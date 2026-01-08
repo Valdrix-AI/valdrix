@@ -16,6 +16,7 @@ from app.core.config import get_settings
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.models.llm import LLMUsage
+from app.models.remediation import RemediationRequest
 
 settings = get_settings()
 

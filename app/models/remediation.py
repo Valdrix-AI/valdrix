@@ -1,0 +1,114 @@
+"""
+Remediation Request Model
+
+Stores pending remediation requests that require human approval.
+Implements a full audit trail for compliance and safety.
+
+Workflow:
+1. User scans for zombies → sees resources
+2. User requests remediation → creates pending request
+3. Reviewer approves/rejects → updates status
+4. On approval → system executes action (with optional backup)
+5. All actions logged for audit
+"""
+
+from uuid import uuid4
+from enum import Enum
+from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Enum as SQLEnum, Numeric
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+
+from app.db.base import Base
+
+
+class RemediationStatus(str, Enum):
+    """Status of a remediation request."""
+    PENDING = "pending"           # Awaiting approval
+    APPROVED = "approved"         # Approved, ready to execute
+    EXECUTING = "executing"       # Currently being executed
+    COMPLETED = "completed"       # Successfully executed
+    FAILED = "failed"             # Execution failed
+    REJECTED = "rejected"         # Human rejected the request
+    CANCELLED = "cancelled"       # User cancelled before approval
+
+
+class RemediationAction(str, Enum):
+    """Types of remediation actions."""
+    DELETE_VOLUME = "delete_volume"
+    DELETE_SNAPSHOT = "delete_snapshot"
+    RELEASE_ELASTIC_IP = "release_elastic_ip"
+    STOP_INSTANCE = "stop_instance"
+    TERMINATE_INSTANCE = "terminate_instance"
+
+
+class RemediationRequest(Base):
+    """
+    A request to remediate (delete/modify) a zombie resource.
+    
+    Requires human approval before execution.
+    Supports optional backup before destructive actions.
+    """
+    
+    __tablename__ = "remediation_requests"
+    
+    # Primary Key
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    
+    # Multi-tenancy
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    
+    # Resource identification
+    resource_id = Column(String(100), nullable=False, index=True)  # AWS resource ID
+    resource_type = Column(String(50), nullable=False)  # EBS Volume, Snapshot, etc.
+    region = Column(String(20), nullable=False, default="us-east-1")
+    
+    # Action details
+    action = Column(SQLEnum(RemediationAction), nullable=False)
+    status = Column(
+        SQLEnum(RemediationStatus),
+        nullable=False,
+        default=RemediationStatus.PENDING,
+        index=True,
+    )
+    
+    # Financial impact
+    estimated_monthly_savings = Column(Numeric(10, 2), nullable=True)
+    
+    # Backup options (for safe delete)
+    create_backup = Column(Boolean, default=False)
+    backup_retention_days = Column(Integer, default=30)
+    backup_resource_id = Column(String(100), nullable=True)  # ID of created backup
+    backup_cost_estimate = Column(Numeric(10, 4), nullable=True)  # Monthly cost of backup
+    
+    # Audit trail - who requested
+    requested_by_user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+    
+    # Audit trail - who approved/rejected
+    reviewed_by_user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+    review_notes = Column(String(500), nullable=True)
+    
+    # Execution details
+    execution_error = Column(String(500), nullable=True)
+    
+    # Timestamps inherited from Base: created_at, updated_at
+    
+    # Relationships
+    tenant = relationship("Tenant")
+    requested_by = relationship("User", foreign_keys=[requested_by_user_id])
+    reviewed_by = relationship("User", foreign_keys=[reviewed_by_user_id])
+    
+    def __repr__(self):
+        return f"<RemediationRequest {self.resource_id} [{self.status.value}]>"

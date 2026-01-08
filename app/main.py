@@ -17,6 +17,11 @@ from app.api.v1.onboard import router as onboard_router
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.services.carbon.calculator import CarbonCalculator
+from app.services.zombies.detector import ZombieDetector, RemediationService
+from app.models.remediation import RemediationAction
+from pydantic import BaseModel
+from typing import Optional
+from uuid import UUID
 
 
 # Configure logging
@@ -182,3 +187,203 @@ async def get_carbon_footprint(
     result = calculator.calculate_from_costs(cost_data, region=region)
     
     return result
+
+@app.get("/zombies")
+async def scan_zombies(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    region: str = Query(default="us-east-1"),
+):
+    """
+    Scan AWS account for zombie resources (unused/underutilized).
+    
+    Returns unattached volumes, old snapshots, unused Elastic IPs.
+    """
+    logger.info("scanning_zombies", region=region)
+    detector = ZombieDetector(region=region)
+    zombies = await detector.scan_all()
+    return zombies
+
+
+# --- Remediation Request Models ---
+class RemediationRequestCreate(BaseModel):
+    """Request to create a new remediation request."""
+    resource_id: str
+    resource_type: str
+    action: str  # delete_volume, delete_snapshot, release_elastic_ip
+    estimated_savings: float
+    create_backup: bool = False
+    backup_retention_days: int = 30
+    backup_cost_estimate: float = 0
+
+
+class ReviewRequest(BaseModel):
+    """Request to approve/reject a remediation."""
+    notes: Optional[str] = None
+
+
+# --- Remediation Approval Workflow Endpoints ---
+
+@app.post("/zombies/request")
+async def create_remediation_request(
+    request: RemediationRequestCreate,
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+    region: str = Query(default="us-east-1"),
+):
+    """
+    Create a remediation request (pending approval).
+    
+    Human-in-the-loop: This does NOT execute immediately.
+    Request must be approved before execution.
+    """
+    # Map string action to enum
+    try:
+        action_enum = RemediationAction(request.action)
+    except ValueError:
+        raise HTTPException(400, f"Invalid action: {request.action}")
+    
+    service = RemediationService(db=db, region=region)
+    result = await service.create_request(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        resource_id=request.resource_id,
+        resource_type=request.resource_type,
+        action=action_enum,
+        estimated_savings=request.estimated_savings,
+        create_backup=request.create_backup,
+        backup_retention_days=request.backup_retention_days,
+        backup_cost_estimate=request.backup_cost_estimate,
+    )
+    
+    return {
+        "status": "pending",
+        "request_id": str(result.id),
+        "message": "Request created. Awaiting approval.",
+        "backup_enabled": request.create_backup,
+    }
+
+
+@app.get("/zombies/pending")
+async def list_pending_requests(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+    region: str = Query(default="us-east-1"),
+):
+    """
+    List all pending remediation requests for the tenant. 
+    """
+    service = RemediationService(db=db, region=region)
+    pending = await service.list_pending(user.tenant_id)
+    
+    return {
+        "pending_count": len(pending),
+        "requests": [
+            {
+                "id": str(r.id),
+                "resource_id": r.resource_id,
+                "resource_type": r.resource_type,
+                "action": r.action.value,
+                "estimated_savings": float(r.estimated_monthly_savings) if r.estimated_monthly_savings else 0,
+                "create_backup": r.create_backup,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in pending
+        ],
+    }
+
+
+@app.post("/zombies/approve/{request_id}")
+async def approve_remediation(
+    request_id: UUID,
+    review: ReviewRequest,
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+    region: str = Query(default="us-east-1"),
+):
+    """
+    Approve a pending remediation request.
+    
+    After approval, the request can be executed.
+    """
+    service = RemediationService(db=db, region=region)
+    
+    try:
+        result = await service.approve(
+            request_id=request_id,
+            reviewer_id=user.id,
+            notes=review.notes,
+        )
+        return {
+            "status": "approved",
+            "request_id": str(result.id),
+            "message": "Request approved. Ready for execution.",
+        }
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/zombies/reject/{request_id}")
+async def reject_remediation(
+    request_id: UUID,
+    review: ReviewRequest,
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+    region: str = Query(default="us-east-1"),
+):
+    """
+    Reject a pending remediation request.
+    """
+    service = RemediationService(db=db, region=region)
+    
+    try:
+        result = await service.reject(
+            request_id=request_id,
+            reviewer_id=user.id,
+            notes=review.notes,
+        )
+        return {
+            "status": "rejected",
+            "request_id": str(result.id),
+            "message": "Request rejected.",
+        }
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/zombies/execute/{request_id}")
+async def execute_remediation(
+    request_id: UUID,
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+    region: str = Query(default="us-east-1"),
+):
+    """
+    Execute an approved remediation request.
+    
+    ⚠️ THIS WILL DELETE RESOURCES.
+    
+    If backup was requested, a snapshot will be created first.
+    """
+    service = RemediationService(db=db, region=region)
+    
+    try:
+        result = await service.execute(request_id=request_id)
+        
+        response = {
+            "status": result.status.value,
+            "request_id": str(result.id),
+            "resource_id": result.resource_id,
+        }
+        
+        if result.backup_resource_id:
+            response["backup_id"] = result.backup_resource_id
+            response["message"] = f"Resource deleted. Backup created: {result.backup_resource_id}"
+        elif result.status.value == "completed":
+            response["message"] = "Resource deleted successfully."
+        else:
+            response["error"] = result.execution_error
+        
+        return response
+        
+    except ValueError as e:
+        raise HTTPException(400, str(e))
