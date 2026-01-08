@@ -30,6 +30,20 @@ class Settings(BaseSettings):
 
     # LLM Provider
     LLM_PROVIDER: str = "groq" # Options: openai, claude, google, groq
+
+    # Scheduler
+    SCHEDULER_HOUR: int = 8
+    SCHEDULER_MINUTE: int = 0
+
+    # Admin API Key
+    ADMIN_API_KEY: Optional[str] = None
+
+    # Database
+    DATABASE_URL: str # Required in prod
+
+    # Supabase Auth
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_JWT_SECRET: str # Required for auth middleware
     
     model_config = SettingsConfigDict(
         env_file=".env", 

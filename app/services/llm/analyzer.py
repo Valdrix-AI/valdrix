@@ -87,7 +87,7 @@ class FinOpsAnalyzer:
       """
       # Pattern matches ```json ... ``` or just ``` ... ```
       pattern = r'^```(?:json)?\s*\n?(.*?)\n?```$'
-      match = re.match(pattern, text.strip(). re.DOTALL)
+      match = re.match(pattern, text.strip(), re.DOTALL)
       if match:
         return match.group(1).strip()
       return text.strip()

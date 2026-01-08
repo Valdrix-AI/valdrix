@@ -1,0 +1,44 @@
+services:
+  # The main application
+  api:
+    build: . 
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  
+  # The prometheus server: Scrapes /metrics from API
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9095:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - api
+
+  # The grafana server: Visualizes metrics from Prometheus
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3005:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=sentinel
+    depends_on:
+      - prometheus
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    environment:
+      - API_URL=http://api:8000

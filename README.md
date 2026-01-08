@@ -9,7 +9,7 @@
 
 CloudSentinel AI is an **autonomous agent** that proactively monitors cloud infrastructure costs, detects anomalies using Generative AI (LLMs), and identifies "zombie resources" (idle assets).
 
-It is built with **FAANG-level rigor**, featuring Clean Architecture, Strategy Pattern for multi-cloud support, and a comprehensive DevOps pipeline.
+It is built with Clean Architecture, Strategy Pattern for multi-cloud support, and a comprehensive DevOps pipeline.
 
 ---
 
@@ -50,7 +50,7 @@ graph TD
     *   Trivy vulnerability scanning in CI/CD.
     *   Non-root Docker container.
 *   **Production Ready:**
-    *   Multi-stage Docker build (256MB).
+    *   Multi-stage Docker build.
     *   CI/CD pipeline with GitHub Actions.
     *   Health checks and Metrics endpoints.
 
