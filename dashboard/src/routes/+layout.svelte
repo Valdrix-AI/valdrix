@@ -25,6 +25,8 @@
     { href: '/', label: 'Dashboard', icon: '📊' },
     { href: '/llm', label: 'LLM Usage', icon: '🤖' },
     { href: '/onboarding', label: 'AWS Setup', icon: '☁️' },
+    { href: '/leaderboards', label: 'Leaderboards', icon: '🏆' },
+    { href: '/settings', label: 'Settings', icon: '⚙️' },
   ];
   
   // Check if route is active
