@@ -24,6 +24,7 @@
   const navItems = [
     { href: '/', label: 'Dashboard', icon: '📊' },
     { href: '/llm', label: 'LLM Usage', icon: '🤖' },
+    { href: '/onboarding', label: 'AWS Setup', icon: '☁️' },
   ];
   
   // Check if route is active
