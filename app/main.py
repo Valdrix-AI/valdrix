@@ -261,10 +261,49 @@ async def scan_zombies(
     Scan AWS account for zombie resources (unused/underutilized).
     
     Returns unattached volumes, old snapshots, unused Elastic IPs.
+    Sends Slack alert if zombies are detected (based on user settings).
     """
     logger.info("scanning_zombies", region=region)
     detector = ZombieDetector(region=region)
     zombies = await detector.scan_all()
+    
+    # Count total zombies found
+    zombie_count = (
+        len(zombies.get("unattached_volumes", [])) +
+        len(zombies.get("old_snapshots", [])) +
+        len(zombies.get("unused_elastic_ips", []))
+    )
+    
+    # Send Slack alert if zombies detected
+    if zombie_count > 0:
+        settings = get_settings()
+        if settings.SLACK_BOT_TOKEN and settings.SLACK_CHANNEL_ID:
+            try:
+                from app.services.notifications import SlackService
+                slack = SlackService(settings.SLACK_BOT_TOKEN, settings.SLACK_CHANNEL_ID)
+                
+                # Estimate potential savings
+                estimated_savings = sum(
+                    v.get("estimated_monthly_cost", 0) 
+                    for v in zombies.get("unattached_volumes", [])
+                )
+                
+                await slack.send_alert(
+                    title="Zombie Resources Detected!",
+                    message=(
+                        f"Found *{zombie_count} zombie resources* that may be costing you money:\n\n"
+                        f"• Unattached volumes: {len(zombies.get('unattached_volumes', []))}\n"
+                        f"• Old snapshots: {len(zombies.get('old_snapshots', []))}\n"
+                        f"• Unused Elastic IPs: {len(zombies.get('unused_elastic_ips', []))}\n\n"
+                        f"💰 Estimated savings: *${estimated_savings:.2f}/month*\n\n"
+                        f"Review and clean up in the CloudSentinel dashboard."
+                    ),
+                    severity="warning" if zombie_count < 5 else "critical"
+                )
+                logger.info("zombie_slack_alert_sent", count=zombie_count)
+            except Exception as e:
+                logger.error("zombie_slack_alert_failed", error=str(e))
+    
     return zombies
 
 
