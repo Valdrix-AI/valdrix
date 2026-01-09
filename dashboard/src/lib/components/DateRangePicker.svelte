@@ -114,7 +114,6 @@
             type="date" 
             id="start-date"
             bind:value={customStartDate}
-            on:change={applyCustomRange}
           />
         </div>
         <span class="separator">→</span>
@@ -124,9 +123,15 @@
             type="date" 
             id="end-date"
             bind:value={customEndDate}
-            on:change={applyCustomRange}
           />
         </div>
+        <button 
+          class="apply-btn"
+          disabled={!customStartDate || !customEndDate}
+          on:click={applyCustomRange}
+        >
+          Apply
+        </button>
       </div>
     </div>
   {/if}
@@ -209,6 +214,27 @@
   .separator {
     color: var(--color-ink-500);
     padding-bottom: 0.5rem;
+  }
+  
+  .apply-btn {
+    padding: 0.5rem 1rem;
+    background: var(--color-accent-500);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    align-self: flex-end;
+  }
+  
+  .apply-btn:hover:not(:disabled) {
+    background: var(--color-accent-600);
+  }
+  
+  .apply-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   
   /* Make date picker icon visible in dark mode */
