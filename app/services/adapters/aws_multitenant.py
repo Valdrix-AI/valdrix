@@ -101,12 +101,12 @@ class MultiTenantAWSAdapter(CostAdapter):
             aws_session_token=creds["SessionToken"],
         )
     
-    async def get_daily_costs(self, start_date: date, end_date: date) -> List[Dict[str, Any]]:
-        """
-        Fetch daily costs from the customer's AWS account.
-        """
+    async def get_daily_costs(self, start_date: date, end_date: date, group_by_service: bool = False) -> Any:
         try:
             client = self._get_ce_client()
+            
+            # Configure grouping if requested
+            group_by = [{"Type": "DIMENSION", "Key": "SERVICE"}] if group_by_service else []
             
             response = client.get_cost_and_usage(
                 TimePeriod={
@@ -115,15 +115,70 @@ class MultiTenantAWSAdapter(CostAdapter):
                 },
                 Granularity="DAILY",
                 Metrics=["UnblendedCost"],
+                GroupBy=group_by
             )
             
+            # Process results into structured CostResponse
+            from app.models.cost import CostResponse, DailyCost
+            
+            results = response.get("ResultsByTime", [])
+            daily_costs_list = []
+            breakdown_list = []
+            total_cost_acc = 0.0
+            
+            for day in results:
+                date_str = day["TimePeriod"]["Start"]
+                
+                if group_by_service:
+                    # When grouped, 'Groups' list contains service breakdown
+                    day_cost = 0.0
+                    service_costs = {}
+                    
+                    for group in day.get("Groups", []):
+                        # Key is likely "Service_Name"
+                        service_name = group["Keys"][0] 
+                        amount = float(group["Metrics"]["UnblendedCost"]["Amount"])
+                        day_cost += amount
+                        service_costs[service_name] = amount
+                    
+                    total_cost_acc += day_cost
+                    
+                    # Add to breakdown structure for charts
+                    breakdown_list.append({
+                        "date": date_str,
+                        "services": service_costs
+                    })
+                    
+                    daily_costs_list.append(DailyCost(
+                        date=date.fromisoformat(date_str),
+                        cost=day_cost
+                    ))
+                    
+                else:
+                    # No grouping, simple total
+                    amount = float(day["Total"]["UnblendedCost"]["Amount"])
+                    total_cost_acc += amount
+                    
+                    daily_costs_list.append(DailyCost(
+                        date=date.fromisoformat(date_str),
+                        cost=amount
+                    ))
+
             logger.info(
                 "multitenant_cost_fetch_success",
                 aws_account=self.connection.aws_account_id,
-                days=len(response.get("ResultsByTime", [])),
+                total_cost=total_cost_acc,
+                days=len(results),
             )
             
-            return response.get("ResultsByTime", [])
+            return CostResponse(
+                total_cost=total_cost_acc,
+                currency="USD",
+                start_date=start_date,
+                end_date=end_date,
+                daily_costs=daily_costs_list,
+                breakdown=breakdown_list
+            )
             
         except ClientError as e:
             logger.error(
@@ -131,7 +186,15 @@ class MultiTenantAWSAdapter(CostAdapter):
                 aws_account=self.connection.aws_account_id,
                 error=str(e),
             )
-            return []
+            # Return empty response on error to avoid API 500
+            from app.models.cost import CostResponse
+            return CostResponse(
+                total_cost=0.0,
+                start_date=start_date,
+                end_date=end_date,
+                daily_costs=[],
+                breakdown=[]
+            )
     
     async def get_resource_usage(self, service_name: str) -> List[Dict[str, Any]]:
         """Placeholder for future resource-level usage."""

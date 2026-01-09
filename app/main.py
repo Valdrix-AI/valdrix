@@ -105,7 +105,9 @@ async def health_check():
     "scheduler": scheduler_status,
   }
 
-@app.get("/costs", response_model=List[Dict[str, Any]])
+from app.models.cost import CostResponse
+
+@app.get("/costs", response_model=CostResponse)
 async def get_costs(
   start_date: date,
   end_date: date,
@@ -115,20 +117,11 @@ async def get_costs(
   """
   Retrieves daily cloud costs for a specified date range.
 
-  This endpoint uses the `CostAdapter` dependency (Strategy Pattern) to fetch data from the 
-  configured cloud provider (currently AWS).
-
-  Args:
-      start_date (date): The start date for the cost period (inclusive).
-      end_date (date): The end date for the cost period (exclusive).
-      adapter (CostAdapter): The injected cloud provider adapter.
-      user (CurrentUser): The authenticated user.
-
   Returns:
-      List[Dict[str, Any]]: A list of daily cost records.
+      CostResponse: Structured cost data with daily breakdown by service.
   """
   logger.info("fetching_costs", start=start_date, end=end_date, user_id=str(user.id))
-  return await adapter.get_daily_costs(start_date, end_date)
+  return await adapter.get_daily_costs(start_date, end_date, group_by_service=True)
 
 # Dependency Factory for LLM
 def get_llm_provider() -> str:

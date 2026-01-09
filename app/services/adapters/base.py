@@ -4,10 +4,12 @@ from datetime import date
 
 class CostAdapter(ABC):
   @abstractmethod
-  async def get_daily_costs(self, start_date: date, end_date: date) -> List[Dict[str, Any]]:
+  @abstractmethod
+  async def get_daily_costs(self, start_date: date, end_date: date, group_by_service: bool = False) -> Any:
     """
-    Returns a uniform list of daily costs.
-    Format: [{"date": "2026-01-01", "service": "EC2", "cost": 50.0}, ...]
+    Returns daily costs.
+    If group_by_service is True, returns structured CostResponse with breakdown.
+    Otherwise returns simple list of daily totals.
     """
     pass
 
