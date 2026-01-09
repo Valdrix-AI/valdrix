@@ -39,6 +39,7 @@ class AWSConnectionCreate(BaseModel):
     """Request body for creating a new AWS connection."""
     aws_account_id: str = Field(..., pattern=r"^\d{12}$", description="12-digit AWS account ID")
     role_arn: str = Field(..., description="Full ARN of the IAM role to assume")
+    external_id: str = Field(..., pattern=r"^cs-[a-f0-9]{32}$", description="External ID from setup step")
     region: str = Field(default="us-east-1", description="AWS region for Cost Explorer")
 
 
@@ -287,12 +288,12 @@ async def create_connection(
             detail=f"Connection for AWS account {data.aws_account_id} already exists"
         )
     
-    # Create new connection
+    # Create new connection - use the SAME external_id from setup step
     connection = AWSConnection(
         tenant_id=current_user.tenant_id,
         aws_account_id=data.aws_account_id,
         role_arn=data.role_arn,
-        external_id=AWSConnection.generate_external_id(),
+        external_id=data.external_id,  # Use ID from frontend, not generate new!
         region=data.region,
         status="pending",
     )

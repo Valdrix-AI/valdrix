@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { createSupabaseBrowserClient } from '$lib/supabase';
   
   // State management
   let currentStep = 1;
@@ -17,6 +18,13 @@
   let copied = false;
   
   const API_URL = 'http://localhost:8002';
+  const supabase = createSupabaseBrowserClient();
+  
+  // Get access token from Supabase session
+  async function getAccessToken(): Promise<string | null> {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  }
   
   // Step 1: Get templates from backend
   async function getTemplates() {
@@ -82,7 +90,14 @@
     error = '';
     
     try {
-      const token = localStorage.getItem('sb-access-token');
+      // Get the access token from Supabase session
+      const token = await getAccessToken();
+      
+      if (!token) {
+        error = 'Please log in first to verify your AWS connection';
+        isVerifying = false;
+        return;
+      }
       
       const createRes = await fetch(`${API_URL}/connections/aws`, {
         method: 'POST',
@@ -93,6 +108,7 @@
         body: JSON.stringify({
           aws_account_id: awsAccountId,
           role_arn: roleArn,
+          external_id: externalId,  // Pass the SAME external_id from step 1!
           region: 'us-east-1',
         }),
       });
