@@ -111,7 +111,7 @@ async def get_costs(
   start_date: date,
   end_date: date,
   user: Annotated[CurrentUser, Depends(get_current_user)],
-  db: Session = Depends(get_db)
+  db: AsyncSession = Depends(get_db)
 ):
   """
   Retrieves daily cloud costs for a specified date range.
@@ -126,9 +126,10 @@ async def get_costs(
   from app.services.adapters.aws_multitenant import MultiTenantAWSAdapter
   
   # Get user's AWS connection from database
-  connection = db.query(AWSConnection).filter(
-    AWSConnection.tenant_id == user.tenant_id
-  ).first()
+  result = await db.execute(
+    select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+  )
+  connection = result.scalar_one_or_none()
   
   if not connection:
     logger.warning("no_aws_connection", tenant_id=str(user.tenant_id))
@@ -183,7 +184,7 @@ async def analyze_costs(
     end_date: date,
     analyzer: Annotated[FinOpsAnalyzer, Depends(get_analyzer)],
     user: Annotated[CurrentUser, Depends(get_current_user)],
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     provider: str = Depends(get_llm_provider),
 ):
     """
@@ -193,9 +194,10 @@ async def analyze_costs(
     from app.services.adapters.aws_multitenant import MultiTenantAWSAdapter
     
     # Get user's AWS connection from database
-    connection = db.query(AWSConnection).filter(
-        AWSConnection.tenant_id == user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+    )
+    connection = result.scalar_one_or_none()
     
     if not connection:
         return {"analysis": "No AWS connection found. Please set up your AWS connection in the dashboard."}
@@ -283,7 +285,7 @@ async def get_carbon_footprint(
     start_date: date,
     end_date: date,
     user: Annotated[CurrentUser, Depends(get_current_user)],
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1", description="AWS region for carbon intensity"),
 ):
     """
@@ -295,9 +297,10 @@ async def get_carbon_footprint(
     from app.services.adapters.aws_multitenant import MultiTenantAWSAdapter
     
     # Get user's AWS connection from database
-    connection = db.query(AWSConnection).filter(
-        AWSConnection.tenant_id == user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+    )
+    connection = result.scalar_one_or_none()
     
     if not connection:
         return {"total_co2_kg": 0, "equivalencies": {}, "error": "No AWS connection found"}
@@ -318,7 +321,7 @@ async def get_carbon_footprint(
 @app.get("/zombies")
 async def scan_zombies(
     user: Annotated[CurrentUser, Depends(get_current_user)],
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
 ):
     """
@@ -330,9 +333,10 @@ async def scan_zombies(
     from app.models.aws_connection import AWSConnection
     
     # Get user's AWS connection from database
-    connection = db.query(AWSConnection).filter(
-        AWSConnection.tenant_id == user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+    )
+    connection = result.scalar_one_or_none()
     
     if not connection:
         return {
