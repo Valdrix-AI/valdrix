@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 import secrets
 from app.core.auth import get_current_user, CurrentUser
 from app.api.v1.onboard import router as onboard_router
+from app.api.connections import router as connections_router
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.services.carbon.calculator import CarbonCalculator
@@ -84,8 +85,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include onboard router
+# Include routers
 app.include_router(onboard_router)
+app.include_router(connections_router)
 
 # 3. Health Check (The Heartbeat of the app)
 # Every K8s pod needs a health check endpoint to prove it's alive
