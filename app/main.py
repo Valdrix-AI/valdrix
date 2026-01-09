@@ -105,7 +105,7 @@ async def health_check():
     "scheduler": scheduler_status,
   }
 
-@app.get("/costs", response_model=List[Dict[str, Any]])
+@app.get("/costs")
 async def get_costs(
   start_date: date,
   end_date: date,
@@ -118,17 +118,32 @@ async def get_costs(
   This endpoint uses the `CostAdapter` dependency (Strategy Pattern) to fetch data from the 
   configured cloud provider (currently AWS).
 
-  Args:
-      start_date (date): The start date for the cost period (inclusive).
-      end_date (date): The end date for the cost period (exclusive).
-      adapter (CostAdapter): The injected cloud provider adapter.
-      user (CurrentUser): The authenticated user.
-
   Returns:
-      List[Dict[str, Any]]: A list of daily cost records.
+      Dict with total_cost and breakdown of daily costs.
   """
   logger.info("fetching_costs", start=start_date, end=end_date, user_id=str(user.id))
-  return await adapter.get_daily_costs(start_date, end_date)
+  raw_costs = await adapter.get_daily_costs(start_date, end_date)
+  
+  # Calculate total cost from AWS response
+  total_cost = 0.0
+  breakdown = []
+  
+  for day in raw_costs:
+    amount = float(day.get("Total", {}).get("UnblendedCost", {}).get("Amount", 0))
+    period = day.get("TimePeriod", {})
+    breakdown.append({
+      "date": period.get("Start", ""),
+      "cost": amount,
+      "estimated": day.get("Estimated", False)
+    })
+    total_cost += amount
+  
+  return {
+    "total_cost": max(total_cost, 0),  # Avoid negative values from refunds
+    "breakdown": breakdown,
+    "start_date": start_date.isoformat(),
+    "end_date": end_date.isoformat()
+  }
 
 # Dependency Factory for LLM
 def get_llm_provider() -> str:
