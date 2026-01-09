@@ -73,7 +73,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",       # SvelteKit dev server
+        "http://localhost:5174",       # SvelteKit alt port
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
         "http://localhost:3000",       # Alternative dev port
         # Add production URLs here later
     ],

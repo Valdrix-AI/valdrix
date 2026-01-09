@@ -68,19 +68,39 @@
 
 {#if !data.user}
   <!-- Public Landing -->
-  <div class="min-h-[80vh] flex flex-col items-center justify-center text-center px-4">
-    <div class="stagger-enter" style="animation-delay: 0ms;">
-      <span class="text-6xl mb-4 block">☁️</span>
+  <div class="min-h-[85vh] flex flex-col items-center justify-center text-center px-4">
+    <!-- Floating Cloud Icon -->
+    <div class="hero-icon mb-6">
+      <span class="text-7xl drop-shadow-lg">☁️</span>
     </div>
-    <h1 class="text-4xl md:text-5xl font-bold mb-4 stagger-enter" style="animation-delay: 100ms;">
-      Cloud Cost Intelligence
+    
+    <!-- Main Heading -->
+    <h1 class="fade-in-up text-4xl md:text-6xl font-bold mb-5 max-w-3xl leading-tight" style="animation-delay: 100ms;">
+      <span class="text-gradient">Cloud Cost</span> Intelligence
     </h1>
-    <p class="text-xl text-ink-400 mb-8 max-w-lg stagger-enter" style="animation-delay: 200ms;">
-      AI-powered FinOps platform that tracks costs, carbon footprint, and zombie resources.
+    
+    <!-- Subheading -->
+    <p class="fade-in-up text-lg md:text-xl mb-10 max-w-xl leading-relaxed" style="animation-delay: 200ms; color: var(--color-ink-400);">
+      AI-powered FinOps platform that tracks costs, carbon footprint, and zombie resources in real-time.
     </p>
-    <a href="/auth/login" class="btn btn-primary text-lg px-8 py-3 stagger-enter" style="animation-delay: 300ms;">
-      Get Started Free
-    </a>
+    
+    <!-- CTA Buttons -->
+    <div class="fade-in-up flex flex-col sm:flex-row gap-4" style="animation-delay: 300ms;">
+      <a href="/auth/login" class="btn btn-primary text-base px-8 py-3 pulse-glow">
+        Get Started Free →
+      </a>
+      <a href="#features" class="btn btn-secondary text-base px-8 py-3">
+        Learn More
+      </a>
+    </div>
+    
+    <!-- Feature Pills -->
+    <div class="fade-in-up flex flex-wrap justify-center gap-3 mt-16" style="animation-delay: 500ms;">
+      <span class="badge badge-accent">💰 Cost Tracking</span>
+      <span class="badge badge-success">🌱 Carbon Footprint</span>
+      <span class="badge badge-warning">👻 Zombie Detection</span>
+      <span class="badge badge-default">🤖 AI Analysis</span>
+    </div>
   </div>
 {:else}
   <div class="space-y-8">
