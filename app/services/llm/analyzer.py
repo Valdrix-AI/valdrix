@@ -7,7 +7,9 @@ from uuid import UUID
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.llm.usage_tracker import UsageTracker
-
+import json
+from app.core.config import get_settings
+from app.services.notifications import SlackService
 logger = structlog.get_logger()
 
 # The "System Prompt" - defines the AI's personality and task
@@ -152,4 +154,22 @@ class FinOpsAnalyzer:
                 logger.warning("llm_usage_tracking_failed", error=str(e))
         
         logger.info("analysis_complete")
+        
+        # After analysis, check for anomalies and alert
+        try:
+            result = json.loads(self._strip_markdown(response.content))
+            if result.get("anomalies") and len(result["anomalies"]) > 0:
+                settings = get_settings()
+                if settings.SLACK_BOT_TOKEN and settings.SLACK_CHANNEL_ID:
+                    slack = SlackService(settings.SLACK_BOT_TOKEN, settings.SLACK_CHANNEL_ID)
+                    
+                    top_anomaly = result["anomalies"][0]
+                    await slack.send_alert(
+                        title=f"Cost Anomaly Detected: {top_anomaly['resource']}",
+                        message=f"*Issue:* {top_anomaly['issue']}\n*Impact:* {top_anomaly['cost_impact']}\n*Severity:* {top_anomaly['severity']}",
+                        severity="critical" if top_anomaly['severity'] == "high" else "warning"
+                    )
+        except json.JSONDecodeError:
+            pass  # If response isn't valid JSON, skip alerting
+            
         return self._strip_markdown(response.content)

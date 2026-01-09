@@ -1,5 +1,9 @@
 # CloudSentinel AI 🤖🛡️
 
+<p align="center">
+  <img src="assets/cloudsentinel_icon.png" alt="CloudSentinel Logo" width="120" />
+</p>
+
 **The Autonomous FinOps Guardian for Multi-Cloud Infrastructure**
 
 [![CI/CD Status](https://github.com/daretechie/CloudSentinel-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/daretechie/CloudSentinel-AI/actions)

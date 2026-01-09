@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Supabase Auth
     SUPABASE_URL: Optional[str] = None
     SUPABASE_JWT_SECRET: str # Required for auth middleware
+
+    # Notifications
+    SLACK_BOT_TOKEN: Optional[str] = None
+    SLACK_CHANNEL_ID: Optional[str] = None
     
     model_config = SettingsConfigDict(
         env_file=".env", 
