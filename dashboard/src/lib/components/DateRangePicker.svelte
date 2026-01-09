@@ -56,11 +56,7 @@
         customEndDate = dates.endDate;
       }
       value = 'custom';
-      // Dispatch current custom dates
-      dispatch('dateChange', {
-        startDate: customStartDate,
-        endDate: customEndDate,
-      });
+      // Don't dispatch here - wait for Apply button click
     }
   }
   
