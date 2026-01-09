@@ -75,6 +75,18 @@
   $: zombieCount = (zombies?.unattached_volumes?.length ?? 0) + 
                    (zombies?.old_snapshots?.length ?? 0) + 
                    (zombies?.unused_elastic_ips?.length ?? 0);
+  
+  // Calculate period label from dates
+  $: periodLabel = (() => {
+    if (!startDate || !endDate) return 'Period';
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    if (days <= 7) return '7-Day';
+    if (days <= 30) return '30-Day';
+    if (days <= 90) return '90-Day';
+    return `${days}-Day`;
+  })();
 </script>
 
 <svelte:head>
@@ -148,9 +160,9 @@
     {:else}
       <!-- Stats Grid -->
       <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-        <!-- 30-Day Cost -->
+        <!-- Period Cost -->
         <div class="card card-stat stagger-enter" style="animation-delay: 0ms;">
-          <p class="text-sm text-ink-400 mb-1">30-Day Cost</p>
+          <p class="text-sm text-ink-400 mb-1">{periodLabel} Cost</p>
           <p class="text-3xl font-bold" style="color: var(--color-accent-400);">
             ${costs?.total_cost?.toFixed(2) ?? '0.00'}
           </p>
