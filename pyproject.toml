@@ -67,3 +67,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+filterwarnings = [
+    # Suppress third-party deprecation warning from codecarbon dependency
+    "ignore:The pynvml package is deprecated:FutureWarning",
+]
