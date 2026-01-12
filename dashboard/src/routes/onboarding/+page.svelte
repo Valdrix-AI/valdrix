@@ -27,10 +27,48 @@
     return session?.access_token ?? null;
   }
   
+  // Ensure user is onboarded in our database (creates user + tenant)
+  async function ensureOnboarded() {
+    const token = await getAccessToken();
+    if (!token) {
+      error = 'Please log in first';
+      return false;
+    }
+    
+    try {
+      const res = await fetch(`${API_URL}/api/v1/onboard`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ tenant_name: 'My Organization' }),
+      });
+      
+      if (res.ok) {
+        console.log('User onboarded successfully');
+        return true;
+      } else if (res.status === 400) {
+        // Already onboarded - this is fine
+        const data = await res.json();
+        if (data.detail === 'Already onboarded') {
+          return true;
+        }
+      }
+      return true; // Continue anyway
+    } catch (e) {
+      console.error('Onboarding check failed:', e);
+      return true; // Continue anyway - the endpoints will catch it
+    }
+  }
+  
   // Step 1: Get templates from backend
   async function getTemplates() {
     isLoading = true;
     error = '';
+    
+    // First ensure user is onboarded
+    await ensureOnboarded();
     
     try {
       const res = await fetch(`${API_URL}/connections/aws/setup`, {

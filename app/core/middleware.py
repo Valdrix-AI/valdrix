@@ -19,6 +19,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         
+        # Skip strict CSP for Swagger UI (requires inline scripts)
+        if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
+            return response
+        
         # CSP connect-src: Restrict based on environment
         if settings.DEBUG:
             connect_src = "'self' http://localhost:8000 http://127.0.0.1:8000"

@@ -138,9 +138,6 @@ async def get_current_user(
             role=user.role
         )
     except Exception as e:
-        with open("error_auth.txt", "w") as f:
-            import traceback
-            traceback.print_exc(file=f)
         logger.error("auth_failed", error=str(e))
         raise e
 
