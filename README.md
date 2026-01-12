@@ -7,7 +7,7 @@
 ### **The Autonomous FinOps & GreenOps Guardian**
 *(a.k.a. The Zombie Hunter for your Cloud)*
 
-[![CI/CD Status](https://github.com/daretechie/cloudsentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/daretechie/cloudsentinel/actions)
+[![CI/CD Status](https://github.com/CloudSentinel/cloudsentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/CloudSentinel/cloudsentinel/actions)
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB.svg?logo=python&logoColor=white)](https://python.org)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00.svg?logo=svelte&logoColor=white)](https://svelte.dev)
@@ -107,7 +107,7 @@ The easiest way to hunt is via Docker.
 
 ### 1. Configure the Hunter
 ```bash
-git clone https://github.com/daretechie/cloudsentinel.git
+git clone https://github.com/CloudSentinel/cloudsentinel.git
 cd cloudsentinel
 cp .env.example .env
 # Add your OPENAI_API_KEY and DATABASE_URL
