@@ -214,7 +214,8 @@ class BillingService:
 
             # Create/Update local record placeholder
             if not sub:
-                sub = TenantSubscription(tenant_id=tenant_id, tier=tier.value)
+                import uuid
+                sub = TenantSubscription(id=uuid.uuid4(), tenant_id=tenant_id, tier=tier.value)
                 self.db.add(sub)
             
             # We don't save reference in DB model currently, implied ephemeral
@@ -336,7 +337,8 @@ class WebhookHandler:
             sub = result.scalar_one_or_none()
 
             if not sub:
-                sub = TenantSubscription(tenant_id=UUID(tenant_id))
+                import uuid
+                sub = TenantSubscription(id=uuid.uuid4(), tenant_id=UUID(tenant_id))
                 self.db.add(sub)
             
             sub.paystack_customer_code = customer_code
