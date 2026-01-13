@@ -46,7 +46,7 @@
       const [costsRes, carbonRes, zombiesRes, analyzeRes] = await Promise.all([
         fetch(`${PUBLIC_API_URL}/costs?start_date=${startDate}&end_date=${endDate}`, { headers }),
         fetch(`${PUBLIC_API_URL}/carbon?start_date=${startDate}&end_date=${endDate}`, { headers }),
-        fetch(`${PUBLIC_API_URL}/zombies`, { headers }),
+        fetch(`${PUBLIC_API_URL}/zombies?analyze=true`, { headers }),
         fetch(`${PUBLIC_API_URL}/analyze?start_date=${startDate}&end_date=${endDate}`, { headers }),
       ]);
       
