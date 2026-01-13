@@ -81,14 +81,20 @@ app = FastAPI(
 # Initialize Prometheus Metrics
 Instrumentator().instrument(app).expose(app)
 
-# Middleware
-app.add_middleware(RequestIDMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
+# IMPORTANT: Middleware order matters in FastAPI!
+# Middleware is processed in REVERSE order of addition.
+# CORS must be added LAST so it processes FIRST for incoming requests.
 
 # Add timeout middleware (5 minutes for long zombie scans)
 from app.core.timeout import TimeoutMiddleware
 app.add_middleware(TimeoutMiddleware, timeout_seconds=300)
 
+# Security headers and request ID
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
+
+# CORS - added LAST so it processes FIRST
+# This ensures OPTIONS preflight requests are handled before other middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
