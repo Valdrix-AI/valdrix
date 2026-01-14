@@ -10,7 +10,7 @@ from app.core.auth import CurrentUser, requires_role
 from app.db.session import get_db
 from app.models.aws_connection import AWSConnection
 from app.services.adapters.aws_multitenant import MultiTenantAWSAdapter
-from app.services.zombies.detector import ZombieDetector, RemediationService
+from app.services.zombies import ZombieDetector, RemediationService
 from app.models.remediation import RemediationAction
 
 router = APIRouter(prefix="/zombies", tags=["Cloud Hygiene (Zombies)"])

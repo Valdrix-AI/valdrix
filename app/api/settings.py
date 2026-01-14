@@ -1,8 +1,24 @@
 """
-Settings API Endpoints for Valdrix.
-Manages per-tenant notification preferences.
+DEPRECATED: This file is being replaced by the modular structure in app/api/v1/settings/
+
+This file is kept for backward compatibility during migration.
+New code should import from:
+- app.api.v1.settings.notifications
+- app.api.v1.settings.carbon  
+- app.api.v1.settings.llm
+- app.api.v1.settings.activeops
+
+TODO: Remove this file once all imports are migrated.
 """
 
+import warnings
+warnings.warn(
+    "app.api.settings is deprecated. Use app.api.v1.settings instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
+# Re-export for backward compatibility
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import select

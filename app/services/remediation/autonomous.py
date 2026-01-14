@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 from app.models.remediation import RemediationRequest, RemediationAction, RemediationStatus
 from app.models.remediation_settings import RemediationSettings
 from app.services.zombies.detector import ZombieDetector
-from app.services.zombies.detector import RemediationService
+from app.services.zombies import RemediationService
 
 logger = structlog.get_logger()
 

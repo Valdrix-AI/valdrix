@@ -6,6 +6,7 @@ Provides zombie resource detection and remediation:
 - RemediationService: Manages approval workflow
 """
 
-from .detector import ZombieDetector, RemediationService
+from .detector import ZombieDetector
+from .remediation import RemediationService
 
 __all__ = ["ZombieDetector", "RemediationService"]
