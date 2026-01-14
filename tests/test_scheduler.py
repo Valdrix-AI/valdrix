@@ -10,7 +10,6 @@ Tests cover:
 
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.services.scheduler import SchedulerService

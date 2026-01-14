@@ -9,8 +9,6 @@ Tests:
 """
 
 import pytest
-from uuid import uuid4
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 from app.services.security.audit_log import (

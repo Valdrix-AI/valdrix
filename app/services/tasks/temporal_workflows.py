@@ -22,7 +22,6 @@ import structlog
 try:
     from temporalio import workflow, activity
     from temporalio.client import Client
-    from temporalio.worker import Worker
     TEMPORAL_AVAILABLE = True
 except ImportError:
     TEMPORAL_AVAILABLE = False
@@ -60,7 +59,6 @@ if TEMPORAL_AVAILABLE:
         This is idempotent - safe to retry on failure.
         """
         from app.services.zombies.detector import ZombieDetector
-        from app.services.aws.region_discovery import RegionDiscovery
 
         logger.info("temporal_activity_start",
                    tenant_id=input.tenant_id,

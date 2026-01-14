@@ -10,11 +10,9 @@ Tests cover:
 """
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from unittest.mock import AsyncMock
 
-from app.services.zombies.detector import ZombieDetector, RemediationService
+from app.services.zombies.detector import ZombieDetector
 from app.services.zombies.zombie_plugin import ZombiePlugin, ESTIMATED_COSTS
 from app.services.zombies.plugins import (
     UnattachedVolumesPlugin, OldSnapshotsPlugin, IdleS3BucketsPlugin,

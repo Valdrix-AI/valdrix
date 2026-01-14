@@ -8,8 +8,6 @@ Tests:
 4. Multi-region scanning
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
 from app.services.zombies.detector import ZombieDetector

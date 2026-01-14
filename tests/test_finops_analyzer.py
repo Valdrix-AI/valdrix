@@ -10,8 +10,7 @@ Tests cover:
 """
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from uuid import uuid4
+from unittest.mock import MagicMock, AsyncMock
 import json
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -104,7 +103,7 @@ class TestAnalyze:
         analyzer = FinOpsAnalyzer(llm=mock_llm)
         
         cost_data = [{"service": "EC2", "cost": 100.0}]
-        result = await analyzer.analyze(cost_data)
+        _ = await analyzer.analyze(cost_data)
         
         # LLM should have been invoked
         mock_llm.ainvoke.assert_called_once()

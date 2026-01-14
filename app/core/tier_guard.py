@@ -17,7 +17,6 @@ Usage:
 
 from enum import Enum
 from functools import wraps
-from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select

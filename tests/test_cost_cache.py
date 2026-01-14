@@ -9,13 +9,12 @@ Tests:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import date, datetime, timezone, timedelta
+from unittest.mock import patch
+from datetime import date
 
 from app.services.adapters.cost_cache import (
     InMemoryCache,
     CostCache,
-    CacheBackend,
     get_cost_cache,
 )
 

@@ -6,7 +6,7 @@ import structlog
 from prometheus_client import Counter, Histogram
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
-
+from enum import Enum
 import asyncio
 from app.services.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.services.llm.factory import LLMFactory
@@ -16,6 +16,14 @@ from app.services.zombies.detector import ZombieDetector
 from app.models.tenant import Tenant
 from app.models.aws_connection import AWSConnection
 from app.core.config import get_settings
+
+
+class TenantCohort(str, Enum):
+    HIGH_VALUE = "high_value"  # Enterprise, Pro
+    ACTIVE = "active"          # Growth
+    DORMANT = "dormant"        # Starter, or any tier inactive 7+ days
+
+
 
 logger = structlog.get_logger()
 
@@ -34,16 +42,7 @@ SCHEDULER_JOB_DURATION = Histogram(
 )
 
 
-# Tenant Cohorts for tiered scheduling (Phase 7: 10K Scale)
-# - HIGH_VALUE: Enterprise/Pro - scan every 6 hours
-# - ACTIVE: Growth - scan daily
-# - DORMANT: Starter or inactive 7+ days - scan weekly
-from enum import Enum
 
-class TenantCohort(str, Enum):
-    HIGH_VALUE = "high_value"  # Enterprise, Pro
-    ACTIVE = "active"          # Growth
-    DORMANT = "dormant"        # Starter, or any tier inactive 7+ days
 
 
 def get_tenant_cohort(tenant: Tenant, last_active: datetime | None = None) -> TenantCohort:

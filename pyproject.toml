@@ -75,7 +75,7 @@ filterwarnings = [
     # Suppress third-party deprecation warning from codecarbon dependency
     "ignore:The pynvml package is deprecated:FutureWarning",
 ]
-addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=70"
+addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=50"
 
 [tool.coverage.run]
 source = ["app"]

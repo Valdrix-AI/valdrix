@@ -84,7 +84,7 @@ async def run_async_migrations() -> None:
     # Why: Supabase via pooler uses a specific CA certificate we must trust
     import os
     base_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    ca_cert_path = os.path.join(base_path, "app", "core", "supabase.crt")
+    _ = os.path.join(base_path, "app", "core", "supabase.crt")
     
     ssl_context = ssl.create_default_context()
     # ssl_context.set_ciphers('DEFAULT@SECLEVEL=0') # Unused as cert is invalid for OpenSSL 3

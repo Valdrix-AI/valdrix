@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
-from decimal import Decimal
 from app.services.zombies.detector import ZombieDetector, RemediationService
 from app.models.remediation import RemediationAction, RemediationStatus, RemediationRequest
 

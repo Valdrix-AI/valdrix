@@ -7,8 +7,6 @@ Tests:
 3. TimeoutMiddleware
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 

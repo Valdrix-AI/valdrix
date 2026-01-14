@@ -1,4 +1,4 @@
-
+import sys
 from cryptography.fernet import Fernet
 from app.core.config import get_settings
 import structlog
@@ -8,7 +8,6 @@ settings = get_settings()
 
 _fallback_key = Fernet.generate_key()
 
-import sys
 
 def get_fernet() -> Fernet:
     """Initialize Fernet with the encryption key."""

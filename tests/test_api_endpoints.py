@@ -44,7 +44,7 @@ class TestAnalyzeEndpoint:
     
     async def test_analyze_without_auth_returns_401(self, ac: AsyncClient):
         """Test that analyze endpoint requires authentication."""
-        response = await ac.get("/analyze?start_date=2026-01-01&end_date=2026-01-02")
+        response = await ac.get("/current?start_date=2026-01-01&end_date=2026-01-02")
         
         assert response.status_code == 401
 

@@ -16,7 +16,7 @@ References:
 - AWS Well-Architected: Sustainability Pillar
 """
 
-from datetime import datetime, timezone, time
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 from enum import Enum

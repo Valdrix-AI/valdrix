@@ -8,8 +8,7 @@ Tests:
 4. Recommendation generation
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 from app.services.llm.zombie_analyzer import ZombieAnalyzer
 

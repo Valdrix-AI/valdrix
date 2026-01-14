@@ -9,9 +9,7 @@ Tests:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi.testclient import TestClient
-from fastapi import HTTPException
+from unittest.mock import AsyncMock
 
 from app.api.v1.billing import (
     CheckoutRequest,
@@ -90,7 +88,7 @@ class TestWebhookHandler:
         from app.services.billing.paystack_billing import WebhookHandler
         
         mock_db = AsyncMock()
-        handler = WebhookHandler(mock_db)
+        _ = WebhookHandler(mock_db)
         
         # Signature verification happens in the handle method
         # This tests the structure, actual crypto verification needs the real key
@@ -114,17 +112,17 @@ class TestPricingTier:
         """PricingTier should have expected values."""
         from app.services.billing.paystack_billing import PricingTier
         
-        assert PricingTier.FREE.value == "free"
+        assert PricingTier.TRIAL.value == "trial"
         assert PricingTier.STARTER.value == "starter"
-        assert PricingTier.PROFESSIONAL.value == "professional"
+        assert PricingTier.PRO.value == "pro"
         assert PricingTier.ENTERPRISE.value == "enterprise"
     
     def test_pricing_tier_from_string(self):
         """PricingTier should be creatable from string."""
         from app.services.billing.paystack_billing import PricingTier
         
-        tier = PricingTier("professional")
-        assert tier == PricingTier.PROFESSIONAL
+        tier = PricingTier("pro")
+        assert tier == PricingTier.PRO
 
 
 class TestTenantSubscriptionModel:

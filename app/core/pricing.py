@@ -11,11 +11,8 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from functools import wraps
 from typing import Optional, Callable
-from uuid import UUID
 
-from fastapi import HTTPException, status, Depends
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException, status
 
 import structlog
 

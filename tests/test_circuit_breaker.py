@@ -9,7 +9,6 @@ Tests:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from app.services.remediation.circuit_breaker import (
     CircuitBreakerConfig,

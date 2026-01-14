@@ -14,11 +14,10 @@ References:
 - Martin Fowler: CircuitBreaker
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from dataclasses import dataclass
-from uuid import UUID
 import json
 import structlog
 

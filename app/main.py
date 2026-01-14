@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
 from app.services.scheduler import SchedulerService
+from app.core.timeout import TimeoutMiddleware
 
 # Ensure all models are registered with SQLAlchemy
 import app.models.tenant
@@ -86,7 +87,6 @@ Instrumentator().instrument(app).expose(app)
 # CORS must be added LAST so it processes FIRST for incoming requests.
 
 # Add timeout middleware (5 minutes for long zombie scans)
-from app.core.timeout import TimeoutMiddleware
 app.add_middleware(TimeoutMiddleware, timeout_seconds=300)
 
 # Security headers and request ID

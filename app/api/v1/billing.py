@@ -8,7 +8,6 @@ Provides:
 """
 
 from typing import Annotated, Optional
-from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel

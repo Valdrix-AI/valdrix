@@ -7,8 +7,6 @@ Tests:
 3. Carbon equivalencies
 """
 
-import pytest
-from unittest.mock import MagicMock
 
 from app.services.carbon.calculator import CarbonCalculator
 
@@ -77,7 +75,7 @@ class TestGridIntensity:
     def test_green_regions(self):
         """Some regions should be greener."""
         green_regions = ["eu-north-1", "us-west-2", "eu-west-1"]
-        brown_regions = ["us-east-1", "ap-south-1"]
+
         
         # Green regions typically < 0.4 kg CO2/kWh
         assert len(green_regions) >= 1

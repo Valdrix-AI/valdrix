@@ -9,7 +9,6 @@ Tests:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 from app.core.auth import CurrentUser, requires_role

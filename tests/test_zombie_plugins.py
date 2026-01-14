@@ -7,8 +7,6 @@ Tests:
 3. Result structures
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.zombies.zombie_plugin import ZombiePlugin
 from app.services.zombies import plugins
@@ -37,7 +35,6 @@ class TestZombiePluginModule:
     
     def test_plugins_exports_plugins(self):
         """Plugins package should export plugin classes."""
-        from app.services.zombies import plugins
         
         # Should have plugin classes exported
         assert hasattr(plugins, 'UnattachedVolumesPlugin')

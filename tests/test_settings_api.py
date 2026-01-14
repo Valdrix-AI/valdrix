@@ -8,9 +8,6 @@ Tests:
 4. ActiveOps settings
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import status
 
 
 class TestNotificationSettings:

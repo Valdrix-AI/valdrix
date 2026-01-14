@@ -13,7 +13,7 @@ Uses Upstash free tier (10K commands/day) which is sufficient for:
 
 import json
 import structlog
-from typing import Optional, Any
+from typing import Optional
 from uuid import UUID
 from datetime import timedelta
 

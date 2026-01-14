@@ -46,15 +46,17 @@ else:
 
 # Engine: The connection pool manager
 # - echo: Logs SQL queries when DEBUG=True (disable in production for performance)
-# - pool_size: Number of persistent connections (5 is good for Neon free tier)
-# - max_overflow: Extra connections allowed during traffic spikes
+# - pool_size: Number of persistent connections (10 for 10K+ user scaling)
+# - max_overflow: Extra connections allowed during traffic spikes (20 for burst handling)
 # - pool_pre_ping: Checks if connection is alive before using (prevents stale connections)
+# - pool_recycle: Recycle connections after 5 min (Supavisor/Neon compatibility)
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
-    pool_size=5,
-    max_overflow=10,
+    pool_size=10,       # Phase 7: Increased for 10K user scaling
+    max_overflow=20,    # Phase 7: Handle traffic bursts
     pool_pre_ping=True,
+    pool_recycle=300,   # Phase 7: Recycle every 5 min for Supavisor
     connect_args=connect_args,
 )
 

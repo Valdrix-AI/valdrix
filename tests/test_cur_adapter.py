@@ -7,8 +7,6 @@ Tests:
 3. Date range handling
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import date
 
 from app.services.adapters.cur_adapter import CURAdapter, CURConfig

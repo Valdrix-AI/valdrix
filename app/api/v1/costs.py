@@ -12,96 +12,106 @@ from app.services.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.services.llm.analyzer import FinOpsAnalyzer
 
 from app.models.llm import LLMUsage
+from app.core.dependencies import get_analyzer
+from app.core.pricing import PricingTier, is_feature_enabled
+from pydantic import BaseModel
+from typing import Any
+
+class CostResponse(BaseModel):
+    analysis: Any
 
 router = APIRouter(tags=["Costs & Analysis"])
 logger = structlog.get_logger()
 
+
 @router.get("/costs")
 async def get_costs(
-  start_date: date,
-  end_date: date,
-  user: Annotated[CurrentUser, Depends(requires_role("member"))],
-  db: AsyncSession = Depends(get_db)
+    start_date: date,
+    end_date: date,
+    user: Annotated[CurrentUser, Depends(requires_role("member"))],
+    db: AsyncSession = Depends(get_db),
 ):
-  """Retrieves daily cloud costs for a specified date range."""
-  result = await db.execute(
-    select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
-  )
-  connection = result.scalar_one_or_none()
+    """Retrieves daily cloud costs for a specified date range."""
+    result = await db.execute(
+        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+    )
+    connection = result.scalar_one_or_none()
 
-  if not connection:
-    logger.warning("no_aws_connection", tenant_id=str(user.tenant_id))
+    if not connection:
+        logger.warning("no_aws_connection", tenant_id=str(user.tenant_id))
+        return {
+            "total_cost": 0,
+            "breakdown": [],
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "error": "No AWS connection found.",
+        }
+
+    adapter = MultiTenantAWSAdapter(connection)
+    results = await adapter.get_daily_costs(start_date, end_date)
+
+    # Simple total calculation for response
+    total = 0
+    if results and not (isinstance(results[0], dict) and "Error" in results[0]):
+        for day in results:
+            # AWS Cost Explorer format: day['Total']['UnblendedCost']['Amount']
+            for metric in day.get("Total", {}).values():
+                total += float(metric.get("Amount", 0))
+
     return {
-      "total_cost": 0,
-      "breakdown": [],
-      "start_date": start_date.isoformat(),
-      "end_date": end_date.isoformat(),
-      "error": "No AWS connection found."
+        "total_cost": total,
+        "breakdown": results,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
     }
 
-  adapter = MultiTenantAWSAdapter(connection)
-  results = await adapter.get_daily_costs(start_date, end_date)
 
-  # Simple total calculation for response
-  total = 0
-  if results and not (isinstance(results[0], dict) and "Error" in results[0]):
-      for day in results:
-          # AWS Cost Explorer format: day['Total']['UnblendedCost']['Amount']
-          for metric in day.get("Total", {}).values():
-              total += float(metric.get("Amount", 0))
 
-  return {
-    "total_cost": total,
-    "breakdown": results,
-    "start_date": start_date.isoformat(),
-    "end_date": end_date.isoformat(),
-  }
 
-from app.core.dependencies import get_analyzer
-from app.core.pricing import PricingTier, is_feature_enabled
 
-@router.get("/analyze")
+@router.get("/current", response_model=CostResponse)
 async def analyze_costs(
-  start_date: date,
-  end_date: date,
-  analyzer: Annotated[FinOpsAnalyzer, Depends(get_analyzer)],
-  user: Annotated[CurrentUser, Depends(requires_role("member"))],
-  db: AsyncSession = Depends(get_db)
+    start_date: date,
+    end_date: date,
+    analyzer: Annotated[FinOpsAnalyzer, Depends(get_analyzer)],
+    user: Annotated[CurrentUser, Depends(requires_role("member"))],
+    db: AsyncSession = Depends(get_db),
 ):
-  """AI-powered analysis of cloud costs. Requires Growth tier or higher."""
-  # Feature gating: Check tier access
-  user_tier = getattr(user, "tier", "starter")
-  try:
-      tier_enum = PricingTier(user_tier)
-  except ValueError:
-      tier_enum = PricingTier.STARTER
-  
-  if not is_feature_enabled(tier_enum, "llm_analysis"):
-      return {
-          "analysis": "AI-powered analysis requires Growth tier or higher.",
-          "upgrade_required": True,
-          "current_tier": user_tier
-      }
-  result = await db.execute(
-    select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
-  )
-  connection = result.scalar_one_or_none()
+    """AI-powered analysis of cloud costs. Requires Growth tier or higher."""
+    # Feature gating: Check tier access
+    user_tier = getattr(user, "tier", "starter")
+    try:
+        tier_enum = PricingTier(user_tier)
+    except ValueError:
+        tier_enum = PricingTier.STARTER
 
-  if not connection:
-    return {"analysis": "No AWS connection found."}
+    if not is_feature_enabled(tier_enum, "llm_analysis"):
+        return {
+            "analysis": "AI-powered analysis requires Growth tier or higher.",
+            "upgrade_required": True,
+            "current_tier": user_tier,
+        }
+    result = await db.execute(
+        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+    )
+    connection = result.scalar_one_or_none()
 
-  adapter = MultiTenantAWSAdapter(connection)
-  cost_data = await adapter.get_daily_costs(start_date, end_date)
+    if not connection:
+        return {"analysis": "No AWS connection found."}
 
-  logger.info("starting_sentinel_analysis", start=start_date, end=end_date)
+    adapter = MultiTenantAWSAdapter(connection)
+    cost_data = await adapter.get_daily_costs(start_date, end_date)
 
-  insights = await analyzer.analyze(
-      cost_data,
-      tenant_id=user.tenant_id,
-      db=db,
-  )
+    logger.info("starting_sentinel_analysis", start=start_date, end=end_date)
 
-  return {"analysis": insights}
+    insights = await analyzer.analyze(
+        cost_data,
+        tenant_id=user.tenant_id,
+        db=db,
+    )
+
+    return {"analysis": insights}
+
 
 @router.get("/llm/usage")
 async def get_llm_usage(

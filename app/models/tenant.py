@@ -15,6 +15,10 @@ class Tenant(Base):
     
     # Trial tracking
     trial_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    
+    # Activity tracking (Phase 7: Lazy Tenant Pattern)
+    # Updated on dashboard access for dormancy detection
+    last_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     users: Mapped[list["User"]] = relationship(back_populates="tenant", cascade="all, delete")

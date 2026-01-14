@@ -306,10 +306,11 @@ class WebhookHandler:
         # We rely on email or customer code to link back if metadata is missing.
         # But charge.success usually has metadata.
         # Let's try to pass tenant_id via customer email or metadata if available.
-        customer_code = data.get("customer", {}).get("customer_code")
-        subscription_code = data.get("subscription_code")
-        email_token = data.get("email_token")
-        next_payment = data.get("next_payment_date")
+        # Let's try to pass tenant_id via customer email or metadata if available.
+        _ = data.get("customer", {}).get("customer_code")
+        _ = data.get("subscription_code")
+        _ = data.get("email_token")
+        _ = data.get("next_payment_date")
         
         # We need to find the tenant. Ideally, we verified the transaction earlier and linked customer_code.
         # If not, we might need to look up by email.
@@ -325,7 +326,7 @@ class WebhookHandler:
         customer_code = customer.get("customer_code")
         
         # In subscription context, data includes authorization (for future charges)
-        authorization = data.get("authorization", {})
+        _ = data.get("authorization", {})
         
         # If this is a subscription charge, we might get plan info
         plan = data.get("plan", {})

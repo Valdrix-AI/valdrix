@@ -7,7 +7,7 @@ Tests behavior when:
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 import json
 
