@@ -9,7 +9,6 @@ Manages the remediation approval workflow:
 """
 
 from typing import List, Dict, Optional
-from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 import aioboto3

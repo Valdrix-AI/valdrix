@@ -8,6 +8,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
+from app.core.sentry import init_sentry
 from app.services.scheduler import SchedulerService
 from app.core.timeout import TimeoutMiddleware
 
@@ -35,8 +36,9 @@ from app.api.v1.jobs import router as jobs_router
 from app.api.v1.health_dashboard import router as health_dashboard_router
 from app.api.v1.usage import router as usage_router
 
-# Configure logging
+# Configure logging and Sentry
 setup_logging()
+init_sentry()
 logger = structlog.get_logger()
 
 @asynccontextmanager

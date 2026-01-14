@@ -17,13 +17,20 @@ Usage:
 """
 
 import os
-import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
-from sentry_sdk.integrations.logging import LoggingIntegration
 import structlog
 
 logger = structlog.get_logger()
+
+# Optional import - Sentry is only used in production
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+    SENTRY_AVAILABLE = True
+except ImportError:
+    SENTRY_AVAILABLE = False
+    logger.info("sentry_sdk_not_installed", message="Install sentry-sdk for error tracking")
 
 
 def init_sentry() -> bool:
@@ -33,6 +40,10 @@ def init_sentry() -> bool:
     Returns:
         True if Sentry was initialized, False otherwise
     """
+    if not SENTRY_AVAILABLE:
+        logger.info("sentry_disabled", reason="sentry-sdk not installed")
+        return False
+    
     dsn = os.getenv("SENTRY_DSN")
     
     if not dsn:
