@@ -196,6 +196,7 @@ class TestEnqueueJob:
     async def test_creates_job_with_defaults(self):
         """Should create job with default values."""
         mock_db = AsyncMock()
+        mock_db.add = MagicMock()
         
         with patch('app.services.jobs.processor.BackgroundJob') as MockJob:
             mock_instance = MagicMock()
@@ -215,6 +216,7 @@ class TestEnqueueJob:
     async def test_respects_scheduled_for(self):
         """Should use provided scheduled_for time."""
         mock_db = AsyncMock()
+        mock_db.add = MagicMock()
         future_time = datetime.now(timezone.utc) + timedelta(hours=1)
         
         with patch('app.services.jobs.processor.BackgroundJob') as MockJob:

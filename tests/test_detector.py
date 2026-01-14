@@ -59,6 +59,9 @@ def mock_db():
     result_mock = MagicMock()
     db.execute.return_value = result_mock
     
+    # db.add is synchronous
+    db.add = MagicMock()
+    
     # Configure default behaviors
     result_mock.scalars.return_value.all.return_value = []
     result_mock.scalar_one_or_none.return_value = None

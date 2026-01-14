@@ -11,7 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 import structlog
 
 from app.core.auth import CurrentUser, requires_role
@@ -32,8 +32,7 @@ class AuditLogResponse(BaseModel):
     success: bool
     correlation_id: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/logs", response_model=List[AuditLogResponse])
