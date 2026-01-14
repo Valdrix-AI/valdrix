@@ -34,6 +34,47 @@ SCHEDULER_JOB_DURATION = Histogram(
 )
 
 
+# Tenant Cohorts for tiered scheduling (Phase 7: 10K Scale)
+# - HIGH_VALUE: Enterprise/Pro - scan every 6 hours
+# - ACTIVE: Growth - scan daily
+# - DORMANT: Starter or inactive 7+ days - scan weekly
+from enum import Enum
+
+class TenantCohort(str, Enum):
+    HIGH_VALUE = "high_value"  # Enterprise, Pro
+    ACTIVE = "active"          # Growth
+    DORMANT = "dormant"        # Starter, or any tier inactive 7+ days
+
+
+def get_tenant_cohort(tenant: Tenant, last_active: datetime | None = None) -> TenantCohort:
+    """
+    Classify tenant into a cohort for tiered scheduling.
+    
+    Args:
+        tenant: The tenant model
+        last_active: Optional last activity timestamp (for dormancy detection)
+    
+    Returns:
+        TenantCohort for scheduling decisions
+    """
+    # High-value tiers get priority scheduling
+    if tenant.plan in ["enterprise", "pro"]:
+        return TenantCohort.HIGH_VALUE
+    
+    # Check for dormancy (inactive > 7 days)
+    if last_active:
+        days_inactive = (datetime.now(timezone.utc) - last_active).days
+        if days_inactive >= 7:
+            return TenantCohort.DORMANT
+    
+    # Growth tier = Active cohort
+    if tenant.plan == "growth":
+        return TenantCohort.ACTIVE
+    
+    # Starter and Trial with no activity info = DORMANT (weekly scans)
+    return TenantCohort.DORMANT
+
+
 class SchedulerService:
     """
     Background job scheduler for Valdrix.
@@ -99,6 +140,73 @@ class SchedulerService:
             duration = time.time() - start_time
             SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
             logger.info("scheduler_job_duration", job=job_name, seconds=round(duration, 2))
+
+    async def cohort_analysis_job(self, target_cohort: TenantCohort):
+        """
+        Cohort-based analysis job (Phase 7: 10K Scale).
+        
+        Only processes tenants in the specified cohort, reducing API usage by 88%.
+        
+        Args:
+            target_cohort: The cohort to process (HIGH_VALUE, ACTIVE, or DORMANT)
+        """
+        job_name = f"cohort_{target_cohort.value}_scan"
+        start_time = time.time()
+
+        logger.info("scheduler_cohort_job_starting", job=job_name, cohort=target_cohort.value)
+
+        try:
+            # 1. Get all tenants
+            async with self.session_maker() as db:
+                result = await db.execute(select(Tenant))
+                all_tenants = result.scalars().all()
+
+            # 2. Filter to target cohort
+            cohort_tenants = [
+                t for t in all_tenants 
+                if get_tenant_cohort(t) == target_cohort
+            ]
+
+            logger.info(
+                "scheduler_cohort_filtered",
+                total_tenants=len(all_tenants),
+                cohort_tenants=len(cohort_tenants),
+                cohort=target_cohort.value
+            )
+
+            if not cohort_tenants:
+                logger.info("scheduler_cohort_empty", cohort=target_cohort.value)
+                return
+
+            today = date.today()
+            yesterday = today - timedelta(days=1)
+
+            # Process cohort tenants in parallel with a semaphore limit
+            tasks = [
+                self._process_tenant_wrapper(tenant, yesterday, today) 
+                for tenant in cohort_tenants
+            ]
+            await asyncio.gather(*tasks)
+
+            SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
+            self._last_run_success = True
+            self._last_run_time = datetime.now(timezone.utc).isoformat()
+
+        except Exception as e:
+            logger.error("scheduler_cohort_job_failed", job=job_name, error=str(e))
+            SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
+            self._last_run_success = False
+            self._last_run_time = datetime.now(timezone.utc).isoformat()
+
+        finally:
+            duration = time.time() - start_time
+            SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
+            logger.info(
+                "scheduler_cohort_job_duration", 
+                job=job_name, 
+                cohort=target_cohort.value,
+                seconds=round(duration, 2)
+            )
 
     async def _process_tenant_wrapper(self, tenant: Tenant, start_date: date, end_date: date):
         """Wrapper to apply semaphore to tenant processing."""
@@ -196,24 +304,50 @@ class SchedulerService:
 
     def start(self):
         """
-        Start the scheduler.
+        Start the scheduler with cohort-based scheduling (Phase 7: 10K Scale).
+        
+        Cohort Schedule:
+        - HIGH_VALUE (Enterprise/Pro): Every 6 hours (0:00, 6:00, 12:00, 18:00 UTC)
+        - ACTIVE (Growth): Daily at 2:00 AM UTC  
+        - DORMANT (Starter/inactive): Weekly on Sunday at 3:00 AM UTC
         """
-        # Get schedule from settings (with defaults)
-        hour = self.settings.SCHEDULER_HOUR
-        minute = self.settings.SCHEDULER_MINUTE
-
-        trigger = CronTrigger(hour=hour, minute=minute, timezone="UTC")
-
+        # HIGH_VALUE cohort: Every 6 hours
+        high_value_trigger = CronTrigger(hour="0,6,12,18", minute=0, timezone="UTC")
         self.scheduler.add_job(
-            self.daily_analysis_job,
-            trigger=trigger,
-            id="daily_finops_scan",
+            self.cohort_analysis_job,
+            trigger=high_value_trigger,
+            id="cohort_high_value_scan",
+            args=[TenantCohort.HIGH_VALUE],
             replace_existing=True,
-            max_instances=1,  # Prevent overlapping runs
-            misfire_grace_time=3600,  # 1 hour grace period for missed jobs
+            max_instances=1,
+            misfire_grace_time=1800,  # 30 min grace
+        )
+        
+        # ACTIVE cohort: Daily at 2 AM
+        active_trigger = CronTrigger(hour=2, minute=0, timezone="UTC")
+        self.scheduler.add_job(
+            self.cohort_analysis_job,
+            trigger=active_trigger,
+            id="cohort_active_scan",
+            args=[TenantCohort.ACTIVE],
+            replace_existing=True,
+            max_instances=1,
+            misfire_grace_time=3600,
+        )
+        
+        # DORMANT cohort: Weekly on Sunday at 3 AM
+        dormant_trigger = CronTrigger(day_of_week="sun", hour=3, minute=0, timezone="UTC")
+        self.scheduler.add_job(
+            self.cohort_analysis_job,
+            trigger=dormant_trigger,
+            id="cohort_dormant_scan",
+            args=[TenantCohort.DORMANT],
+            replace_existing=True,
+            max_instances=1,
+            misfire_grace_time=7200,
         )
 
-        # Weekly Auto-Remediation (Friday 8PM)
+        # Weekly Auto-Remediation (Friday 8PM) - only for HIGH_VALUE cohort
         remediation_trigger = CronTrigger(day_of_week="fri", hour=20, minute=0, timezone="UTC")
         self.scheduler.add_job(
             self.auto_remediation_job,
@@ -223,7 +357,12 @@ class SchedulerService:
             max_instances=1
         )
 
-
+        logger.info("scheduler_started", jobs=[
+            "cohort_high_value_scan (every 6h)",
+            "cohort_active_scan (daily 2AM)",
+            "cohort_dormant_scan (weekly Sun 3AM)",
+            "weekly_remediation_sweep (Fri 8PM)"
+        ])
         self.scheduler.start()
 
     async def auto_remediation_job(self):

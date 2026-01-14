@@ -97,14 +97,16 @@ class TestSchedulerStart:
     """Tests for start() method."""
     
     async def test_registers_daily_job(self):
-        """Should register daily analysis job."""
+        """Should register cohort analysis jobs (Phase 7: tiered scheduling)."""
         mock_session_maker = create_mock_session_maker()
         scheduler = SchedulerService(session_maker=mock_session_maker)
         scheduler.start()
         
-        # Get job IDs
+        # Get job IDs - now using cohort-based scheduling
         job_ids = [j.id for j in scheduler.scheduler.get_jobs()]
-        assert "daily_finops_scan" in job_ids
+        assert "cohort_high_value_scan" in job_ids  # Enterprise/Pro every 6h
+        assert "cohort_active_scan" in job_ids       # Growth daily
+        assert "cohort_dormant_scan" in job_ids      # Starter weekly
         
         scheduler.scheduler.shutdown(wait=False)
     
