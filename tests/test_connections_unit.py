@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from app.api.connections import verify_aws_connection
+from app.api.v1.connections import verify_aws_connection
 
 @pytest.mark.asyncio
 async def test_verify_aws_connection_success():
