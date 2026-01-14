@@ -25,6 +25,58 @@
   let error = $state('');
   let startDate = $state('');
   let endDate = $state('');
+  
+  // Table pagination state
+  let currentPage = $state(0);
+  let remediating = $state<string | null>(null);
+  
+  /**
+   * Handle remediation action for a zombie resource.
+   * Creates a remediation request and navigates to approval workflow.
+   */
+  async function handleRemediate(finding: any) {
+    if (remediating) return;
+    
+    remediating = finding.resource_id;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      
+      const response = await fetch(`${PUBLIC_API_URL}/zombies/request`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          resource_id: finding.resource_id,
+          resource_type: finding.resource_type || 'unknown',
+          action: finding.recommended_action?.toLowerCase().includes('delete') ? 'delete_volume' : 'stop_instance',
+          estimated_savings: parseFloat(finding.monthly_cost?.replace('$', '') || '0'),
+          create_backup: true,
+        }),
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        if (response.status === 403) {
+          alert('⚡ Upgrade Required: Auto-remediation requires Pro tier or higher.');
+        } else {
+          alert(`Error: ${data.detail || 'Failed to create remediation request'}`);
+        }
+        return;
+      }
+      
+      const result = await response.json();
+      alert(`✅ Remediation request created! ID: ${result.request_id}\n\nAn admin must approve before execution.`);
+      
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
+    } finally {
+      remediating = null;
+    }
+  }
 
   async function loadData() {
     if (!data.user || !startDate || !endDate) {
@@ -222,59 +274,141 @@
           </div>
         </div>
         
-        <!-- AI Findings Grid -->
+        <!-- AI Findings Table - Scalable Design -->
         {#if aiData.resources && aiData.resources.length > 0}
-          <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {#each aiData.resources as finding, i}
-              <div 
-                class="glass-panel stagger-enter" 
-                style="animation-delay: {250 + i * 50}ms;"
-              >
-                <!-- Header: Icon + Confidence -->
-                <div class="flex items-start justify-between mb-3">
-                  <span class="text-2xl">
-                    {finding.confidence === 'high' ? '🔴' : finding.confidence === 'medium' ? '🟡' : '🟢'}
-                  </span>
-                  <span class="badge {finding.confidence === 'high' ? 'badge-danger' : finding.confidence === 'medium' ? 'badge-warning' : 'badge-success'}">
-                    {finding.confidence} confidence
-                  </span>
-                </div>
-                
-                <!-- Resource ID -->
-                <h3 class="font-mono text-sm mb-2 truncate">{finding.resource_id}</h3>
-                
-                <!-- Explanation -->
-                <p class="text-sm text-ink-300 mb-3 line-clamp-3">{finding.explanation}</p>
-                
-                <!-- Cost + Risk Row -->
-                <div class="flex items-center gap-4 mb-4 text-xs">
-                  <span class="text-success-400">💵 {finding.monthly_cost}</span>
-                  <span class="{finding.risk_if_deleted === 'high' ? 'text-danger-400' : finding.risk_if_deleted === 'medium' ? 'text-warning-400' : 'text-success-400'}">
-                    Risk: {finding.risk_if_deleted}
-                  </span>
-                </div>
-                
-                <!-- Action Button -->
+          {@const pageSize = 10}
+          {@const totalPages = Math.ceil(aiData.resources.length / pageSize)}
+          
+          <div class="card stagger-enter" style="animation-delay: 250ms;">
+            <!-- Table Header -->
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold">
+                🧟 Zombie Resources ({aiData.resources.length})
+              </h3>
+              <div class="flex items-center gap-2 text-xs text-ink-400">
+                <span>Page {currentPage + 1} of {totalPages}</span>
+              </div>
+            </div>
+            
+            <!-- Responsive Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-ink-700 text-left text-xs text-ink-400 uppercase tracking-wider">
+                    <th class="pb-3 pr-4">Resource</th>
+                    <th class="pb-3 pr-4">Type</th>
+                    <th class="pb-3 pr-4">Cost</th>
+                    <th class="pb-3 pr-4">Confidence</th>
+                    <th class="pb-3 pr-4">Risk</th>
+                    <th class="pb-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each aiData.resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize) as finding, i}
+                    <tr class="border-b border-ink-800 hover:bg-ink-800/50 transition-colors">
+                      <!-- Resource ID -->
+                      <td class="py-3 pr-4">
+                        <div class="font-mono text-xs truncate max-w-[150px]" title={finding.resource_id}>
+                          {finding.resource_id}
+                        </div>
+                        <!-- Expandable explanation -->
+                        <details class="mt-1">
+                          <summary class="text-xs text-ink-500 cursor-pointer hover:text-accent-400">
+                            View details
+                          </summary>
+                          <p class="text-xs text-ink-400 mt-1 max-w-xs">
+                            {finding.explanation}
+                          </p>
+                          {#if finding.confidence_reason}
+                            <p class="text-xs text-ink-500 mt-1 italic">
+                              {finding.confidence_reason}
+                            </p>
+                          {/if}
+                        </details>
+                      </td>
+                      
+                      <!-- Type Badge -->
+                      <td class="py-3 pr-4">
+                        <span class="badge badge-default text-xs">
+                          {finding.resource_type || 'Resource'}
+                        </span>
+                      </td>
+                      
+                      <!-- Monthly Cost -->
+                      <td class="py-3 pr-4 font-semibold text-success-400">
+                        {finding.monthly_cost || '$0'}
+                      </td>
+                      
+                      <!-- Confidence -->
+                      <td class="py-3 pr-4">
+                        <span class="inline-flex items-center gap-1">
+                          <span class="w-2 h-2 rounded-full {finding.confidence === 'high' ? 'bg-danger-400' : finding.confidence === 'medium' ? 'bg-warning-400' : 'bg-success-400'}"></span>
+                          <span class="text-xs capitalize">{finding.confidence}</span>
+                        </span>
+                      </td>
+                      
+                      <!-- Risk -->
+                      <td class="py-3 pr-4">
+                        <span class="text-xs {finding.risk_if_deleted === 'high' ? 'text-danger-400' : finding.risk_if_deleted === 'medium' ? 'text-warning-400' : 'text-ink-400'}">
+                          {finding.risk_if_deleted || 'low'}
+                        </span>
+                      </td>
+                      
+                      <!-- Action Button -->
+                      <td class="py-3 text-right">
+                        <button 
+                          class="btn btn-ghost text-xs hover:bg-accent-500/20 hover:text-accent-400"
+                          onclick={() => handleRemediate(finding)}
+                          disabled={remediating === finding.resource_id}
+                        >
+                          {#if remediating === finding.resource_id}
+                            <span class="animate-pulse">...</span>
+                          {:else}
+                            {finding.recommended_action || 'Review'}
+                          {/if}
+                        </button>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+            
+            <!-- Pagination -->
+            {#if totalPages > 1}
+              <div class="flex items-center justify-between mt-4 pt-4 border-t border-ink-800">
                 <button 
-                  class="btn btn-primary w-full text-xs"
-                  onclick={() => console.log('Remediate:', finding.resource_id)}
+                  class="btn btn-ghost text-xs"
+                  disabled={currentPage === 0}
+                  onclick={() => currentPage = Math.max(0, currentPage - 1)}
                 >
-                  {finding.recommended_action || 'Review'}
+                  ← Previous
                 </button>
                 
-                <!-- Why? Tooltip (expandable) -->
-                {#if finding.confidence_reason}
-                  <details class="mt-2">
-                    <summary class="text-xs text-ink-500 cursor-pointer hover:text-ink-400">
-                      Why this confidence?
-                    </summary>
-                    <p class="text-xs text-ink-400 mt-1 pl-2 border-l border-ink-700">
-                      {finding.confidence_reason}
-                    </p>
-                  </details>
-                {/if}
+                <div class="flex items-center gap-1">
+                  {#each Array(Math.min(totalPages, 5)) as _, p}
+                    {@const pageNum = totalPages <= 5 ? p : 
+                      currentPage < 3 ? p :
+                      currentPage > totalPages - 3 ? totalPages - 5 + p :
+                      currentPage - 2 + p}
+                    <button 
+                      class="w-8 h-8 rounded text-xs {currentPage === pageNum ? 'bg-accent-500 text-white' : 'hover:bg-ink-700'}"
+                      onclick={() => currentPage = pageNum}
+                    >
+                      {pageNum + 1}
+                    </button>
+                  {/each}
+                </div>
+                
+                <button 
+                  class="btn btn-ghost text-xs"
+                  disabled={currentPage >= totalPages - 1}
+                  onclick={() => currentPage = Math.min(totalPages - 1, currentPage + 1)}
+                >
+                  Next →
+                </button>
               </div>
-            {/each}
+            {/if}
           </div>
         {/if}
         

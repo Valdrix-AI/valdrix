@@ -3,11 +3,11 @@
 </p>
 
 <h1 align="center">Valdrix</h1>
-<h3 align="center">Heroic Intelligence for Cloud Spend</h3>
+<h3 align="center">Intelligence for Cloud Value Optimization</h3>
 
 <p align="center">
-  <em>The autonomous FinOps & GreenOps agent that hunts zombie resources,<br/>
-  thinks like a human, and gives your cloud bill a second chance.</em>
+  <em>Valdrix combines <strong>Value</strong> + <strong>Matrix</strong>: an intelligent system that extracts,<br/>
+  measures, and optimizes value from complex multi-cloud financial data.</em>
 </p>
 
 <p align="center">
@@ -26,6 +26,7 @@
   <strong><a href="#-get-started">Get Started</a></strong> · 
   <strong><a href="#-roadmap">Roadmap</a></strong>
 </p>
+
 
 ---
 
@@ -54,10 +55,10 @@ Graphs give you... more questions.
 
 **Valdrix is different.**
 
-It's not a dashboard. It's an **autonomous agent** that connects to your cloud, hunts for waste, and tells you *exactly* what to do—with receipts.
+It's not a dashboard. It's an **autonomous value optimization engine** that connects to your cloud, finds value leakage, and tells you *exactly* what to do—with receipts.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Think_of_it_as-👨‍💻_A_FinOps_Analyst_That_Never_Sleeps-blueviolet?style=for-the-badge" alt="FinOps Analyst" />
+  <img src="https://img.shields.io/badge/Think_of_it_as-�_Your_Cloud_Value_Intelligence-blueviolet?style=for-the-badge" alt="Cloud Value Intelligence" />
 </p>
 
 ### Here's how it works:
