@@ -24,7 +24,7 @@ import app.models.background_job
 from codecarbon import EmissionsTracker
 from app.api.v1.onboard import router as onboard_router
 from app.api.connections import router as connections_router
-from app.api.settings import router as settings_router
+from app.api.v1.settings import router as settings_router
 from app.api.leaderboards import router as leaderboards_router
 from app.api.v1.costs import router as costs_router
 from app.api.v1.carbon import router as carbon_router
