@@ -150,6 +150,21 @@
     <div class="flex items-center justify-center py-20">
       <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-accent-500"></div>
     </div>
+  {:else if !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+    <!-- Tier Gating: Upgrade Required -->
+    <div class="flex flex-col items-center justify-center py-20 text-center">
+      <div class="text-6xl mb-4">🌱</div>
+      <h2 class="text-2xl font-bold text-white mb-2">Upgrade to Unlock GreenOps</h2>
+      <p class="text-ink-400 max-w-md mb-6">
+        Track your cloud carbon footprint, get green region recommendations, and monitor sustainability metrics with our GreenOps dashboard.
+      </p>
+      <div class="flex items-center gap-2 mb-6">
+        <span class="badge badge-warning">Growth Plan Required</span>
+      </div>
+      <a href="/billing" class="btn btn-primary">
+        Upgrade to Growth
+      </a>
+    </div>
   {:else if error}
     <div class="card bg-red-900/20 border-red-800 p-6">
       <p class="text-red-400">{error}</p>
