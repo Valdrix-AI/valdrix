@@ -31,6 +31,8 @@ from app.api.v1.admin import router as admin_router
 from app.api.v1.billing import router as billing_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.jobs import router as jobs_router
+from app.api.v1.health_dashboard import router as health_dashboard_router
+from app.api.v1.usage import router as usage_router
 
 # Configure logging
 setup_logging()
@@ -128,3 +130,5 @@ app.include_router(admin_router)
 app.include_router(billing_router)
 app.include_router(audit_router)
 app.include_router(jobs_router)
+app.include_router(health_dashboard_router)
+app.include_router(usage_router)
