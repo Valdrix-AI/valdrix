@@ -24,7 +24,7 @@ settings = get_settings()
 
 
 class CheckoutRequest(BaseModel):
-    tier: str  # starter, professional, enterprise
+    tier: str  # starter, growth, pro, enterprise
     callback_url: Optional[str] = None
 
 
@@ -52,7 +52,7 @@ async def get_subscription(
         sub = result.scalar_one_or_none()
 
         if not sub:
-            return SubscriptionResponse(tier="free", status="active")
+            return SubscriptionResponse(tier="trial", status="active")
 
         return SubscriptionResponse(
             tier=sub.tier,
