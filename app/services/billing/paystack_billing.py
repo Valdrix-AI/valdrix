@@ -158,18 +158,38 @@ class BillingService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.client = PaystackClient()
+        
+        # Monthly plan codes
         self.plan_codes = {
             PricingTier.STARTER: settings.PAYSTACK_PLAN_STARTER,
             PricingTier.GROWTH: settings.PAYSTACK_PLAN_GROWTH,
             PricingTier.PRO: settings.PAYSTACK_PLAN_PRO,
             PricingTier.ENTERPRISE: settings.PAYSTACK_PLAN_ENTERPRISE,
         }
-        # Amounts in Kobo (NGN x 100) - based on $29/$79/$199 @ ₦1,422/USD
+        
+        # Annual plan codes (17% discount - 2 months free)
+        self.annual_plan_codes = {
+            PricingTier.STARTER: getattr(settings, 'PAYSTACK_PLAN_STARTER_ANNUAL', None),
+            PricingTier.GROWTH: getattr(settings, 'PAYSTACK_PLAN_GROWTH_ANNUAL', None),
+            PricingTier.PRO: getattr(settings, 'PAYSTACK_PLAN_PRO_ANNUAL', None),
+            PricingTier.ENTERPRISE: getattr(settings, 'PAYSTACK_PLAN_ENTERPRISE_ANNUAL', None),
+        }
+        
+        # Monthly amounts in Kobo (NGN x 100) - based on $29/$79/$199 @ ₦1,422/USD
         self.plan_amounts = {
             PricingTier.STARTER: 4125000,      # ₦41,250 ($29)
             PricingTier.GROWTH: 11235000,      # ₦112,350 ($79)
             PricingTier.PRO: 28300000,         # ₦283,000 ($199)
             PricingTier.ENTERPRISE: 0          # Custom
+        }
+        
+        # Annual amounts (10 months price = 17% off)
+        # Annual = Monthly * 10 (instead of *12, giving 2 months free)
+        self.annual_plan_amounts = {
+            PricingTier.STARTER: 4125000 * 10,     # ₦412,500/year (saves ₦82,500)
+            PricingTier.GROWTH: 11235000 * 10,     # ₦1,123,500/year (saves ₦224,700)
+            PricingTier.PRO: 28300000 * 10,        # ₦2,830,000/year (saves ₦566,000)
+            PricingTier.ENTERPRISE: 0              # Custom
         }
 
     async def create_checkout_session(

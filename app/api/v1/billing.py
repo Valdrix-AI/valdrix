@@ -126,9 +126,16 @@ async def cancel_subscription(
 
 @router.post("/webhook")
 async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)):
-    """Handle Paystack webhook events."""
+    """
+    Handle Paystack webhook events with durable processing.
+    
+    Webhooks are stored in background_jobs before processing,
+    enabling automatic retry on failure.
+    """
     try:
         from app.services.billing.paystack_billing import WebhookHandler
+        from app.services.billing.webhook_retry import WebhookRetryService
+        import json
 
         payload = await request.body()
         signature = request.headers.get("x-paystack-signature", "")
@@ -136,14 +143,48 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         if not signature:
             raise HTTPException(401, "Missing signature")
 
+        # Verify signature first
         handler = WebhookHandler(db)
-        result = await handler.handle(payload, signature)
+        if not handler.verify_signature(payload, signature):
+            raise HTTPException(401, "Invalid signature")
 
-        return result
+        # Parse payload
+        data = json.loads(payload)
+        event_type = data.get("event", "unknown")
+        reference = data.get("data", {}).get("reference", "")
+
+        # Store webhook for durable processing
+        retry_service = WebhookRetryService(db)
+        job = await retry_service.store_webhook(
+            provider="paystack",
+            event_type=event_type,
+            payload=data,
+            reference=reference
+        )
+
+        if job is None:
+            # Duplicate webhook, already processed
+            return {"status": "duplicate", "message": "Already processed"}
+
+        # Process immediately (job stored for retry if fails)
+        try:
+            result = await handler.handle(payload, signature)
+            return result
+        except Exception as process_error:
+            logger.warning(
+                "webhook_processing_failed_will_retry",
+                job_id=str(job.id),
+                error=str(process_error)
+            )
+            # Job is already stored, will be retried by JobProcessor
+            return {"status": "queued", "job_id": str(job.id)}
 
     except ValueError as e:
         logger.error("webhook_invalid", error=str(e))
         raise HTTPException(401, str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("webhook_failed", error=str(e))
         raise HTTPException(500, "Webhook processing failed")
+
