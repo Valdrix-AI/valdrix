@@ -53,7 +53,12 @@ class AWSConnectionService:
             "external_id": external_id,
             "cloudformation_yaml": cloudformation_yaml,
             "terraform_hcl": terraform_hcl,
-            "magic_link": None,
+            "magic_link": (
+                f"https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?"
+                f"stackName=ValdrixSecurityAudit&"
+                f"templateURL=https://raw.githubusercontent.com/Valdrix-AI/valdrix/main/cloudformation/valdrix-role.yaml&"
+                f"param_ExternalId={external_id}"
+            ),
             "instructions": (
                 "1. Click the '⚡ Launch AWS Stack' button below\n"
                 "2. Review the permissions and click 'Create Stack' in AWS console\n"
