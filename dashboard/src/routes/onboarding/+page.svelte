@@ -376,6 +376,17 @@
           </button>
         </div>
         
+        <div class="code-editor mb-4 text-sm text-ink-300 bg-accent-950/20 p-4 rounded-lg border border-ink-800">
+          <h4 class="font-bold text-ink-100 mb-2">How to use manual template:</h4>
+          <ol class="list-decimal pl-4 space-y-1">
+            <li>Click <strong>Copy</strong> below to get the template.</li>
+            <li>Go to AWS Console &gt; CloudFormation &gt; Create Stack (With new resources).</li>
+            <li>Choose "Upload a template file" and paste the content (or upload the file).</li>
+            <li>Copy the <strong>RoleArn</strong> from the "Outputs" tab after creation.</li>
+            <li>Paste the RoleArn in Step 3 to verify.</li>
+          </ol>
+        </div>
+
         <div class="code-container">
           <div class="code-header">
             <span>{selectedTab === 'cloudformation' ? 'valdrix-role.yaml' : 'valdrix-role.tf'}</span>
