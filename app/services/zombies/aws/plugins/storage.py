@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import aioboto3
 from botocore.exceptions import ClientError
 import structlog
-from app.services.zombies.zombie_plugin import ZombiePlugin, ESTIMATED_COSTS
+from app.services.zombies.zombie_plugin import ZombiePlugin
 
 logger = structlog.get_logger()
 
@@ -63,8 +63,21 @@ class UnattachedVolumesPlugin(ZombiePlugin):
                             except ClientError as e:
                                 logger.warning("volume_metric_check_failed", vol=vol_id, error=str(e))
 
-                            monthly_cost = size_gb * ESTIMATED_COSTS["ebs_volume_gb"]
-                            backup_cost = size_gb * ESTIMATED_COSTS["snapshot_gb"]
+                            from app.services.pricing.service import PricingService
+                            monthly_cost = PricingService.estimate_monthly_waste(
+                                provider="aws",
+                                resource_type="volume",
+                                resource_size="gp2", # Defaulting to gp2 if unknown
+                                region=region,
+                                quantity=size_gb
+                            )
+                            backup_cost = PricingService.estimate_monthly_waste(
+                                provider="aws",
+                                resource_type="volume",
+                                resource_size="snapshot_gb", # Internal key for snap-GB
+                                region=region,
+                                quantity=size_gb
+                            )
 
                             zombies.append({
                                 "resource_id": vol_id,
@@ -101,8 +114,15 @@ class OldSnapshotsPlugin(ZombiePlugin):
                     for snap in page.get("Snapshots", []):
                         start_time = snap.get("StartTime")
                         if start_time and start_time < cutoff:
+                            from app.services.pricing.service import PricingService
                             size_gb = snap.get("VolumeSize", 0)
-                            monthly_cost = size_gb * ESTIMATED_COSTS["snapshot_gb"]
+                            monthly_cost = PricingService.estimate_monthly_waste(
+                                provider="aws",
+                                resource_type="volume",
+                                resource_size="snapshot_gb", 
+                                region=region,
+                                quantity=size_gb
+                            )
 
                             zombies.append({
                                 "resource_id": snap["SnapshotId"],

@@ -4,42 +4,55 @@ import logging
 from app.core.config import get_settings
 
 def setup_logging():
-  settings = get_settings()
+    settings = get_settings()
 
-  # 1. Choose the renderer based on environment
-  # If DEBUG=True (Local), use ConsoleRenderer (Colors!)
-  # If DEBUG=False (Prod), use JSONRenderer (Machine readable)
-  if settings.DEBUG:
-    renderer = structlog.dev.ConsoleRenderer()
-    min_level = logging.DEBUG
-  else:
-    renderer = structlog.processors.JSONRenderer()
-    min_level = logging.INFO
+    # 1. Choose the renderer based on environment
+    # If DEBUG=True (Local), use ConsoleRenderer (Colors!)
+    # If DEBUG=False (Prod), use JSONRenderer (Machine readable)
+    if settings.DEBUG:
+        renderer = structlog.dev.ConsoleRenderer()
+        min_level = logging.DEBUG
+    else:
+        renderer = structlog.processors.JSONRenderer()
+        min_level = logging.INFO
 
-  # 2. Configure the "Processors" (The Middleware Pipeline for Logs)
-  processors = [
-    structlog.contextvars.merge_contextvars, # Support async context
-    structlog.processors.add_log_level,      # Add "level": "info"
-    structlog.processors.TimeStamper(fmt="iso"), # Add "timestamp": "2026..."
-    structlog.processors.StackInfoRenderer(),
-    structlog.processors.format_exc_info,    # Render exceptions nicely
-    renderer
-  ]
+    # 2. Configure the "Processors" (The Middleware Pipeline for Logs)
+    processors = [
+        structlog.contextvars.merge_contextvars, # Support async context
+        structlog.processors.add_log_level,      # Add "level": "info"
+        structlog.processors.TimeStamper(fmt="iso"), # Add "timestamp": "2026..."
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,    # Render exceptions nicely
+        renderer
+    ]
 
-  # 3. Configure the logger or apply the configuration
-  structlog.configure(
-    processors=processors,
-    logger_factory=structlog.PrintLoggerFactory(),
-    cache_logger_on_first_use=True,
-  )
+    # 3. Configure the logger or apply the configuration
+    structlog.configure(
+        processors=processors,
+        logger_factory=structlog.PrintLoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
 
-  # 4. Intercept the standard logging (e.g. uvicorn's internal log).
-  # This ensure even library logs get formatted as JSON.
-  logging.basicConfig(
-    format="%(message)s",
-    stream=sys.stdout,
-    # filename="debug.log",
-    level=min_level,
-  )
+    # 4. Intercept the standard logging (e.g. uvicorn's internal log).
+    # This ensure even library logs get formatted as JSON.
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stdout,
+        # filename="debug.log",
+        level=min_level,
+    )
 
 
+def audit_log(event: str, user_id: str, tenant_id: str, details: dict = None):
+    """
+    Standardized helper for security-critical audit events.
+    Enforces a consistent schema for SIEM ingestion.
+    """
+    logger = structlog.get_logger("audit")
+    logger.info(
+        "audit_event",
+        event=event,
+        user_id=str(user_id),
+        tenant_id=str(tenant_id),
+        metadata=details or {},
+    )

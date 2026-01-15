@@ -73,9 +73,9 @@ class LLMUsage(Base):
     total_tokens = Column(Integer, nullable=False, default=0)
 
     # Cost in USD: Calculated at time of call
-    # Numeric(10,6): Up to $9999.999999 with 6 decimal precision
-    # Why 6 decimals: Token costs are tiny fractions of cents
-    cost_usd = Column(Numeric(10, 6), nullable=False, default=0)
+    # Numeric(18, 8): High precision for tiny fractions of cents
+    # Why 8 decimals: Token costs are tiny fractions of cents
+    cost_usd = Column(Numeric(18, 8), nullable=False, default=0)
 
     # Request Type: What was this LLM call for?
     # Examples: "daily_analysis", "chat", "anomaly_detection"

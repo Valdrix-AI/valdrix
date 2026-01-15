@@ -45,29 +45,27 @@ async def test_get_daily_costs_success():
 
 @pytest.mark.asyncio
 async def test_get_daily_costs_failure():
-  # 1. Arrange: Mark it crash
-  mock_client = AsyncMock()
-  mock_client.get_cost_and_usage.side_effect = ClientError(
-    {
-      "Error": {
-        "Code": "AccessDenied",
-        "Message": "Access Denied"
-      }
-    }, "get_cost_and_usage"
-  )
-
-  mock_cm = MagicMock()
-  mock_cm.__aenter__.return_value = mock_client
-  mock_cm.__aexit__.return_value = None
-
-  with patch("aioboto3.Session") as mock_session_cls:
-    mock_session = mock_session_cls.return_value
-    mock_session.client.return_value = mock_cm
-
-    adapter = AWSAdapter()
+    """Verify AdapterError is raised on CE failure."""
+    from app.core.exceptions import AdapterError
     
-    # 2. Act (Run the code)
-    result = await adapter.get_daily_costs(date(2026, 1, 1), date(2026, 1, 2))
+    mock_client = AsyncMock()
+    mock_client.get_cost_and_usage.side_effect = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "Access Denied"}}, 
+        "get_cost_and_usage"
+    )
 
-  # 3. Assert: Should be handled gracefully 
-  assert result == []
+    mock_cm = MagicMock()
+    mock_cm.__aenter__.return_value = mock_client
+    mock_cm.__aexit__.return_value = None
+
+    with patch("aioboto3.Session") as mock_session_cls:
+        mock_session = mock_session_cls.return_value
+        mock_session.client.return_value = mock_cm
+
+        adapter = AWSAdapter()
+        
+        with pytest.raises(AdapterError) as excinfo:
+            await adapter.get_daily_costs(date(2026, 1, 1), date(2026, 1, 2))
+            
+        assert "AWS Cost Explorer fetch failed" in str(excinfo.value)
+        assert excinfo.value.code == "AccessDenied"

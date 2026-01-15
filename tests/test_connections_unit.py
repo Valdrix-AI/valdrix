@@ -1,59 +1,61 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from app.api.v1.connections import verify_aws_connection
+from uuid import uuid4
+from fastapi import HTTPException
+from app.services.connections.aws import AWSConnectionService
+from app.models.aws_connection import AWSConnection
 
 @pytest.mark.asyncio
-async def test_verify_aws_connection_success():
-    """Verify that verify_aws_connection returns True on success."""
+async def test_verify_connection_success():
+    """Verify that verify_connection returns success on valid role."""
+    db = AsyncMock()
+    connection_id = uuid4()
+    tenant_id = uuid4()
     
-    # Mock mocks
-    mock_sts = AsyncMock()
-    # verify_aws_connection calls assume_role
-    mock_sts.assume_role.return_value = {
-        "Credentials": {
-            "AccessKeyId": "foo",
-            "SecretAccessKey": "bar",
-            "SessionToken": "baz",
-            "Expiration": "2026-01-01"
-        }
-    }
-    
-    # Mock Context Manager
-    mock_cm = MagicMock()
-    mock_cm.__aenter__.return_value = mock_sts
-    mock_cm.__aexit__.return_value = None
-    
-    with patch("aioboto3.Session") as mock_session_cls:
-        mock_session = mock_session_cls.return_value
-        mock_session.client.return_value = mock_cm
-        
-        success, error = await verify_aws_connection("arn:aws:iam::123:role/TestRole", "external-id-123")
-        
-        assert success is True
-        assert error is None
-        mock_sts.assume_role.assert_called_once()
-
-@pytest.mark.asyncio
-async def test_verify_aws_connection_failure():
-    """Verify that verify_aws_connection returns False on failure."""
-    from botocore.exceptions import ClientError
-    
-    mock_sts = AsyncMock()
-    mock_sts.assume_role.side_effect = ClientError(
-        {"Error": {"Code": "AccessDenied", "Message": "Access Denied"}},
-        "assume_role"
+    # Mock Connection
+    mock_conn = AWSConnection(
+        id=connection_id,
+        tenant_id=tenant_id,
+        role_arn="arn:aws:iam::123:role/TestRole",
+        external_id="ext-123"
     )
     
-    mock_cm = MagicMock()
-    mock_cm.__aenter__.return_value = mock_sts
-    mock_cm.__aexit__.return_value = None
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_conn
+    db.execute.return_value = mock_result
+
+    with patch.object(AWSConnectionService, 'verify_role_access', AsyncMock(return_value=(True, None))):
+        res = await AWSConnectionService.verify_connection(db, connection_id, tenant_id)
+        
+        assert res["status"] == "active"
+        assert mock_conn.status == "active"
+        assert mock_conn.last_verified_at is not None
+        db.commit.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_verify_connection_failure():
+    """Verify that verify_connection raises HTTPException on failure."""
+    db = AsyncMock()
+    connection_id = uuid4()
+    tenant_id = uuid4()
     
-    with patch("aioboto3.Session") as mock_session_cls:
-        mock_session = mock_session_cls.return_value
-        mock_session.client.return_value = mock_cm
+    # Mock Connection
+    mock_conn = AWSConnection(
+        id=connection_id,
+        tenant_id=tenant_id,
+        role_arn="arn:aws:iam::123:role/TestRole",
+        external_id="ext-123"
+    )
+    
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_conn
+    db.execute.return_value = mock_result
+
+    with patch.object(AWSConnectionService, 'verify_role_access', AsyncMock(return_value=(False, "AccessDenied"))):
+        with pytest.raises(HTTPException) as excinfo:
+            await AWSConnectionService.verify_connection(db, connection_id, tenant_id)
         
-        success, error = await verify_aws_connection("arn:aws:iam::123:role/TestRole", "external-id-123")
-        
-        assert success is False
-        assert error is not None
-        assert "AccessDenied" in error
+        assert excinfo.value.status_code == 400
+        assert "AccessDenied" in excinfo.value.detail
+        assert mock_conn.status == "error"
+        db.commit.assert_called_once()

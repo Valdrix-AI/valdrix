@@ -170,6 +170,58 @@ class UsageTracker:
         total = result.scalar() or Decimal("0")
         return Decimal(str(total))
 
+    async def check_budget(self, tenant_id: UUID) -> None:
+        """
+        Synchronously check if tenant has exceeded their monthly budget.
+        Raises BudgetExceededError if limit reached and hard_limit is True.
+        
+        Optimized: Checks Redis first for "Blocked" status (O(1)) before hitting DB.
+        """
+        from sqlalchemy import select
+        from app.models.llm import LLMBudget
+        from app.core.exceptions import BudgetExceededError
+        from app.services.cache import get_cache_service
+
+        # 1. Fast Cache Check (Resilience against DB saturation)
+        cache = get_cache_service()
+        if cache.enabled:
+            is_blocked = await cache.client.get(f"budget_blocked:{tenant_id}")
+            if is_blocked:
+                logger.warning("llm_budget_cache_hit_blocked", tenant_id=str(tenant_id))
+                raise BudgetExceededError(
+                    message="Monthly LLM budget exceeded (cached).",
+                    details={"cached": True}
+                )
+
+        # 2. Database Check (Source of Truth)
+        result = await self.db.execute(
+            select(LLMBudget).where(LLMBudget.tenant_id == tenant_id)
+        )
+        budget = result.scalar_one_or_none()
+
+        if not budget or not budget.hard_limit:
+            return
+
+        current_usage = await self.get_monthly_usage(tenant_id)
+        limit = Decimal(str(budget.monthly_limit_usd))
+
+        if current_usage >= limit:
+            logger.error(
+                "llm_budget_hard_limit_exceeded",
+                tenant_id=str(tenant_id),
+                usage_usd=float(current_usage),
+                limit_usd=float(limit)
+            )
+            
+            # Cache the blocked status for 10 minutes to protect the DB
+            if cache.enabled:
+                await cache.client.set(f"budget_blocked:{tenant_id}", "1", ex=600)
+                
+            raise BudgetExceededError(
+                message=f"Monthly LLM budget of ${limit:.2f} has been exceeded.",
+                details={"usage": float(current_usage), "limit": float(limit)}
+            )
+
     async def _check_budget_and_alert(self, tenant_id: UUID) -> None:
         """
         Check if tenant has exceeded budget threshold and send Slack alert.

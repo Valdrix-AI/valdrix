@@ -15,71 +15,14 @@
   
   const supabase = createSupabaseBrowserClient();
   
-  let loading = $state(true);
-  let usage: any[] = $state([]);
-  let error = $state('');
-  let summary = $state({
+  let usage = $derived(data.usage || []);
+  let summary = $derived(data.summary || {
     total_cost: 0,
     total_tokens: 0,
     by_model: {} as Record<string, { tokens: number, cost: number, calls: number }>,
   });
-  
-  $effect(() => {
-    if (!data.user) {
-      loading = false;
-      return;
-    }
-    
-    async function loadData() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-        
-        const headers = {
-          'Authorization': `Bearer ${session.access_token}`,
-        };
-        
-        const res = await fetch(`${PUBLIC_API_URL}/llm/usage`, { headers });
-        
-        if (!res.ok) {
-          throw new Error(`API error: ${res.status}`);
-        }
-        
-        const result = await res.json();
-        usage = result.usage || [];
-        
-        let newTotalCost = 0;
-        let newTotalTokens = 0;
-        let newByModel: Record<string, { tokens: number, cost: number, calls: number }> = {};
-
-        for (const record of usage) {
-          newTotalCost += record.cost_usd || 0;
-          newTotalTokens += record.total_tokens || 0;
-          
-          const model = record.model || 'unknown';
-          if (!newByModel[model]) {
-            newByModel[model] = { tokens: 0, cost: 0, calls: 0 };
-          }
-          newByModel[model].tokens += record.total_tokens || 0;
-          newByModel[model].cost += record.cost_usd || 0;
-          newByModel[model].calls += 1;
-        }
-
-        summary = {
-          total_cost: newTotalCost,
-          total_tokens: newTotalTokens,
-          by_model: newByModel
-        };
-        
-      } catch (e: any) {
-        error = e.message;
-      } finally {
-        loading = false;
-      }
-    }
-
-    loadData();
-  });
+  let error = $derived(data.error || '');
+  let loading = $derived(false); // Data is pre-fetched
 </script>
 
 <svelte:head>

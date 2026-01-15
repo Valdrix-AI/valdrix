@@ -12,9 +12,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # HSTS: Disable in debug mode for local development
         if settings.DEBUG:
-             response.headers["Strict-Transport-Security"] = "max-age=0"
+            response.headers["Strict-Transport-Security"] = "max-age=0"
         else:
-             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
 
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
@@ -45,10 +45,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """
     Injects a unique X-Request-ID into the logs and response.
-    Improves observability for cross-service tracing.
+    Integrates with app.core.tracing for cross-process correlation.
     """
     async def dispatch(self, request: Request, call_next):
+        from app.core.tracing import set_correlation_id
+        
         request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        
+        # Set unified tracing context
+        set_correlation_id(request_id)
 
         # Log injection via contextvars (supported by structlog)
         structlog.contextvars.clear_contextvars()

@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,12 +52,16 @@ async def get_costs(
     results = await adapter.get_daily_costs(start_date, end_date)
 
     # Simple total calculation for response
-    total = 0
+    total = Decimal("0")
     if results and not (isinstance(results[0], dict) and "Error" in results[0]):
-        for day in results:
-            # AWS Cost Explorer format: day['Total']['UnblendedCost']['Amount']
-            for metric in day.get("Total", {}).values():
-                total += float(metric.get("Amount", 0))
+        # results logic is a bit mixed, checking if it's CloudUsageSummary vs list of dicts
+        if hasattr(results, "total_cost"):
+            total = results.total_cost
+        else:
+            for day in results:
+                # AWS Cost Explorer format: day['Total']['UnblendedCost']['Amount']
+                for metric in day.get("Total", {}).values():
+                    total += Decimal(metric.get("Amount", 0))
 
     return {
         "total_cost": total,

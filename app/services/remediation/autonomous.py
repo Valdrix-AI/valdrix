@@ -163,7 +163,16 @@ class AutonomousRemediationEngine:
         )
 
         # Auto-Pilot Logic: Enabled AND High Confidence AND Rate Limit Not Exceeded
-        if self.auto_pilot_enabled and confidence >= self.min_confidence_threshold:
+        # AND Symbolic Safety Check Passed
+        from app.services.remediation.safety import SafeOpsEngine
+        is_safe, safety_reason = SafeOpsEngine.validate_deletion_sync({
+            "resource_id": resource_id,
+            "resource_type": resource_type,
+            "tags": {}, # TODO: Fetch tags if possible for better safety
+            "confidence": confidence
+        })
+
+        if self.auto_pilot_enabled and confidence >= self.min_confidence_threshold and is_safe:
             # Safety Fuse: Check rate limit before executing
             if self._hourly_execution_count >= self.max_deletions_per_hour:
                 logger.warning(

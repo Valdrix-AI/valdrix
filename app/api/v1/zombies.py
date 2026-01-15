@@ -10,8 +10,9 @@ from app.core.auth import CurrentUser, requires_role
 from app.db.session import get_db
 from app.models.aws_connection import AWSConnection
 from app.services.adapters.aws_multitenant import MultiTenantAWSAdapter
-from app.services.zombies import ZombieDetector, RemediationService
 from app.models.remediation import RemediationAction
+from app.core.tier_guard import TierGuard, FeatureFlag
+from app.services.zombies import ZombieService, RemediationService
 
 router = APIRouter(prefix="/zombies", tags=["Cloud Hygiene (Zombies)"])
 logger = structlog.get_logger()
@@ -21,6 +22,8 @@ class RemediationRequestCreate(BaseModel):
     resource_id: str
     resource_type: str
     action: str
+    provider: str = "aws"
+    connection_id: Optional[UUID] = None
     estimated_savings: float
     create_backup: bool = False
     backup_retention_days: int = 30
@@ -39,76 +42,15 @@ async def scan_zombies(
     analyze: bool = Query(default=False, description="Enable AI-powered analysis of detected zombies"),
 ):
     """
-    Scan AWS account for zombie resources.
-
-    Args:
-        analyze: If True, enriches results with LLM-generated explanations and recommendations.
-                 This uses tokens and will be tracked in LLM usage.
+    Scan cloud accounts for zombie resources.
     """
-    result = await db.execute(
-        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+    service = ZombieService(db)
+    return await service.scan_for_tenant(
+        tenant_id=user.tenant_id,
+        user=user,
+        region=region,
+        analyze=analyze
     )
-    connection = result.scalar_one_or_none()
-
-    if not connection:
-        return {
-            "unattached_volumes": [],
-            "old_snapshots": [],
-            "unused_elastic_ips": [],
-            "error": "No AWS connection found."
-        }
-
-    adapter = MultiTenantAWSAdapter(connection)
-    credentials = await adapter._get_credentials()
-
-    detector = ZombieDetector(region=region, credentials=credentials)
-    zombies = await detector.scan_all()
-
-    # AI Analysis (optional, requires Starter+ tier)
-    if analyze:
-        try:
-            from app.core.tier_guard import TierGuard, FeatureFlag
-            
-            async with TierGuard(user, db) as guard:
-                if not guard.has(FeatureFlag.AI_INSIGHTS):
-                    zombies["ai_analysis"] = {
-                        "error": "AI Insights requires Starter tier or higher.",
-                        "summary": "Upgrade to unlock AI-powered analysis.",
-                        "upgrade_required": True
-                    }
-                else:
-                    from app.services.llm.factory import LLMFactory
-                    from app.services.llm.zombie_analyzer import ZombieAnalyzer
-
-                    llm = LLMFactory.create()
-                    analyzer = ZombieAnalyzer(llm)
-
-                    ai_analysis = await analyzer.analyze(
-                        detection_results=zombies,
-                        tenant_id=user.tenant_id,
-                        db=db,
-                    )
-                    zombies["ai_analysis"] = ai_analysis
-                    logger.info("zombie_ai_analysis_complete",
-                               resource_count=len(ai_analysis.get("resources", [])))
-        except Exception as e:
-            logger.error("zombie_ai_analysis_failed", error=str(e))
-            zombies["ai_analysis"] = {
-                "error": f"AI analysis failed: {str(e)}",
-                "summary": "Analysis unavailable. Rule-based detection completed successfully."
-            }
-
-    # Notification logic - use centralized helper
-    try:
-        from app.services.notifications import get_slack_service
-        slack = get_slack_service()
-        if slack:
-            estimated_savings = zombies.get("total_monthly_waste", 0.0)
-            await slack.notify_zombies(zombies, estimated_savings)
-    except Exception as e:
-        logger.error("zombie_slack_alert_failed", error=str(e))
-
-    return zombies
 
 @router.post("/request")
 async def create_remediation_request(
@@ -118,20 +60,12 @@ async def create_remediation_request(
     region: str = Query(default="us-east-1"),
 ):
     """Create a remediation request. Requires Pro tier or higher."""
-    from app.core.pricing import PricingTier, is_feature_enabled
-    
-    # Feature gating: Pro+ required for auto-remediation
-    user_tier = getattr(user, "tier", "starter")
-    try:
-        tier_enum = PricingTier(user_tier)
-    except ValueError:
-        tier_enum = PricingTier.STARTER
-    
-    if not is_feature_enabled(tier_enum, "auto_remediation"):
-        raise HTTPException(
-            status_code=403,
-            detail="Auto-remediation requires Pro tier or higher. Please upgrade."
-        )
+    async with TierGuard(user, db) as guard:
+        if not guard.has(FeatureFlag.AUTO_REMEDIATION):
+            raise HTTPException(
+                status_code=403,
+                detail="Auto-remediation requires Pro tier or higher. Please upgrade."
+            )
     
     try:
         action_enum = RemediationAction(request.action)
@@ -149,6 +83,8 @@ async def create_remediation_request(
         create_backup=request.create_backup,
         backup_retention_days=request.backup_retention_days,
         backup_cost_estimate=request.backup_cost_estimate,
+        provider=request.provider,
+        connection_id=request.connection_id,
     )
     return {"status": "pending", "request_id": str(result.id)}
 
@@ -199,27 +135,23 @@ async def execute_remediation(
     region: str = Query(default="us-east-1"),
 ):
     """Execute a remediation request. Requires Pro tier or higher."""
-    from app.core.pricing import PricingTier, is_feature_enabled
-    
-    # Feature gating: Pro+ required
-    user_tier = getattr(user, "tier", "starter")
-    try:
-        tier_enum = PricingTier(user_tier)
-    except ValueError:
-        tier_enum = PricingTier.STARTER
-    
-    if not is_feature_enabled(tier_enum, "auto_remediation"):
-        raise HTTPException(
-            status_code=403,
-            detail="Auto-remediation requires Pro tier or higher. Please upgrade."
-        )
+    async with TierGuard(user, db) as guard:
+        if not guard.has(FeatureFlag.AUTO_REMEDIATION):
+            raise HTTPException(
+                status_code=403,
+                detail="Auto-remediation requires Pro tier or higher. Please upgrade."
+            )
+
     result = await db.execute(select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id))
     connection = result.scalar_one_or_none()
     if not connection:
         raise HTTPException(400, "No AWS connection")
 
     adapter = MultiTenantAWSAdapter(connection)
-    credentials = await adapter._get_credentials()
+    # Refactored: Fetching credentials via public service/adapter methods if needed, 
+    # but here we pass them to RemediationService.
+    # TODO: Refactor RemediationService to fetch credentials internally using connection_id
+    credentials = await adapter.get_credentials() 
     service = RemediationService(db=db, region=region, credentials=credentials)
 
     try:

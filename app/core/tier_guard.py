@@ -60,6 +60,9 @@ class FeatureFlag(str, Enum):
     AUDIT_LOGS = "audit_logs"
     SSO = "sso"
     SLA_GUARANTEE = "sla_guarantee"
+    
+    # Advanced Ops
+    AUTO_REMEDIATION = "auto_remediation"
 
 
 # Feature access matrix: which tier gets what
@@ -86,6 +89,7 @@ TIER_FEATURES = {
         FeatureFlag.HOURLY_SCANS,
         FeatureFlag.MULTI_REGION,
         FeatureFlag.AUDIT_LOGS,
+        FeatureFlag.AUTO_REMEDIATION,
     },
     PricingTier.ENTERPRISE: {
         # Enterprise gets everything

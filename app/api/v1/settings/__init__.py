@@ -20,7 +20,7 @@ from .activeops import router as activeops_router
 from .safety import router as safety_router
 
 # Main settings router - aggregates all sub-routers
-router = APIRouter(prefix="/settings", tags=["Settings"])
+router = APIRouter(prefix="/api/v1/settings", tags=["Settings"])
 
 # Include all sub-routers
 router.include_router(notifications_router)

@@ -9,50 +9,20 @@
 
 <script lang="ts">
   import { PUBLIC_API_URL } from '$env/static/public';
-  import { createSupabaseBrowserClient } from '$lib/supabase';
+  import { goto } from '$app/navigation';
   
   let { data } = $props();
   
-  const supabase = createSupabaseBrowserClient();
+  let period = $derived(data.period);
+  let leaderboard = $derived(data.leaderboard);
+  let error = $derived(data.error || '');
+  let loading = $state(false); // Can be used for navigation transitions if desired
   
-  let loading = $state(true);
-  let error = $state('');
-  let period = $state('30d');
-  
-  let leaderboard = $state({
-    period: 'Last 30 Days',
-    entries: [] as { rank: number; user_email: string; savings_usd: number; remediation_count: number }[],
-    total_team_savings: 0,
-  });
-  
-  async function getHeaders() {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-      'Authorization': `Bearer ${session?.access_token}`,
-    };
+  function handlePeriodChange(e: Event) {
+    const target = e.target as HTMLSelectElement;
+    goto(`?period=${target.value}`, { keepFocus: true, noScroll: true });
   }
-  
-  async function loadLeaderboard() {
-    loading = true;
-    error = '';
-    
-    try {
-      const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/leaderboards?period=${period}`, { headers });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Failed to load leaderboard');
-      }
-      
-      leaderboard = await res.json();
-    } catch (e: any) {
-      error = e.message;
-    } finally {
-      loading = false;
-    }
-  }
-  
+
   function getMedal(rank: number): string {
     if (rank === 1) return '🥇';
     if (rank === 2) return '🥈';
@@ -61,25 +31,9 @@
   }
   
   function formatEmail(email: string): string {
-    // Only show first part of email for privacy
     const [name] = email.split('@');
     return name;
   }
-  
-  $effect(() => {
-    if (data.user) {
-      loadLeaderboard();
-    } else {
-      loading = false;
-    }
-  });
-  
-  // Reload when period changes
-  $effect(() => {
-    if (period && data.user && !loading) {
-      loadLeaderboard();
-    }
-  });
 </script>
 
 <svelte:head>
@@ -97,7 +51,9 @@
     {#if data.user}
       <select 
         class="period-select"
-        bind:value={period}
+        value={period}
+        onchange={handlePeriodChange}
+        aria-label="Select leaderboard period"
       >
         <option value="7d">Last 7 Days</option>
         <option value="30d">Last 30 Days</option>

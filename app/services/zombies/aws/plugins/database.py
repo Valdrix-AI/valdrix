@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 import aioboto3
 from botocore.exceptions import ClientError
 import structlog
-from app.services.zombies.zombie_plugin import ZombiePlugin, ESTIMATED_COSTS
+from app.services.zombies.zombie_plugin import ZombiePlugin
+from app.services.pricing.service import PricingService
 
 logger = structlog.get_logger()
 
@@ -65,18 +66,12 @@ class IdleRdsPlugin(ZombiePlugin):
                             avg_connections = res["Values"][0]
                             if avg_connections < connection_threshold:
                                 db_class = db["class"]
-                                if "micro" in db_class:
-                                    monthly_cost = 12.00
-                                elif "small" in db_class:
-                                    monthly_cost = 25.00
-                                elif "medium" in db_class:
-                                    monthly_cost = 50.00
-                                elif "large" in db_class:
-                                    monthly_cost = 100.00
-                                elif "xlarge" in db_class:
-                                    monthly_cost = 200.00
-                                else:
-                                    monthly_cost = 75.00  # Default
+                                monthly_cost = PricingService.estimate_monthly_waste(
+                                    provider="aws",
+                                    resource_type="rds",
+                                    resource_size=db_class,
+                                    region=region
+                                )
 
                                 zombies.append({
                                     "resource_id": db["id"],
@@ -126,7 +121,11 @@ class ColdRedshiftPlugin(ZombiePlugin):
                                     zombies.append({
                                         "resource_id": cluster_id,
                                         "resource_type": "Redshift Cluster",
-                                        "monthly_cost": ESTIMATED_COSTS["redshift_cluster"],
+                                        "monthly_cost": PricingService.estimate_monthly_waste(
+                                            provider="aws",
+                                            resource_type="redshift",
+                                            region=region
+                                        ),
                                         "recommendation": "Delete idle cluster",
                                         "action": "delete_redshift_cluster",
                                         "explainability_notes": "Redshift cluster has had 0 database connections detected in the last 7 days.",

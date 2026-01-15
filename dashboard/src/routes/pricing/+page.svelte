@@ -177,9 +177,10 @@
           class="cta-button {plan.popular ? 'primary' : 'secondary'}"
           onclick={() => selectPlan(plan.id)}
           disabled={!!upgrading}
+          aria-label="{plan.cta} for {plan.name} plan"
         >
           {#if upgrading === plan.id}
-            <span class="spinner"></span>
+            <span class="spinner" aria-hidden="true"></span>
             Processing...
           {:else}
             {plan.cta}

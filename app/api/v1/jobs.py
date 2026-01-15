@@ -9,12 +9,13 @@ Provides endpoints for:
 
 from typing import Annotated
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
-from app.db.session import get_db
+from pydantic import BaseModel
+from app.db.session import get_db, async_session_maker
 from app.core.auth import CurrentUser, requires_role
 from app.models.background_job import BackgroundJob, JobStatus, JobType
 from app.services.jobs.processor import JobProcessor, enqueue_job
@@ -189,23 +190,12 @@ async def list_jobs(
 # Internal endpoint for pg_cron (no auth, called by database)
 @router.post("/internal/process")
 async def internal_process_jobs(
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     secret: str = Query(description="Internal secret for pg_cron")
 ):
     """
-    Internal endpoint called by pg_cron.
-    
-    Configure in Supabase SQL:
-    ```sql
-    SELECT cron.schedule(
-        'process-background-jobs',
-        '* * * * *',
-        $$SELECT net.http_post(
-            url := 'https://your-api.com/api/v1/jobs/internal/process?secret=YOUR_SECRET',
-            headers := '{"Content-Type": "application/json"}'::jsonb
-        )$$
-    );
-    ```
+    Internal endpoint called by pg_cron (Asynchronous).
     """
     from app.core.config import get_settings
     settings = get_settings()
@@ -215,7 +205,11 @@ async def internal_process_jobs(
     if secret != expected_secret:
         raise HTTPException(status_code=403, detail="Invalid secret")
     
-    processor = JobProcessor(db)
-    results = await processor.process_pending_jobs()
+    async def run_processor():
+        async with async_session_maker() as session:
+            processor = JobProcessor(session)
+            await processor.process_pending_jobs()
+
+    background_tasks.add_task(run_processor)
     
-    return results
+    return {"status": "accepted", "message": "Job processing started in background"}

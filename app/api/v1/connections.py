@@ -1,15 +1,8 @@
 """
-AWS Connection Router
+Unified Multi-Cloud Connection Router
 
-Handles CRUD operations for AWS account connections.
-Each endpoint enforces tenant isolation via JWT auth.
-
-Endpoints:
-- POST /connections/aws - Register new connection
-- GET /connections/aws - List tenant's connections
-- GET /connections/aws/{id} - Get specific connection
-- POST /connections/aws/{id}/verify - Test connection works
-- DELETE /connections/aws/{id} - Remove connection
+Handles CRUD operations for AWS, Azure, and GCP connections.
+Enforces "Growth Tier" (or higher) requirement for Azure/GCP.
 """
 
 from uuid import UUID
@@ -17,352 +10,128 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel
 import structlog
-import aioboto3
-from botocore.exceptions import ClientError
 
 from app.db.session import get_db
-from app.models.aws_connection import AWSConnection
 from app.core.auth import CurrentUser, requires_role
+from app.core.logging import audit_log
+from app.services.connections.aws import AWSConnectionService
+from app.services.connections.organizations import OrganizationsDiscoveryService
+
+# Models
+from app.models.aws_connection import AWSConnection
+from app.models.azure_connection import AzureConnection
+from app.models.gcp_connection import GCPConnection
+from app.models.tenant import Tenant
+from app.models.discovered_account import DiscoveredAccount
+
+# Schemas
+from app.schemas.connections import (
+    AWSConnectionCreate, AWSConnectionResponse, TemplateResponse,
+    AzureConnectionCreate, AzureConnectionResponse,
+    GCPConnectionCreate, GCPConnectionResponse,
+    DiscoveredAccountResponse
+)
 
 logger = structlog.get_logger()
-router = APIRouter(prefix="/connections/aws", tags=["connections"])
+router = APIRouter(prefix="/api/v1/connections", tags=["connections"])
 
 
-# ============================================================
-# Pydantic Schemas
-# ============================================================
+# ==================== Helpers ====================
 
-class AWSConnectionCreate(BaseModel):
-    """Request body for creating a new AWS connection."""
-    aws_account_id: str = Field(..., pattern=r"^\d{12}$", description="12-digit AWS account ID")
-    role_arn: str = Field(..., description="Full ARN of the IAM role to assume")
-    external_id: str = Field(..., pattern=r"^vx-[a-f0-9]{32}$", description="External ID from setup step")
-    region: str = Field(default="us-east-1", description="AWS region for Cost Explorer")
-
-
-class AWSConnectionResponse(BaseModel):
-    """Response body for AWS connection.
-
-    Note: external_id is intentionally excluded for security.
-    It should only be visible during initial /setup flow.
+async def check_growth_tier(user: CurrentUser, db: AsyncSession):
     """
-    id: UUID
-    aws_account_id: str
-    role_arn: str
-    # external_id: REMOVED - security risk to expose after initial setup
-    region: str
-    status: str
-    last_verified_at: datetime | None
-    error_message: str | None
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class AWSConnectionSetup(BaseModel):
-    """Response for initial setup - includes external_id for CloudFormation."""
-    external_id: str
-    cloudformation_url: str
-    instructions: str
-
-
-# ============================================================
-# Helper Functions
-# ============================================================
-
-async def verify_aws_connection(role_arn: str, external_id: str) -> tuple[bool, str | None]:
+    Ensure tenant is on 'growth', 'pro', or 'enterprise' plan.
+    'trial' is also allowed per business rules (Trial = Full Growth).
     """
-    Test if we can assume the IAM role (Async).
+    # Fetch tenant plan from DB
+    result = await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))
+    tenant = result.scalar_one_or_none()
+    
+    if not tenant:
+        raise HTTPException(404, "Tenant context lost")
 
-    Returns:
-        (success: bool, error_message: str | None)
-    """
-    try:
-        session = aioboto3.Session()
-        async with session.client("sts") as sts_client:
-
-            # Try to assume the role
-            await sts_client.assume_role(
-                RoleArn=role_arn,
-                RoleSessionName="ValdrixVerification",
-                ExternalId=external_id,
-                DurationSeconds=900,  # Minimum duration
-            )
-
-            # If successful, we got temporary credentials
-            logger.info("aws_connection_verified", role_arn=role_arn)
-            return True, None
-
-    except ClientError as e:
-        error_code = e.response.get("Error", {}).get("Code", "Unknown")
-        error_message = e.response.get("Error", {}).get("Message", str(e))
-
-        logger.warning(
-            "aws_connection_verification_failed",
-            role_arn=role_arn,
-            error_code=error_code,
-            error_message=error_message,
+    allowed_plans = ["trial", "growth", "pro", "enterprise"]
+    if tenant.plan not in allowed_plans:
+        logger.warning("tier_gate_denied", tenant_id=str(tenant.id), plan=tenant.plan, required="growth")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Multi-cloud support requires 'Growth' plan or higher. Current plan: {tenant.plan}"
         )
 
-        return False, f"{error_code}: {error_message}"
 
+# ==================== AWS Endpoints ====================
 
-# ============================================================
-# API Endpoints
-# ============================================================
-
-class TemplateResponse(BaseModel):
-    """Response containing template content for IAM role setup."""
-    external_id: str
-    cloudformation_yaml: str
-    terraform_hcl: str
-    instructions: str
-    permissions_summary: list[str]
-
-
-@router.post("/setup", response_model=TemplateResponse)
-async def get_setup_templates():
-    """
-    Get CloudFormation and Terraform templates with a unique External ID.
-
-    Returns templates that users can copy/paste directly into AWS Console
-    or their IaC repository. No external URL dependencies.
-
-    Three Paths UX:
-    - Path A: Copy YAML → Create Stack manually
-    - Path B: Copy Terraform → Add to IaC repo
-    - Path C: Download file → Upload to AWS
-    """
+@router.post("/aws/setup", response_model=TemplateResponse)
+async def get_aws_setup_templates():
+    """Get CloudFormation/Terraform templates and Magic Link for AWS setup."""
     external_id = AWSConnection.generate_external_id()
+    templates = AWSConnectionService.get_setup_templates(external_id)
+    return TemplateResponse(**templates)
 
-    # CloudFormation YAML template with external_id embedded
-    cloudformation_yaml = f'''AWSTemplateFormatVersion: '2010-09-09'
-Description: Valdrix - Read-Only IAM Role for Cost Analysis and Resource Optimization
 
-Resources:
-  ValdrixRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: ValdrixReadOnly
-      Description: Allows Valdrix to read cost data and detect zombie resources
-      MaxSessionDuration: 3600
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              AWS: !Sub 'arn:aws:iam::${{AWS::AccountId}}:root'
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                sts:ExternalId: '{external_id}'
-      Policies:
-        - PolicyName: ValdrixReadOnlyPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Sid: CostExplorerRead
-                Effect: Allow
-                Action:
-                  - ce:GetCostAndUsage
-                  - ce:GetCostForecast
-                  - ce:GetDimensionValues
-                  - ce:GetTags
-                Resource: '*'
-              - Sid: EC2ReadOnly
-                Effect: Allow
-                Action:
-                  - ec2:DescribeInstances
-                  - ec2:DescribeVolumes
-                  - ec2:DescribeSnapshots
-                  - ec2:DescribeAddresses
-                  - ec2:DescribeNetworkInterfaces
-                  - ec2:DescribeNatGateways
-                  - ec2:DescribeSecurityGroups
-                Resource: '*'
-              - Sid: ELBReadOnly
-                Effect: Allow
-                Action:
-                  - elasticloadbalancing:DescribeLoadBalancers
-                  - elasticloadbalancing:DescribeTargetGroups
-                  - elasticloadbalancing:DescribeTargetHealth
-                Resource: '*'
-              - Sid: RDSReadOnly
-                Effect: Allow
-                Action:
-                  - rds:DescribeDBInstances
-                  - rds:DescribeDBClusters
-                Resource: '*'
-              - Sid: RedshiftReadOnly
-                Effect: Allow
-                Action:
-                  - redshift:DescribeClusters
-                Resource: '*'
-              - Sid: SageMakerReadOnly
-                Effect: Allow
-                Action:
-                  - sagemaker:ListEndpoints
-                  - sagemaker:ListNotebookInstances
-                  - sagemaker:ListModels
-                Resource: '*'
-              - Sid: ECRReadOnly
-                Effect: Allow
-                Action:
-                  - ecr:DescribeRepositories
-                  - ecr:DescribeImages
-                Resource: '*'
-              - Sid: S3ReadOnly
-                Effect: Allow
-                Action:
-                  - s3:ListAllMyBuckets
-                  - s3:GetBucketLocation
-                  - s3:GetBucketTagging
-                Resource: '*'
-              - Sid: CloudWatchRead
-                Effect: Allow
-                Action:
-                  - cloudwatch:GetMetricData
-                  - cloudwatch:GetMetricStatistics
-                Resource: '*'
-
-Outputs:
-  RoleArn:
-    Description: Copy this ARN to Valdrix
-    Value: !GetAtt ValdrixRole.Arn'''
-
-    # Terraform HCL template
-    terraform_hcl = f'''# Valdrix - IAM Role for Cost Analysis and Resource Optimization
-# Apply with: terraform apply
-
-resource "aws_iam_role" "valdrix" {{
-  name        = "ValdrixReadOnly"
-  description = "Allows Valdrix to read cost data and detect zombie resources"
-
-  assume_role_policy = jsonencode({{
-    Version = "2012-10-17"
-    Statement = [{{
-      Effect    = "Allow"
-      Principal = {{ AWS = "arn:aws:iam::${{data.aws_caller_identity.current.account_id}}:root" }}
-      Action    = "sts:AssumeRole"
-      Condition = {{ StringEquals = {{ "sts:ExternalId" = "{external_id}" }} }}
-    }}]
-  }})
-}}
-
-data "aws_caller_identity" "current" {{}}
-
-resource "aws_iam_role_policy" "valdrix_policy" {{
-  name = "ValdrixReadOnlyPolicy"
-  role = aws_iam_role.valdrix.id
-
-  policy = jsonencode({{
-    Version = "2012-10-17"
-    Statement = [
-      {{
-        Sid      = "CostExplorerRead"
-        Effect   = "Allow"
-        Action   = ["ce:GetCostAndUsage", "ce:GetCostForecast", "ce:GetDimensionValues", "ce:GetTags"]
-        Resource = "*"
-      }},
-      {{
-        Sid      = "EC2ReadOnly"
-        Effect   = "Allow"
-        Action   = ["ec2:DescribeInstances", "ec2:DescribeVolumes", "ec2:DescribeSnapshots", "ec2:DescribeAddresses", "ec2:DescribeNetworkInterfaces", "ec2:DescribeNatGateways", "ec2:DescribeSecurityGroups"]
-        Resource = "*"
-      }},
-      {{
-        Sid      = "ELBReadOnly"
-        Effect   = "Allow"
-        Action   = ["elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:DescribeTargetHealth"]
-        Resource = "*"
-      }},
-      {{
-        Sid      = "RDSReadOnly"
-        Effect   = "Allow"
-        Action   = ["rds:DescribeDBInstances", "rds:DescribeDBClusters"]
-        Resource = "*"
-      }},
-      {{
-        Sid      = "RedshiftOnly"
-        Effect   = "Allow"
-        Action   = ["redshift:DescribeClusters"]
-        Resource = "*"
-      }},
-      {{
-        Sid      = "SageMakerReadOnly"
-        Effect   = "Allow"
-        Action   = ["sagemaker:ListEndpoints", "sagemaker:ListNotebookInstances", "sagemaker:ListModels"]
-        Resource = "*"
-      }},
-      {{
-        Sid      = "ECRReadOnly"
-        Effect   = "Allow"
-        Action   = ["ecr:DescribeRepositories", "ecr:DescribeImages"]
-        Resource = "*"
-      }},
-      {{
-        Sid      = "S3ReadOnly"
-        Effect   = "Allow"
-        Action   = ["s3:ListAllMyBuckets", "s3:GetBucketLocation", "s3:GetBucketTagging"]
-        Resource = "*"
-      }},
-      {{
-        Sid      = "CloudWatchRead"
-        Effect   = "Allow"
-        Action   = ["cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics"]
-        Resource = "*"
-      }}
-    ]
-  }})
-}}
-
-output "role_arn" {{
-  value = aws_iam_role.valdrix.arn
-}}'''
-
-    return TemplateResponse(
-        external_id=external_id,
-        cloudformation_yaml=cloudformation_yaml,
-        terraform_hcl=terraform_hcl,
-        instructions=(
-            "1. Copy the CloudFormation or Terraform template above\n"
-            "2. Deploy it in your AWS account\n"
-            "3. Copy the Role ARN from the outputs\n"
-            "4. Paste the Role ARN below to verify connection"
-        ),
-        permissions_summary=[
-            "ce:GetCostAndUsage - Read your cost data",
-            "ce:GetCostForecast - View cost predictions",
-            "ce:GetTags - Read cost allocation tags",
-            "ec2:DescribeInstances - Detect idle EC2 instances",
-            "ec2:DescribeVolumes - Detect unattached EBS volumes",
-            "ec2:DescribeSnapshots - Detect old snapshots",
-            "ec2:DescribeAddresses - Detect unused Elastic IPs",
-            "ec2:DescribeNatGateways - Detect underused NAT gateways",
-            "elasticloadbalancing:Describe* - Detect orphan load balancers",
-            "rds:DescribeDBInstances - Detect idle RDS databases",
-            "cloudwatch:GetMetricData - Monitor resource utilization",
-        ]
+@router.post("/azure/setup")
+async def get_azure_setup(
+    current_user: CurrentUser = Depends(requires_role("member")),
+):
+    """Get Azure Workload Identity setup instructions."""
+    from app.core.config import get_settings
+    settings = get_settings()
+    issuer = settings.API_URL.rstrip('/')
+    
+    snippet = (
+        f"# 1. Create App Registration in Azure AD\n"
+        f"# 2. Create a Federated Credential with these details:\n"
+        f"Issuer: {issuer}\n"
+        f"Subject: tenant:{current_user.tenant_id}\n"
+        f"Audience: api://AzureADTokenExchange\n"
+        f"\n# Or run this via Azure CLI:\n"
+        f"az ad app federated-credential create --id <YOUR_CLIENT_ID> "
+        f"--parameters '{{\"name\":\"ValdrixTrust\",\"issuer\":\"{issuer}\",\"subject\":\"tenant:{current_user.tenant_id}\",\"audiences\":[\"api://AzureADTokenExchange\"]}}'"
     )
+    
+    return {
+        "issuer": issuer,
+        "subject": f"tenant:{current_user.tenant_id}",
+        "audience": "api://AzureADTokenExchange",
+        "snippet": snippet
+    }
 
 
-@router.post("", response_model=AWSConnectionResponse, status_code=status.HTTP_201_CREATED)
-async def create_connection(
+@router.post("/gcp/setup")
+async def get_gcp_setup(
+    current_user: CurrentUser = Depends(requires_role("member")),
+):
+    """Get GCP Identity Federation setup instructions."""
+    from app.core.config import get_settings
+    settings = get_settings()
+    issuer = settings.API_URL.rstrip('/')
+    
+    snippet = (
+        f"# Run this to create an Identity Pool and Provider for Valdrix\n"
+        f"gcloud iam workload-identity-pools create \"valdrix-pool\" --location=\"global\" --display-name=\"Valdrix Pool\"\n"
+        f"gcloud iam workload-identity-pools providers create-oidc \"valdrix-provider\" "
+        f"--location=\"global\" --workload-identity-pool=\"valdrix-pool\" "
+        f"--issuer-uri=\"{issuer}\" "
+        f"--attribute-mapping=\"google.subject=assertion.sub,attribute.tenant_id=assertion.tenant_id\""
+    )
+    
+    return {
+        "issuer": issuer,
+        "subject": f"tenant:{current_user.tenant_id}",
+        "snippet": snippet
+    }
+
+
+@router.post("/aws", response_model=AWSConnectionResponse, status_code=status.HTTP_201_CREATED)
+async def create_aws_connection(
     data: AWSConnectionCreate,
-    current_user: CurrentUser = Depends(requires_role("member")),  # <-- Auth dependency
+    current_user: CurrentUser = Depends(requires_role("member")),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Register a new AWS connection after the user has created the IAM role.
-
-    Security:
-    - Requires valid Supabase JWT
-    - Creates connection tied to user's tenant_id
-    - Validates AWS account ID format (12 digits via Pydantic)
-    """
-    # Check if connection already exists for this tenant + account
+    """Register a new AWS connection (Available on all tiers)."""
+    # Check duplicate
     existing = await db.execute(
         select(AWSConnection).where(
             AWSConnection.tenant_id == current_user.tenant_id,
@@ -370,18 +139,16 @@ async def create_connection(
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Connection for AWS account {data.aws_account_id} already exists"
-        )
+        raise HTTPException(409, f"AWS account {data.aws_account_id} already connected")
 
-    # Create new connection - use the SAME external_id from setup step
     connection = AWSConnection(
         tenant_id=current_user.tenant_id,
         aws_account_id=data.aws_account_id,
         role_arn=data.role_arn,
-        external_id=data.external_id,  # Use ID from frontend, not generate new!
+        external_id=data.external_id,
         region=data.region,
+        is_management_account=data.is_management_account,
+        organization_id=data.organization_id,
         status="pending",
     )
 
@@ -389,103 +156,282 @@ async def create_connection(
     await db.commit()
     await db.refresh(connection)
 
-    logger.info(
-        "aws_connection_created",
-        connection_id=str(connection.id),
-        tenant_id=str(current_user.tenant_id),
-        aws_account_id=data.aws_account_id,
-    )
+    audit_log("aws_connection_created", str(current_user.id), str(current_user.tenant_id), 
+             {"aws_account_id": data.aws_account_id})
 
     return connection
 
 
-@router.get("", response_model=list[AWSConnectionResponse])
-async def list_connections(
+@router.get("/aws", response_model=list[AWSConnectionResponse])
+async def list_aws_connections(
     current_user: CurrentUser = Depends(requires_role("member")),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    List all AWS connections for the current tenant.
+    result = await db.execute(select(AWSConnection).where(AWSConnection.tenant_id == current_user.tenant_id))
+    return result.scalars().all()
 
-    Security:
-    - Only returns connections belonging to the authenticated user's tenant
-    - Cannot see other tenants' connections
-    """
-    result = await db.execute(
-        select(AWSConnection).where(AWSConnection.tenant_id == current_user.tenant_id)
-    )
-    connections = result.scalars().all()
 
-    return connections
-
-@router.post("/{connection_id}/verify")
-async def verify_connection(
+@router.post("/aws/{connection_id}/verify")
+async def verify_aws_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),  # Add this
+    current_user: CurrentUser = Depends(requires_role("member")),
     db: AsyncSession = Depends(get_db),
 ):
-    # Fetch connection AND verify tenant ownership
+    return await AWSConnectionService.verify_connection(db, connection_id, current_user.tenant_id)
+
+
+@router.delete("/aws/{connection_id}", status_code=204)
+async def delete_aws_connection(
+    connection_id: UUID,
+    current_user: CurrentUser = Depends(requires_role("member")),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(AWSConnection).where(
-            AWSConnection.id == connection_id,
-            AWSConnection.tenant_id == current_user.tenant_id,  # Add tenant check
+            AWSConnection.id == connection_id, 
+            AWSConnection.tenant_id == current_user.tenant_id
         )
     )
     connection = result.scalar_one_or_none()
-
-    if not connection:
-        raise HTTPException(status_code=404, detail="Connection not found")
-
-    # Verify the connection
-    success, error = await verify_aws_connection(connection.role_arn, connection.external_id)
-
-    # Update status
-    connection.status = "active" if success else "error"
-    # FIX: Use naive UTC datetime for SQLAlchemy DateTime column
-    connection.last_verified_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    connection.error_message = error
-    await db.commit()
-
-    if success:
-        return {"status": "active", "message": "Connection verified successfully"}
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Connection verification failed: {error}"
-        )
-
-
-@router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_connection(
-    connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),  # Add auth
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Remove an AWS connection.
-
-    Security:
-    - Requires authentication
-    - Only allows deletion of connections belonging to the user's tenant
-    """
-    result = await db.execute(
-        select(AWSConnection).where(
-            AWSConnection.id == connection_id,
-            AWSConnection.tenant_id == current_user.tenant_id,  # Add tenant check
-        )
-    )
-    connection = result.scalar_one_or_none()
-
-    if not connection:
-        raise HTTPException(status_code=404, detail="Connection not found")
+    if not connection: raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
     await db.commit()
+    audit_log("aws_connection_deleted", str(current_user.id), str(current_user.tenant_id), {"id": str(connection_id)})
 
-    logger.info(
-        "aws_connection_deleted",
-        connection_id=str(connection_id),
-        tenant_id=str(current_user.tenant_id),
+
+@router.post("/aws/{connection_id}/sync-org")
+async def sync_aws_org(
+    connection_id: UUID,
+    current_user: CurrentUser = Depends(requires_role("member")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger AWS Organizations account discovery."""
+    result = await db.execute(
+        select(AWSConnection).where(
+            AWSConnection.id == connection_id,
+            AWSConnection.tenant_id == current_user.tenant_id
+        )
     )
+    connection = result.scalar_one_or_none()
+    if not connection or not connection.is_management_account:
+        raise HTTPException(404, "Management account connection not found")
 
-    return None
+    count = await OrganizationsDiscoveryService.sync_accounts(db, connection)
+    return {"message": f"Successfully discovered {count} accounts", "count": count}
+
+
+@router.get("/aws/discovered", response_model=list[DiscoveredAccountResponse])
+async def list_discovered_accounts(
+    current_user: CurrentUser = Depends(requires_role("member")),
+    db: AsyncSession = Depends(get_db),
+):
+    """List accounts discovered via AWS Organizations."""
+    # Find all management connections for this tenant
+    res = await db.execute(
+        select(AWSConnection.id).where(
+            AWSConnection.tenant_id == current_user.tenant_id,
+            AWSConnection.is_management_account == True
+        )
+    )
+    mgmt_ids = [r for r in res.scalars().all()]
+    
+    if not mgmt_ids:
+        return []
+
+    result = await db.execute(
+        select(DiscoveredAccount).where(
+            DiscoveredAccount.management_connection_id.in_(mgmt_ids)
+        ).order_by(DiscoveredAccount.last_discovered_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.post("/aws/discovered/{discovered_id}/link")
+async def link_discovered_account(
+    discovered_id: UUID,
+    current_user: CurrentUser = Depends(requires_role("member")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Link a discovered account by creating a standard connection."""
+    res = await db.execute(
+        select(DiscoveredAccount).where(DiscoveredAccount.id == discovered_id)
+    )
+    discovered = res.scalar_one_or_none()
+    if not discovered:
+        raise HTTPException(404, "Discovered account not found")
+
+    # Double check ownership via management connection
+    mgmt_res = await db.execute(
+        select(AWSConnection).where(
+            AWSConnection.id == discovered.management_connection_id,
+            AWSConnection.tenant_id == current_user.tenant_id
+        )
+    )
+    mgmt = mgmt_res.scalar_one_or_none()
+    if not mgmt:
+        raise HTTPException(403, "Not authorized for this management account")
+
+    # Create standard connection
+    # We use the same External ID or a common role pattern
+    # In a real enterprise flow, the user specifies the role name (e.g., 'OrganizationAccountAccessRole')
+    role_name = "OrganizationAccountAccessRole" # Default for AWS Orgs
+    role_arn = f"arn:aws:iam::{discovered.account_id}:role/{role_name}"
+    
+    # Check duplicate
+    existing = await db.execute(
+        select(AWSConnection).where(
+            AWSConnection.aws_account_id == discovered.account_id,
+            AWSConnection.tenant_id == current_user.tenant_id
+        )
+    )
+    if existing.scalar_one_or_none():
+        discovered.status = "linked"
+        await db.commit()
+        return {"message": "Account already linked", "status": "existing"}
+
+    connection = AWSConnection(
+        tenant_id=current_user.tenant_id,
+        aws_account_id=discovered.account_id,
+        role_arn=role_arn,
+        external_id=mgmt.external_id, # Reuse external ID if roles share it
+        region="us-east-1",
+        status="pending"
+    )
+    db.add(connection)
+    discovered.status = "linked"
+    await db.commit()
+    
+    return {"message": "Account linked successfully", "connection_id": str(connection.id)}
+
+
+# ==================== Azure Endpoints (Growth+) ====================
+
+@router.post("/azure", response_model=AzureConnectionResponse, status_code=status.HTTP_201_CREATED)
+async def create_azure_connection(
+    data: AzureConnectionCreate,
+    current_user: CurrentUser = Depends(requires_role("member")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Connect Azure Subscription (Growth Tier Only)."""
+    await check_growth_tier(current_user, db)
+
+    existing = await db.execute(
+        select(AzureConnection).where(
+            AzureConnection.tenant_id == current_user.tenant_id,
+            AzureConnection.subscription_id == data.subscription_id
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(409, f"Azure subscription {data.subscription_id} already connected")
+
+    connection = AzureConnection(
+        tenant_id=current_user.tenant_id,
+        name=data.name,
+        azure_tenant_id=data.azure_tenant_id,
+        client_id=data.client_id,
+        subscription_id=data.subscription_id,
+        client_secret=data.client_secret,
+        is_active=True
+    )
+    db.add(connection)
+    await db.commit()
+    await db.refresh(connection)
+
+    audit_log("azure_connection_created", str(current_user.id), str(current_user.tenant_id), 
+             {"subscription_id": data.subscription_id})
+    return connection
+
+
+@router.get("/azure", response_model=list[AzureConnectionResponse])
+async def list_azure_connections(
+    current_user: CurrentUser = Depends(requires_role("member")),
+    db: AsyncSession = Depends(get_db),
+):
+    # Retrieve regardless of current tier (if they downgraded, they can still see/delete)
+    result = await db.execute(select(AzureConnection).where(AzureConnection.tenant_id == current_user.tenant_id))
+    return result.scalars().all()
+
+
+@router.delete("/azure/{connection_id}", status_code=204)
+async def delete_azure_connection(
+    connection_id: UUID,
+    current_user: CurrentUser = Depends(requires_role("member")),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(AzureConnection).where(
+            AzureConnection.id == connection_id,
+            AzureConnection.tenant_id == current_user.tenant_id
+        )
+    )
+    connection = result.scalar_one_or_none()
+    if not connection: raise HTTPException(404, "Connection not found")
+
+    await db.delete(connection)
+    await db.commit()
+    audit_log("azure_connection_deleted", str(current_user.id), str(current_user.tenant_id), {"id": str(connection_id)})
+
+
+# ==================== GCP Endpoints (Growth+) ====================
+
+@router.post("/gcp", response_model=GCPConnectionResponse, status_code=status.HTTP_201_CREATED)
+async def create_gcp_connection(
+    data: GCPConnectionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(requires_role("member")),
+):
+    """Connect a GCP project (Secret or Workload Identity)."""
+    from app.services.connections.oidc import OIDCService
+    
+    if data.auth_method == "workload_identity":
+        success, error = await OIDCService.verify_gcp_access(
+            str(current_user.tenant_id), data.project_id
+        )
+    else:
+        success, error = True, None
+
+    if not success:
+        raise HTTPException(status_code=400, detail=f"GCP Verification Failed: {error}")
+
+    connection = GCPConnection(
+        tenant_id=current_user.tenant_id,
+        name=data.name,
+        project_id=data.project_id,
+        service_account_json=data.service_account_json,
+        auth_method=data.auth_method,
+        is_active=True,
+    )
+    db.add(connection)
+    await db.commit()
+    await db.refresh(connection)
+    return connection
+
+
+@router.get("/gcp", response_model=list[GCPConnectionResponse])
+async def list_gcp_connections(
+    current_user: CurrentUser = Depends(requires_role("member")),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(GCPConnection).where(GCPConnection.tenant_id == current_user.tenant_id))
+    return result.scalars().all()
+
+
+@router.delete("/gcp/{connection_id}", status_code=204)
+async def delete_gcp_connection(
+    connection_id: UUID,
+    current_user: CurrentUser = Depends(requires_role("member")),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(GCPConnection).where(
+            GCPConnection.id == connection_id,
+            GCPConnection.tenant_id == current_user.tenant_id
+        )
+    )
+    connection = result.scalar_one_or_none()
+    if not connection: raise HTTPException(404, "Connection not found")
+
+    await db.delete(connection)
+    await db.commit()
+    audit_log("gcp_connection_deleted", str(current_user.id), str(current_user.tenant_id), {"id": str(connection_id)})

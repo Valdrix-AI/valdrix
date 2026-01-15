@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from app.db.session import get_db
+from app.core.logging import audit_log
 from app.core.auth import get_current_user_from_jwt, CurrentUser
 from app.models.tenant import Tenant, User
 
@@ -39,5 +40,13 @@ async def onboard(
     new_user = User(id=user.id, email=user.email, tenant_id=tenant.id, role="owner")
     db.add(new_user)
     await db.commit()
+
+    # 4. Audit Log
+    audit_log(
+        event="tenant_onboarded",
+        user_id=str(user.id),
+        tenant_id=str(tenant.id),
+        details={"tenant_name": request.tenant_name}
+    )
 
     return {"status": "onboarded", "tenant_id": str(tenant.id)}

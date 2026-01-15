@@ -21,6 +21,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.services.llm.usage_tracker import UsageTracker
+from app.services.llm.guardrails import LLMGuardrails, ZombieAnalysisResult
 
 logger = structlog.get_logger()
 
@@ -42,6 +43,7 @@ OUTPUT FORMAT (STRICT JSON ONLY):
     {{
       "resource_id": "the resource identifier",
       "resource_type": "type of resource",
+      "provider": "aws|azure|gcp",
       "explanation": "Why this is a zombie - be specific and clear",
       "confidence": "high|medium|low",
       "confidence_reason": "Why you rated this confidence level",
@@ -58,6 +60,7 @@ OUTPUT FORMAT (STRICT JSON ONLY):
 
 IMPORTANT RULES:
 - Base conclusions ONLY on provided data
+- Preserve the Cloud Provider ("aws", "azure", or "gcp") for each resource
 - Be conservative with confidence ratings
 - Always explain the risk of deleting each resource
 - If unsure, recommend review before deletion
@@ -177,8 +180,11 @@ class ZombieAnalyzer:
             from app.services.llm.factory import LLMFactory
             current_llm = LLMFactory.create(effective_provider, api_key=byok_key)
 
+        # Sanitize zombie data to prevent prompt injection via resource tags/names
+        sanitized_zombies = LLMGuardrails.sanitize_input(zombies)
+        
         # Format zombie data for prompt
-        formatted_data = json.dumps(zombies, default=str, indent=2)
+        formatted_data = json.dumps(sanitized_zombies, default=str, indent=2)
 
         # Invoke LLM
         chain = self.prompt | current_llm
@@ -205,12 +211,15 @@ class ZombieAnalyzer:
                            input_tokens=input_tokens,
                            output_tokens=output_tokens)
             except Exception as e:
-                logger.warning("zombie_usage_tracking_failed", error=str(e))
+                logger.warning("zombie_usage_tracking_failed", 
+                               tenant_id=str(tenant_id),
+                               error=str(e),
+                               exc_info=True)
 
-        # Parse response
+        # Parse and validate response
         try:
-            raw_content = self._strip_markdown(response.content)
-            analysis = json.loads(raw_content)
+            validated_result = LLMGuardrails.validate_output(response.content, ZombieAnalysisResult)
+            analysis = validated_result.model_dump()
             logger.info("zombie_analysis_complete", resource_count=len(analysis.get("resources", [])))
             return analysis
         except json.JSONDecodeError as e:

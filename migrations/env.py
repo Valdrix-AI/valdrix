@@ -12,6 +12,7 @@ from app.db.base import Base
 from app.models.llm import LLMUsage, LLMBudget  # noqa: F401
 from app.models.carbon_settings import CarbonSettings  # noqa: F401
 from app.models.aws_connection import AWSConnection  # noqa: F401
+from app.models.discovered_account import DiscoveredAccount  # noqa: F401
 from app.models.cloud import CostRecord  # noqa: F401
 from app.models.notification_settings import NotificationSettings  # noqa: F401
 from app.models.remediation import RemediationRequest  # noqa: F401

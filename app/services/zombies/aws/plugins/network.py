@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import aioboto3
 from botocore.exceptions import ClientError
 import structlog
-from app.services.zombies.zombie_plugin import ZombiePlugin, ESTIMATED_COSTS
+from app.services.zombies.zombie_plugin import ZombiePlugin
 
 logger = structlog.get_logger()
 
@@ -42,12 +42,18 @@ class OrphanLoadBalancersPlugin(ZombiePlugin):
                                     break
 
                             if not has_healthy_targets:
+                                from app.services.pricing.service import PricingService
+                                monthly_cost = PricingService.estimate_monthly_waste(
+                                    provider="aws",
+                                    resource_type="elb",
+                                    region=region
+                                )
                                 zombies.append({
                                     "resource_id": lb_arn,
                                     "resource_name": lb_name,
                                     "resource_type": "Load Balancer",
                                     "lb_type": lb_type,
-                                    "monthly_cost": ESTIMATED_COSTS["elb"],
+                                    "monthly_cost": round(monthly_cost, 2),
                                     "recommendation": "Delete if no longer needed",
                                     "action": "delete_load_balancer",
                                     "supports_backup": False,
@@ -93,10 +99,16 @@ class UnderusedNatGatewaysPlugin(ZombiePlugin):
                                 total_connections = sum(d.get("Sum", 0) for d in metrics.get("Datapoints", []))
 
                                 if total_connections < 100:
+                                    from app.services.pricing.service import PricingService
+                                    monthly_cost = PricingService.estimate_monthly_waste(
+                                        provider="aws",
+                                        resource_type="nat_gateway",
+                                        region=region
+                                    )
                                     zombies.append({
                                         "resource_id": nat_id,
                                         "resource_type": "NAT Gateway",
-                                        "monthly_cost": ESTIMATED_COSTS.get("nat_gateway", 32.00),
+                                        "monthly_cost": round(monthly_cost, 2),
                                         "recommendation": "Delete or consolidate underused NAT Gateway",
                                         "action": "manual_review",
                                         "explainability_notes": f"NAT Gateway has extremely low traffic ({total_connections} connection attempts in 7 days).",

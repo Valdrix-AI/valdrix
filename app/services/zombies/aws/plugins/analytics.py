@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 import aioboto3
 from botocore.exceptions import ClientError
 import structlog
-from app.services.zombies.zombie_plugin import ZombiePlugin, ESTIMATED_COSTS
+from app.services.zombies.zombie_plugin import ZombiePlugin
+from app.services.pricing.service import PricingService
 
 logger = structlog.get_logger()
 
@@ -36,7 +37,11 @@ class IdleSageMakerPlugin(ZombiePlugin):
                                     zombies.append({
                                         "resource_id": name,
                                         "resource_type": "SageMaker Endpoint",
-                                        "monthly_cost": ESTIMATED_COSTS["sagemaker_endpoint"],
+                                        "monthly_cost": PricingService.estimate_monthly_waste(
+                                            provider="aws",
+                                            resource_type="sagemaker",
+                                            region=region
+                                        ),
                                         "recommendation": "Delete idle endpoint",
                                         "action": "delete_sagemaker_endpoint",
                                         "explainability_notes": "SageMaker endpoint has had 0 invocations over the last 7 days.",

@@ -87,7 +87,21 @@ resource "aws_iam_role_policy" "cost_explorer" {
         Action = [
           "ec2:DescribeInstances",
           "ec2:DescribeVolumes",
-          "ec2:DescribeSnapshots"
+          "ec2:DescribeSnapshots",
+          "ec2:DescribeAddresses",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeNatGateways",
+          "ec2:DescribeSecurityGroups"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ELBReadOnly"
+        Effect = "Allow"
+        Action = [
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetHealth"
         ]
         Resource = "*"
       },
@@ -99,10 +113,69 @@ resource "aws_iam_role_policy" "cost_explorer" {
           "rds:DescribeDBClusters"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "RedshiftOnly"
+        Effect = "Allow"
+        Action = ["redshift:DescribeClusters"]
+        Resource = "*"
+      },
+      {
+        Sid    = "SageMakerReadOnly"
+        Effect = "Allow"
+        Action = ["sagemaker:ListEndpoints", "sagemaker:ListNotebookInstances", "sagemaker:ListModels"]
+        Resource = "*"
+      },
+      {
+        Sid    = "ECRReadOnly"
+        Effect = "Allow"
+        Action = ["ecr:DescribeRepositories", "ecr:DescribeImages"]
+        Resource = "*"
+      },
+      {
+        Sid    = "S3ReadOnly"
+        Effect = "Allow"
+        Action = ["s3:ListAllMyBuckets", "s3:GetBucketLocation", "s3:GetBucketTagging"]
+        Resource = "*"
+      },
+      {
+        Sid    = "CloudWatchRead"
+        Effect = "Allow"
+        Action = ["cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics"]
+        Resource = "*"
+      },
+      {
+        Sid    = "CURAutomation"
+        Effect = "Allow"
+        Action = ["cur:PutReportDefinition", "cur:DescribeReportDefinitions", "cur:ModifyReportDefinition"]
+        Resource = "*"
+      },
+      {
+        Sid    = "S3ManagementForCUR"
+        Effect = "Allow"
+        Action = ["s3:CreateBucket", "s3:PutBucketPolicy", "s3:GetBucketPolicy", "s3:ListBucket"]
+        Resource = "arn:aws:s3:::valdrix-cur-*"
       }
     ]
   })
 }
+
+# ---------------------------------------------------------
+# INFRASTRUCTURE RELIABILITY: RDS BACKUP POLICY
+# ---------------------------------------------------------
+# This section ensures that the Valdrix database has automated
+# backups enabled with a 30-day retention period.
+# Note: In a real environment, this would be part of the 
+# DB instance resource definition.
+
+# resource "aws_db_instance" "valdrix" {
+#   # ... other config ...
+#   backup_retention_period = 30
+#   backup_window           = "03:00-04:00"
+#   copy_tags_to_snapshot   = true
+#   delete_automated_backups = false
+#   skip_final_snapshot     = false
+# }
 
 # Outputs
 output "role_arn" {

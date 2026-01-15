@@ -73,15 +73,14 @@
         </p>
       </div>
       
-      <!-- Error/Success Messages -->
       {#if error}
-        <div class="mb-4 p-3 rounded-lg bg-danger-500/10 border border-danger-500/30 text-danger-400 text-sm">
+        <div role="alert" class="mb-4 p-3 rounded-lg bg-danger-500/10 border border-danger-500/30 text-danger-400 text-sm">
           {error}
         </div>
       {/if}
       
       {#if success}
-        <div class="mb-4 p-3 rounded-lg bg-success-500/10 border border-success-500/30 text-success-400 text-sm">
+        <div role="status" class="mb-4 p-3 rounded-lg bg-success-500/10 border border-success-500/30 text-success-400 text-sm">
           {success}
         </div>
       {/if}
@@ -97,6 +96,7 @@
             required
             class="input"
             placeholder="you@company.com"
+            aria-label="Email address"
           />
         </div>
         
@@ -110,6 +110,7 @@
             minlength="6"
             class="input"
             placeholder="••••••••"
+            aria-label="Password"
           />
         </div>
         
@@ -117,9 +118,10 @@
           type="submit"
           disabled={loading}
           class="btn btn-primary w-full py-2.5"
+          aria-label={mode === 'login' ? 'Sign in' : 'Create account'}
         >
           {#if loading}
-            <span class="spinner"></span>
+            <span class="spinner" aria-hidden="true"></span>
             <span>Please wait...</span>
           {:else}
             {mode === 'login' ? 'Sign In' : 'Create Account'}

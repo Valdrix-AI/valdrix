@@ -113,3 +113,25 @@ class TestAdminEndpoint:
         
         # FastAPI returns 422 if required Header is missing
         assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+class TestConnectionsEndpoint:
+    """Tests for /connections endpoints."""
+    
+    async def test_sync_org_without_auth_returns_401(self, ac: AsyncClient):
+        """Test that sync-org endpoint requires authentication."""
+        from uuid import uuid4
+        response = await ac.post(f"/connections/aws/{uuid4()}/sync-org")
+        assert response.status_code == 401
+
+    async def test_list_discovered_without_auth_returns_401(self, ac: AsyncClient):
+        """Test that list discovered accounts endpoint requires authentication."""
+        response = await ac.get("/connections/aws/discovered")
+        assert response.status_code == 401
+        
+    async def test_link_discovered_without_auth_returns_401(self, ac: AsyncClient):
+        """Test that link discovered account endpoint requires authentication."""
+        from uuid import uuid4
+        response = await ac.post(f"/connections/aws/discovered/{uuid4()}/link")
+        assert response.status_code == 401

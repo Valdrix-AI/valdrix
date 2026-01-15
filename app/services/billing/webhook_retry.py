@@ -21,7 +21,7 @@ Usage:
     result = await service.process_webhook(job_id)
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 import hashlib
 import structlog
@@ -95,7 +95,7 @@ class WebhookRetryService:
             BackgroundJob if new, None if duplicate
         """
         # Generate idempotency key
-        ref = reference or payload.get("data", {}).get("reference", str(datetime.now()))
+        ref = reference or payload.get("data", {}).get("reference", str(datetime.now(timezone.utc)))
         idempotency_key = self._generate_idempotency_key(provider, event_type, ref)
         
         # Check for duplicate

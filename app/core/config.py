@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Valdrix"
     VERSION: str = "0.1.0"
     DEBUG: bool = False
+    API_URL: str = "http://localhost:8000"  # Base URL for OIDC and Magic Links
 
     # AWS Credentials
     AWS_ACCESS_KEY_ID: Optional[str] = None

@@ -72,8 +72,10 @@ class RemediationRequest(Base):
     )
 
     # Resource identification
-    resource_id = Column(String(100), nullable=False, index=True)  # AWS resource ID
-    resource_type = Column(String(50), nullable=False)  # EBS Volume, Snapshot, etc.
+    resource_id = Column(String(100), nullable=False, index=True)
+    resource_type = Column(String(50), nullable=False)
+    provider = Column(String(20), nullable=False, default="aws") # aws, azure, gcp
+    connection_id = Column(UUID(as_uuid=True), nullable=True)     # ID of the specific cloud connection
     region = Column(String(20), nullable=False, default="us-east-1")
 
     # Action details

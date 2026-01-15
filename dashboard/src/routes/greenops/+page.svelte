@@ -11,107 +11,21 @@
 
 <script lang="ts">
   import { PUBLIC_API_URL } from '$env/static/public';
-  import { createSupabaseBrowserClient } from '$lib/supabase';
+  import { goto } from '$app/navigation';
   
   let { data } = $props();
   
-  const supabase = createSupabaseBrowserClient();
+  let carbonData = $derived(data.carbonData);
+  let gravitonData = $derived(data.gravitonData);
+  let budgetData = $derived(data.budgetData);
+  let selectedRegion = $derived(data.selectedRegion);
+  let error = $derived(data.error || '');
+  let loading = $derived(false);
   
-  // State
-  let carbonData: any = $state(null);
-  let gravitonData: any = $state(null);
-  let budgetData: any = $state(null);
-  let loading = $state(true);
-  let error = $state('');
-  let selectedRegion = $state('us-east-1');
-  
-  // Date range (default: last 30 days for faster loading)
-  const today = new Date();
-  const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const startDate = thirtyDaysAgo.toISOString().split('T')[0];
-  const endDate = today.toISOString().split('T')[0];
-  
-  async function getAuthHeaders(): Promise<Record<string, string> | null> {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      error = 'Not authenticated. Please log in.';
-      return null;
-    }
-    return {
-      'Authorization': `Bearer ${session.access_token}`,
-    };
+  function handleRegionChange(e: Event) {
+    const target = e.target as HTMLSelectElement;
+    goto(`?region=${target.value}`, { keepFocus: true, noScroll: true });
   }
-  
-  async function fetchCarbonData() {
-    const headers = await getAuthHeaders();
-    if (!headers) return;
-    
-    try {
-      const res = await fetch(
-        `${PUBLIC_API_URL}/carbon?start_date=${startDate}&end_date=${endDate}&region=${selectedRegion}`,
-        { headers }
-      );
-      if (res.ok) {
-        carbonData = await res.json();
-      } else if (res.status === 401) {
-        error = 'Session expired. Please refresh the page.';
-      } else {
-        error = 'Failed to fetch carbon data';
-      }
-    } catch (e) {
-      error = 'Network error fetching carbon data';
-    }
-  }
-  
-  async function fetchGravitonData() {
-    const headers = await getAuthHeaders();
-    if (!headers) return;
-    
-    try {
-      const res = await fetch(
-        `${PUBLIC_API_URL}/graviton?region=${selectedRegion}`,
-        { headers }
-      );
-      if (res.ok) {
-        gravitonData = await res.json();
-      }
-    } catch (e) {
-      console.error('Failed to fetch Graviton data');
-    }
-  }
-  
-  async function fetchBudgetData() {
-    const headers = await getAuthHeaders();
-    if (!headers) return;
-    
-    try {
-      const res = await fetch(
-        `${PUBLIC_API_URL}/carbon/budget?region=${selectedRegion}`,
-        { headers }
-      );
-      if (res.ok) {
-        budgetData = await res.json();
-      }
-    } catch (e) {
-      console.error('Failed to fetch budget data');
-    }
-  }
-  
-  async function loadAllData() {
-    loading = true;
-    error = '';
-    await Promise.all([fetchCarbonData(), fetchGravitonData(), fetchBudgetData()]);
-    loading = false;
-  }
-  
-  $effect(() => {
-    if (data.user) {
-      loadAllData();
-    } else {
-      loading = false;
-      error = 'Please log in to view GreenOps data.';
-    }
-  });
   
   // Format CO2 value
   function formatCO2(kg: number): string {
@@ -138,6 +52,7 @@
       bind:value={selectedRegion}
       onchange={() => loadAllData()}
       class="bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 text-sm"
+      aria-label="Select AWS region for carbon analysis"
     >
       <option value="us-east-1">US East (N. Virginia)</option>
       <option value="us-west-2">US West (Oregon)</option>

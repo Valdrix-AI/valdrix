@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 import aioboto3
 from botocore.exceptions import ClientError
 import structlog
-from app.services.zombies.zombie_plugin import ZombiePlugin, ESTIMATED_COSTS
+from app.services.zombies.zombie_plugin import ZombiePlugin
+from app.services.pricing.service import PricingService
 
 logger = structlog.get_logger()
 
@@ -30,7 +31,11 @@ class LegacyEcrImagesPlugin(ZombiePlugin):
                                     pushed_at = img.get("imagePushedAt")
                                     if pushed_at and pushed_at < cutoff:
                                         size_gb = img.get("imageSizeInBytes", 0) / (1024**3)
-                                        monthly_cost = size_gb * ESTIMATED_COSTS["ecr_gb"]
+                                        monthly_cost = size_gb * PricingService.get_hourly_rate(
+                                            provider="aws",
+                                            resource_type="ecr",
+                                            region=region
+                                        ) * 730 # GB-month pricing logic simplified
                                         zombies.append({
                                             "resource_id": f"{name}@{img.get('imageDigest', 'unknown')}",
                                             "resource_type": "ECR Image",

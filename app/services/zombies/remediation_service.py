@@ -63,6 +63,8 @@ class RemediationService:
         backup_cost_estimate: float = 0,
         confidence_score: Optional[float] = None,
         explainability_notes: Optional[str] = None,
+        provider: str = "aws",
+        connection_id: Optional[UUID] = None,
     ) -> RemediationRequest:
         """Create a new remediation request (pending approval)."""
         request = RemediationRequest(
@@ -77,6 +79,8 @@ class RemediationService:
             backup_retention_days=backup_retention_days,
             backup_cost_estimate=Decimal(str(backup_cost_estimate)) if backup_cost_estimate else None,
             requested_by_user_id=user_id,
+            provider=provider,
+            connection_id=connection_id,
         )
 
         self.db.add(request)

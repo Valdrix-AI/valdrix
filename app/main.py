@@ -11,6 +11,7 @@ from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
 from app.core.sentry import init_sentry
 from app.services.scheduler import SchedulerService
 from app.core.timeout import TimeoutMiddleware
+from app.core.tracing import setup_tracing
 
 # Ensure all models are registered with SQLAlchemy
 import app.models.tenant
@@ -19,6 +20,8 @@ import app.models.llm
 import app.models.notification_settings
 import app.models.remediation
 import app.models.background_job
+import app.models.azure_connection
+import app.models.gcp_connection
 
 
 from codecarbon import EmissionsTracker
@@ -35,6 +38,7 @@ from app.api.v1.audit import router as audit_router
 from app.api.v1.jobs import router as jobs_router
 from app.api.v1.health_dashboard import router as health_dashboard_router
 from app.api.v1.usage import router as usage_router
+from app.api.oidc import router as oidc_router
 
 # Configure logging and Sentry
 setup_logging()
@@ -77,6 +81,10 @@ async def lifespan(app: FastAPI):
     scheduler.stop()
     tracker.stop()
 
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from app.core.exceptions import ValdrixException
+
 # Application instance
 settings = get_settings()
 app = FastAPI(
@@ -84,6 +92,35 @@ app = FastAPI(
     version=settings.VERSION,
     lifespan=lifespan
 )
+
+# Initialize Tracing
+setup_tracing(app)
+
+@app.exception_handler(ValdrixException)
+async def valdrix_exception_handler(request: Request, exc: ValdrixException):
+    """Handle custom application exceptions."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": "error",
+            "message": exc.message,
+            "code": exc.code,
+            "details": exc.details
+        },
+    )
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    """Handle unhandled exceptions."""
+    logger.exception("unhandled_exception", path=request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": "An unexpected error occurred. Please try again later.",
+            "code": "internal_server_error"
+        },
+    )
 
 # Initialize Prometheus Metrics
 Instrumentator().instrument(app).expose(app)
@@ -135,3 +172,4 @@ app.include_router(audit_router)
 app.include_router(jobs_router)
 app.include_router(health_dashboard_router)
 app.include_router(usage_router)
+app.include_router(oidc_router)

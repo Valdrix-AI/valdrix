@@ -35,6 +35,7 @@ class JobType(str, Enum):
     WEBHOOK_RETRY = "webhook_retry"
     REPORT_GENERATION = "report_generation"
     NOTIFICATION = "notification"
+    COST_INGESTION = "cost_ingestion"
 
 
 class BackgroundJob(Base):

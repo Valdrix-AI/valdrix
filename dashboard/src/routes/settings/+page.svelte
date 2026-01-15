@@ -24,6 +24,52 @@
   let error = $state('');
   let success = $state('');
   
+  async function getHeaders() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return {
+      'Authorization': `Bearer ${session?.access_token}`,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  async function loadSettings() {
+    try {
+      const headers = await getHeaders();
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/notifications`, { headers });
+      if (res.ok) {
+        settings = await res.json();
+      }
+    } catch (e) {
+      console.error('Failed to load settings:', e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function saveSettings() {
+    saving = true;
+    error = '';
+    success = '';
+    try {
+      const headers = await getHeaders();
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/notifications`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(settings),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || 'Failed to save settings');
+      }
+      success = 'General settings saved!';
+      setTimeout(() => success = '', 3000);
+    } catch (e: any) {
+      error = e.message;
+    } finally {
+      saving = false;
+    }
+  }
+  
   // Settings state
   let settings = $state({
     slack_enabled: true,
@@ -70,60 +116,6 @@
     google: [],
   });
   
-  // AWS Connection state
-  let awsConnection: any = $state(null);
-  let loadingAWS = $state(true);
-  let disconnecting = $state(false);
-  
-  async function getHeaders() {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session?.access_token}`,
-    };
-  }
-  
-  async function loadSettings() {
-    try {
-      const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/notifications`, { headers });
-      
-      if (res.ok) {
-        settings = await res.json();
-      }
-    } catch (e: any) {
-      error = e.message;
-    } finally {
-      loading = false;
-    }
-  }
-  
-  async function saveSettings() {
-    saving = true;
-    error = '';
-    success = '';
-    
-    try {
-      const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/notifications`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(settings),
-      });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Failed to save settings');
-      }
-      
-      success = 'Settings saved successfully!';
-      setTimeout(() => success = '', 3000);
-    } catch (e: any) {
-      error = e.message;
-    } finally {
-      saving = false;
-    }
-  }
   
   async function testSlack() {
     testing = true;
@@ -131,7 +123,7 @@
     
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/notifications/test-slack`, {
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/notifications/test-slack`, {
         method: 'POST',
         headers,
       });
@@ -150,61 +142,6 @@
     }
   }
   
-  async function loadAWSConnection() {
-    try {
-      const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/connections/aws`, { headers });
-      
-      if (res.ok) {
-        const connections = await res.json();
-        awsConnection = connections.length > 0 ? connections[0] : null;
-      } else {
-        const data = await res.json();
-        throw new Error(data.detail || `Error ${res.status}: Failed to load connection`);
-      }
-    } catch (e: any) {
-      console.error('Failed to load AWS connection:', e);
-      error = e.message; // Show in UI!
-    } finally {
-      loadingAWS = false;
-    }
-  }
-  
-  async function disconnectAWS() {
-    if (!awsConnection) return;
-    
-    const confirmed = confirm(
-      'Are you sure you want to disconnect your AWS account?\n\n' +
-      'This will delete the connection from Valdrix. ' +
-      'You will need to go through onboarding again to reconnect.'
-    );
-    
-    if (!confirmed) return;
-    
-    disconnecting = true;
-    error = '';
-    
-    try {
-      const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/connections/aws/${awsConnection.id}`, {
-        method: 'DELETE',
-        headers,
-      });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || 'Failed to disconnect AWS');
-      }
-      
-      awsConnection = null;
-      success = 'AWS account disconnected successfully! You can now re-onboard with updated permissions.';
-      setTimeout(() => success = '', 5000);
-    } catch (e: any) {
-      error = e.message;
-    } finally {
-      disconnecting = false;
-    }
-  }
   
   // Carbon settings state
   let carbonSettings = $state({
@@ -220,7 +157,7 @@
   async function loadCarbonSettings() {
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/carbon`, { headers });
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/carbon`, { headers });
       
       if (res.ok) {
         carbonSettings = await res.json();
@@ -239,7 +176,7 @@
     
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/carbon`, {
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/carbon`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(carbonSettings),
@@ -261,7 +198,7 @@
 
   async function loadModels() {
     try {
-      const res = await fetch(`${PUBLIC_API_URL}/settings/llm/models`);
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/llm/models`);
       if (res.ok) {
         providerModels = await res.json();
       }
@@ -273,7 +210,7 @@
   async function loadLLMSettings() {
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/llm`, { headers });
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/llm`, { headers });
       
       if (res.ok) {
         llmSettings = await res.json();
@@ -292,7 +229,7 @@
     
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/llm`, {
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/llm`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(llmSettings),
@@ -315,7 +252,7 @@
   async function loadActiveOpsSettings() {
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/activeops`, { headers });
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/activeops`, { headers });
       
       if (res.ok) {
         activeOpsSettings = await res.json();
@@ -334,7 +271,7 @@
     
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/activeops`, {
+      const res = await fetch(`${PUBLIC_API_URL}/api/v1/settings/activeops`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(activeOpsSettings),
@@ -357,14 +294,12 @@
   $effect(() => {
     if (data.user) {
       loadSettings();
-      loadAWSConnection();
       loadCarbonSettings();
       loadModels();
       loadLLMSettings();
       loadActiveOpsSettings();
     } else {
       loading = false;
-      loadingAWS = false;
       loadingCarbon = false;
       loadingLLM = false;
       loadingActiveOps = false;
@@ -379,8 +314,8 @@
 <div class="space-y-8">
   <!-- Page Header -->
   <div>
-    <h1 class="text-2xl font-bold mb-1">Settings</h1>
-    <p class="text-ink-400 text-sm">Configure your notification preferences</p>
+    <h1 class="text-2xl font-bold mb-1">Preferences</h1>
+    <p class="text-ink-400 text-sm">Configure your notifications, AI strategy, and GreenOps thresholds.</p>
   </div>
   
   {#if !data.user}
@@ -395,61 +330,17 @@
     </div>
   {:else}
     {#if error}
-      <div class="card border-danger-500/50 bg-danger-500/10">
+      <div role="alert" class="card border-danger-500/50 bg-danger-500/10">
         <p class="text-danger-400">{error}</p>
       </div>
     {/if}
     
     {#if success}
-      <div class="card border-success-500/50 bg-success-500/10">
+      <div role="status" class="card border-success-500/50 bg-success-500/10">
         <p class="text-success-400">{success}</p>
       </div>
     {/if}
     
-    <!-- AWS Connection -->
-    <div class="card stagger-enter">
-      <h2 class="text-lg font-semibold mb-5 flex items-center gap-2">
-        <span>☁️</span> AWS Connection
-      </h2>
-      
-      {#if loadingAWS}
-        <div class="skeleton h-4 w-48"></div>
-      {:else if awsConnection}
-        <div class="space-y-4">
-          <div class="flex items-center gap-3">
-            <span class="connection-status connected"></span>
-            <span class="text-success-400 font-medium">Connected</span>
-          </div>
-          
-          <div class="text-sm text-ink-400 space-y-1">
-            <p><strong>Account:</strong> {awsConnection.aws_account_id}</p>
-            <p><strong>Region:</strong> {awsConnection.region}</p>
-            <p><strong>Role:</strong> {awsConnection.role_arn?.split('/').pop() || 'ValdrixReadOnly'}</p>
-            <p><strong>Status:</strong> {awsConnection.status}</p>
-          </div>
-          
-          <div class="pt-4 border-t border-ink-700">
-            <button 
-              class="btn btn-danger" 
-              onclick={disconnectAWS}
-              disabled={disconnecting}
-            >
-              {disconnecting ? '⏳ Disconnecting...' : '🔌 Disconnect AWS Account'}
-            </button>
-            <p class="text-xs text-ink-500 mt-2">
-              Disconnecting will allow you to re-onboard with updated permissions.
-            </p>
-          </div>
-        </div>
-      {:else}
-        <div class="space-y-3">
-          <p class="text-ink-400">No AWS account connected.</p>
-          <a href="/onboarding" class="btn btn-primary inline-block">
-            ➕ Connect AWS Account
-          </a>
-        </div>
-      {/if}
-    </div>
     
     <!-- Carbon Budget Settings -->
     <div class="card stagger-enter relative" class:opacity-60={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)} class:pointer-events-none={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}>
@@ -482,6 +373,7 @@
               min="0"
               step="10"
               disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+              aria-label="Monthly carbon budget in kilograms"
             />
             <p class="text-xs text-ink-500 mt-1">Set your monthly carbon footprint limit</p>
           </div>
@@ -495,13 +387,17 @@
               min="0"
               max="100"
               disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+              aria-label="Carbon alert threshold percentage"
             />
             <p class="text-xs text-ink-500 mt-1">Warn when usage reaches this percentage of budget</p>
           </div>
           
           <div class="form-group">
             <label for="default_region">Default AWS Region</label>
-            <select id="default_region" bind:value={carbonSettings.default_region} class="select" disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}>
+            <select id="default_region" bind:value={carbonSettings.default_region} class="select" 
+              disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+              aria-label="Default AWS region for carbon analysis"
+            >
               <option value="us-west-2">US West (Oregon) - 21 gCO₂/kWh ⭐</option>
               <option value="eu-north-1">EU (Stockholm) - 28 gCO₂/kWh ⭐</option>
               <option value="ca-central-1">Canada (Central) - 35 gCO₂/kWh ⭐</option>
@@ -515,7 +411,10 @@
           <!-- Email Notifications -->
           <div class="form-group">
             <label class="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" bind:checked={carbonSettings.email_enabled} class="toggle" disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)} />
+              <input type="checkbox" bind:checked={carbonSettings.email_enabled} class="toggle" 
+                disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)} 
+                aria-label="Enable email notifications for carbon alerts"
+              />
               <span>Enable email notifications for carbon alerts</span>
             </label>
           </div>
@@ -529,12 +428,16 @@
                 bind:value={carbonSettings.email_recipients}
                 placeholder="email1@example.com, email2@example.com"
                 disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+                aria-label="Carbon alert email recipients"
               />
               <p class="text-xs text-ink-500 mt-1">Comma-separated email addresses for carbon budget alerts</p>
             </div>
           {/if}
           
-          <button class="btn btn-primary" onclick={saveCarbonSettings} disabled={savingCarbon || !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}>
+          <button class="btn btn-primary" onclick={saveCarbonSettings} 
+            disabled={savingCarbon || !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+            aria-label="Save carbon budget settings"
+          >
             {savingCarbon ? '⏳ Saving...' : '💾 Save Carbon Settings'}
           </button>
         </div>
@@ -555,7 +458,9 @@
             <div class="form-group">
               <label for="provider">Preferred Provider</label>
               <select id="provider" bind:value={llmSettings.preferred_provider} class="select" 
-                onchange={() => llmSettings.preferred_model = providerModels[llmSettings.preferred_provider as keyof typeof providerModels][0]}>
+                onchange={() => llmSettings.preferred_model = providerModels[llmSettings.preferred_provider as keyof typeof providerModels][0]}
+                aria-label="Preferred AI provider"
+              >
                 <option value="groq">Groq (Ultra-Fast)</option>
                 <option value="openai">OpenAI (Gold Standard)</option>
                 <option value="anthropic">Anthropic (Claude)</option>
@@ -565,7 +470,7 @@
             
             <div class="form-group">
               <label for="model">AI Model</label>
-              <select id="model" bind:value={llmSettings.preferred_model} class="select">
+              <select id="model" bind:value={llmSettings.preferred_model} class="select" aria-label="Preferred AI model">
                 {#each providerModels[llmSettings.preferred_provider as keyof typeof providerModels] as model}
                   <option value={model}>{model}</option>
                 {/each}
@@ -582,6 +487,7 @@
                 bind:value={llmSettings.monthly_limit_usd}
                 min="0"
                 step="1"
+                aria-label="Monthly AI budget in USD"
               />
             </div>
             
@@ -593,6 +499,7 @@
                 bind:value={llmSettings.alert_threshold_percent}
                 min="0"
                 max="100"
+                aria-label="AI alert threshold percentage"
               />
             </div>
           </div>
@@ -610,6 +517,7 @@
                   id="openai_key"
                   bind:value={llmSettings.openai_api_key}
                   placeholder={llmSettings.has_openai_key ? '••••••••••••••••' : 'sk-...'}
+                  aria-label="OpenAI API Key"
                 />
               </div>
               <div class="form-group">
@@ -619,6 +527,7 @@
                   id="claude_key"
                   bind:value={llmSettings.claude_api_key}
                   placeholder={llmSettings.has_claude_key ? '••••••••••••••••' : 'sk-ant-...'}
+                  aria-label="Claude API Key"
                 />
               </div>
               <div class="form-group">
@@ -628,6 +537,7 @@
                   id="google_key"
                   bind:value={llmSettings.google_api_key}
                   placeholder={llmSettings.has_google_key ? '••••••••••••••••' : 'AIza...'}
+                  aria-label="Google AI (Gemini) API Key"
                 />
               </div>
               <div class="form-group">
@@ -637,6 +547,7 @@
                   id="groq_key"
                   bind:value={llmSettings.groq_api_key}
                   placeholder={llmSettings.has_groq_key ? '••••••••••••••••' : 'gsk_...'}
+                  aria-label="Groq API Key"
                 />
               </div>
             </div>
@@ -644,12 +555,12 @@
 
           <div class="form-group">
             <label class="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" bind:checked={llmSettings.hard_limit} class="toggle" />
+              <input type="checkbox" bind:checked={llmSettings.hard_limit} class="toggle" aria-label="Enable hard limit for AI budget" />
               <span>Enable Hard Limit (Block AI analysis if budget exceeded)</span>
             </label>
           </div>
           
-          <button class="btn btn-primary" onclick={saveLLMSettings} disabled={savingLLM}>
+          <button class="btn btn-primary" onclick={saveLLMSettings} disabled={savingLLM} aria-label="Save AI strategy settings">
             {savingLLM ? '⏳ Saving...' : '💾 Save AI Strategy'}
           </button>
         </div>
@@ -689,7 +600,10 @@
           </div>
 
           <label class="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" bind:checked={activeOpsSettings.auto_pilot_enabled} class="toggle toggle-warning" disabled={!['pro', 'enterprise'].includes(data.subscription?.tier)} />
+            <input type="checkbox" bind:checked={activeOpsSettings.auto_pilot_enabled} class="toggle toggle-warning" 
+              disabled={!['pro', 'enterprise'].includes(data.subscription?.tier)} 
+              aria-label="Enable Auto-Pilot for autonomous deletion"
+            />
             <span class="font-medium {activeOpsSettings.auto_pilot_enabled ? 'text-white' : 'text-ink-400'}">
               Enable Auto-Pilot (Weekly Autonomous Deletion)
             </span>
@@ -706,6 +620,7 @@
               step="0.01"
               class="range"
               disabled={!activeOpsSettings.auto_pilot_enabled || !['pro', 'enterprise'].includes(data.subscription?.tier)}
+              aria-label="Minimum AI confidence threshold for autonomous actions"
             />
             <div class="flex justify-between text-[10px] text-ink-500 mt-1">
               <span>Riskier (50%)</span>
@@ -713,7 +628,10 @@
             </div>
           </div>
           
-          <button class="btn btn-primary" onclick={saveActiveOpsSettings} disabled={savingActiveOps || !['pro', 'enterprise'].includes(data.subscription?.tier)}>
+          <button class="btn btn-primary" onclick={saveActiveOpsSettings} 
+            disabled={savingActiveOps || !['pro', 'enterprise'].includes(data.subscription?.tier)}
+            aria-label="Save ActiveOps settings"
+          >
             {savingActiveOps ? '⏳ Saving...' : '💾 Save ActiveOps Settings'}
           </button>
         </div>
@@ -728,7 +646,7 @@
       
       <div class="space-y-4">
         <label class="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" bind:checked={settings.slack_enabled} class="toggle" />
+          <input type="checkbox" bind:checked={settings.slack_enabled} class="toggle" aria-label="Enable Slack notifications" />
           <span>Enable Slack notifications</span>
         </label>
         
@@ -740,6 +658,7 @@
             bind:value={settings.slack_channel_override}
             placeholder="C01234ABCDE"
             disabled={!settings.slack_enabled}
+            aria-label="Slack channel ID override"
           />
           <p class="text-xs text-ink-500 mt-1">Leave empty to use the default channel</p>
         </div>
@@ -748,6 +667,7 @@
           class="btn btn-secondary" 
           onclick={testSlack}
           disabled={!settings.slack_enabled || testing}
+          aria-label="Send test Slack notification"
         >
           {testing ? '⏳ Sending...' : '🧪 Send Test Notification'}
         </button>
@@ -763,7 +683,7 @@
       <div class="space-y-4">
         <div class="form-group">
           <label for="schedule">Frequency</label>
-          <select id="schedule" bind:value={settings.digest_schedule} class="select">
+          <select id="schedule" bind:value={settings.digest_schedule} class="select" aria-label="Daily digest frequency">
             <option value="daily">Daily</option>
             <option value="weekly">Weekly (Mondays)</option>
             <option value="disabled">Disabled</option>
@@ -774,7 +694,7 @@
           <div class="grid grid-cols-2 gap-4">
             <div class="form-group">
               <label for="hour">Hour (UTC)</label>
-              <select id="hour" bind:value={settings.digest_hour} class="select">
+              <select id="hour" bind:value={settings.digest_hour} class="select" aria-label="Digest delivery hour (UTC)">
                 {#each Array(24).fill(0).map((_, i) => i) as h}
                   <option value={h}>{h.toString().padStart(2, '0')}:00</option>
                 {/each}
@@ -782,7 +702,7 @@
             </div>
             <div class="form-group">
               <label for="minute">Minute</label>
-              <select id="minute" bind:value={settings.digest_minute} class="select">
+              <select id="minute" bind:value={settings.digest_minute} class="select" aria-label="Digest delivery minute">
                 {#each [0, 15, 30, 45] as m}
                   <option value={m}>:{m.toString().padStart(2, '0')}</option>
                 {/each}
@@ -982,5 +902,43 @@
   
   .border-ink-700 {
     border-color: var(--color-ink-700);
+  }
+
+  /* Provider Status Cards */
+  .provider-status-card {
+    background: var(--color-ink-800);
+    border: 1px solid var(--color-ink-700);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 0.2s ease;
+  }
+
+  .provider-status-card:hover {
+    border-color: var(--color-accent-500);
+    transform: translateY(-2px);
+  }
+
+  .logo-sm {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.8rem;
+  }
+
+  .logo-sm.aws { background: rgba(255, 153, 0, 0.1); color: #FF9900; }
+  .logo-sm.azure { background: rgba(0, 120, 212, 0.1); color: #0078D4; }
+  .logo-sm.gcp { background: rgba(66, 133, 244, 0.1); color: #4284F4; }
+
+  .badge-accent {
+    background: rgba(99, 102, 241, 0.2);
+    color: var(--color-accent-400);
+    border: 1px solid rgba(99, 102, 241, 0.3);
   }
 </style>

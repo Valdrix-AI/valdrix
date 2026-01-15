@@ -10,33 +10,36 @@
 
 <script lang="ts">
   import { PUBLIC_API_URL } from '$env/static/public';
+  import { onMount } from 'svelte';
   import { createSupabaseBrowserClient } from '$lib/supabase';
+  import { Shield, Zap, Search, AlertCircle, TrendingDown, ChevronRight, ChevronLeft, Globe } from '@lucide/svelte';
+  import CloudLogo from '$lib/components/CloudLogo.svelte';
+  import { api } from '$lib/api';
+  import { goto } from '$app/navigation';
   import DateRangePicker from '$lib/components/DateRangePicker.svelte';
   
   let { data } = $props();
   
+  let loading = $state(false); // Can be used for nav transitions
+  let costs = $derived(data.costs);
+  let carbon = $derived(data.carbon);
+  let zombies = $derived(data.zombies);
+  let analysis = $derived(data.analysis);
+  let error = $derived(data.error || '');
+  let startDate = $derived(data.startDate || '');
+  let endDate = $derived(data.endDate || '');
+  
   const supabase = createSupabaseBrowserClient();
-  
-  let loading = $state(true);
-  let costs: any = $state(null);
-  let carbon: any = $state(null);
-  let zombies: any = $state(null);
-  let analysis: any = $state(null);
-  let error = $state('');
-  let startDate = $state('');
-  let endDate = $state('');
-  
+
   // Table pagination state
   let currentPage = $state(0);
   let remediating = $state<string | null>(null);
   
   /**
    * Handle remediation action for a zombie resource.
-   * Creates a remediation request and navigates to approval workflow.
    */
   async function handleRemediate(finding: any) {
     if (remediating) return;
-    
     remediating = finding.resource_id;
     
     try {
@@ -52,18 +55,20 @@
         body: JSON.stringify({
           resource_id: finding.resource_id,
           resource_type: finding.resource_type || 'unknown',
+          provider: finding.provider || 'aws',
+          connection_id: finding.connection_id,
           action: finding.recommended_action?.toLowerCase().includes('delete') ? 'delete_volume' : 'stop_instance',
-          estimated_savings: parseFloat(finding.monthly_cost?.replace('$', '') || '0'),
+          estimated_savings: parseFloat(finding.monthly_cost?.toString().replace('$', '') || '0'),
           create_backup: true,
         }),
       });
       
       if (!response.ok) {
-        const data = await response.json();
+        const errData = await response.json();
         if (response.status === 403) {
           alert('⚡ Upgrade Required: Auto-remediation requires Pro tier or higher.');
         } else {
-          alert(`Error: ${data.detail || 'Failed to create remediation request'}`);
+          alert(`Error: ${errData.detail || 'Failed to create remediation request'}`);
         }
         return;
       }
@@ -78,47 +83,13 @@
     }
   }
 
-  async function loadData() {
-    if (!data.user || !startDate || !endDate) {
-      loading = false;
-      return;
-    }
-    
-    loading = true;
-    error = '';
-    
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      
-      const headers = {
-        'Authorization': `Bearer ${session.access_token}`,
-      };
-      
-      const [costsRes, carbonRes, zombiesRes, analyzeRes] = await Promise.all([
-        fetch(`${PUBLIC_API_URL}/costs?start_date=${startDate}&end_date=${endDate}`, { headers }),
-        fetch(`${PUBLIC_API_URL}/carbon?start_date=${startDate}&end_date=${endDate}`, { headers }),
-        fetch(`${PUBLIC_API_URL}/zombies?analyze=true`, { headers }),
-        fetch(`${PUBLIC_API_URL}/analyze?start_date=${startDate}&end_date=${endDate}`, { headers }),
-      ]);
-      
-      costs = await costsRes.json();
-      carbon = await carbonRes.json();
-      zombies = await zombiesRes.json();
-      analysis = analyzeRes.ok ? await analyzeRes.json() : { analysis: 'Analysis unavailable.' };
-    } catch (e: any) {
-      error = e.message;
-    } finally {
-      loading = false;
-    }
-  }
-  
   function handleDateChange(dates: { startDate: string; endDate: string }) {
-    startDate = dates.startDate;
-    endDate = dates.endDate;
-    if (data.user) {
-      loadData();
-    }
+    if (dates.startDate === startDate && dates.endDate === endDate) return;
+    goto(`?start_date=${dates.startDate}&end_date=${dates.endDate}`, { 
+      keepFocus: true, 
+      noScroll: true,
+      replaceState: true 
+    });
   }
   
   let zombieCount = $derived(zombies ? Object.values(zombies).reduce((acc: number, val: any) => {
@@ -297,7 +268,8 @@
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead>
-                  <tr class="border-b border-ink-700 text-left text-xs text-ink-400 uppercase tracking-wider">
+                    <tr class="border-b border-ink-700 text-left text-xs text-ink-400 uppercase tracking-wider">
+                    <th class="pb-3 pr-4">Provider</th>
                     <th class="pb-3 pr-4">Resource</th>
                     <th class="pb-3 pr-4">Type</th>
                     <th class="pb-3 pr-4">Cost</th>
@@ -309,6 +281,16 @@
                 <tbody>
                   {#each aiData.resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize) as finding, i}
                     <tr class="border-b border-ink-800 hover:bg-ink-800/50 transition-colors">
+                      <!-- Provider -->
+                      <td class="py-3 pr-4">
+                        <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter
+                          {finding.provider === 'aws' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 
+                           finding.provider === 'azure' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 
+                           'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'}">
+                          <CloudLogo provider={finding.provider} size={10} />
+                          <span>{finding.provider === 'aws' ? 'AWS' : finding.provider === 'azure' ? 'Azure' : 'GCP'}</span>
+                        </div>
+                      </td>
                       <!-- Resource ID -->
                       <td class="py-3 pr-4">
                         <div class="font-mono text-xs truncate max-w-[150px]" title={finding.resource_id}>
@@ -479,6 +461,7 @@
             <table class="table">
               <thead>
                 <tr>
+                  <th>Cloud</th>
                   <th>Resource</th>
                   <th>Type</th>
                   <th>Monthly Cost</th>
@@ -489,6 +472,12 @@
               <tbody>
                 {#each zombies?.unattached_volumes ?? [] as vol}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={vol.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {vol.provider === 'aws' ? 'text-orange-400' : vol.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {vol.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{vol.resource_id}</td>
                     <td><span class="badge badge-default">EBS Volume</span></td>
                     <td class="text-danger-400">${vol.monthly_cost}</td>
@@ -510,6 +499,12 @@
                 {/each}
                 {#each zombies?.old_snapshots ?? [] as snap}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={snap.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {snap.provider === 'aws' ? 'text-orange-400' : snap.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {snap.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{snap.resource_id}</td>
                     <td><span class="badge badge-default">Snapshot</span></td>
                     <td class="text-danger-400">${snap.monthly_cost}</td>
@@ -531,6 +526,12 @@
                 {/each}
                 {#each zombies?.unused_elastic_ips ?? [] as eip}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={eip.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {eip.provider === 'aws' ? 'text-orange-400' : eip.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {eip.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{eip.resource_id}</td>
                     <td><span class="badge badge-default">Elastic IP</span></td>
                     <td class="text-danger-400">${eip.monthly_cost}</td>
@@ -550,6 +551,12 @@
                 {/each}
                 {#each zombies?.idle_instances ?? [] as ec2}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={ec2.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {ec2.provider === 'aws' ? 'text-orange-400' : ec2.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {ec2.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{ec2.resource_id}</td>
                     <td><span class="badge badge-default">Idle EC2 ({ec2.instance_type})</span></td>
                     <td class="text-danger-400">${ec2.monthly_cost}</td>
@@ -569,6 +576,12 @@
                 {/each}
                 {#each zombies?.orphan_load_balancers ?? [] as lb}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={lb.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {lb.provider === 'aws' ? 'text-orange-400' : lb.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {lb.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{lb.resource_id}</td>
                     <td><span class="badge badge-default">Orphan {lb.lb_type.toUpperCase()}</span></td>
                     <td class="text-danger-400">${lb.monthly_cost}</td>
@@ -588,6 +601,12 @@
                 {/each}
                 {#each zombies?.idle_rds_databases ?? [] as rds}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={rds.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {rds.provider === 'aws' ? 'text-orange-400' : rds.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {rds.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{rds.resource_id}</td>
                     <td><span class="badge badge-default">Idle RDS ({rds.db_class})</span></td>
                     <td class="text-danger-400">${rds.monthly_cost}</td>
@@ -607,6 +626,12 @@
                 {/each}
                 {#each zombies?.underused_nat_gateways ?? [] as nat}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={nat.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {nat.provider === 'aws' ? 'text-orange-400' : nat.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {nat.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{nat.resource_id}</td>
                     <td><span class="badge badge-default">Idle NAT Gateway</span></td>
                     <td class="text-danger-400">${nat.monthly_cost}</td>
@@ -626,6 +651,12 @@
                 {/each}
                 {#each zombies?.idle_s3_buckets ?? [] as s3}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={s3.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {s3.provider === 'aws' ? 'text-orange-400' : s3.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {s3.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{s3.resource_id}</td>
                     <td><span class="badge badge-default">Idle S3 Bucket</span></td>
                     <td class="text-danger-400">${s3.monthly_cost}</td>
@@ -645,6 +676,12 @@
                 {/each}
                 {#each zombies?.legacy_ecr_images ?? [] as ecr}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={ecr.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {ecr.provider === 'aws' ? 'text-orange-400' : ecr.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {ecr.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs truncate max-w-[150px]">{ecr.resource_id}</td>
                     <td><span class="badge badge-default">ECR Image</span></td>
                     <td class="text-danger-400">${ecr.monthly_cost}</td>
@@ -664,6 +701,12 @@
                 {/each}
                 {#each zombies?.idle_sagemaker_endpoints ?? [] as sm}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={sm.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {sm.provider === 'aws' ? 'text-orange-400' : sm.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {sm.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{sm.resource_id}</td>
                     <td><span class="badge badge-default">SageMaker Endpoint</span></td>
                     <td class="text-danger-400">${sm.monthly_cost}</td>
@@ -683,6 +726,12 @@
                 {/each}
                 {#each zombies?.cold_redshift_clusters ?? [] as rs}
                   <tr>
+                    <td class="flex items-center gap-1.5">
+                      <CloudLogo provider={rs.provider} size={12} />
+                      <span class="text-[10px] font-bold uppercase {rs.provider === 'aws' ? 'text-orange-400' : rs.provider === 'azure' ? 'text-blue-400' : 'text-yellow-400'}">
+                        {rs.provider || 'AWS'}
+                      </span>
+                    </td>
                     <td class="font-mono text-xs">{rs.resource_id}</td>
                     <td><span class="badge badge-default">Redshift Cluster</span></td>
                     <td class="text-danger-400">${rs.monthly_cost}</td>

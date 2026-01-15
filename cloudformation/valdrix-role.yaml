@@ -62,22 +62,88 @@ Resources:
                   - ce:GetSavingsPlansCoverage
                 Resource: '*'
               
-              # (Optional) Read EC2 instances for zombie detection
+              # Read EC2 instances for zombie detection
               - Sid: EC2ReadOnly
                 Effect: Allow
                 Action:
                   - ec2:DescribeInstances
                   - ec2:DescribeVolumes
                   - ec2:DescribeSnapshots
+                  - ec2:DescribeAddresses
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeNatGateways
+                  - ec2:DescribeSecurityGroups
                 Resource: '*'
-              
-              # (Optional) Read RDS for zombie detection
+
+              - Sid: ELBReadOnly
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:DescribeTargetHealth
+                Resource: '*'
+
               - Sid: RDSReadOnly
                 Effect: Allow
                 Action:
                   - rds:DescribeDBInstances
                   - rds:DescribeDBClusters
                 Resource: '*'
+
+              - Sid: RedshiftReadOnly
+                Effect: Allow
+                Action:
+                  - redshift:DescribeClusters
+                Resource: '*'
+
+              - Sid: SageMakerReadOnly
+                Effect: Allow
+                Action:
+                  - sagemaker:ListEndpoints
+                  - sagemaker:ListNotebookInstances
+                  - sagemaker:ListModels
+                Resource: '*'
+
+              - Sid: ECRReadOnly
+                Effect: Allow
+                Action:
+                  - ecr:DescribeRepositories
+                  - ecr:DescribeImages
+                Resource: '*'
+
+              - Sid: S3ReadOnly
+                Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketLocation
+                  - s3:GetBucketTagging
+                Resource: '*'
+
+              - Sid: CloudWatchRead
+                Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:GetMetricStatistics
+                Resource: '*'
+
+              # CUR Automation (Required for Phase 11)
+              - Sid: CURAutomation
+                Effect: Allow
+                Action:
+                  - cur:PutReportDefinition
+                  - cur:DescribeReportDefinitions
+                  - cur:ModifyReportDefinition
+                Resource: '*'
+
+              # S3 Management for automated CUR delivery
+              - Sid: S3ManagementForCUR
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:PutBucketPolicy
+                  - s3:GetBucketPolicy
+                  - s3:ListBucket
+                Resource: 'arn:aws:s3:::valdrix-cur-*'
 
       Tags:
         - Key: Purpose

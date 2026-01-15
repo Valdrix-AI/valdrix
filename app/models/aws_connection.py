@@ -20,7 +20,7 @@ Usage:
 
 import uuid
 import secrets
-from sqlalchemy import Column, String, ForeignKey, DateTime, Text
+from sqlalchemy import Column, String, ForeignKey, DateTime, Text, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -32,9 +32,7 @@ from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
 from app.core.config import get_settings
 
 settings = get_settings()
-# If ENCRYPTION_KEY is missing, use fallback for dev, but this should be set in prod
-# The key for AesEngine must be 16, 24, or 32 bytes (128, 192, or 256 bits)
-_encryption_key = settings.ENCRYPTION_KEY or "dev-unsecure-key-16bytes!!"
+_encryption_key = settings.ENCRYPTION_KEY
 
 class AWSConnection(Base):
     """
@@ -89,12 +87,26 @@ class AWSConnection(Base):
     # active: Connection verified and working
     # error: Last verification failed
     status = Column(String(20), nullable=False, default="pending")
+    
+    # AWS Organizations Support
+    is_management_account = Column(Boolean, default=False, server_default="false")
+    organization_id = Column(String(32), nullable=True)
 
     # Timestamps for tracking
-    last_verified_at = Column(DateTime, nullable=True)
+    last_verified_at = Column(DateTime(timezone=True), nullable=True)
 
     # Error message if status is "error"
     error_message = Column(Text, nullable=True)
+
+    # CUR (Cost and Usage Report) Automation
+    # none, setting_up, active, error
+    cur_status = Column(String(20), nullable=False, default="none")
+    cur_bucket_name = Column(String(255), nullable=True)
+    cur_report_name = Column(String(255), nullable=True)
+    
+    # Health Tracking
+    # Updated by JobProcessor when costs are successfully ingested
+    last_ingested_at = Column(DateTime(timezone=True), nullable=True)
 
     # created_at and updated_at inherited from Base
 

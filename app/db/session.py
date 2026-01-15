@@ -53,10 +53,10 @@ else:
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
-    pool_size=10,       # Phase 7: Increased for 10K user scaling
-    max_overflow=20,    # Phase 7: Handle traffic bursts
+    pool_size=5,        # Zero-Budget: Reduced to stay within free tier limits
+    max_overflow=10,    # Zero-Budget: Reduced to prevent connection exhaustion
     pool_pre_ping=True,
-    pool_recycle=300,   # Phase 7: Recycle every 5 min for Supavisor
+    pool_recycle=300,   # Recycle every 5 min for Supavisor
     connect_args=connect_args,
 )
 
@@ -70,25 +70,27 @@ async_session_maker = async_sessionmaker(
 )
 
 
-async def get_db() -> AsyncSession:
+from fastapi import Request
+from sqlalchemy import text
+
+async def get_db(request: Request = None) -> AsyncSession:
     """
-    FastAPI dependency that provides a database session.
-
-    Usage in endpoint:
-        @app.get("/users")
-        async def get_users(db: AsyncSession = Depends(get_db)):
-            result = await db.execute(select(User))
-            return result.scalars().all()
-
-    What it does:
-    1. Creates a new session from the pool
-    2. Yields it to the endpoint
-    3. Closes/returns it to pool after request completes
-
-    Why generator (yield):
-        Ensures cleanup happens even if endpoint throws an exception
+    FastAPI dependency that provides a database session with RLS context.
     """
     async with async_session_maker() as session:
+        # If we have a tenant_id in request state, set it in the DB session for RLS
+        # current_setting('app.current_tenant_id', TRUE) in SQL will return this value
+        if request and hasattr(request.state, "tenant_id"):
+            tenant_id = request.state.tenant_id
+            if tenant_id:
+                try:
+                    await session.execute(
+                        text("SELECT set_config('app.current_tenant_id', :tid, true)"),
+                        {"tid": str(tenant_id)}
+                    )
+                except Exception as e:
+                    logger.warning("rls_context_set_failed", error=str(e))
+
         try:
             yield session
         finally:

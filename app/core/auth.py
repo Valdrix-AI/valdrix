@@ -1,7 +1,7 @@
 import jwt
 from typing import Optional
 from uuid import UUID
-from fastapi import HTTPException, Depends, status
+from fastapi import HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import structlog
@@ -100,7 +100,10 @@ async def get_current_user_from_jwt(
     return CurrentUser(id=UUID(user_id), email=email)
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security), db: AsyncSession = Depends(get_db)) -> CurrentUser:
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security), 
+    db: AsyncSession = Depends(get_db)
+) -> CurrentUser:
     """
     JWT + DB lookup. For protected routes
     """
@@ -126,8 +129,13 @@ async def get_current_user(
         user = result.scalar_one_or_none()
 
         # Handle not found
+        # Handle not found
         if user is None:
-          raise HTTPException(403, "User not found. Complete Onboarding first.")
+            raise HTTPException(403, "User not found. Complete Onboarding first.")
+
+        # Store in request state for downstream rate limiting and RLS
+        request.state.tenant_id = user.tenant_id
+        request.state.user_id = user.id
 
         logger.info("user_authenticated", user_id=str(user.id), email=user.email, role=user.role)
 

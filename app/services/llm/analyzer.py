@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 import json
 import re
 import structlog
@@ -13,6 +13,11 @@ from app.core.config import get_settings
 from app.services.llm.usage_tracker import UsageTracker
 from app.services.notifications import SlackService
 from app.services.cache import get_cache_service
+from app.services.llm.guardrails import LLMGuardrails, FinOpsAnalysisResult
+from app.services.analysis.forecaster import SymbolicForecaster
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
 
 logger = structlog.get_logger()
 
@@ -73,6 +78,7 @@ RULES:
 - Base all conclusions strictly on the provided data
 - If no issues are found, return empty arrays and set total_estimated_savings to "$0/month"
 - Prioritize recommendations by ROI (estimated savings versus implementation effort)
+- Interprete any "symbolic_forecast" data provided to explain the "why" behind predicted trends
 """
 
 class FinOpsAnalyzer:
@@ -90,107 +96,156 @@ class FinOpsAnalyzer:
         ])
 
     def _strip_markdown(self, text: str) -> str:
-      """
-      Removes markdown code block wrappers from LLM responses.
-      LLMs often ignore 'no markdown' instructions.
-      """
-      # Pattern matches ```json ... ``` or just ``` ... ```
-      pattern = r'^```(?:json)?\s*\n?(.*?)\n?```$'
-      match = re.match(pattern, text.strip(), re.DOTALL)
-      if match:
-        return match.group(1).strip()
-      return text.strip()
+        """
+        Removes markdown code block wrappers from LLM responses.
+        LLMs often ignore 'no markdown' instructions.
+        """
+        # Pattern matches ```json ... ``` or just ``` ... ```
+        pattern = r'^```(?:json)?\s*\n?(.*?)\n?```$'
+        match = re.match(pattern, text.strip(), re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return text.strip()
 
     async def analyze(
-    self,
-    cost_data: List[Dict[str, Any]],
-    tenant_id: Optional[UUID] = None,
-    db: Optional[AsyncSession] = None,
-    provider: Optional[str] = None,
-    model: Optional[str] = None,
-    force_refresh: bool = False,) -> str:
+        self,
+        usage_summary: "CloudUsageSummary",
+        tenant_id: Optional[UUID] = None,
+        db: Optional[AsyncSession] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        force_refresh: bool = False,
+    ) -> Dict[str, Any]:
         """
-        Takes raw cost data and returns AI-generated insights.
-
-        The process:
-        1. Check cache for recent analysis (if tenant_id provided)
-        2. Formats the raw list of dictionaries into a string.
-        3. Injects it into the prompt template.
-        4. Invokes the LLM to process the data against the System Prompt.
-        5. Strips any markdown formatting from the response to ensure valid JSON.
-        6. Caches the result for 24 hours
-
-        Args:
-            cost_data: List of daily cost records from the adapter.
-            force_refresh: Skip cache and force new LLM analysis.
-
-        Returns:
-            str: A raw JSON string containing the analysis.
+        Takes normalized cloud usage data and returns AI-generated insights.
         """
-        cache = get_cache_service()
+        from app.schemas.costs import CloudUsageSummary
+
+        with tracer.start_as_current_span("analyze_costs") as span:
+            span.set_attribute("tenant_id", str(tenant_id) if tenant_id else "anonymous")
+            cache = get_cache_service()
         
         # Check cache first (unless force_refresh)
         if tenant_id and not force_refresh:
             cached = await cache.get_analysis(tenant_id)
             if cached:
                 logger.info("analysis_cache_hit", tenant_id=str(tenant_id))
-                return json.dumps(cached)
+                return cached
         
-        logger.info("starting_analysis", data_points=len(cost_data), cache_miss=True)
+        logger.info("starting_analysis", 
+                    tenant_id=str(tenant_id), 
+                    data_points=len(usage_summary.records),
+                    cache_miss=True)
 
-        # Format cost data as JSON string for the prompt (better than str() for LLMs)
-        formatted_data = json.dumps(cost_data, default=str)
-
-        # Determine provider and model
-        effective_provider = provider
-        effective_model = model
-
-        if tenant_id and db and (not effective_provider or not effective_model):
-            from app.models.llm import LLMBudget
-            result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id))
-            budget = result.scalar_one_or_none()
-            if budget:
-                effective_provider = effective_provider or budget.preferred_provider
-                effective_model = effective_model or budget.preferred_model
-
-        # Fallbacks if still none
-        effective_provider = effective_provider or get_settings().LLM_PROVIDER
-        effective_model = effective_model or "llama-3.3-70b-versatile"
-
-        # BYOK Check: Fetch tenant-specific API key if available
-        byok_key = None
+        # Series-A Budget Lock: Strict enforcement before LLM invocation
         if tenant_id and db:
-            from app.models.llm import LLMBudget
-            result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id))
-            budget = result.scalar_one_or_none()
-            if budget:
-                if effective_provider == "openai":
-                    byok_key = budget.openai_api_key
-                elif effective_provider in ["claude", "anthropic"]:
-                    byok_key = budget.claude_api_key
-                elif effective_provider == "google":
-                    byok_key = budget.google_api_key
-                elif effective_provider == "groq":
-                    byok_key = budget.groq_api_key
+            # Check cache first (unless force_refresh)
+            if tenant_id and not force_refresh:
+                cached = await cache.get_analysis(tenant_id)
+                if cached:
+                    logger.info("analysis_cache_hit", tenant_id=str(tenant_id))
+                    return cached
+            
+            logger.info("starting_analysis", 
+                        tenant_id=str(tenant_id), 
+                        data_points=len(usage_summary.records),
+                        cache_miss=True)
 
-        # Build the chain: Prompt -> LLM
-        # We need to ensure self.llm matches the effective_provider if they differ or if BYOK is used
+            # Series-A Budget Lock: Strict enforcement before LLM invocation
+            if tenant_id and db:
+                usage_tracker = UsageTracker(db)
+                await usage_tracker.check_budget(tenant_id)
 
-        current_llm = self.llm
-        if effective_provider != get_settings().LLM_PROVIDER or byok_key:
-             from app.services.llm.factory import LLMFactory
-             current_llm = LLMFactory.create(effective_provider, api_key=byok_key)
+            # Sanitize input data to prevent prompt injection
+            # Note: We dump the summary to dict for sanitization and then format for LLM
+            sanitized_data = LLMGuardrails.sanitize_input(usage_summary.model_dump())
+            # 2. Run Symbolic Forecast (Deterministic Baseline)
+            with tracer.start_as_current_span("symbolic_forecast"):
+                symbolic_forecast = SymbolicForecaster.forecast(usage_summary.records)
+            
+            sanitized_data["symbolic_forecast"] = symbolic_forecast
+            
+            # Format for LLM prompt
+            formatted_data = json.dumps(sanitized_data, default=str)
 
-        chain = self.prompt | current_llm
+            # Determine provider and model
+            effective_provider = provider
+            effective_model = model
 
-        # Invoke the chain
-        response = await chain.ainvoke({"cost_data": formatted_data})
+            if tenant_id and db and (not effective_provider or not effective_model):
+                from app.models.llm import LLMBudget
+                result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id))
+                budget = result.scalar_one_or_none()
+                if budget:
+                    effective_provider = effective_provider or budget.preferred_provider
+                    effective_model = effective_model or budget.preferred_model
 
-        # Track LLM usage if tenant context provided
-        if tenant_id and db:
+            # Fallbacks if still none
+            effective_provider = effective_provider or get_settings().LLM_PROVIDER
+            effective_model = effective_model or "llama-3.3-70b-versatile"
+
+            # BYOK Check: Fetch tenant-specific API key if available
+            byok_key = None
+            if tenant_id and db:
+                from app.models.llm import LLMBudget
+                result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id))
+                budget = result.scalar_one_or_none()
+                if budget:
+                    if effective_provider == "openai":
+                        byok_key = budget.openai_api_key
+                    elif effective_provider in ["claude", "anthropic"]:
+                        byok_key = budget.claude_api_key
+                    elif effective_provider == "google":
+                        byok_key = budget.google_api_key
+                    elif effective_provider == "groq":
+                        byok_key = budget.groq_api_key
+
+            # Build the chain: Prompt -> LLM
+            # We need to ensure self.llm matches the effective_provider if they differ or if BYOK is used
+
+            current_llm = self.llm
+            if effective_provider != get_settings().LLM_PROVIDER or byok_key:
+                from app.services.llm.factory import LLMFactory
+                current_llm = LLMFactory.create(effective_provider, api_key=byok_key)
+
+            chain = self.prompt | current_llm
+
+            # Invoke the chain
+            with tracer.start_as_current_span("llm_invocation") as llm_span:
+                llm_span.set_attribute("llm.provider", effective_provider)
+                llm_span.set_attribute("llm.model", effective_model)
+                response = await chain.ainvoke({"cost_data": formatted_data})
+
+            # Track LLM usage if tenant context provided
+            if tenant_id and db:
+                try:
+                    # Extract token usage from response metadata
+                    usage_metadata = response.response_metadata.get("token_usage", {})
+                    input_tokens = usage_metadata.get("prompt_tokens", 0)
+                    output_tokens = usage_metadata.get("completion_tokens", 0)
+
+                    # Record usage
+                    tracker = UsageTracker(db)
+                    await tracker.record(
+                        tenant_id=tenant_id,
+                        provider=effective_provider,
+                        model=effective_model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        is_byok=byok_key is not None,
+                        request_type="cost_analysis",
+                    )
+                except Exception as e:
+                    # Don't fail the analysis if tracking fails
+                    logger.warning("llm_usage_tracking_failed", 
+                                tenant_id=str(tenant_id),
+                                error=str(e),
+                                exc_info=True)
+
+            logger.info("analysis_complete")
+
+            # After analysis, check for anomalies and alert
             try:
-                # Extract token usage from response metadata
-                usage_metadata = response.response_metadata.get("token_usage", {})
                 input_tokens = usage_metadata.get("prompt_tokens", 0)
                 output_tokens = usage_metadata.get("completion_tokens", 0)
 
@@ -207,13 +262,18 @@ class FinOpsAnalyzer:
                 )
             except Exception as e:
                 # Don't fail the analysis if tracking fails
-                logger.warning("llm_usage_tracking_failed", error=str(e))
+                logger.warning("llm_usage_tracking_failed", 
+                               tenant_id=str(tenant_id),
+                               error=str(e),
+                               exc_info=True)
 
         logger.info("analysis_complete")
 
         # After analysis, check for anomalies and alert
         try:
-            result = json.loads(self._strip_markdown(response.content))
+            # Use Guardrails to validate structured output
+            validated_result = LLMGuardrails.validate_output(response.content, FinOpsAnalysisResult)
+            result = validated_result.model_dump()
             
             # Cache the result for future requests (24h TTL)
             if tenant_id:
@@ -234,4 +294,14 @@ class FinOpsAnalyzer:
         except json.JSONDecodeError as e:
             logger.warning("llm_response_json_parse_failed", error=str(e))
 
-        return self._strip_markdown(response.content)
+        # Combine LLM result with Symbolic Forecast
+        final_result = {
+            "llm_analysis": json.loads(self._strip_markdown(response.content)),
+            "symbolic_forecast": symbolic_forecast
+        }
+        
+        # Cache the combined result
+        if tenant_id:
+            await cache.set_analysis(tenant_id, final_result)
+        
+        return final_result

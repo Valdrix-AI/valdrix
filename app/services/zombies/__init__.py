@@ -8,5 +8,6 @@ Provides zombie resource detection and remediation:
 
 from .detector import ZombieDetector
 from .remediation_service import RemediationService
+from .service import ZombieService
 
-__all__ = ["ZombieDetector", "RemediationService"]
+__all__ = ["ZombieDetector", "RemediationService", "ZombieService"]

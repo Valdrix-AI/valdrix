@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 import aioboto3
 from botocore.exceptions import ClientError
 import structlog
-from app.services.zombies.zombie_plugin import ZombiePlugin, ESTIMATED_COSTS
+from app.services.zombies.zombie_plugin import ZombiePlugin
+from app.services.pricing.service import PricingService
 
 logger = structlog.get_logger()
 
@@ -24,7 +25,11 @@ class UnusedElasticIpsPlugin(ZombiePlugin):
                             "resource_id": addr.get("AllocationId", addr.get("PublicIp")),
                             "resource_type": "Elastic IP",
                             "public_ip": addr.get("PublicIp"),
-                            "monthly_cost": ESTIMATED_COSTS["elastic_ip"],
+                            "monthly_cost": PricingService.estimate_monthly_waste(
+                                provider="aws",
+                                resource_type="ip",
+                                region=region
+                            ),
                             "backup_cost_monthly": 0,
                             "recommendation": "Release if not needed",
                             "action": "release_elastic_ip",
@@ -99,8 +104,12 @@ class IdleInstancesPlugin(ZombiePlugin):
                         if res and res.get("Values"):
                             avg_cpu = res["Values"][0]
                             if avg_cpu < cpu_threshold:
-                                cost_key = f"ec2_{inst['type'].replace('.', '_')}"
-                                monthly_cost = ESTIMATED_COSTS.get(cost_key, ESTIMATED_COSTS["ec2_default"])
+                                monthly_cost = PricingService.estimate_monthly_waste(
+                                    provider="aws",
+                                    resource_type="instance",
+                                    resource_size=inst['type'],
+                                    region=region
+                                )
 
                                 zombies.append({
                                     "resource_id": inst["id"],

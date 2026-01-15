@@ -1,15 +1,27 @@
 <script lang="ts">
   import { createSupabaseBrowserClient } from '$lib/supabase';
+  import CloudLogo from '$lib/components/CloudLogo.svelte';
   
   // State management
-  let currentStep = $state(1);
+  let currentStep = $state(0); // 0: Select Provider, 1: Setup, 2: Verify, 3: Done
+  let selectedProvider: 'aws' | 'azure' | 'gcp' = $state('aws');
   let selectedTab: 'cloudformation' | 'terraform' = $state('cloudformation');
   let externalId = $state('');
+  let magicLink = $state('');
   let cloudformationYaml = $state('');
   let terraformHcl = $state('');
   let permissionsSummary: string[] = $state([]);
   let roleArn = $state('');
   let awsAccountId = $state('');
+  let isManagementAccount = $state(false);
+  let organizationId = $state('');
+  
+  // Azure/GCP specific
+  let azureSubscriptionId = $state('');
+  let azureTenantId = $state('');
+  let gcpProjectId = $state('');
+  let cloudShellSnippet = $state('');
+
   let isLoading = $state(false);
   let isVerifying = $state(false);
   let error = $state('');
@@ -63,30 +75,47 @@
   }
   
   // Step 1: Get templates from backend
-  async function getTemplates() {
+  async function fetchSetupData() {
     isLoading = true;
     error = '';
-    
-    // First ensure user is onboarded
-    await ensureOnboarded();
-    
     try {
-      const res = await fetch(`${API_URL}/connections/aws/setup`, {
+      const token = await getAccessToken();
+      const endpoint = selectedProvider === 'aws' ? '/connections/aws/setup' : 
+                       selectedProvider === 'azure' ? '/connections/azure/setup' : 
+                       '/connections/gcp/setup';
+
+      const res = await fetch(`${API_URL}/api/v1${endpoint}`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       
-      if (!res.ok) throw new Error('Failed to get templates');
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Failed to fetch setup data');
+      }
       
       const data = await res.json();
-      externalId = data.external_id;
-      cloudformationYaml = data.cloudformation_yaml;
-      terraformHcl = data.terraform_hcl;
-      permissionsSummary = data.permissions_summary || [];
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Unknown error';
+      if (selectedProvider === 'aws') {
+        externalId = data.external_id;
+        magicLink = data.magic_link;
+        cloudformationYaml = data.cloudformation_yaml;
+        terraformHcl = data.terraform_hcl;
+        permissionsSummary = data.permissions_summary || [];
+      } else {
+        cloudShellSnippet = data.snippet;
+      }
+    } catch (e: any) {
+      error = `Failed to initialize ${selectedProvider.toUpperCase()} setup: ${e.message}`;
     } finally {
       isLoading = false;
     }
+  }
+
+  function handleContinueToSetup() {
+    currentStep = 1;
+    fetchSetupData();
   }
   
   // Copy template to clipboard
@@ -113,12 +142,77 @@
     URL.revokeObjectURL(url);
   }
   
-  // Move to step 2
-  function proceedToVerify() {
-    currentStep = 2;
+  // Move to step 2 or verify directly for Azure/GCP
+  async function proceedToVerify() {
+    error = ''; // Clear previous errors
+    if (selectedProvider === 'aws') {
+      currentStep = 2; // For AWS, proceed to the verification input step
+    } else if (selectedProvider === 'azure') {
+      if (!azureTenantId || !azureSubscriptionId) {
+        error = 'Please enter both Tenant ID and Subscription ID';
+        return;
+      }
+      isVerifying = true;
+      try {
+        const token = await getAccessToken();
+        const res = await fetch(`${API_URL}/api/v1/connections/azure`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: `Azure-${azureSubscriptionId.slice(0, 8)}`,
+            azure_tenant_id: azureTenantId,
+            subscription_id: azureSubscriptionId,
+            client_id: '<YOUR_CLIENT_ID>', 
+            auth_method: 'workload_identity'
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || 'Failed to connect');
+        }
+        currentStep = 3; // Done
+      } catch (e: any) {
+        error = e.message;
+      } finally {
+        isVerifying = false;
+      }
+    } else if (selectedProvider === 'gcp') {
+      if (!gcpProjectId) {
+        error = 'Please enter Project ID';
+        return;
+      }
+      isVerifying = true;
+      try {
+        const token = await getAccessToken();
+        const res = await fetch(`${API_URL}/api/v1/connections/gcp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            name: `GCP-${gcpProjectId}`,
+            project_id: gcpProjectId,
+            auth_method: 'workload_identity'
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || 'Failed to connect');
+        }
+        currentStep = 3; // Done
+      } catch (e: any) {
+        error = e.message;
+      } finally {
+        isVerifying = false;
+      }
+    }
   }
   
-  // Verify connection
+  // Verify connection (AWS specific)
   async function verifyConnection() {
     if (!roleArn || !awsAccountId) {
       error = 'Please enter both AWS Account ID and Role ARN';
@@ -148,6 +242,8 @@
           aws_account_id: awsAccountId,
           role_arn: roleArn,
           external_id: externalId,  // Pass the SAME external_id from step 1!
+          is_management_account: isManagementAccount,
+          organization_id: organizationId,
           region: 'us-east-1',
         }),
       });
@@ -180,7 +276,13 @@
   }
   
   $effect(() => {
-    getTemplates();
+    // This effect was likely intended to call fetchSetupData()
+    // but was named getTemplates(). Correcting to fetchSetupData()
+    // if that was the original intent, or removing if not needed.
+    // Assuming it was meant to fetch setup data on component mount.
+    if (currentStep === 1 && selectedProvider) {
+      fetchSetupData();
+    }
   });
 </script>
 
@@ -189,89 +291,147 @@
   
   <!-- Progress indicator -->
   <div class="progress-steps">
-    <div class="step" class:active={currentStep >= 1} class:complete={currentStep > 1}>1. Get Template</div>
-    <div class="step" class:active={currentStep >= 2} class:complete={currentStep > 2}>2. Deploy & Verify</div>
-    <div class="step" class:active={currentStep >= 3}>3. Done!</div>
+    <div class="step" class:active={currentStep === 0} class:complete={currentStep > 0}>1. Choose Cloud</div>
+    <div class="step" class:active={currentStep === 1} class:complete={currentStep > 1}>2. Configure</div>
+    <div class="step" class:active={currentStep === 2} class:complete={currentStep > 2}>3. Verify</div>
+    <div class="step" class:active={currentStep === 3}>4. Done!</div>
   </div>
   
   {#if error}
     <div class="error-banner">{error}</div>
   {/if}
+
+  <!-- Step 0: Select Provider -->
+  {#if currentStep === 0}
+    <div class="step-content">
+      <h2>Choose Your Cloud Provider</h2>
+      <p class="text-muted mb-8">Valdrix uses read-only access to analyze your infrastructure and find waste.</p>
+      
+      <div class="provider-grid">
+        <button class="provider-card" class:selected={selectedProvider === 'aws'} onclick={() => selectedProvider = 'aws'}>
+          <div class="logo-circle">
+            <CloudLogo provider="aws" size={32} />
+          </div>
+          <h3>Amazon Web Services</h3>
+          <p>Standard across all tiers</p>
+        </button>
+
+        <button class="provider-card" class:selected={selectedProvider === 'azure'} onclick={() => selectedProvider = 'azure'}>
+          <div class="logo-circle">
+            <CloudLogo provider="azure" size={32} />
+          </div>
+          <h3>Microsoft Azure</h3>
+          <span class="badge">Growth Tier +</span>
+        </button>
+
+        <button class="provider-card" class:selected={selectedProvider === 'gcp'} onclick={() => selectedProvider = 'gcp'}>
+          <div class="logo-circle">
+            <CloudLogo provider="gcp" size={32} />
+          </div>
+          <h3>Google Cloud</h3>
+          <span class="badge">Growth Tier +</span>
+        </button>
+      </div>
+
+      <button class="primary-btn mt-8" onclick={handleContinueToSetup}>
+        Continue to Setup →
+      </button>
+    </div>
+  {/if}
   
-  <!-- Step 1: Get Template -->
+  <!-- Step 1: Configuration -->
   {#if currentStep === 1}
     <div class="step-content">
-      <h2>Step 1: Copy the IAM Role Template</h2>
-      <p>Choose your preferred Infrastructure-as-Code format:</p>
-      
-      {#if isLoading}
-        <div class="loading">Generating secure credentials...</div>
-      {:else}
-        <!-- Tab selector -->
+      {#if selectedProvider === 'aws'}
+        <h2>Step 2: Connect AWS Account</h2>
+        <p class="mb-6">We've generated a secure IAM role template for your account.</p>
+
+        {#if magicLink}
+          <!-- Innovation: Magic Link -->
+          <div class="magic-link-box p-6 bg-accent-950/20 border border-accent-500/30 rounded-2xl mb-8 flex flex-col items-center gap-4">
+            <div class="text-3xl">🧩</div>
+            <div class="text-center">
+              <h4 class="font-bold text-lg mb-1">Recommended: 1-Click Setup</h4>
+              <p class="text-sm text-ink-400">Launch a CloudFormation stack with all parameters pre-filled.</p>
+            </div>
+            <a href={magicLink} target="_blank" class="primary-btn !w-auto px-8 py-3 bg-accent-500 hover:bg-accent-600">
+              ⚡ Launch AWS Stack
+            </a>
+          </div>
+
+          <div class="divider text-xs text-ink-500 mb-6 flex items-center gap-4">
+            <div class="h-px flex-1 bg-ink-800"></div>
+            OR USE MANUAL TEMPLATES
+            <div class="h-px flex-1 bg-ink-800"></div>
+          </div>
+        {/if}
+
+        <!-- Manual Templates (Old Flow) -->
         <div class="tab-selector">
-          <button 
-            class="tab" 
-            class:active={selectedTab === 'cloudformation'}
-            onclick={() => selectedTab = 'cloudformation'}
-          >
+          <button class="tab" class:active={selectedTab === 'cloudformation'} onclick={() => selectedTab = 'cloudformation'}>
             ☁️ CloudFormation
           </button>
-          <button 
-            class="tab" 
-            class:active={selectedTab === 'terraform'}
-            onclick={() => selectedTab = 'terraform'}
-          >
+          <button class="tab" class:active={selectedTab === 'terraform'} onclick={() => selectedTab = 'terraform'}>
             🏗️ Terraform
           </button>
         </div>
         
-        <!-- External ID display -->
-        <div class="info-box">
-          <div class="label-text">🔐 Your External ID (embedded in template)</div>
-          <code class="external-id">{externalId}</code>
-        </div>
-        
-        <!-- Template code -->
         <div class="code-container">
           <div class="code-header">
             <span>{selectedTab === 'cloudformation' ? 'valdrix-role.yaml' : 'valdrix-role.tf'}</span>
             <div class="code-actions">
-              <button class="icon-btn" onclick={copyTemplate}>
-                {copied ? '✅ Copied!' : '📋 Copy'}
-              </button>
-              <button class="icon-btn" onclick={downloadTemplate}>
-                📥 Download
-              </button>
+              <button class="icon-btn" onclick={copyTemplate}>{copied ? '✅' : '📋 Copy'}</button>
+              <button class="icon-btn" onclick={downloadTemplate}>📥</button>
             </div>
           </div>
           <pre class="code-block">{selectedTab === 'cloudformation' ? cloudformationYaml : terraformHcl}</pre>
         </div>
-        
-        <!-- Permissions transparency -->
-        <details class="permissions-accordion">
-          <summary>🔍 What permissions are we requesting?</summary>
-          <ul>
-            {#each permissionsSummary as perm}
-              <li>{perm}</li>
-            {/each}
-          </ul>
-        </details>
-        
-        <div class="instructions">
-          <h3>📋 Next Steps</h3>
-          <ol>
-            <li>Copy or download the template above</li>
-            <li>Go to <a href="https://console.aws.amazon.com/cloudformation" target="_blank">AWS CloudFormation Console</a></li>
-            <li>Create Stack → Upload the template</li>
-            <li>Wait for stack creation to complete</li>
-            <li>Copy the <strong>RoleArn</strong> from Outputs</li>
-          </ol>
+
+      {:else if selectedProvider === 'azure'}
+        <h2>Step 2: Connect Microsoft Azure</h2>
+        <p class="mb-6">Connect using <strong>Workload Identity Federation</strong> (Zero-Secret).</p>
+
+        <div class="space-y-4 mb-8">
+          <div class="form-group">
+            <label for="azTenant">Azure Tenant ID</label>
+            <input type="text" id="azTenant" bind:value={azureTenantId} placeholder="00000000-0000-0000-0000-000000000000" />
+          </div>
+          <div class="form-group">
+            <label for="azSub">Subscription ID</label>
+            <input type="text" id="azSub" bind:value={azureSubscriptionId} placeholder="00000000-0000-0000-0000-000000000000" />
+          </div>
         </div>
-        
-        <button class="primary-btn" onclick={proceedToVerify}>
-          I've deployed the stack → Verify Connection
-        </button>
+
+        <div class="info-box mb-6">
+          <h4 class="text-sm font-bold mb-2">🚀 Magic Snippet</h4>
+          <p class="text-xs text-ink-400 mb-3">Copy and paste this into your Azure Cloud Shell to establish trust.</p>
+          <div class="bg-black/50 p-3 rounded font-mono text-xs break-all text-green-400">
+            # Establishing Workload Identity Trust... (Snippet coming soon)
+          </div>
+        </div>
+
+      {:else if selectedProvider === 'gcp'}
+        <h2>Step 2: Connect Google Cloud</h2>
+        <p class="mb-6">Connect using <strong>Identity Federation</strong>.</p>
+
+        <div class="form-group mb-8">
+          <label for="gcpProject">GCP Project ID</label>
+          <input type="text" id="gcpProject" bind:value={gcpProjectId} placeholder="my-awesome-project" />
+        </div>
+
+        <div class="info-box mb-6">
+          <h4 class="text-sm font-bold mb-2">🚀 Magic Snippet</h4>
+          <p class="text-xs text-ink-400 mb-3">Run this gcloud command in your GCP Console.</p>
+          <div class="bg-black/50 p-3 rounded font-mono text-xs break-all text-yellow-400">
+            gcloud iam workload-identity-pools create "valdrix-pool" ... (Snippet coming soon)
+          </div>
+        </div>
       {/if}
+
+      <div class="flex gap-4 mt-8">
+        <button class="secondary-btn !w-auto px-6" onclick={() => currentStep = 0}>← Back</button>
+        <button class="primary-btn !flex-1" onclick={proceedToVerify}>Next: Verify Connection →</button>
+      </div>
     </div>
   {/if}
   
@@ -296,11 +456,43 @@
         <label for="roleArn">Role ARN (from CloudFormation Outputs)</label>
         <input 
           type="text" 
-          id="roleArn"
+          id="roleArn" 
           bind:value={roleArn} 
           placeholder="arn:aws:iam::123456789012:role/ValdrixReadOnly"
         />
       </div>
+
+      <div class="form-group pt-4 border-t border-ink-800 relative" class:opacity-50={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}>
+        <label class="flex items-center justify-between gap-3 cursor-pointer">
+          <div class="flex items-center gap-3">
+            <input type="checkbox" bind:checked={isManagementAccount} class="toggle" disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)} />
+            <span class="font-bold">Register as Management Account</span>
+          </div>
+          {#if !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+            <span class="badge badge-warning text-[10px]">Growth Tier +</span>
+          {/if}
+        </label>
+        <p class="text-xs text-ink-500 mt-2">
+          Enable this if this account is the Management Account of an AWS Organization. 
+          Valdrix will automatically discover and help you link member accounts.
+        </p>
+        {#if !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+          <p class="text-[10px] text-accent-400 mt-1">⚡ Multi-account discovery requires Growth tier or higher.</p>
+        {/if}
+      </div>
+
+      {#if isManagementAccount}
+        <div class="form-group stagger-enter">
+          <label for="org_id">Organization ID (Optional)</label>
+          <input 
+            type="text" 
+            id="org_id"
+            bind:value={organizationId}
+            placeholder="o-xxxxxxxxxx"
+            class="input"
+          />
+        </div>
+      {/if}
       
       <button 
         class="primary-btn" 
@@ -332,9 +524,84 @@
 
 <style>
   .onboarding-container {
-    max-width: 800px;
+    max-width: 900px;
     margin: 2rem auto;
     padding: 2rem;
+  }
+
+  /* Provider Selector */
+  .provider-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+  }
+
+  .provider-card {
+    background: var(--card-bg, #1a1a2e);
+    border: 1px solid var(--border, #333);
+    border-radius: 16px;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  .provider-card:hover {
+    border-color: var(--primary, #6366f1);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px -10px rgba(99, 102, 241, 0.3);
+  }
+
+  .provider-card.selected {
+    border-color: var(--primary, #6366f1);
+    background: rgba(99, 102, 241, 0.05);
+    box-shadow: 0 0 0 2px var(--primary, #6366f1);
+  }
+
+  .logo-circle {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    items-center: center;
+    justify-content: center;
+    padding: 12px;
+    margin-bottom: 0.5rem;
+  }
+
+  .logo-circle.aws { background: rgba(255, 153, 0, 0.1); color: #FF9900; }
+  .logo-circle.azure { background: rgba(0, 120, 212, 0.1); color: #0078D4; }
+  .logo-circle.gcp { background: rgba(66, 133, 244, 0.1); color: #4284F4; }
+
+  .provider-card h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+
+  .provider-card p {
+    font-size: 0.85rem;
+    color: var(--text-muted, #888);
+  }
+
+  .provider-card .badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary, #6366f1);
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
   
   h1 {

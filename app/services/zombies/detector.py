@@ -20,7 +20,7 @@ import aioboto3
 import structlog
 
 from app.services.zombies.zombie_plugin import ZombiePlugin
-from app.services.zombies.plugins import (
+from app.services.zombies.aws.plugins import (
     UnattachedVolumesPlugin, OldSnapshotsPlugin, IdleS3BucketsPlugin,
     UnusedElasticIpsPlugin, IdleInstancesPlugin,
     OrphanLoadBalancersPlugin, UnderusedNatGatewaysPlugin,
@@ -81,12 +81,16 @@ class ZombieDetector:
             logger.error("plugin_scan_failed", plugin=plugin.category_key, error=str(e))
             return plugin.category_key, []
 
-    async def scan_all(self) -> Dict[str, Any]:
+    async def scan_all(self, on_category_complete=None) -> Dict[str, Any]:
         """
         Scan for all types of zombie resources using registered plugins.
 
         Runs plugins in PARALLEL for improved performance at scale.
         Returns dict with zombies by category and total waste estimate.
+        
+        Args:
+            on_category_complete: Async callback called after each plugin completes.
+                                  Used for durable checkpoints.
         """
         zombies = {
             "region": self.region,
@@ -101,7 +105,16 @@ class ZombieDetector:
         try:
             # Run all plugins in PARALLEL with timeout per plugin
             tasks = [self._run_plugin_with_timeout(plugin) for plugin in self.plugins]
-            results = await asyncio.gather(*tasks)
+            
+            # Wrap tasks to call checkpoint callback
+            async def run_and_checkpoint(task):
+                category_key, items = await task
+                if on_category_complete:
+                    await on_category_complete(category_key, items)
+                return category_key, items
+
+            checkpoint_tasks = [run_and_checkpoint(t) for t in tasks]
+            results = await asyncio.gather(*checkpoint_tasks)
 
             # Collect results from parallel execution
             for category_key, items in results:

@@ -13,19 +13,21 @@
   import { createSupabaseBrowserClient } from '$lib/supabase';
   import { invalidate } from '$app/navigation';
   import { page } from '$app/stores';
+  import { uiState } from '$lib/stores/ui.svelte';
+  import ToastComponent from '$lib/components/Toast.svelte';
+  import CloudLogo from '$lib/components/CloudLogo.svelte';
   
   let { data, children } = $props();
   
   const supabase = createSupabaseBrowserClient();
-  let sidebarOpen = $state(true);
   
   // Navigation items
   const navItems = [
     { href: '/', label: 'Dashboard', icon: '📊' },
+    { href: '/connections', label: 'Cloud Accounts', icon: '☁️' },
     { href: '/greenops', label: 'GreenOps', icon: '🌱' },
     { href: '/llm', label: 'LLM Usage', icon: '🤖' },
     { href: '/billing', label: 'Billing', icon: '💳' },
-    { href: '/onboarding', label: 'AWS Setup', icon: '☁️' },
     { href: '/leaderboards', label: 'Leaderboards', icon: '🏆' },
     { href: '/settings', label: 'Settings', icon: '⚙️' },
   ];
@@ -50,10 +52,10 @@
 <div class="min-h-screen bg-ink-950 text-ink-100">
   {#if data.user}
     <!-- Sidebar Navigation -->
-    <aside class="sidebar" class:sidebar-collapsed={!sidebarOpen}>
+    <aside class="sidebar" class:sidebar-collapsed={!uiState.isSidebarOpen}>
       <!-- Logo -->
       <div class="flex items-center gap-3 px-5 py-5 border-b border-ink-800">
-        <span class="text-2xl">☁️</span>
+        <CloudLogo provider="valdrix" size={32} />
         <span class="text-lg font-semibold text-gradient">Valdrix</span>
       </div>
       
@@ -92,14 +94,14 @@
     </aside>
     
     <!-- Main Content -->
-    <main class="main-content" class:!ml-0={!sidebarOpen}>
+    <main class="main-content" class:!ml-0={!uiState.isSidebarOpen}>
       <!-- Top Bar -->
       <header class="sticky top-0 z-40 bg-ink-900/80 backdrop-blur border-b border-ink-800">
         <div class="flex items-center justify-between px-6 py-3">
           <button 
             type="button"
             class="btn btn-ghost p-2"
-            onclick={() => sidebarOpen = !sidebarOpen}
+            onclick={() => uiState.toggleSidebar()}
             aria-label="Toggle sidebar"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -125,7 +127,7 @@
     <header class="border-b border-ink-800 bg-ink-900/50 backdrop-blur sticky top-0 z-50">
       <nav class="container mx-auto flex items-center justify-between px-6 py-4">
         <a href="/" class="flex items-center gap-2">
-          <span class="text-2xl">☁️</span>
+          <CloudLogo provider="valdrix" size={32} />
           <span class="text-xl font-bold text-gradient">Valdrix</span>
         </a>
         
@@ -139,6 +141,13 @@
       {@render children()}
     </main>
   {/if}
+</div>
+
+<!-- Global Toasts -->
+<div class="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 min-w-[320px] max-w-md">
+  {#each uiState.toasts as toast (toast.id)}
+    <ToastComponent {toast} />
+  {/each}
 </div>
 
 <style>

@@ -49,8 +49,12 @@ class AWSAdapter(CostAdapter):
                 return response.get("ResultsByTime", [])
 
         except ClientError as e:
-            logger.error("aws_cost_fetch_failed", error=str(e))
-            return []
+            from app.core.exceptions import AdapterError
+            raise AdapterError(
+                message="AWS Cost Explorer fetch failed",
+                code=e.response.get("Error", {}).get("Code", "Unknown"),
+                details={"error": str(e)}
+            ) from e
 
 
 

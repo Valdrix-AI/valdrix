@@ -133,7 +133,9 @@ async def test_get_daily_costs_pagination(adapter):
 
 @pytest.mark.asyncio
 async def test_get_daily_costs_error_handling(adapter):
-    """Verify graceful error reporting on API failure."""
+    """Verify AdapterError is raised on CE failure."""
+    from app.core.exceptions import AdapterError
+    
     adapter._credentials = {"AccessKeyId": "TEST", "SecretAccessKey": "SECRET", "SessionToken": "TOKEN"}
     adapter._credentials_expire_at = datetime.now(timezone.utc) + timedelta(hours=1)
     
@@ -147,9 +149,9 @@ async def test_get_daily_costs_error_handling(adapter):
     mock_session.client.return_value.__aenter__.return_value = mock_ce
     
     with patch.object(adapter, 'session', mock_session):
-        results = await adapter.get_daily_costs(date(2024, 1, 1), date(2024, 1, 2))
+        with pytest.raises(AdapterError) as excinfo:
+            await adapter.get_daily_costs(date(2024, 1, 1), date(2024, 1, 2))
         
-        # Should return list with error dict
-        assert len(results) == 1
-        assert "Error" in results[0]
-        assert results[0]["Code"] == "AccessDenied"
+        assert "AWS Cost Explorer failure" in str(excinfo.value)
+        assert excinfo.value.code == "AccessDenied"
+        assert excinfo.value.details["aws_account"] == MOCK_CX.aws_account_id
