@@ -115,9 +115,15 @@
     }
   }
 
-  function handleContinueToSetup() {
+  async function handleContinueToSetup() {
+    isLoading = true;
+    const onboarded = await ensureOnboarded();
+    if (!onboarded) {
+      isLoading = false;
+      return;
+    }
     currentStep = 1;
-    fetchSetupData();
+    await fetchSetupData();
   }
   
   // Copy template to clipboard
@@ -225,7 +231,14 @@
     error = '';
     
     try {
-      // Get the access token from Supabase session
+      // 1. Ensure user is in our DB (Fixes 403 Forbidden)
+      const onboarded = await ensureOnboarded();
+      if (!onboarded) {
+        isVerifying = false;
+        return;
+      }
+
+      // 2. Get the access token from Supabase session
       const token = await getAccessToken();
       
       if (!token) {
