@@ -76,12 +76,18 @@ class MultiTenantAWSAdapter(BaseAdapter):
                 return self._credentials
 
             except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "Unknown")
                 logger.error(
                     "sts_assume_role_failed",
                     role_arn=self.connection.role_arn,
                     error=str(e),
                 )
-                raise
+                from app.core.exceptions import AdapterError
+                raise AdapterError(
+                    message=f"AWS STS AssumeRole failure: {str(e)}",
+                    code=error_code,
+                    details={"role_arn": self.connection.role_arn}
+                ) from e
 
     async def get_cost_and_usage(
         self,
