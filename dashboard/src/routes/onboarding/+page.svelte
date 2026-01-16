@@ -234,7 +234,7 @@
         return;
       }
       
-      const createRes = await fetch(`${API_URL}/connections/aws`, {
+      const createRes = await fetch(`${API_URL}/api/v1/connections/aws`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -257,7 +257,7 @@
       
       const connection = await createRes.json();
       
-      const verifyRes = await fetch(`${API_URL}/connections/aws/${connection.id}/verify`, {
+      const verifyRes = await fetch(`${API_URL}/api/v1/connections/aws/${connection.id}/verify`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
       });
