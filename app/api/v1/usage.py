@@ -11,6 +11,7 @@ Endpoint: GET /usage
 """
 
 from typing import Annotated
+from uuid import UUID
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, func
@@ -56,7 +57,7 @@ class FeatureUsageMetrics(BaseModel):
 
 class UsageResponse(BaseModel):
     """Complete usage metering response."""
-    tenant_id: str
+    tenant_id: UUID
     period: str
     llm: LLMUsageMetrics
     aws: AWSMeteringMetrics
@@ -90,7 +91,7 @@ async def get_usage_metrics(
     feature_metrics = await _get_feature_usage(db, user.tenant_id)
     
     return UsageResponse(
-        tenant_id=str(user.tenant_id),
+        tenant_id=user.tenant_id,
         period="current_month",
         llm=llm_metrics,
         aws=aws_metrics,

@@ -33,12 +33,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "default-src 'self'; "
             "img-src 'self' data: https:; "
             "script-src 'self'; "
-            "style-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "  # Allow inline styles for Svelte/shadcn
             f"connect-src {connect_src}; "
-            "frame-ancestors 'none';"
+            "frame-ancestors 'none'; "
+            "form-action 'self'; "
+            "base-uri 'self';"
         )
         response.headers["Content-Security-Policy"] = csp_policy
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
 
         return response
 
@@ -46,6 +50,8 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     """
     Injects a unique X-Request-ID into the logs and response.
     Integrates with app.core.tracing for cross-process correlation.
+    NOTE: This middleware trusts the X-Request-ID header if provided by the client.
+    This is intended for correlation and debugging, not as a security principal.
     """
     async def dispatch(self, request: Request, call_next):
         from app.core.tracing import set_correlation_id

@@ -6,13 +6,15 @@ from sqlalchemy import select
 from pydantic import BaseModel
 import structlog
 
-from app.core.auth import CurrentUser, requires_role
+from app.core.auth import CurrentUser, requires_role, require_tenant_access
 from app.db.session import get_db
 from app.models.remediation import RemediationAction
 from app.services.zombies import ZombieService, RemediationService
 from app.core.dependencies import requires_feature
 from app.core.pricing import FeatureFlag
 from app.core.rate_limit import rate_limit, analysis_limit
+from app.models.background_job import JobType
+from app.services.jobs.processor import enqueue_job
 
 router = APIRouter(tags=["Cloud Hygiene (Zombies)"])
 logger = structlog.get_logger()
@@ -38,17 +40,33 @@ class ReviewRequest(BaseModel):
 @rate_limit("10/minute") # Protect expensive scan operation
 async def scan_zombies(
     request: Request,
+    tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
     analyze: bool = Query(default=False, description="Enable AI-powered analysis of detected zombies"),
+    background: bool = Query(default=False, description="Run scan as a background job"),
 ):
     """
     Scan cloud accounts for zombie resources.
+    If background=True, returns a job_id immediately.
     """
+    if background:
+        logger.info("enqueuing_zombie_scan", tenant_id=str(tenant_id), region=region)
+        job = await enqueue_job(
+            db=db,
+            job_type=JobType.ZOMBIE_SCAN,
+            tenant_id=tenant_id,
+            payload={
+                "region": region,
+                "analyze": analyze
+            }
+        )
+        return {"status": "pending", "job_id": str(job.id)}
+
     service = ZombieService(db)
     return await service.scan_for_tenant(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         user=user,
         region=region,
         analyze=analyze
@@ -57,6 +75,7 @@ async def scan_zombies(
 @router.post("/request")
 async def create_remediation_request(
     request: RemediationRequestCreate,
+    tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.AUTO_REMEDIATION))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
@@ -65,11 +84,16 @@ async def create_remediation_request(
     try:
         action_enum = RemediationAction(request.action)
     except ValueError:
-        raise HTTPException(400, f"Invalid action: {request.action}")
+        from app.core.exceptions import ValdrixException
+        raise ValdrixException(
+            message=f"Invalid action: {request.action}",
+            code="invalid_remediation_action",
+            status_code=400
+        )
 
     service = RemediationService(db=db, region=region)
     result = await service.create_request(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         user_id=user.id,
         resource_id=request.resource_id,
         resource_type=request.resource_type,
@@ -85,13 +109,16 @@ async def create_remediation_request(
 
 @router.get("/pending")
 async def list_pending_requests(
+    tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     """List pending requests."""
     service = RemediationService(db=db, region=region)
-    pending = await service.list_pending(user.tenant_id)
+    pending = await service.list_pending(tenant_id, limit=limit, offset=offset)
     return {
         "pending_count": len(pending),
         "requests": [
@@ -110,6 +137,7 @@ async def list_pending_requests(
 async def approve_remediation(
     request_id: UUID,
     review: ReviewRequest,
+    tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
@@ -117,16 +145,18 @@ async def approve_remediation(
     """Approve a request."""
     service = RemediationService(db=db, region=region)
     try:
-        result = await service.approve(request_id, user.tenant_id, user.id, review.notes)
+        result = await service.approve(request_id, tenant_id, user.id, review.notes)
         return {"status": "approved", "request_id": str(result.id)}
     except ValueError as e:
-        raise HTTPException(404, str(e))
+        from app.core.exceptions import ResourceNotFoundError
+        raise ResourceNotFoundError(str(e), code="remediation_request_not_found")
 
 @router.post("/execute/{request_id}")
-@rate_limit("5/minute") # Strict limit for destructive actions
+@analysis_limit
 async def execute_remediation(
     request: Request,
     request_id: UUID,
+    tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
@@ -138,17 +168,27 @@ async def execute_remediation(
     from app.models.aws_connection import AWSConnection
     from app.services.adapters.aws_multitenant import MultiTenantAWSAdapter
     
-    result = await db.execute(select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id))
+    result = await db.execute(select(AWSConnection).where(AWSConnection.tenant_id == tenant_id))
     connection = result.scalar_one_or_none()
     if not connection:
-        raise HTTPException(400, "No AWS connection")
+        from app.core.exceptions import ValdrixException
+        raise ValdrixException(
+            message="No AWS connection found for this tenant. Setup is required first.",
+            code="aws_connection_missing",
+            status_code=400
+        )
 
     adapter = MultiTenantAWSAdapter(connection)
     credentials = await adapter.get_credentials() 
     service = RemediationService(db=db, region=region, credentials=credentials)
 
     try:
-        result = await service.execute(request_id, user.tenant_id)
+        result = await service.execute(request_id, tenant_id)
         return {"status": result.status.value, "request_id": str(result.id)}
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        from app.core.exceptions import ValdrixException
+        raise ValdrixException(
+            message=str(e),
+            code="remediation_execution_failed",
+            status_code=400
+        )

@@ -12,12 +12,17 @@
   import { PUBLIC_API_URL } from '$env/static/public';
   import { onMount } from 'svelte';
   import { createSupabaseBrowserClient } from '$lib/supabase';
-  import { Shield, Zap, Search, AlertCircle, TrendingDown, ChevronRight, ChevronLeft, Globe } from '@lucide/svelte';
+  import { Shield, Zap, Search, AlertCircle, TrendingDown, ChevronRight, ChevronLeft, Globe, Clock, AlertTriangle } from '@lucide/svelte';
   import CloudLogo from '$lib/components/CloudLogo.svelte';
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
   import DateRangePicker from '$lib/components/DateRangePicker.svelte';
   import ProviderSelector from '$lib/components/ProviderSelector.svelte';
+  import AllocationBreakdown from '$lib/components/AllocationBreakdown.svelte';
+  import StatsGrid from '$lib/components/StatsGrid.svelte';
+  import SavingsHero from '$lib/components/SavingsHero.svelte';
+  import FindingsTable from '$lib/components/FindingsTable.svelte';
+  import CarbonImpact from '$lib/components/CarbonImpact.svelte';
   
   let { data } = $props();
   
@@ -26,6 +31,8 @@
   let carbon = $derived(data.carbon);
   let zombies = $derived(data.zombies);
   let analysis = $derived(data.analysis);
+  let allocation = $derived(data.allocation);
+  let freshness = $derived(data.freshness);
   let error = $derived(data.error || '');
   let startDate = $derived(data.startDate || '');
   let endDate = $derived(data.endDate || '');
@@ -47,14 +54,13 @@
     try {
       const accessToken = data.session?.access_token;
       if (!accessToken) throw new Error('Not authenticated');
+
+      const headers = {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      };
       
-      const response = await fetch(`${PUBLIC_API_URL}/zombies/request`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const response = await api.post(`${PUBLIC_API_URL}/zombies/request`, {
           resource_id: finding.resource_id,
           resource_type: finding.resource_type || 'unknown',
           provider: finding.provider || 'aws',
@@ -62,8 +68,7 @@
           action: finding.recommended_action?.toLowerCase().includes('delete') ? 'delete_volume' : 'stop_instance',
           estimated_savings: parseFloat(finding.monthly_cost?.toString().replace('$', '') || '0'),
           create_backup: true,
-        }),
-      });
+        }, { headers });
       
       if (!response.ok) {
         const errData = await response.json();
@@ -262,8 +267,40 @@
         </div>
       {/if}
       
+      <!-- Data Freshness Status -->
+      {#if freshness}
+        <div class="freshness-indicator stagger-enter" style="animation-delay: 240ms;">
+          <div class="flex items-center gap-2">
+            <Clock class="h-4 w-4 text-ink-400" />
+            <span class="text-sm text-ink-400">Data Freshness:</span>
+            {#if freshness.status === 'final'}
+              <span class="badge badge-success">✓ Finalized</span>
+            {:else if freshness.status === 'preliminary'}
+              <span class="badge badge-warning flex items-center gap-1">
+                <AlertTriangle class="h-3 w-3" />
+                Preliminary ({freshness.preliminary_records} records may change)
+              </span>
+            {:else if freshness.status === 'mixed'}
+              <span class="badge badge-default">
+                {freshness.freshness_percentage}% Finalized
+              </span>
+            {:else}
+              <span class="badge badge-default">No Data</span>
+            {/if}
+          </div>
+          {#if freshness.latest_record_date}
+            <span class="text-xs text-ink-500">Latest: {freshness.latest_record_date}</span>
+          {/if}
+        </div>
+      {/if}
+      
       <!-- Carbon Impact Section -->
       <CarbonImpact carbon={carbon} />
+      
+      <!-- Cost Allocation Breakdown -->
+      {#if allocation && allocation.buckets && allocation.buckets.length > 0}
+        <AllocationBreakdown data={allocation} />
+      {/if}
       
       <!-- Zombie Resources Table -->
       {#if zombieCount > 0}
@@ -304,12 +341,12 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {vol.confidence_score ? vol.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{vol.confidence_score ? Math.round(vol.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{vol.confidence_score ? Math.round(vol.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <button class="btn btn-ghost text-xs">Review</button>
+                      <button class="btn btn-ghost text-xs" onclick={() => handleRemediate(vol)}>Review</button>
                     </td>
                   </tr>
                 {/each}
@@ -331,12 +368,12 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {snap.confidence_score ? snap.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{snap.confidence_score ? Math.round(snap.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{snap.confidence_score ? Math.round(snap.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <button class="btn btn-ghost text-xs">Review</button>
+                      <button class="btn btn-ghost text-xs" onclick={() => handleRemediate(snap)}>Review</button>
                     </td>
                   </tr>
                 {/each}
@@ -358,11 +395,11 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {eip.confidence_score ? eip.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{eip.confidence_score ? Math.round(eip.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{eip.confidence_score ? Math.round(eip.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td><button class="btn btn-ghost text-xs">Review</button></td>
+                    <td><button class="btn btn-ghost text-xs" onclick={() => handleRemediate(eip)}>Review</button></td>
                   </tr>
                 {/each}
                 {#each zombies?.idle_instances ?? [] as ec2}
@@ -383,11 +420,11 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {ec2.confidence_score ? ec2.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{ec2.confidence_score ? Math.round(ec2.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{ec2.confidence_score ? Math.round(ec2.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td><button class="btn btn-ghost text-xs">Review</button></td>
+                    <td><button class="btn btn-ghost text-xs" onclick={() => handleRemediate(ec2)}>Review</button></td>
                   </tr>
                 {/each}
                 {#each zombies?.orphan_load_balancers ?? [] as lb}
@@ -408,11 +445,11 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {lb.confidence_score ? lb.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{lb.confidence_score ? Math.round(lb.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{lb.confidence_score ? Math.round(lb.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td><button class="btn btn-ghost text-xs">Review</button></td>
+                    <td><button class="btn btn-ghost text-xs" onclick={() => handleRemediate(lb)}>Review</button></td>
                   </tr>
                 {/each}
                 {#each zombies?.idle_rds_databases ?? [] as rds}
@@ -433,11 +470,11 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {rds.confidence_score ? rds.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{rds.confidence_score ? Math.round(rds.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{rds.confidence_score ? Math.round(rds.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td><button class="btn btn-ghost text-xs">Review</button></td>
+                    <td><button class="btn btn-ghost text-xs" onclick={() => handleRemediate(rds)}>Review</button></td>
                   </tr>
                 {/each}
                 {#each zombies?.underused_nat_gateways ?? [] as nat}
@@ -458,11 +495,11 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {nat.confidence_score ? nat.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{nat.confidence_score ? Math.round(nat.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{nat.confidence_score ? Math.round(nat.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td><button class="btn btn-ghost text-xs">Review</button></td>
+                    <td><button class="btn btn-ghost text-xs" onclick={() => handleRemediate(nat)}>Review</button></td>
                   </tr>
                 {/each}
                 {#each zombies?.idle_s3_buckets ?? [] as s3}
@@ -483,11 +520,11 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {s3.confidence_score ? s3.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{s3.confidence_score ? Math.round(s3.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{s3.confidence_score ? Math.round(s3.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td><button class="btn btn-ghost text-xs">Review</button></td>
+                    <td><button class="btn btn-ghost text-xs" onclick={() => handleRemediate(s3)}>Review</button></td>
                   </tr>
                 {/each}
                 {#each zombies?.legacy_ecr_images ?? [] as ecr}
@@ -508,11 +545,11 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {ecr.confidence_score ? ecr.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{ecr.confidence_score ? Math.round(ecr.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{ecr.confidence_score ? Math.round(ecr.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td><button class="btn btn-ghost text-xs">Review</button></td>
+                    <td><button class="btn btn-ghost text-xs" onclick={() => handleRemediate(ecr)}>Review</button></td>
                   </tr>
                 {/each}
                 {#each zombies?.idle_sagemaker_endpoints ?? [] as sm}
@@ -533,11 +570,11 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {sm.confidence_score ? sm.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{sm.confidence_score ? Math.round(sm.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{sm.confidence_score ? Math.round(sm.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td><button class="btn btn-ghost text-xs">Review</button></td>
+                    <td><button class="btn btn-ghost text-xs" onclick={() => handleRemediate(sm)}>Review</button></td>
                   </tr>
                 {/each}
                 {#each zombies?.cold_redshift_clusters ?? [] as rs}
@@ -558,11 +595,11 @@
                           <div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
                             <div class="h-full bg-accent-500" style="width: {rs.confidence_score ? rs.confidence_score * 100 : 0}%"></div>
                           </div>
-                          <span class="text-[10px] font-bold text-accent-400">{rs.confidence_score ? Math.round(rs.confidence_score * 100) + '% Match' : 'Pending'}</span>
+                          <span class="text-[10px] font-bold text-accent-400">{rs.confidence_score ? Math.round(rs.confidence_score * 100) + '% Match' : 'N/A'}</span>
                         </div>
                       </div>
                     </td>
-                    <td><button class="btn btn-ghost text-xs">Review</button></td>
+                    <td><button class="btn btn-ghost text-xs" onclick={() => handleRemediate(rs)}>Review</button></td>
                   </tr>
                 {/each}
               </tbody>

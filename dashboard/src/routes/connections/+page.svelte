@@ -3,6 +3,7 @@
   import { createSupabaseBrowserClient } from '$lib/supabase';
   import CloudLogo from '$lib/components/CloudLogo.svelte';
   import { onMount } from 'svelte';
+  import { api } from '$lib/api';
   
   let { data } = $props();
   const supabase = createSupabaseBrowserClient();
@@ -39,27 +40,27 @@
       const headers = await getHeaders();
       
       // AWS
-      const awsRes = await fetch(`${PUBLIC_API_URL}/settings/connections/aws`, { headers });
+      const awsRes = await api.get(`${PUBLIC_API_URL}/settings/connections/aws`, { headers });
       if (awsRes.ok) {
         awsConnections = await awsRes.json();
         awsConnection = awsConnections.length > 0 ? awsConnections[0] : null;
       }
       loadingAWS = false;
-
+ 
       // Azure
-      const azureRes = await fetch(`${PUBLIC_API_URL}/settings/connections/azure`, { headers });
+      const azureRes = await api.get(`${PUBLIC_API_URL}/settings/connections/azure`, { headers });
       if (azureRes.ok) {
         azureConnections = await azureRes.json();
       }
       loadingAzure = false;
-
+ 
       // GCP
-      const gcpRes = await fetch(`${PUBLIC_API_URL}/settings/connections/gcp`, { headers });
+      const gcpRes = await api.get(`${PUBLIC_API_URL}/settings/connections/gcp`, { headers });
       if (gcpRes.ok) {
         gcpConnections = await gcpRes.json();
       }
       loadingGCP = false;
-
+ 
       if (awsConnection?.is_management_account) {
         loadDiscoveredAccounts();
       }
@@ -73,7 +74,7 @@
     loadingDiscovered = true;
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/connections/aws/discovered`, { headers });
+      const res = await api.get(`${PUBLIC_API_URL}/settings/connections/aws/discovered`, { headers });
       if (res.ok) {
         discoveredAccounts = await res.json();
       }
@@ -91,10 +92,7 @@
     error = '';
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/connections/aws/${awsConnection.id}/sync-org`, {
-        method: 'POST',
-        headers
-      });
+      const res = await api.post(`${PUBLIC_API_URL}/settings/connections/aws/${awsConnection.id}/sync-org`, {}, { headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Sync failed');
       
@@ -112,15 +110,12 @@
     if (!confirm(`Are you sure you want to delete this ${provider.toUpperCase()} connection? Data fetching will stop immediately.`)) {
       return;
     }
-
+ 
     success = '';
     error = '';
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/connections/${provider}/${id}`, {
-        method: 'DELETE',
-        headers
-      });
+      const res = await api.delete(`${PUBLIC_API_URL}/settings/connections/${provider}/${id}`, { headers });
       
       // Handle Success (204) OR Not Found (404 - already deleted)
       if (res.ok || res.status === 404) {
@@ -152,10 +147,7 @@
     error = '';
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/connections/aws/discovered/${discoveredId}/link`, {
-        method: 'POST',
-        headers
-      });
+      const res = await api.post(`${PUBLIC_API_URL}/settings/connections/aws/discovered/${discoveredId}/link`, {}, { headers });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || 'Linking failed');
       

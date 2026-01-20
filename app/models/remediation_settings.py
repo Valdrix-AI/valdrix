@@ -36,6 +36,10 @@ class RemediationSettings(Base):
     # Simulation Mode - dry-run preview without actual execution
     simulation_mode: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Cloud Hard Caps (Phase 36)
+    hard_cap_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    monthly_hard_cap_usd: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
+
     # Relationship
     tenant = relationship("Tenant")
 

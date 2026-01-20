@@ -29,21 +29,21 @@ async def test_llm_factory_byok_priority():
     """Verify that LLMFactory prioritizes provide API key over global settings."""
     with patch('app.services.llm.factory.ChatOpenAI') as mock_openai:
         with patch('app.services.llm.factory.get_settings') as mock_settings:
-            mock_settings.return_value.OPENAI_API_KEY = "global-key"
+            mock_settings.return_value.OPENAI_API_KEY = "sk-" + "a" * 32
             mock_settings.return_value.OPENAI_MODEL = "gpt-4o"
             
             # Case 1: Use Global Key
             LLMFactory.create(provider="openai")
             mock_openai.assert_called_with(
-                api_key="global-key",
+                api_key="sk-" + "a" * 32,
                 model="gpt-4o",
                 temperature=0
             )
             
             # Case 2: Use BYOK
-            LLMFactory.create(provider="openai", api_key="user-personal-key")
+            LLMFactory.create(provider="openai", api_key="sk-" + "b" * 32)
             mock_openai.assert_called_with(
-                api_key="user-personal-key",
+                api_key="sk-" + "b" * 32,
                 model="gpt-4o",
                 temperature=0
             )
@@ -96,5 +96,6 @@ async def test_scheduler_concurrency():
                 
                 # Verify that it completed "instantly" (doesn't wait for actual scans)
                 assert duration < 0.5 
-                # Verify BackgroundJobs were added (3 cohorts, multiple jobs per cohort)
-                assert mock_db.add.call_count >= 15
+                # Verify BackgroundJobs were enqueued via execute (insert...on_conflict)
+                # SchedulerService.daily_analysis_job now enqueues tasks per cohort
+                assert mock_db.execute.call_count >= 3

@@ -17,28 +17,12 @@ class ZombieDetectorFactory:
         type_name = type(connection).__name__
         
         if "AWSConnection" in type_name:
-            creds = {
-                "role_arn": getattr(connection, "role_arn", None),
-                "external_id": getattr(connection, "external_id", None),
-                "aws_account_id": getattr(connection, "aws_account_id", None),
-            }
-            return AWSZombieDetector(region=region, credentials=creds, db=db)
+            return AWSZombieDetector(region=region, connection=connection, db=db)
             
         elif "AzureConnection" in type_name:
-            creds = {
-                "tenant_id": getattr(connection, "azure_tenant_id", None),
-                "client_id": getattr(connection, "client_id", None),
-                "client_secret": getattr(connection, "client_secret", None),
-                "subscription_id": getattr(connection, "subscription_id", None)
-            }
-            return AzureZombieDetector(region="global", credentials=creds, db=db)
+            return AzureZombieDetector(region="global", connection=connection, db=db)
             
         elif "GCPConnection" in type_name:
-            creds = {
-                "project_id": getattr(connection, "project_id", None),
-                "service_account_json": getattr(connection, "service_account_json", None),
-                "auth_method": getattr(connection, "auth_method", "secret")
-            }
-            return GCPZombieDetector(region="global", credentials=creds, db=db)
+            return GCPZombieDetector(region="global", connection=connection, db=db)
             
         raise ValueError(f"Unsupported connection type: {type_name}")

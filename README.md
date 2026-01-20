@@ -231,6 +231,9 @@ We're in **active development**. Here's where we are:
 - [x] Slack integration (alerts, digests, leaderboards)
 - [x] SvelteKit dashboard with dark mode
 - [x] Human-in-the-loop remediation workflow
+- [x] **Azure & GCP support** (Adapters complete)
+- [x] **ML-based forecasting** (Prophet-integrated)
+- [x] **ActiveOps** (Autonomous Remediation Engine)
 
 ### 🔨 In Progress
 - [ ] FinOps-as-Code (GitHub Action to preview cost changes on PRs)
@@ -238,10 +241,9 @@ We're in **active development**. Here's where we are:
 - [ ] Deployment to Koyeb
 
 ### 🔮 Coming Soon
-- [ ] Azure & GCP support
-- [ ] ML-based forecasting (Prophet/ARIMA)
-- [ ] Virtual tagging (LLM infers team ownership)
+- [ ] ClickHouse migration (for 100M+ scaling)
 - [ ] Stripe billing & usage metering
+- [ ] Virtual tagging (LLM infers team ownership)
 
 ---
 
@@ -261,11 +263,7 @@ See [LICENSE](LICENSE) for full terms.
 
 We welcome contributions! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
 
-**Areas we need help:**
-- Azure & GCP adapters
-- More zombie detection plugins
-- Dashboard UI/UX improvements
-- Documentation
+
 
 ---
 

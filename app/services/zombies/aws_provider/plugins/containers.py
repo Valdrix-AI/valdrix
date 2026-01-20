@@ -15,12 +15,12 @@ class LegacyEcrImagesPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "legacy_ecr_images"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         days_old = 30
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_old)
         try:
-            async with await self._get_client(session, "ecr", region, credentials) as ecr:
+            async with self._get_client(session, "ecr", region, credentials, config=config) as ecr:
                 repo_paginator = ecr.get_paginator("describe_repositories")
                 async for repo_page in repo_paginator.paginate():
                     for repo in repo_page.get("repositories", []):

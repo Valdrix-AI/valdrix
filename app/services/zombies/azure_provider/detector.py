@@ -6,10 +6,8 @@ from azure.mgmt.network.aio import NetworkManagementClient
 from app.services.zombies.base import BaseZombieDetector
 from app.services.zombies.zombie_plugin import ZombiePlugin
 
-# Import Azure Plugins
-from app.services.zombies.azure_provider.plugins.unattached_disks import AzureUnattachedDisksPlugin
-from app.services.zombies.azure_provider.plugins.orphaned_ips import AzureOrphanedIpsPlugin
-from app.services.zombies.azure_provider.plugins.orphaned_images import AzureOrphanedImagesPlugin
+# Import Azure Plugins to trigger registration
+import app.services.zombies.azure_provider.plugins  # noqa
 
 logger = structlog.get_logger()
 
@@ -19,12 +17,24 @@ class AzureZombieDetector(BaseZombieDetector):
     Manages Azure SDK clients and plugin execution.
     """
 
-    def __init__(self, region: str = "global", credentials: Optional[Dict[str, Any]] = None, db: Optional[Any] = None):
-        super().__init__(region, credentials, db)
+    def __init__(self, region: str = "global", credentials: Optional[Dict[str, Any]] = None, db: Optional[Any] = None, connection: Any = None):
+        super().__init__(region, credentials, db, connection)
         # credentials dict expected to have: tenant_id, client_id, client_secret, subscription_id
-        self.subscription_id = credentials.get("subscription_id") if credentials else None
+        self.subscription_id = None
         self._credential = None
-        if credentials:
+
+        if connection:
+            from app.services.adapters.azure import AzureAdapter
+            adapter = AzureAdapter(connection)
+            # Use logic from adapter to get creds
+            self.subscription_id = connection.subscription_id
+            self._credential = ClientSecretCredential(
+                tenant_id=connection.azure_tenant_id,
+                client_id=connection.client_id,
+                client_secret=connection.client_secret
+            )
+        elif credentials:
+            self.subscription_id = credentials.get("subscription_id")
             self._credential = ClientSecretCredential(
                 tenant_id=credentials.get("tenant_id"),
                 client_id=credentials.get("client_id"),
@@ -42,11 +52,7 @@ class AzureZombieDetector(BaseZombieDetector):
 
     def _initialize_plugins(self):
         """Register the standard suite of Azure detections."""
-        self.plugins = [
-            AzureUnattachedDisksPlugin(),
-            AzureOrphanedIpsPlugin(),
-            AzureOrphanedImagesPlugin(),
-        ]
+        self.plugins = registry.get_plugins_for_provider("azure")
 
     async def _execute_plugin_scan(self, plugin: ZombiePlugin) -> List[Dict[str, Any]]:
         """
@@ -57,20 +63,19 @@ class AzureZombieDetector(BaseZombieDetector):
             return []
 
         # Route to appropriate client based on plugin type or key
-        if plugin.category_key == "unattached_disks":
+        client = None
+        if plugin.category_key in ["unattached_disks", "orphaned_images"]:
             if not self._compute_client:
                 self._compute_client = ComputeManagementClient(self._credential, self.subscription_id)
-            return await plugin.scan(self._compute_client, region=self.region)
+            client = self._compute_client
             
         elif plugin.category_key == "orphaned_ips":
             if not self._network_client:
                 self._network_client = NetworkManagementClient(self._credential, self.subscription_id)
-            return await plugin.scan(self._network_client, region=self.region)
+            client = self._network_client
             
-        elif plugin.category_key == "orphaned_images":
-            if not self._compute_client:
-                self._compute_client = ComputeManagementClient(self._credential, self.subscription_id)
-            return await plugin.scan(self._compute_client, region=self.region)
+        if client:
+            return await plugin.scan(client, region=self.region)
             
         return []
 

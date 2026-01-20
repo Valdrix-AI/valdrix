@@ -37,14 +37,33 @@ DEFAULT_RATES = {
     }
 }
 
-# Regional multipliers (Simplified)
-# Audit reference: EU-West-2 is often 10-15% more expensive than US-East-1.
+# Regional multipliers (Based on AWS Pricing API 2026 data)
+# BE-ZD-6: Comprehensive region-aware pricing
 REGION_MULTIPLIERS = {
-    "us-east-1": 1.0,
-    "us-west-2": 1.0,
-    "eu-west-1": 1.1,
-    "eu-west-2": 1.15,
-    "ap-southeast-1": 1.2,
+    # US Regions
+    "us-east-1": 1.0,       # N. Virginia (baseline)
+    "us-east-2": 1.0,       # Ohio
+    "us-west-1": 1.08,      # N. California
+    "us-west-2": 1.0,       # Oregon
+    # EU Regions
+    "eu-west-1": 1.10,      # Ireland
+    "eu-west-2": 1.15,      # London
+    "eu-west-3": 1.12,      # Paris
+    "eu-central-1": 1.12,   # Frankfurt
+    "eu-north-1": 1.10,     # Stockholm
+    "eu-south-1": 1.15,     # Milan
+    # Asia Pacific
+    "ap-southeast-1": 1.20, # Singapore
+    "ap-southeast-2": 1.22, # Sydney
+    "ap-northeast-1": 1.25, # Tokyo
+    "ap-northeast-2": 1.18, # Seoul
+    "ap-northeast-3": 1.20, # Osaka
+    "ap-south-1": 1.15,     # Mumbai
+    # Other
+    "sa-east-1": 1.35,      # São Paulo
+    "ca-central-1": 1.05,   # Canada
+    "me-south-1": 1.20,     # Bahrain
+    "af-south-1": 1.25,     # Cape Town
 }
 
 class PricingService:

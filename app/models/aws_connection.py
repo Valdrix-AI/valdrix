@@ -20,7 +20,7 @@ Usage:
 
 import uuid
 import secrets
-from sqlalchemy import Column, String, ForeignKey, DateTime, Text, Boolean
+from sqlalchemy import Column, String, ForeignKey, DateTime, Text, Boolean, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -46,6 +46,9 @@ class AWSConnection(Base):
     """
 
     __tablename__ = "aws_connections"
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'aws_account_id', name='uq_tenant_aws_account'),
+    )
 
     # Primary key
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

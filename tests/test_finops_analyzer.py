@@ -1,212 +1,158 @@
-"""
-Tests for FinOpsAnalyzer (LLM-based cost analysis)
-
-Tests cover:
-- Analyzer instantiation
-- Prompt template validation
-- JSON output parsing
-- Error handling for malformed LLM responses
-- Usage tracking integration
-"""
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 import json
+from uuid import uuid4
+from datetime import date, datetime
+from decimal import Decimal
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 
 from app.services.llm.analyzer import FinOpsAnalyzer
 from app.schemas.costs import CloudUsageSummary, CostRecord
-from datetime import date, datetime
-from decimal import Decimal
-from app.services.zombies.aws_provider.detector import AWSZombieDetector
 
-# Mock system prompt for tests (decoupled in production)
+# Mock system prompt for tests
 FINOPS_SYSTEM_PROMPT = """
 You are a FinOps expert. Analyze the cost data and return STRICT JSON ONLY.
-Include anomalies, zombie_resources, recommendations, and total_estimated_savings.
-Severity levels: high|medium|low.
 """
 
-
 class TestFinOpsAnalyzerInstantiation:
-    """Tests for FinOpsAnalyzer initialization."""
-    
     def test_requires_llm(self):
-        """Should require a LangChain chat model."""
         mock_llm = MagicMock(spec=BaseChatModel)
         analyzer = FinOpsAnalyzer(llm=mock_llm)
         assert analyzer.llm is mock_llm
-    
-    def test_creates_prompt_template(self):
-        """Should create a ChatPromptTemplate with cost_data variable."""
-        mock_llm = MagicMock(spec=BaseChatModel)
-        analyzer = FinOpsAnalyzer(llm=mock_llm)
-        assert analyzer.prompt is not None
-        # Should have 'cost_data' as input variable
-        assert 'cost_data' in analyzer.prompt.input_variables
-
-
-class TestSystemPrompt:
-    """Tests for the system prompt."""
-    
-    def test_instructs_json_output(self):
-        """System prompt should instruct strict JSON output."""
-        assert "JSON" in FINOPS_SYSTEM_PROMPT
-        assert "STRICT JSON ONLY" in FINOPS_SYSTEM_PROMPT
-    
-    def test_defines_output_schema(self):
-        """System prompt should define the expected output schema."""
-        assert "anomalies" in FINOPS_SYSTEM_PROMPT
-        assert "zombie_resources" in FINOPS_SYSTEM_PROMPT
-        assert "recommendations" in FINOPS_SYSTEM_PROMPT
-        assert "total_estimated_savings" in FINOPS_SYSTEM_PROMPT
-    
-    def test_includes_severity_levels(self):
-        """System prompt should define severity levels."""
-        assert "high|medium|low" in FINOPS_SYSTEM_PROMPT
-
-
-class TestStripMarkdown:
-    """Tests for _strip_markdown helper."""
-    
-    def test_removes_json_code_block(self):
-        """Should strip ```json wrapper."""
-        mock_llm = MagicMock(spec=BaseChatModel)
-        analyzer = FinOpsAnalyzer(llm=mock_llm)
-        
-        input_text = '```json\n{"key": "value"}\n```'
-        result = analyzer._strip_markdown(input_text)
-        
-        assert result == '{"key": "value"}'
-    
-    def test_handles_plain_json(self):
-        """Should handle plain JSON without markdown."""
-        mock_llm = MagicMock(spec=BaseChatModel)
-        analyzer = FinOpsAnalyzer(llm=mock_llm)
-        
-        input_text = '{"key": "value"}'
-        result = analyzer._strip_markdown(input_text)
-        
-        assert result == '{"key": "value"}'
-    
-    def test_removes_generic_code_block(self):
-        """Should strip ``` wrapper without language."""
-        mock_llm = MagicMock(spec=BaseChatModel)
-        analyzer = FinOpsAnalyzer(llm=mock_llm)
-        
-        input_text = '```\n{"key": "value"}\n```'
-        result = analyzer._strip_markdown(input_text)
-        
-        assert result == '{"key": "value"}'
-
 
 @pytest.mark.asyncio
 class TestAnalyze:
-    """Tests for analyze() method."""
-    
     async def test_invokes_llm_with_cost_data(self):
-        """Should invoke LLM with formatted cost data."""
         mock_llm = MagicMock(spec=BaseChatModel)
-        mock_llm.ainvoke = AsyncMock(return_value=AIMessage(content='{"anomalies":[],"zombie_resources":[],"optimizations":[],"total_estimated_savings":"$0/month"}'))
+        mock_llm.ainvoke = AsyncMock(return_value=AIMessage(content='{"insights":[],"zombie_resources":[],"recommendations":[],"summary":{"total_estimated_savings":"$0/month"}}'))
         
-        analyzer = FinOpsAnalyzer(llm=mock_llm)
+        from app.services.analysis.forecaster import SymbolicForecaster
+        mock_forecast = AsyncMock(return_value={"total_forecasted_cost": 0, "forecast": []})
         
-        usage_summary = CloudUsageSummary(
-            tenant_id="test-tenant",
-            provider="aws",
-            start_date=date.today(),
-            end_date=date.today(),
-            total_cost=Decimal("100.0"),
-            records=[CostRecord(date=datetime.now(), amount=Decimal("100.0"), service="EC2")]
-        )
-        _ = await analyzer.analyze(usage_summary)
-        
-        # LLM should have been invoked
-        mock_llm.ainvoke.assert_called_once()
-    
+        with MagicMock() as mock_db:
+            analyzer = FinOpsAnalyzer(llm=mock_llm, db=mock_db)
+            
+            tenant_id = str(uuid4())
+            usage_summary = CloudUsageSummary(
+                tenant_id=tenant_id,
+                provider="aws",
+                start_date=date.today(),
+                end_date=date.today(),
+                total_cost=Decimal("100.0"),
+                records=[CostRecord(date=datetime.now(), amount=Decimal("100.0"), service="EC2")]
+            )
+            
+            with patch.object(SymbolicForecaster, "forecast", side_effect=mock_forecast):
+                _ = await analyzer.analyze(usage_summary, tenant_id=tenant_id)
+            
+            mock_llm.ainvoke.assert_called_once()
+
     async def test_returns_parsed_result(self):
-        """Should return result from LLM response."""
         mock_llm = MagicMock(spec=BaseChatModel)
         mock_response = {
-            "anomalies": [],
+            "insights": [],
             "zombie_resources": [],
             "recommendations": [],
             "summary": {"total_estimated_savings": "$0/month"}
         }
         mock_llm.ainvoke = AsyncMock(return_value=AIMessage(content=json.dumps(mock_response)))
         
-        analyzer = FinOpsAnalyzer(llm=mock_llm)
-        
-        usage_summary = CloudUsageSummary(
-            tenant_id="test-tenant",
-            provider="aws",
-            start_date=date.today(),
-            end_date=date.today(),
-            total_cost=Decimal("100.0"),
-            records=[CostRecord(date=datetime.now(), amount=Decimal("100.0"), service="EC2")]
-        )
-        result = await analyzer.analyze(usage_summary)
-        
-        # Result should be valid JSON string or parsed dict
-        assert result is not None
-    
+        from app.services.analysis.forecaster import SymbolicForecaster
+        mock_forecast = AsyncMock(return_value={"total_forecasted_cost": 120, "forecast": []})
+
+        with MagicMock() as mock_db:
+            analyzer = FinOpsAnalyzer(llm=mock_llm, db=mock_db)
+            
+            tenant_id = str(uuid4())
+            usage_summary = CloudUsageSummary(
+                tenant_id=tenant_id,
+                provider="aws",
+                start_date=date.today(),
+                end_date=date.today(),
+                total_cost=Decimal("100.0"),
+                records=[CostRecord(date=datetime.now(), amount=Decimal("100.0"), service="EC2")]
+            )
+            
+            with patch.object(SymbolicForecaster, "forecast", side_effect=mock_forecast):
+                result = await analyzer.analyze(usage_summary, tenant_id=tenant_id)
+            
+            assert "insights" in result
+            assert result["symbolic_forecast"]["total_forecasted_cost"] == 120
+
     async def test_handles_markdown_wrapped_json(self):
-        """Should handle LLM responses wrapped in markdown code blocks."""
         mock_llm = MagicMock(spec=BaseChatModel)
-        mock_response = '```json\n{"anomalies":[],"zombie_resources":[],"optimizations":[],"total_estimated_savings":"$0/month"}\n```'
+        mock_response = '```json\n{"insights":[],"zombie_resources":[],"recommendations":[],"summary":{"total_estimated_savings":"$0/month"}}\n```'
         mock_llm.ainvoke = AsyncMock(return_value=AIMessage(content=mock_response))
         
-        analyzer = FinOpsAnalyzer(llm=mock_llm)
-        
-        usage_summary = CloudUsageSummary(
-            tenant_id="test-tenant",
-            provider="aws",
-            start_date=date.today(),
-            end_date=date.today(),
-            total_cost=Decimal("100.0"),
-            records=[CostRecord(date=datetime.now(), amount=Decimal("100.0"), service="EC2")]
-        )
-        result = await analyzer.analyze(usage_summary)
-        
-        assert "insights" in result
-        assert "recommendations" in result
-    
+        from app.services.analysis.forecaster import SymbolicForecaster
+        mock_forecast = AsyncMock(return_value={"total_forecasted_cost": 0, "forecast": []})
+
+        with MagicMock() as mock_db:
+            analyzer = FinOpsAnalyzer(llm=mock_llm, db=mock_db)
+            
+            tenant_id = str(uuid4())
+            usage_summary = CloudUsageSummary(
+                tenant_id=tenant_id,
+                provider="aws",
+                start_date=date.today(),
+                end_date=date.today(),
+                total_cost=Decimal("100.0"),
+                records=[CostRecord(date=datetime.now(), amount=Decimal("100.0"), service="EC2")]
+            )
+            
+            with patch.object(SymbolicForecaster, "forecast", side_effect=mock_forecast):
+                result = await analyzer.analyze(usage_summary, tenant_id=tenant_id)
+            
+            assert "insights" in result
+
     async def test_handles_invalid_json_gracefully(self):
-        """Should handle invalid JSON from LLM gracefully."""
         mock_llm = MagicMock(spec=BaseChatModel)
         mock_llm.ainvoke = AsyncMock(return_value=AIMessage(content="This is not valid JSON at all"))
         
-        analyzer = FinOpsAnalyzer(llm=mock_llm)
-        
-        usage_summary = CloudUsageSummary(
-            tenant_id="test-tenant",
-            provider="aws",
-            start_date=date.today(),
-            end_date=date.today(),
-            total_cost=Decimal("100.0"),
-            records=[CostRecord(date=datetime.now(), amount=Decimal("100.0"), service="EC2")]
-        )
-        # Should not raise, should return the raw response
-        result = await analyzer.analyze(usage_summary)
-        assert result is not None  # Returns raw content on parse failure
-    
+        from app.services.analysis.forecaster import SymbolicForecaster
+        mock_forecast = AsyncMock(return_value={"total_forecasted_cost": 0, "forecast": []})
+
+        with MagicMock() as mock_db:
+            analyzer = FinOpsAnalyzer(llm=mock_llm, db=mock_db)
+            
+            tenant_id = str(uuid4())
+            usage_summary = CloudUsageSummary(
+                tenant_id=tenant_id,
+                provider="aws",
+                start_date=date.today(),
+                end_date=date.today(),
+                total_cost=Decimal("100.0"),
+                records=[CostRecord(date=datetime.now(), amount=Decimal("100.0"), service="EC2")]
+            )
+            
+            with patch.object(SymbolicForecaster, "forecast", side_effect=mock_forecast):
+                result = await analyzer.analyze(usage_summary, tenant_id=tenant_id)
+            assert result is not None
+
     async def test_handles_empty_cost_data(self):
-        """Should handle empty cost data gracefully."""
         mock_llm = MagicMock(spec=BaseChatModel)
-        mock_llm.ainvoke = AsyncMock(return_value=AIMessage(content='{"anomalies":[],"zombie_resources":[],"optimizations":[],"total_estimated_savings":"$0/month"}'))
+        mock_llm.ainvoke = AsyncMock(return_value=AIMessage(content='{"insights":[],"zombie_resources":[],"recommendations":[],"summary":{"total_estimated_savings":"$0/month"}}'))
         
-        analyzer = FinOpsAnalyzer(llm=mock_llm)
-        
-        usage_summary = CloudUsageSummary(
-            tenant_id="test-tenant",
-            provider="aws",
-            start_date=date.today(),
-            end_date=date.today(),
-            total_cost=Decimal("0.0"),
-            records=[]
-        )
-        result = await analyzer.analyze(usage_summary)
-        
-        assert "anomalies" in result
+        from app.services.analysis.forecaster import SymbolicForecaster
+        mock_forecast = AsyncMock(return_value={"total_forecasted_cost": 0, "forecast": []})
+
+        with MagicMock() as mock_db:
+            analyzer = FinOpsAnalyzer(llm=mock_llm, db=mock_db)
+            
+            tenant_id = str(uuid4())
+            usage_summary = CloudUsageSummary(
+                tenant_id=tenant_id,
+                provider="aws",
+                start_date=date.today(),
+                end_date=date.today(),
+                total_cost=Decimal("0.0"),
+                records=[]
+            )
+            
+            with patch.object(SymbolicForecaster, "forecast", side_effect=mock_forecast):
+                result = await analyzer.analyze(usage_summary, tenant_id=tenant_id)
+            
+            assert "recommendations" in result

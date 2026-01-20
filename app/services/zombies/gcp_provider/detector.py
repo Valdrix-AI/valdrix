@@ -7,9 +7,8 @@ from app.services.zombies.base import BaseZombieDetector
 from app.services.zombies.zombie_plugin import ZombiePlugin
 
 # Import GCP Plugins
-from app.services.zombies.gcp_provider.plugins.unattached_disks import GCPUnattachedDisksPlugin
-from app.services.zombies.gcp_provider.plugins.unused_ips import GCPUnusedStaticIpsPlugin
-from app.services.zombies.gcp_provider.plugins.machine_images import GCPMachineImagesPlugin
+# Import GCP Plugins to trigger registration
+import app.services.zombies.gcp_provider.plugins  # noqa
 
 logger = structlog.get_logger()
 class GCPZombieDetector(BaseZombieDetector):
@@ -18,18 +17,30 @@ class GCPZombieDetector(BaseZombieDetector):
     Manages GCP SDK clients and plugin execution.
     """
 
-    def __init__(self, region: str = "us-central1-a", credentials: Optional[Dict[str, Any]] = None, db: Optional[Any] = None):
+    def __init__(self, region: str = "us-central1-a", credentials: Optional[Dict[str, Any]] = None, db: Optional[Any] = None, connection: Any = None):
         # region for GCP is usually a zone like 'us-central1-a'
-        super().__init__(region, credentials, db)
-        self.project_id = credentials.get("project_id") if credentials else None
-        
+        super().__init__(region, credentials, db, connection)
+        self.project_id = None
         self._credentials_obj = None
-        if credentials and credentials.get("service_account_json"):
-            import json
-            info = json.loads(credentials["service_account_json"])
-            self._credentials_obj = service_account.Credentials.from_service_account_info(info)
-            if not self.project_id:
-                self.project_id = info.get("project_id")
+
+        if connection:
+            from app.services.adapters.gcp import GCPAdapter
+            adapter = GCPAdapter(connection)
+            self.project_id = connection.project_id
+            # Fetch credentials using logic from connection or adapter
+            if connection.service_account_json:
+                import json
+                info = json.loads(connection.service_account_json)
+                self._credentials_obj = service_account.Credentials.from_service_account_info(info)
+
+        elif credentials:
+            self.project_id = credentials.get("project_id")
+            if credentials.get("service_account_json"):
+                import json
+                info = json.loads(credentials["service_account_json"])
+                self._credentials_obj = service_account.Credentials.from_service_account_info(info)
+                if not self.project_id:
+                    self.project_id = info.get("project_id")
 
         self._disks_client = None
         self._address_client = None
@@ -41,11 +52,7 @@ class GCPZombieDetector(BaseZombieDetector):
 
     def _initialize_plugins(self):
         """Register the standard suite of GCP detections."""
-        self.plugins = [
-            GCPUnattachedDisksPlugin(),
-            GCPUnusedStaticIpsPlugin(),
-            GCPMachineImagesPlugin(),
-        ]
+        self.plugins = registry.get_plugins_for_provider("gcp")
 
     async def _execute_plugin_scan(self, plugin: ZombiePlugin) -> List[Dict[str, Any]]:
         """
@@ -55,31 +62,27 @@ class GCPZombieDetector(BaseZombieDetector):
             logger.error("gcp_detector_missing_project_id")
             return []
 
+        client = None
+        kwargs = {"project_id": self.project_id}
+
         if plugin.category_key == "unattached_disks":
             if not self._disks_client:
-                if self._credentials_obj:
-                    self._disks_client = compute_v1.DisksClient(credentials=self._credentials_obj)
-                else:
-                    self._disks_client = compute_v1.DisksClient()
-            return await plugin.scan(self._disks_client, project_id=self.project_id, zone=self.region)
+                self._disks_client = compute_v1.DisksClient(credentials=self._credentials_obj) if self._credentials_obj else compute_v1.DisksClient()
+            client = self._disks_client
+            kwargs["zone"] = self.region
             
         elif plugin.category_key == "orphaned_ips":
-            # Extract region from zone (e.g., 'us-central1-a' -> 'us-central1')
-            gcp_region = "-".join(self.region.split("-")[:2])
-            
             if not self._address_client:
-                if self._credentials_obj:
-                    self._address_client = compute_v1.AddressesClient(credentials=self._credentials_obj)
-                else:
-                    self._address_client = compute_v1.AddressesClient()
-            return await plugin.scan(self._address_client, project_id=self.project_id, region=gcp_region)
+                self._address_client = compute_v1.AddressesClient(credentials=self._credentials_obj) if self._credentials_obj else compute_v1.AddressesClient()
+            client = self._address_client
+            kwargs["region"] = "-".join(self.region.split("-")[:2])
             
         elif plugin.category_key == "orphaned_images":
             if not self._images_client:
-                if self._credentials_obj:
-                    self._images_client = compute_v1.MachineImagesClient(credentials=self._credentials_obj)
-                else:
-                    self._images_client = compute_v1.MachineImagesClient()
-            return await plugin.scan(self._images_client, project_id=self.project_id)
+                self._images_client = compute_v1.MachineImagesClient(credentials=self._credentials_obj) if self._credentials_obj else compute_v1.MachineImagesClient()
+            client = self._images_client
+
+        if client:
+            return await plugin.scan(client, **kwargs)
 
         return []

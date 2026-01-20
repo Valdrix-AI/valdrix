@@ -409,14 +409,26 @@ class WebhookHandler:
         return {"status": "success"}
 
     def verify_signature(self, payload: bytes, signature: str) -> bool:
-        if not settings.PAYSTACK_SECRET_KEY:
+        """Verify Paystack webhook signature using HMAC-SHA512."""
+        if not signature:
+            logger.warning("paystack_webhook_missing_signature")
             return False
+            
+        if not settings.PAYSTACK_SECRET_KEY:
+            logger.error("paystack_secret_key_not_configured")
+            return False
+
         expected = hmac.new(
             settings.PAYSTACK_SECRET_KEY.encode(),
             payload,
             hashlib.sha512
         ).hexdigest()
-        return hmac.compare_digest(expected, signature)
+
+        is_valid = hmac.compare_digest(expected, signature)
+        if not is_valid:
+            logger.warning("paystack_webhook_invalid_signature", provided_sig=signature[:8] + "...")
+            
+        return is_valid
 
     async def _handle_subscription_create(self, data: Dict) -> None:
         """Handle new subscription - update subscription codes and next payment date."""

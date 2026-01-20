@@ -169,6 +169,6 @@ async def test_get_daily_costs_error_handling(adapter):
         with pytest.raises(AdapterError) as excinfo:
             await adapter.get_daily_costs(date(2024, 1, 1), date(2024, 1, 2))
         
-        assert "AWS Cost Explorer failure" in str(excinfo.value)
+        assert "Permission denied" in str(excinfo.value)
         assert excinfo.value.code == "AccessDenied"
         assert excinfo.value.details["aws_account"] == MOCK_CX.aws_account_id

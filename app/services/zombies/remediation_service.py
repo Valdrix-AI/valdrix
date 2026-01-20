@@ -10,6 +10,7 @@ Manages the remediation approval workflow:
 
 from typing import List, Dict, Optional
 from decimal import Decimal
+from datetime import datetime, timezone
 from uuid import UUID
 import aioboto3
 from botocore.exceptions import ClientError
@@ -19,6 +20,8 @@ import structlog
 
 from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
 from app.services.security.audit_log import AuditLogger, AuditEventType
+from app.core.security_metrics import REMEDIATION_TOTAL
+from app.core.ops_metrics import REMEDIATION_DURATION_SECONDS
 
 logger = structlog.get_logger()
 
@@ -41,14 +44,29 @@ class RemediationService:
         self.session = aioboto3.Session()
 
     async def _get_client(self, service_name: str):
-        """Helper to get aioboto3 client with optional credentials."""
+        """Helper to get aioboto3 client with optional credentials and endpoint override."""
+        from app.core.config import get_settings
+        settings = get_settings()
+        
         kwargs = {"region_name": self.region}
+        
+        if settings.AWS_ENDPOINT_URL:
+            kwargs["endpoint_url"] = settings.AWS_ENDPOINT_URL
+            
         if self.credentials:
-            kwargs.update({
-                "aws_access_key_id": self.credentials["AccessKeyId"],
-                "aws_secret_access_key": self.credentials["SecretAccessKey"],
-                "aws_session_token": self.credentials["SessionToken"],
-            })
+            # Map CamelCase to snake_case for aioboto3
+            Mapping = {
+                "AccessKeyId": "aws_access_key_id",
+                "SecretAccessKey": "aws_secret_access_key",
+                "SessionToken": "aws_session_token",
+                "aws_access_key_id": "aws_access_key_id",
+                "aws_secret_access_key": "aws_secret_access_key",
+                "aws_session_token": "aws_session_token",
+            }
+            for src, dst in Mapping.items():
+                if src in self.credentials:
+                    kwargs[dst] = self.credentials[src]
+
         return self.session.client(service_name, **kwargs)
 
     async def create_request(
@@ -68,6 +86,19 @@ class RemediationService:
         connection_id: Optional[UUID] = None,
     ) -> RemediationRequest:
         """Create a new remediation request (pending approval)."""
+        # P2: Resource Ownership Verification
+        if connection_id:
+            # Verify connection belongs to tenant
+            from app.models.aws_connection import AWSConnection
+            conn_res = await self.db.execute(
+                select(AWSConnection).where(
+                    AWSConnection.id == connection_id,
+                    AWSConnection.tenant_id == tenant_id
+                )
+            )
+            if not conn_res.scalar_one_or_none():
+                raise ValueError("Unauthorized: Connection does not belong to tenant")
+
         request = RemediationRequest(
             tenant_id=tenant_id,
             resource_id=resource_id,
@@ -98,13 +129,15 @@ class RemediationService:
 
         return request
 
-    async def list_pending(self, tenant_id: UUID) -> List[RemediationRequest]:
+    async def list_pending(self, tenant_id: UUID, limit: int = 50, offset: int = 0) -> List[RemediationRequest]:
         """List all pending remediation requests for a tenant."""
         result = await self.db.execute(
             select(RemediationRequest)
             .where(RemediationRequest.tenant_id == tenant_id)
             .where(RemediationRequest.status == RemediationStatus.PENDING)
             .order_by(RemediationRequest.created_at.desc())
+            .offset(offset)
+            .limit(limit)
         )
         return list(result.scalars().all())
 
@@ -180,16 +213,23 @@ class RemediationService:
 
         return request
 
-    async def execute(self, request_id: UUID, tenant_id: UUID) -> RemediationRequest:
+    async def execute(
+        self, 
+        request_id: UUID, 
+        tenant_id: UUID, 
+        bypass_grace_period: bool = False
+    ) -> RemediationRequest:
         """
         Execute an approved remediation request.
 
         If create_backup is True, creates snapshot before deleting volume.
+        If bypass_grace_period is True, executes immediately (emergency use).
         """
         result = await self.db.execute(
             select(RemediationRequest)
             .where(RemediationRequest.id == request_id)
             .where(RemediationRequest.tenant_id == tenant_id)
+            .with_for_update()  # SEC-03: Atomic lock to prevent race conditions
         )
         request = result.scalar_one_or_none()
 
@@ -197,21 +237,125 @@ class RemediationService:
             raise ValueError(f"Request {request_id} not found")
 
         if request.status != RemediationStatus.APPROVED:
-            raise ValueError(f"Request must be approved first (current: {request.status.value})")
+            # BE-SEC-3: If already scheduled, check if grace period has passed
+            if request.status == RemediationStatus.SCHEDULED:
+                now = datetime.now(timezone.utc)
+                if now < request.scheduled_execution_at:
+                    logger.info("remediation_execution_deferred_grace_period", 
+                                request_id=str(request_id), 
+                                remaining_minutes=(request.scheduled_execution_at - now).total_seconds() / 60)
+                    return request
+                # If grace period passed, proceed to EXECUTING below
+            else:
+                raise ValueError(f"Request must be approved or scheduled (current: {request.status.value})")
+
+        # 1. Create immutable pre-execution audit log FIRST (SEC-03)
+        audit_logger = AuditLogger(db=self.db, tenant_id=tenant_id)
+
+        # BE-SEC-3: Implement 24-hour Grace Period (Delayed Deletion)
+        if request.status == RemediationStatus.APPROVED and not bypass_grace_period:
+            # First time execution: Schedule for 24h later
+            from datetime import timedelta
+            grace_period = timedelta(hours=24)
+            scheduled_at = datetime.now(timezone.utc) + grace_period
+            
+            request.status = RemediationStatus.SCHEDULED
+            request.scheduled_execution_at = scheduled_at
+            await self.db.commit()
+            
+            logger.info("remediation_scheduled_grace_period", 
+                        request_id=str(request_id), 
+                        scheduled_at=scheduled_at.isoformat())
+                        
+            # Log scheduling in audit trail
+            await audit_logger.log(
+                event_type=AuditEventType.REMEDIATION_EXECUTION_STARTED,
+                actor_id=request.reviewed_by_user_id,
+                resource_id=request.resource_id,
+                resource_type=request.resource_type,
+                success=True,
+                details={
+                    "request_id": str(request_id),
+                    "action": request.action.value,
+                    "scheduled_execution_at": scheduled_at.isoformat(),
+                    "note": "Resource scheduled for deletion after 24h grace period."
+                }
+            )
+
+            # BE-SEC-3: Enqueue background job for automatic execution after grace period
+            from app.services.jobs.processor import enqueue_job
+            from app.models.background_job import JobType
+            await enqueue_job(
+                db=self.db,
+                job_type=JobType.REMEDIATION,
+                tenant_id=tenant_id,
+                payload={"request_id": str(request_id)},
+                scheduled_for=scheduled_at
+            )
+
+            return request
 
         request.status = RemediationStatus.EXECUTING
         await self.db.commit()
 
-        try:
-            # Create backup if requested (for volumes only)
-            if request.create_backup and request.action == RemediationAction.DELETE_VOLUME:
-                backup_id = await self._create_volume_backup(
-                    request.resource_id,
-                    request.backup_retention_days,
-                )
-                request.backup_resource_id = backup_id
+        # SOC2: Log the actual start of execution (after grace period)
+        await audit_logger.log(
+            event_type=AuditEventType.REMEDIATION_EXECUTION_STARTED,
+            actor_id=request.reviewed_by_user_id,
+            resource_id=request.resource_id,
+            resource_type=request.resource_type,
+            success=True,
+            details={
+                "request_id": str(request_id),
+                "action": request.action.value,
+                "triggered_by": "background_worker"
+            }
+        )
 
-            # Execute the action
+        import time
+        start_time = time.time()
+        try:
+            # 2. Create backup BEFORE any deletion
+            if request.create_backup:
+                try:
+                    if request.action == RemediationAction.DELETE_VOLUME:
+                        backup_id = await self._create_volume_backup(
+                            request.resource_id,
+                            request.backup_retention_days,
+                        )
+                        request.backup_resource_id = backup_id
+                    elif request.action == RemediationAction.DELETE_RDS_INSTANCE:
+                        backup_id = await self._create_rds_backup(
+                            request.resource_id,
+                            request.backup_retention_days,
+                        )
+                        request.backup_resource_id = backup_id
+                    elif request.action == RemediationAction.DELETE_REDSHIFT_CLUSTER:
+                        backup_id = await self._create_redshift_backup(
+                            request.resource_id,
+                            request.backup_retention_days,
+                        )
+                        request.backup_resource_id = backup_id
+                    
+                    await self.db.commit() # Ensure backup record is persisted
+                except Exception as b_err:
+                    # CRITICAL: Fail the request if backup fails - do not proceed to deletion
+                    request.status = RemediationStatus.FAILED
+                    request.execution_error = f"BACKUP_FAILED: {str(b_err)}"
+                    await self.db.commit()
+                    logger.error("remediation_backup_failed_aborting", request_id=str(request_id), error=str(b_err))
+                    
+                    await audit_logger.log(
+                        event_type=AuditEventType.REMEDIATION_FAILED,
+                        actor_id=request.reviewed_by_user_id,
+                        resource_id=request.resource_id,
+                        resource_type=request.resource_type, # Added missing resource_type
+                        success=False,
+                        error_message=f"Backup failed: {str(b_err)}"
+                    )
+                    return request
+
+            # 3. NOW execute deletion with confirmation
             await self._execute_action(request.resource_id, request.action)
 
             request.status = RemediationStatus.COMPLETED
@@ -221,8 +365,8 @@ class RemediationService:
                 resource=request.resource_id,
             )
 
+            # 4. Log success AFTER completion
             # Permanent Audit Log (SEC-03) - SOC2 compliant
-            audit_logger = AuditLogger(db=self.db, tenant_id=tenant_id)
             await audit_logger.log(
                 event_type=AuditEventType.REMEDIATION_EXECUTED,
                 actor_id=request.reviewed_by_user_id,
@@ -236,6 +380,13 @@ class RemediationService:
                     "savings": float(request.estimated_monthly_savings or 0)
                 }
             )
+            
+            # Record metrics
+            duration = time.time() - start_time
+            REMEDIATION_DURATION_SECONDS.labels(
+                action=request.action.value,
+                provider=request.provider or "aws"
+            ).observe(duration)
 
         except Exception as e:
             # ... (logger.error already there)
@@ -265,6 +416,15 @@ class RemediationService:
 
         await self.db.commit()
         await self.db.refresh(request)
+
+        # Track successful execution in metrics (SEC-03)
+        if request.status == RemediationStatus.COMPLETED:
+            REMEDIATION_TOTAL.labels(
+                status="success",
+                resource_type=request.resource_type,
+                action=request.action.value
+            ).inc()
+
         return request
 
     async def _create_volume_backup(
@@ -300,6 +460,56 @@ class RemediationService:
 
         except ClientError as e:
             logger.error("backup_creation_failed", volume_id=volume_id, error=str(e))
+            raise
+
+    async def _create_rds_backup(
+        self,
+        instance_id: str,
+        retention_days: int,
+    ) -> str:
+        """Create a DB snapshot backup before deleting an RDS instance."""
+        try:
+            import time
+            snapshot_id = f"valdrix-backup-{instance_id}-{int(time.time())}"
+            
+            async with await self._get_client("rds") as rds:
+                await rds.create_db_snapshot(
+                    DBSnapshotIdentifier=snapshot_id,
+                    DBInstanceIdentifier=instance_id,
+                    Tags=[
+                        {"Key": "Valdrix", "Value": "remediation-backup"},
+                        {"Key": "RetentionDays", "Value": str(retention_days)},
+                    ],
+                )
+                logger.info("rds_backup_initiated", instance_id=instance_id, snapshot_id=snapshot_id)
+                return snapshot_id
+        except ClientError as e:
+            logger.error("rds_backup_failed", instance_id=instance_id, error=str(e))
+            raise
+
+    async def _create_redshift_backup(
+        self,
+        cluster_id: str,
+        retention_days: int,
+    ) -> str:
+        """Create a cluster snapshot backup before deleting a Redshift cluster."""
+        try:
+            import time
+            snapshot_id = f"valdrix-backup-{cluster_id}-{int(time.time())}"
+            
+            async with await self._get_client("redshift") as redshift:
+                await redshift.create_cluster_snapshot(
+                    SnapshotIdentifier=snapshot_id,
+                    ClusterIdentifier=cluster_id,
+                    Tags=[
+                        {"Key": "Valdrix", "Value": "remediation-backup"},
+                        {"Key": "RetentionDays", "Value": str(retention_days)},
+                    ],
+                )
+                logger.info("redshift_backup_initiated", cluster_id=cluster_id, snapshot_id=snapshot_id)
+                return snapshot_id
+        except ClientError as e:
+            logger.error("redshift_backup_failed", cluster_id=cluster_id, error=str(e))
             raise
 
     async def _execute_action(
@@ -378,3 +588,49 @@ class RemediationService:
         except ClientError as e:
             logger.error("aws_action_failed", resource=resource_id, error=str(e))
             raise
+
+    async def enforce_hard_limit(self, tenant_id: UUID) -> List[UUID]:
+        """
+        Enforce hard limits for a tenant.
+        1. Checks budget status via UsageTracker.
+        2. If HARD_LIMIT is reached:
+           - Automatically executes high-confidence pending remediation requests.
+           - Bypasses grace period for emergency stabilization.
+        """
+        from app.services.llm.usage_tracker import UsageTracker, BudgetStatus
+        
+        tracker = UsageTracker(self.db)
+        status = await tracker.check_budget(tenant_id)
+        
+        if status != BudgetStatus.HARD_LIMIT:
+            return []
+            
+        logger.warning("enforcing_hard_limit_for_tenant", tenant_id=str(tenant_id))
+        
+        # 1. Fetch pending remediation requests for this tenant
+        # Priority: Highest savings first, then highest confidence
+        result = await self.db.execute(
+            select(RemediationRequest)
+            .where(RemediationRequest.tenant_id == tenant_id)
+            .where(RemediationRequest.status == RemediationStatus.PENDING)
+            .where(RemediationRequest.confidence_score >= Decimal("0.90")) # Only high confidence
+            .order_by(RemediationRequest.estimated_monthly_savings.desc())
+        )
+        requests = result.scalars().all()
+        
+        executed_ids = []
+        for req in requests:
+            try:
+                # Auto-approve for hard limit emergency
+                req.status = RemediationStatus.APPROVED
+                req.reviewed_by_user_id = UUID("00000000-0000-0000-0000-000000000000") # System ID placeholder
+                req.review_notes = "AUTO_APPROVED: Budget Hard Limit Exceeded"
+                await self.db.commit()
+                
+                # Execute immediately (emergency use)
+                await self.execute(req.id, tenant_id, bypass_grace_period=True)
+                executed_ids.append(req.id)
+            except Exception as e:
+                logger.error("hard_limit_enforcement_failed", request_id=str(req.id), error=str(e))
+                
+        return executed_ids

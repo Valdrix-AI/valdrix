@@ -14,12 +14,12 @@ class UnattachedVolumesPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "unattached_volumes"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         try:
-            async with await self._get_client(session, "ec2", region, credentials) as ec2:
+            async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
                 paginator = ec2.get_paginator("describe_volumes")
-                async with await self._get_client(session, "cloudwatch", region, credentials) as cloudwatch:
+                async with self._get_client(session, "cloudwatch", region, credentials, config=config) as cloudwatch:
                     async for page in paginator.paginate(
                         Filters=[{"Name": "status", "Values": ["available"]}]
                     ):
@@ -105,13 +105,13 @@ class OldSnapshotsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "old_snapshots"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         days_old = 90
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_old)
 
         try:
-            async with await self._get_client(session, "ec2", region, credentials) as ec2:
+            async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
                 paginator = ec2.get_paginator("describe_snapshots")
                 async for page in paginator.paginate(OwnerIds=["self"]):
                     for snap in page.get("Snapshots", []):
@@ -151,10 +151,10 @@ class IdleS3BucketsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_s3_buckets"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         try:
-            async with await self._get_client(session, "s3", region, credentials) as s3:
+            async with self._get_client(session, "s3", region, credentials, config=config) as s3:
                 response = await s3.list_buckets()
                 buckets = response.get("Buckets", [])
                 for bucket in buckets:

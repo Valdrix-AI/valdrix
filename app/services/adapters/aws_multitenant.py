@@ -17,13 +17,16 @@ import aioboto3
 from botocore.config import Config as BotoConfig
 
 from app.schemas.costs import CloudUsageSummary, CostRecord
-from botocore.exceptions import ClientError
 import structlog
 from app.models.aws_connection import AWSConnection
 from app.services.adapters.base import BaseAdapter
+from app.core.config import get_settings
+import tenacity
+from botocore.exceptions import ClientError, ConnectTimeoutError, ReadTimeoutError, EndpointConnectionError
+from app.core.exceptions import AdapterError
 
 if TYPE_CHECKING:
-    from app.schemas.costs import CloudUsageSummary
+    pass
 
 logger = structlog.get_logger()
 
@@ -38,6 +41,45 @@ BOTO_CONFIG = BotoConfig(
 # Safety limit to prevent infinite loops, set to a very high value (300 pages = ~10 years of daily data)
 MAX_COST_EXPLORER_PAGES = 300
 
+# BE-ADAPT-2: Global retry decorator for transient AWS connection issues
+def with_aws_retry(func):
+    """
+    Exponential backoff retry decorator for AWS API calls.
+    Targets transient network failures (ConnectTimeout, EndpointConnectionError).
+    Supports both standard coroutines and async generators.
+    """
+    import inspect
+    from functools import wraps
+
+    retry_config = {
+        "retry": tenacity.retry_if_exception_type((ConnectTimeoutError, ReadTimeoutError, EndpointConnectionError)),
+        "wait": tenacity.wait_exponential(multiplier=1, min=2, max=10),
+        "stop": tenacity.stop_after_attempt(4),
+        "before_sleep": tenacity.before_sleep_log(logger, "debug")
+    }
+
+    if inspect.isasyncgenfunction(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # For async generators, we can't easily use the decorator pattern 
+            # with tenacity directly because it expects a single awaitable.
+            # Instead, we'll wrap the inner loop if needed, but for now 
+            # we'll just allow it to be retried via the standard mechanism 
+            # if the initial call fails.
+            # Better approach: tenacity.AsyncRetrying
+            retrying = tenacity.AsyncRetrying(**retry_config)
+            async for attempt in retrying:
+                with attempt:
+                    async for item in func(*args, **kwargs):
+                        yield item
+        return wrapper
+    else:
+        @tenacity.retry(**retry_config)
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            return await func(*args, **kwargs)
+        return wrapper
+
 class MultiTenantAWSAdapter(BaseAdapter):
     """
     AWS adapter that assumes an IAM role in the customer's account using aioboto3.
@@ -49,22 +91,37 @@ class MultiTenantAWSAdapter(BaseAdapter):
         self._credentials_expire_at: Optional[datetime] = None
         self.session = aioboto3.Session()
 
+    @with_aws_retry
     async def verify_connection(self) -> bool:
         """Verify that the stored credentials are valid by assuming the role."""
         try:
+            # BE-ADAPT-1: Regional white-listing
+            settings = get_settings()
+            if self.connection.region not in settings.AWS_SUPPORTED_REGIONS:
+                logger.error("invalid_aws_region_rejected", 
+                             region=self.connection.region,
+                             tenant_id=str(self.connection.tenant_id))
+                return False
+
             await self.get_credentials()
             return True
         except Exception as e:
             logger.error("verify_connection_failed", provider="aws", error=str(e))
             return False
 
+    @with_aws_retry
     async def get_credentials(self) -> Dict:
         """Get temporary credentials via STS AssumeRole (Native Async)."""
         if self._credentials and self._credentials_expire_at:
             if datetime.now(timezone.utc) < self._credentials_expire_at:
                 return self._credentials
 
-        async with self.session.client("sts") as sts_client:
+        STS_CONFIG = BotoConfig(
+            read_timeout=10,
+            connect_timeout=5,
+            retries={"max_attempts": 2}
+        )
+        async with self.session.client("sts", config=STS_CONFIG) as sts_client:
             try:
                 response = await sts_client.assume_role(
                     RoleArn=self.connection.role_arn,
@@ -139,39 +196,45 @@ class MultiTenantAWSAdapter(BaseAdapter):
         usage_only: bool = False,
         group_by_service: bool = True,
     ) -> CloudUsageSummary:
-        """
-        Legacy method to fetch costs and return a CloudUsageSummary object.
-        Now implemented by consuming the stream_cost_and_usage generator.
-        """
-        # Convert date to datetime for stream method
-        start_dt = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
-        end_dt = datetime.combine(end_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+        """Fetch multi-region costs with OTel tracing."""
+        from app.core.tracing import get_tracer
+        tracer = get_tracer(__name__)
+        
+        with tracer.start_as_current_span("aws_fetch_costs") as span:
+            span.set_attribute("tenant_id", str(self.connection.tenant_id))
+            span.set_attribute("aws_account", self.connection.aws_account_id)
+            
+            # ... existing implementation ...
+            # Convert date to datetime for stream method
+            start_dt = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+            end_dt = datetime.combine(end_date, datetime.min.time()).replace(tzinfo=timezone.utc)
 
-        records = []
-        total_cost = Decimal("0")
+            records = []
+            total_cost = Decimal("0")
 
-        async for record in self.stream_cost_and_usage(start_dt, end_dt, granularity):
-            records.append(CostRecord(
-                date=record["timestamp"],
-                service=record["service"],
-                region=record["region"],
-                amount=record["cost_usd"],
-                currency=record["currency"],
-                amount_raw=record["amount_raw"],
-                usage_type=record["usage_type"]
-            ))
-            total_cost += record["cost_usd"]
+            async for record in self.stream_cost_and_usage(start_dt, end_dt, granularity):
+                records.append(CostRecord(
+                    date=record["timestamp"],
+                    service=record["service"],
+                    region=record["region"],
+                    amount=record["cost_usd"],
+                    currency=record["currency"],
+                    amount_raw=record["amount_raw"],
+                    usage_type=record["usage_type"]
+                ))
+                total_cost += record["cost_usd"]
 
-        return CloudUsageSummary(
-            tenant_id=str(self.connection.tenant_id),
-            provider="aws",
-            records=records,
-            total_cost=total_cost,
-            currency="USD",
-            start_date=start_date,
-            end_date=end_date
-        )
+            return CloudUsageSummary(
+                tenant_id=str(self.connection.tenant_id),
+                provider="aws",
+                records=records,
+                total_cost=total_cost,
+                currency="USD",
+                start_date=start_date,
+                end_date=end_date
+            )
 
+    @with_aws_retry
     async def stream_cost_and_usage(
         self,
         start_date: datetime,
@@ -190,6 +253,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
             aws_access_key_id=creds["AccessKeyId"],
             aws_secret_access_key=creds["SecretAccessKey"],
             aws_session_token=creds["SessionToken"],
+            config=BOTO_CONFIG
         ) as client:
             try:
                 request_params = {
@@ -231,7 +295,6 @@ class MultiTenantAWSAdapter(BaseAdapter):
             except ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "Unknown")
                 logger.error("multitenant_cost_fetch_failed", error=str(e))
-                from app.core.exceptions import AdapterError
                 raise AdapterError(
                     message=f"AWS Cost Explorer failure: {str(e)}",
                     code=error_code,
@@ -246,66 +309,80 @@ class MultiTenantAWSAdapter(BaseAdapter):
         # We can keep it or deprecate it.
         return []
 
+    async def get_amortized_costs(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        granularity: str = "DAILY"
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch amortized costs (RI/Savings Plans spread across usage).
+        Phase 2.3: RI & Savings Plan Amortization - AWS already uses AmortizedCost metric.
+        This method provides API parity with Azure and GCP adapters.
+        """
+        return await self.get_cost_and_usage(start_date, end_date, granularity)
+
+    @with_aws_retry
     async def discover_resources(self, resource_type: str, region: str = None) -> List[Dict[str, Any]]:
-        from app.services.zombies.registry import registry
-        plugins = registry.get_plugins_for_provider("aws")
-        
-        # Simple heuristic to find the right plugin by resource_type
-        # e.g. "volume" -> UnattachedVolumesPlugin has reason like "unattached volume"
-        # Most plugins have a property we can match on, or we just map them.
-        mapping = {
-            "volume": "storage",
-            "snapshot": "storage",
-            "ip": "compute",
-            "instance": "compute",
-            "load_balancer": "network",
-            "nat_gateway": "network",
-            "rds": "database",
-            "redshift": "database",
-            "sagemaker": "analytics",
-            "s3": "storage",
-            "ecr": "containers",
-        }
-        
-        category = mapping.get(resource_type)
-        if not category:
-            logger.warning("unsupported_resource_type", resource_type=resource_type)
-            return []
-
-        # Find plugin that matches the resource_type in its reason or name
-        # For now, to be safe and match legacy behavior exactly without complex logic:
-        # We can just check the class name or a new property.
-        # But standard registry usage is better.
-        
-        # Let's filter plugins by category_key
-        category_plugins = [p for p in plugins if p.category_key == category]
-        
-        # Since one category has multiple plugins, we might need a more specific filter
-        # or just return all from that category if specifically requested.
-        # Legacy behavior was 1:1.
-        
-        # For now, let's keep it simple: find the first plugin whose class name contains the type
-        target_plugin = None
-        type_lower = resource_type.lower().replace("_", "")
-        for p in plugins:
-            if type_lower in p.__class__.__name__.lower():
-                target_plugin = p
-                break
-        
-        if not target_plugin:
-            logger.warning("plugin_not_found_for_resource", resource_type=resource_type)
-            return []
-
-        plugin = target_plugin
-
+        """
+        Discover zombie resources with OTel tracing.
+        """
+        # BE-ADAPT-1: Regional white-listing
+        settings = get_settings()
         target_region = region or self.connection.region
-        creds = await self.get_credentials()
-        
-        try:
-            return await plugin.scan(self.session, target_region, creds)
-        except Exception as e:
-            logger.error("resource_discovery_failed", 
-                         resource_type=resource_type, 
+        if target_region not in settings.AWS_SUPPORTED_REGIONS:
+            logger.error("unsupported_aws_region_skip_scan", 
                          region=target_region, 
-                         error=str(e))
+                         tenant_id=str(self.connection.tenant_id))
             return []
+
+        from app.core.tracing import get_tracer
+        tracer = get_tracer(__name__)
+        
+        with tracer.start_as_current_span("aws_discover_resources") as span:
+            span.set_attribute("tenant_id", str(self.connection.tenant_id))
+            span.set_attribute("resource_type", resource_type)
+            
+            from app.services.zombies.registry import registry
+            plugins = registry.get_plugins_for_provider("aws")
+            
+            # Simple heuristic to find the right plugin by resource_type
+            mapping = {
+                "volume": "storage",
+                "snapshot": "storage",
+                "ip": "compute",
+                "instance": "compute",
+                "nat_gateway": "network",
+                "eip": "network",
+                "load_balancer": "network",
+                "db": "database",
+                "rds": "database",
+                "redshift": "database",
+                "sagemaker": "analytics",
+                "s3": "storage",
+                "ecr": "containers",
+            }
+            
+            target_plugin = None
+            category = mapping.get(resource_type.lower())
+            if category:
+                for p in plugins:
+                    if hasattr(p, "category") and p.category == category:
+                        target_plugin = p
+                        break
+            
+            if not target_plugin:
+                logger.warning("plugin_not_found_for_resource", resource_type=resource_type)
+                return []
+
+            target_region = region or self.connection.region
+            creds = await self.get_credentials()
+            
+            try:
+                return await target_plugin.scan(self.session, target_region, creds, config=BOTO_CONFIG)
+            except Exception as e:
+                logger.error("resource_discovery_failed", 
+                             resource_type=resource_type, 
+                             region=target_region, 
+                             error=str(e))
+                return []

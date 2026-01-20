@@ -3,12 +3,13 @@ from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy import String, Boolean, ForeignKey, Numeric, Date, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from typing import TYPE_CHECKING
 from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
+    from app.models.attribution import AttributionRule
 
 class CloudAccount(Base):
     __tablename__ = "cloud_accounts"
@@ -48,10 +49,27 @@ class CostRecord(Base):
     # GreenOps
     carbon_kg: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
 
+    # SEC: Cost Reconciliation (BE-COST-1)
+    is_preliminary: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    cost_status: Mapped[str] = mapped_column(String, default="PRELIMINARY", index=True) # PRELIMINARY, FINAL
+    reconciliation_run_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True, nullable=True)
+    
+    # Forensic Lineage (FinOps Audit Phase 1)
+    ingestion_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # SEC: Attribution & Allocation (FinOps Audit Phase 2)
+    attribution_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("attribution_rules.id", name="fk_cost_records_attribution"),
+        nullable=True, 
+        index=True
+    )
+    allocated_to: Mapped[str | None] = mapped_column(String, nullable=True, index=True) # Bucket name (Team/Project)
+
     recorded_at: Mapped[date] = mapped_column(Date, primary_key=True, nullable=False, index=True)
     timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     account: Mapped["CloudAccount"] = relationship(back_populates="cost_records")
+    attribution_rule: Mapped["AttributionRule | None"] = relationship(back_populates="cost_records")
 
     __table_args__ = (
         UniqueConstraint('account_id', 'timestamp', 'service', 'region', 'usage_type', 'recorded_at', name='uix_account_cost_granularity'),

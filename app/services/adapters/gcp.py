@@ -1,15 +1,34 @@
 import json
+import re
 from datetime import datetime
 from typing import List, Dict, Any
 import structlog
 from google.cloud import bigquery
 from google.cloud import asset_v1
 from google.oauth2 import service_account
+from google.api_core.exceptions import ServiceUnavailable, DeadlineExceeded, Unauthenticated
+import tenacity
 
 from app.services.adapters.base import BaseAdapter
 from app.models.gcp_connection import GCPConnection
 
 logger = structlog.get_logger()
+
+# BE-ADAPT-6/7: Retry decorator for GCP transient failures and expired credentials
+gcp_retry = tenacity.retry(
+    retry=tenacity.retry_if_exception_type((ServiceUnavailable, DeadlineExceeded)),
+    wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
+    stop=tenacity.stop_after_attempt(3),
+    before_sleep=tenacity.before_sleep_log(logger, "warning")
+)
+
+# BE-ADAPT-8: Project ID format validation
+PROJECT_ID_PATTERN = re.compile(r"^[a-z][a-z0-9\-]{4,28}[a-z0-9]$")
+
+def validate_project_id(project_id: str) -> bool:
+    """Validate GCP project ID format."""
+    return bool(PROJECT_ID_PATTERN.match(project_id))
+
 
 class GCPAdapter(BaseAdapter):
     """
@@ -20,6 +39,13 @@ class GCPAdapter(BaseAdapter):
     
     def __init__(self, connection: GCPConnection):
         self.connection = connection
+        
+        # BE-ADAPT-8: Fail-fast validation of project ID format
+        if not validate_project_id(connection.project_id):
+            error_msg = f"Invalid GCP project ID format: '{connection.project_id}'. Must be 6-30 lowercase letters, digits, or hyphens."
+            logger.error("gcp_invalid_project_id", project_id=connection.project_id)
+            raise ValueError(error_msg)
+        
         self._credentials = self._get_credentials()
 
     def _get_credentials(self):
@@ -57,10 +83,12 @@ class GCPAdapter(BaseAdapter):
         self,
         start_date: datetime,
         end_date: datetime,
-        granularity: str = "DAILY"
+        granularity: str = "DAILY",
+        include_credits: bool = True  # Phase 5: CUD amortization
     ) -> List[Dict[str, Any]]:
         """
         Fetch GCP costs from BigQuery billing export.
+        Phase 5: Includes CUD credit extraction for amortized cost calculation.
         """
         if not self.connection.billing_dataset or not self.connection.billing_table:
             logger.warning("gcp_bq_export_not_configured", project_id=self.connection.project_id)
@@ -74,21 +102,24 @@ class GCPAdapter(BaseAdapter):
         billing_table = self.connection.billing_table
 
         # Strict validation: GCP resource IDs must be alphanumeric plus hyphens/underscores/dots
-        # This prevents injection into the f-string query below
-        import re
         safe_pattern = re.compile(r"^[a-zA-Z0-9.\-_]+$")
         if not all(safe_pattern.match(s) for s in [billing_project, billing_dataset, billing_table]):
-             logger.error("gcp_bq_invalid_table_path", 
-                          project=billing_project, dataset=billing_dataset, table=billing_table)
-             return []
+            error_msg = f"Invalid BigQuery table path: '{billing_project}.{billing_dataset}.{billing_table}'"
+            logger.error("gcp_bq_invalid_table_path", 
+                         project=billing_project, dataset=billing_dataset, table=billing_table)
+            raise ValueError(error_msg)
 
         table_path = f"{billing_project}.{billing_dataset}.{billing_table}"
 
-        # Standard GCP Billing Export Query
+        # Phase 5: Enhanced query to extract CUD credits for amortization
         query = f"""
             SELECT
                 service.description as service,
                 SUM(cost) as cost_usd,
+                SUM(
+                    (SELECT SUM(c.amount) FROM UNNEST(credits) AS c 
+                     WHERE c.name LIKE '%COMMITTED_USAGE_DISCOUNT%')
+                ) as cud_credit,
                 MAX(currency) as currency,
                 TIMESTAMP_TRUNC(usage_start_time, DAY) as timestamp
             FROM `{table_path}`
@@ -114,6 +145,8 @@ class GCPAdapter(BaseAdapter):
                     "timestamp": row.timestamp,
                     "service": row.service,
                     "cost_usd": float(row.cost_usd),
+                    "cud_credit": float(row.cud_credit) if row.cud_credit else 0.0,
+                    "amortized_cost": float(row.cost_usd) + float(row.cud_credit or 0),  # credits are negative
                     "currency": row.currency,
                     "region": "global" 
                 }
@@ -122,6 +155,23 @@ class GCPAdapter(BaseAdapter):
         except Exception as e:
             logger.error("gcp_bq_query_failed", table=table_path, error=str(e))
             return []
+
+    async def get_amortized_costs(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        granularity: str = "DAILY"
+    ) -> List[Dict[str, Any]]:
+        """
+        Get GCP costs with CUD amortization applied.
+        Phase 5: Cloud Parity - Returns amortized_cost which reflects CUD discounts.
+        """
+        records = await self.get_cost_and_usage(start_date, end_date, granularity, include_credits=True)
+        # Return records with amortized_cost as the primary cost field
+        return [
+            {**r, "cost_usd": r.get("amortized_cost", r["cost_usd"])}
+            for r in records
+        ]
 
     async def stream_cost_and_usage(
         self,
@@ -139,10 +189,17 @@ class GCPAdapter(BaseAdapter):
 
     async def discover_resources(self, resource_type: str, region: str = None) -> List[Dict[str, Any]]:
         """
-        Discover GCP resources using Cloud Asset API.
+        Discover GCP resources with OTel tracing.
         """
-        client = self._get_asset_client()
-        parent = f"projects/{self.connection.project_id}"
+        from app.core.tracing import get_tracer
+        tracer = get_tracer(__name__)
+        
+        with tracer.start_as_current_span("gcp_discover_resources") as span:
+            span.set_attribute("project_id", self.connection.project_id)
+            span.set_attribute("resource_type", resource_type)
+            
+            client = self._get_asset_client()
+            parent = f"projects/{self.connection.project_id}"
         
         # Map generic resource types to GCP content types
         asset_types = []

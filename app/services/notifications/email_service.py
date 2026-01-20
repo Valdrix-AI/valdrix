@@ -5,12 +5,20 @@ Sends carbon budget alerts via email using SMTP.
 """
 
 import smtplib
+import html
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import List, Dict, Any
 import structlog
 
 logger = structlog.get_logger()
+
+
+def escape_html(text: str) -> str:
+    """BE-NOTIF-1: Escape user-provided content to prevent HTML injection."""
+    if not text:
+        return ""
+    return html.escape(str(text))
 
 
 class EmailService:
@@ -90,7 +98,8 @@ class EmailService:
         status_text = "🚨 EXCEEDED" if status == "exceeded" else "⚠️ WARNING"
 
         recommendations = budget_status.get("recommendations", [])
-        recs_html = "".join(f"<li>{rec}</li>" for rec in recommendations[:3])
+        # BE-NOTIF-1: Escape user-provided content
+        recs_html = "".join(f"<li>{escape_html(rec)}</li>" for rec in recommendations[:3])
 
         return f"""
 <!DOCTYPE html>

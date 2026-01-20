@@ -39,10 +39,12 @@ finops_analysis:
         {{
           "action": "specific action to take",
           "resource": "affected resource(s)",
+          "type": "EC2|RDS|ELB|Other",
           "estimated_savings": "$XX/month",
           "priority": "high|medium|low",
           "effort": "low|medium|high",
-          "confidence": "high|medium|low"
+          "confidence": "high|medium|low",
+          "autonomous_ready": true|false
         }}
       ],
       "summary": {{

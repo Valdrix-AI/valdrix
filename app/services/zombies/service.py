@@ -107,14 +107,64 @@ class ZombieService:
             except Exception as e:
                 logger.error("scan_provider_failed", error=str(e), provider=type(conn).__name__)
 
-        # Execute all scans in parallel
-        await asyncio.gather(*(run_scan(c) for c in all_connections))
+        # Execute all scans in parallel with a hard 5-minute timeout for the entire operation
+        # BE-SCHED-3: Resilience - Prevent hanging API requests
+        from app.core.ops_metrics import SCAN_LATENCY, SCAN_TIMEOUTS
+        import time
+        
+        start_time = time.perf_counter()
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*(run_scan(c) for c in all_connections)),
+                timeout=300 # 5 minutes
+            )
+            # Record overall scan latency
+            latency = time.perf_counter() - start_time
+            SCAN_LATENCY.labels(provider="multi", region="aggregated").observe(latency)
+        except asyncio.TimeoutError:
+            logger.error("scan_overall_timeout", tenant_id=str(tenant_id))
+            all_zombies["scan_timeout"] = True
+            all_zombies["partial_results"] = True
+            SCAN_TIMEOUTS.labels(level="overall").inc()
 
         all_zombies["total_monthly_waste"] = round(total_waste, 2)
 
-        # 3. AI Analysis
-        if analyze:
-            await self._enrich_with_ai(all_zombies, user)
+        # 3. AI Analysis (BE-LLM-1: Decoupled Async Analysis)
+        if analyze and not all_zombies.get("scan_timeout"):
+            # Enqueue AI analysis as a background job instead of blocking the scan
+            from app.models.background_job import BackgroundJob, JobType, JobStatus
+            from sqlalchemy.dialects.postgresql import insert
+            from datetime import datetime, timezone
+            
+            now = datetime.now(timezone.utc)
+            job_id = None
+            try:
+                # Deduplicate by tenant_id + scan_time_bucket
+                bucket_str = now.strftime("%Y-%m-%d-%H")
+                dedup_key = f"{tenant_id}:zombie_analysis:{bucket_str}"
+                
+                stmt = insert(BackgroundJob).values(
+                    job_type=JobType.ZOMBIE_ANALYSIS.value,
+                    tenant_id=tenant_id,
+                    status=JobStatus.PENDING,
+                    scheduled_for=now,
+                    created_at=now,
+                    deduplication_key=dedup_key,
+                    payload={"zombies": all_zombies} # Pass the results to analyze
+                ).on_conflict_do_nothing(index_elements=["deduplication_key"]).returning(BackgroundJob.id)
+                
+                result = await self.db.execute(stmt)
+                job_id = result.scalar_one_or_none()
+                await self.db.commit()
+                
+                all_zombies["ai_analysis"] = {
+                    "status": "pending",
+                    "job_id": str(job_id) if job_id else "already_queued",
+                    "summary": "AI Analysis has been queued and will be available shortly."
+                }
+            except Exception as e:
+                logger.error("failed_to_enqueue_ai_analysis", error=str(e))
+                all_zombies["ai_analysis"] = {"status": "error", "error": "Failed to queue analysis"}
 
         # 4. Notifications
         await self._send_notifications(all_zombies)

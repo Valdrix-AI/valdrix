@@ -50,7 +50,7 @@
     
     <select 
       bind:value={selectedRegion}
-      onchange={() => loadAllData()}
+      onchange={handleRegionChange}
       class="bg-ink-800 border border-ink-700 rounded-lg px-3 py-2 text-sm"
       aria-label="Select AWS region for carbon analysis"
     >

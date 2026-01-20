@@ -16,9 +16,27 @@ class ValdrixException(Exception):
         self.details = details or {}
 
 class AdapterError(ValdrixException):
-    """Raised when an external cloud adapter fails."""
+    """
+    Raised when an external cloud adapter fails.
+    BE-ADAPT-3: Automatically sanitizes error messages to avoid leaking internal cloud details.
+    """
     def __init__(self, message: str, code: str = "adapter_error", details: Optional[Dict[str, Any]] = None):
-        super().__init__(message, code=code, status_code=502, details=details)
+        sanitized_message = self._sanitize(message)
+        super().__init__(sanitized_message, code=code, status_code=502, details=details)
+
+    def _sanitize(self, msg: str) -> str:
+        """Remove sensitive tokens, request IDs, and internal paths from error messages."""
+        import re
+        # Remove UUIDs (likely Request IDs)
+        msg = re.sub(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '[REDACTED_ID]', msg, flags=re.IGNORECASE)
+        # Remove common sensitive AWS/Azure/GCP keywords if they appear in raw error strings
+        msg = re.sub(r'(?i)(access_key|secret_key|token|password|signature)=[^&\s]+', r'\1=[REDACTED]', msg)
+        # Simplify common cloud errors to user-friendly versions
+        if "AccessDenied" in msg or "Unauthorized" in msg:
+            return "Permission denied: Ensure the Valdrix IAM role has the required read permissions."
+        if "Throttling" in msg or "RequestLimitExceeded" in msg:
+            return "Cloud provider rate limit exceeded. Valdrix is retrying with backoff."
+        return msg
 
 class AuthError(ValdrixException):
     """Raised when authentication or authorization fails."""

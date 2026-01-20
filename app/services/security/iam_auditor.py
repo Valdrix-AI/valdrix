@@ -119,10 +119,21 @@ class IAMAuditor:
             # In 2026, scoping strictly to resources is mandatory.
             if "*" in resources:
                 # Check if actions are sensitive
-                sensitive_prefixes = ["ec2:*", "s3:*", "iam:*", "rds:*"]
+                # Item 18: Enhanced detection for service-specific wildcards e.g. "s3:*" or "ec2:*"
+                sensitive_prefixes = [
+                    "ec2:*", "s3:*", "iam:*", "rds:*", "dynamodb:*", "lambda:*", 
+                    "kms:*", "secretsmanager:*", "sqs:*", "sns:*", "logs:*"
+                ]
                 for action in actions:
-                    if action == "*" or any(action.startswith(p) for p in sensitive_prefixes):
-                        risks.append(f"High: Unscoped allow on sensitive action '{action}'. Should rely on Resource ARNs.")
+                    action_lower = str(action).lower()
+                    # Detect full wildcard "*" or service-level wildcard "s3:*" or prefix-level "s3:Get*"
+                    if action == "*" or any(action_lower.startswith(p.replace("*", "").lower()) and "*" in action_lower for p in sensitive_prefixes):
+                        risks.append(f"High: Unscoped allow on sensitive action '{action}'. Should rely on Resource ARNs for Zero Trust.")
+                        break
+                    
+                    # Additional check for data-exfiltration or modification wildcards
+                    if any(x in action_lower for x in ["delete", "put", "update", "create"]) and "*" in action_lower:
+                        risks.append(f"Medium: Broad wildcard detected in write action '{action}'. Recommended to scope to ARNs.")
                         break
 
         return {"risks": risks}

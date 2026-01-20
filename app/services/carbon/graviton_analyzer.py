@@ -55,22 +55,28 @@ GRAVITON_EQUIVALENTS = {
 
 # Workloads that are typically compatible with Graviton
 COMPATIBLE_WORKLOADS = [
-    "web servers",
-    "containerized microservices",
-    "caching (Redis, Memcached)",
-    "databases (MySQL, PostgreSQL, MariaDB)",
-    "big data analytics",
-    "media encoding",
-    "machine learning inference",
-    "gaming servers",
+    "web servers (nginx, apache)",
+    "containerized microservices (docker, k8s)",
+    "caching layers (redis, memcached)",
+    "open-source databases (mysql, postgres, mariadb)",
+    "big data processing (hadoop, spark)",
+    "media encoding (ffmpeg)",
+    "eda/hpc workloads",
+    "JVM-based apps (Java, Kotlin, Scala)",
+    "interpreted languages (Python, Node.js, Ruby, PHP)",
+    ".NET 5+ or .NET Core apps",
 ]
 
 # Workloads that may require validation
 REQUIRES_VALIDATION = [
-    "Windows workloads (not supported)",
-    "x86-specific compiled binaries",
-    "legacy applications with x86 dependencies",
-    "applications using x86-specific SIMD instructions",
+    "Windows workloads (not supported by Graviton)",
+    "x86-specific compiled binaries (requires re-compilation)",
+    "legacy dotNET framework (requires .NET Core/5+)",
+    "kernel-level drivers/software (requires ARM port)",
+    "proprietary third-party agents without ARM support",
+    "SIMD-accelerated code (AVX/AVX2 - requires Neon port)",
+    "software with hard-coded x86 assembly",
+    "older .NET Framework (< 5) apps",
 ]
 
 

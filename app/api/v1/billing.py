@@ -16,6 +16,7 @@ import structlog
 from app.core.auth import CurrentUser, requires_role
 from app.db.session import get_db
 from app.core.config import get_settings
+from app.core.rate_limit import auth_limit
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Billing"])
@@ -77,10 +78,16 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)):
     for tier in [PricingTier.STARTER, PricingTier.GROWTH, PricingTier.PRO]:
         config = TIER_CONFIG.get(tier)
         if config:
+            price_cfg = config["price_usd"]
+            # Handle both legacy int and new dict formats
+            monthly = price_cfg["monthly"] if isinstance(price_cfg, dict) else price_cfg
+            annual = price_cfg["annual"] if isinstance(price_cfg, dict) else (price_cfg * 10) # Fallback 2 months free
+            
             public_plans.append({
                 "id": tier.value,
                 "name": config["name"],
-                "price": config["price_usd"]["monthly"],
+                "price_monthly": monthly,
+                "price_annual": annual,
                 "period": "/mo",
                 "description": config["description"],
                 "features": config["display_features"],
@@ -92,7 +99,9 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/subscription", response_model=SubscriptionResponse)
+@auth_limit
 async def get_subscription(
+    request: Request,
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db),
 ):
@@ -118,11 +127,13 @@ async def get_subscription(
         )
     except Exception as e:
         logger.error("get_subscription_failed", error=str(e))
-        raise HTTPException(500, "Failed to fetch subscription")
+        raise HTTPException(500, "Failed to fetch subscription") from e
 
 
 @router.get("/features")
+@auth_limit
 async def get_features(
+    request: Request,
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
 ):
     """
@@ -143,8 +154,10 @@ async def get_features(
 
 
 @router.post("/checkout")
+@auth_limit
 async def create_checkout(
-    request: CheckoutRequest,
+    request: Request,
+    checkout_req: CheckoutRequest,
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db),
 ):
@@ -181,7 +194,7 @@ async def create_checkout(
         raise HTTPException(400, str(e))
     except Exception as e:
         logger.error("checkout_failed", error=str(e))
-        raise HTTPException(500, "Failed to create checkout session")
+        raise HTTPException(500, "Failed to create checkout session") from e
 
 
 @router.post("/cancel")
@@ -202,7 +215,7 @@ async def cancel_subscription(
         raise HTTPException(400, str(e))
     except Exception as e:
         logger.error("cancel_failed", error=str(e))
-        raise HTTPException(500, "Failed to cancel subscription")
+        raise HTTPException(500, "Failed to cancel subscription") from e
 
 
 @router.post("/webhook")
@@ -217,6 +230,15 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         from app.services.billing.paystack_billing import WebhookHandler
         from app.services.billing.webhook_retry import WebhookRetryService
         import json
+
+        # BE-BILLING-1: Validate Paystack origin IP (Mandatory for SOC2/Security)
+        PAYSTACK_IPS = {"52.31.139.75", "52.49.173.169", "52.214.14.220"}
+        # Check X-Forwarded-For (if behind proxy) or client host
+        client_ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+        
+        if settings.ENVIRONMENT == "production" and client_ip not in PAYSTACK_IPS:
+            logger.warning("unauthorized_webhook_origin", ip=client_ip)
+            raise HTTPException(403, "Unauthorized origin IP")
 
         payload = await request.body()
         signature = request.headers.get("x-paystack-signature", "")
@@ -267,7 +289,7 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         raise
     except Exception as e:
         logger.error("webhook_failed", error=str(e))
-        raise HTTPException(500, "Webhook processing failed")
+        raise HTTPException(500, "Webhook processing failed") from e
 
 # ==================== Admin Endpoints ====================
 
@@ -332,9 +354,11 @@ async def get_exchange_rate(
     }
 
 @router.post("/admin/plans/{plan_id}")
+@auth_limit
 async def update_pricing_plan(
-    plan_id: str,
-    request: PricingPlanUpdate,
+    request: Request,
+    plan_id: str, # Note: plan_id is a slug (e.g., 'starter'), not a UUID
+    plan_req: PricingPlanUpdate,
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db)
 ):
@@ -348,11 +372,11 @@ async def update_pricing_plan(
     if not plan:
         raise HTTPException(404, "Plan not found")
 
-    plan.price_usd = request.price_usd
-    if request.features:
-        plan.features = request.features
-    if request.limits:
-        plan.limits = request.limits
+    plan.price_usd = plan_req.price_usd
+    if plan_req.features:
+        plan.features = plan_req.features
+    if plan_req.limits:
+        plan.limits = plan_req.limits
     
     await db.commit()
     return {"status": "success", "plan_id": plan_id}

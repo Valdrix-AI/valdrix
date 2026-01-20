@@ -12,21 +12,84 @@ class Settings(BaseSettings):
     APP_NAME: str = "Valdrix"
     VERSION: str = "0.1.0"
     DEBUG: bool = False
+    ENVIRONMENT: str = "development"  # local, development, staging, production
     API_URL: str = "http://localhost:8000"  # Base URL for OIDC and Magic Links
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None # Added for D5: Telemetry Sink
     OTEL_EXPORTER_OTLP_INSECURE: bool = False # SEC-07: Secure Tracing
     CSRF_SECRET_KEY: str = "change-me-in-production-csrf" # SEC-01: CSRF
     TESTING: bool = False
+    RATELIMIT_ENABLED: bool = True
 
     @model_validator(mode='after')
-    def validate_csrf_key_in_production(self) -> 'Settings':
-        """Fail-closed: Prevent startup with default CSRF key in production."""
-        if not self.TESTING and not self.DEBUG:
+    def validate_security_config(self) -> 'Settings':
+        """Ensure critical production keys are present and valid."""
+        if self.TESTING:
+            return self
+            
+        if self.is_production:
+            # SEC-01: CSRF key must be changed
             if self.CSRF_SECRET_KEY == "change-me-in-production-csrf":
                 raise ValueError(
                     "SECURITY ERROR: CSRF_SECRET_KEY must be changed from default in production! "
                     "Set CSRF_SECRET_KEY environment variable to a secure random value."
                 )
+            
+            # SEC-02: Encryption Key must be secure
+            if not self.ENCRYPTION_KEY or len(self.ENCRYPTION_KEY) < 32:
+                raise ValueError("ENCRYPTION_KEY must be at least 32 characters in production.")
+            
+            # SEC-03: DB and Auth
+            if not self.DATABASE_URL:
+                raise ValueError("DATABASE_URL is required in production.")
+            if not self.SUPABASE_JWT_SECRET or len(self.SUPABASE_JWT_SECRET) < 32:
+                raise ValueError("SUPABASE_JWT_SECRET must be at least 32 characters in production.")
+
+            # SEC-04: Database SSL Mode
+            if self.DB_SSL_MODE not in ["require", "verify-ca", "verify-full"]:
+                 raise ValueError(f"SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production. Current: {self.DB_SSL_MODE}")
+
+        # SEC-05: Admin API Key validation for staging/production
+        if self.ENVIRONMENT in ["production", "staging"]:
+            if not self.ADMIN_API_KEY:
+                raise ValueError(f"SECURITY ERROR: ADMIN_API_KEY must be configured in {self.ENVIRONMENT} environment.")
+            
+            if self.ENVIRONMENT == "production" and len(self.ADMIN_API_KEY) < 32:
+                raise ValueError("SECURITY ERROR: ADMIN_API_KEY must be at least 32 characters in production for security.")
+            
+            # SEC-A1: CORS origins should not include localhost in production
+            localhost_origins = [o for o in self.CORS_ORIGINS if 'localhost' in o or '127.0.0.1' in o]
+            if localhost_origins:
+                import structlog
+                structlog.get_logger().warning(
+                    "cors_localhost_in_production",
+                    origins=localhost_origins,
+                    msg="CORS_ORIGINS contains localhost URLs in production mode"
+                )
+            
+            # SEC-A2: API_URL/FRONTEND_URL should be HTTPS in production
+            for attr_name in ["API_URL", "FRONTEND_URL"]:
+                val = getattr(self, attr_name)
+                if val and val.startswith("http://"):
+                    import structlog
+                    structlog.get_logger().warning(
+                        f"{attr_name.lower()}_not_https",
+                        **{attr_name.lower(): val},
+                        msg=f"{attr_name} should use HTTPS in production"
+                    )
+        
+        # LLM Provider keys (validated in all modes if provider selected)
+        provider_keys = {
+            "openai": self.OPENAI_API_KEY,
+            "claude": self.CLAUDE_API_KEY,
+            "anthropic": self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY,
+            "google": self.GOOGLE_API_KEY,
+            "groq": self.GROQ_API_KEY
+        }
+        
+        if self.LLM_PROVIDER in provider_keys and not provider_keys[self.LLM_PROVIDER]:
+            if self.is_production:
+                raise ValueError(f"LLM_PROVIDER is set to '{self.LLM_PROVIDER}' but corresponding API key is missing.")
+                
         return self
 
 
@@ -34,6 +97,7 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_DEFAULT_REGION: str = "us-east-1"
+    AWS_ENDPOINT_URL: Optional[str] = None  # Added for local testing (MotoServer/LocalStack)
     
     # CloudFormation Template (Configurable for S3/GitHub)
     CLOUDFORMATION_TEMPLATE_URL: str = "https://raw.githubusercontent.com/Valdrix-AI/valdrix/main/cloudformation/valdrix-role.yaml"
@@ -132,6 +196,16 @@ class Settings(BaseSettings):
     CIRCUIT_BREAKER_RECOVERY_SECONDS: int = 300
     CIRCUIT_BREAKER_MAX_DAILY_SAVINGS: float = 1000.0
 
+    # AWS Regions (BE-ADAPT-1: Regional Whitelist)
+    AWS_SUPPORTED_REGIONS: list[str] = [
+        "us-east-1", "us-east-2", "us-west-1", "us-west-2",
+        "af-south-1", "ap-east-1", "ap-south-1", "ap-northeast-3",
+        "ap-northeast-2", "ap-southeast-1", "ap-southeast-2", "ap-northeast-1",
+        "ca-central-1", "eu-central-1", "eu-west-1", "eu-west-2", "eu-south-1",
+        "eu-west-3", "eu-north-1", "me-south-1", "sa-east-1", "us-gov-east-1",
+        "us-gov-west-1"
+    ]
+
     # Scanner Settings
     ZOMBIE_PLUGIN_TIMEOUT_SECONDS: int = 30
     ZOMBIE_REGION_TIMEOUT_SECONDS: int = 120
@@ -145,30 +219,6 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return not self.DEBUG
 
-    from pydantic import model_validator
-    @model_validator(mode='after')
-    def validate_secure_keys(self) -> 'Settings':
-        """Ensure critical production keys are present and valid."""
-        if not self.ENCRYPTION_KEY or len(self.ENCRYPTION_KEY) < 32:
-            # Only allow missing version in local dev if not explicitly required
-            if self.is_production:
-                raise ValueError("ENCRYPTION_KEY must be at least 32 characters in production.")
-        
-        # Validate LLM Provider keys
-        provider_keys = {
-            "openai": self.OPENAI_API_KEY,
-            "claude": self.CLAUDE_API_KEY,
-            "anthropic": self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY, # Graceful migration
-            "google": self.GOOGLE_API_KEY,
-            "groq": self.GROQ_API_KEY
-        }
-        
-        if self.LLM_PROVIDER in provider_keys and not provider_keys[self.LLM_PROVIDER]:
-            # In production, we MUST have a key for the primary provider
-            if self.is_production:
-                raise ValueError(f"LLM_PROVIDER is set to '{self.LLM_PROVIDER}' but corresponding API key is missing.")
-        
-        return self
 
 @lru_cache
 def get_settings():

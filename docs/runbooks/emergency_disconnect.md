@@ -1,0 +1,42 @@
+# Emergency Cloud Disconnect Runbook
+
+**Version:** 1.0  
+**Status:** Active  
+**Author:** Valdrix Platform Team
+
+## Overview
+This runbook provides instructions for immediate disconnection of a cloud provider account from Valdrix in case of a security incident or at the customer's request.
+
+## Target Audience
+- Valdrix Security Engineers
+- Customer Cloud Administrators
+
+## Procedure
+
+### 1. In-App Disconnect
+1. Login to Valdrix Admin/Dashboard.
+2. Navigate to **Connections**.
+3. Locate the connection to be removed.
+4. Click **Delete/Disconnect**.
+5. Confirm deletion. This will:
+   - Mark the connection as `deleted` in the Valdrix DB.
+   - Stop all ongoing scans and health checks.
+   - Revoke access to the connection in the application layer.
+
+### 2. AWS Side Revocation (Manual)
+If the Valdrix app is unavailable or the situation is urgent:
+1. Login to the **AWS Management Console** of the connected account.
+2. Navigate to **IAM > Roles**.
+3. Search for the role assumed by Valdrix (e.g., `CloudSentinel-AI-Role` or `Valdrix-Role`).
+4. **Delete the role** OR **Remove the Trust Relationship** of the role.
+   - Removing the trust relationship is less destructive and prevents Valdrix from assuming the role without deleting the role itself.
+5. Search for the **IAM Policy** associated with the role and delete it.
+
+### 3. Verification
+1. Attempt to run a scan in the Valdrix dashboard; it should fail with an `AccessDenied` or `ResourceNotFound` error.
+2. Check the Audit Log in AWS for `AssumeRole` failures from the Valdrix Principal ARN.
+
+---
+
+# Data Retention & Purge Policy
+

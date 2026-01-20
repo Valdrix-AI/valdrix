@@ -151,52 +151,64 @@ class LLMProviderSelector:
 
 class LLMFactory:
     """Factory for creating LLM clients with smart provider selection."""
-    
+
     @staticmethod
-    def create(provider: str = None, api_key: str = None) -> BaseChatModel:
-        """Create an LLM client for the specified provider."""
+    def validate_api_key(provider: str, api_key: Optional[str]) -> None:
+        """
+        Validates the format and presence of an LLM API key.
+        Checks for common placeholders and minimum length.
+        """
+        if not api_key:
+            raise ValueError(f"{provider.upper()}_API_KEY not configured")
+        
+        placeholders = ["sk-xxx", "change-me", "your-key-here", "default_key"]
+        if any(p in api_key.lower() for p in placeholders):
+            raise ValueError(f"Invalid API key for {provider}: Key contains a placeholder value.")
+        
+        if len(api_key) < 20:
+            raise ValueError(f"Invalid API key for {provider}: Key is too short.")
+
+    @staticmethod
+    def create(provider: str = None, model: str = None, api_key: str = None) -> BaseChatModel:
+        """Create an LLM client for the specified provider and model."""
         settings = get_settings()
         # Use configured provider if none specified
         effective_provider = provider or settings.LLM_PROVIDER or "groq"
-        logger.info("Initializing LLM", provider=effective_provider, byok=api_key is not None)
+        logger.info("Initializing LLM", provider=effective_provider, model=model, byok=api_key is not None)
 
         if effective_provider == "openai":
             key = api_key or settings.OPENAI_API_KEY
-            if not key:
-                raise ValueError("OPENAI_API_KEY not configured - set it in environment variables")
+            LLMFactory.validate_api_key("openai", key)
             return ChatOpenAI(
                 api_key=key,
-                model=settings.OPENAI_MODEL,
+                model=model or settings.OPENAI_MODEL,
                 temperature=0
             )
 
         elif effective_provider == "claude" or effective_provider == "anthropic":
             key = api_key or settings.ANTHROPIC_API_KEY or settings.CLAUDE_API_KEY
-            if not key:
-                raise ValueError("ANTHROPIC_API_KEY or CLAUDE_API_KEY not configured")
+            LLMFactory.validate_api_key("anthropic", key)
             return ChatAnthropic(
                 api_key=key,
-                model=settings.CLAUDE_MODEL,
+                model=model or settings.CLAUDE_MODEL,
                 temperature=0
             )
 
         elif effective_provider == "google":
             key = api_key or settings.GOOGLE_API_KEY
-            if not key:
-                raise ValueError("GOOGLE_API_KEY not configured - set it in environment variables")
+            LLMFactory.validate_api_key("google", key)
             return ChatGoogleGenerativeAI(
                 google_api_key=key,
-                model=settings.GOOGLE_MODEL,
+                model=model or settings.GOOGLE_MODEL,
                 temperature=0
             )
 
         elif effective_provider == "groq":
             key = api_key or settings.GROQ_API_KEY
-            if not key:
-                raise ValueError("GROQ_API_KEY not configured - set it in environment variables")
+            LLMFactory.validate_api_key("groq", key)
             return ChatGroq(
                 api_key=key,
-                model=settings.GROQ_MODEL,
+                model=model or settings.GROQ_MODEL,
                 temperature=0
             )
         raise ValueError(f"Unsupported provider: {effective_provider}")

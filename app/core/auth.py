@@ -21,16 +21,12 @@ security = HTTPBearer(auto_error=False)
 class CurrentUser(BaseModel):
     """
     Represents the authenticated user from the JWT.
-
-    Fields:
-    - id: Supabase user UUID (used as PK in our users table)
-    - email: User's email from Supabase
-    - tenant_id: Will be populated from our database (not in JWT)
     """
     id: UUID
     email: str
     tenant_id: Optional[UUID] = None
     role: str = "member"  # owner, admin, member
+    tier: str = "starter" # trial, starter, growth, pro, enterprise
 
 
 def decode_jwt(token: str) -> dict:
@@ -124,26 +120,34 @@ async def get_current_user(
         )
 
     try:
-        # Fetch user from DB
-        result = await db.execute(select(User).where(User.id == UUID(user_id)))
-        user = result.scalar_one_or_none()
+        # Fetch user and tenant from DB
+        from app.models.tenant import Tenant
+        result = await db.execute(
+            select(User, Tenant.plan)
+            .join(Tenant, User.tenant_id == Tenant.id)
+            .where(User.id == UUID(user_id))
+        )
+        row = result.one_or_none()
 
         # Handle not found
-        # Handle not found
-        if user is None:
+        if row is None:
             raise HTTPException(403, "User not found. Complete Onboarding first.")
+
+        user, plan = row
 
         # Store in request state for downstream rate limiting and RLS
         request.state.tenant_id = user.tenant_id
         request.state.user_id = user.id
+        request.state.tier = plan # BE-LLM-4: Enable tier-aware rate limiting
 
-        logger.info("user_authenticated", user_id=str(user.id), email=user.email, role=user.role)
+        logger.info("user_authenticated", user_id=str(user.id), email=user.email, role=user.role, tier=plan)
 
         return CurrentUser(
             id=user.id,
             email=user.email,
             tenant_id=user.tenant_id,
-            role=user.role
+            role=user.role,
+            tier=plan
         )
     except HTTPException:
         # Re-raise known HTTP exceptions (like 403 User not found)
@@ -200,6 +204,19 @@ def requires_role(required_role: str):
         return user
 
     return role_checker
+
+def require_tenant_access(user: CurrentUser = Depends(get_current_user)):
+    """
+    Ensures that the current user has access to the tenant context.
+    Standardizes BE-SEC-02: Strict Tenant Isolation.
+    """
+    if not user.tenant_id:
+        logger.error("tenant_id_missing_in_user_context", user_id=str(user.id))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant context required"
+        )
+    return user.tenant_id
 
 
 

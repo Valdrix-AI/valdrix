@@ -1,6 +1,6 @@
 from datetime import datetime
 import uuid
-from sqlalchemy import String, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy import String, Boolean, ForeignKey, DateTime, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy_utils import StringEncryptedType
@@ -22,6 +22,9 @@ class GCPConnection(Base):
       (Contains private_key, client_email, etc.)
     """
     __tablename__ = "gcp_connections"
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'project_id', name='uq_tenant_gcp_project'),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)

@@ -5,7 +5,7 @@ Sends alerts and daily digests to configured Slack channel.
 import logging
 from typing import Any
 
-from slack_sdk import WebClient
+from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.errors import SlackApiError
 
 logger = logging.getLogger(__name__)
@@ -20,11 +20,54 @@ class SlackService:
         "warning": "#f59e0b",   # Amber
         "critical": "#f43f5e",  # Red
     }
+    
+    @staticmethod
+    def escape_mrkdwn(text: str) -> str:
+        """
+        Escape Slack control characters to prevent mrkdwn injection.
+        References: https://api.slack.com/reference/surfaces/formatting#escaping
+        """
+        if not text:
+            return ""
+        return (
+            str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
 
     def __init__(self, bot_token: str, channel_id: str):
         """Initialize with bot token and target channel."""
-        self.client = WebClient(token=bot_token)
+        self.client = AsyncWebClient(token=bot_token)
         self.channel_id = channel_id
+        
+        # BE-NOTIF-4: Alert deduplication cache (stores alert hashes with timestamps)
+        self._sent_alerts: dict[str, float] = {}
+        self._dedup_window_seconds = 3600  # 1 hour deduplication window
+
+    async def _send_with_retry(self, method: str, **kwargs) -> bool:
+        """Generic Slack API call with exponential backoff for rate limiting."""
+        import asyncio
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            try:
+                # Use getattr to call the method (e.g., chat_postMessage)
+                func = getattr(self.client, method)
+                await func(**kwargs)
+                return True
+            except SlackApiError as e:
+                error_code = e.response.get('error', '')
+                if error_code == 'ratelimited' and attempt < max_retries:
+                    retry_after = int(e.response.headers.get('Retry-After', 2 ** attempt))
+                    logger.warning(f"Slack rate limited, retrying in {retry_after}s", attempt=attempt)
+                    await asyncio.sleep(retry_after)
+                    continue
+                logger.error(f"Slack API error in {method}: {error_code}")
+                return False
+            except Exception as e:
+                logger.error(f"Slack {method} fail: {e}")
+                return False
+        return False
 
     async def send_alert(
         self,
@@ -32,85 +75,77 @@ class SlackService:
         message: str,
         severity: str = "warning"
     ) -> bool:
-        """
-        Send an alert message to Slack.
-
-        Args:
-            title: Alert headline
-            message: Detailed message
-            severity: info | warning | critical
-
-        Returns:
-            True if sent successfully, False otherwise
-        """
+        """Send an alert message to Slack with retry logic and deduplication."""
+        import hashlib
+        import time
+        
+        # BE-NOTIF-4: Check for duplicate alerts within dedup window
+        alert_hash = hashlib.md5(f"{title}:{severity}".encode()).hexdigest()
+        current_time = time.time()
+        
+        if alert_hash in self._sent_alerts:
+            last_sent = self._sent_alerts[alert_hash]
+            if current_time - last_sent < self._dedup_window_seconds:
+                logger.info(f"Duplicate alert suppressed: {title}")
+                return True  # Suppress duplicate
+        
+        # Record this alert
+        self._sent_alerts[alert_hash] = current_time
+        
+        # Cleanup old entries (simple garbage collection)
+        self._sent_alerts = {
+            k: v for k, v in self._sent_alerts.items()
+            if current_time - v < self._dedup_window_seconds
+        }
+        
         color = self.SEVERITY_COLORS.get(severity, self.SEVERITY_COLORS["warning"])
-
-        try:
-            # WebClient is sync, so we use it directly (it's fast enough)
-            self.client.chat_postMessage(
-                channel=self.channel_id,
-                attachments=[
-                    {
-                        "color": color,
-                        "blocks": [
-                            {
-                                "type": "header",
-                                "text": {"type": "plain_text", "text": f"🚨 {title}"}
-                            },
-                            {
-                                "type": "section",
-                                "text": {"type": "mrkdwn", "text": message}
-                            },
-                        ]
-                    }
-                ]
-            )
-            logger.info(f"Slack alert sent: {title}")
-            return True
-        except SlackApiError as e:
-            logger.error(f"Slack API error: {e.response['error']}")
-            return False
-        except Exception as e:
-            logger.error(f"Slack send failed: {e}")
-            return False
+        return await self._send_with_retry(
+            "chat_postMessage",
+            channel=self.channel_id,
+            attachments=[
+                {
+                    "color": color,
+                    "blocks": [
+                        {
+                            "type": "header",
+                            "text": {"type": "plain_text", "text": f"🚨 {title}"}
+                        },
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": message}
+                        },
+                    ]
+                }
+            ]
+        )
 
     async def send_digest(self, stats: dict[str, Any]) -> bool:
-        """
-        Send daily cost digest to Slack.
-
-        Args:
-            stats: Dict with keys: total_cost, carbon_kg, zombie_count, period
-        """
-        try:
-            self.client.chat_postMessage(
-                channel=self.channel_id,
-                blocks=[
-                    {
-                        "type": "header",
-                        "text": {"type": "plain_text", "text": "📊 Daily Cloud Cost Digest"}
-                    },
-                    {
-                        "type": "section",
-                        "fields": [
-                            {"type": "mrkdwn", "text": f"*💰 Total Cost*\n${stats.get('total_cost', 0):.2f}"},
-                            {"type": "mrkdwn", "text": f"*🌱 Carbon*\n{stats.get('carbon_kg', 0):.2f} kg CO₂"},
-                            {"type": "mrkdwn", "text": f"*👻 Zombies*\n{stats.get('zombie_count', 0)} resources"},
-                            {"type": "mrkdwn", "text": f"*📅 Period*\n{stats.get('period', 'Last 24h')}"},
-                        ]
-                    },
-                    {
-                        "type": "context",
-                        "elements": [
-                            {"type": "mrkdwn", "text": "Powered by Valdrix"}
-                        ]
-                    }
-                ]
-            )
-            logger.info("Slack daily digest sent")
-            return True
-        except SlackApiError as e:
-            logger.error(f"Slack digest error: {e.response['error']}")
-            return False
+        """Send daily cost digest to Slack with retry logic."""
+        return await self._send_with_retry(
+            "chat_postMessage",
+            channel=self.channel_id,
+            blocks=[
+                {
+                    "type": "header",
+                    "text": {"type": "plain_text", "text": "📊 Daily Cloud Cost Digest"}
+                },
+                {
+                    "type": "section",
+                    "fields": [
+                        {"type": "mrkdwn", "text": f"*💰 Total Cost*\n${stats.get('total_cost', 0):.2f}"},
+                        {"type": "mrkdwn", "text": f"*🌱 Carbon*\n{stats.get('carbon_kg', 0):.2f} kg CO₂"},
+                        {"type": "mrkdwn", "text": f"*👻 Zombies*\n{stats.get('zombie_count', 0)} resources"},
+                        {"type": "mrkdwn", "text": f"*📅 Period*\n{stats.get('period', 'Last 24h')}"},
+                    ]
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {"type": "mrkdwn", "text": "Powered by Valdrix"}
+                    ]
+                }
+            ]
+        )
 
     async def notify_zombies(self, zombies: dict[str, Any], estimated_savings: float = 0.0) -> bool:
         """
@@ -127,8 +162,9 @@ class SlackService:
         summary_lines = []
         for cat, items in zombies.items():
             if isinstance(items, list) and len(items) > 0:
-                label = cat.replace("_", " ").title()
-                summary_lines.append(f"• {label}: {len(items)}")
+                # BE-SLACK-1: Escape category label
+                safe_label = self.escape_mrkdwn(cat.replace("_", " ").title())
+                summary_lines.append(f"• {safe_label}: {len(items)}")
 
         message = (
             f"Found *{zombie_count} zombie resources*.\n" +

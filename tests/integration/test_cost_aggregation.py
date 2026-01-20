@@ -8,6 +8,7 @@ from app.models.tenant import Tenant, User
 from app.models.aws_connection import AWSConnection
 from app.models.cloud import CloudAccount, CostRecord
 from app.core.auth import CurrentUser, get_current_user
+from app.db.session import get_db
 from app.main import app
 
 @pytest.fixture
@@ -25,34 +26,22 @@ def mock_auth_user():
 
 @pytest.mark.asyncio
 async def test_cost_aggregation_and_filtering(ac: AsyncClient, db, mock_auth_user):
-    # Setup: Override Auth Dependency
+    # Setup: Override Auth & DB Dependency
     app.dependency_overrides[get_current_user] = lambda: mock_auth_user
+    app.dependency_overrides[get_db] = lambda: db
     
     try:
         tenant_id = mock_auth_user.tenant_id
         
-        # 0. Create Tenant
-        new_tenant = Tenant(
-            id=tenant_id,
-            name="Test Tenant",
-            plan="enterprise"
-        )
-        db.add(new_tenant)
+        # 0. Create Tenant (REQUIRED for RLS/Foreign Keys)
+        from sqlalchemy import text
+        await db.execute(text(f"INSERT INTO tenants (id, name, plan) VALUES ('{tenant_id}', 'Test Tenant', 'enterprise') ON CONFLICT DO NOTHING"))
         await db.commit()
         
         # 1. AWS Connection & Account
-        aws_conn = AWSConnection(
-            id=uuid4(),
-            tenant_id=tenant_id,
-            aws_account_id="123456789012",
-            role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
-            external_id="ext-123",
-            region="us-east-1"
-        )
-        db.add(aws_conn)
-        
+        aws_id = uuid4()
         aws_cloud = CloudAccount(
-            id=aws_conn.id,
+            id=aws_id,
             tenant_id=tenant_id,
             provider="aws",
             name="AWS Prod",
@@ -79,14 +68,13 @@ async def test_cost_aggregation_and_filtering(ac: AsyncClient, db, mock_auth_use
         # AWS Cost: $100 EC2
         db.add(CostRecord(
             tenant_id=tenant_id,
-            account_id=aws_conn.id,
+            account_id=aws_id,
             service="AmazonEC2",
             region="us-east-1",
             usage_type="BoxUsage",
             cost_usd=Decimal("100.00"),
             currency="USD",
-            recorded_at=today,
-            timestamp=today
+            recorded_at=today
         ))
         
         # Azure Cost: $50 SQL
@@ -98,8 +86,7 @@ async def test_cost_aggregation_and_filtering(ac: AsyncClient, db, mock_auth_use
             usage_type="Database",
             cost_usd=Decimal("50.00"),
             currency="USD",
-            recorded_at=today,
-            timestamp=today
+            recorded_at=today
         ))
         
         await db.commit()

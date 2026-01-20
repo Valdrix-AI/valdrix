@@ -20,10 +20,22 @@ export const handle: Handle = async ({ event, resolve }) => {
       cookies: {
         get: (key) => event.cookies.get(key),
         set: (key, value, options) => {
-          event.cookies.set(key, value, { path: '/', ...options });
+          event.cookies.set(key, value, { 
+            path: '/', 
+            httpOnly: true, 
+            secure: true, 
+            sameSite: 'strict',
+            ...options 
+          });
         },
         remove: (key, options) => {
-          event.cookies.delete(key, { path: '/', ...options });
+          event.cookies.delete(key, { 
+            path: '/', 
+            httpOnly: true, 
+            secure: true, 
+            sameSite: 'strict',
+            ...options 
+          });
         },
       },
     }

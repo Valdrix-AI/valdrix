@@ -1,9 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, DateTime
+from sqlalchemy import String, ForeignKey, DateTime, UniqueConstraint, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy import Column, String, ForeignKey, DateTime, event
 from app.db.base import Base
 from app.core.security import generate_blind_index
 
@@ -47,13 +46,15 @@ class Tenant(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'email_bidx', name='uq_tenant_user_email'),
+    )
 
     # We use the Supabase User ID (which is a UUID) as our PK
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
     email = mapped_column(
         StringEncryptedType(String, _encryption_key, AesEngine, "pkcs5"),
-        unique=True,
         index=True
     )
     email_bidx: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
@@ -64,9 +65,9 @@ class User(Base):
 
 # SQLAlchemy Listeners to keep Blind Indexes in sync
 @event.listens_for(Tenant.name, "set")
-def on_tenant_name_set(target, value, oldvalue, initiator):
+def on_tenant_name_set(target, value, _old, _init):
     target.name_bidx = generate_blind_index(value)
 
 @event.listens_for(User.email, "set")
-def on_user_email_set(target, value, oldvalue, initiator):
+def on_user_email_set(target, value, _old, _init):
     target.email_bidx = generate_blind_index(value)

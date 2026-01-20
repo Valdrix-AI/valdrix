@@ -93,10 +93,38 @@ async def test_remediation_service_execute_delete_volume(mock_db):
     mock_ec2 = AsyncMock()
     with patch.object(service, "_get_client", return_value=MagicMock(__aenter__=AsyncMock(return_value=mock_ec2))):
         with patch("app.services.security.audit_log.AuditLogger.log", new_callable=AsyncMock):
-            executed_req = await service.execute(req_id, tenant_id)
+            # Use bypass_grace_period=True to test immediate execution
+            executed_req = await service.execute(req_id, tenant_id, bypass_grace_period=True)
             
             assert executed_req.status == RemediationStatus.COMPLETED
             mock_ec2.delete_volume.assert_called_with(VolumeId="vol-12345")
+
+@pytest.mark.asyncio
+async def test_remediation_service_schedules_grace_period(mock_db):
+    """Test that remediation schedules a 24h grace period by default."""
+    service = RemediationService(mock_db)
+    req_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    
+    mock_request = MagicMock(spec=RemediationRequest)
+    mock_request.id = req_id
+    mock_request.tenant_id = tenant_id
+    mock_request.status = RemediationStatus.APPROVED
+    mock_request.action = RemediationAction.DELETE_VOLUME
+    mock_request.resource_id = "vol-67890"
+    mock_request.reviewed_by_user_id = uuid.uuid4()
+    
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_request
+    mock_db.execute.return_value = mock_result
+    
+    with patch("app.services.security.audit_log.AuditLogger.log", new_callable=AsyncMock):
+        with patch("app.services.jobs.processor.enqueue_job", new_callable=AsyncMock):
+            # Execute without bypass - should schedule, not complete
+            scheduled_req = await service.execute(req_id, tenant_id)
+            
+            assert scheduled_req.status == RemediationStatus.SCHEDULED
+            assert scheduled_req.scheduled_execution_at is not None
 
 @pytest.mark.asyncio
 async def test_zombie_service_enrich_with_ai_tier_restriction(mock_db):

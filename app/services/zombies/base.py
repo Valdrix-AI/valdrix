@@ -23,7 +23,7 @@ class BaseZombieDetector(ABC):
     """
 
     from sqlalchemy.ext.asyncio import AsyncSession
-    def __init__(self, region: str = "global", credentials: Optional[Dict[str, str]] = None, db: Optional[AsyncSession] = None):
+    def __init__(self, region: str = "global", credentials: Optional[Dict[str, str]] = None, db: Optional[AsyncSession] = None, connection: Any = None):
         """
         Initializes the detector for a specific region.
         
@@ -31,10 +31,12 @@ class BaseZombieDetector(ABC):
             region: Cloud region (e.g., 'us-east-1').
             credentials: Optional provider-specific credentials override.
             db: Optional database session for persistence.
+            connection: Optional connection model instance (e.g. AWSConnection).
         """
         self.region = region
         self.credentials = credentials
         self.db = db
+        self.connection = connection
         self.plugins: List[ZombiePlugin] = [] 
 
     @abstractmethod
@@ -84,7 +86,24 @@ class BaseZombieDetector(ABC):
 
             # Aggregate individual plugin results
             for category_key, items in plugin_results:
-                results[category_key] = items
+                # BE-ZD-5: Robust Regional Validation
+                # Prevent cross-region data leakage by ensuring all items match detector region
+                validated_items = []
+                for item in items:
+                    item_region = item.get("region", self.region)
+                    if item_region != self.region:
+                        logger.warning("cross_region_resource_detected",
+                                       plugin=category_key,
+                                       resource=item.get("resource_id"),
+                                       item_region=item_region,
+                                       detector_region=self.region)
+                        continue
+                    
+                    # Ensure region is set consistently in output
+                    item["region"] = self.region
+                    validated_items.append(item)
+                
+                results[category_key] = validated_items
 
             # Calculate the total monthly waste across all items
             total = Decimal("0")
@@ -102,6 +121,10 @@ class BaseZombieDetector(ABC):
                 plugins_run=len(self.plugins)
             )
 
+        except asyncio.CancelledError:
+            # O4: Propagate cancellation for proper cleanup
+            logger.info("zombie_scan_cancelled", provider=self.provider_name)
+            raise
         except Exception as e:
             logger.error("zombie_scan_failed", provider=self.provider_name, error=str(e))
             results["error"] = str(e)
@@ -121,6 +144,9 @@ class BaseZombieDetector(ABC):
         except asyncio.TimeoutError:
             logger.error("plugin_timeout", plugin=plugin.category_key)
             return plugin.category_key, []
+        except asyncio.CancelledError:
+            # O4: Propagate cancellation
+            raise
         except Exception as e:
             logger.error("plugin_scan_failed", plugin=plugin.category_key, error=str(e))
             return plugin.category_key, []

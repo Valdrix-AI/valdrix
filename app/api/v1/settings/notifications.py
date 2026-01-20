@@ -39,7 +39,7 @@ class NotificationSettingsResponse(BaseModel):
 class NotificationSettingsUpdate(BaseModel):
     """Request to update notification settings."""
     slack_enabled: bool = Field(True, description="Enable/disable Slack notifications")
-    slack_channel_override: str | None = Field(None, max_length=64, description="Override Slack channel ID")
+    slack_channel_override: str | None = Field(None, max_length=64, pattern=r"^(#[\w-]+|[CU][A-Z0-9]+)?$", description="Override Slack channel ID (e.g., #general or C0123456789)")
     digest_schedule: str = Field("daily", pattern="^(daily|weekly|disabled)$", description="Digest frequency")
     digest_hour: int = Field(9, ge=0, le=23, description="Hour to send digest (UTC)")
     digest_minute: int = Field(0, ge=0, le=59, description="Minute to send digest")

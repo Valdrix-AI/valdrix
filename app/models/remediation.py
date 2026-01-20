@@ -14,7 +14,7 @@ Workflow:
 
 from uuid import uuid4
 from enum import Enum
-from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Enum as SQLEnum, Numeric, Index
+from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Enum as SQLEnum, Numeric, Index, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -26,6 +26,7 @@ class RemediationStatus(str, Enum):
     PENDING = "pending"           # Awaiting approval
     APPROVED = "approved"         # Approved, ready to execute
     EXECUTING = "executing"       # Currently being executed
+    SCHEDULED = "scheduled"       # Scheduled for future execution (grace period)
     COMPLETED = "completed"       # Successfully executed
     FAILED = "failed"             # Execution failed
     REJECTED = "rejected"         # Human rejected the request
@@ -47,6 +48,7 @@ class RemediationAction(str, Enum):
     STOP_RDS_INSTANCE = "stop_rds_instance"
     DELETE_RDS_INSTANCE = "delete_rds_instance"
     DELETE_NAT_GATEWAY = "delete_nat_gateway"
+    RESIZE_INSTANCE = "resize_instance"
     MANUAL_REVIEW = "manual_review"
 
 
@@ -106,7 +108,7 @@ class RemediationRequest(Base):
     requested_by_user_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id"),
-        nullable=True,
+        nullable=False,
     )
     # Inherited timestamps with manual index if needed
     # but Base class update is better if we could. 
@@ -122,8 +124,11 @@ class RemediationRequest(Base):
 
     # Execution details
     execution_error = Column(String(500), nullable=True)
+    scheduled_execution_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
-    # Timestamps inherited from Base: created_at, updated_at
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     tenant = relationship("Tenant")

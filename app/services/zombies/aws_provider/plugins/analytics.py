@@ -15,12 +15,12 @@ class IdleSageMakerPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_sagemaker_endpoints"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         try:
-            async with await self._get_client(session, "sagemaker", region, credentials) as sagemaker:
+            async with self._get_client(session, "sagemaker", region, credentials, config=config) as sagemaker:
                 paginator = sagemaker.get_paginator("list_endpoints")
-                async with await self._get_client(session, "cloudwatch", region, credentials) as cloudwatch:
+                async with self._get_client(session, "cloudwatch", region, credentials, config=config) as cloudwatch:
                     async for page in paginator.paginate(StatusEquals="InService"):
                         for ep in page.get("Endpoints", []):
                             name = ep["EndpointName"]

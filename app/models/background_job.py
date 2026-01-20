@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Text, Integer, DateTime, ForeignKey
+from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Boolean, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.db.base import Base
@@ -37,6 +37,10 @@ class JobType(str, Enum):
     NOTIFICATION = "notification"
     COST_INGESTION = "cost_ingestion"
     RECURRING_BILLING = "recurring_billing"
+    ZOMBIE_ANALYSIS = "zombie_analysis"
+    COST_FORECAST = "cost_forecast"
+    COST_EXPORT = "cost_export"  # Phase 4.2: Async export for >10M records
+
 
 
 class BackgroundJob(Base):
@@ -60,19 +64,47 @@ class BackgroundJob(Base):
         ForeignKey("tenants.id", ondelete="CASCADE"), 
         nullable=True
     )
+    # BE-SCHED-6: Deduplication key for idempotent enqueuing (tenant_id:job_type:bucket)
+    deduplication_key: Mapped[str | None] = mapped_column(
+        String(255), 
+        unique=True, 
+        index=True, 
+        nullable=True
+    )
     status: Mapped[str] = mapped_column(String(20), default=JobStatus.PENDING, index=True)
     payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    # BE-SCHED-5: Job priority (higher = more urgent, 0 = normal, negative = low priority)
+    priority: Mapped[int] = mapped_column(Integer, default=0, index=True)
     scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="background_jobs")
     
     def __repr__(self) -> str:
         return f"<BackgroundJob {self.id} type={self.job_type} status={self.status}>"
+
+
+# Item P3: Audit Trigger for deletions
+@event.listens_for(BackgroundJob, "before_delete")
+def audit_job_deletion(_mapper, _connection, target):
+    """
+    Log job deletion to audit trail before it's gone.
+    """
+    import structlog
+    audit_logger = structlog.get_logger("audit.deletion")
+    audit_logger.info(
+        "resource_permanently_deleted",
+        resource_type="background_job",
+        resource_id=str(target.id),
+        tenant_id=str(target.tenant_id),
+        job_type=str(target.job_type)
+    )
+

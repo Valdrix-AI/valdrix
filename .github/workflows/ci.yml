@@ -47,6 +47,8 @@ jobs:
           GROQ_API_KEY: "testing"
           DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
           SUPABASE_JWT_SECRET: "test-jwt-secret-for-ci"
+          # GreenOps 2.0: Enable CodeCarbon emission tracking
+          CODECARBON_LOG_LEVEL: "info"
         run: |
           uv run pytest -v --cov=app --cov-report=xml --cov-report=term-missing
           
@@ -57,7 +59,52 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
-  # JOB 2: SECURITY CHECKS
+  # JOB 2: CARBON EMISSIONS (GreenOps 2.0)
+  emissions:
+    name: Carbon Footprint Report
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Install Dependencies
+        run: uv sync --dev
+
+      - name: Run CodeCarbon Benchmark
+        env:
+          CODECARBON_LOG_LEVEL: "info"
+        run: |
+          python -c "
+          from codecarbon import EmissionsTracker
+          tracker = EmissionsTracker(project_name='Valdrix-CI', output_dir='.')
+          tracker.start()
+          import subprocess
+          subprocess.run(['uv', 'run', 'pytest', 'tests/', '-x', '--no-cov'], check=False)
+          emissions = tracker.stop()
+          print(f'🌍 Carbon Emissions: {emissions:.6f} kgCO2eq')
+          print(f'📊 Emissions saved to emissions.csv')
+          "
+
+      - name: Upload Emissions Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: carbon-emissions-report
+          path: emissions.csv
+          retention-days: 30
+
+  # JOB 3: SECURITY CHECKS
   security:
     name: Security Audits
     runs-on: ubuntu-latest

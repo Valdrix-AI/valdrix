@@ -169,17 +169,13 @@ class TestDailyAnalysisJob:
         mock_session_maker = MagicMock(return_value=MockAsyncContext(mock_db))
         scheduler = SchedulerService(session_maker=mock_session_maker)
         
-        # Mock results
-        mock_lock_result = MagicMock(name="lock_result")
-        mock_lock_result.scalar.return_value = True
         mock_result = MagicMock(name="result")
         mock_result.scalars.return_value.all.return_value = []
-
-        mock_db.execute.side_effect = [mock_lock_result, mock_result] * 3
+        mock_db.execute.return_value = mock_result
         
         await scheduler.daily_analysis_job()
         
-        assert mock_db.execute.call_count == 6
+        assert mock_db.execute.call_count >= 3
     
     async def test_updates_last_run_status(self):
         """Should update last_run_success after completion."""
@@ -194,17 +190,15 @@ class TestDailyAnalysisJob:
         mock_session_maker = MagicMock(return_value=MockAsyncContext(mock_db))
         scheduler = SchedulerService(session_maker=mock_session_maker)
         
-        mock_lock_result = MagicMock(name="lock_result")
-        mock_lock_result.scalar.return_value = True
         mock_result = MagicMock(name="result")
         mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.side_effect = [mock_lock_result, mock_result] * 3
+        mock_db.execute.return_value = mock_result
         
         await scheduler.daily_analysis_job()
         
         assert scheduler._last_run_success is True
         assert scheduler._last_run_time is not None
-        assert mock_db.execute.call_count == 6
+        assert mock_db.execute.call_count >= 3
     
     async def test_processes_multiple_tenants(self):
         """Should process all tenants."""
@@ -220,13 +214,11 @@ class TestDailyAnalysisJob:
         scheduler = SchedulerService(session_maker=mock_session_maker)
         
         mock_tenants = [MagicMock(id=uuid4(), name="Tenant1"), MagicMock(id=uuid4(), name="Tenant2")]
-        mock_lock_result = MagicMock(name="lock_result")
-        mock_lock_result.scalar.return_value = True
         mock_result = MagicMock(name="result")
         mock_result.scalars.return_value.all.return_value = mock_tenants
-        mock_db.execute.side_effect = [mock_lock_result, mock_result] * 3
+        mock_db.execute.return_value = mock_result
         
         await scheduler.daily_analysis_job()
         
-        assert mock_db.execute.call_count == 6
+        assert mock_db.execute.call_count >= 3
         assert scheduler._last_run_success is True

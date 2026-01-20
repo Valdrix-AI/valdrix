@@ -89,5 +89,5 @@ class TestRateLimitMiddleware:
     
     def test_rate_limit_importable(self):
         """Rate limit module should be importable."""
-        from app.core.rate_limit import limiter
-        assert limiter is not None
+        from app.core.rate_limit import get_limiter
+        assert get_limiter() is not None

@@ -61,6 +61,30 @@ REGION_CARBON_PROFILES = {
     "ap-southeast-1": RegionCarbonProfile("ap-southeast-1", 450, 20, [10, 11, 12]),  # Singapore
 }
 
+# BE-CARBON-1: Data freshness tracking
+_CARBON_DATA_LAST_UPDATED = datetime(2026, 1, 15, tzinfo=timezone.utc)
+_CARBON_DATA_MAX_AGE_DAYS = 30  # Data older than this should trigger a warning
+
+
+def validate_carbon_data_freshness() -> bool:
+    """
+    BE-CARBON-1: Validate that carbon intensity data is fresh.
+    Raises CarbonDataStaleError if data is outdated.
+    Returns True if data is current.
+    """
+    now = datetime.now(timezone.utc)
+    age = (now - _CARBON_DATA_LAST_UPDATED).days
+    
+    if age > _CARBON_DATA_MAX_AGE_DAYS:
+        error_msg = f"Carbon intensity data is {age} days old (max: {_CARBON_DATA_MAX_AGE_DAYS}). Update REGION_CARBON_PROFILES."
+        logger.error("carbon_data_stale", 
+                     last_updated=_CARBON_DATA_LAST_UPDATED.isoformat(),
+                     age_days=age,
+                     max_age_days=_CARBON_DATA_MAX_AGE_DAYS)
+        raise ValueError(error_msg)
+    
+    return True
+
 
 class CarbonAwareScheduler:
     """

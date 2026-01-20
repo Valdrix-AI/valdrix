@@ -34,7 +34,8 @@ def test_validate_output_valid():
     
     result = LLMGuardrails.validate_output(json.dumps(valid_json), FinOpsAnalysisResult)
     assert isinstance(result, FinOpsAnalysisResult)
-    assert result.anomalies[0].resource == "i-123"
+    # anomalies is List[Dict], so use dictionary access
+    assert result.anomalies[0]["resource"] == "i-123"
 
 def test_validate_output_malformed():
     """Verify that malformed JSON triggers an error."""

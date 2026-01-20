@@ -16,7 +16,7 @@ import structlog
 from app.db.session import get_db
 from app.core.auth import CurrentUser, requires_role
 from app.core.logging import audit_log
-from app.core.rate_limit import rate_limit, auth_limit
+from app.core.rate_limit import rate_limit, standard_limit
 from app.services.connections.aws import AWSConnectionService
 from app.services.connections.azure import AzureConnectionService
 from app.services.connections.gcp import GCPConnectionService
@@ -87,7 +87,7 @@ async def get_azure_setup(
     snippet = (
         f"# 1. Create App Registration in Azure AD\n"
         f"# 2. Create a Federated Credential with these details:\n"
-        f"Issuer: {issuer}\n"
+        f"Issuer: {issuer} (IMPORTANT: Must be publicly reachable by Azure)\n"
         f"Subject: tenant:{current_user.tenant_id}\n"
         f"Audience: api://AzureADTokenExchange\n"
         f"\n# Or run this via Azure CLI:\n"
@@ -114,6 +114,7 @@ async def get_gcp_setup(
     
     snippet = (
         f"# Run this to create an Identity Pool and Provider for Valdrix\n"
+        f"# IMPORTANT: Your Valdrix instance must be reachable at {issuer}\n"
         f"gcloud iam workload-identity-pools create \"valdrix-pool\" --location=\"global\" --display-name=\"Valdrix Pool\"\n"
         f"gcloud iam workload-identity-pools providers create-oidc \"valdrix-provider\" "
         f"--location=\"global\" --workload-identity-pool=\"valdrix-pool\" "
@@ -129,7 +130,7 @@ async def get_gcp_setup(
 
 
 @router.post("/aws", response_model=AWSConnectionResponse, status_code=status.HTTP_201_CREATED)
-@rate_limit("5/minute") # Strict limit for connection creation
+@standard_limit
 async def create_aws_connection(
     request: Request,
     data: AWSConnectionCreate,
@@ -178,7 +179,7 @@ async def list_aws_connections(
 
 
 @router.post("/aws/{connection_id}/verify")
-@rate_limit("10/minute") # Protect verification logic
+@standard_limit
 async def verify_aws_connection(
     request: Request,
     connection_id: UUID,
@@ -262,23 +263,21 @@ async def link_discovered_account(
     db: AsyncSession = Depends(get_db),
 ):
     """Link a discovered account by creating a standard connection."""
-    res = await db.execute(
-        select(DiscoveredAccount).where(DiscoveredAccount.id == discovered_id)
-    )
-    discovered = res.scalar_one_or_none()
-    if not discovered:
-        raise HTTPException(404, "Discovered account not found")
-
-    # Double check ownership via management connection
-    mgmt_res = await db.execute(
-        select(AWSConnection).where(
-            AWSConnection.id == discovered.management_connection_id,
+    # Double check ownership via management connection in the same query
+    stmt = (
+        select(DiscoveredAccount, AWSConnection)
+        .join(AWSConnection, DiscoveredAccount.management_connection_id == AWSConnection.id)
+        .where(
+            DiscoveredAccount.id == discovered_id,
             AWSConnection.tenant_id == current_user.tenant_id
         )
     )
-    mgmt = mgmt_res.scalar_one_or_none()
-    if not mgmt:
-        raise HTTPException(403, "Not authorized for this management account")
+    res = await db.execute(stmt)
+    row = res.one_or_none()
+    if not row:
+        raise HTTPException(404, "Discovered account not found or not authorized")
+    
+    discovered, mgmt = row
 
     # Create standard connection
     # We use the same External ID or a common role pattern
@@ -323,6 +322,9 @@ async def create_azure_connection(
     current_user: CurrentUser = Depends(requires_role("member")),
     db: AsyncSession = Depends(get_db),
 ):
+    # Item 7: Hard Tier Gating for Azure
+    await check_growth_tier(current_user, db)
+
     connection = await db.scalar(
         select(AzureConnection).where(
             AzureConnection.tenant_id == current_user.tenant_id,
@@ -359,6 +361,8 @@ async def verify_azure_connection(
     db: AsyncSession = Depends(get_db),
 ):
     """Verify Azure connection credentials."""
+    # Item 7: Ensure verification is also gated
+    await check_growth_tier(current_user, db)
     return await AzureConnectionService(db).verify_connection(connection_id, current_user.tenant_id)
 
 
@@ -403,6 +407,9 @@ async def create_gcp_connection(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(requires_role("member")),
 ):
+    # Item 7: Hard Tier Gating for GCP
+    await check_growth_tier(current_user, db)
+
     connection = await db.scalar(
         select(GCPConnection).where(
             GCPConnection.tenant_id == current_user.tenant_id,
@@ -441,6 +448,8 @@ async def verify_gcp_connection(
     db: AsyncSession = Depends(get_db),
 ):
     """Verify GCP connection credentials."""
+    # Item 7: Guard verification logic
+    await check_growth_tier(current_user, db)
     return await GCPConnectionService(db).verify_connection(connection_id, current_user.tenant_id)
 
 

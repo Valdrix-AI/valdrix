@@ -28,6 +28,10 @@ async def get_carbon_footprint(
     region: str = Query(default="us-east-1")
 ):
     """Calculates the estimated CO2 emissions. Requires Growth tier or higher."""
+    # Bound date range to max 366 days (Issue #44)
+    if (end_date - start_date).days > 366:
+        raise HTTPException(status_code=400, detail="Date range cannot exceed 1 year")
+    
     result = await db.execute(
         select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
     )

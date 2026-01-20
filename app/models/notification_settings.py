@@ -46,6 +46,8 @@ class NotificationSettings(Base):
     # Alert preferences
     alert_on_budget_warning: Mapped[bool] = mapped_column(Boolean, default=True)
     alert_on_budget_exceeded: Mapped[bool] = mapped_column(Boolean, default=True)
+    alert_on_carbon_budget_warning: Mapped[bool] = mapped_column(Boolean, default=True)
+    alert_on_carbon_budget_exceeded: Mapped[bool] = mapped_column(Boolean, default=True)
     alert_on_zombie_detected: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Timestamps are inherited from Base

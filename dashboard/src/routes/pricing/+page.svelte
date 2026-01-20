@@ -19,15 +19,17 @@
   
   const supabase = createSupabaseBrowserClient();
   
-  let upgrading = $state('');
-  let error = $state('');
+  let billingCycle = $state('monthly'); // 'monthly' or 'annual'
+  let upgrading = $state(''); // plan ID being upgraded to
+  let error = $state(''); // error message for display
   
   // Dynamic plans from API, with defaults for SSR/Fallback
   let plans = $state([
     {
       id: 'starter',
       name: 'Starter',
-      price: 29,
+      price_monthly: 29,
+      price_annual: 290,
       period: '/mo',
       description: 'For small teams getting started with cloud cost visibility.',
       features: ['Single cloud provider (AWS)', 'Cost dashboards', 'Budget alerts'],
@@ -37,7 +39,8 @@
     {
       id: 'growth',
       name: 'Growth',
-      price: 79,
+      price_monthly: 79,
+      price_annual: 790,
       period: '/mo',
       description: 'For growing teams who need AI-powered cost intelligence.',
       features: ['Multi-cloud support', 'AI insights', 'GreenOps'],
@@ -47,7 +50,8 @@
     {
       id: 'pro',
       name: 'Pro',
-      price: 199,
+      price_monthly: 199,
+      price_annual: 1990,
       period: '/mo',
       description: 'For teams who want automated optimization and full API access.',
       features: ['Automated remediation', 'Priority support', 'Full API access'],
@@ -75,7 +79,7 @@
     
     // If not logged in, redirect to signup
     if (!data.user) {
-      goto(`/auth/signup?plan=${planId}`);
+      goto(`/auth/signup?plan=${planId}&cycle=${billingCycle}`);
       return;
     }
     
@@ -91,7 +95,10 @@
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ tier: planId })
+        body: JSON.stringify({ 
+          tier: planId,
+          billing_cycle: billingCycle
+        })
       });
       
       if (!res.ok) {
@@ -129,6 +136,22 @@
     <p class="hero-subtitle">
       Start with a <strong>14-day free trial</strong>. No credit card required.
     </p>
+
+    <!-- Cycle Toggle -->
+    <div class="cycle-toggle-container">
+      <span class={billingCycle === 'monthly' ? 'active' : ''}>Monthly</span>
+      <button 
+        class="cycle-toggle-switch {billingCycle === 'annual' ? 'annual' : ''}"
+        onclick={() => billingCycle = billingCycle === 'monthly' ? 'annual' : 'monthly'}
+        aria-label="Toggle billing cycle"
+      >
+        <span class="toggle-knob"></span>
+      </button>
+      <span class={billingCycle === 'annual' ? 'active' : ''}>
+        Yearly
+        <span class="savings-badge">Save 17%</span>
+      </span>
+    </div>
   </div>
   
   {#if error}
@@ -138,7 +161,7 @@
     </div>
   {/if}
   
-  <!-- Pricing Cards -->
+  <!-- Pricing Grid -->
   <div class="pricing-grid">
     {#each plans as plan, i}
       <div class="pricing-card {plan.popular ? 'popular' : ''}" style="animation-delay: {i * 100}ms;">
@@ -153,8 +176,12 @@
         
         <div class="plan-price">
           <span class="currency">$</span>
-          <span class="amount">{plan.price}</span>
-          <span class="period">{plan.period}</span>
+          <span class="amount">
+            {billingCycle === 'monthly' ? plan.price_monthly : Math.round(plan.price_annual / 12)}
+          </span>
+          <span class="period">
+            {billingCycle === 'monthly' ? '/mo' : '/mo, billed yearly'}
+          </span>
         </div>
         
         <ul class="feature-list">
@@ -242,28 +269,78 @@
   }
   
   /* Hero */
-  .hero-section {
-    text-align: center;
-    margin-bottom: 3rem;
-  }
-  
-  .hero-title {
-    font-size: 2.5rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--color-accent-400), var(--color-primary-400));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 0.75rem;
-  }
-  
   .hero-subtitle {
     color: var(--color-ink-400);
     font-size: 1.125rem;
+    margin-bottom: 2rem;
   }
   
   .hero-subtitle strong {
     color: var(--color-accent-400);
+  }
+
+  /* Cycle Toggle */
+  .cycle-toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    font-weight: 500;
+  }
+
+  .cycle-toggle-container span {
+    color: var(--color-ink-400);
+    transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .cycle-toggle-container span.active {
+    color: var(--color-ink-100);
+  }
+
+  .cycle-toggle-switch {
+    width: 64px;
+    height: 32px;
+    background: var(--color-surface-200);
+    border: 1px solid var(--color-surface-300);
+    border-radius: 999px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    padding: 2px;
+  }
+
+  .cycle-toggle-switch.annual {
+    background: var(--color-accent-500);
+    border-color: var(--color-accent-600);
+  }
+
+  .toggle-knob {
+    width: 26px;
+    height: 26px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+
+  .cycle-toggle-switch.annual .toggle-knob {
+    transform: translateX(32px);
+  }
+
+  .savings-badge {
+    background: rgba(var(--color-success-500-rgb), 0.15);
+    color: var(--color-success-400);
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--color-success-500-rgb), 0.3);
   }
   
   /* Error Banner */

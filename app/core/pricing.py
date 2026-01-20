@@ -91,7 +91,10 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
     },
     PricingTier.STARTER: {
         "name": "Starter",
-        "price_usd": 29,
+        "price_usd": {
+            "monthly": 29,
+            "annual": 290
+        },
         "paystack_amount_kobo": {
             "monthly": 4125000,
             "annual": 41250000
@@ -111,6 +114,8 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             "max_aws_accounts": 5,
             "max_azure_tenants": 2,
             "max_gcp_projects": 3,
+            "ai_insights_per_month": 10,
+            "scan_frequency_hours": 24,
             "retention_days": 90,
         },
         "description": "For small teams getting started with cloud cost visibility.",
@@ -125,7 +130,10 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
     },
     PricingTier.GROWTH: {
         "name": "Growth",
-        "price_usd": 79,
+        "price_usd": {
+            "monthly": 79,
+            "annual": 790
+        },
         "paystack_amount_kobo": {
             "monthly": 11250000,    # ₦112,500
             "annual": 112500000     # ₦1,125,000
@@ -160,7 +168,10 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
     },
     PricingTier.PRO: {
         "name": "Pro",
-        "price_usd": 199,
+        "price_usd": {
+            "monthly": 199,
+            "annual": 1990
+        },
         "paystack_amount_kobo": {
             "monthly": 28500000,    # ₦285,000
             "annual": 285000000     # ₦2,850,000

@@ -1,5 +1,6 @@
 <script lang="ts">
   import CloudLogo from './CloudLogo.svelte';
+  import DOMPurify from 'dompurify';
   
   export let resources: any[] = [];
   export let onRemediate: (finding: any) => Promise<void>;
@@ -60,7 +61,10 @@
                   View details
                 </summary>
                 <p class="text-xs text-ink-400 mt-1 max-w-xs">
-                  {finding.explanation}
+                  {@html DOMPurify.sanitize(finding.explanation, {
+                    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'br', 'p', 'ul', 'li', 'code'],
+                    ALLOWED_ATTR: []
+                  })}
                 </p>
                 {#if finding.confidence_reason}
                   <p class="text-xs text-ink-500 mt-1 italic">
@@ -84,10 +88,14 @@
             
             <!-- Confidence -->
             <td class="py-3 pr-4">
-              <span class="inline-flex items-center gap-1">
-                <span class="w-2 h-2 rounded-full {finding.confidence === high ? 'bg-danger-400' : finding.confidence === 'medium' ? 'bg-warning-400' : 'bg-success-400'}"></span>
-                <span class="text-xs capitalize">{finding.confidence}</span>
-              </span>
+              {#if finding.confidence}
+                <span class="inline-flex items-center gap-1">
+                  <span class="w-2 h-2 rounded-full {finding.confidence === 'high' ? 'bg-danger-400' : finding.confidence === 'medium' ? 'bg-warning-400' : 'bg-success-400'}"></span>
+                  <span class="text-xs capitalize">{finding.confidence}</span>
+                </span>
+              {:else}
+                <span class="text-xs text-ink-500 italic">N/A</span>
+              {/if}
             </td>
             
             <!-- Risk -->

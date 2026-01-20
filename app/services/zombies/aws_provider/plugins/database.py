@@ -15,14 +15,14 @@ class IdleRdsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_rds_databases"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         dbs = []
         connection_threshold = 1
         days = 7
 
         try:
-            async with await self._get_client(session, "rds", region, credentials) as rds:
+            async with self._get_client(session, "rds", region, credentials, config=config) as rds:
                 paginator = rds.get_paginator("describe_db_instances")
                 async for page in paginator.paginate():
                     for db in page.get("DBInstances", []):
@@ -38,7 +38,7 @@ class IdleRdsPlugin(ZombiePlugin):
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(days=days)
 
-            async with await self._get_client(session, "cloudwatch", region, credentials) as cloudwatch:
+            async with self._get_client(session, "cloudwatch", region, credentials, config=config) as cloudwatch:
                 for i in range(0, len(dbs), 500):
                     batch = dbs[i:i + 500]
                     fixed_queries = []
@@ -100,12 +100,12 @@ class ColdRedshiftPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "cold_redshift_clusters"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         try:
-            async with await self._get_client(session, "redshift", region, credentials) as redshift:
+            async with self._get_client(session, "redshift", region, credentials, config=config) as redshift:
                 paginator = redshift.get_paginator("describe_clusters")
-                async with await self._get_client(session, "cloudwatch", region, credentials) as cloudwatch:
+                async with self._get_client(session, "cloudwatch", region, credentials, config=config) as cloudwatch:
                     async for page in paginator.paginate():
                         for cluster in page.get("Clusters", []):
                             cluster_id = cluster["ClusterIdentifier"]

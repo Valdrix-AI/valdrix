@@ -3,30 +3,37 @@ import structlog
 import logging
 from app.core.config import get_settings
 
-def pii_redactor(logger, method_name, event_dict):
+def pii_redactor(_logger, _method_name, event_dict):
     """
-    Redact common PII and sensitive fields from logs.
+    Recursively redact common PII and sensitive fields from logs.
     Ensures GDPR/SOC2 compliance by preventing leakage into telemetry.
     """
     pii_fields = {
         "email", "user_email", "phone", "password", "token", "secret", 
         "cvv", "api_key", "aws_secret_key", "stripe_customer_id",
         "_openai_api_key", "_claude_api_key", "_google_api_key", "_groq_api_key",
-        "paystack_auth_code", "authorization_code", "client_secret"
+        "paystack_auth_code", "authorization_code", "client_secret", "aws_access_key_id",
+        "x-paystack-signature", "authorization", "credentials", "connection_string"
     }
-    
-    # Redact top-level fields
-    for field in pii_fields:
-        if field in event_dict:
-            event_dict[field] = "[REDACTED]"
-            
-    # Redact nested fields in common containers
-    for container in ["metadata", "payload", "details", "extra"]:
-        if container in event_dict and isinstance(event_dict[container], dict):
-            for field in pii_fields:
-                if field in event_dict[container]:
-                    event_dict[container][field] = "[REDACTED]"
-                    
+
+    def redact_recursive(data):
+        if isinstance(data, dict):
+            return {
+                k: ("[REDACTED]" if str(k).lower() in pii_fields else redact_recursive(v))
+                for k, v in data.items()
+            }
+        elif isinstance(data, list):
+            return [redact_recursive(item) for item in data]
+        return data
+
+    return redact_recursive(event_dict)
+
+def add_otel_trace_id(_logger, _method_name, event_dict):
+    """Integrate OTel Trace IDs into structured logs."""
+    from app.core.tracing import get_current_trace_id
+    trace_id = get_current_trace_id()
+    if trace_id:
+        event_dict["trace_id"] = trace_id
     return event_dict
 
 def setup_logging():
@@ -47,6 +54,7 @@ def setup_logging():
         structlog.processors.TimeStamper(fmt="iso"), # Add "timestamp": "2026..."
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,    # Render exceptions nicely
+        add_otel_trace_id,                       # Observability: Add Trace IDs
         pii_redactor,                            # Security: Redact PII before rendering
         renderer
     ]

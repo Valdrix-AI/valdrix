@@ -46,6 +46,7 @@ OUTPUT FORMAT (STRICT JSON ONLY):
       "provider": "aws|azure|gcp",
       "explanation": "Why this is a zombie - be specific and clear",
       "confidence": "high|medium|low",
+      "confidence_score": 0.0-1.0,
       "confidence_reason": "Why you rated this confidence level",
       "recommended_action": "What to do with this resource",
       "monthly_cost": "$X.XX",
@@ -61,6 +62,7 @@ OUTPUT FORMAT (STRICT JSON ONLY):
 IMPORTANT RULES:
 - Base conclusions ONLY on provided data
 - Preserve the Cloud Provider ("aws", "azure", or "gcp") for each resource
+- Provide a numeric confidence_score (0.0 to 1.0) where 1.0 is highest
 - Be conservative with confidence ratings
 - Always explain the risk of deleting each resource
 - If unsure, recommend review before deletion

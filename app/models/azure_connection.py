@@ -1,6 +1,6 @@
 from datetime import datetime
 import uuid
-from sqlalchemy import String, Boolean, ForeignKey, DateTime
+from sqlalchemy import String, Boolean, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy_utils import StringEncryptedType
@@ -21,6 +21,9 @@ class AzureConnection(Base):
     - client_secret is encrypted at rest (AES-256)
     """
     __tablename__ = "azure_connections"
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'subscription_id', name='uq_tenant_azure_subscription'),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)

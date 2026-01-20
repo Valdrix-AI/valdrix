@@ -13,9 +13,9 @@ router = APIRouter(tags=["oidc"])
 @router.get("/.well-known/openid-configuration")
 async def get_oidc_config():
     """Standard OIDC Discovery document."""
-    return OIDCService.get_discovery_doc()
+    return await OIDCService.get_discovery_doc()
 
 @router.get("/oidc/jwks.json")
 async def get_jwks():
     """Public keys for token verification."""
-    return OIDCService.get_jwks()
+    return await OIDCService.get_jwks()

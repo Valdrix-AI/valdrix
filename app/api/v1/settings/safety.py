@@ -119,8 +119,9 @@ async def reset_circuit_breaker(
         
         return {"status": "reset", "message": "Circuit breaker reset to closed state"}
     except Exception as e:
-        logger.error("circuit_breaker_reset_failed", error=str(e))
+        # Item 9: Provide actionable error message for reset failures
+        logger.error("circuit_breaker_reset_failed", error=str(e), tenant_id=str(current_user.tenant_id))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to reset circuit breaker"
+            detail=f"Failed to reset circuit breaker: {str(e)}. Please check Redis connectivity or contact support."
         ) from e

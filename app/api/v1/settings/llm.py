@@ -129,7 +129,14 @@ async def update_llm_settings(
         )
         db.add(settings)
     else:
-        for key, value in data.model_dump().items():
+        update_data = data.model_dump()
+        # Item 15: Validate thresholds at boundaries
+        if update_data["alert_threshold_percent"] == 0:
+            logger.info("llm_alert_threshold_zero", tenant_id=str(current_user.tenant_id))
+        elif update_data["alert_threshold_percent"] == 100:
+            logger.info("llm_alert_threshold_max", tenant_id=str(current_user.tenant_id))
+            
+        for key, value in update_data.items():
             setattr(settings, key, value)
 
     await db.commit()

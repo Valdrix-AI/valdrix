@@ -37,13 +37,17 @@ class RateLimiter:
     def __init__(self, rate_per_second: float = DEFAULT_RATE_LIMIT):
         self.rate = rate_per_second
         self.tokens = rate_per_second
-        self.last_update = asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else 0
+        try:
+            loop = asyncio.get_running_loop()
+            self.last_update = loop.time()
+        except RuntimeError:
+            self.last_update = 0
         self._lock = asyncio.Lock()
     
     async def acquire(self) -> None:
         """Wait until a token is available."""
         async with self._lock:
-            now = asyncio.get_event_loop().time()
+            now = asyncio.get_running_loop().time()
             elapsed = now - self.last_update
             
             # Refill tokens based on elapsed time

@@ -11,6 +11,7 @@ from starlette.responses import JSONResponse
 import structlog
 
 
+from app.core.config import get_settings
 logger = structlog.get_logger()
 
 # Default timeout in seconds (configurable via settings)
@@ -25,9 +26,10 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
     resource exhaustion from long-running operations.
     """
 
-    def __init__(self, app, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS):
+    def __init__(self, app, timeout_seconds: int | None = None):
         super().__init__(app)
-        self.timeout_seconds = timeout_seconds
+        settings = get_settings()
+        self.timeout_seconds = timeout_seconds or getattr(settings, "REQUEST_TIMEOUT", DEFAULT_TIMEOUT_SECONDS)
 
     async def dispatch(self, request: Request, call_next):
         try:

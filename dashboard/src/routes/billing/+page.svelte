@@ -19,27 +19,17 @@
   let subscription = $state<any>(null);
   let error = $state('');
   let upgrading = $state('');
+  let billingCycle = $state('monthly');
   
-  const prices = {
-    starter: '$29',
-    growth: '$79',
-    pro: '$199',
-    enterprise: 'Custom'
-  };
-  
-  const features = {
-    starter: ['Single Cloud (AWS)', 'Cost Dashboards', 'Budget Alerts', 'Basic Zombie Detection', 'Up to $10K cloud spend'],
-    growth: ['Multi-Cloud Support', 'AI Cost Analysis', 'Full Zombie Detection', 'GreenOps (Carbon Tracking)', 'Slack Integration', 'Forecasting', 'Up to $50K cloud spend'],
-    pro: ['Everything in Growth', 'Auto-Remediation', 'Full API Access', 'Priority Support', 'Up to $200K cloud spend'],
-    enterprise: ['Unlimited Accounts', 'SSO (SAML/OIDC)', 'Dedicated Support', 'Custom SLA', 'Unlimited cloud spend']
-  };
-  
+  let plans = $state<any[]>([]);
+
   $effect(() => {
     if (!data.user) {
       loading = false;
       return;
     }
     loadSubscription();
+    loadPlans();
   });
   
   async function loadSubscription() {
@@ -63,6 +53,17 @@
       loading = false;
     }
   }
+
+  async function loadPlans() {
+    try {
+      const res = await fetch(`${PUBLIC_API_URL}/billing/plans`);
+      if (res.ok) {
+        plans = await res.json();
+      }
+    } catch (e) {
+      console.error('Failed to load plans', e);
+    }
+  }
   
   async function upgrade(tier: string) {
     if (upgrading) return;
@@ -78,7 +79,10 @@
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ tier })
+        body: JSON.stringify({ 
+          tier,
+          billing_cycle: billingCycle
+        })
       });
       
       if (!res.ok) {
@@ -151,59 +155,98 @@
       </div>
     </div>
     
-    <!-- Pricing Tiers -->
-    <div class="grid gap-5 md:grid-cols-4">
-      {#each ['starter', 'growth', 'pro', 'enterprise'] as tier, i}
-        <div 
-          class="card stagger-enter {tierIsCurrent(tier) ? 'border-accent-500 border-2' : ''}" 
-          style="animation-delay: {50 + i * 50}ms;"
-        >
-          <!-- Tier Header -->
-          <div class="mb-4">
-            <h3 class="text-lg font-semibold capitalize">{tier}</h3>
-            <p class="text-3xl font-bold mt-2">
-              {prices[tier as keyof typeof prices]}
-              {#if tier !== 'enterprise'}
-                <span class="text-sm text-ink-400 font-normal">/month</span>
-              {/if}
-            </p>
-          </div>
-          
-          <!-- Features -->
-          <ul class="space-y-2 mb-6">
-            {#each features[tier as keyof typeof features] as feature}
-              <li class="flex items-center gap-2 text-sm text-ink-300">
-                <span class="text-success-400">✓</span>
-                {feature}
-              </li>
-            {/each}
-          </ul>
-          
-          <!-- Action Button -->
-          {#if tierIsCurrent(tier)}
-            <button class="btn btn-secondary w-full" disabled>
-              Current Plan
-            </button>
-          {:else if tier === 'enterprise'}
-            <a href="mailto:enterprise@valdrix.io" class="btn btn-secondary w-full text-center">
-              Contact Sales
-            </a>
-          {:else}
-            <button 
-              class="btn btn-primary w-full"
-              onclick={() => upgrade(tier)}
-              disabled={!!upgrading}
-            >
-              {#if upgrading === tier}
-                <span class="spinner"></span>
-                Processing...
-              {:else}
-                Upgrade to {tier}
-              {/if}
-            </button>
-          {/if}
+    <!-- Plan Selector -->
+    <div class="space-y-6">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <h2 class="text-lg font-semibold">Upgrade Your Plan</h2>
+        
+        <!-- Cycle Toggle (Styled for Dashboard) -->
+        <div class="flex items-center gap-3 bg-surface-200/50 p-1 rounded-full border border-surface-300 w-fit">
+          <button 
+            class="px-4 py-1.5 rounded-full text-xs font-medium transition-all {billingCycle === 'monthly' ? 'bg-accent-500 text-white shadow-sm' : 'text-ink-400 hover:text-ink-200'}"
+            onclick={() => billingCycle = 'monthly'}
+          >
+            Monthly
+          </button>
+          <button 
+            class="px-4 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 {billingCycle === 'annual' ? 'bg-accent-500 text-white shadow-sm' : 'text-ink-400 hover:text-ink-200'}"
+            onclick={() => billingCycle = 'annual'}
+          >
+            Yearly
+            {#if billingCycle !== 'annual'}
+              <span class="bg-success-500/20 text-success-400 px-1.5 py-0.5 rounded text-[10px] font-bold">Save 17%</span>
+            {/if}
+          </button>
         </div>
-      {/each}
+      </div>
+
+      <div class="grid gap-5 md:grid-cols-4">
+        {#each plans as plan, i}
+          <div 
+            class="card stagger-enter {tierIsCurrent(plan.id) ? 'border-accent-500 border-2 bg-accent-500/5' : ''}" 
+            style="animation-delay: {50 + i * 50}ms;"
+          >
+            <!-- Tier Header -->
+            <div class="mb-4">
+              <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold capitalize">{plan.name}</h3>
+                {#if plan.popular}
+                  <span class="text-[10px] bg-accent-500/20 text-accent-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Popular</span>
+                {/if}
+              </div>
+              <p class="text-3xl font-bold mt-2">
+                ${billingCycle === 'monthly' ? plan.price_monthly : Math.round(plan.price_annual / 12)}
+                <span class="text-sm text-ink-400 font-normal">/mo</span>
+              </p>
+              {#if billingCycle === 'annual'}
+                <p class="text-[10px] text-success-400 mt-1">Billed annually (${plan.price_annual}/yr)</p>
+              {/if}
+            </div>
+            
+            <!-- Features -->
+            <ul class="space-y-2 mb-6 flex-grow">
+              {#each plan.features as feature}
+                <li class="flex items-start gap-2 text-xs text-ink-300">
+                  <span class="text-success-400 mt-0.5">✓</span>
+                  {feature}
+                </li>
+              {/each}
+            </ul>
+            
+            <!-- Action Button -->
+            {#if tierIsCurrent(plan.id)}
+              <button class="btn btn-secondary w-full cursor-default" disabled>
+                Current Plan
+              </button>
+            {:else}
+              <button 
+                class="btn {plan.popular ? 'btn-primary' : 'btn-secondary'} w-full"
+                onclick={() => upgrade(plan.id)}
+                disabled={!!upgrading}
+              >
+                {#if upgrading === plan.id}
+                  <span class="spinner"></span>
+                  Processing...
+                {:else}
+                  Upgrade to {plan.name}
+                {/if}
+              </button>
+            {/if}
+          </div>
+        {/each}
+
+        <!-- Enterprise Card -->
+        <div class="card stagger-enter border-dashed border-surface-300 bg-surface-100/30" style="animation-delay: 250ms;">
+          <h3 class="text-lg font-semibold">Enterprise</h3>
+          <p class="text-ink-400 text-xs mt-2 mb-6">For large organizations with custom security & scale requirements.</p>
+          <ul class="space-y-2 mb-6 flex-grow">
+            <li class="flex items-start gap-2 text-xs text-ink-300"><span class="text-success-400">✓</span> Unlimited Cloud Accounts</li>
+            <li class="flex items-start gap-2 text-xs text-ink-300"><span class="text-success-400">✓</span> SSO (SAML/OIDC)</li>
+            <li class="flex items-start gap-2 text-xs text-ink-300"><span class="text-success-400">✓</span> Custom SLAs & Support</li>
+          </ul>
+          <a href="mailto:enterprise@valdrix.io" class="btn btn-secondary w-full text-center">Contact Sales</a>
+        </div>
+      </div>
     </div>
     
     <!-- Payment Info -->

@@ -5,11 +5,11 @@ from pydantic import BaseModel, Field, ConfigDict
 class AWSConnectionCreate(BaseModel):
     """Request body for creating a new AWS connection."""
     aws_account_id: str = Field(..., pattern=r"^\d{12}$", description="12-digit AWS account ID")
-    role_arn: str = Field(..., description="Full ARN of the IAM role to assume")
+    role_arn: str = Field(..., pattern=r"^arn:aws:iam::\d{12}:role/[\w+=,.@-]+$", description="Full ARN of the IAM role to assume")
     external_id: str = Field(..., pattern=r"^vx-[a-f0-9]{32}$", description="External ID from setup step")
-    region: str = Field(default="us-east-1", description="AWS region for Cost Explorer")
+    region: str = Field(default="us-east-1", max_length=20, description="AWS region for Cost Explorer")
     is_management_account: bool = Field(default=False, description="Whether this is a Management Account for Organizations")
-    organization_id: str | None = Field(default=None, description="AWS Organization ID")
+    organization_id: str | None = Field(default=None, max_length=12, description="AWS Organization ID")
 
 
 class AWSConnectionResponse(BaseModel):
@@ -56,12 +56,12 @@ class TemplateResponse(BaseModel):
 
 class AzureConnectionCreate(BaseModel):
     """Azure Service Principal connection request."""
-    name: str = Field(..., min_length=3, description="Friendly name for connection")
-    azure_tenant_id: str = Field(..., description="Azure Tenant ID (Directory ID)")
-    client_id: str = Field(..., description="Application ID")
-    subscription_id: str = Field(..., description="Subscription ID")
-    client_secret: str | None = Field(default=None, description="Client Secret (Optional for Workload Identity)")
-    auth_method: str = Field(default="secret", description="secret or workload_identity")
+    name: str = Field(..., min_length=3, max_length=100, description="Friendly name for connection")
+    azure_tenant_id: str = Field(..., max_length=50, description="Azure Tenant ID (Directory ID)")
+    client_id: str = Field(..., max_length=50, description="Application ID")
+    subscription_id: str = Field(..., max_length=50, description="Subscription ID")
+    client_secret: str | None = Field(default=None, max_length=255, description="Client Secret (Optional for Workload Identity)")
+    auth_method: str = Field(default="secret", max_length=20, description="secret or workload_identity")
 
 class AzureConnectionResponse(BaseModel):
     id: UUID
@@ -77,13 +77,13 @@ class AzureConnectionResponse(BaseModel):
 
 class GCPConnectionCreate(BaseModel):
     """GCP Service Account connection request."""
-    name: str = Field(..., min_length=3, description="Friendly name")
-    project_id: str = Field(..., description="GCP Project ID")
-    service_account_json: str | None = Field(default=None, description="Full JSON content (Optional for Workload Identity)")
-    auth_method: str = Field(default="secret", description="secret or workload_identity")
-    billing_project_id: str | None = Field(default=None, description="Project ID holding BigQuery export")
-    billing_dataset: str | None = Field(default=None, description="BigQuery dataset ID")
-    billing_table: str | None = Field(default=None, description="BigQuery table ID")
+    name: str = Field(..., min_length=3, max_length=100, description="Friendly name")
+    project_id: str = Field(..., max_length=100, description="GCP Project ID")
+    service_account_json: str | None = Field(default=None, max_length=20000, description="Full JSON content (Optional for Workload Identity)")
+    auth_method: str = Field(default="secret", max_length=20, description="secret or workload_identity")
+    billing_project_id: str | None = Field(default=None, max_length=100, description="Project ID holding BigQuery export")
+    billing_dataset: str | None = Field(default=None, max_length=100, description="BigQuery dataset ID")
+    billing_table: str | None = Field(default=None, max_length=100, description="BigQuery table ID")
 
 class GCPConnectionResponse(BaseModel):
     id: UUID

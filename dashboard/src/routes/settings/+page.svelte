@@ -11,8 +11,8 @@
 <script lang="ts">
   import { PUBLIC_API_URL } from '$env/static/public';
   import { createSupabaseBrowserClient } from '$lib/supabase';
-  console.log('PUBLIC_API_URL:', PUBLIC_API_URL);
-
+  import { api } from '$lib/api';
+  import { z } from 'zod';
   
   let { data } = $props();
   
@@ -27,35 +27,46 @@
   async function getHeaders() {
     return {
       'Authorization': `Bearer ${data.session?.access_token}`,
-      'Content-Type': 'application/json',
     };
   }
 
   async function loadSettings() {
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/notifications`, { headers });
+      const res = await api.get(`${PUBLIC_API_URL}/settings/notifications`, { headers });
       if (res.ok) {
         settings = await res.json();
       }
     } catch (e) {
       console.error('Failed to load settings:', e);
+      error = 'Failed to connect to backend service.';
     } finally {
       loading = false;
     }
   }
+
+
+  const NotificationSettingsSchema = z.object({
+    slack_enabled: z.boolean(),
+    slack_channel_override: z.string().max(50).optional(),
+    digest_schedule: z.enum(['daily', 'weekly', 'disabled']),
+    digest_hour: z.number().min(0).max(23),
+    digest_minute: z.number().min(0).max(59),
+    alert_on_budget_warning: z.boolean(),
+    alert_on_budget_exceeded: z.boolean(),
+    alert_on_zombie_detected: z.boolean(),
+  });
 
   async function saveSettings() {
     saving = true;
     error = '';
     success = '';
     try {
+      // FE-H2: Input Validation
+      const validated = NotificationSettingsSchema.parse(settings);
+      
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/notifications`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(settings),
-      });
+      const res = await api.put(`${PUBLIC_API_URL}/settings/notifications`, validated, { headers });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.detail || 'Failed to save settings');
@@ -63,7 +74,11 @@
       success = 'General settings saved!';
       setTimeout(() => success = '', 3000);
     } catch (e: any) {
-      error = e.message;
+      if (e instanceof z.ZodError) {
+        error = e.issues.map((err: z.ZodIssue) => err.message).join(', ');
+      } else {
+        error = e.message;
+      }
     } finally {
       saving = false;
     }
@@ -122,10 +137,7 @@
     
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/notifications/test-slack`, {
-        method: 'POST',
-        headers,
-      });
+      const res = await api.post(`${PUBLIC_API_URL}/settings/notifications/test-slack`, {}, { headers });
       
       if (!res.ok) {
         const data = await res.json();
@@ -156,7 +168,7 @@
   async function loadCarbonSettings() {
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/carbon`, { headers });
+      const res = await api.get(`${PUBLIC_API_URL}/settings/carbon`, { headers });
       
       if (res.ok) {
         carbonSettings = await res.json();
@@ -168,18 +180,24 @@
     }
   }
   
+const CarbonSettingsSchema = z.object({
+    carbon_budget_kg: z.number().min(1).max(100000),
+    alert_threshold_percent: z.number().min(1).max(100),
+    default_region: z.string().min(2),
+    email_enabled: z.boolean(),
+    email_recipients: z.string().optional(),
+  });
+
   async function saveCarbonSettings() {
     savingCarbon = true;
     error = '';
     success = '';
     
     try {
+      CarbonSettingsSchema.parse(carbonSettings);
+      
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/carbon`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(carbonSettings),
-      });
+      const res = await api.put(`${PUBLIC_API_URL}/settings/carbon`, carbonSettings, { headers });
       
       if (!res.ok) {
         const data = await res.json();
@@ -189,7 +207,11 @@
       success = 'Carbon settings saved successfully!';
       setTimeout(() => success = '', 3000);
     } catch (e: any) {
-      error = e.message;
+      if (e instanceof z.ZodError) {
+        error = e.issues.map((err: z.ZodIssue) => `${err.path.join('.')}: ${err.message}`).join(', ');
+      } else {
+        error = e.message;
+      }
     } finally {
       savingCarbon = false;
     }
@@ -197,7 +219,7 @@
 
   async function loadModels() {
     try {
-      const res = await fetch(`${PUBLIC_API_URL}/settings/llm/models`);
+      const res = await api.get(`${PUBLIC_API_URL}/settings/llm/models`);
       if (res.ok) {
         providerModels = await res.json();
       }
@@ -209,7 +231,7 @@
   async function loadLLMSettings() {
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/llm`, { headers });
+      const res = await api.get(`${PUBLIC_API_URL}/settings/llm`, { headers });
       
       if (res.ok) {
         llmSettings = await res.json();
@@ -221,28 +243,56 @@
     }
   }
 
+const LLMSettingsSchema = z.object({
+    monthly_limit_usd: z.number().min(0).max(10000),
+    alert_threshold_percent: z.number().min(0).max(100),
+    hard_limit: z.boolean(),
+    preferred_provider: z.string(),
+    preferred_model: z.string(),
+    openai_api_key: z.string().min(20).optional().or(z.literal('')),
+    claude_api_key: z.string().min(20).optional().or(z.literal('')),
+    google_api_key: z.string().min(20).optional().or(z.literal('')),
+    groq_api_key: z.string().min(20).optional().or(z.literal('')),
+  });
+
   async function saveLLMSettings() {
     savingLLM = true;
     error = '';
     success = '';
     
     try {
+      // FE-H2: Input Validation
+      LLMSettingsSchema.parse(llmSettings);
+
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/llm`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(llmSettings),
-      });
+      const res = await api.put(`${PUBLIC_API_URL}/settings/llm`, llmSettings, { headers });
       
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.detail || 'Failed to save LLM settings');
       }
+
+      const updated = await res.json();
+      // SEC-04: Clear raw keys from state after successful save (FE-H4)
+      llmSettings.openai_api_key = '';
+      llmSettings.claude_api_key = '';
+      llmSettings.google_api_key = '';
+      llmSettings.groq_api_key = '';
+      
+      // Update has_key flags from response
+      llmSettings.has_openai_key = updated.has_openai_key;
+      llmSettings.has_claude_key = updated.has_claude_key;
+      llmSettings.has_google_key = updated.has_google_key;
+      llmSettings.has_groq_key = updated.has_groq_key;
       
       success = 'AI strategy settings saved!';
       setTimeout(() => success = '', 3000);
     } catch (e: any) {
-      error = e.message;
+      if (e instanceof z.ZodError) {
+        error = e.issues.map((err: z.ZodIssue) => `${err.path.join('.')}: ${err.message}`).join(', ');
+      } else {
+        error = e.message;
+      }
     } finally {
       savingLLM = false;
     }
@@ -251,7 +301,7 @@
   async function loadActiveOpsSettings() {
     try {
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/activeops`, { headers });
+      const res = await api.get(`${PUBLIC_API_URL}/settings/activeops`, { headers });
       
       if (res.ok) {
         activeOpsSettings = await res.json();
@@ -263,18 +313,21 @@
     }
   }
 
+const ActiveOpsSettingsSchema = z.object({
+    auto_pilot_enabled: z.boolean(),
+    min_confidence_threshold: z.number().min(0.5).max(1.0),
+  });
+
   async function saveActiveOpsSettings() {
     savingActiveOps = true;
     error = '';
     success = '';
     
     try {
+      ActiveOpsSettingsSchema.parse(activeOpsSettings);
+      
       const headers = await getHeaders();
-      const res = await fetch(`${PUBLIC_API_URL}/settings/activeops`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(activeOpsSettings),
-      });
+      const res = await api.put(`${PUBLIC_API_URL}/settings/activeops`, activeOpsSettings, { headers });
       
       if (!res.ok) {
         const data = await res.json();
@@ -284,7 +337,11 @@
       success = 'ActiveOps / Auto-Pilot settings saved!';
       setTimeout(() => success = '', 3000);
     } catch (e: any) {
-      error = e.message;
+      if (e instanceof z.ZodError) {
+        error = e.issues.map((err: z.ZodIssue) => `${err.path.join('.')}: ${err.message}`).join(', ');
+      } else {
+        error = e.message;
+      }
     } finally {
       savingActiveOps = false;
     }
@@ -510,7 +567,12 @@
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="form-group">
-                <label for="openai_key">OpenAI API Key {llmSettings.has_openai_key ? '✅' : ''}</label>
+                <label for="openai_key" class="flex items-center justify-between">
+                  <span>OpenAI API Key</span>
+                  {#if llmSettings.has_openai_key}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50">Configured</span>
+                  {/if}
+                </label>
                 <input 
                   type="password" 
                   id="openai_key"
@@ -520,7 +582,12 @@
                 />
               </div>
               <div class="form-group">
-                <label for="claude_key">Claude API Key {llmSettings.has_claude_key ? '✅' : ''}</label>
+                <label for="claude_key" class="flex items-center justify-between">
+                  <span>Claude API Key</span>
+                  {#if llmSettings.has_claude_key}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50">Configured</span>
+                  {/if}
+                </label>
                 <input 
                   type="password" 
                   id="claude_key"
@@ -530,7 +597,12 @@
                 />
               </div>
               <div class="form-group">
-                <label for="google_key">Google AI (Gemini) Key {llmSettings.has_google_key ? '✅' : ''}</label>
+                <label for="google_key" class="flex items-center justify-between">
+                  <span>Google AI (Gemini) Key</span>
+                  {#if llmSettings.has_google_key}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50">Configured</span>
+                  {/if}
+                </label>
                 <input 
                   type="password" 
                   id="google_key"
@@ -540,7 +612,12 @@
                 />
               </div>
               <div class="form-group">
-                <label for="groq_key">Groq API Key {llmSettings.has_groq_key ? '✅' : ''}</label>
+                <label for="groq_key" class="flex items-center justify-between">
+                  <span>Groq API Key</span>
+                  {#if llmSettings.has_groq_key}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50">Configured</span>
+                  {/if}
+                </label>
                 <input 
                   type="password" 
                   id="groq_key"

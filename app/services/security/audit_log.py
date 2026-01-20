@@ -52,8 +52,13 @@ class AuditEventType(str, Enum):
     REMEDIATION_REQUESTED = "remediation.requested"
     REMEDIATION_APPROVED = "remediation.approved"
     REMEDIATION_REJECTED = "remediation.rejected"
+    REMEDIATION_EXECUTION_STARTED = "remediation.execution_started"
     REMEDIATION_EXECUTED = "remediation.executed"
     REMEDIATION_FAILED = "remediation.failed"
+    
+    # Tenants
+    TENANT_CREATED = "tenant.created"
+    TENANT_DELETED = "tenant.deleted"
 
     # Settings
     SETTINGS_UPDATED = "settings.updated"
@@ -222,16 +227,23 @@ class AuditLogger:
 
         return entry
 
-    def _mask_sensitive(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Recursively mask sensitive fields."""
+    def _mask_sensitive(self, data: Any) -> Any:
+        """
+        Recursively mask sensitive fields in dicts and lists.
+        Item 17: Extended to handle nested JSONB and list structures.
+        """
+        if isinstance(data, list):
+            return [self._mask_sensitive(item) for item in data]
+        
         if not isinstance(data, dict):
             return data
 
         masked = {}
         for key, value in data.items():
-            if any(sensitive in key.lower() for sensitive in self.SENSITIVE_FIELDS):
+            # Check for sensitive keywords in the key name
+            if any(sensitive in str(key).lower() for sensitive in self.SENSITIVE_FIELDS):
                 masked[key] = "***REDACTED***"
-            elif isinstance(value, dict):
+            elif isinstance(value, (dict, list)):
                 masked[key] = self._mask_sensitive(value)
             else:
                 masked[key] = value

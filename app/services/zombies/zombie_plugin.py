@@ -38,27 +38,29 @@ class ZombiePlugin(ABC):
         pass
 
     @abstractmethod
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, *args, **kwargs) -> List[Dict[str, Any]]:
         """
         Scan for zombie resources.
-
-        Args:
-            session: The aioboto3 session to use for client creation.
-            region: AWS region to scan.
-            credentials: STS credentials dictionary (optional).
-
-        Returns:
-            List of dictionaries representing detected zombie resources.
+        
+        Subclasses should document their expected arguments (e.g., session, client, region).
         """
         pass
 
-    async def _get_client(self, session: aioboto3.Session, service_name: str, region: str, credentials: Dict[str, str] = None):
-        """Helper to get aioboto3 client with optional credentials."""
+    def _get_client(self, session: Any, service_name: str, region: str, credentials: Dict[str, str] = None, config: Any = None):
+        """Helper to get AWS client with optional credentials and config."""
+        from app.core.config import get_settings
+        settings = get_settings()
+        
         kwargs = {"region_name": region}
+        if settings.AWS_ENDPOINT_URL:
+            kwargs["endpoint_url"] = settings.AWS_ENDPOINT_URL
+            
         if credentials:
             kwargs.update({
-                "aws_access_key_id": credentials["AccessKeyId"],
-                "aws_secret_access_key": credentials["SecretAccessKey"],
-                "aws_session_token": credentials["SessionToken"],
+                "aws_access_key_id": credentials.get("AccessKeyId") or credentials.get("aws_access_key_id"),
+                "aws_secret_access_key": credentials.get("SecretAccessKey") or credentials.get("aws_secret_access_key"),
+                "aws_session_token": credentials.get("SessionToken") or credentials.get("aws_session_token"),
             })
+        if config:
+            kwargs["config"] = config
         return session.client(service_name, **kwargs)

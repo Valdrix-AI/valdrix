@@ -32,6 +32,7 @@ async def test_adapter_wraps_sts_error():
     with pytest.raises(AdapterError) as exc_info:
         await adapter.get_credentials()
     
-    assert "AWS STS AssumeRole failure" in str(exc_info.value)
+    # Assert error is sanitized (AdapterError sanitizes AccessDenied messages)
+    assert "Permission denied" in str(exc_info.value) or "Valdrix IAM role" in str(exc_info.value)
     assert exc_info.value.code == "AccessDenied"
     assert exc_info.value.status_code == 502

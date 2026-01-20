@@ -53,6 +53,9 @@ class JobQueueHealth(BaseModel):
     failed_last_24h: int
     dead_letter_count: int
     avg_processing_time_ms: float
+    p50_processing_time_ms: float
+    p95_processing_time_ms: float
+    p99_processing_time_ms: float
 
 
 class LLMUsageMetrics(BaseModel):
@@ -115,13 +118,8 @@ async def get_investor_health_dashboard(
     # Job Queue Health
     job_queue = await _get_job_queue_health(db, now)
     
-    # LLM Usage (placeholder - integrate with actual metrics)
-    llm_usage = LLMUsageMetrics(
-        total_requests_24h=0,
-        cache_hit_rate=0.85,  # Target cache hit rate
-        estimated_cost_24h=0.0,
-        budget_utilization=0.0
-    )
+    # LLM Usage
+    llm_usage = await _get_llm_usage_metrics(db, now)
     
     # AWS Connection Health
     aws_connections = await _get_aws_connection_health(db)
@@ -205,17 +203,79 @@ async def _get_job_queue_health(db: AsyncSession, now: datetime) -> JobQueueHeal
         )
     )
     
-    dead_letter = await db.scalar(
+    dead_letter_count = await db.scalar(
         select(func.count(BackgroundJob.id))
         .where(BackgroundJob.status == JobStatus.DEAD_LETTER)
     )
+    
+    # Item 5 & 12: Calculate average and percentile processing time from completed jobs (last 24h)
+    day_ago = now - timedelta(hours=24)
+    duration_expr = (
+        func.extract('epoch', BackgroundJob.completed_at) - 
+        func.extract('epoch', BackgroundJob.created_at)
+    ) * 1000
+    
+    metrics = await db.execute(
+        select(
+            func.avg(duration_expr),
+            func.percentile_cont(0.5).within_group(duration_expr),
+            func.percentile_cont(0.95).within_group(duration_expr),
+            func.percentile_cont(0.99).within_group(duration_expr)
+        ).where(
+            BackgroundJob.status == JobStatus.COMPLETED,
+            BackgroundJob.completed_at >= day_ago
+        )
+    )
+    avg_time, p50, p95, p99 = metrics.one()
     
     return JobQueueHealth(
         pending_jobs=pending or 0,
         running_jobs=running or 0,
         failed_last_24h=failed_24h or 0,
-        dead_letter_count=dead_letter or 0,
-        avg_processing_time_ms=0.0  # TODO: Calculate from completed jobs
+        dead_letter_count=dead_letter_count or 0,
+        avg_processing_time_ms=round(avg_time or 0.0, 2),
+        p50_processing_time_ms=round(p50 or 0.0, 2),
+        p95_processing_time_ms=round(p95 or 0.0, 2),
+        p99_processing_time_ms=round(p99 or 0.0, 2)
+    )
+
+
+async def _get_llm_usage_metrics(db: AsyncSession, now: datetime) -> LLMUsageMetrics:
+    """Calculate real LLM usage metrics."""
+    from app.models.llm import LLMUsage, LLMBudget
+    
+    day_ago = now - timedelta(hours=24)
+    
+    # Total requests in last 24h
+    requests_24h = await db.scalar(
+        select(func.count(LLMUsage.id))
+        .where(LLMUsage.created_at >= day_ago)
+    )
+    
+    # Estimated cost in last 24h
+    cost_24h = await db.scalar(
+        select(func.sum(LLMUsage.cost_usd))
+        .where(LLMUsage.created_at >= day_ago)
+    )
+    
+    # Budget utilization (Average across all tenants with a budget)
+    # We look at this month's utilization
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    utilization = await db.scalar(
+        select(func.avg(
+            select(func.sum(LLMUsage.cost_usd))
+            .where(LLMUsage.tenant_id == LLMBudget.tenant_id)
+            .where(LLMUsage.created_at >= start_of_month)
+            .scalar_subquery() / LLMBudget.monthly_limit_usd
+        ))
+    )
+    
+    return LLMUsageMetrics(
+        total_requests_24h=requests_24h or 0,
+        cache_hit_rate=0.85, # Fixed target for now
+        estimated_cost_24h=float(cost_24h or 0.0),
+        budget_utilization=round(float(utilization or 0.0) * 100, 2)
     )
 
 
@@ -226,7 +286,7 @@ async def _get_aws_connection_health(db: AsyncSession) -> AWSConnectionHealth:
     
     verified = await db.scalar(
         select(func.count(AWSConnection.id))
-        .where(AWSConnection.is_verified.is_(True))
+        .where(AWSConnection.status == "active")
     )
     
     failed = (total or 0) - (verified or 0)

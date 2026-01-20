@@ -9,20 +9,23 @@ import ssl
 
 from app.db.base import Base
 # Import all models so Base knows about them!
-from app.models.llm import LLMUsage, LLMBudget  # noqa: F401
-from app.models.carbon_settings import CarbonSettings  # noqa: F401
-from app.models.aws_connection import AWSConnection  # noqa: F401
-from app.models.discovered_account import DiscoveredAccount  # noqa: F401
-from app.models.cloud import CostRecord  # noqa: F401
-from app.models.notification_settings import NotificationSettings  # noqa: F401
-from app.models.remediation import RemediationRequest  # noqa: F401
-from app.models.remediation_settings import RemediationSettings  # noqa: F401
-from app.models.azure_connection import AzureConnection  # noqa: F401
-from app.models.gcp_connection import GCPConnection  # noqa: F401
-from app.models.tenant import User, Tenant  # noqa: F401
-from app.models.pricing import PricingPlan, ExchangeRate  # noqa: F401
-from app.models.background_job import BackgroundJob  # noqa: F401
-from app.services.billing.paystack_billing import TenantSubscription  # noqa: F401
+from app.models.llm import LLMUsage, LLMBudget  # noqa: F401 # pylint: disable=unused-import
+from app.models.carbon_settings import CarbonSettings  # noqa: F401 # pylint: disable=unused-import
+from app.models.aws_connection import AWSConnection  # noqa: F401 # pylint: disable=unused-import
+from app.models.discovered_account import DiscoveredAccount  # noqa: F401 # pylint: disable=unused-import
+from app.models.cloud import CostRecord  # noqa: F401 # pylint: disable=unused-import
+from app.models.notification_settings import NotificationSettings  # noqa: F401 # pylint: disable=unused-import
+from app.models.remediation import RemediationRequest  # noqa: F401 # pylint: disable=unused-import
+from app.models.remediation_settings import RemediationSettings  # noqa: F401 # pylint: disable=unused-import
+from app.models.azure_connection import AzureConnection  # noqa: F401 # pylint: disable=unused-import
+from app.models.gcp_connection import GCPConnection  # noqa: F401 # pylint: disable=unused-import
+from app.models.tenant import User, Tenant  # noqa: F401 # pylint: disable=unused-import
+from app.models.pricing import PricingPlan, ExchangeRate  # noqa: F401 # pylint: disable=unused-import
+from app.models.background_job import BackgroundJob  # noqa: F401 # pylint: disable=unused-import
+from app.services.billing.paystack_billing import TenantSubscription  # noqa: F401 # pylint: disable=unused-import
+from app.services.security.audit_log import AuditLog  # noqa: F401 # pylint: disable=unused-import
+from app.models.attribution import AttributionRule, CostAllocation  # noqa: F401 # pylint: disable=unused-import
+from app.models.anomaly_marker import AnomalyMarker  # noqa: F401 # pylint: disable=unused-import
 
 from app.core.config import get_settings
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -52,6 +55,23 @@ target_metadata = Base.metadata
 # ... etc.
 
 
+def include_object(obj, name, type_, reflected, compare_to):
+    """
+    Skip partitioned tables and other objects we don't want Alembic to manage.
+    """
+    if type_ == "table":
+        # Ignore audit log partitions (e.g., audit_logs_p2026_01)
+        if name.startswith("audit_logs_p"):
+            return False
+        # Ignore cost record partitions (managed by pg_partman or similar)
+        if name.startswith("cost_records_p"):
+            return False
+        # Ignore materialized views (managed manually)
+        if name.startswith("mv_"):
+            return False
+    return True
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -70,6 +90,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -77,7 +98,11 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, 
+        target_metadata=target_metadata,
+        include_object=include_object
+    )
 
     with context.begin_transaction():
         context.run_migrations()

@@ -62,7 +62,8 @@ class TestJobProcessor:
         assert results["failed"] == 0
     
     @pytest.mark.asyncio
-    async def test_marks_job_running_on_start(self):
+    @patch('app.services.jobs.processor.get_handler_factory')
+    async def test_marks_job_running_on_start(self, mock_factory):
         """Job status should change to RUNNING when processing starts."""
         mock_db = AsyncMock()
         mock_job = create_mock_job()
@@ -74,16 +75,18 @@ class TestJobProcessor:
         processor = JobProcessor(mock_db)
         
         # Mock handler to verify state
+        mock_handler = MagicMock()
         async def verify_handler(job, db):
             assert job.status == JobStatus.RUNNING.value
             return {"status": "ok"}
-        
-        processor._handlers[JobType.FINOPS_ANALYSIS.value] = verify_handler
+        mock_handler.return_value.execute = verify_handler
+        mock_factory.return_value = mock_handler
         
         await processor.process_pending_jobs()
     
     @pytest.mark.asyncio
-    async def test_marks_job_completed_on_success(self):
+    @patch('app.services.jobs.processor.get_handler_factory')
+    async def test_marks_job_completed_on_success(self, mock_factory):
         """Job status should change to COMPLETED on success."""
         mock_db = AsyncMock()
         mock_db.begin_nested = MagicMock()
@@ -100,10 +103,9 @@ class TestJobProcessor:
         
         processor = JobProcessor(mock_db)
         
-        async def success_handler(job, db):
-            return {"status": "completed"}
-        
-        processor._handlers[JobType.FINOPS_ANALYSIS.value] = success_handler
+        mock_handler = MagicMock()
+        mock_handler.return_value.execute = AsyncMock(return_value={"status": "completed"})
+        mock_factory.return_value = mock_handler
         
         await processor.process_pending_jobs()
         
@@ -111,7 +113,8 @@ class TestJobProcessor:
         assert mock_job.completed_at is not None
     
     @pytest.mark.asyncio
-    async def test_retries_on_failure(self):
+    @patch('app.services.jobs.processor.get_handler_factory')
+    async def test_retries_on_failure(self, mock_factory):
         """Job should be rescheduled on failure with backoff."""
         mock_db = AsyncMock()
         mock_db.begin_nested = MagicMock()
@@ -128,10 +131,9 @@ class TestJobProcessor:
         
         processor = JobProcessor(mock_db)
         
-        async def failing_handler(job, db):
-            raise Exception("Simulated failure")
-        
-        processor._handlers[JobType.FINOPS_ANALYSIS.value] = failing_handler
+        mock_handler = MagicMock()
+        mock_handler.return_value.execute = AsyncMock(side_effect=Exception("Simulated failure"))
+        mock_factory.return_value = mock_handler
         
         await processor.process_pending_jobs()
         
@@ -142,7 +144,8 @@ class TestJobProcessor:
         assert mock_job.scheduled_for > datetime.now(timezone.utc) - timedelta(seconds=1)
     
     @pytest.mark.asyncio
-    async def test_dead_letter_on_max_attempts(self):
+    @patch('app.services.jobs.processor.get_handler_factory')
+    async def test_dead_letter_on_max_attempts(self, mock_factory):
         """Job should go to dead letter after max attempts."""
         mock_db = AsyncMock()
         mock_db.begin_nested = MagicMock()
@@ -159,10 +162,9 @@ class TestJobProcessor:
         
         processor = JobProcessor(mock_db)
         
-        async def failing_handler(job, db):
-            raise Exception("Final failure")
-        
-        processor._handlers[JobType.FINOPS_ANALYSIS.value] = failing_handler
+        mock_handler = MagicMock()
+        mock_handler.return_value.execute = AsyncMock(side_effect=Exception("Final failure"))
+        mock_factory.return_value = mock_handler
         
         await processor.process_pending_jobs()
         
@@ -170,7 +172,8 @@ class TestJobProcessor:
         assert mock_job.completed_at is not None
     
     @pytest.mark.asyncio
-    async def test_increments_attempts(self):
+    @patch('app.services.jobs.processor.get_handler_factory')
+    async def test_increments_attempts(self, mock_factory):
         """Attempts should increment on each processing."""
         mock_db = AsyncMock()
         mock_job = create_mock_job(attempts=0)
@@ -181,10 +184,9 @@ class TestJobProcessor:
         
         processor = JobProcessor(mock_db)
         
-        async def success_handler(job, db):
-            return {}
-        
-        processor._handlers[JobType.FINOPS_ANALYSIS.value] = success_handler
+        mock_handler = MagicMock()
+        mock_handler.return_value.execute = AsyncMock(return_value={})
+        mock_factory.return_value = mock_handler
         
         await processor.process_pending_jobs()
         

@@ -14,10 +14,10 @@ class OrphanLoadBalancersPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "orphan_load_balancers"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         try:
-            async with await self._get_client(session, "elbv2", region, credentials) as elb:
+            async with self._get_client(session, "elbv2", region, credentials, config=config) as elb:
                 paginator = elb.get_paginator("describe_load_balancers")
                 async for page in paginator.paginate():
                     for lb in page.get("LoadBalancers", []):
@@ -76,12 +76,12 @@ class UnderusedNatGatewaysPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "underused_nat_gateways"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         try:
-            async with await self._get_client(session, "ec2", region, credentials) as ec2:
+            async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
                 paginator = ec2.get_paginator("describe_nat_gateways")
-                async with await self._get_client(session, "cloudwatch", region, credentials) as cloudwatch:
+                async with self._get_client(session, "cloudwatch", region, credentials, config=config) as cloudwatch:
                     async for page in paginator.paginate():
                         for nat in page.get("NatGateways", []):
                             if nat["State"] != "available":

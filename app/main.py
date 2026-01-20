@@ -1,7 +1,9 @@
 import structlog
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from typing import Annotated
+from fastapi import FastAPI, Depends, Request, Response, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
@@ -11,10 +13,14 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
+from app.core.security_metrics import CSRF_ERRORS, RATE_LIMIT_EXCEEDED
+from app.core.ops_metrics import API_ERRORS_TOTAL
 from app.core.sentry import init_sentry
 from app.services.scheduler import SchedulerService
 from app.core.timeout import TimeoutMiddleware
 from app.core.tracing import setup_tracing
+from app.db.session import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Ensure all models are registered with SQLAlchemy
 import app.models.tenant
@@ -43,6 +49,7 @@ from app.api.v1.jobs import router as jobs_router
 from app.api.v1.health_dashboard import router as health_dashboard_router
 from app.api.v1.usage import router as usage_router
 from app.api.oidc import router as oidc_router
+from app.api.v1.public import router as public_router
 
 # Configure logging and Sentry
 setup_logging()
@@ -91,10 +98,6 @@ async def lifespan(app: FastAPI):
         logger.info("scheduler_skipped_in_testing")
     app.state.scheduler = scheduler
 
-    # Setup rate limiting
-    from app.core.rate_limit import setup_rate_limiting
-    setup_rate_limiting(app)
-
     yield
 
     # Teardown: Stop scheduler and tracker
@@ -107,7 +110,6 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
     logger.info("db_engine_disposed")
 
-from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from app.core.exceptions import ValdrixException
 
@@ -125,6 +127,11 @@ setup_tracing(app)
 @app.exception_handler(ValdrixException)
 async def valdrix_exception_handler(request: Request, exc: ValdrixException):
     """Handle custom application exceptions."""
+    API_ERRORS_TOTAL.labels(
+        path=request.url.path, 
+        method=request.method, 
+        status_code=exc.status_code
+    ).inc()
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -138,6 +145,12 @@ async def valdrix_exception_handler(request: Request, exc: ValdrixException):
 @app.exception_handler(CsrfProtectError)
 async def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError):
     """Handle CSRF protection exceptions."""
+    CSRF_ERRORS.labels(path=request.url.path, method=request.method).inc()
+    API_ERRORS_TOTAL.labels(
+        path=request.url.path, 
+        method=request.method, 
+        status_code=exc.status_code
+    ).inc()
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -147,29 +160,131 @@ async def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError
         },
     )
 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle FastAPI HTTP exceptions with standardized format."""
+    API_ERRORS_TOTAL.labels(
+        path=request.url.path, 
+        method=request.method, 
+        status_code=exc.status_code
+    ).inc()
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail if isinstance(exc.detail, str) else "Error",
+            "code": "HTTP_ERROR",
+            "message": str(exc.detail) if isinstance(exc.detail, str) else "Request failed"
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle Pydantic validation errors."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "Unprocessable Entity",
+            "code": "VALIDATION_ERROR",
+            "message": "The request body or parameters are invalid.",
+            "details": exc.errors()
+        }
+    )
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    """Handle business logic ValueErrors."""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": "Bad Request",
+            "code": "VALUE_ERROR",
+            "message": str(exc)
+        }
+    )
+
+# Setup rate limiting early for test visibility
+from app.core.rate_limit import setup_rate_limiting, RateLimitExceeded, _rate_limit_exceeded_handler
+setup_rate_limiting(app)
+
+# Override handler to include metrics (SEC-03)
+original_handler = app.exception_handlers.get(RateLimitExceeded, _rate_limit_exceeded_handler)
+async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    RATE_LIMIT_EXCEEDED.labels(
+        path=request.url.path, 
+        method=request.method,
+        tier=getattr(request.state, "tier", "unknown")
+    ).inc()
+    return await original_handler(request, exc)
+
+app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
+
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
-    """Handle unhandled exceptions."""
-    logger.exception("unhandled_exception", path=request.url.path)
+    """
+    Handle unhandled exceptions with a standardized response.
+    Item 4 & 10: Prevents leaking stack traces and provides machine-readable error codes.
+    Ensures NO internal variables (env or local) are leaked in the response.
+    """
+    from uuid import uuid4
+    error_id = str(uuid4())
+    
+    # Log the full exception internally (Sentry or local logs)
+    logger.exception("unhandled_exception", 
+                     path=request.url.path, 
+                     method=request.method,
+                     error_id=error_id)
+    
+    # Standardized response for end users
     return JSONResponse(
         status_code=500,
         content={
-            "status": "error",
-            "message": "An unexpected error occurred. Please try again later.",
-            "code": "internal_server_error"
-        },
+            "error": "Internal Server Error",
+            "code": "INTERNAL_ERROR",
+            "message": "An unexpected error occurred. Please contact support with the error ID.",
+            "error_id": error_id
+        }
     )
 
+# Prometheus Gauge for System Health
+from prometheus_client import Gauge
+SYSTEM_HEALTH = Gauge("valdrix_system_health", "System health status (1=healthy, 0.5=degraded, 0=unhealthy)")
+
+@app.get("/", tags=["Lifecycle"])
+async def root():
+    """Root endpoint for basic reachability."""
+    return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}
+
+@app.get("/health/live", tags=["Lifecycle"])
+async def liveness_check():
+    """Fast liveness check without dependencies."""
+    return {"status": "healthy"}
+
 @app.get("/health", tags=["Lifecycle"])
-async def health_check():
-    """Simple health check for load balancers."""
-    from datetime import datetime, timezone
-    return {
-        "status": "active",
-        "app": settings.APP_NAME,
-        "version": settings.VERSION,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
+async def health_check(
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
+    """
+    Enhanced health check for load balancers.
+    Checks DB, Redis, and AWS STS reachability.
+    """
+    from app.services.health import HealthService
+    from fastapi import Response
+
+    service = HealthService(db)
+    health = await service.check_all()
+    
+    # Update Prometheus metrics
+    status_map = {"healthy": 1.0, "degraded": 0.5, "unhealthy": 0.0}
+    SYSTEM_HEALTH.set(status_map.get(health["status"], 0.0))
+    
+    # Critical dependency: Database
+    if health["database"]["status"] == "down":
+        return JSONResponse(
+            status_code=503,
+            content=health
+        )
+    
+    return health
 
 # Initialize Prometheus Metrics
 Instrumentator().instrument(app).expose(app)
@@ -211,7 +326,7 @@ async def csrf_protect_middleware(request: Request, call_next):
         if request.url.path.startswith("/api/v1"):
             csrf = CsrfProtect()
             try:
-                csrf.validate_csrf(request)
+                await csrf.validate_csrf(request)
             except CsrfProtectError as e:
                 # Log and block
                 logger.warning("csrf_validation_failed", path=request.url.path, method=request.method)
@@ -234,3 +349,4 @@ app.include_router(jobs_router, prefix="/api/v1/jobs")
 app.include_router(health_dashboard_router, prefix="/api/v1/admin/health-dashboard")
 app.include_router(usage_router, prefix="/api/v1/usage")
 app.include_router(oidc_router)
+app.include_router(public_router, prefix="/api/v1/public")
