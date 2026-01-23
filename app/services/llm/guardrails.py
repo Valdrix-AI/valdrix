@@ -1,7 +1,7 @@
 import re
 import json
 import unicodedata
-from typing import Dict, Any, List, Type, TypeVar
+from typing import Dict, Any, List, Type, TypeVar, Optional
 from pydantic import BaseModel, Field, ValidationError
 import structlog
 
@@ -156,6 +156,8 @@ class ZombieResourceInsight(BaseModel):
     monthly_cost: str
     risk_if_deleted: str
     risk_explanation: str
+    owner: Optional[str] = "unknown"
+    is_gpu: bool = False
 
 class ZombieAnalysisResult(BaseModel):
     """Schema for overall zombie analysis results."""

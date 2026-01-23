@@ -24,44 +24,47 @@ async def test_graceful_degradation_soft_limit():
     usage_tracker_mock.check_budget.return_value = BudgetStatus.SOFT_LIMIT
     
     # Patch dependencies in analyzer
+    from app.services.llm.budget_manager import LLMBudgetManager
+    from app.services.analysis.forecaster import SymbolicForecaster
+
     with patch("app.services.llm.analyzer.UsageTracker", return_value=usage_tracker_mock):
         with patch("app.services.llm.analyzer.LLMFactory.create") as mock_factory:
-            # Configure mocked DB budget lookup
-            mock_result = MagicMock()
-            mock_budget = MagicMock()
-            mock_budget.openai_api_key = "test_key"
-            mock_budget.preferred_provider = "openai"
-            mock_budget.preferred_model = "gpt-4"
-            mock_result.scalar_one_or_none.return_value = mock_budget
-            mock_db.execute.return_value = mock_result
+            with patch.object(LLMBudgetManager, "check_and_reserve", AsyncMock(return_value=Decimal("0.01"))):
+                with patch.object(SymbolicForecaster, "forecast", AsyncMock(return_value={"total_forecasted_cost": 0, "forecast": []})):
+                    # Configure mocked DB budget lookup
+                    mock_result = MagicMock()
+                    mock_budget = MagicMock()
+                    mock_budget.openai_api_key = "test_key"
+                    mock_budget.preferred_provider = "openai"
+                    mock_budget.preferred_model = "gpt-4"
+                    mock_result.scalar_one_or_none.return_value = mock_budget
+                    mock_db.execute.return_value = mock_result
 
-            # Configure mocked LLM
-            mock_degraded_llm = AsyncMock()
-            response_mock = MagicMock()
-            response_mock.content = '{"insights": [], "recommendations": [], "anomalies": [], "forecast": {}}'
-            response_mock.response_metadata = {}
-            # AsyncMock returns the return_value when awaited
-            mock_degraded_llm.ainvoke.return_value = response_mock
-            mock_factory.return_value = mock_degraded_llm
-            
-            summary = CloudUsageSummary(
-                tenant_id=str(tenant_id),
-                provider="aws",
-                start_date=date.today(),
-                end_date=date.today(),
-                total_cost=Decimal("0"),
-                records=[]
-            )
-            
-            # Analyze
-            with patch("app.services.llm.analyzer.LLMBudgetManager.check_and_reserve", AsyncMock(return_value=Decimal("0.01"))):
-                await analyzer.analyze(
-                    usage_summary=summary,
-                    tenant_id=tenant_id,
-                    db=mock_db,
-                    provider="openai",
-                    model="gpt-4"
-                )
+                    # Configure mocked LLM
+                    mock_degraded_llm = AsyncMock()
+                    response_mock = MagicMock()
+                    response_mock.content = '{"insights": [], "recommendations": [], "anomalies": [], "forecast": {}}'
+                    response_mock.response_metadata = {}
+                    mock_degraded_llm.ainvoke.return_value = response_mock
+                    mock_factory.return_value = mock_degraded_llm
+                    
+                    summary = CloudUsageSummary(
+                        tenant_id=str(tenant_id),
+                        provider="aws",
+                        start_date=date.today(),
+                        end_date=date.today(),
+                        total_cost=Decimal("0"),
+                        records=[]
+                    )
+                    
+                    # Analyze
+                    await analyzer.analyze(
+                        usage_summary=summary,
+                        tenant_id=tenant_id,
+                        db=mock_db,
+                        provider="openai",
+                        model="gpt-4"
+                    )
             
             # Verify factory was called with cheaper model (gpt-4o-mini for openai)
             mock_factory.assert_called()
@@ -80,8 +83,8 @@ async def test_hard_limit_blocking():
     usage_tracker_mock = AsyncMock()
     usage_tracker_mock.check_budget.return_value = BudgetStatus.HARD_LIMIT
     
+    from app.services.llm.budget_manager import LLMBudgetManager, BudgetExceededError
     with patch("app.services.llm.analyzer.UsageTracker", return_value=usage_tracker_mock):
-        from app.core.exceptions import BudgetExceededError
         summary = CloudUsageSummary(
             tenant_id=str(tenant_id),
             provider="aws",
@@ -92,7 +95,7 @@ async def test_hard_limit_blocking():
         )
         
         with pytest.raises(BudgetExceededError) as excinfo:
-            with patch("app.services.llm.analyzer.LLMBudgetManager.check_and_reserve", side_effect=BudgetExceededError("Hard Limit reached")):
+            with patch.object(LLMBudgetManager, "check_and_reserve", side_effect=BudgetExceededError("Hard Limit reached")):
                 await analyzer.analyze(summary, tenant_id=tenant_id, db=mock_db)
         
         assert "Hard Limit" in str(excinfo.value)

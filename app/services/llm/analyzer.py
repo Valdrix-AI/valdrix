@@ -387,18 +387,6 @@ class FinOpsAnalyzer:
                 from app.core.exceptions import AIAnalysisError
                 raise AIAnalysisError(f"All LLM providers failed. Primary: {provider}, Error: {str(primary_error)}")
 
-    async def _track_usage(
-        self, usage_tracker: Optional[UsageTracker], tenant_id: Optional[UUID],
-        provider: str, model: str, metadata: Dict, byok_key: Optional[str]
-    ):
-        """Records LLM usage metrics."""
-        if not (tenant_id and usage_tracker):
-            return
-
-        # Usage is now tracked via LLMBudgetManager in the main analyze() loop.
-        # This legacy tracker can be maintained for detailed internal metrics if needed,
-        # but budget enforcement is now centralized.
-        pass
 
     async def _process_analysis_results(
         self, content: str, tenant_id: Optional[UUID], usage_summary: Any

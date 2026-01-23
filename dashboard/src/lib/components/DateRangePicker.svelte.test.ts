@@ -18,7 +18,7 @@ describe('DateRangePicker Component', () => {
 		render(DateRangePicker, { value: '30d' });
 		const sevenDaysBtn = screen.getByText('7 Days');
 		await fireEvent.click(sevenDaysBtn);
-		
+
 		// Wait for Svelte 5 reactivity if necessary, though fireEvent should trigger it.
 		expect(sevenDaysBtn.className).toContain('active');
 	});
@@ -27,7 +27,7 @@ describe('DateRangePicker Component', () => {
 		render(DateRangePicker, { value: '30d' });
 		const customBtn = screen.getByText(/Custom/);
 		await fireEvent.click(customBtn);
-		
+
 		expect(screen.getByLabelText('From')).toBeTruthy();
 		expect(screen.getByLabelText('To')).toBeTruthy();
 	});

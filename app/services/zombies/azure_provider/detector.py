@@ -3,6 +3,7 @@ import structlog
 from azure.identity.aio import ClientSecretCredential
 from azure.mgmt.compute.aio import ComputeManagementClient
 from azure.mgmt.network.aio import NetworkManagementClient
+from azure.mgmt.monitor.aio import MonitorManagementClient
 from app.services.zombies.base import BaseZombieDetector
 from app.services.zombies.zombie_plugin import ZombiePlugin
 
@@ -45,6 +46,7 @@ class AzureZombieDetector(BaseZombieDetector):
         # or we can init them here if we have sub ID.
         self._compute_client = None
         self._network_client = None
+        self._monitor_client = None
 
     @property
     def provider_name(self) -> str:
@@ -74,8 +76,14 @@ class AzureZombieDetector(BaseZombieDetector):
                 self._network_client = NetworkManagementClient(self._credential, self.subscription_id)
             client = self._network_client
             
-        if client:
-            return await plugin.scan(client, region=self.region)
+        elif plugin.category_key == "idle_vms":
+            if not self._compute_client:
+                self._compute_client = ComputeManagementClient(self._credential, self.subscription_id)
+            if not self._monitor_client:
+                self._monitor_client = MonitorManagementClient(self._credential, self.subscription_id)
+            client = self._compute_client
+            # Pass monitor client in registry or as extra kwarg
+            return await plugin.scan(client, region=self.region, monitor_client=self._monitor_client)
             
         return []
 
@@ -87,5 +95,7 @@ class AzureZombieDetector(BaseZombieDetector):
             await self._compute_client.close()
         if self._network_client:
             await self._network_client.close()
+        if self._monitor_client:
+            await self._monitor_client.close()
         if self._credential:
             await self._credential.close()

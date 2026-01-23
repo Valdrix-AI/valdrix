@@ -634,3 +634,94 @@ class RemediationService:
                 logger.error("hard_limit_enforcement_failed", request_id=str(req.id), error=str(e))
                 
         return executed_ids
+
+    async def generate_iac_plan(self, request: RemediationRequest, tenant_id: UUID) -> str:
+        """
+        Generates a Terraform decommissioning plan for the resource.
+        Supports 'state rm' and 'removed' blocks for GitOps workflows.
+        
+        Phase 8: Gated by Pro tier.
+        """
+        from app.core.pricing import get_tenant_tier, FeatureFlag, is_feature_enabled
+        tier = await get_tenant_tier(tenant_id, self.db)
+        
+        if not is_feature_enabled(tier, FeatureFlag.GITOPS_REMEDIATION):
+            return "# GitOps Remediation is a Pro-tier feature. Please upgrade to unlock IaC plans."
+            
+        resource_id = request.resource_id
+        provider = request.provider.lower()
+        
+        # Mapping Valdrix resource types to Terraform resource types
+        tf_mapping = {
+            "EC2 Instance": "aws_instance",
+            "Elastic IP": "aws_eip",
+            "EBS Volume": "aws_ebs_volume",
+            "RDS Instance": "aws_db_instance",
+            "S3 Bucket": "aws_s3_bucket",
+            "Snapshot": "aws_ebs_snapshot",
+            # Azure Mappings
+            "Azure VM": "azurerm_virtual_machine",
+            "Managed Disk": "azurerm_managed_disk",
+            "Public IP": "azurerm_public_ip",
+            # GCP Mappings
+            "GCP Instance": "google_compute_instance",
+            "Address": "google_compute_address",
+            "Disk": "google_compute_disk"
+        }
+        
+        tf_type = tf_mapping.get(request.resource_type, "cloud_resource")
+        # Sanitize resource ID for TF identifier
+        tf_id = resource_id.replace('-', '_').replace('.', '_')
+        
+        planlines = [
+            f"# Valdrix GitOps Remediation Plan",
+            f"# Resource: {resource_id} ({request.resource_type})",
+            f"# Savings: ${request.estimated_monthly_savings}/mo",
+            f"# Action: {request.action.value}",
+            ""
+        ]
+        
+        if provider == "aws":
+            planlines.append(f"# Option 1: Manual State Removal")
+            planlines.append(f"terraform state rm {tf_type}.{tf_id}")
+            planlines.append("")
+            
+            planlines.append(f"# Option 2: Terraform 'removed' block (Recommended for TF 1.7+)")
+            planlines.append(f"removed {{")
+            planlines.append(f"  from = {tf_type}.{tf_id}")
+            planlines.append(f"  lifecycle {{")
+            planlines.append(f"    destroy = true")
+            planlines.append(f"  }}")
+            planlines.append(f"}}")
+            
+        elif provider == "azure":
+            planlines.append(f"# Option 1: Manual State Removal")
+            planlines.append(f"terraform state rm {tf_type}.{tf_id}")
+            planlines.append("")
+            planlines.append(f"# Option 2: Terraform 'removed' block")
+            planlines.append(f"removed {{")
+            planlines.append(f"  from = {tf_type}.{tf_id}")
+            planlines.append(f"  lifecycle {{")
+            planlines.append(f"    destroy = true")
+            planlines.append(f"  }}")
+            planlines.append(f"}}")
+
+        elif provider == "gcp":
+            planlines.append(f"# Option 1: Manual State Removal")
+            planlines.append(f"terraform state rm {tf_type}.{tf_id}")
+            planlines.append("")
+            planlines.append(f"# Option 2: Terraform 'removed' block")
+            planlines.append(f"removed {{")
+            planlines.append(f"  from = {tf_type}.{tf_id}")
+            planlines.append(f"  lifecycle {{")
+            planlines.append(f"    destroy = true")
+            planlines.append(f"  }}")
+            planlines.append(f"}}")
+            
+        return "\n".join(planlines)
+
+    async def bulk_generate_iac_plan(self, requests: List[RemediationRequest], tenant_id: UUID) -> str:
+        """Generates a combined IaC plan for multiple resources."""
+        plans = [await self.generate_iac_plan(req, tenant_id) for req in requests]
+        header = f"# Valdrix Bulk IaC Remediation Plan\n# Generated: {datetime.now(timezone.utc).isoformat()}\n\n"
+        return header + "\n\n" + "\n" + "-"*40 + "\n".join(plans)

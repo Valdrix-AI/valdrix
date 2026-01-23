@@ -51,7 +51,9 @@ OUTPUT FORMAT (STRICT JSON ONLY):
       "recommended_action": "What to do with this resource",
       "monthly_cost": "$X.XX",
       "risk_if_deleted": "low|medium|high",
-      "risk_explanation": "Brief explanation of deletion risk"
+      "risk_explanation": "Brief explanation of deletion risk",
+      "owner": "principal/user email if provided",
+      "is_gpu": true|false
     }}
   ],
   "general_recommendations": [

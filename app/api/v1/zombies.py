@@ -192,3 +192,37 @@ async def execute_remediation(
             code="remediation_execution_failed",
             status_code=400
         )
+
+@router.get("/plan/{request_id}")
+async def get_remediation_plan(
+    request_id: UUID,
+    tenant_id: Annotated[UUID, Depends(require_tenant_access)],
+    user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GITOPS_REMEDIATION))],
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate and return a Terraform decommissioning plan for a remediation request.
+    Requires Pro tier or higher.
+    """
+    service = RemediationService(db=db)
+    
+    # Fetch the request
+    result = await db.execute(
+        select(RemediationRequest)
+        .where(RemediationRequest.id == request_id)
+        .where(RemediationRequest.tenant_id == tenant_id)
+    )
+    remediation_request = result.scalar_one_or_none()
+    
+    if not remediation_request:
+        from app.core.exceptions import ResourceNotFoundError
+        raise ResourceNotFoundError(f"Remediation request {request_id} not found")
+        
+    plan = await service.generate_iac_plan(remediation_request, tenant_id)
+    
+    return {
+        "status": "success",
+        "plan": plan,
+        "resource_id": remediation_request.resource_id,
+        "provider": remediation_request.provider
+    }

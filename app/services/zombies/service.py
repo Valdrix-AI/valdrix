@@ -10,7 +10,7 @@ Handles:
 """
 
 import asyncio
-from typing import Dict, Any, List
+from typing import Dict, Any
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -26,11 +26,10 @@ logger = structlog.get_logger()
 class ZombieService:
     def __init__(self, db: AsyncSession):
         self.db = db
-
     async def scan_for_tenant(
         self, 
         tenant_id: Any, 
-        user: Any, 
+        user: Any = None,
         region: str = "us-east-1", 
         analyze: bool = False
     ) -> Dict[str, Any]:
@@ -41,8 +40,8 @@ class ZombieService:
         # Phase 21: Decoupling from concrete models
         all_connections = []
         for model in [AWSConnection, AzureConnection, GCPConnection]:
-           q = await self.db.execute(select(model).where(model.tenant_id == tenant_id))
-           all_connections.extend(q.scalars().all())
+            q = await self.db.execute(select(model).where(model.tenant_id == tenant_id))
+            all_connections.extend(q.scalars().all())
 
         if not all_connections:
             return {
@@ -102,6 +101,23 @@ class ZombieService:
                             cost = float(item.get("monthly_waste") or item.get("monthly_cost") or 0)
                             item["monthly_cost"] = cost # Ensure legacy compatibility
                             
+                            # Tier Gating for Precision Signals (Phase 8)
+                            from app.core.pricing import get_tenant_tier, FeatureFlag, is_feature_enabled
+                            tier = await get_tenant_tier(tenant_id, self.db)
+                            
+                            has_precision = is_feature_enabled(tier, FeatureFlag.PRECISION_DISCOVERY)
+                            has_attribution = is_feature_enabled(tier, FeatureFlag.OWNER_ATTRIBUTION)
+                            
+                            if not has_precision:
+                                item["is_gpu"] = "Upgrade to Growth"
+                            else:
+                                item["is_gpu"] = bool(item.get("is_gpu", False))
+                                
+                            if not has_attribution:
+                                item["owner"] = "Upgrade to Growth"
+                            else:
+                                item["owner"] = item.get("owner", "unknown")
+                            
                             all_zombies[ui_key].append(item)
                             total_waste += cost
             except Exception as e:
@@ -156,6 +172,14 @@ class ZombieService:
                 result = await self.db.execute(stmt)
                 job_id = result.scalar_one_or_none()
                 await self.db.commit()
+
+                if job_id:
+                    from app.core.ops_metrics import BACKGROUND_JOBS_ENQUEUED
+                    from app.models.background_job import JobType
+                    BACKGROUND_JOBS_ENQUEUED.labels(
+                        job_type=JobType.ZOMBIE_ANALYSIS.value,
+                        priority="normal"
+                    ).inc()
                 
                 all_zombies["ai_analysis"] = {
                     "status": "pending",
@@ -171,11 +195,10 @@ class ZombieService:
 
         return all_zombies
 
-    async def _enrich_with_ai(self, zombies: Dict[str, Any], user: Any):
+    async def _enrich_with_ai(self, zombies: Dict[str, Any], tenant_id: Any, tier: PricingTier):
         """Enrich results with AI insights if tier allows."""
         try:
-            user_tier = getattr(user, "tier", PricingTier.TRIAL)
-            if not is_feature_enabled(user_tier, FeatureFlag.LLM_ANALYSIS):
+            if not is_feature_enabled(tier, FeatureFlag.LLM_ANALYSIS):
                 zombies["ai_analysis"] = {
                     "error": "AI Insights requires Growth tier or higher.",
                     "summary": "Upgrade to unlock AI-powered analysis.",
@@ -183,19 +206,19 @@ class ZombieService:
                 }
             else:
 
-                    from app.services.llm.factory import LLMFactory
-                    from app.services.llm.zombie_analyzer import ZombieAnalyzer
+                from app.services.llm.factory import LLMFactory
+                from app.services.llm.zombie_analyzer import ZombieAnalyzer
 
-                    llm = LLMFactory.create()
-                    analyzer = ZombieAnalyzer(llm)
+                llm = LLMFactory.create()
+                analyzer = ZombieAnalyzer(llm)
 
-                    ai_analysis = await analyzer.analyze(
-                        detection_results=zombies,
-                        tenant_id=user.tenant_id,
-                        db=self.db,
-                    )
-                    zombies["ai_analysis"] = ai_analysis
-                    logger.info("service_zombie_ai_analysis_complete")
+                ai_analysis = await analyzer.analyze(
+                    detection_results=zombies,
+                    tenant_id=tenant_id,
+                    db=self.db,
+                )
+                zombies["ai_analysis"] = ai_analysis
+                logger.info("service_zombie_ai_analysis_complete")
         except Exception as e:
             logger.error("service_zombie_ai_analysis_failed", error=str(e))
             zombies["ai_analysis"] = {

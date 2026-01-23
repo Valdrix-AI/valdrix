@@ -378,6 +378,26 @@ class SchedulerOrchestrator:
                 # Function might not exist yet if script-based creation failed
                 pass
 
+            # 3. Update Pending Jobs Metric (Series-A Observability Audit)
+            try:
+                from app.core.ops_metrics import BACKGROUND_JOBS_PENDING
+                from app.models.background_job import BackgroundJob, JobStatus, JobType
+                # Count pending/scheduled jobs by type
+                stmt = sa.select(
+                    BackgroundJob.job_type,
+                    sa.func.count(BackgroundJob.id)
+                ).where(
+                    BackgroundJob.status.in_([JobStatus.PENDING, JobStatus.SCHEDULED]),
+                    BackgroundJob.is_deleted == False
+                ).group_by(BackgroundJob.job_type)
+                
+                counts = await db.execute(stmt)
+                for jtype, count in counts:
+                    BACKGROUND_JOBS_PENDING.labels(job_type=jtype).set(count)
+                logger.info("ops_metrics_jobs_pending_updated")
+            except Exception as e:
+                logger.warning("ops_metrics_jobs_pending_update_failed", error=str(e))
+
     def start(self):
         """Defines cron schedules and starts APScheduler."""
         # HIGH_VALUE: Every 6 hours

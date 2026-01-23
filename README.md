@@ -101,15 +101,15 @@ It connects to your cloud, uncovers waste, explains spend behavior, and gives yo
 ### 🧟 **Deep Zombie Detection**
 Not just "idle EC2." We find *everything*:
 
-| Category | What We Hunt |
-|----------|--------------|
-| **Compute** | Idle EC2 instances, forgotten SageMaker endpoints |
-| **Storage** | Orphan EBS volumes, snapshots older than 90 days, empty S3 buckets |
-| **Network** | Unallocated Elastic IPs, orphan load balancers, underused NAT gateways |
-| **Data** | Idle RDS instances, cold Redshift clusters |
-| **Registry** | Legacy ECR images with no recent pulls |
+| Category | What We Hunt | Precision Signals |
+|----------|--------------|-------------------|
+| **Compute** | Idle EC2, Azure VMs, GCP Instances | **GPU Hunting** (P/G/Nvidia), **Owner Attribution** |
+| **Storage** | Orphan EBS, Managed Disks, Snapshots | **Creator Attribution**, Age-based decay |
+| **Network** | Unallocated IPs, Orphan LBs, NAT GWs | **Association Tracking** |
+| **Data** | Idle RDS, Redshift, GCP SQL | **Connection Activity** |
+| **Registry** | Legacy ECR, ACR, GCR Images | **Pull Frequency** |
 
-**11 detection plugins.** More coming.
+**11 detection plugins + Multi-Cloud Parity (AWS, Azure, GCP).**
 
 ---
 
@@ -163,6 +163,7 @@ We're paranoid, so you don't have to be:
 - **Zero-Trust Architecture** — We assume IAM roles via STS. No long-lived credentials.
 - **Read-Only by Default** — Our CloudFormation/Terraform templates grant only `Describe*` and `Get*` permissions.
 - **Human-in-the-Loop** — The AI recommends; *you* approve the action.
+- **GitOps-First Remediation** — Generate professional Terraform plans (`state rm` and `removed` blocks) to decommission resources via your existing CI/CD.
 - **Audit Trail** — Every remediation request is logged with who requested, who approved, and when.
 
 ---

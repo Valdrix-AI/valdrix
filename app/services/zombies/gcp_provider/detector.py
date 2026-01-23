@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 import structlog
 from google.cloud import compute_v1
+from google.cloud import logging as gcp_logging
 # Note: google.oauth2.service_account is needed for custom creds if not using default
 from google.oauth2 import service_account
 from app.services.zombies.base import BaseZombieDetector
@@ -45,6 +46,7 @@ class GCPZombieDetector(BaseZombieDetector):
         self._disks_client = None
         self._address_client = None
         self._images_client = None
+        self._logging_client = None
 
     @property
     def provider_name(self) -> str:
@@ -81,6 +83,15 @@ class GCPZombieDetector(BaseZombieDetector):
             if not self._images_client:
                 self._images_client = compute_v1.MachineImagesClient(credentials=self._credentials_obj) if self._credentials_obj else compute_v1.MachineImagesClient()
             client = self._images_client
+
+        elif plugin.category_key == "idle_instances":
+            if not self._disks_client: # Just a placeholder, we use compute clients
+                self._disks_client = compute_v1.InstancesClient(credentials=self._credentials_obj) if self._credentials_obj else compute_v1.InstancesClient()
+            if not self._logging_client:
+                self._logging_client = gcp_logging.Client(credentials=self._credentials_obj, project=self.project_id) if self._credentials_obj else gcp_logging.Client(project=self.project_id)
+            client = self._disks_client
+            kwargs["zone"] = self.region
+            return await plugin.scan(client, logging_client=self._logging_client, **kwargs)
 
         if client:
             return await plugin.scan(client, **kwargs)

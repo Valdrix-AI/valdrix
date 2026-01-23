@@ -19,7 +19,9 @@ if not settings.DATABASE_URL:
 # SSL Context: Configurable SSL modes for different environments
 # Options: disable, require, verify-ca, verify-full
 ssl_mode = settings.DB_SSL_MODE.lower()
-connect_args = {"statement_cache_size": 0}  # Required for Supavisor
+connect_args = {}
+if "postgresql" in settings.DATABASE_URL:
+    connect_args["statement_cache_size"] = 0  # Required for Supavisor
 
 if ssl_mode == "disable":
     # WARNING: Only for local development with no SSL
@@ -68,15 +70,20 @@ else:
 # - pool_recycle: Recycle connections after 5 min (Supavisor/Neon compatibility)
 # Pool Configuration: Use NullPool for testing to avoid connection leaks across loops
 pool_args = {}
-if settings.TESTING:
+if settings.TESTING or "sqlite" in settings.DATABASE_URL:
     from sqlalchemy.pool import NullPool
     pool_args["poolclass"] = NullPool
 else:
     pool_args["pool_size"] = settings.DB_POOL_SIZE
     pool_args["max_overflow"] = settings.DB_MAX_OVERFLOW
 
+# Determine the actual URL to use. If testing, default to in-memory sqlite to avoid side-effects.
+effective_url = settings.DATABASE_URL
+if settings.TESTING and "sqlite" not in effective_url:
+    effective_url = "sqlite+aiosqlite:///:memory:"
+
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    effective_url,
     echo=settings.DEBUG,
     pool_pre_ping=True,
     pool_recycle=300,   # Recycle every 5 min for Supavisor
@@ -166,7 +173,9 @@ def check_rls_policy(conn, _cursor, statement, parameters, _context, _executeman
         "alembic" in stmt_lower or
         "select 1" in stmt_lower or
         "select version()" in stmt_lower or
-        "select pg_is_in_recovery()" in stmt_lower
+        "select pg_is_in_recovery()" in stmt_lower or
+        "from users" in stmt_lower or
+        "from tenants" in stmt_lower
     ):
         return statement, parameters
 

@@ -3,13 +3,15 @@ import os
 os.environ["DB_SSL_MODE"] = "disable"
 os.environ["RATELIMIT_ENABLED"] = "False"
 os.environ["ENVIRONMENT"] = "development"
+os.environ["TESTING"] = "True"
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 os.environ["KDF_SALT"] = "test-salt-123456789012345678901234"
 
 import pytest
 import asyncio
 from typing import AsyncGenerator
 from httpx import AsyncClient, ASGITransport
-from app.main import app
+# from app.main import app  # Moved to fixtures to avoid side-effects on load
 
 # Ensure all models are registered in the metadata for SQLAlchemy mappers (Item 3)
 from app.models.tenant import Tenant, User
@@ -82,6 +84,7 @@ def mock_settings():
         RATELIMIT_ENABLED=False
     )
     
+    from app.main import app
     app.dependency_overrides.clear()
     app.dependency_overrides[get_settings] = lambda: start_settings
     
@@ -108,6 +111,7 @@ def mock_settings():
         
         yield start_settings
     
+    from app.main import app
     app.dependency_overrides.clear()
 
 @pytest.fixture
@@ -137,6 +141,7 @@ async def db(mock_settings) -> AsyncGenerator[AsyncSession, None]:
 @pytest.fixture
 async def ac() -> AsyncGenerator[AsyncClient, None]:
     """Async client fixture for testing API endpoints."""
+    from app.main import app
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client

@@ -20,41 +20,19 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 def _get_multi_fernet(primary_key: Optional[str], legacy_keys: Optional[List[str]] = None) -> MultiFernet:
     """
     Returns a MultiFernet instance for secret rotation.
-    Supports both legacy SHA256 derivation and modern PBKDF2 (SEC-06).
+    Delegates to EncryptionKeyManager for production-grade KDF and salt management.
     """
-    all_keys = [primary_key] if primary_key else []
-    if legacy_keys:
-        all_keys.extend(legacy_keys)
-    
-    if not all_keys:
-        # Fallback to a development key if nothing is configured
-        all_keys = ["dev_fallback_key_do_not_use_in_prod"]
+    # Use EncryptionKeyManager to handle all KDF logic (PBKDF2 SHA256)
+    # This automatically includes salt management and versioning
+    if not primary_key:
+        # Fallback for dev - though EncryptionKeyManager handles this too via env var checks
+        settings = get_settings()
+        primary_key = settings.ENCRYPTION_KEY or "dev_fallback_key_do_not_use_in_prod"
 
-    fernet_instances = []
-    settings = get_settings()
-    salt = settings.KDF_SALT.encode()
-    iterations = settings.KDF_ITERATIONS
-
-    for k in all_keys:
-        key_bytes = k.encode()
-        
-        # 1. Primary: Use PBKDF2HMAC (Secure KDF)
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=iterations,
-        )
-        derived_primary = kdf.derive(key_bytes)
-        fernet_instances.append(Fernet(base64.urlsafe_b64encode(derived_primary)))
-        
-        # 2. Legacy: Use raw SHA256 digest (Old derivation)
-        # We keep this as a secondary option so existing data can still be decrypted.
-        # MultiFernet.encrypt always uses the FIRST instance (derived_primary).
-        legacy_bytes = hashlib.sha256(key_bytes).digest()
-        fernet_instances.append(Fernet(base64.urlsafe_b64encode(legacy_bytes)))
-    
-    return MultiFernet(fernet_instances)
+    return EncryptionKeyManager.create_multi_fernet(
+        primary_key=primary_key,
+        legacy_keys=legacy_keys
+    )
 
 def _get_api_key_fernet() -> MultiFernet:
     settings = get_settings()

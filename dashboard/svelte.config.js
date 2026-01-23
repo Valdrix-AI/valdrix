@@ -15,9 +15,14 @@ const config = {
 				'script-src': ['self', 'https://*.supabase.co'],
 				'style-src': ['self', 'unsafe-inline'], // Tailwind needs this
 				'img-src': ['self', 'data:', 'https://*.supabase.co'],
-				'connect-src': ['self', 'https://*.supabase.co', 'http://localhost:*', 'https://*.valdrix.ai'],
+				'connect-src': [
+					'self',
+					'https://*.supabase.co',
+					'http://localhost:*',
+					'https://*.valdrix.ai'
+				],
 				'object-src': ['none'],
-				'base-uri': ['self'],
+				'base-uri': ['self']
 			}
 		}
 	}

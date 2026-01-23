@@ -27,7 +27,6 @@ class FeatureFlag(str, Enum):
     COST_TRACKING = "cost_tracking"
     ALERTS = "alerts"
     SLACK_INTEGRATION = "slack_integration"
-    ZOMBIE_DETECTION = "zombie_detection"
     ZOMBIE_SCAN = "zombie_scan"
     LLM_ANALYSIS = "llm_analysis"
     AI_INSIGHTS = "ai_insights"
@@ -43,6 +42,9 @@ class FeatureFlag(str, Enum):
     AUDIT_LOGS = "audit_logs"
     HOURLY_SCANS = "hourly_scans"
     AI_ANALYSIS_DETAILED = "ai_analysis_detailed"
+    PRECISION_DISCOVERY = "precision_discovery"
+    OWNER_ATTRIBUTION = "owner_attribution"
+    GITOPS_REMEDIATION = "gitops_remediation"
 
 
 # Tier configuration - USD pricing
@@ -53,7 +55,6 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
         "features": {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
-            FeatureFlag.ZOMBIE_DETECTION,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.GREENOPS,
             FeatureFlag.CARBON_TRACKING,
@@ -80,7 +81,6 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
         "features": {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.ALERTS,
-            FeatureFlag.ZOMBIE_DETECTION,
             FeatureFlag.ZOMBIE_SCAN,
         },
         "limits": {
@@ -103,7 +103,6 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
             FeatureFlag.ALERTS,
-            FeatureFlag.ZOMBIE_DETECTION,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
             FeatureFlag.MULTI_REGION,
@@ -142,13 +141,14 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
             FeatureFlag.ALERTS,
-            FeatureFlag.ZOMBIE_DETECTION,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
             FeatureFlag.MULTI_REGION,
             FeatureFlag.CARBON_TRACKING,
             FeatureFlag.GREENOPS,
             FeatureFlag.AUTO_REMEDIATION,
+            FeatureFlag.PRECISION_DISCOVERY,
+            FeatureFlag.OWNER_ATTRIBUTION,
         },
         "limits": {
             "max_aws_accounts": 20,
@@ -180,7 +180,6 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
             FeatureFlag.ALERTS,
-            FeatureFlag.ZOMBIE_DETECTION,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
             FeatureFlag.MULTI_REGION,
@@ -194,6 +193,7 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             FeatureFlag.AI_ANALYSIS_DETAILED,
             FeatureFlag.SLACK_INTEGRATION,
             FeatureFlag.AUDIT_LOGS,
+            FeatureFlag.GITOPS_REMEDIATION,
         },
         "limits": {
             "max_aws_accounts": 25,

@@ -56,14 +56,38 @@ class IdleInstancesPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_instances"
 
+    async def _get_attribution(self, session: aioboto3.Session, region: str, instance_id: str, credentials: Dict[str, str] = None, config: Any = None) -> str:
+        """
+        Governance Layer: Uses CloudTrail to find who launched the instance.
+        """
+        try:
+            async with self._get_client(session, "cloudtrail", region, credentials, config=config) as ct:
+                response = await ct.lookup_events(
+                    LookupAttributes=[{
+                        'AttributeKey': 'ResourceName',
+                        'AttributeValue': instance_id
+                    }],
+                    MaxResults=10
+                )
+                for event in response.get("Events", []):
+                    # We look for the RunInstances event to find the original launcher
+                    if event.get("EventName") == "RunInstances":
+                        return event.get("Username", "Unknown")
+        except Exception as e:
+            logger.warning("cloudtrail_lookup_failed", instance_id=instance_id, error=str(e))
+        return "Unknown"
+
     async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
         zombies = []
         instances = []
         cpu_threshold = 2.0  # Tightened from 5% (BE-ZD-3)
         days = 14            # Extended from 7 days (BE-ZD-3)
+        
+        # GPU Precision: p3, p4, g4, g5, p5, trn1 etc.
+        gpu_families = ["p3", "p4", "g4", "g5", "p5", "trn1", "dl1"]
 
         try:
-            async with await self._get_client(session, "ec2", region, credentials, config=config) as ec2:
+            async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
                 paginator = ec2.get_paginator("describe_instances")
                 async for page in paginator.paginate(
                     Filters=[{"Name": "instance-state-name", "Values": ["running"]}]
@@ -77,9 +101,13 @@ class IdleInstancesPlugin(ZombiePlugin):
                             if any("batch" in k or "batch" in tags[k] for k in tags):
                                 continue
 
+                            instance_type = instance.get("InstanceType", "unknown")
+                            is_gpu = any(fam in instance_type for fam in gpu_families)
+
                             instances.append({
                                 "id": instance["InstanceId"],
-                                "type": instance.get("InstanceType", "unknown"),
+                                "type": instance_type,
+                                "is_gpu": is_gpu,
                                 "launch_time": instance.get("LaunchTime"),
                                 "tags": tags
                             })
@@ -124,27 +152,35 @@ class IdleInstancesPlugin(ZombiePlugin):
                         if res and res.get("Values"):
                             avg_cpu = res["Values"][0]
                             
-                            # BE-ZD-3: Heuristic improvement
-                            if avg_cpu < cpu_threshold:
+                            # Decision logic: GPU instances are higher priority "Zombies"
+                            # If it's a GPU instance, even slightly higher CPU might still be a zombie if under-utilized
+                            threshold = cpu_threshold * 1.5 if inst["is_gpu"] else cpu_threshold
+
+                            if avg_cpu < threshold:
                                 monthly_cost = PricingService.estimate_monthly_waste(
                                     provider="aws",
                                     resource_type="instance",
                                     resource_size=inst['type'],
                                     region=region
                                 )
+                                
+                                # Governance: Get Attribution
+                                owner = await self._get_attribution(session, region, inst["id"], credentials, config)
 
                                 zombies.append({
                                     "resource_id": inst["id"],
                                     "resource_type": "EC2 Instance",
                                     "instance_type": inst["type"],
+                                    "is_gpu": inst["is_gpu"],
+                                    "owner": owner,
                                     "avg_cpu_percent": round(avg_cpu, 2),
                                     "monthly_cost": round(monthly_cost, 2),
                                     "launch_time": inst["launch_time"].isoformat() if inst["launch_time"] else "",
                                     "recommendation": "Stop or terminate if not needed",
                                     "action": "stop_instance",
                                     "supports_backup": True,
-                                    "explainability_notes": f"Instance has shown extremely low CPU utilization (avg {round(avg_cpu, 2)}%) over a 14-day analysis period. High confidence zombie resource.",
-                                    "confidence_score": 0.98  # Raised from 0.92
+                                    "explainability_notes": f"Instance ({inst['type']}) has shown extremely low CPU utilization (avg {round(avg_cpu, 2)}%) over a 14-day analysis period. {'HIGH PRIORITY: Expensive GPU instance detected.' if inst['is_gpu'] else ''} Launched by: {owner}.",
+                                    "confidence_score": 0.99 if inst["is_gpu"] else 0.98
                                 })
 
         except ClientError as e:
