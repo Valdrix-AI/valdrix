@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import MagicMock, patch
 from app.shared.llm.factory import LLMFactory
 from app.shared.llm.providers.openai import OpenAIProvider
-from app.shared.llm.providers.anthropic import AnthropicProvider
 
 @pytest.mark.parametrize("provider,expected_class", [
     ("openai", "ChatOpenAI"),
@@ -28,7 +27,6 @@ def test_factory_invalid_provider():
 
 def test_api_key_validation_failure():
     """Verifies that invalid API keys (placeholders or too short) are rejected."""
-    from app.shared.llm.providers.openai import OpenAIProvider
     provider = OpenAIProvider()
     
     with pytest.raises(ValueError, match="not configured"):

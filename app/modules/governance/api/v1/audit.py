@@ -28,7 +28,7 @@ class AuditLogResponse(BaseModel):
     event_timestamp: datetime
     actor_email: Optional[str] = None
     resource_type: Optional[str] = None
-    resource_id: Optional[UUID] = None
+    resource_id: Optional[str] = None
     success: bool
     correlation_id: Optional[str] = None
 
@@ -232,9 +232,22 @@ async def request_data_erasure(
         )
     
     try:
-        from app.models.tenant import Tenant, User
+        from app.models.tenant import User
         from app.models.cloud import CostRecord, CloudAccount
-        from app.models.zombies import ZombieResource, RemediationRequest
+        from app.models.remediation import RemediationRequest
+        from app.models.anomaly_marker import AnomalyMarker
+        from app.models.aws_connection import AWSConnection
+        from app.models.azure_connection import AzureConnection
+        from app.models.gcp_connection import GCPConnection
+        from app.models.llm import LLMUsage, LLMBudget
+        from app.models.notification_settings import NotificationSettings
+        from app.models.background_job import BackgroundJob
+        from app.models.carbon_settings import CarbonSettings
+        from app.models.pricing import PricingPlan
+        from app.models.remediation_settings import RemediationSettings
+        from app.models.discovered_account import DiscoveredAccount
+        from app.models.attribution import AttributionRule, CostAllocation
+        from app.models.cost_audit import CostAuditLog
         from sqlalchemy import delete
         
         tenant_id = user.tenant_id
@@ -249,31 +262,99 @@ async def request_data_erasure(
         # Delete in order of dependencies
         deleted_counts = {}
         
-        # 1. Delete cost records (largest table)
+        # 1. Delete dependent cost data (audit logs for records)
+        await db.execute(
+            delete(CostAuditLog).where(
+                CostAuditLog.cost_record_id.in_(
+                    select(CostRecord.id).where(CostRecord.tenant_id == tenant_id)
+                )
+            )
+        )
+        
+        # 2. Delete cost records (largest table)
         result = await db.execute(
             delete(CostRecord).where(CostRecord.tenant_id == tenant_id)
         )
         deleted_counts["cost_records"] = result.rowcount
         
-        # 2. Delete zombie resources
+        # 3. Delete anomaly markers
         result = await db.execute(
-            delete(ZombieResource).where(ZombieResource.tenant_id == tenant_id)
+            delete(AnomalyMarker).where(AnomalyMarker.tenant_id == tenant_id)
         )
-        deleted_counts["zombie_resources"] = result.rowcount
-        
-        # 3. Delete remediation requests
+        deleted_counts["anomaly_markers"] = result.rowcount
+
+        # 4. Delete remediation and discovery data
         result = await db.execute(
             delete(RemediationRequest).where(RemediationRequest.tenant_id == tenant_id)
         )
         deleted_counts["remediation_requests"] = result.rowcount
         
-        # 4. Delete cloud accounts
+        await db.execute(
+            delete(RemediationSettings).where(RemediationSettings.tenant_id == tenant_id)
+        )
+        
+        result = await db.execute(
+            delete(DiscoveredAccount).where(
+                DiscoveredAccount.management_connection_id.in_(
+                    select(AWSConnection.id).where(AWSConnection.tenant_id == tenant_id)
+                )
+            )
+        )
+        deleted_counts["discovered_accounts"] = result.rowcount
+
+        # 5. Delete Cloud Connections and Attribution
+        await db.execute(
+            delete(AWSConnection).where(AWSConnection.tenant_id == tenant_id)
+        )
+        await db.execute(
+            delete(AzureConnection).where(AzureConnection.tenant_id == tenant_id)
+        )
+        await db.execute(
+            delete(GCPConnection).where(GCPConnection.tenant_id == tenant_id)
+        )
+        
+        await db.execute(
+            delete(CostAllocation).where(
+                CostAllocation.cost_record_id.in_(
+                    select(CostRecord.id).where(CostRecord.tenant_id == tenant_id)
+                )
+            )
+        )
+        await db.execute(
+            delete(AttributionRule).where(AttributionRule.tenant_id == tenant_id)
+        )
+        
+        # 6. Delete LLM Usage and Budgets
+        result = await db.execute(
+            delete(LLMUsage).where(LLMUsage.tenant_id == tenant_id)
+        )
+        deleted_counts["llm_usage_records"] = result.rowcount
+        
+        await db.execute(
+            delete(LLMBudget).where(LLMBudget.tenant_id == tenant_id)
+        )
+        
+        # 7. Delete Notification and Carbon settings
+        await db.execute(
+            delete(NotificationSettings).where(NotificationSettings.tenant_id == tenant_id)
+        )
+        await db.execute(
+            delete(CarbonSettings).where(CarbonSettings.tenant_id == tenant_id)
+        )
+        
+        # 8. Delete Background Jobs
+        result = await db.execute(
+            delete(BackgroundJob).where(BackgroundJob.tenant_id == tenant_id)
+        )
+        deleted_counts["background_jobs"] = result.rowcount
+
+        # 9. Delete Cloud accounts (Meta)
         result = await db.execute(
             delete(CloudAccount).where(CloudAccount.tenant_id == tenant_id)
         )
         deleted_counts["cloud_accounts"] = result.rowcount
         
-        # 5. Delete users (except the requesting user - they delete last)
+        # 10. Delete users (except the requesting user - they delete last)
         result = await db.execute(
             delete(User).where(
                 User.tenant_id == tenant_id,
@@ -281,6 +362,7 @@ async def request_data_erasure(
             )
         )
         deleted_counts["other_users"] = result.rowcount
+
         
         # 6. Audit logs preserved (required for compliance) but marked
         # We don't delete audit logs - they are required for SOC2

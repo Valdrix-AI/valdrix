@@ -10,14 +10,12 @@ import asyncio
 import structlog
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Import all modules under test
-from app.shared.db.session import check_rls_policy
-from app.shared.core.exceptions import ValdrixException, AIAnalysisError
+from app.shared.core.exceptions import ValdrixException
 from app.shared.core.security import (
     EncryptionKeyManager,
     encrypt_string,
@@ -210,7 +208,7 @@ class TestLLMBudgetCheck:
         tenant_id = uuid4()
         
         # Patch LLMUsage to avoid real model instantiation issues
-        with patch('app.shared.llm.budget_manager.LLMUsage', autospec=True) as mock_usage_cls:
+        with patch('app.shared.llm.budget_manager.LLMUsage', autospec=True):
             await LLMBudgetManager.record_usage(
                 tenant_id=tenant_id,
                 db=mock_db,

@@ -40,9 +40,28 @@ class ZombieScanHandler(BaseJobHandler):
             on_category_complete=checkpoint_result
         )
 
+        if not results or (not any(isinstance(v, list) and v for v in results.values()) and results.get("total_monthly_waste", 0) == 0):
+            if results.get("error"):
+                return {"status": "skipped", "reason": "no_connections_found", "details": []}
+
+        # Build details summary for per-provider visibility
+        details = []
+        # ZombieService.scan_for_tenant doesn't currently categorize by provider in the top level
+        # but it adds 'provider' to each item.
+        providers_hit = set()
+        for cat, items in results.items():
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, dict) and "provider" in item:
+                        providers_hit.add(item["provider"])
+        
+        for p in providers_hit:
+            details.append({"provider": p, "success": True})
+
         return {
             "status": "completed",
-            "zombies_found": sum(len(v) for k, v in results.items() if isinstance(v, list)),
+            "zombies_found": sum(len(v) for k, v in results.items() if isinstance(v, list) and k not in ["scanned_connections", "details"]),
             "total_waste": results.get("total_monthly_waste", 0.0),
+            "details": details,
             "results": results
         }

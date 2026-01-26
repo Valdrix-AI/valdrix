@@ -1,5 +1,5 @@
 import jwt
-from typing import Optional
+from typing import Optional, Any, Callable
 from uuid import UUID
 from fastapi import HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -8,14 +8,39 @@ import structlog
 from app.shared.core.config import get_settings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.shared.db.session import get_db
-from app.models.tenant import User
+from app.shared.db.session import get_db, set_session_tenant_id
+from app.models.tenant import User, UserRole
+from app.shared.core.pricing import PricingTier
 
 logger = structlog.get_logger()
 
 # HTTPBearer: Extracts "Bearer <token>" from Authorization header
 # auto_error=False: Returns None instead of 403 if no token (allows optional auth)
 security = HTTPBearer(auto_error=False)
+
+from datetime import datetime, timedelta, timezone
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Generate a new JWT token signed with the application secret.
+    """
+    settings = get_settings()
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=60) # Default 1 hour
+    
+    # Ensure standard claims
+    if "aud" not in to_encode:
+        to_encode["aud"] = "authenticated"
+    if "iss" not in to_encode:
+        to_encode["iss"] = "supabase"
+        
+    to_encode.update({"exp": expire})
+    
+    encoded_jwt = jwt.encode(to_encode, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
+    return encoded_jwt
 
 
 class CurrentUser(BaseModel):
@@ -25,8 +50,8 @@ class CurrentUser(BaseModel):
     id: UUID
     email: str
     tenant_id: Optional[UUID] = None
-    role: str = "member"  # owner, admin, member
-    tier: str = "starter" # trial, starter, growth, pro, enterprise
+    role: UserRole = UserRole.MEMBER
+    tier: PricingTier = PricingTier.STARTER
 
 
 def decode_jwt(token: str) -> dict:
@@ -131,6 +156,7 @@ async def get_current_user(
 
         # Handle not found
         if row is None:
+            logger.error("auth_user_not_found_in_db", user_id=user_id)
             raise HTTPException(403, "User not found. Complete Onboarding first.")
 
         user, plan = row
@@ -139,6 +165,9 @@ async def get_current_user(
         request.state.tenant_id = user.tenant_id
         request.state.user_id = user.id
         request.state.tier = plan # BE-LLM-4: Enable tier-aware rate limiting
+
+        # Propagate RLS context to the database session
+        await set_session_tenant_id(db, user.tenant_id)
 
         logger.info("user_authenticated", user_id=str(user.id), email=user.email, role=user.role, tier=plan)
 
@@ -163,7 +192,7 @@ async def get_current_user(
 
 
 
-def requires_role(required_role: str):
+def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
     """
     FastAPI dependency for RBAC.
 
@@ -179,15 +208,19 @@ def requires_role(required_role: str):
     """
     def role_checker(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         # Owner bypasses all role checks
-        if user.role == "owner":
+        if user.role == UserRole.OWNER:
             return user
 
         # Check hierarchy
         # owner > admin > member
-        role_hierarchy = {"owner": 100, "admin": 50, "member": 10}
+        role_hierarchy = {
+            UserRole.OWNER: 100, 
+            UserRole.ADMIN: 50, 
+            UserRole.MEMBER: 10
+        }
 
         user_level = role_hierarchy.get(user.role, 0)
-        required_level = role_hierarchy.get(required_role, 10)
+        required_level = role_hierarchy.get(UserRole(required_role), 10)
 
         if user_level < required_level:
             logger.warning(
@@ -205,7 +238,7 @@ def requires_role(required_role: str):
 
     return role_checker
 
-def require_tenant_access(user: CurrentUser = Depends(get_current_user)):
+def require_tenant_access(user: CurrentUser = Depends(get_current_user)) -> UUID:
     """
     Ensures that the current user has access to the tenant context.
     Standardizes BE-SEC-02: Strict Tenant Isolation.

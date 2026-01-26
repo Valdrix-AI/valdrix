@@ -8,18 +8,19 @@ Implements production-grade dunning for failed payments:
 """
 
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
+from typing import Dict, Any, cast
+from app.shared.core.config import get_settings
 
 from app.modules.reporting.domain.billing.paystack_billing import (
     TenantSubscription, 
     SubscriptionStatus,
-    BillingService,
-    PricingTier
+    BillingService
 )
+from app.shared.core.pricing import PricingTier
 from app.models.background_job import JobType
 from app.modules.governance.domain.jobs.processor import enqueue_job
 
@@ -50,7 +51,7 @@ class DunningService:
         self, 
         subscription_id: UUID,
         is_webhook: bool = True
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """
         Process a failed payment - called by webhook or job handler.
         
@@ -99,7 +100,7 @@ class DunningService:
         await enqueue_job(
             db=self.db,
             job_type=JobType.DUNNING,
-            tenant_id=subscription.tenant_id,
+            tenant_id=cast(UUID, subscription.tenant_id),
             payload={
                 "subscription_id": str(subscription.id),
                 "attempt": attempt + 1
@@ -118,7 +119,7 @@ class DunningService:
             "next_retry_at": next_retry.isoformat()
         }
     
-    async def retry_payment(self, subscription_id: UUID) -> dict:
+    async def retry_payment(self, subscription_id: UUID) -> Dict[str, Any]:
         """
         Attempt to charge the subscription again.
         Called by DunningHandler.
@@ -142,7 +143,7 @@ class DunningService:
             if success:
                 return await self._handle_retry_success(subscription)
             else:
-                return await self.process_failed_payment(subscription.id, is_webhook=False)
+                return await self.process_failed_payment(cast(UUID, subscription.id), is_webhook=False)
                 
         except Exception as e:
             logger.error(
@@ -152,7 +153,7 @@ class DunningService:
             )
             return await self.process_failed_payment(subscription.id, is_webhook=False)
     
-    async def _handle_retry_success(self, subscription: TenantSubscription) -> dict:
+    async def _handle_retry_success(self, subscription: TenantSubscription) -> Dict[str, Any]:
         """Clear dunning state after successful payment."""
         subscription.status = SubscriptionStatus.ACTIVE.value
         subscription.dunning_attempts = 0
@@ -172,7 +173,7 @@ class DunningService:
         
         return {"status": "success", "action": "subscription_reactivated"}
     
-    async def _handle_final_failure(self, subscription: TenantSubscription) -> dict:
+    async def _handle_final_failure(self, subscription: TenantSubscription) -> Dict[str, Any]:
         """Handle max retries exhausted - downgrade to TRIAL."""
         subscription.status = SubscriptionStatus.CANCELLED.value
         subscription.tier = PricingTier.TRIAL.value
@@ -220,7 +221,14 @@ class DunningService:
             from app.shared.core.security import decrypt_string
             email = decrypt_string(user.email, context="pii")
             
-            email_service = EmailService()
+            settings = get_settings()
+            email_service = EmailService(
+                smtp_host=str(settings.SMTP_HOST),
+                smtp_port=int(settings.SMTP_PORT),
+                smtp_user=str(settings.SMTP_USER),
+                smtp_password=str(settings.SMTP_PASSWORD),
+                from_email=str(settings.EMAILS_FROM_EMAIL or "billing@valdrix.io")
+            )
             await email_service.send_dunning_notification(
                 to_email=email,
                 attempt=attempt,
@@ -250,7 +258,14 @@ class DunningService:
             from app.shared.core.security import decrypt_string
             email = decrypt_string(user.email, context="pii")
             
-            email_service = EmailService()
+            settings = get_settings()
+            email_service = EmailService(
+                smtp_host=str(settings.SMTP_HOST),
+                smtp_port=int(settings.SMTP_PORT),
+                smtp_user=str(settings.SMTP_USER),
+                smtp_password=str(settings.SMTP_PASSWORD),
+                from_email=str(settings.EMAILS_FROM_EMAIL or "billing@valdrix.io")
+            )
             await email_service.send_payment_recovered_notification(to_email=email)
             
         except Exception as e:
@@ -273,7 +288,14 @@ class DunningService:
             from app.shared.core.security import decrypt_string
             email = decrypt_string(user.email, context="pii")
             
-            email_service = EmailService()
+            settings = get_settings()
+            email_service = EmailService(
+                smtp_host=str(settings.SMTP_HOST),
+                smtp_port=int(settings.SMTP_PORT),
+                smtp_user=str(settings.SMTP_USER),
+                smtp_password=str(settings.SMTP_PASSWORD),
+                from_email=str(settings.EMAILS_FROM_EMAIL or "billing@valdrix.io")
+            )
             await email_service.send_account_downgraded_notification(to_email=email)
             
         except Exception as e:

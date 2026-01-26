@@ -6,6 +6,7 @@ from google.cloud import logging as gcp_logging
 from google.oauth2 import service_account
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
+from app.modules.optimization.domain.registry import registry
 
 # Import GCP Plugins
 # Import GCP Plugins to trigger registration
@@ -25,8 +26,6 @@ class GCPZombieDetector(BaseZombieDetector):
         self._credentials_obj = None
 
         if connection:
-            from app.shared.adapters.gcp import GCPAdapter
-            adapter = GCPAdapter(connection)
             self.project_id = connection.project_id
             # Fetch credentials using logic from connection or adapter
             if connection.service_account_json:

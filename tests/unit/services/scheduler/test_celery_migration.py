@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.modules.governance.domain.scheduler.orchestrator import SchedulerOrchestrator
-from app.shared.core.celery_app import celery_app
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 
 @pytest.fixture

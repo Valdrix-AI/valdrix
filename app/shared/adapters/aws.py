@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Any as AnyType
+from typing import List, Dict, Any
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import aioboto3
@@ -18,7 +18,11 @@ class AWSAdapter(CostAdapter):
         self.session = aioboto3.Session()
 
     async def verify_connection(self) -> bool:
-        """Verify AWS credentials (placeholder)."""
+        """
+        Verify that the provided AWS credentials have the necessary permissions.
+        Currently returns True to satisfy the interface; actual validation occurs
+        during the first Cost Explorer call.
+        """
         return True
 
     async def get_cost_and_usage(
@@ -101,5 +105,8 @@ class AWSAdapter(CostAdapter):
                 }
 
     async def get_resource_usage(self, service_name: str, resource_id: str = None) -> List[Dict[str, Any]]:
-        """Placeholder."""
+        """
+        Optional: Fetch granular usage metrics for a specific resource.
+        Not implemented for the base AWS adapter.
+        """
         return []

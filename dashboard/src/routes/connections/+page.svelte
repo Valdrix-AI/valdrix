@@ -149,7 +149,6 @@
 			if (res.ok || res.status === 404) {
 				success = `${provider.toUpperCase()} connection deleted successfully.`;
 				if (res.status === 404) {
-					console.log('Connection was already deleted (404), refreshing list.');
 				}
 
 				// If this was the management account, clear discovered accounts

@@ -3,7 +3,6 @@ import structlog
 from google.cloud import compute_v1
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
-from decimal import Decimal
 
 logger = structlog.get_logger()
 
@@ -38,14 +37,21 @@ class GCPUnusedStaticIpsPlugin(ZombiePlugin):
                 if address.status == "RESERVED":
                     # Static IP monthly cost is ~$7.30 (standard rate for redundant IPs)
                     # Or ~$0.01 per hour = $7.2 per 30 days
-                    monthly_waste = Decimal("7.20")
+                    from app.modules.reporting.domain.pricing.service import PricingService
+                    monthly_waste = PricingService.estimate_monthly_waste(
+                        provider="gcp",
+                        resource_type="ip",
+                        region=region
+                    )
                     
                     zombies.append({
-                        "id": str(address.id),
+                        "resource_id": str(address.id),
                         "name": address.name,
                         "region": region,
                         "ip_address": address.address,
+                        "monthly_cost": float(monthly_waste),
                         "monthly_waste": float(monthly_waste),
+                        "description": "Unused static Public IP",
                         "tags": dict(address.labels) if address.labels else {},
                         "created_at": address.creation_timestamp
                     })

@@ -58,7 +58,8 @@ class BaseZombieDetector(ABC):
         Returns:
             A dictionary containing scan results, waste metrics, and metadata.
         """
-        self._initialize_plugins()
+        if not self.plugins:
+            self._initialize_plugins()
         
         results = {
             "provider": self.provider_name,

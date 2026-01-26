@@ -9,9 +9,11 @@ Uses moto to mock AWS responses and verifies:
 """
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from decimal import Decimal
+from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta, timezone
+from moto.server import ThreadedMotoServer
+import aioboto3
+from botocore.config import Config
 
 # Test data representing mock AWS resources
 MOCK_UNATTACHED_VOLUME = {
@@ -112,9 +114,48 @@ class TestZombieDetectorFactory:
         assert detector.project_id == "my-gcp-project"
 
 
-from moto.server import ThreadedMotoServer
-import aioboto3
-from botocore.config import Config
+
+
+class AsyncPaginatorWrapper:
+    def __init__(self, sync_paginator):
+        self._sync_paginator = sync_paginator
+
+    def paginate(self, *args, **kwargs):
+        self._iter = iter(self._sync_paginator.paginate(*args, **kwargs))
+        return self
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._iter)
+        except StopIteration:
+            raise StopAsyncIteration
+
+class AsyncClientWrapper:
+    """Wrapper to make boto3 sync clients behave like aioboto3 async clients."""
+    def __init__(self, sync_client):
+        self._sync_client = sync_client
+    
+    def __getattr__(self, name):
+        attr = getattr(self._sync_client, name)
+        if name == "get_paginator":
+            def get_paginator_wrapper(*args, **kwargs):
+                return AsyncPaginatorWrapper(attr(*args, **kwargs))
+            return get_paginator_wrapper
+            
+        if callable(attr):
+            async def wrapper(*args, **kwargs):
+                # Execute directly in main thread for moto compatibility
+                return attr(*args, **kwargs)
+            return wrapper
+        return attr
+
+    async def __aenter__(self):
+        return self
+    async def __aexit__(self, *args):
+        pass
 
 @pytest.fixture(scope="class")
 def moto_server():
@@ -163,7 +204,7 @@ class TestZombieScanWithMoto:
             volume_id = vol_response["VolumeId"]
             
         # 2. Act - Run the storage plugin
-        from app.modules.optimization.domain.aws_provider.plugins.storage import UnattachedVolumesPlugin
+        from app.modules.optimization.adapters.aws.plugins.storage import UnattachedVolumesPlugin
         plugin = UnattachedVolumesPlugin()
         
         boto_config = Config(read_timeout=30, connect_timeout=10, retries={"max_attempts": 3})
@@ -197,10 +238,10 @@ class TestZombieScanWithMoto:
         async with session.client("ec2", region_name="us-east-1", endpoint_url=endpoint_url) as ec2:
             vol = await ec2.create_volume(AvailabilityZone="us-east-1a", Size=10)
             snap = await ec2.create_snapshot(VolumeId=vol["VolumeId"])
-            snapshot_id = snap["SnapshotId"]
+            snap["SnapshotId"]
             
         # 2. Act - Run the storage plugin
-        from app.modules.optimization.domain.aws_provider.plugins.storage import OldSnapshotsPlugin
+        from app.modules.optimization.adapters.aws.plugins.storage import OldSnapshotsPlugin
         plugin = OldSnapshotsPlugin()
         
         boto_config = Config(read_timeout=30, connect_timeout=10, retries={"max_attempts": 3})
@@ -242,9 +283,9 @@ class TestPluginRegistry:
         from app.modules.optimization.domain.registry import registry
         
         # Import plugins to trigger registration
-        import app.modules.optimization.domain.azure_provider.plugins.unattached_disks  # noqa
-        import app.modules.optimization.domain.azure_provider.plugins.orphaned_ips  # noqa
-        import app.modules.optimization.domain.azure_provider.plugins.orphaned_images  # noqa
+        import app.modules.optimization.adapters.azure.plugins.unattached_disks  # noqa
+        import app.modules.optimization.adapters.azure.plugins.orphaned_ips  # noqa
+        import app.modules.optimization.adapters.azure.plugins.orphaned_images  # noqa
         
         azure_plugins = registry.get_plugins_for_provider("azure")
         assert len(azure_plugins) >= 3
@@ -254,9 +295,9 @@ class TestPluginRegistry:
         from app.modules.optimization.domain.registry import registry
         
         # Import plugins to trigger registration
-        import app.modules.optimization.domain.gcp_provider.plugins.unattached_disks  # noqa
-        import app.modules.optimization.domain.gcp_provider.plugins.unused_ips  # noqa
-        import app.modules.optimization.domain.gcp_provider.plugins.machine_images  # noqa
+        import app.modules.optimization.adapters.gcp.plugins.unattached_disks  # noqa
+        import app.modules.optimization.adapters.gcp.plugins.unused_ips  # noqa
+        import app.modules.optimization.adapters.gcp.plugins.machine_images  # noqa
         
         gcp_plugins = registry.get_plugins_for_provider("gcp")
         assert len(gcp_plugins) >= 3

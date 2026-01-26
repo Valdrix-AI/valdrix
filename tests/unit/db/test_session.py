@@ -4,8 +4,6 @@ Tests for Database Session Management
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import Request
-from sqlalchemy import text
-import time
 from app.shared.db.session import (
     get_db,
     before_cursor_execute,

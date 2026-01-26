@@ -216,6 +216,6 @@ async def test_send_carbon_alert_slack(carbon_service, mock_db):
                         "recommendations": ["Use Graviton"]
                     }
                     
-                    sent = await carbon_service.send_carbon_alert(tenant_id, budget_status)
+                    await carbon_service.send_carbon_alert(tenant_id, budget_status)
                     
                     mock_slack.send_alert.assert_called_once()

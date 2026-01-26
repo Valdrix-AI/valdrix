@@ -26,6 +26,8 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import structlog
+from app.shared.core.pricing import PricingTier
+from app.shared.core.security import encrypt_string, decrypt_string
 
 from app.shared.db.base import Base
 from app.shared.core.config import get_settings
@@ -34,8 +36,6 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 
-from app.shared.core.pricing import PricingTier
-from app.shared.core.security import encrypt_string, decrypt_string
 
 
 class SubscriptionStatus(str, Enum):

@@ -152,7 +152,6 @@ async def test_check_remediation_rate_limit_memory_window_reset():
     
     with patch("app.shared.core.rate_limit.get_redis_client", return_value=None):
         # Use a very small limit and simulate time pass
-        import time
         with patch("time.time", side_effect=[1000, 1001, 5000]): # Start, Incr, Reset (1000 + 3600 = 4600 < 5000)
             # First attempt
             assert await check_remediation_rate_limit(tenant_id, action, limit=1) is True

@@ -1,12 +1,9 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
+import sys
 
-# Mock engine before any app imports to avoid ConnectionRefusedError
-with patch("sqlalchemy.ext.asyncio.create_async_engine"):
-    with patch("app.shared.db.session.engine"):
-        from app.modules.optimization.domain.azure_provider.plugins.idle_vms import AzureIdleVMPlugin
-
-from decimal import Decimal
+# Import the adapter directly to avoid the domain/app dependency chain
+from app.modules.optimization.adapters.azure.plugins.idle_vms import AzureIdleVMPlugin
 
 @pytest.mark.asyncio
 async def test_azure_idle_vm_plugin_gpu_detection():
@@ -29,7 +26,9 @@ async def test_azure_idle_vm_plugin_gpu_detection():
     
     client.virtual_machines.list_all = mock_list
     
-    zombies = await plugin.scan(client, region="eastus")
+    # Inject PricingService mock at class level for this test
+    with patch("app.modules.reporting.domain.pricing.service.PricingService.estimate_monthly_waste", return_value=1200.0):
+        zombies = await plugin.scan(client, region="eastus")
     
     assert len(zombies) == 1
     assert zombies[0]["name"] == "gpu-vm"
@@ -63,7 +62,9 @@ async def test_azure_idle_vm_plugin_attribution():
     
     monitor_client.activity_logs.list = mock_activity_list
     
-    zombies = await plugin.scan(client, monitor_client=monitor_client)
+    # Inject PricingService mock
+    with patch("app.modules.reporting.domain.pricing.service.PricingService.estimate_monthly_waste", return_value=150.0):
+        zombies = await plugin.scan(client, monitor_client=monitor_client)
     
     assert len(zombies) == 1
     assert zombies[0]["owner"] == "admin@example.com"

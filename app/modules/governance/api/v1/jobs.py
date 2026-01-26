@@ -8,8 +8,9 @@ Provides endpoints for:
 """
 
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Dict, Any, List
 from datetime import datetime, timezone
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from sqlalchemy import select, func, desc, asc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,15 +45,15 @@ class ProcessJobsResponse(BaseModel):
 
 class EnqueueJobRequest(BaseModel):
     """Request to enqueue a new job."""
-    job_type: Literal["finops_analysis", "zombie_scan", "notification"]
-    payload: dict | None = None
+    job_type: JobType
+    payload: Dict[str, Any] | None = None
     scheduled_for: datetime | None = None
 
 
 class JobResponse(BaseModel):
     """Single job details."""
     id: uuid.UUID
-    job_type: Literal["finops_analysis", "zombie_scan", "notification", "recurring_billing", "manual_fix"]
+    job_type: JobType
     status: str
     attempts: int
     scheduled_for: datetime
@@ -64,7 +65,7 @@ class JobResponse(BaseModel):
 async def get_job_queue_status(
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db)
-):
+) -> JobStatusResponse:
     """
     Get current job queue statistics.
     
@@ -77,7 +78,7 @@ async def get_job_queue_status(
             func.count(BackgroundJob.id)
         )
         .where(BackgroundJob.tenant_id == user.tenant_id)
-        .where(BackgroundJob.is_deleted == False)
+        .where(sa.not_(BackgroundJob.is_deleted))
         .group_by(BackgroundJob.status)
     )
     
@@ -93,13 +94,13 @@ async def get_job_queue_status(
 
 
 @router.post("/process", response_model=ProcessJobsResponse)
-@standard_limit
+@standard_limit # type: ignore[untyped-decorator]
 async def process_pending_jobs(
-    request: Request,
+    _request: Request,
     _user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=10, ge=1, le=50, description="Max jobs to process")
-):
+) -> ProcessJobsResponse:
     """
     Process pending jobs manually.
     
@@ -121,7 +122,7 @@ async def enqueue_new_job(
     request: EnqueueJobRequest,
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db)
-):
+) -> JobResponse:
     """
     Enqueue a new background job.
     
@@ -131,15 +132,15 @@ async def enqueue_new_job(
     - notification: Send notification
     """
     # Validate job type - Item N1: Prevent enqueuing internal system jobs
-    USER_CREATABLE_JOBS = [
-        JobType.FINOPS_ANALYSIS.value,
-        JobType.ZOMBIE_SCAN.value,
-        JobType.NOTIFICATION.value
-    ]
+    USER_CREATABLE_JOBS = {
+        JobType.FINOPS_ANALYSIS,
+        JobType.ZOMBIE_SCAN,
+        JobType.NOTIFICATION
+    }
     if request.job_type not in USER_CREATABLE_JOBS:
         raise HTTPException(
             status_code=403,
-            detail=f"Unauthorized job type. Users can only enqueue: {USER_CREATABLE_JOBS}"
+            detail=f"Unauthorized job type. Users can only enqueue: {[t.value for t in USER_CREATABLE_JOBS]}"
         )
     
     job = await enqueue_job(
@@ -167,8 +168,8 @@ async def list_jobs(
     status: str | None = Query(default=None, description="Filter by status"),
     limit: int = Query(default=20, ge=1, le=100),
     sort_by: Literal["created_at", "scheduled_for", "status"] = Query("created_at"),
-    order: Literal["asc", "desc"] = Query("desc")
-):
+    order: Literal["asc", "desc"] = Query(default="desc")
+) -> List[JobResponse]:
     """List recent jobs for the tenant."""
     sort_column = getattr(BackgroundJob, sort_by)
     order_func = desc if order == "desc" else asc
@@ -176,13 +177,13 @@ async def list_jobs(
     query = (
         select(BackgroundJob)
         .where(BackgroundJob.tenant_id == user.tenant_id)
-        .where(BackgroundJob.is_deleted == False)
-        .order_by(order_func(sort_column))
-        .limit(limit)
+        .where(sa.not_(BackgroundJob.is_deleted))
     )
     
     if status:
         query = query.where(BackgroundJob.status == status)
+    
+    query = query.order_by(order_func(sort_column)).limit(limit)
     
     result = await db.execute(query)
     jobs = result.scalars().all()
@@ -190,7 +191,7 @@ async def list_jobs(
     return [
         JobResponse(
             id=j.id,
-            job_type=j.job_type,
+            job_type=JobType(j.job_type),
             status=j.status,
             attempts=j.attempts,
             scheduled_for=j.scheduled_for,
@@ -208,7 +209,7 @@ async def internal_process_jobs(
     background_tasks: BackgroundTasks,
     _db: AsyncSession = Depends(get_db),
     secret: str = Query(description="Internal secret for pg_cron")
-):
+) -> Dict[str, str]:
     """
     Internal endpoint called by pg_cron (Asynchronous).
     """
@@ -220,7 +221,7 @@ async def internal_process_jobs(
     if not secrets.compare_digest(secret, expected_secret):
         raise HTTPException(status_code=403, detail="Invalid secret")
     
-    async def run_processor():
+    async def run_processor() -> None:
         async with async_session_maker() as session:
             processor = JobProcessor(session)
             await processor.process_pending_jobs()

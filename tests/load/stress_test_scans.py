@@ -1,7 +1,6 @@
 import asyncio
 import pytest
 import uuid
-from decimal import Decimal
 from unittest.mock import MagicMock, AsyncMock, patch
 from app.modules.optimization.domain.service import ZombieService
 

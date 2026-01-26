@@ -19,17 +19,29 @@
 	let canvas: HTMLCanvasElement;
 	let chart: Chart | null = null;
 
-	const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-	
+	const labels = [
+		'Jan',
+		'Feb',
+		'Mar',
+		'Apr',
+		'May',
+		'Jun',
+		'Jul',
+		'Aug',
+		'Sep',
+		'Oct',
+		'Nov',
+		'Dec'
+	];
+
 	// Simulated cumulative savings data (Compound Value)
 	const savingsData = [
-		1200, 2500, 3900, 5400, 7100, 9000, 
-		11200, 13700, 16500, 19600, 23000, 26800
+		1200, 2500, 3900, 5400, 7100, 9000, 11200, 13700, 16500, 19600, 23000, 26800
 	];
 
 	function createChart() {
 		if (!canvas) return;
-		
+
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
@@ -75,8 +87,8 @@
 					},
 					y: {
 						grid: { color: 'rgba(51, 65, 85, 0.2)' },
-						ticks: { 
-							color: '#64748b', 
+						ticks: {
+							color: '#64748b',
 							font: { size: 10 },
 							callback: (value) => `$${(value as number) / 1000}k`
 						}
@@ -87,7 +99,9 @@
 	}
 
 	onMount(() => createChart());
-	onDestroy(() => { if (chart) chart.destroy(); });
+	onDestroy(() => {
+		if (chart) chart.destroy();
+	});
 </script>
 
 <div class="roa-chart glass-panel stagger-enter" style="animation-delay: 300ms;">

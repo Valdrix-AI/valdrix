@@ -1,9 +1,8 @@
 import httpx
 import structlog
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from app.shared.core.config import get_settings
 from app.models.pricing import ExchangeRate
@@ -32,6 +31,7 @@ class ExchangeRateService:
         2. External API
         3. Hardcoded Fallback (₦1,450 as of early 2026)
         """
+        rate_obj = None
         # 1. Check DB Cache
         try:
             result = await self.db.execute(
@@ -61,7 +61,7 @@ class ExchangeRateService:
             logger.warning("currency_using_stale_db_rate", age=datetime.now(timezone.utc) - rate_obj.last_updated)
             return float(rate_obj.rate)
             
-        return 1450.0  # Industry estimated baseline if all else fails
+        return settings.FALLBACK_NGN_RATE  # Industry estimated baseline if all else fails
 
     async def _fetch_from_api(self) -> float:
         """Fetch latest rate from ExchangeRate-API."""

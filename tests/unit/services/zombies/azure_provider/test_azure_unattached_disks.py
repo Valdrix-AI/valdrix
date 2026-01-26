@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 from app.modules.optimization.domain.azure_provider.plugins.unattached_disks import AzureUnattachedDisksPlugin
 
 @pytest.fixture

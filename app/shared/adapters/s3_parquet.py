@@ -3,7 +3,6 @@ import pandas as pd
 import aioboto3
 import structlog
 from typing import List, Dict, Any
-from datetime import datetime
 from app.models.aws_connection import AWSConnection
 
 logger = structlog.get_logger()

@@ -8,20 +8,23 @@ Manages the remediation approval workflow:
 4. execute() - System executes approved requests
 """
 
-from typing import List, Dict, Optional
-from decimal import Decimal
 from datetime import datetime, timezone
 from uuid import UUID
+from decimal import Decimal
+from typing import List, Dict, Optional, Any, Tuple
 import aioboto3
 from botocore.exceptions import ClientError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import structlog
+import time
 
 from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
 from app.modules.governance.domain.security.audit_log import AuditLogger, AuditEventType
 from app.shared.core.security_metrics import REMEDIATION_TOTAL
 from app.shared.core.ops_metrics import REMEDIATION_DURATION_SECONDS
+from app.shared.core.constants import SYSTEM_USER_ID
+from app.shared.adapters.aws_utils import map_aws_credentials
 
 logger = structlog.get_logger()
 
@@ -35,15 +38,18 @@ class RemediationService:
     2. list_pending() - Reviewer sees pending requests
     3. approve() / reject() - Reviewer takes action
     4. execute() - System executes approved requests
+    4. execute() - System executes approved requests
     """
 
-    def __init__(self, db: AsyncSession, region: str = "us-east-1", credentials: Dict[str, str] = None):
+    # Mapping CamelCase to snake_case for aioboto3 credentials - DEPRECATED: Use aws_utils
+
+    def __init__(self, db: AsyncSession, region: str = "us-east-1", credentials: Optional[Dict[str, str]] = None) -> None:
         self.db = db
         self.region = region
         self.credentials = credentials
         self.session = aioboto3.Session()
 
-    async def _get_client(self, service_name: str):
+    async def _get_client(self, service_name: str) -> Any:
         """Helper to get aioboto3 client with optional credentials and endpoint override."""
         from app.shared.core.config import get_settings
         settings = get_settings()
@@ -54,18 +60,7 @@ class RemediationService:
             kwargs["endpoint_url"] = settings.AWS_ENDPOINT_URL
             
         if self.credentials:
-            # Map CamelCase to snake_case for aioboto3
-            Mapping = {
-                "AccessKeyId": "aws_access_key_id",
-                "SecretAccessKey": "aws_secret_access_key",
-                "SessionToken": "aws_session_token",
-                "aws_access_key_id": "aws_access_key_id",
-                "aws_secret_access_key": "aws_secret_access_key",
-                "aws_session_token": "aws_session_token",
-            }
-            for src, dst in Mapping.items():
-                if src in self.credentials:
-                    kwargs[dst] = self.credentials[src]
+            kwargs.update(map_aws_credentials(self.credentials))
 
         return self.session.client(service_name, **kwargs)
 
@@ -240,7 +235,7 @@ class RemediationService:
             # BE-SEC-3: If already scheduled, check if grace period has passed
             if request.status == RemediationStatus.SCHEDULED:
                 now = datetime.now(timezone.utc)
-                if now < request.scheduled_execution_at:
+                if request.scheduled_execution_at and now < request.scheduled_execution_at:
                     logger.info("remediation_execution_deferred_grace_period", 
                                 request_id=str(request_id), 
                                 remaining_minutes=(request.scheduled_execution_at - now).total_seconds() / 60)
@@ -250,7 +245,7 @@ class RemediationService:
                 raise ValueError(f"Request must be approved or scheduled (current: {request.status.value})")
 
         # 1. Create immutable pre-execution audit log FIRST (SEC-03)
-        audit_logger = AuditLogger(db=self.db, tenant_id=tenant_id)
+        audit_logger = AuditLogger(db=self.db, tenant_id=str(tenant_id))
 
         # BE-SEC-3: Implement 24-hour Grace Period (Delayed Deletion)
         if request.status == RemediationStatus.APPROVED and not bypass_grace_period:
@@ -270,7 +265,7 @@ class RemediationService:
             # Log scheduling in audit trail
             await audit_logger.log(
                 event_type=AuditEventType.REMEDIATION_EXECUTION_STARTED,
-                actor_id=request.reviewed_by_user_id,
+                actor_id=str(request.reviewed_by_user_id) if request.reviewed_by_user_id else str(SYSTEM_USER_ID),
                 resource_id=request.resource_id,
                 resource_type=request.resource_type,
                 success=True,
@@ -301,7 +296,7 @@ class RemediationService:
         # SOC2: Log the actual start of execution (after grace period)
         await audit_logger.log(
             event_type=AuditEventType.REMEDIATION_EXECUTION_STARTED,
-            actor_id=request.reviewed_by_user_id,
+            actor_id=str(request.reviewed_by_user_id) if request.reviewed_by_user_id else str(SYSTEM_USER_ID),
             resource_id=request.resource_id,
             resource_type=request.resource_type,
             success=True,
@@ -312,7 +307,6 @@ class RemediationService:
             }
         )
 
-        import time
         start_time = time.time()
         try:
             # 2. Create backup BEFORE any deletion
@@ -359,17 +353,17 @@ class RemediationService:
             await self._execute_action(request.resource_id, request.action)
 
             request.status = RemediationStatus.COMPLETED
+            request.executed_at = datetime.now(timezone.utc)
             logger.info(
                 "remediation_executed",
                 request_id=str(request_id),
                 resource=request.resource_id,
             )
 
-            # 4. Log success AFTER completion
             # Permanent Audit Log (SEC-03) - SOC2 compliant
             await audit_logger.log(
                 event_type=AuditEventType.REMEDIATION_EXECUTED,
-                actor_id=request.reviewed_by_user_id,
+                actor_id=str(request.reviewed_by_user_id) if request.reviewed_by_user_id else str(SYSTEM_USER_ID),
                 resource_id=request.resource_id,
                 resource_type=request.resource_type,
                 success=True,
@@ -469,7 +463,6 @@ class RemediationService:
     ) -> str:
         """Create a DB snapshot backup before deleting an RDS instance."""
         try:
-            import time
             snapshot_id = f"valdrix-backup-{instance_id}-{int(time.time())}"
             
             async with await self._get_client("rds") as rds:
@@ -494,7 +487,6 @@ class RemediationService:
     ) -> str:
         """Create a cluster snapshot backup before deleting a Redshift cluster."""
         try:
-            import time
             snapshot_id = f"valdrix-backup-{cluster_id}-{int(time.time())}"
             
             async with await self._get_client("redshift") as redshift:
@@ -623,7 +615,7 @@ class RemediationService:
             try:
                 # Auto-approve for hard limit emergency
                 req.status = RemediationStatus.APPROVED
-                req.reviewed_by_user_id = UUID("00000000-0000-0000-0000-000000000000") # System ID placeholder
+                req.reviewed_by_user_id = SYSTEM_USER_ID
                 req.review_notes = "AUTO_APPROVED: Budget Hard Limit Exceeded"
                 await self.db.commit()
                 
@@ -674,7 +666,7 @@ class RemediationService:
         tf_id = resource_id.replace('-', '_').replace('.', '_')
         
         planlines = [
-            f"# Valdrix GitOps Remediation Plan",
+            "# Valdrix GitOps Remediation Plan",
             f"# Resource: {resource_id} ({request.resource_type})",
             f"# Savings: ${request.estimated_monthly_savings}/mo",
             f"# Action: {request.action.value}",
@@ -682,41 +674,41 @@ class RemediationService:
         ]
         
         if provider == "aws":
-            planlines.append(f"# Option 1: Manual State Removal")
+            planlines.append("# Option 1: Manual State Removal")
             planlines.append(f"terraform state rm {tf_type}.{tf_id}")
             planlines.append("")
             
-            planlines.append(f"# Option 2: Terraform 'removed' block (Recommended for TF 1.7+)")
-            planlines.append(f"removed {{")
+            planlines.append("# Option 2: Terraform 'removed' block (Recommended for TF 1.7+)")
+            planlines.append("removed {")
             planlines.append(f"  from = {tf_type}.{tf_id}")
-            planlines.append(f"  lifecycle {{")
-            planlines.append(f"    destroy = true")
-            planlines.append(f"  }}")
-            planlines.append(f"}}")
+            planlines.append("  lifecycle {")
+            planlines.append("    destroy = true")
+            planlines.append("  }")
+            planlines.append("}")
             
         elif provider == "azure":
-            planlines.append(f"# Option 1: Manual State Removal")
+            planlines.append("# Option 1: Manual State Removal")
             planlines.append(f"terraform state rm {tf_type}.{tf_id}")
             planlines.append("")
-            planlines.append(f"# Option 2: Terraform 'removed' block")
-            planlines.append(f"removed {{")
+            planlines.append("# Option 2: Terraform 'removed' block")
+            planlines.append("removed {")
             planlines.append(f"  from = {tf_type}.{tf_id}")
-            planlines.append(f"  lifecycle {{")
-            planlines.append(f"    destroy = true")
-            planlines.append(f"  }}")
-            planlines.append(f"}}")
+            planlines.append("  lifecycle {")
+            planlines.append("    destroy = true")
+            planlines.append("  }")
+            planlines.append("}")
 
         elif provider == "gcp":
-            planlines.append(f"# Option 1: Manual State Removal")
+            planlines.append("# Option 1: Manual State Removal")
             planlines.append(f"terraform state rm {tf_type}.{tf_id}")
             planlines.append("")
-            planlines.append(f"# Option 2: Terraform 'removed' block")
-            planlines.append(f"removed {{")
+            planlines.append("# Option 2: Terraform 'removed' block")
+            planlines.append("removed {")
             planlines.append(f"  from = {tf_type}.{tf_id}")
-            planlines.append(f"  lifecycle {{")
-            planlines.append(f"    destroy = true")
-            planlines.append(f"  }}")
-            planlines.append(f"}}")
+            planlines.append("  lifecycle {")
+            planlines.append("    destroy = true")
+            planlines.append("  }")
+            planlines.append("}")
             
         return "\n".join(planlines)
 

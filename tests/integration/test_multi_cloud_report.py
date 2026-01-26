@@ -1,9 +1,8 @@
 import pytest
 from httpx import AsyncClient
-from datetime import date, timedelta
+from datetime import date
 from uuid import uuid4
 from decimal import Decimal
-from app.models.tenant import Tenant, User
 from app.models.cloud import CloudAccount, CostRecord
 from app.shared.core.auth import CurrentUser, get_current_user
 from app.shared.db.session import get_db

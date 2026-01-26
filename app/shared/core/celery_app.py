@@ -30,5 +30,14 @@ celery_app.conf.update(
     broker_connection_retry_on_startup=True,
 )
 
+# BE-TEST-2: Support eager execution for unit tests without Redis
+if settings.TESTING:
+    celery_app.conf.update(
+        task_always_eager=True,
+        task_eager_propagates=True,
+        broker_url="memory://",
+        result_backend="rpc://"
+    )
+
 if __name__ == "__main__":
     celery_app.start()

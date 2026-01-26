@@ -1,6 +1,5 @@
 from typing import List, Dict, Any, Optional
 import structlog
-from datetime import datetime, timedelta, timezone
 from google.cloud import compute_v1
 from google.cloud import logging as gcp_logging
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -63,15 +62,16 @@ class GCPIdleInstancePlugin(ZombiePlugin):
                     owner = await self._get_attribution(logging_client, inst.id, zone_name)
 
                 # 3. Cost Estimation
-                monthly_cost = self._estimate_instance_cost(machine_type, is_gpu)
+                monthly_cost = self._estimate_instance_cost(machine_type, is_gpu, region=zone_name)
 
                 zombies.append({
-                    "id": str(inst.id),
+                    "resource_id": str(inst.id),
                     "name": inst.name,
                     "region": zone_name,
                     "type": machine_type,
                     "is_gpu": is_gpu,
                     "owner": owner,
+                    "monthly_cost": float(monthly_cost),
                     "monthly_waste": float(monthly_cost),
                     "confidence_score": float(confidence),
                     "tags": dict(inst.labels) if inst.labels else {},
@@ -112,12 +112,21 @@ class GCPIdleInstancePlugin(ZombiePlugin):
             logger.error("gcp_attribution_failed", instance_id=instance_id, error=str(e))
             return "attribution_failed"
 
-    def _estimate_instance_cost(self, machine_type: str, is_gpu: bool) -> Decimal:
-        """Rough estimation of monthly instance cost."""
+    def _estimate_instance_cost(self, machine_type: str, is_gpu: bool, region: str = "us-central1") -> Decimal:
+        """Rough estimation of monthly instance cost via PricingService."""
+        from app.modules.reporting.domain.pricing.service import PricingService
+        
+        resource_size = "default"
         if is_gpu:
-            return Decimal("1500.00")
-        if "n1-standard" in machine_type:
-            return Decimal("100.00")
-        if "f1-micro" in machine_type or "e2-micro" in machine_type:
-            return Decimal("5.00")
-        return Decimal("50.00")
+            resource_size = "gpu"
+        elif "n1-standard" in machine_type:
+            resource_size = "n1-standard"
+        elif "f1-micro" in machine_type or "e2-micro" in machine_type:
+            resource_size = "micro"
+            
+        return Decimal(str(PricingService.estimate_monthly_waste(
+            provider="gcp",
+            resource_type="instance",
+            resource_size=resource_size,
+            region=region
+        )))

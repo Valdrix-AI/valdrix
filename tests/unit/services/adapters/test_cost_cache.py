@@ -4,8 +4,6 @@ Tests for CostCache - Caching logic for cost data
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import date, datetime, timezone, timedelta
-import json
-from decimal import Decimal
 from app.shared.adapters.cost_cache import (
     InMemoryCache,
     RedisCache,

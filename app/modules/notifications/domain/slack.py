@@ -4,6 +4,9 @@ Sends alerts and daily digests to configured Slack channel.
 """
 import logging
 from typing import Any
+import asyncio
+import hashlib
+import time
 
 from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.errors import SlackApiError
@@ -47,7 +50,6 @@ class SlackService:
 
     async def _send_with_retry(self, method: str, **kwargs) -> bool:
         """Generic Slack API call with exponential backoff for rate limiting."""
-        import asyncio
         max_retries = 3
         for attempt in range(max_retries + 1):
             try:
@@ -76,8 +78,6 @@ class SlackService:
         severity: str = "warning"
     ) -> bool:
         """Send an alert message to Slack with retry logic and deduplication."""
-        import hashlib
-        import time
         
         # BE-NOTIF-4: Check for duplicate alerts within dedup window
         alert_hash = hashlib.md5(f"{title}:{severity}".encode()).hexdigest()

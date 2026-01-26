@@ -32,27 +32,27 @@ class CacheBackend(ABC):
     @abstractmethod
     async def get(self, key: str) -> Optional[str]:
         """Get value from cache."""
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     async def set(self, key: str, value: str, ttl_seconds: int) -> None:
         """Set value in cache with TTL."""
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     async def delete(self, key: str) -> None:
         """Delete key from cache."""
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     async def delete_pattern(self, pattern: str) -> int:
         """Delete keys matching pattern. Returns count deleted."""
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     async def health_check(self) -> bool:
         """Check if backend is healthy."""
-        pass
+        raise NotImplementedError()
 
 
 class InMemoryCache(CacheBackend):

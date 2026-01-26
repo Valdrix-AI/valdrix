@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 import json
 import re
 import copy
@@ -9,6 +9,12 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 from app.shared.core.config import get_settings
 from app.shared.llm.usage_tracker import UsageTracker
@@ -17,19 +23,16 @@ from app.shared.core.cache import get_cache_service
 from app.shared.llm.guardrails import LLMGuardrails, FinOpsAnalysisResult
 from app.shared.analysis.forecaster import SymbolicForecaster
 from app.shared.llm.factory import LLMFactory
-from opentelemetry import trace
-tracer = trace.get_tracer(__name__)
-logger = structlog.get_logger()
-
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
 from app.shared.core.exceptions import AIAnalysisError, BudgetExceededError
 from app.shared.llm.budget_manager import LLMBudgetManager
-import asyncio
+from app.shared.core.constants import LLMProvider
+from opentelemetry import trace
+
+if TYPE_CHECKING:
+    from app.schemas.costs import CloudUsageSummary
+
+tracer = trace.get_tracer(__name__)
+logger = structlog.get_logger()
 
 # System prompts are now managed in prompts.yaml
 
@@ -44,36 +47,37 @@ class FinOpsAnalyzer:
         self.llm = llm
         self.db = db
         
-        # Load prompt from registry (Phase 21: Audit Hardening)
+        system_prompt = self._load_system_prompt()
+            
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("user", "Analyze this cloud cost data:\n{cost_data}")
+        ])
+
+    def _load_system_prompt(self) -> str:
+        """Loads the system prompt from yaml or returns fallback."""
         import yaml
         import os
         prompt_path = os.path.join(os.path.dirname(__file__), "prompts.yaml")
-        system_prompt = None
         
         try:
             if os.path.exists(prompt_path):
                 with open(prompt_path, "r") as f:
                     registry = yaml.safe_load(f)
                     if isinstance(registry, dict) and "finops_analysis" in registry:
-                        system_prompt = registry["finops_analysis"].get("system")
+                        return registry["finops_analysis"].get("system")
         except Exception as e:
             logger.error("failed_to_load_prompts_yaml", error=str(e), path=prompt_path)
             
-        if not system_prompt:
-            # Item 20: Robust Fallback Prompt
-            logger.warning("using_fallback_system_prompt")
-            system_prompt = (
-                "You are a FinOps expert. Analyze the provided cloud cost data. "
-                "Identify anomalies, waste, and optimization opportunities. "
-                "You MUST return the analysis in valid JSON format only, "
-                "with the keys: 'summary', 'anomalies' (list), 'recommendations' (list), "
-                "and 'estimated_total_savings'."
-            )
-            
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("user", "Analyze this cloud cost data:\n{cost_data}")
-        ])
+        # Item 20: Robust Fallback Prompt
+        logger.warning("using_fallback_system_prompt")
+        return (
+            "You are a FinOps expert. Analyze the provided cloud cost data. "
+            "Identify anomalies, waste, and optimization opportunities. "
+            "You MUST return the analysis in valid JSON format only, "
+            "with the keys: 'summary', 'anomalies' (list), 'recommendations' (list), "
+            "and 'estimated_total_savings'."
+        )
 
     def _strip_markdown(self, text: str) -> str:
         """
@@ -241,7 +245,7 @@ class FinOpsAnalyzer:
             
             if not records_to_analyze:
                 logger.info("analysis_delta_no_new_data", tenant_id=str(tenant_id))
-                return cached_analysis, True
+                return cached_analysis, False
 
             # Create a shallow copy of summary but with filtered records
             usage_summary_copy = copy.copy(usage_summary)
@@ -277,22 +281,21 @@ class FinOpsAnalyzer:
             budget = result.scalar_one_or_none()
             if budget:
                 keys = {
-                    "openai": budget.openai_api_key,
-                    "claude": budget.claude_api_key,
-                    "anthropic": budget.claude_api_key,
-                    "google": budget.google_api_key,
-                    "groq": budget.groq_api_key,
-                    "azure": budget.azure_api_key
+                    LLMProvider.OPENAI: budget.openai_api_key,
+                    LLMProvider.ANTHROPIC: budget.claude_api_key, # unified
+                    LLMProvider.GOOGLE: budget.google_api_key,
+                    LLMProvider.GROQ: budget.groq_api_key,
+                    LLMProvider.AZURE: budget.azure_api_key
                 }
                 byok_key = keys.get(provider or budget.preferred_provider)
 
         # Provider & Model Validation
         VALID_MODELS = {
-            "openai": ["gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
-            "anthropic": ["claude-3-opus", "claude-3-sonnet", "claude-3-5-sonnet", "claude-3-5-haiku"],
-            "google": ["gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash"],
-            "groq": ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768", "llama-3.1-8b-instant"],
-            "azure": ["gpt-4", "gpt-35-turbo"]
+            LLMProvider.OPENAI: ["gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
+            LLMProvider.ANTHROPIC: ["claude-3-opus", "claude-3-sonnet", "claude-3-5-sonnet", "claude-3-5-haiku"],
+            LLMProvider.GOOGLE: ["gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash"],
+            LLMProvider.GROQ: ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768", "llama-3.1-8b-instant"],
+            LLMProvider.AZURE: ["gpt-4", "gpt-35-turbo"]
         }
 
         effective_provider = provider or (budget.preferred_provider if budget else get_settings().LLM_PROVIDER)
@@ -302,13 +305,13 @@ class FinOpsAnalyzer:
         if tenant_id and db and budget_status == BudgetStatus.SOFT_LIMIT:
             logger.warning("llm_budget_soft_limit_degradation", tenant_id=str(tenant_id))
             # Switch to cheapest model for the effective provider
-            if effective_provider == "groq":
+            if effective_provider == LLMProvider.GROQ:
                 effective_model = "llama-3.1-8b-instant"
-            elif effective_provider == "openai":
+            elif effective_provider == LLMProvider.OPENAI:
                 effective_model = "gpt-4o-mini"
-            elif effective_provider == "google":
+            elif effective_provider == LLMProvider.GOOGLE:
                 effective_model = "gemini-1.5-flash"
-            elif effective_provider == "anthropic":
+            elif effective_provider == LLMProvider.ANTHROPIC:
                 effective_model = "claude-3-5-haiku"
 
         if effective_provider not in VALID_MODELS:
@@ -331,9 +334,6 @@ class FinOpsAnalyzer:
         self, formatted_data: str, provider: str, model: str, byok_key: Optional[str]
     ) -> tuple[str, Dict]:
         """Orchestrates the LangChain invocation."""
-        # Data is already formatted in analyze()
-        pass
-
         current_llm = self.llm
         if provider != get_settings().LLM_PROVIDER or byok_key:
             current_llm = LLMFactory.create(provider, model=model, api_key=byok_key)
@@ -420,7 +420,6 @@ class FinOpsAnalyzer:
             db=effective_db,
             tenant_id=usage_summary.tenant_id
         )
-        total_forecasted = float(symbolic_forecast.get("total_forecasted_cost", 0))
         
         final_result = {
             "insights": llm_result.get("insights", []),

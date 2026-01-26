@@ -10,8 +10,10 @@ Handles:
 """
 
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, Union, Callable, Awaitable
+from uuid import UUID
 import structlog
+import time
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -28,20 +30,22 @@ class ZombieService:
         self.db = db
     async def scan_for_tenant(
         self, 
-        tenant_id: Any, 
-        user: Any = None,
-        region: str = "us-east-1", 
+        tenant_id: UUID, 
+        _user: Optional[Any] = None,
+        region: str = "us-east-1",  
         analyze: bool = False,
-        on_category_complete: Any = None
+        on_category_complete: Optional[Callable[[str, List[Dict[str, Any]]], Awaitable[None]]] = None
     ) -> Dict[str, Any]:
         """
         Scan all cloud accounts (AWS, Azure, GCP) for a tenant and return aggregated results.
         """
         # 1. Fetch all cloud connections generically
         # Phase 21: Decoupling from concrete models
-        all_connections = []
+        all_connections: List[Union[AWSConnection, AzureConnection, GCPConnection]] = []
         for model in [AWSConnection, AzureConnection, GCPConnection]:
-            q = await self.db.execute(select(model).where(model.tenant_id == tenant_id))
+            # Use cast or ignore if mypy cannot verify tenant_id exists on all models
+            # but they all do in this codebase.
+            q = await self.db.execute(select(model).where(model.tenant_id == tenant_id)) # type: ignore
             all_connections.extend(q.scalars().all())
 
         if not all_connections:
@@ -52,7 +56,7 @@ class ZombieService:
             }
 
         # 2. Execute scans across all providers
-        all_zombies = {
+        all_zombies: Dict[str, Any] = {
             "unattached_volumes": [],
             "old_snapshots": [],
             "unused_elastic_ips": [],
@@ -64,8 +68,8 @@ class ZombieService:
             "legacy_ecr_images": [],
             "idle_sagemaker_endpoints": [],
             "cold_redshift_clusters": [],
-            "scanned_connections": len(all_connections)
         }
+        all_zombies["scanned_connections"] = len(all_connections)
         total_waste = 0.0
 
         # Mapping cloud-specific keys to frontend category keys
@@ -74,50 +78,36 @@ class ZombieService:
             "orphaned_ips": "unused_elastic_ips",     # Azure/GCP IP -> EIP
         }
 
-        async def run_scan(conn):
+        from app.shared.core.pricing import get_tenant_tier
+        tier = await get_tenant_tier(tenant_id, self.db)
+        has_precision = is_feature_enabled(tier, FeatureFlag.PRECISION_DISCOVERY)
+        has_attribution = is_feature_enabled(tier, FeatureFlag.OWNER_ATTRIBUTION)
+
+        async def run_scan(conn: Union[AWSConnection, AzureConnection, GCPConnection]) -> None:
             nonlocal total_waste
             try:
-                # Use standard us-east-1 if connection is AWS, or use global/region accordingly
-                # Azure/GCP detectors handle 'global' themselves if needed.
                 scan_region = region if isinstance(conn, AWSConnection) else "global"
-                
-                # AWSCrossAccount logic for creds if needed, though DetectorFactory/Detector handle it
                 detector = ZombieDetectorFactory.get_detector(conn, region=scan_region, db=self.db)
-                
-                # Execute detector scan (runs all plugins for that provider)
                 results = await detector.scan_all(on_category_complete=on_category_complete)
                 
                 for category, items in results.items():
-                    # Map to frontend key if necessary
                     ui_key = category_mapping.get(category, category)
                     
                     if ui_key in all_zombies:
-                        # Append and tag with provider/connection info
                         for item in items:
-                            item["provider"] = detector.provider_name
-                            item["connection_id"] = str(conn.id)
-                            item["connection_name"] = getattr(conn, "name", "Other")
-                            item["resource_id"] = item.get("id") or item.get("resource_id")
+                            # Standardize resource fields
+                            res_id = item.get("resource_id") or item.get("id")
+                            cost = float(item.get("monthly_cost") or item.get("monthly_waste") or 0)
                             
-                            cost = float(item.get("monthly_waste") or item.get("monthly_cost") or 0)
-                            item["monthly_cost"] = cost # Ensure legacy compatibility
-                            
-                            # Tier Gating for Precision Signals (Phase 8)
-                            from app.shared.core.pricing import get_tenant_tier, FeatureFlag, is_feature_enabled
-                            tier = await get_tenant_tier(tenant_id, self.db)
-                            
-                            has_precision = is_feature_enabled(tier, FeatureFlag.PRECISION_DISCOVERY)
-                            has_attribution = is_feature_enabled(tier, FeatureFlag.OWNER_ATTRIBUTION)
-                            
-                            if not has_precision:
-                                item["is_gpu"] = "Upgrade to Growth"
-                            else:
-                                item["is_gpu"] = bool(item.get("is_gpu", False))
-                                
-                            if not has_attribution:
-                                item["owner"] = "Upgrade to Growth"
-                            else:
-                                item["owner"] = item.get("owner", "unknown")
+                            item.update({
+                                "provider": detector.provider_name,
+                                "connection_id": str(conn.id),
+                                "connection_name": getattr(conn, "name", "Other"),
+                                "resource_id": res_id,
+                                "monthly_cost": cost,
+                                "is_gpu": bool(item.get("is_gpu", False)) if has_precision else "Upgrade to Growth",
+                                "owner": item.get("owner", "unknown") if has_attribution else "Upgrade to Growth"
+                            })
                             
                             all_zombies[ui_key].append(item)
                             total_waste += cost
@@ -127,7 +117,7 @@ class ZombieService:
         # Execute all scans in parallel with a hard 5-minute timeout for the entire operation
         # BE-SCHED-3: Resilience - Prevent hanging API requests
         from app.shared.core.ops_metrics import SCAN_LATENCY, SCAN_TIMEOUTS
-        import time
+        from app.shared.core.ops_metrics import SCAN_LATENCY, SCAN_TIMEOUTS
         
         start_time = time.perf_counter()
         try:

@@ -62,7 +62,7 @@ class JobProcessor:
         with tracer.start_as_current_span("process_pending_jobs") as span:
             span.set_attribute("batch_limit", limit)
             logger.info("processing_pending_jobs", limit=limit)
-            results = {
+            results: Dict[str, Any] = {
                 "processed": 0,
                 "succeeded": 0,
                 "failed": 0,
@@ -119,7 +119,7 @@ class JobProcessor:
                 BackgroundJob.status == JobStatus.PENDING.value,
                 BackgroundJob.scheduled_for <= now,
                 BackgroundJob.attempts < BackgroundJob.max_attempts,
-                BackgroundJob.is_deleted == False
+                sa.not_(BackgroundJob.is_deleted)
             )
             # BE-SCHED-5: Order by priority (desc) first, then scheduled_for
             .order_by(BackgroundJob.priority.desc(), BackgroundJob.scheduled_for)
@@ -164,10 +164,8 @@ class JobProcessor:
             async with self.db.begin_nested():
                 # Set tenant context for RLS isolation during job execution
                 if job.tenant_id:
-                    await self.db.execute(
-                        sa.text("SELECT set_config('app.current_tenant_id', :tid, true)"),
-                        {"tid": str(job.tenant_id)}
-                    )
+                    from app.shared.db.session import set_session_tenant_id
+                    await set_session_tenant_id(self.db, job.tenant_id)
                 
                 # Execute handler with timeout protection (BE-SCHED-2)
                 result = await asyncio.wait_for(

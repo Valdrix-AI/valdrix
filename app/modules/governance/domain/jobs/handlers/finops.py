@@ -5,7 +5,7 @@ from typing import Dict, Any
 from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.background_job import BackgroundJob, JobType
+from app.models.background_job import BackgroundJob
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
 
 

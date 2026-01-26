@@ -2,7 +2,7 @@
 Tests for CacheService - Upstash Redis integration
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 import json
 from app.shared.cache import CacheService, get_cache_service
@@ -16,7 +16,7 @@ def mock_redis():
 
 @pytest.fixture
 def cache_service(mock_redis):
-    with patch("app.shared.cache._get_async_client", return_value=mock_redis):
+    with patch("app.shared.core.cache._get_async_client", return_value=mock_redis):
         return CacheService()
 
 
@@ -83,7 +83,7 @@ async def test_invalidate_tenant(cache_service, mock_redis):
 
 def test_get_cache_service_singleton():
     """Test singleton pattern."""
-    with patch("app.shared.cache._cache_service", None):
+    with patch("app.shared.core.cache._cache_service", None):
         s1 = get_cache_service()
         s2 = get_cache_service()
         assert s1 is s2

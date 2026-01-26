@@ -8,7 +8,7 @@ implementation that enforces timeouts and proper error handling.
 import asyncio
 import structlog
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob, JobStatus

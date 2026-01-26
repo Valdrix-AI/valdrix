@@ -2,8 +2,6 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.aws_connection import AWSConnection
-from app.models.cloud import CostRecord
-from app.shared.adapters.s3_parquet import S3ParquetAdapter
 from app.shared.db.session import async_session_maker
 
 logger = structlog.get_logger()
@@ -49,8 +47,6 @@ class CURIngestionJob:
         """
         Ingest the latest CUR data for a connection.
         """
-        adapter = S3ParquetAdapter(connection)
-        
         # 1. Discover latest files (simplified for now: looking in standard bucket)
         # In production, we'd read the manifest file.
         bucket = f"valdrix-cur-{connection.aws_account_id}-{connection.region}"

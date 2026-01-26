@@ -1,8 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import Request, HTTPException
 from app.shared.llm.usage_tracker import UsageTracker, BudgetStatus
-from app.models.llm import LLMBudget, LLMUsage
+from app.models.llm import LLMBudget
 from uuid import uuid4
 from decimal import Decimal
 from app.shared.core.exceptions import BudgetExceededError
@@ -17,9 +16,9 @@ def tracker(db_session):
 
 @pytest.mark.asyncio
 async def test_calculate_cost(tracker):
-    # groq llama-3.3-70b: input 0.59, output 0.79 per 1M
-    cost = tracker.calculate_cost("groq", "llama-3.3-70b-versatile", 1000000, 1000000)
-    assert cost == Decimal("1.38")
+    # openai gpt-4o-mini: input 0.15, output 0.6 per 1M
+    cost = tracker.calculate_cost("openai", "gpt-4o-mini", 1000000, 1000000)
+    assert cost == Decimal("0.75")
 
 @pytest.mark.asyncio
 async def test_calculate_cost_unknown_model(tracker):

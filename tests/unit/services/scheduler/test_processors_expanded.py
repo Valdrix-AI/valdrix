@@ -89,7 +89,7 @@ class TestSavingsProcessorExpanded:
         mock_rec = MagicMock()
         mock_rec.autonomous_ready = True
         mock_rec.confidence = "high"
-        mock_rec.action = "Delete volume"
+        mock_rec.action = "delete volume vol-123"
         mock_rec.resource = "vol-123"
         mock_rec.resource_type = "EBS"
         mock_rec.estimated_savings = "$50"
@@ -97,7 +97,7 @@ class TestSavingsProcessorExpanded:
         mock_result = MagicMock()
         mock_result.recommendations = [mock_rec]
         
-        with patch("app.modules.optimization.domain.remediation_service.RemediationService") as mock_remediation:
+        with patch("app.modules.optimization.domain.remediation.RemediationService") as mock_remediation:
             mock_rem_instance = AsyncMock()
             mock_remediation.return_value = mock_rem_instance
             mock_rem_instance.create_request.return_value = MagicMock(id=uuid4())

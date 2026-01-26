@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.logging import audit_log
 from app.shared.db.session import get_db
 from app.models.remediation_settings import RemediationSettings
 
@@ -74,7 +75,7 @@ async def get_activeops_settings(
 @router.put("/activeops", response_model=ActiveOpsSettingsResponse)
 async def update_activeops_settings(
     data: ActiveOpsSettingsUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -105,6 +106,13 @@ async def update_activeops_settings(
         tenant_id=str(current_user.tenant_id),
         auto_pilot=settings.auto_pilot_enabled,
         threshold=float(settings.min_confidence_threshold)
+    )
+
+    audit_log(
+        "settings.activeops_updated",
+        str(current_user.id),
+        str(current_user.tenant_id),
+        {"auto_pilot_enabled": settings.auto_pilot_enabled, "threshold": float(settings.min_confidence_threshold)}
     )
 
     return settings

@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.logging import audit_log
 from app.shared.db.session import get_db
 from app.models.carbon_settings import CarbonSettings
 
@@ -86,7 +87,7 @@ async def get_carbon_settings(
 @router.put("/carbon", response_model=CarbonSettingsResponse)
 async def update_carbon_settings(
     data: CarbonSettingsUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -121,6 +122,13 @@ async def update_carbon_settings(
         tenant_id=str(current_user.tenant_id),
         budget_kg=settings.carbon_budget_kg,
         threshold=settings.alert_threshold_percent,
+    )
+
+    audit_log(
+        "settings.carbon_updated",
+        str(current_user.id),
+        str(current_user.tenant_id),
+        {"budget_kg": float(settings.carbon_budget_kg), "region": settings.default_region}
     )
 
     return settings

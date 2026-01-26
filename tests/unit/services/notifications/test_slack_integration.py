@@ -107,7 +107,7 @@ class TestSlackService:
         with patch.object(service, "send_alert", new_callable=AsyncMock) as mock_alert:
             mock_alert.return_value = True
             
-            result = await service.notify_budget_alert(
+            await service.notify_budget_alert(
                 current_spend=80.0,
                 budget_limit=100.0,
                 percent_used=80.0

@@ -5,7 +5,6 @@ This file maintains backward compatibility by proxying calls to the
 refactored SchedulerOrchestrator in the .orchestrator sub-module.
 """
 
-import structlog
 from .orchestrator import SchedulerOrchestrator, SchedulerService
 from .cohorts import TenantCohort, get_tenant_cohort
 

@@ -4,10 +4,9 @@ import hashlib
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime, timezone, timedelta
 from app.modules.reporting.domain.billing.paystack_billing import (
     PaystackClient, BillingService, WebhookHandler, 
-    SubscriptionStatus, TenantSubscription
+    SubscriptionStatus
 )
 from app.shared.core.pricing import PricingTier
 from fastapi import HTTPException

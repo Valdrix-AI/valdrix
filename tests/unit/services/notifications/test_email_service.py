@@ -2,7 +2,7 @@
 Tests for EmailService - SMTP Notifications
 """
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch
 from datetime import datetime, timezone
 from app.modules.notifications.domain.email_service import EmailService
 
@@ -72,7 +72,7 @@ async def test_send_dunning_notification(email_service):
 async def test_send_payment_recovered(email_service):
     """Test payment recovered notification email."""
     with patch("smtplib.SMTP") as mock_smtp_cls:
-        mock_smtp = mock_smtp_cls.return_value.__enter__.return_value
+        mock_smtp_cls.return_value.__enter__.return_value
         res = await email_service.send_payment_recovered_notification("to@v.io")
         assert res is True
 
@@ -81,6 +81,6 @@ async def test_send_payment_recovered(email_service):
 async def test_send_account_downgraded(email_service):
     """Test account downgraded notification email."""
     with patch("smtplib.SMTP") as mock_smtp_cls:
-        mock_smtp = mock_smtp_cls.return_value.__enter__.return_value
+        mock_smtp_cls.return_value.__enter__.return_value
         res = await email_service.send_account_downgraded_notification("to@v.io")
         assert res is True

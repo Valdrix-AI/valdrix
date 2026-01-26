@@ -57,15 +57,16 @@ class AzureIdleVMPlugin(ZombiePlugin):
                     owner = await self._get_attribution(monitor_client, vm.id)
 
                 # 3. Cost Estimation
-                monthly_cost = self._estimate_vm_cost(vm_size)
+                monthly_cost = self._estimate_vm_cost(vm_size, region=vm.location)
 
                 zombies.append({
-                    "id": vm.id,
+                    "resource_id": vm.id,
                     "name": vm.name,
                     "region": vm.location,
                     "type": vm_size,
                     "is_gpu": is_gpu,
                     "owner": owner,
+                    "monthly_cost": float(monthly_cost),
                     "monthly_waste": float(monthly_cost),
                     "confidence_score": float(confidence),
                     "tags": vm.tags or {},
@@ -102,13 +103,21 @@ class AzureIdleVMPlugin(ZombiePlugin):
             logger.error("azure_attribution_failed", resource=resource_id, error=str(e))
             return "attribution_failed"
 
-    def _estimate_vm_cost(self, vm_size: str) -> Decimal:
-        """Rough estimation of monthly VM cost."""
-        # Simple heuristic based on family/size
+    def _estimate_vm_cost(self, vm_size: str, region: str = "us-east-1") -> Decimal:
+        """Rough estimation of monthly VM cost via PricingService."""
+        from app.modules.reporting.domain.pricing.service import PricingService
+        
+        resource_size = "default"
         if "NC" in vm_size or "ND" in vm_size or "NV" in vm_size:
-            return Decimal("1200.00") # GPU instances are expensive
-        if "D" in vm_size:
-            return Decimal("150.00")
-        if "B" in vm_size:
-            return Decimal("20.00")
-        return Decimal("100.00")
+            resource_size = "gpu"
+        elif "Standard_D" in vm_size:
+            resource_size = "standard_d"
+        elif "Standard_B" in vm_size:
+            resource_size = "standard_b"
+            
+        return Decimal(str(PricingService.estimate_monthly_waste(
+            provider="azure",
+            resource_type="instance",
+            resource_size=resource_size,
+            region=region
+        )))

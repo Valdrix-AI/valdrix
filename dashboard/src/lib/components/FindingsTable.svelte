@@ -31,14 +31,16 @@
 	let currentPage = $state(0);
 	let copiedId = $state<string | null>(null);
 	const pageSize = 10;
-	
+
 	let totalPages = $derived(Math.ceil(resources.length / pageSize));
-	let paginatedResources = $derived(resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize));
+	let paginatedResources = $derived(
+		resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+	);
 
 	function generateSniperCommand(finding: ZombieFinding): string {
 		const id = finding.resource_id;
 		const type = finding.resource_type?.toLowerCase() || '';
-		
+
 		if (finding.provider === 'aws') {
 			if (type.includes('volume') || type.includes('ebs')) {
 				return `aws ec2 delete-volume --volume-id ${id}`;
@@ -54,15 +56,15 @@
 			}
 			return `# AWS Snipe: ${id}\naws resourcegroupstaggingapi untag-resources --resource-arn-list ${id}`;
 		}
-		
+
 		if (finding.provider === 'azure') {
 			return `az resource delete --ids ${id}`;
 		}
-		
+
 		if (finding.provider === 'gcp') {
 			return `gcloud compute instances delete ${id} --quiet`;
 		}
-		
+
 		return `# Sniper Command for ${id} not generated`;
 	}
 
@@ -155,15 +157,15 @@
 
 						<!-- Type Badge -->
 						<td class="py-3 pr-4">
-								<span class="badge badge-default text-xs">
-									{finding.resource_type || 'Resource'}
-								</span>
-								{#if finding.is_gpu}
-									<span
-										class="badge badge-error py-0.5 px-1.5 text-[10px] uppercase font-bold animate-pulse"
-										>GPU</span
-									>
-								{/if}
+							<span class="badge badge-default text-xs">
+								{finding.resource_type || 'Resource'}
+							</span>
+							{#if finding.is_gpu}
+								<span
+									class="badge badge-error py-0.5 px-1.5 text-[10px] uppercase font-bold animate-pulse"
+									>GPU</span
+								>
+							{/if}
 						</td>
 
 						<!-- Monthly Cost -->
@@ -228,7 +230,8 @@
 							<div class="flex items-center justify-end gap-2">
 								<button
 									class="btn btn-ghost btn-xs text-ink-400 hover:text-accent-400"
-									onclick={() => copyToClipboard(generateSniperCommand(finding), finding.resource_id)}
+									onclick={() =>
+										copyToClipboard(generateSniperCommand(finding), finding.resource_id)}
 									title="Copy Sniper Command"
 								>
 									{#if copiedId === finding.resource_id}

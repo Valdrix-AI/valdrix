@@ -6,14 +6,14 @@ tag-based attribution and source-of-truth cost data.
 """
 
 import os
+import json
 import tempfile
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Dict, Any, List
 import aioboto3
 import pandas as pd
 import pyarrow.parquet as pq
-import pytz
 import structlog
 from app.shared.adapters.base import CostAdapter
 from app.models.aws_connection import AWSConnection
@@ -36,6 +36,107 @@ class AWSCURAdapter(CostAdapter):
         """Verify S3 access."""
         return True
 
+    async def setup_cur_automation(self) -> Dict[str, Any]:
+        """
+        Automates the creation of an S3 bucket and CUR report definition.
+        """
+        creds = await self._get_credentials()
+        
+        async with self.session.client(
+            "s3",
+            region_name=self.connection.region,
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        ) as s3:
+            try:
+                # 1. Check if bucket exists
+                from botocore.exceptions import ClientError
+                bucket_exists = True
+                try:
+                    await s3.head_bucket(Bucket=self.bucket_name)
+                except ClientError as e:
+                    if e.response["Error"]["Code"] in ["404", "403"]:
+                        bucket_exists = False
+                    else:
+                        raise
+
+                # 2. Create bucket if needed
+                if not bucket_exists:
+                    if self.connection.region == "us-east-1":
+                        await s3.create_bucket(Bucket=self.bucket_name)
+                    else:
+                        await s3.create_bucket(
+                            Bucket=self.bucket_name,
+                            CreateBucketConfiguration={'LocationConstraint': self.connection.region}
+                        )
+
+                # 3. Put bucket policy
+                policy = {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Sid": "AllowCURPutObject",
+                            "Effect": "Allow",
+                            "Principal": {"Service": "billingreports.amazonaws.com"},
+                            "Action": "s3:PutObject",
+                            "Resource": f"arn:aws:s3:::{self.bucket_name}/*",
+                            "Condition": {
+                                "StringEquals": {
+                                    "aws:SourceAccount": self.connection.aws_account_id,
+                                    "aws:SourceArn": f"arn:aws:cur:us-east-1:{self.connection.aws_account_id}:definition/*"
+                                }
+                            }
+                        },
+                        {
+                            "Sid": "AllowCURGetBucketAcl",
+                            "Effect": "Allow",
+                            "Principal": {"Service": "billingreports.amazonaws.com"},
+                            "Action": "s3:GetBucketAcl",
+                            "Resource": f"arn:aws:s3:::{self.bucket_name}"
+                        }
+                    ]
+                }
+                await s3.put_bucket_policy(Bucket=self.bucket_name, Policy=json.dumps(policy))
+
+            except Exception as e:
+                logger.error("s3_setup_failed", error=str(e))
+                return {"status": "error", "message": f"S3 setup failed: {str(e)}"}
+
+        async with self.session.client(
+            "cur",
+            region_name="us-east-1", # CUR is global but uses us-east-1 endpoint
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        ) as cur:
+            try:
+                # 4. Create CUR Report Definition
+                report_name = f"valdrix-cur-{self.connection.aws_account_id}"
+                await cur.put_report_definition(
+                    ReportDefinition={
+                        'ReportName': report_name,
+                        'TimeUnit': 'HOURLY',
+                        'Format': 'Parquet',
+                        'Compression': 'GZIP',
+                        'AdditionalSchemaElements': ['RESOURCES'],
+                        'S3Bucket': self.bucket_name,
+                        'S3Prefix': 'cur',
+                        'S3Region': self.connection.region,
+                        'ReportVersioning': 'OVERWRITE_REPORT',
+                        'RefreshClosedReports': True
+                    }
+                )
+                
+                return {
+                    "status": "success",
+                    "bucket_name": self.bucket_name,
+                    "report_name": report_name
+                }
+            except Exception as e:
+                logger.error("cur_setup_failed", error=str(e))
+                return {"status": "error", "message": f"CUR setup failed: {str(e)}"}
+
     async def get_cost_and_usage(
         self,
         start_date: datetime,
@@ -47,7 +148,10 @@ class AWSCURAdapter(CostAdapter):
         return [r.dict() for r in summary.records]
 
     async def discover_resources(self, resource_type: str, region: str = None) -> List[Dict[str, Any]]:
-        """Placeholder - CUR usually doesn't discover live resources."""
+        """
+        CUR adapters do not typically discover live resources; they process
+        historical billing records. Use AWSAdapter for live discovery.
+        """
         return []
 
     async def stream_cost_and_usage(
@@ -150,8 +254,8 @@ class AWSCURAdapter(CostAdapter):
         min_date = None
         max_date = None
 
-        # Standard AWS CUR Columns
-        data_map = {
+        # AWS CUR Column Aliases
+        CUR_COLUMNS = {
             "date": ["lineItem/UsageStartDate", "identity/TimeInterval", "line_item_usage_start_date"],
             "cost": ["lineItem/UnblendedCost", "line_item_unblended_cost"],
             "currency": ["lineItem/CurrencyCode", "line_item_currency_code"],
@@ -166,68 +270,35 @@ class AWSCURAdapter(CostAdapter):
             df_chunk = table.to_pandas()
             
             # Resolve columns for this chunk
-            date_col = next((c for c in data_map["date"] if c in df_chunk.columns), df_chunk.columns[0])
-            cost_col = next((c for c in data_map["cost"] if c in df_chunk.columns), "cost")
-            curr_col = next((c for c in data_map["currency"] if c in df_chunk.columns), None)
-            svc_col = next((c for c in data_map["service"] if c in df_chunk.columns), "service")
-            reg_col = next((c for c in data_map["region"] if c in df_chunk.columns), None)
-            type_col = next((c for c in data_map["usage_type"] if c in df_chunk.columns), None)
+            col_map = {k: next((c for c in v if c in df_chunk.columns), None) for k, v in CUR_COLUMNS.items()}
+            # Fallbacks for critical columns
+            col_map["date"] = col_map["date"] or df_chunk.columns[0]
+            col_map["cost"] = col_map["cost"] or "cost"
+            col_map["service"] = col_map["service"] or "service"
 
             # Update date range
-            chunk_min = pd.to_datetime(df_chunk[date_col].min()).date()
-            chunk_max = pd.to_datetime(df_chunk[date_col].max()).date()
+            chunk_min = pd.to_datetime(df_chunk[col_map["date"]].min()).date()
+            chunk_max = pd.to_datetime(df_chunk[col_map["date"]].max()).date()
             min_date = min(min_date, chunk_min) if min_date else chunk_min
             max_date = max(max_date, chunk_max) if max_date else chunk_max
 
             # Process rows in chunk
             for _, row in df_chunk.iterrows():
-                raw_amount = Decimal(str(row.get(cost_col, 0)))
-                currency = str(row.get(curr_col, "USD"))
-                amount_usd = raw_amount # Simplified conversion for now
-                
-                service = str(row.get(svc_col, "Unknown"))
-                region = str(row.get(reg_col, "Global"))
-                usage_type = str(row.get(type_col, "Unknown"))
-
-                tags = {}
-                for k, v in row.items():
-                    if pd.notna(v) and v != "":
-                        str_k = str(k)
-                        if "resourceTags/user:" in str_k:
-                            tags[str_k.split("resourceTags/user:")[-1]] = str(v)
-                        elif "resource_tags_user_" in str_k:
-                            tags[str_k.replace("resource_tags_user_", "")] = str(v)
-
-                # Internal Record
-                # Use raw datetime to preserve hourly granularity
-                dt = pd.to_datetime(row[date_col])
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=pytz.UTC)
-
-                record = CostRecord(
-                    date=dt,
-                    amount=amount_usd,
-                    amount_raw=raw_amount,
-                    currency=currency,
-                    service=service,
-                    region=region,
-                    usage_type=usage_type,
-                    tags=tags
-                )
+                record = self._parse_row(row, col_map)
                 
                 # Safety valve: For massive files, we limit the records list to prevent OOM
-                # but we still aggregate EVERYTHING.
                 if len(all_records) < 100000:
                     all_records.append(record)
 
                 # Aggregation
-                total_cost_usd += amount_usd
-                by_service[service] = by_service.get(service, Decimal("0")) + amount_usd
-                by_region[region] = by_region.get(region, Decimal("0")) + amount_usd
+                total_cost_usd += record.amount
+                by_service[record.service] = by_service.get(record.service, Decimal("0")) + record.amount
+                by_region[record.region] = by_region.get(record.region, Decimal("0")) + record.amount
                 
-                for tk, tv in tags.items():
-                    if tk not in by_tag: by_tag[tk] = {}
-                    by_tag[tk][tv] = by_tag[tk].get(tv, Decimal("0")) + amount_usd
+                for tk, tv in record.tags.items():
+                    if tk not in by_tag:
+                        by_tag[tk] = {}
+                    by_tag[tk][tv] = by_tag[tk].get(tv, Decimal("0")) + record.amount
 
         return CloudUsageSummary(
             tenant_id=str(self.connection.tenant_id),
@@ -240,6 +311,45 @@ class AWSCURAdapter(CostAdapter):
             by_region=by_region,
             by_tag=by_tag
         )
+
+    def _parse_row(self, row: pd.Series, col_map: Dict[str, str]) -> CostRecord:
+        """Parses a single CUR row into a CostRecord."""
+        raw_amount = Decimal(str(row.get(col_map["cost"], 0)))
+        currency = str(row.get(col_map["currency"], "USD"))
+        
+        service = str(row.get(col_map["service"], "Unknown"))
+        region = str(row.get(col_map["region"], "Global"))
+        usage_type = str(row.get(col_map["usage_type"], "Unknown"))
+
+        tags = self._extract_tags(row)
+
+        # Use raw datetime to preserve hourly granularity
+        dt = pd.to_datetime(row[col_map["date"]])
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        return CostRecord(
+            date=dt,
+            amount=raw_amount,
+            amount_raw=raw_amount,
+            currency=currency,
+            service=service,
+            region=region,
+            usage_type=usage_type,
+            tags=tags
+        )
+
+    def _extract_tags(self, row: pd.Series) -> Dict[str, str]:
+        """Extracts user-defined tags from CUR columns."""
+        tags = {}
+        for k, v in row.items():
+            if pd.notna(v) and v != "":
+                str_k = str(k)
+                if "resourceTags/user:" in str_k:
+                    tags[str_k.split("resourceTags/user:")[-1]] = str(v)
+                elif "resource_tags_user_" in str_k:
+                    tags[str_k.replace("resource_tags_user_", "")] = str(v)
+        return tags
 
     async def _get_credentials(self) -> Dict:
         """Helper to get credentials from existing adapter logic or shared util."""
@@ -260,10 +370,9 @@ class AWSCURAdapter(CostAdapter):
             by_region={}
         )
 
-    async def discover_resources(self, resource_type: str, region: str = None) -> List[Dict[str, Any]]:
-        """Placeholder - CUR usually doesn't discover live resources, but we could parse from tags."""
-        return []
 
     async def get_resource_usage(self, service_name: str, resource_id: str = None) -> List[Dict[str, Any]]:
-        """Placeholder - detailed usage resides within the CUR records."""
+        """
+        Detailed usage metrics are parsed from the CUR records during ingestion.
+        """
         return []

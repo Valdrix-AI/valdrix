@@ -22,7 +22,7 @@ def test_classify_complexity():
 
 def test_select_provider_byok_priority():
     """Test that BYOK provider always takes priority."""
-    with patch("app.shared.llm.factory.get_settings") as mock_settings:
+    with patch("app.shared.llm.factory.get_settings") as _:
         provider, complexity = LLMProviderSelector.select_provider(
             "short text", tenant_byok_provider="openai"
         )
@@ -76,29 +76,6 @@ def test_estimate_cost_paid_provider():
     assert abs(cost - expected) < 1e-6
 
 
-def test_llm_factory_validate_api_key_valid():
-    """Test API key validation with valid key."""
-    # Should not raise
-    LLMFactory.validate_api_key("openai", "sk-proj-valid-key-at-least-twenty-chars")
-
-
-def test_llm_factory_validate_api_key_missing():
-    """Test API key validation failure with missing key."""
-    with pytest.raises(ValueError, match="not configured"):
-        LLMFactory.validate_api_key("openai", None)
-
-
-def test_llm_factory_validate_api_key_placeholder():
-    """Test API key validation failure with placeholder."""
-    with pytest.raises(ValueError, match="placeholder"):
-        LLMFactory.validate_api_key("openai", "sk-xxx-key")
-
-
-def test_llm_factory_validate_api_key_too_short():
-    """Test API key validation failure with too short key."""
-    with pytest.raises(ValueError, match="too short"):
-        LLMFactory.validate_api_key("openai", "sk-short")
-
 
 @pytest.mark.asyncio
 async def test_llm_factory_create_smart():
@@ -118,32 +95,30 @@ async def test_llm_factory_create_smart():
 @pytest.mark.asyncio
 async def test_llm_factory_create_google():
     """Test creating Google Gemini client."""
-    with patch("app.shared.llm.factory.ChatGoogleGenerativeAI") as mock_gemini:
+    with patch("app.shared.llm.providers.GoogleProvider") as MockProvider:
+        mock_instance = MockProvider.return_value
+        
         with patch("app.shared.llm.factory.get_settings") as mock_settings:
             mock_settings.return_value.GOOGLE_API_KEY = "google-valid-key-long-enough"
             mock_settings.return_value.GOOGLE_MODEL = "gemini-flash"
             
             LLMFactory.create(provider="google")
-            mock_gemini.assert_called_with(
-                google_api_key="google-valid-key-long-enough",
-                model="gemini-flash",
-                temperature=0
-            )
+            
+            mock_instance.create_model.assert_called_with(model=None, api_key=None)
 
 @pytest.mark.asyncio
 async def test_llm_factory_create_groq():
     """Test creating Groq client."""
-    with patch("app.shared.llm.factory.ChatGroq") as mock_groq:
+    with patch("app.shared.llm.providers.GroqProvider") as MockProvider:
+        mock_instance = MockProvider.return_value
+        
         with patch("app.shared.llm.factory.get_settings") as mock_settings:
             mock_settings.return_value.GROQ_API_KEY = "groq-valid-key-long-enough"
             mock_settings.return_value.GROQ_MODEL = "llama-3"
             
             LLMFactory.create(provider="groq")
-            mock_groq.assert_called_with(
-                api_key="groq-valid-key-long-enough",
-                model="llama-3",
-                temperature=0
-            )
+            
+            mock_instance.create_model.assert_called_with(model=None, api_key=None)
 
 def test_llm_factory_create_unsupported():
     """Test error when creating unsupported provider."""

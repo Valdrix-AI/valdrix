@@ -10,7 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.logging import audit_log
 from app.shared.db.session import get_db
 from app.models.notification_settings import NotificationSettings
 
@@ -96,7 +97,7 @@ async def get_notification_settings(
 @router.put("/notifications", response_model=NotificationSettingsResponse)
 async def update_notification_settings(
     data: NotificationSettingsUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -132,12 +133,24 @@ async def update_notification_settings(
         digest_schedule=settings.digest_schedule,
     )
 
+    audit_log(
+        "settings.notifications_updated",
+        str(current_user.id),
+        str(current_user.tenant_id),
+        {
+            "slack_enabled": settings.slack_enabled,
+            "digest": settings.digest_schedule,
+            "slack_override": bool(settings.slack_channel_override)
+        }
+    )
+
     return settings
 
 
 @router.post("/notifications/test-slack")
 async def test_slack_notification(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(requires_role("admin")),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Send a test notification to Slack.
@@ -155,8 +168,17 @@ async def test_slack_notification(
             detail="Slack is not configured. Set SLACK_BOT_TOKEN and SLACK_CHANNEL_ID in environment."
         )
 
+    # Item: Honor channel override defined in settings
+    result = await db.execute(
+        select(NotificationSettings).where(
+            NotificationSettings.tenant_id == current_user.tenant_id
+        )
+    )
+    db_settings = result.scalar_one_or_none()
+    target_channel = (db_settings.slack_channel_override if db_settings else None) or settings.SLACK_CHANNEL_ID
+
     try:
-        slack = SlackService(settings.SLACK_BOT_TOKEN, settings.SLACK_CHANNEL_ID)
+        slack = SlackService(settings.SLACK_BOT_TOKEN, target_channel)
         success = await slack.send_alert(
             title="Test Notification",
             message=f"This is a test alert from Valdrix.\n\nUser: {current_user.email}",

@@ -1,1 +1,1 @@
-from .detector import GCPZombieDetector
+from .detector import GCPZombieDetector as GCPZombieDetector

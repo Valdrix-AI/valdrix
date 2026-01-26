@@ -4,12 +4,10 @@ Tests for ZombieAnalyzer Logic - BYOK and Usage Tracking
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime
 import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.llm.zombie_analyzer import ZombieAnalyzer
-from app.shared.llm.guardrails import ZombieAnalysisResult
 
 
 @pytest.fixture

@@ -11,10 +11,11 @@ from app.shared.core.rate_limit import auth_limit
 router = APIRouter(tags=["Admin Utilities"])
 logger = structlog.get_logger()
 
-@router.post("/trigger-analysis")
-@auth_limit # Item 11: Rate limit admin key checks
-async def trigger_analysis(request: Request, x_admin_key: str = Header(..., alias="X-Admin-Key")):
-    """Manually trigger a scheduled analysis job."""
+async def validate_admin_key(
+    request: Request,
+    x_admin_key: str = Header(..., alias="X-Admin-Key")
+):
+    """Dependency to validate the admin API key with production hardening."""
     settings = get_settings()
 
     if not settings.ADMIN_API_KEY:
@@ -35,11 +36,21 @@ async def trigger_analysis(request: Request, x_admin_key: str = Header(..., alia
     if not secrets.compare_digest(x_admin_key, settings.ADMIN_API_KEY):
         # Item 11: Audit failed admin access attempts
         from app.shared.core.logging import audit_log
-        audit_log("admin_auth_failed", "admin_portal", str(request.state.tenant_id if hasattr(request.state, 'tenant_id') else 'unknown'), 
+        audit_log("admin_auth_failed", "admin_portal", str(getattr(request.state, 'tenant_id', 'unknown')), 
                   {"path": request.url.path, "ip": request.client.host})
         
         logger.warning("admin_auth_failed", ip=request.client.host)
         raise HTTPException(status_code=403, detail="Forbidden")
+    
+    return True
+
+@router.post("/trigger-analysis")
+@auth_limit # Item 11: Rate limit admin key checks
+async def trigger_analysis(
+    request: Request,
+    _: bool = Depends(validate_admin_key)
+):
+    """Manually trigger a scheduled analysis job."""
 
     logger.info("manual_trigger_requested")
     # Access scheduler from app state (passed via request.app)
@@ -48,20 +59,18 @@ async def trigger_analysis(request: Request, x_admin_key: str = Header(..., alia
 
 
 @router.get("/reconcile/{tenant_id}")
+@auth_limit # Item 11: Consistent rate limiting
 async def reconcile_tenant_costs(
     tenant_id: UUID,
     start_date: date,
     end_date: date,
     db: AsyncSession = Depends(get_db),
-    x_admin_key: str = Header(..., alias="X-Admin-Key")
+    _: bool = Depends(validate_admin_key)
 ):
     """
     Diagnostic tool to compare Explorer vs CUR data for a tenant.
     Used for investigating billing discrepancies.
     """
-    settings = get_settings()
-    if not secrets.compare_digest(x_admin_key, settings.ADMIN_API_KEY):
-        raise HTTPException(status_code=403, detail="Forbidden")
 
     from app.modules.reporting.domain.reconciliation import CostReconciliationService
     service = CostReconciliationService(db)

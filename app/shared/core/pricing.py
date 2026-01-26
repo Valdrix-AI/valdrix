@@ -1,7 +1,10 @@
 import uuid
 from enum import Enum
 from functools import wraps
-from typing import Optional, Callable, Dict
+from typing import Optional, Callable, Dict, TYPE_CHECKING, List, Union, Set, Any, Awaitable
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.modules.governance.domain.security.auth import CurrentUser
 
 from fastapi import HTTPException, status
 
@@ -194,6 +197,8 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             FeatureFlag.SLACK_INTEGRATION,
             FeatureFlag.AUDIT_LOGS,
             FeatureFlag.GITOPS_REMEDIATION,
+            FeatureFlag.PRECISION_DISCOVERY,
+            FeatureFlag.OWNER_ATTRIBUTION,
         },
         "limits": {
             "max_aws_accounts": 25,
@@ -253,7 +258,7 @@ def get_tier_limit(tier: PricingTier, limit_name: str) -> Optional[int]:
 get_limit = get_tier_limit
 
 
-def requires_tier(*allowed_tiers: PricingTier):
+def requires_tier(*allowed_tiers: PricingTier) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
     """
     Decorator to require specific tiers for an endpoint.
     """
@@ -286,7 +291,7 @@ def requires_tier(*allowed_tiers: PricingTier):
     return decorator
 
 
-def requires_feature(feature_name: str | FeatureFlag):
+def requires_feature(feature_name: Union[str, FeatureFlag]) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
     """
     Decorator to require a specific feature for an endpoint.
     """
@@ -319,7 +324,7 @@ def requires_feature(feature_name: str | FeatureFlag):
     return decorator
 
 
-async def get_tenant_tier(tenant_id: str | uuid.UUID, db: "AsyncSession") -> PricingTier:
+async def get_tenant_tier(tenant_id: Union[str, uuid.UUID], db: "AsyncSession") -> PricingTier:
     """Get the pricing tier for a tenant."""
     from sqlalchemy import select
     from app.models.tenant import Tenant
@@ -358,12 +363,12 @@ class TierGuard:
         self.db = db
         self.tier = PricingTier.FREE
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "TierGuard":
         if self.user and self.user.tenant_id:
             self.tier = await get_tenant_tier(self.user.tenant_id, self.db)
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         pass
 
     def has(self, feature: FeatureFlag) -> bool:

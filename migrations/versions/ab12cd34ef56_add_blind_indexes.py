@@ -32,9 +32,6 @@ def upgrade() -> None:
     try:
         # Import ALL models to ensure relationships (like BackgroundJob) are registered
         from app.models.tenant import Tenant, User
-        from app.models.background_job import BackgroundJob
-        from app.models.llm import LLMUsage, LLMBudget
-        from app.models.aws_connection import AWSConnection
         
         # Populate Tenants
         tenants = session.query(Tenant).all()

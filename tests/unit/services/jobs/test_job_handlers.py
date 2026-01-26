@@ -67,8 +67,7 @@ async def test_zombie_scan_handler_success(mock_db, sample_job):
         mock_detector = AsyncMock()
         mock_detector.provider_name = "aws"
         mock_detector.scan_all.return_value = {
-            "total_monthly_waste": 50.0,
-            "ebs": [{"id": "v-1"}, {"id": "v-2"}]
+            "unattached_volumes": [{"id": "v-1", "monthly_waste": 25.0, "provider": "aws"}, {"id": "v-2", "monthly_waste": 25.0, "provider": "aws"}]
         }
         mock_factory.return_value = mock_detector
         
@@ -155,7 +154,7 @@ async def test_remediation_handler_targeted(mock_db, sample_job):
     request_id = str(uuid4())
     sample_job.payload = {"request_id": request_id}
     
-    with patch("app.modules.optimization.domain.remediation_service.RemediationService") as mock_service_cls:
+    with patch("app.modules.optimization.domain.remediation.RemediationService") as mock_service_cls:
         mock_service = AsyncMock()
         mock_result = MagicMock()
         mock_result.id = UUID(request_id)

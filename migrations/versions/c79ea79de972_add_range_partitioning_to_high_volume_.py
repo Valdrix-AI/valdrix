@@ -8,7 +8,6 @@ Create Date: 2026-01-16 17:22:57.084365
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
@@ -78,7 +77,6 @@ def upgrade() -> None:
 
     # 3. Create Initial Partitions (Q1 2026)
     for table in ["audit_logs", "cost_records"]:
-        col = "event_timestamp" if table == "audit_logs" else "recorded_at"
         op.execute(f"CREATE TABLE {table}_2026_01 PARTITION OF {table} FOR VALUES FROM ('2026-01-01') TO ('2026-02-01')")
         op.execute(f"CREATE TABLE {table}_2026_02 PARTITION OF {table} FOR VALUES FROM ('2026-02-01') TO ('2026-03-01')")
         op.execute(f"CREATE TABLE {table}_2026_03 PARTITION OF {table} FOR VALUES FROM ('2026-03-01') TO ('2026-04-01')")

@@ -1,14 +1,17 @@
 import structlog
+import asyncio
 import os
 from contextlib import asynccontextmanager
-from typing import Annotated
-from fastapi import FastAPI, Depends, Request, Response, HTTPException
+from typing import Annotated, Dict, Any, Callable, Awaitable, List, cast
+from fastapi import FastAPI, Depends, Request, HTTPException, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
 from pydantic import BaseModel
 from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Gauge
 
 from app.shared.core.config import get_settings
 from app.shared.core.logging import setup_logging
@@ -19,8 +22,10 @@ from app.shared.core.sentry import init_sentry
 from app.modules.governance.domain.scheduler import SchedulerService
 from app.shared.core.timeout import TimeoutMiddleware
 from app.shared.core.tracing import setup_tracing
-from app.shared.db.session import get_db
+from app.shared.db.session import get_db, async_session_maker, engine
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.shared.core.exceptions import ValdrixException
+from app.shared.core.rate_limit import setup_rate_limiting, RateLimitExceeded, _rate_limit_exceeded_handler
 
 # Ensure all models are registered with SQLAlchemy
 import app.models.tenant
@@ -52,7 +57,7 @@ from app.modules.governance.api.oidc import router as oidc_router
 from app.modules.governance.api.v1.public import router as public_router
 
 # Configure logging and Sentry
-setup_logging()
+setup_logging()  # type: ignore[no-untyped-call]
 init_sentry()
 settings = get_settings()
 
@@ -62,13 +67,13 @@ class CsrfSettings(BaseModel):
     cookie_samesite: str = "lax"
 
 @CsrfProtect.load_config
-def get_csrf_config():
-    return CsrfSettings()
+def get_csrf_config() -> List[tuple[str, Any]]:
+    return [("secret_key", settings.CSRF_SECRET_KEY), ("cookie_samesite", "lax")]
 
 logger = structlog.get_logger()
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> Any:
     # Setup: Initialize scheduler and emissions tracker
     settings = get_settings()
     logger.info(f"Starting {settings.APP_NAME}...")
@@ -89,10 +94,9 @@ async def lifespan(app: FastAPI):
     app.state.emissions_tracker = tracker
 
     # Pass shared session factory to scheduler (DI pattern)
-    from app.shared.db.session import async_session_maker
-    scheduler = SchedulerService(session_maker=async_session_maker)
+    scheduler = SchedulerService(session_maker=async_session_maker)  # type: ignore[no-untyped-call]
     if not settings.TESTING:
-        scheduler.start()
+        scheduler.start()  # type: ignore[no-untyped-call]
         logger.info("scheduler_started")
     else:
         logger.info("scheduler_skipped_in_testing")
@@ -106,26 +110,26 @@ async def lifespan(app: FastAPI):
     tracker.stop()
 
     # Item 18: Async Database Engine Cleanup
-    from app.shared.db.session import engine
     await engine.dispose()
     logger.info("db_engine_disposed")
 
-from fastapi.responses import JSONResponse
-from app.shared.core.exceptions import ValdrixException
 
 # Application instance
 settings = get_settings()
-app = FastAPI(
+valdrix_app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
     lifespan=lifespan
 )
+# MyPy: 'app' shadows the package name, ignore the assignment error
+app = valdrix_app # type: ignore[assignment]
+router = valdrix_app
 
 # Initialize Tracing
-setup_tracing(app)
+setup_tracing(app)  # type: ignore[no-untyped-call]
 
-@app.exception_handler(ValdrixException)
-async def valdrix_exception_handler(request: Request, exc: ValdrixException):
+@valdrix_app.exception_handler(ValdrixException)
+async def valdrix_exception_handler(request: Request, exc: ValdrixException) -> JSONResponse:
     """Handle custom application exceptions."""
     API_ERRORS_TOTAL.labels(
         path=request.url.path, 
@@ -142,8 +146,8 @@ async def valdrix_exception_handler(request: Request, exc: ValdrixException):
         },
     )
 
-@app.exception_handler(CsrfProtectError)
-async def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError):
+@valdrix_app.exception_handler(CsrfProtectError)
+async def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError) -> JSONResponse:
     """Handle CSRF protection exceptions."""
     CSRF_ERRORS.labels(path=request.url.path, method=request.method).inc()
     API_ERRORS_TOTAL.labels(
@@ -160,8 +164,8 @@ async def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError
         },
     )
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
+@valdrix_app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Handle FastAPI HTTP exceptions with standardized format."""
     API_ERRORS_TOTAL.labels(
         path=request.url.path, 
@@ -177,8 +181,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         }
     )
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+@valdrix_app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Handle Pydantic validation errors."""
     return JSONResponse(
         status_code=422,
@@ -190,8 +194,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         }
     )
 
-@app.exception_handler(ValueError)
-async def value_error_handler(request: Request, exc: ValueError):
+@valdrix_app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
     """Handle business logic ValueErrors."""
     return JSONResponse(
         status_code=400,
@@ -203,23 +207,29 @@ async def value_error_handler(request: Request, exc: ValueError):
     )
 
 # Setup rate limiting early for test visibility
-from app.shared.core.rate_limit import setup_rate_limiting, RateLimitExceeded, _rate_limit_exceeded_handler
-setup_rate_limiting(app)
+setup_rate_limiting(valdrix_app)
 
 # Override handler to include metrics (SEC-03)
-original_handler = app.exception_handlers.get(RateLimitExceeded, _rate_limit_exceeded_handler)
-async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+# MyPy: 'exception_handlers' is dynamic on FastAPI instance
+original_handler = valdrix_app.exception_handlers.get(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+async def custom_rate_limit_handler(request: Request, exc: Exception) -> Response:
+    if not isinstance(exc, RateLimitExceeded):
+        raise exc
     RATE_LIMIT_EXCEEDED.labels(
         path=request.url.path, 
         method=request.method,
         tier=getattr(request.state, "tier", "unknown")
     ).inc()
-    return await original_handler(request, exc)
+    res = original_handler(request, exc)
+    if asyncio.iscoroutine(res):
+        return await res # type: ignore
+    return cast(Response, res)
 
-app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
+valdrix_app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
+@valdrix_app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     Handle unhandled exceptions with a standardized response.
     Item 4 & 10: Prevents leaking stack traces and provides machine-readable error codes.
@@ -246,29 +256,27 @@ async def generic_exception_handler(request: Request, exc: Exception):
     )
 
 # Prometheus Gauge for System Health
-from prometheus_client import Gauge
 SYSTEM_HEALTH = Gauge("valdrix_system_health", "System health status (1=healthy, 0.5=degraded, 0=unhealthy)")
 
-@app.get("/", tags=["Lifecycle"])
-async def root():
+@valdrix_app.get("/", tags=["Lifecycle"])
+async def root() -> Dict[str, str]:
     """Root endpoint for basic reachability."""
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}
 
-@app.get("/health/live", tags=["Lifecycle"])
-async def liveness_check():
+@valdrix_app.get("/health/live", tags=["Lifecycle"])
+async def liveness_check() -> Dict[str, str]:
     """Fast liveness check without dependencies."""
     return {"status": "healthy"}
 
-@app.get("/health", tags=["Lifecycle"])
+@valdrix_app.get("/health", tags=["Lifecycle"])
 async def health_check(
     db: Annotated[AsyncSession, Depends(get_db)]
-):
+) -> Any:
     """
     Enhanced health check for load balancers.
     Checks DB, Redis, and AWS STS reachability.
     """
     from app.shared.core.health import HealthService
-    from fastapi import Response
 
     service = HealthService(db)
     health = await service.check_all()
@@ -287,22 +295,22 @@ async def health_check(
     return health
 
 # Initialize Prometheus Metrics
-Instrumentator().instrument(app).expose(app)
+Instrumentator().instrument(valdrix_app).expose(valdrix_app)
 
 # IMPORTANT: Middleware order matters in FastAPI!
 # Middleware is processed in REVERSE order of addition.
 # CORS must be added LAST so it processes FIRST for incoming requests.
 
 # Add timeout middleware (5 minutes for long zombie scans)
-app.add_middleware(TimeoutMiddleware, timeout_seconds=300)
+valdrix_app.add_middleware(TimeoutMiddleware, timeout_seconds=300)
 
 # Security headers and request ID
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RequestIDMiddleware)
+valdrix_app.add_middleware(SecurityHeadersMiddleware)
+valdrix_app.add_middleware(RequestIDMiddleware)
 
 # CORS - added LAST so it processes FIRST
 # This ensures OPTIONS preflight requests are handled before other middleware
-app.add_middleware(
+valdrix_app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
@@ -311,8 +319,8 @@ app.add_middleware(
 )
 
 # CSRF Protection Middleware - processes after CORS but before auth
-@app.middleware("http")
-async def csrf_protect_middleware(request: Request, call_next):
+@valdrix_app.middleware("http")
+async def csrf_protect_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """
     Global CSRF protection middleware.
     Blocks unsafe methods (POST, PUT, DELETE, PATCH) if CSRF token is missing/invalid.
@@ -335,18 +343,18 @@ async def csrf_protect_middleware(request: Request, call_next):
     return await call_next(request)
 
 # Register Routers
-app.include_router(onboard_router, prefix="/api/v1/settings/onboard")
-app.include_router(connections_router, prefix="/api/v1/settings/connections")
-app.include_router(settings_router, prefix="/api/v1/settings")
-app.include_router(leaderboards_router, prefix="/api/v1/leaderboards")
-app.include_router(costs_router, prefix="/api/v1/costs")
-app.include_router(carbon_router, prefix="/api/v1/carbon")
-app.include_router(zombies_router, prefix="/api/v1/zombies")
-app.include_router(admin_router, prefix="/api/v1/admin")
-app.include_router(billing_router, prefix="/api/v1/billing")
-app.include_router(audit_router, prefix="/api/v1/audit")
-app.include_router(jobs_router, prefix="/api/v1/jobs")
-app.include_router(health_dashboard_router, prefix="/api/v1/admin/health-dashboard")
-app.include_router(usage_router, prefix="/api/v1/usage")
-app.include_router(oidc_router)
-app.include_router(public_router, prefix="/api/v1/public")
+valdrix_app.include_router(onboard_router, prefix="/api/v1/settings/onboard")
+valdrix_app.include_router(connections_router, prefix="/api/v1/settings/connections")
+valdrix_app.include_router(settings_router, prefix="/api/v1/settings")
+valdrix_app.include_router(leaderboards_router, prefix="/api/v1/leaderboards")
+valdrix_app.include_router(costs_router, prefix="/api/v1/costs")
+valdrix_app.include_router(carbon_router, prefix="/api/v1/carbon")
+valdrix_app.include_router(zombies_router, prefix="/api/v1/zombies")
+valdrix_app.include_router(admin_router, prefix="/api/v1/admin")
+valdrix_app.include_router(billing_router, prefix="/api/v1/billing")
+valdrix_app.include_router(audit_router, prefix="/api/v1/audit")
+valdrix_app.include_router(jobs_router, prefix="/api/v1/jobs")
+valdrix_app.include_router(health_dashboard_router, prefix="/api/v1/admin/health-dashboard")
+valdrix_app.include_router(usage_router, prefix="/api/v1/usage")
+valdrix_app.include_router(oidc_router)
+valdrix_app.include_router(public_router, prefix="/api/v1/public")

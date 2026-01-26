@@ -21,6 +21,7 @@ import structlog
 
 from app.shared.db.session import get_db
 from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.pricing import PricingTier
 from app.models.tenant import Tenant
 from app.models.background_job import BackgroundJob, JobStatus
 from app.models.aws_connection import AWSConnection
@@ -89,7 +90,7 @@ _startup_time = datetime.now(timezone.utc)
 
 @router.get("", response_model=InvestorHealthDashboard)
 async def get_investor_health_dashboard(
-    user: Annotated[CurrentUser, Depends(requires_role("admin"))],
+    _user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -157,7 +158,7 @@ async def _get_tenant_metrics(db: AsyncSession, now: datetime) -> TenantMetrics:
     # Trial vs paid
     trial = await db.scalar(
         select(func.count(Tenant.id))
-        .where(Tenant.plan == "trial")
+        .where(Tenant.plan == PricingTier.TRIAL.value)
     )
     
     paid = (total or 0) - (trial or 0)
@@ -166,7 +167,7 @@ async def _get_tenant_metrics(db: AsyncSession, now: datetime) -> TenantMetrics:
     churn_risk = await db.scalar(
         select(func.count(Tenant.id))
         .where(
-            Tenant.plan != "trial",
+            Tenant.plan != PricingTier.TRIAL.value,
             (Tenant.last_accessed_at < week_ago) | (Tenant.last_accessed_at.is_(None))
         )
     )
@@ -215,18 +216,34 @@ async def _get_job_queue_health(db: AsyncSession, now: datetime) -> JobQueueHeal
         func.extract('epoch', BackgroundJob.created_at)
     ) * 1000
     
-    metrics = await db.execute(
-        select(
-            func.avg(duration_expr),
-            func.percentile_cont(0.5).within_group(duration_expr),
-            func.percentile_cont(0.95).within_group(duration_expr),
-            func.percentile_cont(0.99).within_group(duration_expr)
-        ).where(
-            BackgroundJob.status == JobStatus.COMPLETED,
-            BackgroundJob.completed_at >= day_ago
+    # Determine if we are on Postgres for percentile support
+    from app.shared.db.session import engine
+    is_postgres = "postgresql" in str(engine.url)
+    
+    if is_postgres:
+        metrics = await db.execute(
+            select(
+                func.avg(duration_expr),
+                func.percentile_cont(0.5).within_group(duration_expr),
+                func.percentile_cont(0.95).within_group(duration_expr),
+                func.percentile_cont(0.99).within_group(duration_expr)
+            ).where(
+                BackgroundJob.status == JobStatus.COMPLETED,
+                BackgroundJob.completed_at >= day_ago
+            )
         )
-    )
-    avg_time, p50, p95, p99 = metrics.one()
+        avg_time, p50, p95, p99 = metrics.one()
+    else:
+        # Fallback for SQLite (Dev/Test) - Percentiles not supported natively
+        metrics = await db.execute(
+            select(func.avg(duration_expr)).where(
+                BackgroundJob.status == JobStatus.COMPLETED,
+                BackgroundJob.completed_at >= day_ago
+            )
+        )
+        avg_time = metrics.scalar()
+        p50 = p95 = p99 = avg_time  # Simple fallback
+
     
     return JobQueueHealth(
         pending_jobs=pending or 0,

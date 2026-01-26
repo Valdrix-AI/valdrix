@@ -1,4 +1,3 @@
-import pytest
 from app.shared.core.pricing import TIER_CONFIG, PricingTier
 
 def test_annual_pricing_discount():

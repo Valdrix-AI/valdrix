@@ -128,7 +128,7 @@ class TestSavingsProcessor:
             mock_service_instance.execute = AsyncMock()
             mock_service.return_value = mock_service_instance
             
-            result = await processor.process_recommendations(
+            await processor.process_recommendations(
                 mock_db, tenant_id, mock_result
             )
 

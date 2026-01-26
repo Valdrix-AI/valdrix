@@ -3,9 +3,6 @@ from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.adapters.aws.detector import AWSZombieDetector
 from app.modules.optimization.adapters.azure.detector import AzureZombieDetector
 from app.modules.optimization.adapters.gcp.detector import GCPZombieDetector
-from app.models.aws_connection import AWSConnection
-from app.models.azure_connection import AzureConnection
-from app.models.gcp_connection import GCPConnection
 
 class ZombieDetectorFactory:
     """

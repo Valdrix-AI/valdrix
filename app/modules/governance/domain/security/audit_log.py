@@ -17,7 +17,7 @@ Key Features:
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from sqlalchemy import String, ForeignKey, Text, Index, JSON, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -171,9 +171,10 @@ class AuditLogger:
         "external_id", "session_token", "credit_card"
     }
 
-    def __init__(self, db, tenant_id: str, correlation_id: str = None):
+    def __init__(self, db, tenant_id: Union[str, uuid.UUID], correlation_id: str = None):
         self.db = db
-        self.tenant_id = tenant_id
+        # Ensure tenant_id is a UUID object for SQLAlchemy
+        self.tenant_id = uuid.UUID(str(tenant_id)) if isinstance(tenant_id, (str, bytes)) else tenant_id
         self.correlation_id = correlation_id or str(uuid.uuid4())
 
     async def log(
@@ -198,7 +199,7 @@ class AuditLogger:
         entry = AuditLog(
             tenant_id=self.tenant_id,
             event_type=event_type.value,
-            actor_id=actor_id,
+            actor_id=uuid.UUID(str(actor_id)) if actor_id and isinstance(actor_id, (str, bytes)) else actor_id,
             actor_email=actor_email,
             actor_ip=actor_ip,
             correlation_id=self.correlation_id,

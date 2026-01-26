@@ -5,7 +5,6 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.optimization.domain.service import ZombieService
 from app.models.aws_connection import AWSConnection
-from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
 
 @pytest.fixture
@@ -84,7 +83,8 @@ async def test_ai_enrichment_tier_gating(zombie_service, db_session):
     zombies = {"unattached_volumes": []}
     
     with patch("app.modules.optimization.domain.service.is_feature_enabled", return_value=False):
-        await zombie_service._enrich_with_ai(zombies, user)
+        from app.shared.core.pricing import PricingTier
+        await zombie_service._enrich_with_ai(zombies, tenant_id, PricingTier.STARTER)
         assert "upgrade_required" in zombies["ai_analysis"]
 
 @pytest.mark.asyncio
@@ -95,7 +95,8 @@ async def test_ai_enrichment_failure_handling(zombie_service, db_session):
     
     with patch("app.modules.optimization.domain.service.is_feature_enabled", return_value=True):
         with patch("app.shared.llm.factory.LLMFactory.create", side_effect=Exception("LLM Down")):
-            await zombie_service._enrich_with_ai(zombies, user)
+            from app.shared.core.pricing import PricingTier
+            await zombie_service._enrich_with_ai(zombies, tenant_id, PricingTier.GROWTH)
             assert "AI analysis failed" in zombies["ai_analysis"]["error"]
 
 @pytest.mark.asyncio

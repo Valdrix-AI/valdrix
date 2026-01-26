@@ -3,13 +3,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4, UUID
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
-from botocore.exceptions import ClientError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from app.modules.optimization.domain.remediation_service import RemediationService
 from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
 from app.models.aws_connection import AWSConnection
-from app.modules.governance.domain.security.audit_log import AuditEventType
 
 @pytest.fixture
 def db_session():
@@ -176,7 +173,7 @@ async def test_execute_scheduled_successfully(remediation_service, db_session):
     mock_res.scalar_one_or_none.return_value = req
     db_session.execute.return_value = mock_res
     
-    with patch("app.modules.optimization.domain.remediation_service.AuditLogger.log", return_value=AsyncMock()) as mock_audit, \
+    with patch("app.modules.optimization.domain.remediation.AuditLogger.log", return_value=AsyncMock()) as mock_audit, \
          patch("app.modules.governance.domain.jobs.processor.enqueue_job", return_value=AsyncMock()) as mock_job:
         
         res = await remediation_service.execute(request_id, tenant_id, bypass_grace_period=False)
@@ -215,7 +212,7 @@ async def test_execute_grace_period_logic(remediation_service, db_session):
     req.reviewed_by_user_id = uuid4()
     
     with patch.object(remediation_service, "_execute_action", return_value=AsyncMock()), \
-         patch("app.modules.optimization.domain.remediation_service.AuditLogger.log", return_value=AsyncMock()):
+         patch("app.modules.optimization.domain.remediation.AuditLogger.log", return_value=AsyncMock()):
         res = await remediation_service.execute(request_id, tenant_id)
         assert res.status == RemediationStatus.COMPLETED
 
@@ -241,7 +238,7 @@ async def test_execute_backup_routing(remediation_service, db_session):
     db_session.execute.return_value = mock_res
     
     with patch.object(remediation_service, "_execute_action", return_value=AsyncMock()), \
-         patch("app.modules.optimization.domain.remediation_service.AuditLogger.log", return_value=AsyncMock()):
+         patch("app.modules.optimization.domain.remediation.AuditLogger.log", return_value=AsyncMock()):
         
         # 1. RDS Backup
         req.status = RemediationStatus.APPROVED
@@ -276,7 +273,7 @@ async def test_execute_backup_failure_aborts(remediation_service, db_session):
     db_session.execute.return_value = mock_res
     
     with patch.object(remediation_service, "_create_volume_backup", side_effect=Exception("AWS Error")), \
-         patch("app.modules.optimization.domain.remediation_service.AuditLogger.log", return_value=AsyncMock()):
+         patch("app.modules.optimization.domain.remediation.AuditLogger.log", return_value=AsyncMock()):
         
         res = await remediation_service.execute(request_id, tenant_id, bypass_grace_period=True)
         assert res.status == RemediationStatus.FAILED

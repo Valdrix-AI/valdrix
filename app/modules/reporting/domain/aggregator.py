@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from uuid import UUID
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -202,12 +202,19 @@ class CostAggregator:
         total_cost = row.total_cost if row and row.total_cost else Decimal("0.00")
         total_carbon = row.total_carbon if row and row.total_carbon else Decimal("0.00")
         
+        # Phase 21: Include basic breakdown in summary for holistic dashboard entry
+        # This reduces API calls from the frontend.
+        breakdown_data = await CostAggregator.get_basic_breakdown(
+            db, tenant_id, start_date, end_date, provider
+        )
+        
         return {
             "total_cost": float(total_cost),
             "total_carbon_kg": float(total_carbon),
             "provider": provider or "multi",
             "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat()
+            "end_date": end_date.isoformat(),
+            "breakdown": breakdown_data["breakdown"]
         }
     
     @staticmethod
@@ -298,7 +305,7 @@ class CostAggregator:
                 CostRecord.recorded_at >= start_date,
                 CostRecord.recorded_at <= end_date,
                 # Simple heuristic: no ingestion_metadata or empty tags
-                (CostRecord.allocated_to == None) | (CostRecord.allocated_to == 'Unallocated')
+                (CostRecord.allocated_to.is_(None)) | (CostRecord.allocated_to == 'Unallocated')
             )
         )
         

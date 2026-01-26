@@ -2,8 +2,7 @@
 Tests for LLM Guardrails - Security and Validation
 """
 import pytest
-from app.shared.llm.guardrails import LLMGuardrails, ZombieAnalysisResult, ZombieResourceInsight
-from pydantic import ValidationError
+from app.shared.llm.guardrails import LLMGuardrails, ZombieAnalysisResult
 
 
 @pytest.mark.asyncio

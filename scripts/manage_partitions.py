@@ -18,7 +18,7 @@ Usage:
 
 import argparse
 import asyncio
-from datetime import date, timedelta
+from datetime import date
 from dateutil.relativedelta import relativedelta
 import structlog
 from sqlalchemy import text

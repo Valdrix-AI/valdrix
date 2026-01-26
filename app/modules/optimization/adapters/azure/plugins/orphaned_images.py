@@ -46,11 +46,11 @@ class AzureOrphanedImagesPlugin(ZombiePlugin):
                     monthly_waste = Decimal(str(size_gb)) * Decimal("0.05")
                     
                     zombies.append({
-                        "id": image.id,
+                        "resource_id": image.id,
                         "name": image.name,
                         "region": image.location,
                         "type": "ManagedImage",
-                        "monthly_waste": float(monthly_waste),
+                        "monthly_cost": float(monthly_waste),
                         "tags": image.tags or {}
                     })
                     

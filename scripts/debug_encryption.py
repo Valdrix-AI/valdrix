@@ -1,4 +1,4 @@
-from app.shared.core.security import EncryptionKeyManager, encrypt_string, decrypt_string
+from app.shared.core.security import EncryptionKeyManager, encrypt_string
 import os
 
 os.environ["KDF_SALT"] = EncryptionKeyManager.generate_salt()

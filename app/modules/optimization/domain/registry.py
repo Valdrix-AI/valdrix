@@ -1,4 +1,4 @@
-from typing import List, Dict, Type, DefaultDict
+from typing import List, Type, DefaultDict
 from collections import defaultdict
 from app.modules.optimization.domain.plugin import ZombiePlugin
 

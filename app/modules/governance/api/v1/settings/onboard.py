@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from app.shared.db.session import get_db
 from app.shared.core.logging import audit_log
 from app.shared.core.auth import get_current_user_from_jwt, CurrentUser
-from app.models.tenant import Tenant, User
+from app.models.tenant import Tenant, User, UserRole
+from app.shared.core.pricing import PricingTier
 from app.shared.core.rate_limit import auth_limit
 
 class OnboardRequest(BaseModel):
@@ -23,7 +24,7 @@ router = APIRouter(tags=["onboarding"])
 @router.post("", response_model=OnboardResponse)
 @auth_limit
 async def onboard(
-    request: Request,
+    _request: Request,
     onboard_req: OnboardRequest,
     user: CurrentUser = Depends(get_current_user_from_jwt),  # No DB check
     db: AsyncSession = Depends(get_db),
@@ -39,14 +40,14 @@ async def onboard(
 
     tenant = Tenant(
         name=onboard_req.tenant_name,
-        plan="trial",
+        plan=PricingTier.TRIAL.value,
         trial_started_at=datetime.now(timezone.utc)
     )
     db.add(tenant)
     await db.flush()  # Get tenant.id
 
     # 3. Create User linked to Tenant
-    new_user = User(id=user.id, email=user.email, tenant_id=tenant.id, role="owner")
+    new_user = User(id=user.id, email=user.email, tenant_id=tenant.id, role=UserRole.OWNER)
     db.add(new_user)
     await db.commit()
 

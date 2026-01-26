@@ -6,7 +6,7 @@ import structlog
 from google.cloud import bigquery
 from google.cloud import asset_v1
 from google.oauth2 import service_account
-from google.api_core.exceptions import ServiceUnavailable, DeadlineExceeded, Unauthenticated
+from google.api_core.exceptions import ServiceUnavailable, DeadlineExceeded
 import tenacity
 
 from app.shared.adapters.base import BaseAdapter
@@ -111,8 +111,27 @@ class GCPAdapter(BaseAdapter):
 
         table_path = f"{billing_project}.{billing_dataset}.{billing_table}"
 
-        # Phase 5: Broad Credit extraction (CUD, SUD, Free Trial, Discounts)
-        query = f"""
+        query = self._build_cost_query(table_path)
+        
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("start_date", "TIMESTAMP", start_date),
+                bigquery.ScalarQueryParameter("end_date", "TIMESTAMP", end_date),
+            ]
+        )
+
+        try:
+            query_job = client.query(query, job_config=job_config)
+            results = query_job.result()
+            
+            return [self._parse_row(row) for row in results]
+        except Exception as e:
+            logger.error("gcp_bq_query_failed", table=table_path, error=str(e))
+            return []
+
+    def _build_cost_query(self, table_path: str) -> str:
+        """Constructs the BigQuery SQL for cost extraction."""
+        return f"""
             SELECT
                 service.description as service,
                 SUM(cost) as cost_usd,
@@ -127,33 +146,18 @@ class GCPAdapter(BaseAdapter):
             GROUP BY service, timestamp
             ORDER BY timestamp DESC
         """ # nosec: B608
-        
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("start_date", "TIMESTAMP", start_date),
-                bigquery.ScalarQueryParameter("end_date", "TIMESTAMP", end_date),
-            ]
-        )
 
-        try:
-            query_job = client.query(query, job_config=job_config)
-            results = query_job.result()
-            
-            return [
-                {
-                    "timestamp": row.timestamp,
-                    "service": row.service,
-                    "cost_usd": float(row.cost_usd),
-                    "credits": float(row.total_credits) if row.total_credits else 0.0,
-                    "amortized_cost": float(row.cost_usd) + float(row.total_credits or 0),
-                    "currency": row.currency,
-                    "region": "global" 
-                }
-                for row in results
-            ]
-        except Exception as e:
-            logger.error("gcp_bq_query_failed", table=table_path, error=str(e))
-            return []
+    def _parse_row(self, row: Any) -> Dict[str, Any]:
+        """Normalizes a single GCP BigQuery result row."""
+        return {
+            "timestamp": row.timestamp,
+            "service": row.service,
+            "cost_usd": float(row.cost_usd),
+            "credits": float(row.total_credits) if row.total_credits else 0.0,
+            "amortized_cost": float(row.cost_usd) + float(row.total_credits or 0),
+            "currency": row.currency,
+            "region": "global" 
+        }
 
     async def get_amortized_costs(
         self,

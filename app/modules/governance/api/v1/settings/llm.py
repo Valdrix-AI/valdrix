@@ -11,7 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.logging import audit_log
 from app.shared.db.session import get_db
 from app.models.llm import LLMBudget
 
@@ -109,7 +110,7 @@ async def get_llm_settings(
 @router.put("/llm", response_model=LLMSettingsResponse)
 async def update_llm_settings(
     data: LLMSettingsUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -147,6 +148,19 @@ async def update_llm_settings(
         tenant_id=str(current_user.tenant_id),
         provider=settings.preferred_provider,
         model=settings.preferred_model,
+    )
+
+    # SEC: Audit log critical settings change
+    audit_log(
+        "settings.llm_updated",
+        str(current_user.id),
+        str(current_user.tenant_id),
+        {
+            "monthly_limit": float(settings.monthly_limit_usd),
+            "provider": settings.preferred_provider,
+            "model": settings.preferred_model,
+            "keys_updated": [k for k, v in data.model_dump().items() if "api_key" in k and v is not None]
+        }
     )
 
     # Map model flags for response

@@ -7,7 +7,7 @@ Provides:
 - POST /billing/webhook - Handle Paystack webhooks
 """
 
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Dict, Any, List, cast
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -28,8 +28,8 @@ class ExchangeRateUpdate(BaseModel):
 
 class PricingPlanUpdate(BaseModel):
     price_usd: float
-    features: Optional[dict] = None
-    limits: Optional[dict] = None
+    features: Optional[Dict[str, Any]] = None
+    limits: Optional[Dict[str, Any]] = None
 
 
 class CheckoutRequest(BaseModel):
@@ -45,7 +45,7 @@ class SubscriptionResponse(BaseModel):
 
 
 @router.get("/plans")
-async def get_public_plans(db: AsyncSession = Depends(get_db)):
+async def get_public_plans(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
     """
     Get public pricing plans for the landing page.
     No authentication required.
@@ -57,7 +57,7 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)):
     
     # 1. Try fetching from DB
     try:
-        result = await db.execute(select(PricingPlan).where(PricingPlan.is_active == True))
+        result = await db.execute(select(PricingPlan).where(PricingPlan.is_active))
         db_plans = result.scalars().all()
         if db_plans:
             return [{
@@ -99,12 +99,12 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/subscription", response_model=SubscriptionResponse)
-@auth_limit
+@auth_limit # type: ignore[untyped-decorator]
 async def get_subscription(
     request: Request,
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db),
-):
+) -> SubscriptionResponse:
     """Get current subscription status for tenant."""
     try:
         from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription
@@ -131,11 +131,11 @@ async def get_subscription(
 
 
 @router.get("/features")
-@auth_limit
+@auth_limit # type: ignore[untyped-decorator]
 async def get_features(
     request: Request,
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
-):
+) -> Dict[str, Any]:
     """
     Get enabled features and limits for the user's current tier.
     Central authority for frontend and backend gating.
@@ -154,13 +154,13 @@ async def get_features(
 
 
 @router.post("/checkout")
-@auth_limit
+@auth_limit # type: ignore[untyped-decorator]
 async def create_checkout(
     request: Request,
     checkout_req: CheckoutRequest,
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db),
-):
+) -> Dict[str, str]:
     """Initialize Paystack checkout session."""
     if not settings.PAYSTACK_SECRET_KEY:
         raise HTTPException(503, "Billing not configured")
@@ -171,21 +171,24 @@ async def create_checkout(
 
         # Validate tier
         try:
-            tier = PricingTier(request.tier.lower())
+            tier = PricingTier(checkout_req.tier.lower())
         except ValueError:
-            raise HTTPException(400, f"Invalid tier: {request.tier}")
+            raise HTTPException(400, f"Invalid tier: {checkout_req.tier}")
 
         billing = BillingService(db)
         
         # Default callback URL
-        callback = request.callback_url or f"{settings.FRONTEND_URL}/billing?success=true"
+        callback = checkout_req.callback_url or f"{settings.FRONTEND_URL}/billing?success=true"
         
+        if not user.tenant_id:
+            raise HTTPException(400, "User has no tenant")
+
         result = await billing.create_checkout_session(
             tenant_id=user.tenant_id,
             tier=tier,
             email=user.email,
             callback_url=callback,
-            billing_cycle=request.billing_cycle
+            billing_cycle=checkout_req.billing_cycle
         )
 
         return {"checkout_url": result["url"], "reference": result["reference"]}
@@ -201,12 +204,14 @@ async def create_checkout(
 async def cancel_subscription(
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
-):
+) -> Dict[str, str]:
     """Cancel current subscription."""
     try:
         from app.modules.reporting.domain.billing.paystack_billing import BillingService
 
         billing = BillingService(db)
+        if not user.tenant_id:
+            raise HTTPException(400, "User has no tenant")
         await billing.cancel_subscription(user.tenant_id)
 
         return {"status": "cancelled"}
@@ -219,7 +224,7 @@ async def cancel_subscription(
 
 
 @router.post("/webhook")
-async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> Any:
     """
     Handle Paystack webhook events with durable processing.
     
@@ -234,7 +239,8 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         # BE-BILLING-1: Validate Paystack origin IP (Mandatory for SOC2/Security)
         PAYSTACK_IPS = {"52.31.139.75", "52.49.173.169", "52.214.14.220"}
         # Check X-Forwarded-For (if behind proxy) or client host
-        client_ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+        host = request.client.host if request.client else "unknown"
+        client_ip = request.headers.get("x-forwarded-for", host).split(",")[0].strip()
         
         if settings.ENVIRONMENT == "production" and client_ip not in PAYSTACK_IPS:
             logger.warning("unauthorized_webhook_origin", ip=client_ip)
@@ -298,7 +304,7 @@ async def update_exchange_rate(
     request: ExchangeRateUpdate,
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """Manually update exchange rate."""
     from app.models.pricing import ExchangeRate
     from sqlalchemy import select
@@ -331,7 +337,7 @@ async def update_exchange_rate(
 async def get_exchange_rate(
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db)
-):
+) -> Dict[str, Any]:
     """Get current exchange rate."""
     from app.models.pricing import ExchangeRate
     from sqlalchemy import select
@@ -354,14 +360,14 @@ async def get_exchange_rate(
     }
 
 @router.post("/admin/plans/{plan_id}")
-@auth_limit
+@auth_limit # type: ignore[untyped-decorator]
 async def update_pricing_plan(
     request: Request,
     plan_id: str, # Note: plan_id is a slug (e.g., 'starter'), not a UUID
     plan_req: PricingPlanUpdate,
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db)
-):
+) -> Dict[str, str]:
     """Update pricing plan details."""
     from app.models.pricing import PricingPlan
     from sqlalchemy import select

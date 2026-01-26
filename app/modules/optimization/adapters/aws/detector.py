@@ -24,6 +24,8 @@ class AWSZombieDetector(BaseZombieDetector):
         if connection:
             from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
             self._adapter = MultiTenantAWSAdapter(connection)
+        
+        self._initialize_plugins()
 
     @property
     def provider_name(self) -> str:

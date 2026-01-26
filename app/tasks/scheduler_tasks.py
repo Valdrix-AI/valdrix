@@ -19,12 +19,14 @@ import uuid
 
 logger = structlog.get_logger()
 
+from typing import Any
+
 # Helper to run async code in sync Celery task
-def run_async(coro):
+def run_async(coro: Any) -> Any:
     return asyncio.run(coro)
 
 @shared_task(name="scheduler.cohort_analysis")
-def run_cohort_analysis(cohort_value: str):
+def run_cohort_analysis(cohort_value: str) -> None:
     """
     Celery task to enqueue jobs for a tenant cohort.
     Wraps async logic in synchronous execution.
@@ -32,7 +34,7 @@ def run_cohort_analysis(cohort_value: str):
     cohort = TenantCohort(cohort_value)
     run_async(_cohort_analysis_logic(cohort))
 
-async def _cohort_analysis_logic(target_cohort: TenantCohort):
+async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
     job_id = str(uuid.uuid4())
     structlog.contextvars.bind_contextvars(
         correlation_id=job_id, 
@@ -93,7 +95,8 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort):
                             ).on_conflict_do_nothing(index_elements=["deduplication_key"])
                             
                             result_proxy = await db.execute(stmt)
-                            if result_proxy.rowcount > 0:
+                            # Cast to CursorResult to access rowcount
+                            if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
                                 jobs_enqueued += 1
                                 BACKGROUND_JOBS_ENQUEUED.labels(
                                     job_type=jtype.value, 
@@ -126,12 +129,11 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort):
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 @shared_task(name="scheduler.remediation_sweep")
-def run_remediation_sweep():
+def run_remediation_sweep() -> None:
     run_async(_remediation_sweep_logic())
 
-async def _remediation_sweep_logic():
+async def _remediation_sweep_logic() -> None:
     from app.models.aws_connection import AWSConnection
-    job_id = str(uuid.uuid4())
     job_name = "weekly_remediation_sweep"
     start_time = time.time()
     max_retries = 3
@@ -172,7 +174,7 @@ async def _remediation_sweep_logic():
                         ).on_conflict_do_nothing(index_elements=["deduplication_key"])
                         
                         result_proxy = await db.execute(stmt)
-                        if result_proxy.rowcount > 0:
+                        if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
                             jobs_enqueued += 1
                             BACKGROUND_JOBS_ENQUEUED.labels(
                                 job_type=JobType.REMEDIATION.value, 
@@ -195,10 +197,10 @@ async def _remediation_sweep_logic():
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 @shared_task(name="scheduler.billing_sweep")
-def run_billing_sweep():
+def run_billing_sweep() -> None:
     run_async(_billing_sweep_logic())
 
-async def _billing_sweep_logic():
+async def _billing_sweep_logic() -> None:
     from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription, SubscriptionStatus
     job_name = "daily_billing_sweep"
     start_time = time.time()
@@ -232,7 +234,7 @@ async def _billing_sweep_logic():
                     ).on_conflict_do_nothing(index_elements=["deduplication_key"])
                     
                     result_proxy = await db.execute(stmt)
-                    if result_proxy.rowcount > 0:
+                    if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
                         jobs_enqueued += 1
                         BACKGROUND_JOBS_ENQUEUED.labels(
                             job_type=JobType.RECURRING_BILLING.value, 
@@ -249,10 +251,10 @@ async def _billing_sweep_logic():
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 @shared_task(name="scheduler.maintenance_sweep")
-def run_maintenance_sweep():
+def run_maintenance_sweep() -> None:
     run_async(_maintenance_sweep_logic())
 
-async def _maintenance_sweep_logic():
+async def _maintenance_sweep_logic() -> None:
     from app.modules.reporting.domain.aggregator import CostAggregator
     from app.modules.reporting.domain.persistence import CostPersistenceService
     from sqlalchemy import text

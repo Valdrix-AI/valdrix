@@ -3,21 +3,28 @@
 # ============================================================
 FROM python:3.12-slim AS builder
 
+# Labels for OCI compliance
+LABEL org.opencontainers.image.source="https://github.com/valdrix/valdrix"
+LABEL org.opencontainers.image.description="Valdrix AI - Autonomous FinOps & GreenOps Guardian"
+LABEL org.opencontainers.image.licenses="MIT"
+
 WORKDIR /app
 
-# Install system dependencies for compilation
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast dependency management
+ENV UV_SYSTEM_PYTHON=1
 RUN pip install --no-cache-dir uv
 
-# Copy dependency files first (Docker cache optimization)
-COPY pyproject.toml ./
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
 
-# Install dependencies
-RUN uv pip install --system --no-cache .
+# Install dependencies into a dedicated path
+RUN uv pip install --no-cache -r pyproject.toml
 
 # ============================================================
 # STAGE 2: Runtime (minimal image)
@@ -27,28 +34,27 @@ FROM python:3.12-slim AS runtime
 WORKDIR /app
 
 # Security: Run as non-root user
-RUN useradd --create-home --shell /bin/bash appuser
+RUN useradd --create-home --shell /bin/bash appuser && \
+    chown -R appuser:appuser /app
 
-# Copy installed packages from builder
 # Copy installed packages from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code with ownership
+# Copy application code
 COPY --chown=appuser:appuser app ./app
 
-# Create data directory for local storage (if needed)
-RUN mkdir -p data && chown appuser:appuser data
+# Metadata and Environment
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
-# Switch to non-root user
 USER appuser
 
-# Health check (using python standard library to avoid installing curl)
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
-# Expose port
 EXPOSE 8000
 
-# Run with uvicorn
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

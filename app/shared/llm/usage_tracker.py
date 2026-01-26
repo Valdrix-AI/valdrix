@@ -13,6 +13,7 @@ import structlog
 
 from app.models.llm import LLMUsage
 from app.shared.core.cache import get_cache_service
+from app.shared.llm.pricing_data import LLM_PRICING
 from enum import Enum
 
 class BudgetStatus(str, Enum):
@@ -22,33 +23,6 @@ class BudgetStatus(str, Enum):
 
 
 logger = structlog.get_logger()
-
-# Prices per 1 MILLION tokens (input/output) in USD
-# Source: Official pricing pages as of 2026
-LLM_PRICING = {
-    "groq": {
-        "llama-3.3-70b-versatile": {"input": 0.59, "output": 0.79},
-        "llama-3.1-8b-instant": {"input": 0.05, "output": 0.08},
-        "deepseek-v3": {"input": 0.14, "output": 0.28},
-    },
-    "openai": {
-        "gpt-4o": {"input": 2.50, "output": 10.00},
-        "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-        "o1-mini": {"input": 3.00, "output": 12.00},
-        "o1-preview": {"input": 15.00, "output": 60.00},
-    },
-    "anthropic": {
-        "claude-3-7-sonnet": {"input": 3.00, "output": 15.00},
-        "claude-3-5-sonnet": {"input": 3.00, "output": 15.00},
-        "claude-3-5-haiku": {"input": 0.25, "output": 1.25},
-        "claude-3-opus": {"input": 15.00, "output": 75.00},
-    },
-    "google": {
-        "gemini-2.0-flash": {"input": 0.10, "output": 0.40},
-        "gemini-1.5-pro": {"input": 1.00, "output": 3.00},
-        "gemini-1.5-flash": {"input": 0.05, "output": 0.15},
-    },
-}
 
 
 def count_tokens(text: str, model: str = "gpt-4") -> int:
@@ -147,8 +121,9 @@ class UsageTracker:
         # Update cache if it was a pre-authorized request
         cache = get_cache_service()
         if cache.enabled:
-            # We don't necessarily clear here, but we could update the estimate
-            pass
+            # Update the monthly usage estimate in cache to avoid frequent DB hits
+            current_usage = await self.get_monthly_usage(tenant_id)
+            await cache.client.set(f"usage_usd:{tenant_id}", str(current_usage), ex=3600)
 
         usage = LLMUsage(
             tenant_id=tenant_id,
@@ -163,12 +138,14 @@ class UsageTracker:
         )
 
         self.db.add(usage)
-        # Track in Prometheus for real-time spend monitoring (Phase 2)
+        # Track in Prometheus for real-time spend monitoring
         from app.shared.core.ops_metrics import LLM_SPEND_USD
-        # We would need the tenant's tier here, either pass it or fetch it.
-        # For now, we increment with generic labels if unknown.
+        from app.shared.core.pricing import get_tenant_tier
+        
+        tier = await get_tenant_tier(tenant_id, self.db)
+        
         LLM_SPEND_USD.labels(
-            tenant_tier="growth", # Default or fetched
+            tenant_tier=tier.value,
             provider=provider,
             model=model
         ).inc(float(cost))
@@ -239,8 +216,9 @@ class UsageTracker:
         
         if projected_total > limit:
             from app.shared.core.ops_metrics import LLM_PRE_AUTH_DENIALS
-            # Assuming a default tier or fetching it if available
-            LLM_PRE_AUTH_DENIALS.labels(reason="hard_limit_exceeded", tenant_tier="growth").inc()
+            from app.shared.core.pricing import get_tenant_tier
+            tier = await get_tenant_tier(tenant_id, self.db)
+            LLM_PRE_AUTH_DENIALS.labels(reason="hard_limit_exceeded", tenant_tier=tier.value).inc()
 
             logger.error(
                 "llm_request_pre_authorization_rejected",
@@ -297,10 +275,7 @@ class UsageTracker:
         Optimized: Checks Redis first for "Blocked" status (O(1)) before hitting DB.
         Hardened: Uses a fail-closed pattern. If Redis or DB is down, we block (HARD_LIMIT).
         """
-        from sqlalchemy import select
-        from app.models.llm import LLMBudget
         from app.shared.core.exceptions import BudgetExceededError
-        import aiobreaker
         # Initialize or get a circuit breaker for budget operations
 
         # Initialize or get a circuit breaker for budget operations

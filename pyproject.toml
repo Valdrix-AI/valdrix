@@ -95,11 +95,12 @@ dev = [
     "moto[server]>=5.0.0",
     "pytest-mock>=3.14.0",
     "aiosqlite>=0.20.0",
+    "mypy>=1.14.0",
+    "types-boto3>=1.35.0",
+    "sqlalchemy[mypy]>=2.0.46",
 ]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 markers = [
@@ -107,7 +108,7 @@ markers = [
 ]
 filterwarnings = [
 ]
-addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=50"
+addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=80"
 
 [tool.coverage.run]
 source = ["app"]
@@ -120,3 +121,19 @@ exclude_lines = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
 ]
+
+[tool.mypy]
+plugins = [
+    "pydantic.mypy",
+    "sqlalchemy.ext.mypy.plugin"
+]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true

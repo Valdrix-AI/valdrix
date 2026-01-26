@@ -13,7 +13,7 @@ Uses Upstash free tier (10K commands/day) which is sufficient for:
 
 import json
 import structlog
-from typing import Optional
+from typing import Optional, Any
 from uuid import UUID
 from datetime import timedelta
 
@@ -28,6 +28,10 @@ logger = structlog.get_logger()
 ANALYSIS_TTL = timedelta(hours=24)
 COST_DATA_TTL = timedelta(hours=6)
 METADATA_TTL = timedelta(hours=1)
+
+# Key Prefixes
+PREFIX_ANALYSIS = "analysis"
+PREFIX_COSTS = "costs"
 
 # Singleton instances
 _sync_client: Optional[Redis] = None
@@ -85,86 +89,63 @@ class CacheService:
     
     async def get_analysis(self, tenant_id: UUID) -> Optional[dict]:
         """Get cached LLM analysis for a tenant."""
-        if not self.enabled:
-            return None
-        
-        try:
-            key = f"analysis:{tenant_id}"
-            data = await self.client.get(key)
-            if data:
-                logger.debug("cache_hit", key=key)
-                return json.loads(data) if isinstance(data, str) else data
-        except Exception as e:
-            logger.warning("cache_get_error", key=f"analysis:{tenant_id}", error=str(e))
-        
-        return None
+        key = f"{PREFIX_ANALYSIS}:{tenant_id}"
+        return await self._get(key)
     
     async def set_analysis(self, tenant_id: UUID, analysis: dict) -> bool:
         """Cache LLM analysis with 24h TTL."""
-        if not self.enabled:
-            return False
-        
-        try:
-            key = f"analysis:{tenant_id}"
-            await self.client.set(
-                key,
-                json.dumps(analysis),
-                ex=int(ANALYSIS_TTL.total_seconds())
-            )
-            logger.debug("cache_set", key=key, ttl_hours=24)
-            return True
-        except Exception as e:
-            logger.warning("cache_set_error", key=f"analysis:{tenant_id}", error=str(e))
-            return False
+        key = f"{PREFIX_ANALYSIS}:{tenant_id}"
+        return await self._set(key, analysis, ANALYSIS_TTL)
     
     async def get_cost_data(self, tenant_id: UUID, date_range: str) -> Optional[list]:
         """Get cached cost data for a tenant and date range."""
-        if not self.enabled:
-            return None
-        
-        try:
-            key = f"costs:{tenant_id}:{date_range}"
-            data = await self.client.get(key)
-            if data:
-                logger.debug("cache_hit", key=key)
-                return json.loads(data) if isinstance(data, str) else data
-        except Exception as e:
-            logger.warning("cache_get_error", error=str(e))
-        
-        return None
+        key = f"{PREFIX_COSTS}:{tenant_id}:{date_range}"
+        return await self._get(key)
     
     async def set_cost_data(self, tenant_id: UUID, date_range: str, costs: list) -> bool:
         """Cache cost data with 6h TTL."""
-        if not self.enabled:
-            return False
-        
-        try:
-            key = f"costs:{tenant_id}:{date_range}"
-            await self.client.set(
-                key,
-                json.dumps(costs, default=str),
-                ex=int(COST_DATA_TTL.total_seconds())
-            )
-            logger.debug("cache_set", key=key, ttl_hours=6)
-            return True
-        except Exception as e:
-            logger.warning("cache_set_error", error=str(e))
-            return False
+        key = f"{PREFIX_COSTS}:{tenant_id}:{date_range}"
+        return await self._set(key, costs, COST_DATA_TTL)
     
     async def invalidate_tenant(self, tenant_id: UUID) -> bool:
         """Invalidate all cache entries for a tenant."""
         if not self.enabled:
             return False
-        
         try:
-            # Delete analysis and cost caches
-            await self.client.delete(f"analysis:{tenant_id}")
-            # Note: cost keys with date ranges would need pattern matching
-            # which Upstash supports but we'll keep it simple for now
+            await self.client.delete(f"{PREFIX_ANALYSIS}:{tenant_id}")
             logger.info("cache_invalidated", tenant_id=str(tenant_id))
             return True
         except Exception as e:
             logger.warning("cache_invalidate_error", error=str(e))
+            return False
+
+    async def _get(self, key: str) -> Optional[Any]:
+        """Internal helper for Redis GET with error handling."""
+        if not self.enabled:
+            return None
+        try:
+            data = await self.client.get(key)
+            if data:
+                logger.debug("cache_hit", key=key)
+                return json.loads(data) if isinstance(data, str) else data
+        except Exception as e:
+            logger.warning("cache_get_error", key=key, error=str(e))
+        return None
+
+    async def _set(self, key: str, value: Any, ttl: timedelta) -> bool:
+        """Internal helper for Redis SET with error handling."""
+        if not self.enabled:
+            return False
+        try:
+            await self.client.set(
+                key,
+                json.dumps(value, default=str),
+                ex=int(ttl.total_seconds())
+            )
+            logger.debug("cache_set", key=key, ttl_seconds=int(ttl.total_seconds()))
+            return True
+        except Exception as e:
+            logger.warning("cache_set_error", key=key, error=str(e))
             return False
 
 

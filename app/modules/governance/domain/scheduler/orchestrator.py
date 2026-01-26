@@ -1,17 +1,13 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import date, timedelta, datetime, timezone
+from datetime import datetime, timezone
 import asyncio
-import time
 import structlog
-from app.modules.governance.domain.scheduler.metrics import SCHEDULER_JOB_RUNS, SCHEDULER_JOB_DURATION
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
-from app.models.tenant import Tenant
+from typing import Dict, Any, List, Optional, Union
 
-from app.models.aws_connection import AWSConnection
-from app.shared.core.tracing import set_correlation_id
-from app.modules.governance.domain.scheduler.cohorts import TenantCohort, get_tenant_cohort
+from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.processors import AnalysisProcessor
 
 logger = structlog.get_logger()
@@ -34,7 +30,7 @@ class SchedulerOrchestrator:
         self._last_run_success: bool | None = None
         self._last_run_time: str | None = None
 
-    async def cohort_analysis_job(self, target_cohort: TenantCohort):
+    async def cohort_analysis_job(self, target_cohort: TenantCohort) -> None:
         """
         PRODUCTION: Enqueues a distributed task for cohort analysis.
         """
@@ -46,26 +42,37 @@ class SchedulerOrchestrator:
         self._last_run_success = True
         self._last_run_time = datetime.now(timezone.utc).isoformat()
 
-    # _is_low_carbon_window logic migrated to task or kept as utility if needed. 
-    # Since logical flow moved to task, this method is no longer used by orchestrator directly.
-    # We can keep it or remove it. Removing for cleaner code if unused.
-    # Actually, let's keep it but mark deprecated or remove.
-    # It was private, so removal is safe.
+    async def _is_low_carbon_window(self, region: str) -> bool:
+        """
+        Series-A (Phase 4): Carbon-Aware Scheduling.
+        Returns True if the current time is a 'Green Window' for the region.
+        
+        Logic:
+        - 10 AM to 4 PM (10:00 - 16:00) usually has high solar output.
+        - 12 AM to 5 AM (00:00 - 05:00) usually has low grid demand.
+        """
+        now = datetime.now(timezone.utc)
+        hour = now.hour
+        
+        # Simple rule-based logic for now
+        is_green = (10 <= hour <= 16) or (0 <= hour <= 5)
+        logger.info("scheduler_green_window_check", hour=hour, is_green=is_green, region=region)
+        return is_green
 
-    async def auto_remediation_job(self):
+    async def auto_remediation_job(self) -> None:
         """Dispatches weekly remediation sweep."""
         logger.info("scheduler_dispatching_remediation_sweep")
         from app.shared.core.celery_app import celery_app
         celery_app.send_task("scheduler.remediation_sweep")
 
-    async def billing_sweep_job(self):
+    async def billing_sweep_job(self) -> None:
         """Dispatches billing sweep."""
         logger.info("scheduler_dispatching_billing_sweep")
         from app.shared.core.celery_app import celery_app
         celery_app.send_task("scheduler.billing_sweep")
 
 
-    async def detect_stuck_jobs(self):
+    async def detect_stuck_jobs(self) -> None:
         """
         Series-A Hardening (Phase 2): Detects jobs stuck in PENDING status for > 1 hour.
         Emits critical alerts and moves them to FAILED to prevent queue poisoning.
@@ -100,7 +107,7 @@ class SchedulerOrchestrator:
                 await db.commit()
                 logger.info("stuck_jobs_mitigated", count=len(stuck_jobs))
 
-    async def maintenance_sweep_job(self):
+    async def maintenance_sweep_job(self) -> None:
         """Dispatches maintenance sweep."""
         logger.info("scheduler_dispatching_maintenance_sweep")
         from app.shared.core.celery_app import celery_app
@@ -117,7 +124,7 @@ class SchedulerOrchestrator:
         # or relying on the Celery task to do it (if I update scheduler_tasks.py later).
         # For now, simplistic dispatch.
 
-    def start(self):
+    def start(self) -> None:
         """Defines cron schedules and starts APScheduler."""
         # HIGH_VALUE: Every 6 hours
         self.scheduler.add_job(
@@ -173,15 +180,15 @@ class SchedulerOrchestrator:
         )
         self.scheduler.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self.scheduler.shutdown(wait=True)
 
-    def get_status(self) -> dict:
+    def get_status(self) -> Dict[str, Any]:
         return {
             "running": self.scheduler.running,
             "last_run_success": self._last_run_success,
             "last_run_time": self._last_run_time,
-            "jobs": [job.id for job in self.scheduler.get_jobs()]
+            "jobs": [str(job.id) for job in self.scheduler.get_jobs()]
         }
 
 
@@ -191,11 +198,11 @@ class SchedulerService(SchedulerOrchestrator):
     Inherits from refactored Orchestrator to maintain existing API.
     """
     
-    def __init__(self, session_maker):
+    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
         super().__init__(session_maker)
         logger.info("scheduler_proxy_initialized", refactor_version="1.0-modular")
 
-    async def daily_analysis_job(self):
+    async def daily_analysis_job(self) -> None:
         """Legacy entry point, proxies to a full scan."""
         from .cohorts import TenantCohort
         # High value → Active → Dormant

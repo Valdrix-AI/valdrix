@@ -4,6 +4,7 @@ import base64
 import os
 import secrets
 import structlog
+from functools import lru_cache
 from typing import Optional, List
 from cryptography.fernet import Fernet, MultiFernet
 from cryptography.hazmat.primitives import hashes
@@ -12,6 +13,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+settings = get_settings()
 
 # ============================================================================
 # Encryption Key Manager (Production Hardening)
@@ -62,6 +64,7 @@ class EncryptionKeyManager:
         )
     
     @staticmethod
+    @lru_cache(maxsize=32)
     def derive_key(
         master_key: str,
         salt: str,
@@ -72,7 +75,7 @@ class EncryptionKeyManager:
         try:
             salt_bytes = base64.b64decode(salt)
         except Exception as e:
-            raise ValueError(f"Invalid KDF salt format: {str(e)}")
+            raise ValueError(f"Invalid KDF salt format: {str(e)}") from e
         
         kdf_input = f"{master_key}:v{key_version}".encode()
         
@@ -87,14 +90,16 @@ class EncryptionKeyManager:
         return base64.urlsafe_b64encode(derived_key)
     
     @staticmethod
+    @lru_cache(maxsize=32)
     def create_fernet_for_key(master_key: str, salt: str) -> Fernet:
         derived_key = EncryptionKeyManager.derive_key(master_key, salt)
         return Fernet(derived_key)
     
     @staticmethod
+    @lru_cache(maxsize=16)
     def create_multi_fernet(
         primary_key: str,
-        legacy_keys: Optional[List[str]] = None,
+        legacy_keys: Optional[tuple] = None, # Changed list to tuple for hashing
         salt: str = None
     ) -> MultiFernet:
         """Create MultiFernet for key rotation support."""
@@ -140,9 +145,13 @@ def _get_multi_fernet(primary_key: Optional[str], legacy_keys: Optional[List[str
 
 def _get_api_key_fernet() -> MultiFernet:
     settings = get_settings()
-    return _get_multi_fernet(
-        settings.API_KEY_ENCRYPTION_KEY or settings.ENCRYPTION_KEY,
-        settings.LEGACY_ENCRYPTION_KEYS
+    # Convert list to tuple for lru_cache compatibility if needed, 
+    # though strict strings here are fine.
+    legacy = tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
+    
+    return EncryptionKeyManager.create_multi_fernet(
+        primary_key=settings.API_KEY_ENCRYPTION_KEY or settings.ENCRYPTION_KEY,
+        legacy_keys=legacy
     )
 
 def _get_pii_fernet() -> MultiFernet:
@@ -170,7 +179,7 @@ def encrypt_string(value: str, context: str = "generic") -> str:
         
     fernet = EncryptionKeyManager.create_multi_fernet(
         primary_key=primary_key,
-        legacy_keys=settings.LEGACY_ENCRYPTION_KEYS
+        legacy_keys=tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
     )
     
     return fernet.encrypt(value.encode()).decode()
@@ -194,12 +203,12 @@ def decrypt_string(value: str, context: str = "generic") -> str:
             
         fernet = EncryptionKeyManager.create_multi_fernet(
             primary_key=primary_key,
-            legacy_keys=settings.LEGACY_ENCRYPTION_KEYS
+            legacy_keys=tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
         )
             
         return fernet.decrypt(value.encode()).decode()
     except Exception as e:
-        logger.error("decryption_failed", context=context, error=str(e))
+        logger.error("decryption_failed", context=context, error=str(e), exc_info=True)
         return None
 
 

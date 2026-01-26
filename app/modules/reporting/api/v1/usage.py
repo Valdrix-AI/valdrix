@@ -102,7 +102,7 @@ async def get_usage_metrics(
 
 async def _get_llm_usage(
     db: AsyncSession, 
-    tenant_id, 
+    tenant_id: UUID, 
     now: datetime
 ) -> LLMUsageMetrics:
     """Get LLM usage for the current billing period."""
@@ -150,7 +150,7 @@ async def _get_llm_usage(
 
 async def _get_aws_metering(
     db: AsyncSession, 
-    tenant_id, 
+    tenant_id: UUID, 
     today_start: datetime
 ) -> AWSMeteringMetrics:
     """Get AWS API usage for today."""
@@ -194,7 +194,7 @@ async def _get_aws_metering(
     )
 
 
-async def _get_feature_usage(db: AsyncSession, tenant_id) -> FeatureUsageMetrics:
+async def _get_feature_usage(db: AsyncSession, tenant_id: UUID) -> FeatureUsageMetrics:
     """Get feature adoption metrics."""
     from app.models.notification_settings import NotificationSettings
     from app.models.remediation import RemediationRequest
@@ -223,6 +223,6 @@ async def _get_feature_usage(db: AsyncSession, tenant_id) -> FeatureUsageMetrics
     return FeatureUsageMetrics(
         greenops_enabled=is_paid,
         activeops_enabled=is_paid,
-        webhooks_configured=1 if notif and notif.slack_webhook else 0,
+        webhooks_configured=1 if notif and notif.slack_enabled else 0,
         total_remediations=remediation_count or 0
     )

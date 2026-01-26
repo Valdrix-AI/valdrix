@@ -19,7 +19,7 @@ class TestZombieServiceExpanded:
         user = MagicMock()
         user.tier = "starter"
         
-        with patch("app.modules.optimization.domain.service.select") as mock_select:
+        with patch("app.modules.optimization.domain.service.select") as _:
             mock_conn_res = MagicMock()
             mock_conn_res.scalars.return_value.all.return_value = []
             mock_db.execute.return_value = mock_conn_res

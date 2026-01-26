@@ -1,0 +1,51 @@
+# Exclude git metadata
+.git
+.github
+.gitignore
+
+# Exclude build artifacts and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Exclude environment files and secrets
+.env
+.env.*
+!.env.example
+*.log
+secrets/
+.gemini/
+brain/
+
+# Exclude IDE and local configs
+.vscode/
+.idea/
+.cursorrules
+*.swp
+*.swo
+
+# Exclude local dependencies
+.venv/
+node_modules/
+
+# Exclude documentation and assets not needed at runtime
+docs/
+assets/
+README.md
+CONTRIBUTING.md
+LICENSE
+walkthrough.md
+implementation_plan.md
+architecture_audit.md
+task.md
+mypy_initial.log
+test_output.log
+opt_*.log

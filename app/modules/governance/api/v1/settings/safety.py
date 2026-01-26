@@ -9,9 +9,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.auth import CurrentUser, get_current_user, requires_role
 from app.shared.db.session import get_db
 from app.shared.core.rate_limit import rate_limit
+from app.shared.core.logging import audit_log
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Safety"])
@@ -38,9 +39,9 @@ class SafetyStatusResponse(BaseModel):
 @router.get("/safety", response_model=SafetyStatusResponse)
 @rate_limit("20/minute")
 async def get_safety_status(
-    request: Request,
+    _request: Request,
     current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    _db: AsyncSession = Depends(get_db),
 ):
     """
     Get circuit breaker and safety status for the current tenant.
@@ -89,21 +90,15 @@ async def get_safety_status(
 @router.post("/safety/reset")
 @rate_limit("5/minute")
 async def reset_circuit_breaker(
-    request: Request,
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    _request: Request,
+    current_user: CurrentUser = Depends(requires_role("admin")),
+    _db: AsyncSession = Depends(get_db),
 ):
     """
     Manually reset circuit breaker to closed state (admin-only).
     
     Use with caution - this allows remediations to proceed.
     """
-    # Check admin role
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
-        )
     
     from app.shared.remediation.circuit_breaker import get_circuit_breaker
     
@@ -115,6 +110,13 @@ async def reset_circuit_breaker(
             "circuit_breaker_reset",
             tenant_id=str(current_user.tenant_id),
             by_user=str(current_user.id)
+        )
+
+        audit_log(
+            "remediation.safety_reset",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"action": "manual_circuit_reset", "status": "closed"}
         )
         
         return {"status": "reset", "message": "Circuit breaker reset to closed state"}

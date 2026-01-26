@@ -10,7 +10,7 @@ Phase 3.2: Manual intervention markers for forecast tuning.
 import uuid
 from datetime import date, datetime
 from sqlalchemy import String, Text, ForeignKey, Date, DateTime, Boolean
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from app.shared.db.base import Base
 

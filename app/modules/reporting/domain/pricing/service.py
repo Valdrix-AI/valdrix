@@ -5,66 +5,10 @@ Centralized source of truth for resource costs across regions and providers.
 Addresses Audit Issue: Hardcoded Regional Pricing.
 """
 
-from typing import Dict, Any, Optional
 import structlog
+from app.shared.core.pricing_defaults import DEFAULT_RATES, REGION_MULTIPLIERS
 
 logger = structlog.get_logger()
-
-# Standardized hourly rates (USD) - Simplified for MVP
-# In a real system, these would be fetched from a dynamic DB or Market API.
-DEFAULT_RATES = {
-    "aws": {
-        "volume": {
-            "gp2": 0.10 / 720, # $0.10/GB-month
-            "gp3": 0.08 / 720, # $0.08/GB-month
-        },
-        "ip": 0.005, # $0.005/hour for unused EIP
-        "instance": {
-            "t3.micro": 0.0104,
-            "t3.medium": 0.0416,
-            "m5.large": 0.096,
-        },
-        "nat_gateway": 0.045, # $0.045 per hour
-        "rds": {
-             "db.t3.micro": 0.017,
-             "db.t3.small": 0.034,
-             "db.t3.medium": 0.068,
-             "db.t3.large": 0.136,
-        },
-        "redshift": 0.25, # $0.25/hour per node
-        "sagemaker": 0.15, # $0.15/hour per endpoint instance
-        "ecr": 0.10, # $0.10/GB-month
-    }
-}
-
-# Regional multipliers (Based on AWS Pricing API 2026 data)
-# BE-ZD-6: Comprehensive region-aware pricing
-REGION_MULTIPLIERS = {
-    # US Regions
-    "us-east-1": 1.0,       # N. Virginia (baseline)
-    "us-east-2": 1.0,       # Ohio
-    "us-west-1": 1.08,      # N. California
-    "us-west-2": 1.0,       # Oregon
-    # EU Regions
-    "eu-west-1": 1.10,      # Ireland
-    "eu-west-2": 1.15,      # London
-    "eu-west-3": 1.12,      # Paris
-    "eu-central-1": 1.12,   # Frankfurt
-    "eu-north-1": 1.10,     # Stockholm
-    "eu-south-1": 1.15,     # Milan
-    # Asia Pacific
-    "ap-southeast-1": 1.20, # Singapore
-    "ap-southeast-2": 1.22, # Sydney
-    "ap-northeast-1": 1.25, # Tokyo
-    "ap-northeast-2": 1.18, # Seoul
-    "ap-northeast-3": 1.20, # Osaka
-    "ap-south-1": 1.15,     # Mumbai
-    # Other
-    "sa-east-1": 1.35,      # São Paulo
-    "ca-central-1": 1.05,   # Canada
-    "me-south-1": 1.20,     # Bahrain
-    "af-south-1": 1.25,     # Cape Town
-}
 
 class PricingService:
     """
@@ -144,4 +88,4 @@ class PricingService:
     ) -> float:
         """Estimates monthly waste based on hourly rates."""
         hourly = PricingService.get_hourly_rate(provider, resource_type, resource_size, region)
-        return hourly * 730 * quantity # 730 hours in a month
+        return hourly * 730 * quantity # 730 hours in a month (Industry Average)

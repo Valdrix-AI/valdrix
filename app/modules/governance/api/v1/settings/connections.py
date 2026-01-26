@@ -6,11 +6,9 @@ Enforces "Growth Tier" (or higher) requirement for Azure/GCP.
 """
 
 from uuid import UUID
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
 import structlog
 
 from app.shared.db.session import get_db
@@ -21,6 +19,8 @@ from app.shared.connections.aws import AWSConnectionService
 from app.shared.connections.azure import AzureConnectionService
 from app.shared.connections.gcp import GCPConnectionService
 from app.shared.connections.organizations import OrganizationsDiscoveryService
+from app.shared.connections.instructions import ConnectionInstructionService
+from app.shared.core.pricing import PricingTier
 
 # Models
 from app.models.aws_connection import AWSConnection
@@ -55,12 +55,25 @@ async def check_growth_tier(user: CurrentUser, db: AsyncSession):
     if not tenant:
         raise HTTPException(404, "Tenant context lost")
 
-    allowed_plans = ["trial", "growth", "pro", "enterprise"]
-    if tenant.plan not in allowed_plans:
-        logger.warning("tier_gate_denied", tenant_id=str(tenant.id), plan=tenant.plan, required="growth")
+    allowed_plans = [
+        PricingTier.TRIAL,
+        PricingTier.GROWTH,
+        PricingTier.PRO,
+        PricingTier.ENTERPRISE
+    ]
+    
+    # Normalize plan string to enum if needed, though DB should store valid strings
+    try:
+        current_plan = PricingTier(tenant.plan)
+    except ValueError:
+        # Fallback for legacy data
+        current_plan = PricingTier.FREE
+
+    if current_plan not in allowed_plans:
+        logger.warning("tier_gate_denied", tenant_id=str(tenant.id), plan=current_plan.value, required="growth")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Multi-cloud support requires 'Growth' plan or higher. Current plan: {tenant.plan}"
+            detail=f"Multi-cloud support requires 'Growth' plan or higher. Current plan: {current_plan.value}"
         )
 
 
@@ -68,7 +81,7 @@ async def check_growth_tier(user: CurrentUser, db: AsyncSession):
 
 @router.post("/aws/setup", response_model=TemplateResponse)
 @rate_limit("10/minute") # Protect setup against scanning
-async def get_aws_setup_templates(request: Request):
+async def get_aws_setup_templates(_request: Request):
     """Get CloudFormation/Terraform templates and Magic Link for AWS setup."""
     external_id = AWSConnection.generate_external_id()
     templates = AWSConnectionService.get_setup_templates(external_id)
@@ -80,27 +93,7 @@ async def get_azure_setup(
     current_user: CurrentUser = Depends(requires_role("member")),
 ):
     """Get Azure Workload Identity setup instructions."""
-    from app.shared.core.config import get_settings
-    settings = get_settings()
-    issuer = settings.API_URL.rstrip('/')
-    
-    snippet = (
-        f"# 1. Create App Registration in Azure AD\n"
-        f"# 2. Create a Federated Credential with these details:\n"
-        f"Issuer: {issuer} (IMPORTANT: Must be publicly reachable by Azure)\n"
-        f"Subject: tenant:{current_user.tenant_id}\n"
-        f"Audience: api://AzureADTokenExchange\n"
-        f"\n# Or run this via Azure CLI:\n"
-        f"az ad app federated-credential create --id <YOUR_CLIENT_ID> "
-        f"--parameters '{{\"name\":\"ValdrixTrust\",\"issuer\":\"{issuer}\",\"subject\":\"tenant:{current_user.tenant_id}\",\"audiences\":[\"api://AzureADTokenExchange\"]}}'"
-    )
-    
-    return {
-        "issuer": issuer,
-        "subject": f"tenant:{current_user.tenant_id}",
-        "audience": "api://AzureADTokenExchange",
-        "snippet": snippet
-    }
+    return ConnectionInstructionService.get_azure_setup_snippet(str(current_user.tenant_id))
 
 
 @router.post("/gcp/setup")
@@ -108,31 +101,13 @@ async def get_gcp_setup(
     current_user: CurrentUser = Depends(requires_role("member")),
 ):
     """Get GCP Identity Federation setup instructions."""
-    from app.shared.core.config import get_settings
-    settings = get_settings()
-    issuer = settings.API_URL.rstrip('/')
-    
-    snippet = (
-        f"# Run this to create an Identity Pool and Provider for Valdrix\n"
-        f"# IMPORTANT: Your Valdrix instance must be reachable at {issuer}\n"
-        f"gcloud iam workload-identity-pools create \"valdrix-pool\" --location=\"global\" --display-name=\"Valdrix Pool\"\n"
-        f"gcloud iam workload-identity-pools providers create-oidc \"valdrix-provider\" "
-        f"--location=\"global\" --workload-identity-pool=\"valdrix-pool\" "
-        f"--issuer-uri=\"{issuer}\" "
-        f"--attribute-mapping=\"google.subject=assertion.sub,attribute.tenant_id=assertion.tenant_id\""
-    )
-    
-    return {
-        "issuer": issuer,
-        "subject": f"tenant:{current_user.tenant_id}",
-        "snippet": snippet
-    }
+    return ConnectionInstructionService.get_gcp_setup_snippet(str(current_user.tenant_id))
 
 
 @router.post("/aws", response_model=AWSConnectionResponse, status_code=status.HTTP_201_CREATED)
 @standard_limit
 async def create_aws_connection(
-    request: Request,
+    _request: Request,
     data: AWSConnectionCreate,
     current_user: CurrentUser = Depends(requires_role("member")),
     db: AsyncSession = Depends(get_db),
@@ -181,7 +156,7 @@ async def list_aws_connections(
 @router.post("/aws/{connection_id}/verify")
 @standard_limit
 async def verify_aws_connection(
-    request: Request,
+    _request: Request,
     connection_id: UUID,
     current_user: CurrentUser = Depends(requires_role("member")),
     db: AsyncSession = Depends(get_db),
@@ -202,7 +177,8 @@ async def delete_aws_connection(
         )
     )
     connection = result.scalar_one_or_none()
-    if not connection: raise HTTPException(404, "Connection not found")
+    if not connection:
+        raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
     await db.commit()
@@ -240,7 +216,7 @@ async def list_discovered_accounts(
     res = await db.execute(
         select(AWSConnection.id).where(
             AWSConnection.tenant_id == current_user.tenant_id,
-            AWSConnection.is_management_account == True
+            AWSConnection.is_management_account
         )
     )
     mgmt_ids = [r for r in res.scalars().all()]
@@ -317,7 +293,7 @@ async def link_discovered_account(
 @router.post("/azure", response_model=AzureConnectionResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit("5/minute")
 async def create_azure_connection(
-    request: Request,
+    _request: Request,
     data: AzureConnectionCreate,
     current_user: CurrentUser = Depends(requires_role("member")),
     db: AsyncSession = Depends(get_db),
@@ -355,7 +331,7 @@ async def create_azure_connection(
 @router.post("/azure/{connection_id}/verify")
 @rate_limit("10/minute")
 async def verify_azure_connection(
-    request: Request,
+    _request: Request,
     connection_id: UUID,
     current_user: CurrentUser = Depends(requires_role("member")),
     db: AsyncSession = Depends(get_db),
@@ -372,8 +348,6 @@ async def list_azure_connections(
     db: AsyncSession = Depends(get_db),
 ):
     # Retrieve regardless of current tier (if they downgraded, they can still see/delete)
-    # result = await db.execute(select(AzureConnection).where(AzureConnection.tenant_id == current_user.tenant_id))
-    # return result.scalars().all()
     return await AzureConnectionService(db).list_connections(current_user.tenant_id)
 
 
@@ -390,7 +364,8 @@ async def delete_azure_connection(
         )
     )
     connection = result.scalar_one_or_none()
-    if not connection: raise HTTPException(404, "Connection not found")
+    if not connection:
+        raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
     await db.commit()
@@ -402,7 +377,7 @@ async def delete_azure_connection(
 @router.post("/gcp", response_model=GCPConnectionResponse, status_code=status.HTTP_201_CREATED)
 @rate_limit("5/minute")
 async def create_gcp_connection(
-    request: Request,
+    _request: Request,
     data: GCPConnectionCreate,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(requires_role("member")),
@@ -442,7 +417,7 @@ async def create_gcp_connection(
 @router.post("/gcp/{connection_id}/verify")
 @rate_limit("10/minute")
 async def verify_gcp_connection(
-    request: Request,
+    _request: Request,
     connection_id: UUID,
     current_user: CurrentUser = Depends(requires_role("member")),
     db: AsyncSession = Depends(get_db),
@@ -475,7 +450,8 @@ async def delete_gcp_connection(
         )
     )
     connection = result.scalar_one_or_none()
-    if not connection: raise HTTPException(404, "Connection not found")
+    if not connection:
+        raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
     await db.commit()

@@ -12,11 +12,15 @@ Workflow:
 5. All actions logged for audit
 """
 
-from uuid import uuid4
+from uuid import uuid4, UUID
 from enum import Enum
-from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, Enum as SQLEnum, Numeric, Index, DateTime, func
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from decimal import Decimal
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import String, Integer, Boolean, ForeignKey, Enum as SQLEnum, Numeric, Index, DateTime, func
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from app.shared.db.base import Base
 
@@ -66,26 +70,26 @@ class RemediationRequest(Base):
     )
 
     # Primary Key
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
 
     # Multi-tenancy
-    tenant_id = Column(
-        UUID(as_uuid=True),
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     # Resource identification
-    resource_id = Column(String(100), nullable=False, index=True)
-    resource_type = Column(String(50), nullable=False)
-    provider = Column(String(20), nullable=False, default="aws") # aws, azure, gcp
-    connection_id = Column(UUID(as_uuid=True), nullable=True)     # ID of the specific cloud connection
-    region = Column(String(20), nullable=False, default="us-east-1")
+    resource_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    resource_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False, default="aws") # aws, azure, gcp
+    connection_id: Mapped[Optional[UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)     # ID of the specific cloud connection
+    region: Mapped[str] = mapped_column(String(20), nullable=False, default="us-east-1")
 
     # Action details
-    action = Column(SQLEnum(RemediationAction), nullable=False)
-    status = Column(
+    action: Mapped[RemediationAction] = mapped_column(SQLEnum(RemediationAction), nullable=False)
+    status: Mapped[RemediationStatus] = mapped_column(
         SQLEnum(RemediationStatus),
         nullable=False,
         default=RemediationStatus.PENDING,
@@ -93,47 +97,45 @@ class RemediationRequest(Base):
     )
 
     # Financial impact
-    estimated_monthly_savings = Column(Numeric(10, 2), nullable=True)
+    estimated_monthly_savings: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
 
     # AI Explainability
-    confidence_score = Column(Numeric(3, 2), nullable=True) # 0.00 to 1.00
-    explainability_notes = Column(String(1000), nullable=True) # AI Reasoning
+    confidence_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(3, 2), nullable=True) # 0.00 to 1.00
+    explainability_notes: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True) # AI Reasoning
 
     # Backup options (for safe delete)
-    create_backup = Column(Boolean, default=False)
-    backup_retention_days = Column(Integer, default=30)
-    backup_resource_id = Column(String(100), nullable=True)  # ID of created backup
-    backup_cost_estimate = Column(Numeric(10, 4), nullable=True)  # Monthly cost of backup
+    create_backup: Mapped[bool] = mapped_column(Boolean, default=False)
+    backup_retention_days: Mapped[int] = mapped_column(Integer, default=30)
+    backup_resource_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # ID of created backup
+    backup_cost_estimate: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 4), nullable=True)  # Monthly cost of backup
 
-    requested_by_user_id = Column(
-        UUID(as_uuid=True),
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
         ForeignKey("users.id"),
         nullable=False,
     )
-    # Inherited timestamps with manual index if needed
-    # but Base class update is better if we could. 
-    # For now, we rely on the audit's specific request.
 
     # Audit trail - who approved/rejected
-    reviewed_by_user_id = Column(
-        UUID(as_uuid=True),
+    reviewed_by_user_id: Mapped[Optional[UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
         ForeignKey("users.id"),
         nullable=True,
     )
-    review_notes = Column(String(500), nullable=True)
+    review_notes: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # Execution details
-    execution_error = Column(String(500), nullable=True)
-    scheduled_execution_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    execution_error: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    scheduled_execution_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     tenant = relationship("Tenant")
     requested_by = relationship("User", foreign_keys=[requested_by_user_id])
     reviewed_by = relationship("User", foreign_keys=[reviewed_by_user_id])
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<RemediationRequest {self.resource_id} [{self.status.value}]>"

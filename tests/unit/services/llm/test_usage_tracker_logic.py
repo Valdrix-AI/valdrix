@@ -20,13 +20,13 @@ def mock_db():
     return db
 
 
-def test_calculate_cost_groq(mock_db):
-    """Test cost calculation for Groq (free)."""
+def test_calculate_cost_openai(mock_db):
+    """Test cost calculation for OpenAI (paid)."""
     tracker = UsageTracker(mock_db)
-    cost = tracker.calculate_cost("groq", "llama-3.3-70b-versatile", 1000, 1000)
-    # Price is 0.59 input, 0.79 output per 1M tokens
-    expected = (Decimal("1000") * Decimal("0.59") / Decimal("1000000")) + \
-               (Decimal("1000") * Decimal("0.79") / Decimal("1000000"))
+    cost = tracker.calculate_cost("openai", "gpt-4o-mini", 1000, 1000)
+    # Price is 0.15 input, 0.6 output per 1M tokens
+    expected = (Decimal("1000") * Decimal("0.15") / Decimal("1000000")) + \
+               (Decimal("1000") * Decimal("0.6") / Decimal("1000000"))
     assert cost == expected
 
 

@@ -4,12 +4,12 @@ BE-FIN-ATTR-1: Validates rule matching and cost allocation logic.
 """
 import pytest
 from decimal import Decimal
-from datetime import date, datetime, timezone
+from datetime import date
 from uuid import uuid4
 from unittest.mock import MagicMock, AsyncMock
 
 from app.modules.reporting.domain.attribution_engine import AttributionEngine
-from app.models.attribution import AttributionRule, CostAllocation
+from app.models.attribution import AttributionRule
 from app.models.cloud import CostRecord
 
 

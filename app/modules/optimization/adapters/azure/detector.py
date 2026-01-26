@@ -6,6 +6,7 @@ from azure.mgmt.network.aio import NetworkManagementClient
 from azure.mgmt.monitor.aio import MonitorManagementClient
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
+from app.modules.optimization.domain.registry import registry
 
 # Import Azure Plugins to trigger registration
 import app.modules.optimization.adapters.azure.plugins  # noqa
@@ -25,9 +26,7 @@ class AzureZombieDetector(BaseZombieDetector):
         self._credential = None
 
         if connection:
-            from app.shared.adapters.azure import AzureAdapter
-            adapter = AzureAdapter(connection)
-            # Use logic from adapter to get creds
+            # Use logic from connection or adapter to get creds
             self.subscription_id = connection.subscription_id
             self._credential = ClientSecretCredential(
                 tenant_id=connection.azure_tenant_id,

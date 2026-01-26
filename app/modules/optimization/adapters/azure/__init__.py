@@ -1,1 +1,1 @@
-from .detector import AzureZombieDetector
+from .detector import AzureZombieDetector as AzureZombieDetector

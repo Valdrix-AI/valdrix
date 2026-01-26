@@ -1,8 +1,13 @@
 import structlog
 from datetime import date
 from uuid import UUID
-from sqlalchemy import select, desc
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import TYPE_CHECKING, Optional, List, Dict, Any, cast
+import asyncio
+if TYPE_CHECKING:
+    from app.shared.llm.guardrails import FinOpsAnalysisResult
+    from app.models.remediation import RemediationAction
 from app.models.tenant import Tenant
 from app.shared.llm.factory import LLMFactory
 from app.shared.llm.analyzer import FinOpsAnalyzer
@@ -16,10 +21,10 @@ logger = structlog.get_logger()
 class AnalysisProcessor:
     """Handles the heavy lifting of analyzing a single tenant's cloud usage."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.settings = get_settings()
 
-    async def process_tenant(self, db: AsyncSession, tenant: Tenant, start_date: date, end_date: date):
+    async def process_tenant(self, db: AsyncSession, tenant: Tenant, start_date: date, end_date: date) -> None:
         """Process a single tenant's analysis."""
         try:
             logger.info("processing_tenant", tenant_id=str(tenant.id), name=tenant.name)
@@ -42,17 +47,23 @@ class AnalysisProcessor:
                 try:
                     # BE-SCHED-2: Analysis Timeout Protection (SEC-05)
                     # Use a generous 5-minute timeout per connection to prevent job hangs
-                    import asyncio
-                    async def _run_analysis():
+                    # Use a generous 5-minute timeout per connection to prevent job hangs
+                    async def _run_analysis() -> None:
                         # Use MultiTenant adapter
                         adapter = MultiTenantAWSAdapter(conn)
-                        costs = await adapter.get_daily_costs(start_date, end_date)
+                        costs: List[Dict[str, Any]] = await adapter.get_daily_costs(start_date, end_date) # type: ignore[assignment]
 
                         if not costs:
                             return
 
                         # 1. LLM Analysis
-                        await analyzer.analyze(costs, tenant_id=tenant.id, db=db)
+                        from app.models.analysis import CloudUsageSummary
+                        summary_obj = CloudUsageSummary(
+                            total_cost=0.0, # calculated inside
+                            currency="USD",
+                            records=costs
+                        )
+                        await analyzer.analyze(summary_obj, tenant_id=tenant.id, db=db)
 
                         # 2. Carbon Calculation
                         carbon_result = carbon_calc.calculate_from_costs(costs, region=conn.region)
@@ -119,11 +130,10 @@ class AnalysisProcessor:
 class SavingsProcessor:
     """Executes high-confidence, low-risk autonomous savings."""
 
-    async def process_recommendations(self, db: AsyncSession, tenant_id: UUID, analysis_result: "FinOpsAnalysisResult"):
+    async def process_recommendations(self, db: AsyncSession, tenant_id: UUID, analysis_result: "FinOpsAnalysisResult") -> None:
         """Filters for 'autonomous_ready' items and executes them."""
         from uuid import UUID as PyUUID
         from app.modules.optimization.domain.remediation import RemediationService
-        from app.models.remediation import RemediationAction
         
         remediation = RemediationService(db)
         # System User ID for autonomous actions
@@ -174,12 +184,20 @@ class SavingsProcessor:
     def _map_action_to_enum(self, action_str: str) -> "Optional[RemediationAction]":
         from app.models.remediation import RemediationAction
         s = action_str.lower()
-        if "delete volume" in s: return RemediationAction.DELETE_VOLUME
-        if "stop instance" in s: return RemediationAction.STOP_INSTANCE
-        if "terminate instance" in s: return RemediationAction.TERMINATE_INSTANCE
-        if "resize" in s: return RemediationAction.RESIZE_INSTANCE
-        if "delete snapshot" in s: return RemediationAction.DELETE_SNAPSHOT
-        if "release elastic ip" in s: return RemediationAction.RELEASE_ELASTIC_IP
-        if "stop rds" in s: return RemediationAction.STOP_RDS_INSTANCE
-        if "delete rds" in s: return RemediationAction.DELETE_RDS_INSTANCE
+        if "delete volume" in s:
+            return RemediationAction.DELETE_VOLUME
+        if "stop instance" in s:
+            return RemediationAction.STOP_INSTANCE
+        if "terminate instance" in s:
+            return RemediationAction.TERMINATE_INSTANCE
+        if "resize" in s:
+            return RemediationAction.RESIZE_INSTANCE
+        if "delete snapshot" in s:
+            return RemediationAction.DELETE_SNAPSHOT
+        if "release elastic ip" in s:
+            return RemediationAction.RELEASE_ELASTIC_IP
+        if "stop rds" in s:
+            return RemediationAction.STOP_RDS_INSTANCE
+        if "delete rds" in s:
+            return RemediationAction.DELETE_RDS_INSTANCE
         return None

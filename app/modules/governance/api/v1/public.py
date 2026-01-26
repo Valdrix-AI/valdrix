@@ -23,7 +23,7 @@ async def get_csrf_token(request: Request):
 
 @router.post("/assessment")
 @rate_limit("5/day")
-async def run_public_assessment(request: Request, body: Dict[str, Any]):
+async def run_public_assessment(_request: Request, body: Dict[str, Any]):
     """
     Public endpoint for lead-gen cost assessment.
     Limited to 5 requests per day per IP to prevent abuse.
@@ -33,6 +33,6 @@ async def run_public_assessment(request: Request, body: Dict[str, Any]):
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception:
         # Don't leak internals for public endpoints
         raise HTTPException(status_code=500, detail="An unexpected error occurred during assessment")

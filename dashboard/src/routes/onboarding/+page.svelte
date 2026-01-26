@@ -62,7 +62,6 @@
 			});
 
 			if (res.ok) {
-				console.log('User onboarded successfully');
 				return true;
 			} else if (res.status === 400) {
 				// Already onboarded - this is fine

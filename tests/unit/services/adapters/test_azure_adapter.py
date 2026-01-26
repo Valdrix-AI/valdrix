@@ -67,8 +67,8 @@ async def test_azure_get_cost_and_usage_success(adapter):
     
     mock_result.columns = [mock_col_cost, mock_col_service, mock_col_currency, mock_col_date]
     mock_result.rows = [
-        [10.5, "Compute", "USD", "20240101", "Usage"],
-        [5.2, "Storage", "USD", "20240101", "Usage"]
+        [10.5, "Compute", "eastus", "Usage", "20240101"],
+        [5.2, "Storage", "eastus", "Usage", "20240101"]
     ]
     
     mock_cost_client.query.usage = AsyncMock(return_value=mock_result)

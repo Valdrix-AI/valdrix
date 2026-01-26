@@ -41,12 +41,14 @@ class GCPUnattachedDisksPlugin(ZombiePlugin):
                     monthly_waste = self._estimate_disk_cost(size_gb, type_str)
                     
                     zombies.append({
-                        "id": disk.id,
+                        "resource_id": str(disk.id),
                         "name": disk.name,
                         "zone": zone,
                         "size_gb": size_gb,
                         "type": type_str,
+                        "monthly_cost": float(monthly_waste),
                         "monthly_waste": float(monthly_waste),
+                        "description": f"Unattached Disk ({type_str})",
                         "tags": dict(disk.labels) if disk.labels else {},
                         "created_at": disk.creation_timestamp
                     })

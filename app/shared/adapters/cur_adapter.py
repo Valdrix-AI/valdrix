@@ -17,7 +17,7 @@ Architecture:
 
 import aioboto3
 from datetime import date, datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import structlog
 from botocore.exceptions import ClientError
 
@@ -82,14 +82,12 @@ class CURAdapter(CostAdapter):
                 return []
 
             # Step 2: Parse and aggregate
-            # NOTE: Full Parquet parsing requires pyarrow dependency (see ROADMAP.md)
-            # Current: Returns empty list, CUR file discovery works
-            # Future: Add pyarrow to parse CUR Parquet files for sub-penny cost accuracy
+            # NOTE: Full Parquet parsing requires pyarrow dependency.
+            # Current: Returns parsed results from S3 files.
             logger.info("cur_files_found",
                        count=len(cur_files),
                        bucket=self.bucket_name)
 
-            # Placeholder: Return empty for now, integrate with pyarrow later
             return await self._parse_cur_files(cur_files, start_date, end_date, group_by_service)
 
         except ClientError as e:
@@ -123,23 +121,6 @@ class CURAdapter(CostAdapter):
                     async for page in paginator.paginate(Bucket=self.bucket_name, Prefix=prefix):
                         for obj in page.get("Contents", []):
                             key = obj["Key"]
-                            # The following code snippet appears to be a test mock and is not valid
-                            # for inclusion in the production code.
-                            # mock_ce.get_cost_and_usage.side_effect = [
-                            # {
-                            # "ResultsByTime": [{
-                            # "TimePeriod": {"Start": "2024-01-01T00:00:00Z"},
-                            # "Groups": [{"Keys": ["S3"], "Metrics": {"AmortizedCost": {"Amount": "100"}}}]
-                            # }],
-                            # "NextPageToken": "page2"
-                            # },
-                            # {
-                            # "ResultsByTime": [{
-                            # "TimePeriod": {"Start": "2024-01-02T00:00:00Z"},
-                            # "Groups": [{"Keys": ["EC2"], "Metrics": {"AmortizedCost": {"Amount": "50"}}}]
-                            # }],
-                            # }
-                            # ]
                             if key.endswith(".parquet"):
                                 files.append(key)
 

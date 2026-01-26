@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
-import aioboto3
+from typing import List, Dict, Any, Optional
+from app.shared.adapters.aws_utils import map_aws_credentials
 
-from app.modules.reporting.domain.pricing.service import PricingService
 
 # Estimated monthly costs (USD) used for zombie resource impact analysis
 ESTIMATED_COSTS = {
@@ -56,11 +55,8 @@ class ZombiePlugin(ABC):
             kwargs["endpoint_url"] = settings.AWS_ENDPOINT_URL
             
         if credentials:
-            kwargs.update({
-                "aws_access_key_id": credentials.get("AccessKeyId") or credentials.get("aws_access_key_id"),
-                "aws_secret_access_key": credentials.get("SecretAccessKey") or credentials.get("aws_secret_access_key"),
-                "aws_session_token": credentials.get("SessionToken") or credentials.get("aws_session_token"),
-            })
+            kwargs.update(map_aws_credentials(credentials))
+            
         if config:
             kwargs["config"] = config
         return session.client(service_name, **kwargs)

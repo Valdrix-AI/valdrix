@@ -40,7 +40,7 @@ class GCPMachineImagesPlugin(ZombiePlugin):
                     monthly_waste = Decimal("1.50")
                     
                     zombies.append({
-                        "id": str(image.id),
+                        "resource_id": str(image.id),
                         "name": image.name,
                         "storage_locations": list(image.storage_locations),
                         "monthly_waste": float(monthly_waste),

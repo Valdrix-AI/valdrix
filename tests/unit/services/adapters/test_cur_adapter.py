@@ -3,9 +3,8 @@ Tests for CURAdapter - AWS CUR ingestion from S3
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import date, datetime, timezone
+from datetime import date
 import pandas as pd
-from io import BytesIO
 from botocore.exceptions import ClientError
 from app.shared.adapters.cur_adapter import CURAdapter, CURConfig
 

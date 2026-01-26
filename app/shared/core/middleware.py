@@ -23,11 +23,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
             return response
 
-        # CSP connect-src: Restrict based on environment
-        if settings.DEBUG:
-            connect_src = "'self' http://localhost:8000 http://127.0.0.1:8000"
-        else:
-            connect_src = "'self'"
+        # CSP connect-src: Restrict based on allowed origins from config
+        # Convert CORS_ORIGINS list to a space-separated string for CSP
+        allowed_origins = " ".join(settings.CORS_ORIGINS)
+        connect_src = f"'self' {allowed_origins}"
 
         csp_policy = (
             "default-src 'self'; "

@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from sqlalchemy import String, DateTime, Numeric, Boolean, JSON
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-import uuid
 
 from app.shared.db.base import Base
 

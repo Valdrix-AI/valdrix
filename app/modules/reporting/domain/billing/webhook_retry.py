@@ -67,7 +67,7 @@ class WebhookRetryService:
             select(BackgroundJob)
             .where(
                 BackgroundJob.job_type == JobType.WEBHOOK_RETRY,
-                BackgroundJob.payload["idempotency_key"].astext == idempotency_key,
+                BackgroundJob.payload["idempotency_key"].as_string() == idempotency_key,
                 BackgroundJob.status == JobStatus.COMPLETED
             )
         )
@@ -113,7 +113,7 @@ class WebhookRetryService:
             select(BackgroundJob)
             .where(
                 BackgroundJob.job_type == JobType.WEBHOOK_RETRY,
-                BackgroundJob.payload["idempotency_key"].astext == idempotency_key,
+                BackgroundJob.payload["idempotency_key"].as_string() == idempotency_key,
                 BackgroundJob.status.in_([JobStatus.PENDING, JobStatus.RUNNING])
             )
         )
@@ -166,7 +166,7 @@ class WebhookRetryService:
         
         if provider:
             query = query.where(
-                BackgroundJob.payload["provider"].astext == provider
+                BackgroundJob.payload["provider"].as_string() == provider
             )
         
         result = await self.db.execute(query)
@@ -181,6 +181,9 @@ async def process_paystack_webhook(job: BackgroundJob, db: AsyncSession) -> Dict
     """
     from app.modules.reporting.domain.billing.paystack_billing import WebhookHandler
     
+    if not job.payload:
+        return {"status": "error", "reason": "Missing payload"}
+
     payload = job.payload
     webhook_data = payload.get("payload", {})
     

@@ -9,8 +9,9 @@ from typing import Any, Dict, AsyncIterable, List
 from datetime import date, datetime, timedelta, timezone
 import uuid
 from decimal import Decimal
-from sqlalchemy import delete, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 from app.models.cloud import CostRecord
@@ -70,30 +71,15 @@ class CostPersistenceService:
                     "ingestion_metadata": ingestion_meta
                 })
             
-            # PostgreSQL-specific Upsert logic (Atomic Ops)
-            stmt = insert(CostRecord).values(values)
-            stmt = stmt.on_conflict_do_update(
-                constraint="uix_account_cost_granularity",
-                set_={
-                    "cost_usd": stmt.excluded.cost_usd,
-                    "amount_raw": stmt.excluded.amount_raw,
-                    "currency": stmt.excluded.currency,
-                    "is_preliminary": stmt.excluded.is_preliminary,
-                    "cost_status": stmt.excluded.cost_status,
-                    "reconciliation_run_id": stmt.excluded.reconciliation_run_id,
-                    "ingestion_metadata": stmt.excluded.ingestion_metadata
-                }
-            )
-            
             # BE-COST-2: Check for significant cost adjustments (>2%)
             if not is_preliminary:
-                await self._check_for_significant_adjustments(batch, summary.tenant_id, account_id)
+                await self._check_for_significant_adjustments(summary.tenant_id, account_id, batch)
                 
-            await self.db.execute(stmt)
+            await self._bulk_upsert(values)
             records_saved += len(values)
 
-        # Item 13: Explicitly commit at the end of a full summary save
-        await self.db.commit()
+        # Item 13: Explicitly flush at the end of a full summary save
+        await self.db.flush()
         
         logger.info("cost_persistence_success", 
                     tenant_id=summary.tenant_id, 
@@ -150,17 +136,42 @@ class CostPersistenceService:
         """Helper for PostgreSQL ON CONFLICT DO UPDATE bulk insert."""
         if not values:
             return
-        stmt = insert(CostRecord).values(values)
-        stmt = stmt.on_conflict_do_update(
-            constraint="uix_account_cost_granularity",
-            set_={
-                "cost_usd": stmt.excluded.cost_usd,
-                "amount_raw": stmt.excluded.amount_raw,
-                "currency": stmt.excluded.currency,
-                "usage_type": stmt.excluded.usage_type
-            }
-        )
-        await self.db.execute(stmt)
+        bind_url = str(self.db.bind.url if self.db.bind else "")
+        if "postgresql" in bind_url:
+            stmt = pg_insert(CostRecord).values(values)
+            stmt = stmt.on_conflict_do_update(
+                constraint="uix_account_cost_granularity",
+                set_={
+                    "cost_usd": stmt.excluded.cost_usd,
+                    "amount_raw": stmt.excluded.amount_raw,
+                    "currency": stmt.excluded.currency,
+                    "usage_type": stmt.excluded.usage_type
+                }
+            )
+            await self.db.execute(stmt)
+        else:
+            # Fallback for SQLite/Testing: Manual Idempotency
+            # We use session methods directly to avoid driver-level conflicts
+            for val in values:
+                # Use a fresh select to avoid session state issues
+                stmt = select(CostRecord).where(
+                    CostRecord.account_id == val["account_id"],
+                    CostRecord.recorded_at == val["recorded_at"],
+                    CostRecord.service == val["service"],
+                    CostRecord.usage_type == val["usage_type"]
+                )
+                # Use scalar() which is safer
+                res = await self.db.execute(stmt)
+                existing = res.scalars().first()
+                
+                if existing:
+                    existing.cost_usd = Decimal(str(val["cost_usd"]))
+                    if "amount_raw" in val:
+                        existing.amount_raw = Decimal(str(val["amount_raw"]))
+                else:
+                    self.db.add(CostRecord(**val))
+            
+            await self.db.flush()
 
     async def _check_for_significant_adjustments(
         self, 

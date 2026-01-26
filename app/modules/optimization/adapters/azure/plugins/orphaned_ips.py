@@ -34,11 +34,12 @@ class AzureOrphanedIpsPlugin(ZombiePlugin):
                     monthly_waste = Decimal("3.65")
                     
                     zombies.append({
-                        "id": ip.id,
+                        "resource_id": ip.id,
                         "name": ip.name,
                         "region": ip.location,
                         "ip_address": ip.ip_address,
                         "sku": ip.sku.name if ip.sku else "Basic",
+                        "monthly_cost": float(monthly_waste),
                         "monthly_waste": float(monthly_waste),
                         "tags": ip.tags or {}
                     })

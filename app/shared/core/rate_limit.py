@@ -5,15 +5,26 @@ Provides API rate limiting using slowapi (built on limits library).
 Configurable via environment variables.
 """
 
+from typing import Optional, Any, Callable, Awaitable, Dict, Union
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 import structlog
-from typing import Optional
 from redis.asyncio import Redis, from_url
 
 from app.shared.core.config import get_settings
+
+__all__ = [
+    "get_limiter", 
+    "setup_rate_limiting", 
+    "rate_limit", 
+    "standard_limit", 
+    "auth_limit", 
+    "analysis_limit", 
+    "RateLimitExceeded", 
+    "_rate_limit_exceeded_handler"
+]
 
 logger = structlog.get_logger()
 
@@ -87,9 +98,9 @@ def setup_rate_limiting(app: FastAPI) -> None:
     """
     Configure rate limiting for the FastAPI application.
     """
-    l = get_limiter()
+    limiter = get_limiter()
     # Add rate limit exceeded handler
-    app.state.limiter = l
+    app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     logger.info("rate_limiting_configured")
 
@@ -137,7 +148,7 @@ standard_limit = _make_limit_decorator(STANDARD_LIMIT)
 auth_limit = _make_limit_decorator(AUTH_LIMIT)
 
 # Dynamic analysis limit decorator
-def analysis_limit(func):
+def analysis_limit(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
     """Decorator that applies a dynamic analysis limit based on tenant tier."""
     return get_limiter().limit(get_analysis_limit)(func)
 

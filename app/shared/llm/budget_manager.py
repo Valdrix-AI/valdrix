@@ -9,7 +9,7 @@ import structlog
 from decimal import Decimal
 from datetime import datetime, timezone
 from uuid import UUID
-from sqlalchemy import select, func, update, text
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.llm import LLMBudget, LLMUsage
 from app.shared.core.exceptions import BudgetExceededError, ResourceNotFoundError

@@ -34,7 +34,7 @@ class AttributionEngine:
         query = (
             select(AttributionRule)
             .where(AttributionRule.tenant_id == tenant_id)
-            .where(AttributionRule.is_active == True)
+            .where(AttributionRule.is_active)
             .order_by(AttributionRule.priority.asc())
         )
         result = await self.db.execute(query)
@@ -336,7 +336,7 @@ class AttributionEngine:
             .where(CostRecord.tenant_id == tenant_id)
             .where(CostRecord.recorded_at >= start_date)
             .where(CostRecord.recorded_at <= end_date)
-            .where((CostRecord.allocated_to == None) | (CostRecord.allocated_to == "Unallocated"))
+            .where((CostRecord.allocated_to.is_(None)) | (CostRecord.allocated_to == "Unallocated"))
             .group_by(CostRecord.service)
             .order_by(func.sum(CostRecord.cost_usd).desc())
             .limit(5)

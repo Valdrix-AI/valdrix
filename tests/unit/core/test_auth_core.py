@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import Request, HTTPException, status
+from fastapi import Request, HTTPException
 from app.shared.core.auth import get_current_user, decode_jwt, CurrentUser, get_current_user_from_jwt, requires_role, require_tenant_access
-from uuid import uuid4, UUID
+from uuid import uuid4
 import jwt
 from datetime import datetime, timezone, timedelta
 
@@ -183,20 +183,17 @@ async def test_requires_role_owner_bypass():
 
 @pytest.mark.asyncio
 async def test_requires_role_unknown_role():
-    user = CurrentUser(id=uuid4(), email="a@b.com", role="unknown")
-    checker = requires_role("member")
-    # unknown role (0) < member (10) -> forbidden
-    with pytest.raises(HTTPException) as exc:
-        checker(user)
-    assert exc.value.status_code == 403
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        CurrentUser(id=uuid4(), email="a@b.com", role="unknown")
 
 @pytest.mark.asyncio
 async def test_requires_role_unknown_required_role():
     user = CurrentUser(id=uuid4(), email="a@b.com", role="member")
-    checker = requires_role("unknown_required")
-    # member (10) >= unknown_required (default 10) -> success
-    res = checker(user)
-    assert res == user
+    # This will raise ValueError when calling UserRole("unknown_required")
+    with pytest.raises(ValueError):
+        checker = requires_role("unknown_required")
+        checker(user)
 
 @pytest.mark.asyncio
 async def test_require_tenant_access_failure():

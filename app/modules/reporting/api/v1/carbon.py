@@ -1,11 +1,11 @@
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import structlog
 
-from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.auth import CurrentUser
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
 from app.shared.db.session import get_db
@@ -26,7 +26,7 @@ async def get_carbon_footprint(
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1")
-):
+) -> Dict[str, Any]:
     """Calculates the estimated CO2 emissions. Requires Growth tier or higher."""
     # Bound date range to max 366 days (Issue #44)
     if (end_date - start_date).days > 366:
@@ -52,7 +52,7 @@ async def get_carbon_budget(
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1")
-):
+) -> Dict[str, Any]:
     """Get carbon budget status for the current month."""
     result = await db.execute(
         select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
@@ -97,7 +97,7 @@ async def analyze_graviton_opportunities(
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
-):
+) -> Dict[str, Any]:
     """Analyze EC2 instances for Graviton migration opportunities."""
     result = await db.execute(
         select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)

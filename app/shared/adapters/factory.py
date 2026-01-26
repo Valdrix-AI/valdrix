@@ -5,7 +5,7 @@ Standardizes cloud provider interactions and provides a unified interface
 for AWS, Azure, and GCP.
 """
 
-from typing import Dict, Any
+from typing import Any
 from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.adapters.aws_cur import AWSCURAdapter

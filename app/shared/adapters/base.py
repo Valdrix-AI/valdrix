@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from datetime import date, datetime
-from typing import List, Dict, Any
-from app.schemas.costs import CloudUsageSummary
+from datetime import datetime
+from typing import List, Dict, Any, Optional
 
 class BaseAdapter(ABC):
     """
@@ -16,7 +15,7 @@ class BaseAdapter(ABC):
     @abstractmethod
     async def verify_connection(self) -> bool:
         """Verify that the stored credentials are valid."""
-        pass
+        raise NotImplementedError()
     
     @abstractmethod
     async def get_cost_and_usage(
@@ -26,7 +25,7 @@ class BaseAdapter(ABC):
         granularity: str = "DAILY"
     ) -> List[Dict[str, Any]]:
         """Fetch cost data as a list (legacy)."""
-        pass
+        raise NotImplementedError()
 
     @abstractmethod
     async def stream_cost_and_usage(
@@ -41,15 +40,15 @@ class BaseAdapter(ABC):
         Stream cost data normalized to the standard Valdrix format.
         Used for memory-efficient ingestion.
         """
-        pass
+        raise NotImplementedError()
     
     @abstractmethod
-    async def discover_resources(self, resource_type: str, region: str = None) -> List[Dict[str, Any]]:
+    async def discover_resources(self, resource_type: str, region: Optional[str] = None) -> List[Dict[str, Any]]:
         """Discover active resources of a specific type (for Zombie detection)."""
-        pass
+        raise NotImplementedError()
 
     # Deprecated methods compatible for now
-    async def get_resource_usage(self, service_name: str, resource_id: str = None) -> List[Dict[str, Any]]:
+    async def get_resource_usage(self, service_name: str, resource_id: Optional[str] = None) -> List[Dict[str, Any]]:
         return []
 
 

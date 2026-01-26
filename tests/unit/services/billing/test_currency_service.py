@@ -94,6 +94,7 @@ async def test_get_ngn_rate_fallback(mock_db):
     
     with patch("app.modules.reporting.domain.billing.currency.settings") as mock_settings:
         mock_settings.EXCHANGERATE_API_KEY = None
+        mock_settings.FALLBACK_NGN_RATE = 1450.0
         service = ExchangeRateService(mock_db)
         service.api_key = None
         

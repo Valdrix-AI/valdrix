@@ -4,10 +4,6 @@ Multi-Tenant AWS Adapter (Native Async)
 Uses STS AssumeRole to fetch cost data from customer AWS accounts.
 Leverages aioboto3 for non-blocking I/O.
 
-Security:
-- Never stores long-lived credentials
-- Uses temporary credentials that expire in 1 hour
-- Each request assumes the customer's IAM role
 """
 
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
@@ -303,7 +299,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
 
     async def get_gross_usage(self, start_date: date, end_date: date) -> List[Dict[str, Any]]:
         # Helper that wraps get_daily_costs specifically for gross usage
-        summary = await self.get_daily_costs(start_date, end_date, usage_only=True, group_by_service=True)
+        await self.get_daily_costs(start_date, end_date, usage_only=True, group_by_service=True)
         # Convert to list of dicts if needed or keep using CloudUsageSummary internally
         # For now, this method signature in original code was somewhat loose or unused in BaseAdapter (not present there)
         # We can keep it or deprecate it.

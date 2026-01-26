@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 from langchain_core.language_models.chat_models import BaseChatModel
-from app.shared.core.config import get_settings
 
 class BaseProvider(ABC):
     """
@@ -12,7 +11,7 @@ class BaseProvider(ABC):
     @abstractmethod
     def create_model(self, model: Optional[str] = None, api_key: Optional[str] = None) -> BaseChatModel:
         """Create a LangChain compatible ChatModel."""
-        pass
+        raise NotImplementedError()
 
     def validate_api_key(self, api_key: Optional[str], provider_name: str) -> None:
         """Standardized API key validation logic."""

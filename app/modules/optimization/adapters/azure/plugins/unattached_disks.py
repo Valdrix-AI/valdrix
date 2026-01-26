@@ -40,11 +40,12 @@ class AzureUnattachedDisksPlugin(ZombiePlugin):
                     monthly_cost = self._estimate_disk_cost(size_gb, sku_name)
                     
                     zombies.append({
-                        "id": disk.id,
+                        "resource_id": disk.id,
                         "name": disk.name,
                         "region": disk.location,
                         "size_gb": size_gb,
                         "sku": sku_name,
+                        "monthly_cost": float(monthly_cost),
                         "monthly_waste": float(monthly_cost),
                         "tags": disk.tags or {},
                         "created_at": disk.time_created.isoformat() if disk.time_created else None

@@ -1,14 +1,15 @@
 import pytest
 from unittest.mock import MagicMock, patch
+import sys
 
-# Mock engine before any app imports to avoid ConnectionRefusedError
-with patch("sqlalchemy.ext.asyncio.create_async_engine"):
-    with patch("app.shared.db.session.engine"):
-        from app.modules.optimization.domain.gcp_provider.plugins.idle_instances import GCPIdleInstancePlugin
+# Move import inside tests to avoid top-level side effects
+# form app.modules... import ... is removed from here
 
 @pytest.mark.asyncio
 async def test_gcp_idle_instance_plugin_gpu_detection():
-    plugin = GCPIdleInstancePlugin()
+    with patch.dict(sys.modules, {"app.shared.db.session": MagicMock()}):
+        from app.modules.optimization.domain.gcp_provider.plugins.idle_instances import GCPIdleInstancePlugin
+        plugin = GCPIdleInstancePlugin()
     client = MagicMock()
     
     # Mock Aggregated List result
@@ -36,11 +37,13 @@ async def test_gcp_idle_instance_plugin_gpu_detection():
     assert zombies[0]["name"] == "gpu-instance"
     assert zombies[0]["is_gpu"] is True
     assert zombies[0]["confidence_score"] == 0.95
-    assert zombies[0]["monthly_waste"] == 1500.0
+    assert zombies[0]["monthly_waste"] == pytest.approx(1500.0)
 
 @pytest.mark.asyncio
 async def test_gcp_idle_instance_plugin_attribution():
-    plugin = GCPIdleInstancePlugin()
+    with patch.dict(sys.modules, {"app.shared.db.session": MagicMock()}):
+        from app.modules.optimization.domain.gcp_provider.plugins.idle_instances import GCPIdleInstancePlugin
+        plugin = GCPIdleInstancePlugin()
     client = MagicMock()
     logging_client = MagicMock()
     

@@ -1,12 +1,10 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import uuid4
-from datetime import datetime, timezone
 
 from app.shared.connections.organizations import OrganizationsDiscoveryService
 from app.models.aws_connection import AWSConnection
 from app.models.discovered_account import DiscoveredAccount
-from botocore.exceptions import ClientError
 
 @pytest.fixture
 def mock_db():

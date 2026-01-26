@@ -1,6 +1,6 @@
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Dict, Any, List
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -8,7 +8,7 @@ import structlog
 
 from app.shared.core.auth import CurrentUser, requires_role, require_tenant_access
 from app.shared.db.session import get_db
-from app.models.remediation import RemediationAction
+from app.models.remediation import RemediationAction, RemediationRequest
 from app.modules.optimization.domain import ZombieService, RemediationService
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
@@ -37,7 +37,7 @@ class ReviewRequest(BaseModel):
 # --- Endpoints ---
 
 @router.get("")
-@rate_limit("10/minute") # Protect expensive scan operation
+@rate_limit("10/minute") # type: ignore[untyped-decorator]
 async def scan_zombies(
     request: Request,
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
@@ -46,7 +46,7 @@ async def scan_zombies(
     region: str = Query(default="us-east-1"),
     analyze: bool = Query(default=False, description="Enable AI-powered analysis of detected zombies"),
     background: bool = Query(default=False, description="Run scan as a background job"),
-):
+) -> Any:
     """
     Scan cloud accounts for zombie resources.
     If background=True, returns a job_id immediately.
@@ -64,10 +64,10 @@ async def scan_zombies(
         )
         return {"status": "pending", "job_id": str(job.id)}
 
-    service = ZombieService(db)
+    service = ZombieService(db=db)
     return await service.scan_for_tenant(
         tenant_id=tenant_id,
-        user=user,
+        _user=user,
         region=region,
         analyze=analyze
     )
@@ -79,7 +79,7 @@ async def create_remediation_request(
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.AUTO_REMEDIATION))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
-):
+) -> Dict[str, str]:
     """Create a remediation request. Requires Pro tier or higher."""
     try:
         action_enum = RemediationAction(request.action)
@@ -115,7 +115,7 @@ async def list_pending_requests(
     region: str = Query(default="us-east-1"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-):
+) -> Dict[str, Any]:
     """List pending requests."""
     service = RemediationService(db=db, region=region)
     pending = await service.list_pending(tenant_id, limit=limit, offset=offset)
@@ -141,7 +141,7 @@ async def approve_remediation(
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
-):
+) -> Dict[str, str]:
     """Approve a request."""
     service = RemediationService(db=db, region=region)
     try:
@@ -160,7 +160,8 @@ async def execute_remediation(
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default="us-east-1"),
-):
+    bypass_grace_period: bool = Query(default=False, description="Bypass 24h grace period (emergency use)"),
+) -> Dict[str, str]:
     """Execute a remediation request. Requires Pro tier or higher and Admin role."""
     # Note: requires_feature(FeatureFlag.AUTO_REMEDIATION) also checks for isAdmin if we wanted, 
     # but here we use requires_role("admin") explicitly for SEC-02.
@@ -183,8 +184,8 @@ async def execute_remediation(
     service = RemediationService(db=db, region=region, credentials=credentials)
 
     try:
-        result = await service.execute(request_id, tenant_id)
-        return {"status": result.status.value, "request_id": str(result.id)}
+        executed_request = await service.execute(request_id, tenant_id, bypass_grace_period=bypass_grace_period)
+        return {"status": executed_request.status.value, "request_id": str(executed_request.id)}
     except ValueError as e:
         from app.shared.core.exceptions import ValdrixException
         raise ValdrixException(
@@ -199,7 +200,7 @@ async def get_remediation_plan(
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GITOPS_REMEDIATION))],
     db: AsyncSession = Depends(get_db),
-):
+) -> Dict[str, Any]:
     """
     Generate and return a Terraform decommissioning plan for a remediation request.
     Requires Pro tier or higher.

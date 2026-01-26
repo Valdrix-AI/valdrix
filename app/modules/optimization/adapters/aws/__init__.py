@@ -1,1 +1,1 @@
-from .detector import AWSZombieDetector
+from .detector import AWSZombieDetector as AWSZombieDetector

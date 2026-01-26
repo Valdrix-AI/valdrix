@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from decimal import Decimal
 from uuid import uuid4
-from datetime import date
 from app.shared.remediation.hard_cap_service import BudgetHardCapService
 from app.models.remediation_settings import RemediationSettings
 
@@ -57,7 +56,7 @@ async def test_hard_cap_breached(hard_cap_service, mock_db):
     mock_db.execute.return_value = mock_result
     
     with patch("app.modules.reporting.domain.aggregator.CostAggregator.get_summary") as mock_summary, \
-         patch("app.modules.notifications.domain.slack.get_slack_service") as mock_slack_factory:
+         patch("app.shared.remediation.hard_cap_service.get_slack_service") as mock_slack_factory:
         
         mock_summary.return_value = MagicMock(total_cost=Decimal("600.00"))
         mock_slack = AsyncMock()
@@ -65,4 +64,4 @@ async def test_hard_cap_breached(hard_cap_service, mock_db):
         
         result = await hard_cap_service.check_and_enforce(tenant_id)
         assert result is True
-        mock_slack.send_alert.assert_called_once()
+        mock_slack.notify_budget_alert.assert_called_once()

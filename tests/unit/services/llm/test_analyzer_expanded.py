@@ -3,7 +3,6 @@ import yaml
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from app.shared.llm.analyzer import FinOpsAnalyzer
-from app.shared.core.exceptions import AIAnalysisError
 
 @pytest.fixture
 def mock_llm():
@@ -18,7 +17,7 @@ class TestFinOpsAnalyzerExpanded:
         
         with patch("os.path.join", return_value=str(prompt_file)), \
              patch("os.path.exists", return_value=True):
-            analyzer = FinOpsAnalyzer(MagicMock())
+            FinOpsAnalyzer(MagicMock())
             # Hit initialization code
             
     def test_init_with_invalid_yaml(self, tmp_path):
@@ -26,7 +25,7 @@ class TestFinOpsAnalyzerExpanded:
         prompt_file.write_text("NOT_YAML: <<<")  # Invalid YAML
         with patch("os.path.join", return_value=str(prompt_file)), \
              patch("os.path.exists", return_value=True):
-            analyzer = FinOpsAnalyzer(MagicMock())
+            FinOpsAnalyzer(MagicMock())
             # Should use fallback prompt
 
     @pytest.mark.asyncio

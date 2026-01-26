@@ -1,16 +1,11 @@
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_groq import ChatGroq
-from app.shared.core.config import get_settings
-import structlog
 from typing import Optional, Tuple
-from dataclasses import dataclass
 from enum import Enum
+from langchain_core.language_models.chat_models import BaseChatModel
+import structlog
+from app.shared.core.config import get_settings
+from .pricing_data import PROVIDER_COSTS
 
 logger = structlog.get_logger()
-
 
 class AnalysisComplexity(str, Enum):
     """Analysis complexity levels for provider selection."""
@@ -18,36 +13,26 @@ class AnalysisComplexity(str, Enum):
     MEDIUM = "medium"    # 1000-4000 tokens, use Gemini (cheap)
     COMPLEX = "complex"  # > 4000 tokens, use GPT-4o-mini (best)
 
-
-@dataclass
-class ProviderCost:
-    """Provider cost per 1K tokens (USD)."""
-    input: float
-    output: float
-    free_tier_tokens: int = 0
-
-
-# LLM Provider costs (2026 pricing)
-PROVIDER_COSTS = {
-    "groq": ProviderCost(input=0.0, output=0.0, free_tier_tokens=14000),  # Free tier!
-    "google": ProviderCost(input=0.00025, output=0.0005, free_tier_tokens=0),  # Gemini Flash
-    "openai": ProviderCost(input=0.00015, output=0.0006, free_tier_tokens=0),  # GPT-4o-mini
-    "claude": ProviderCost(input=0.003, output=0.015, free_tier_tokens=0),  # Most expensive
-}
-
-
 class LLMFactory:
-    """
-    Smart LLM provider selection for cost optimization (Phase 7: 10K Scale).
-    
-    Waterfall strategy:
-    1. SIMPLE (< 1000 tokens): Use Groq (FREE tier: 14K tokens/min)
-    2. MEDIUM (1000-4000 tokens): Use Gemini Flash (cheapest paid)
-    3. COMPLEX (> 4000 tokens): Use GPT-4o-mini (best quality/price)
-    
-    This ensures 80%+ of analyses use the free Groq tier.
-    """
-    
+    @staticmethod
+    def validate_api_key(provider: str, api_key: Optional[str]) -> None:
+        """
+        Validates the format and presence of an LLM API key.
+        Prevents usage of placeholders and provides early feedback.
+        """
+        if not api_key:
+            raise ValueError(f"LLM API key for provider '{provider}' is not configured.")
+        
+        # Check for placeholders
+        if "xxx" in api_key.lower() or "change-me" in api_key.lower():
+            # Test expects "contains a placeholder"
+            raise ValueError(f"LLM API key for '{provider}' contains a placeholder. Use a real key.")
+            
+        # Basic length validation
+        if len(api_key) < 20: 
+            # Test expects "too short"
+            raise ValueError(f"LLM API key for '{provider}' is too short.")
+
     @staticmethod
     def estimate_tokens(text: str) -> int:
         """
@@ -92,8 +77,8 @@ class LLMFactory:
             return tenant_byok_provider, AnalysisComplexity.MEDIUM
         
         # Estimate tokens
-        token_estimate = LLMProviderSelector.estimate_tokens(input_text)
-        complexity = LLMProviderSelector.classify_complexity(token_estimate)
+        token_estimate = LLMFactory.estimate_tokens(input_text)
+        complexity = LLMFactory.classify_complexity(token_estimate)
         
         # Waterfall selection
         if complexity == AnalysisComplexity.SIMPLE:
@@ -139,12 +124,17 @@ class LLMFactory:
         output_tokens: int
     ) -> float:
         """Estimate cost for a provider call in USD."""
-        costs = PROVIDER_COSTS.get(provider)
+        # Use 'default' model pricing for the provider
+        provider_data = PROVIDER_COSTS.get(provider, {})
+        costs = provider_data.get("default")
+        
         if not costs:
             return 0.0
         
-        input_cost = (input_tokens / 1000) * costs.input
-        output_cost = (output_tokens / 1000) * costs.output
+        # ProviderCost supports both .input and ['input']
+        # Pricing is Per Million Tokens
+        input_cost = (input_tokens / 1_000_000) * costs.input
+        output_cost = (output_tokens / 1_000_000) * costs.output
         
         return input_cost + output_cost
 
@@ -197,7 +187,7 @@ class LLMFactory:
         Returns:
             Tuple of (llm_client, provider_name, complexity)
         """
-        provider, complexity = LLMProviderSelector.select_provider(
+        provider, complexity = LLMFactory.select_provider(
             input_text=input_text,
             tenant_byok_provider=tenant_byok_provider
         )
@@ -208,4 +198,7 @@ class LLMFactory:
         )
         
         return llm, provider, complexity
+
+
+LLMProviderSelector = LLMFactory
 

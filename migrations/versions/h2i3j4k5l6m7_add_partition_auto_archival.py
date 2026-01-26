@@ -15,7 +15,6 @@ Phase 4.4: Partition Auto-Archival
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.

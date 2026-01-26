@@ -10,7 +10,6 @@ import tenacity
 
 from app.shared.adapters.base import BaseAdapter
 from app.models.azure_connection import AzureConnection
-from app.shared.core.exceptions import AdapterError
 
 logger = structlog.get_logger()
 
@@ -75,67 +74,86 @@ class AzureAdapter(BaseAdapter):
         start_date: datetime,
         end_date: datetime,
         granularity: str = "DAILY",
-        cost_type: str = "ActualCost"  # Phase 5: Support ActualCost or AmortizedCost
+        cost_type: str = "ActualCost"
     ) -> List[Dict[str, Any]]:
-        """
-        Fetch costs using Azure Query API.
-        
-        Args:
-            cost_type: 'ActualCost' for on-demand costs, 'AmortizedCost' for RI/SP amortization.
-        """
+        """Fetch costs using Azure Query API."""
         try:
             client = await self._get_cost_client()
-            
-            # Azure Query API requires a scope (subscription in this case)
             scope = f"subscriptions/{self.connection.subscription_id}"
             
-            query_definition = QueryDefinition(
-                type=cost_type,  # Phase 5: Dynamic cost type
-                timeframe="Custom",
-                time_period=QueryTimePeriod(
-                    from_property=start_date,
-                    to=end_date
-                ),
-                dataset=QueryDataset(
-                    granularity=granularity,
-                    aggregation={
-                        "totalCost": QueryAggregation(name="PreTaxCost", function="Sum")
-                    },
-                    grouping=[
-                        QueryGrouping(type="Dimension", name="ServiceName"),
-                        QueryGrouping(type="Dimension", name="ResourceLocation"),
-                        QueryGrouping(type="Dimension", name="ChargeType")
-                    ]
-                )
+            query_definition = self._build_query_definition(
+                start_date, end_date, granularity, cost_type
             )
             
             response = await client.query.usage(scope=scope, parameters=query_definition)
             
-            records = []
-            now = datetime.now(timezone.utc)
             if response and response.rows:
-                # Column indices based on grouping: PreTaxCost (0), ServiceName (1), ResourceLocation (2), UsageDate (3)
-                for row in response.rows:
-                    dt = datetime.strptime(str(row[3]).strip(), "%Y%m%d").replace(tzinfo=timezone.utc)
-                    # Phase 5: Mark as finalized if >3 days old
-                    is_finalized = (now - dt).days > 3
-                    records.append({
-                        "timestamp": dt,
-                        "service": row[1],
-                        "region": row[2],
-                        "cost_usd": float(row[0]),
-                        "currency": "USD",
-                        "amount_raw": float(row[0]),
-                        "usage_type": row[4], # ChargeType (Usage, Purchase, Tax, etc)
-                        "cost_type": cost_type,
-                        "is_finalized": is_finalized
-                    })
-            return records
+                return [self._parse_row(row, cost_type) for row in response.rows]
+            return []
         except Exception as e:
             from app.shared.core.exceptions import AdapterError
             logger.error("azure_cost_fetch_failed", error=str(e))
             raise AdapterError(f"Azure cost fetch failed: {str(e)}") from e
 
+    def _build_query_definition(
+        self, start: datetime, end: datetime, granularity: str, cost_type: str
+    ) -> QueryDefinition:
+        """Constructs the Azure Query API definition."""
+        return QueryDefinition(
+            type=cost_type,
+            timeframe="Custom",
+            time_period=QueryTimePeriod(from_property=start, to=end),
+            dataset=QueryDataset(
+                granularity=granularity,
+                aggregation={
+                    "totalCost": QueryAggregation(name="PreTaxCost", function="Sum")
+                },
+                grouping=[
+                    QueryGrouping(type="Dimension", name="ServiceName"),
+                    QueryGrouping(type="Dimension", name="ResourceLocation"),
+                    QueryGrouping(type="Dimension", name="ChargeType"),
+                    QueryGrouping(type="Dimension", name="UsageDate")
+                ]
+            )
+        )
+
+    def _parse_row(self, row: List[Any], cost_type: str) -> Dict[str, Any]:
+        """Normalizes a single Azure result row."""
+        # Indices: PreTaxCost (0), ServiceName (1), ResourceLocation (2), ChargeType (3), UsageDate (4)
+        raw_date = str(row[4]).strip()
+        
+        # Try multiple formats (Azure can be inconsistent depending on the API version/export)
+        dt = None
+        for fmt in ["%Y%m%d", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ"]:
+            try:
+                dt = datetime.strptime(raw_date, fmt).replace(tzinfo=timezone.utc)
+                break
+            except ValueError:
+                continue
+        
+        if not dt:
+            # Fallback for ISO date if simple strptime fails
+            try:
+                from dateutil import parser
+                dt = parser.parse(raw_date).replace(tzinfo=timezone.utc)
+            except (ValueError, ImportError):
+                logger.error("azure_date_parse_failed", raw_val=raw_date)
+                # Fallback to now but log error
+                dt = datetime.now(timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        
+        return {
+            "timestamp": dt,
+            "service": row[1],
+            "region": row[2],
+            "cost_usd": float(row[0]),
+            "currency": "USD",
+            "amount_raw": float(row[0]),
+            "usage_type": row[3],
+            "cost_type": cost_type,
+            "is_finalized": (now - dt).days > 3
+        }
     async def get_amortized_costs(
         self,
         start_date: datetime,

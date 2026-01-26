@@ -6,6 +6,7 @@ Sends carbon budget alerts via email using SMTP.
 
 import smtplib
 import html
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import List, Dict, Any
@@ -159,7 +160,6 @@ class EmailService:
         """
         Send payment failed notification for dunning workflow.
         """
-        from datetime import datetime
         
         try:
             subject = f"⚠️ Valdrix: Payment Failed ({attempt}/{max_attempts})"

@@ -2,6 +2,7 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
 from typing import Optional
+from app.shared.core.constants import AWS_SUPPORTED_REGIONS, LLMProvider
 
 
 class Settings(BaseSettings):
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     API_URL: str = "http://localhost:8000"  # Base URL for OIDC and Magic Links
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None # Added for D5: Telemetry Sink
     OTEL_EXPORTER_OTLP_INSECURE: bool = False # SEC-07: Secure Tracing
-    CSRF_SECRET_KEY: str = "change-me-in-production-csrf" # SEC-01: CSRF
+    CSRF_SECRET_KEY: Optional[str] = None # SEC-01: CSRF
     TESTING: bool = False
     RATELIMIT_ENABLED: bool = True
 
@@ -28,9 +29,9 @@ class Settings(BaseSettings):
             
         if self.is_production:
             # SEC-01: CSRF key must be changed
-            if self.CSRF_SECRET_KEY == "change-me-in-production-csrf":
+            if not self.CSRF_SECRET_KEY:
                 raise ValueError(
-                    "SECURITY ERROR: CSRF_SECRET_KEY must be changed from default in production! "
+                    "SECURITY ERROR: CSRF_SECRET_KEY must be set in production! "
                     "Set CSRF_SECRET_KEY environment variable to a secure random value."
                 )
             
@@ -83,11 +84,11 @@ class Settings(BaseSettings):
         
         # LLM Provider keys (validated in all modes if provider selected)
         provider_keys = {
-            "openai": self.OPENAI_API_KEY,
-            "claude": self.CLAUDE_API_KEY,
-            "anthropic": self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY,
-            "google": self.GOOGLE_API_KEY,
-            "groq": self.GROQ_API_KEY
+            LLMProvider.OPENAI: self.OPENAI_API_KEY,
+            LLMProvider.CLAUDE: self.CLAUDE_API_KEY,
+            LLMProvider.ANTHROPIC: self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY,
+            LLMProvider.GOOGLE: self.GOOGLE_API_KEY,
+            LLMProvider.GROQ: self.GROQ_API_KEY
         }
         
         if self.LLM_PROVIDER in provider_keys and not provider_keys[self.LLM_PROVIDER]:
@@ -109,7 +110,7 @@ class Settings(BaseSettings):
     # Reload trigger: 2026-01-14
 
     # Security
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"]
+    CORS_ORIGINS: list[str] = [] # Empty by default - restricted in prod
     FRONTEND_URL: str = "http://localhost:5173"  # Used for billing callbacks
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o" # High performance for complex analysis
@@ -187,6 +188,7 @@ class Settings(BaseSettings):
     PAYSTACK_SECRET_KEY: Optional[str] = None
     PAYSTACK_PUBLIC_KEY: Optional[str] = None
     EXCHANGERATE_API_KEY: Optional[str] = None # Added for dynamic currency
+    FALLBACK_NGN_RATE: float = 1450.0 # SEC: Centralized financial fallback
     # Monthly plans
     PAYSTACK_PLAN_STARTER: str = "PLN_starter_xxx"    # ₦41,250/mo ($29)
     PAYSTACK_PLAN_GROWTH: str = "PLN_growth_xxx"      # ₦112,350/mo ($79)
@@ -204,14 +206,7 @@ class Settings(BaseSettings):
     CIRCUIT_BREAKER_MAX_DAILY_SAVINGS: float = 1000.0
 
     # AWS Regions (BE-ADAPT-1: Regional Whitelist)
-    AWS_SUPPORTED_REGIONS: list[str] = [
-        "us-east-1", "us-east-2", "us-west-1", "us-west-2",
-        "af-south-1", "ap-east-1", "ap-south-1", "ap-northeast-3",
-        "ap-northeast-2", "ap-southeast-1", "ap-southeast-2", "ap-northeast-1",
-        "ca-central-1", "eu-central-1", "eu-west-1", "eu-west-2", "eu-south-1",
-        "eu-west-3", "eu-north-1", "me-south-1", "sa-east-1", "us-gov-east-1",
-        "us-gov-west-1"
-    ]
+    AWS_SUPPORTED_REGIONS: list[str] = AWS_SUPPORTED_REGIONS
 
     # Scanner Settings
     ZOMBIE_PLUGIN_TIMEOUT_SECONDS: int = 30
