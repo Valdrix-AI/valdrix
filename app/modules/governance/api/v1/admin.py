@@ -61,6 +61,7 @@ async def trigger_analysis(
 @router.get("/reconcile/{tenant_id}")
 @auth_limit # Item 11: Consistent rate limiting
 async def reconcile_tenant_costs(
+    request: Request,
     tenant_id: UUID,
     start_date: date,
     end_date: date,

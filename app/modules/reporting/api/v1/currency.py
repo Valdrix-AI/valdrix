@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, List
+from typing import Dict, List, Any
 from app.shared.db.session import get_db
 from app.shared.core.auth import get_current_user
 from app.models.tenant import User

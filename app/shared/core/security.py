@@ -5,7 +5,7 @@ import os
 import secrets
 import structlog
 from functools import lru_cache
-from typing import Optional, List
+from typing import Optional, List, Union
 from cryptography.fernet import Fernet, MultiFernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -132,21 +132,8 @@ class EncryptionKeyManager:
 # Encryption Functions
 # ============================================================================
 
-def _get_multi_fernet(primary_key: Optional[str], legacy_keys: Optional[List[str]] = None) -> MultiFernet:
-    """Returns a MultiFernet instance for secret rotation."""
-    if not primary_key:
-        settings = get_settings()
-        primary_key = settings.ENCRYPTION_KEY or "dev_fallback_key_do_not_use_in_prod"
-
-    return EncryptionKeyManager.create_multi_fernet(
-        primary_key=primary_key,
-        legacy_keys=legacy_keys
-    )
-
 def _get_api_key_fernet() -> MultiFernet:
     settings = get_settings()
-    # Convert list to tuple for lru_cache compatibility if needed, 
-    # though strict strings here are fine.
     legacy = tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
     
     return EncryptionKeyManager.create_multi_fernet(
@@ -156,9 +143,24 @@ def _get_api_key_fernet() -> MultiFernet:
 
 def _get_pii_fernet() -> MultiFernet:
     settings = get_settings()
+    legacy = tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
     return _get_multi_fernet(
         settings.PII_ENCRYPTION_KEY or settings.ENCRYPTION_KEY,
-        settings.LEGACY_ENCRYPTION_KEYS
+        legacy
+    )
+
+def _get_multi_fernet(primary_key: Optional[str], legacy_keys: Optional[Union[List[str], tuple]] = None) -> MultiFernet:
+    """Returns a MultiFernet instance for secret rotation."""
+    if not primary_key:
+        settings = get_settings()
+        primary_key = settings.ENCRYPTION_KEY or "dev_fallback_key_do_not_use_in_prod"
+
+    # Ensure list is converted to tuple for lru_cache hashing
+    legacy_tuple = tuple(legacy_keys) if legacy_keys and isinstance(legacy_keys, list) else legacy_keys
+
+    return EncryptionKeyManager.create_multi_fernet(
+        primary_key=primary_key,
+        legacy_keys=legacy_tuple
     )
 
 def encrypt_string(value: str, context: str = "generic") -> str:

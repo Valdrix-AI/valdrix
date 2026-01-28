@@ -99,7 +99,7 @@ async def get_job_queue_status(
 @router.post("/process", response_model=ProcessJobsResponse)
 @standard_limit # type: ignore[untyped-decorator]
 async def process_pending_jobs(
-    _request: Request,
+    request: Request,
     _user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=10, ge=1, le=50, description="Max jobs to process")
