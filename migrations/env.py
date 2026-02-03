@@ -22,10 +22,11 @@ from app.models.gcp_connection import GCPConnection  # noqa: F401 # pylint: disa
 from app.models.tenant import User, Tenant  # noqa: F401 # pylint: disable=unused-import
 from app.models.pricing import PricingPlan, ExchangeRate  # noqa: F401 # pylint: disable=unused-import
 from app.models.background_job import BackgroundJob  # noqa: F401 # pylint: disable=unused-import
-from app.services.billing.paystack_billing import TenantSubscription  # noqa: F401 # pylint: disable=unused-import
-from app.services.security.audit_log import AuditLog  # noqa: F401 # pylint: disable=unused-import
+from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription  # noqa: F401 # pylint: disable=unused-import
+from app.modules.governance.domain.security.audit_log import AuditLog  # noqa: F401 # pylint: disable=unused-import
 from app.models.attribution import AttributionRule, CostAllocation  # noqa: F401 # pylint: disable=unused-import
 from app.models.anomaly_marker import AnomalyMarker  # noqa: F401 # pylint: disable=unused-import
+from app.models.optimization import OptimizationStrategy, StrategyRecommendation  # noqa: F401 # pylint: disable=unused-import
 
 from app.shared.core.config import get_settings
 from sqlalchemy.ext.asyncio import create_async_engine

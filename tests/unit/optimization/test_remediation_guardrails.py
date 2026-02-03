@@ -1,7 +1,6 @@
 import pytest
 from uuid import uuid4
 from decimal import Decimal
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.modules.optimization.domain.remediation import RemediationService
 from app.shared.core.exceptions import KillSwitchTriggeredError

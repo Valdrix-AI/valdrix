@@ -1,13 +1,11 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime, timezone
 from fastapi import HTTPException
 
 from app.shared.core.cloud_connection import CloudConnectionService
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
-from app.models.gcp_connection import GCPConnection
 
 @pytest.fixture
 def mock_db():

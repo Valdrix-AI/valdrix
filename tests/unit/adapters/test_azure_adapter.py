@@ -1,8 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
-import app.models.tenant
-import app.models.azure_connection
 from app.shared.adapters.azure import AzureAdapter
 from app.models.azure_connection import AzureConnection
 from app.shared.core.exceptions import AdapterError

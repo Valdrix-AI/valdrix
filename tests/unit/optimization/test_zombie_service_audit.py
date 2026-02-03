@@ -2,7 +2,6 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from decimal import Decimal
 from app.modules.optimization.domain.service import ZombieService
 from app.models.aws_connection import AWSConnection
 from app.shared.core.pricing import PricingTier
@@ -58,7 +57,7 @@ async def test_scan_for_tenant_success(mock_db, tenant_id):
     with patch("app.modules.optimization.domain.service.ZombieDetectorFactory.get_detector", return_value=mock_detector):
         with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE):
             # Mock metrics
-            with patch("app.shared.core.ops_metrics.SCAN_LATENCY") as mock_latency:
+            with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
                 result = await service.scan_for_tenant(tenant_id)
                 
                 assert result["total_monthly_waste"] == 10.0
@@ -85,7 +84,7 @@ async def test_scan_for_tenant_timeout(mock_db, tenant_id):
         mock_factory.return_value = mock_detector
         
         with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE):
-            with patch("app.shared.core.ops_metrics.SCAN_TIMEOUTS") as mock_timeouts:
+            with patch("app.shared.core.ops_metrics.SCAN_TIMEOUTS"):
                 # Use a very short timeout for testing
                 with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
                     result = await service.scan_for_tenant(tenant_id)

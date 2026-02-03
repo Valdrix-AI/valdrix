@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, status, Request
+from fastapi import HTTPException, Request
 import jwt
 
 from app.shared.core.auth import (
@@ -27,6 +27,17 @@ def test_create_access_token():
     assert decoded["email"] == "test@example.com"
     assert decoded["iss"] == "supabase"
     assert "exp" in decoded
+
+def test_create_access_token_with_delta():
+    data = {"sub": "456"}
+    delta = timedelta(minutes=5)
+    token = create_access_token(data, expires_delta=delta)
+    decoded = jwt.decode(token, "supersecretkey", algorithms=["HS256"], audience="authenticated")
+    assert decoded["sub"] == "456"
+    # Basic check that it's within 5 min
+    exp = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
+    now = datetime.now(timezone.utc)
+    assert (exp - now).total_seconds() <= 305
 
 def test_decode_jwt_valid():
     token = jwt.encode(
@@ -73,6 +84,26 @@ async def test_get_current_user_from_jwt_success():
     user = await get_current_user_from_jwt(credentials)
     assert str(user.id) == user_id
     assert user.email == "test@example.com"
+
+@pytest.mark.asyncio
+async def test_get_current_user_from_jwt_no_creds():
+    with pytest.raises(HTTPException) as exc:
+        await get_current_user_from_jwt(None)
+    assert exc.value.status_code == 401
+
+@pytest.mark.asyncio
+async def test_get_current_user_from_jwt_invalid_payload():
+    token = jwt.encode(
+        {"email": "test@example.com", "aud": "authenticated"}, # Missing sub
+        "supersecretkey",
+        algorithm="HS256"
+    )
+    credentials = MagicMock()
+    credentials.credentials = token
+    with pytest.raises(HTTPException) as exc:
+        await get_current_user_from_jwt(credentials)
+    assert exc.value.status_code == 401
+    assert "Invalid token payload" in exc.value.detail
 
 @pytest.mark.asyncio
 async def test_get_current_user_success():
@@ -131,7 +162,7 @@ async def test_get_current_user_not_found():
     request = MagicMock(spec=Request)
 
     # Mock logger to avoid structlog issues
-    with patch("app.shared.core.auth.logger") as mock_logger:
+    with patch("app.shared.core.auth.logger"):
         with pytest.raises(HTTPException) as exc:
             await get_current_user(request, credentials, mock_db)
         
@@ -141,6 +172,41 @@ async def test_get_current_user_not_found():
              
         assert exc.value.status_code == 403
         assert "User not found" in exc.value.detail
+
+@pytest.mark.asyncio
+async def test_get_current_user_no_creds():
+    with pytest.raises(HTTPException) as exc:
+        await get_current_user(MagicMock(), None, AsyncMock())
+    assert exc.value.status_code == 401
+
+@pytest.mark.asyncio
+async def test_get_current_user_invalid_payload():
+    token = jwt.encode(
+        {"email": "test@example.com", "aud": "authenticated"}, # Missing sub
+        "supersecretkey",
+        algorithm="HS256"
+    )
+    credentials = MagicMock()
+    credentials.credentials = token
+    with pytest.raises(HTTPException) as exc:
+        await get_current_user(MagicMock(), credentials, AsyncMock())
+    assert exc.value.status_code == 401
+
+@pytest.mark.asyncio
+async def test_get_current_user_unexpected_error():
+    token = jwt.encode(
+        {"sub": str(uuid4()), "aud": "authenticated"},
+        "supersecretkey",
+        algorithm="HS256"
+    )
+    credentials = MagicMock()
+    credentials.credentials = token
+    mock_db = AsyncMock()
+    mock_db.execute.side_effect = Exception("DB Exploded")
+    
+    with pytest.raises(HTTPException) as exc:
+        await get_current_user(MagicMock(), credentials, mock_db)
+    assert exc.value.status_code == 500
 
 def test_requires_role_success():
     checker = requires_role("admin")

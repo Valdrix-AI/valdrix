@@ -41,7 +41,7 @@ async def test_create_remediation_request(mock_db, tenant_id, user_id):
     assert mock_db.commit.called
 
 @pytest.mark.asyncio
-async def test_approve_remediation(mock_db, tenant_id, user_id):
+async def test_approve_remediation(mock_db, tenant_id):
     service = RemediationService(mock_db)
     
     req = RemediationRequest(
@@ -236,7 +236,7 @@ async def test_generate_iac_plan_pro_tier(mock_db, tenant_id):
     )
     
     # Patch source for local imports
-    with patch("app.shared.core.pricing.get_tenant_tier") as mock_tier:
+    with patch("app.shared.core.pricing.get_tenant_tier"):
         with patch("app.shared.core.pricing.is_feature_enabled", return_value=True):
             plan = await service.generate_iac_plan(req, tenant_id)
             

@@ -1,7 +1,6 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 from uuid import uuid4, UUID
-from datetime import datetime
 from app.modules.governance.domain.security.audit_log import AuditLogger, AuditEventType, AuditLog
 
 @pytest.fixture

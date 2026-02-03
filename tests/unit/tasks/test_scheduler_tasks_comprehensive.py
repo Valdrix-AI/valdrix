@@ -1,16 +1,13 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.tasks.scheduler_tasks import (
     _cohort_analysis_logic,
-    run_cohort_analysis,
     _remediation_sweep_logic,
     _billing_sweep_logic,
     _maintenance_sweep_logic
 )
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.models.tenant import Tenant
-from app.models.background_job import BackgroundJob, JobStatus, JobType
-from datetime import datetime, timezone
 
 @pytest.fixture
 def mock_db():

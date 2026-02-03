@@ -10,7 +10,6 @@ Tests cover:
 
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from uuid import uuid4
 
 from app.modules.governance.domain.scheduler.orchestrator import SchedulerService
 

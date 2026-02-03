@@ -16,9 +16,17 @@ async def get_csrf_token(request: Request):
     """
     from fastapi_csrf_protect import CsrfProtect
     csrf = CsrfProtect()
-    token = csrf.generate_csrf(getattr(request.state, "request_id", "anonymous"))
+    from app.shared.core.config import get_settings
+    s = get_settings()
+    
+    # Manual configuration catch-all
+    if not hasattr(csrf, "_secret_key") or not csrf._secret_key:
+        csrf._secret_key = s.CSRF_SECRET_KEY
+        csrf._cookie_samesite = "lax"
+        
+    token, signed_token = csrf.generate_csrf_tokens()
     response = JSONResponse(content={"csrf_token": token})
-    csrf.set_csrf_cookie(token, response)
+    csrf.set_csrf_cookie(signed_token, response)
     return response
 
 @router.post("/assessment")

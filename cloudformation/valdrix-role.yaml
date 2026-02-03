@@ -43,23 +43,15 @@ Resources:
       
       # Inline policy: What this role can do
       Policies:
-        - PolicyName: ValdrixCostExplorerReadOnly
+        - PolicyName: ValdrixReadOnly
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Cost Explorer Read Access
-              - Sid: CostExplorerRead
-                Effect: Allow
-                Action:
-                  - ce:GetCostAndUsage
-                  - ce:GetCostForecast
-                  - ce:GetDimensionValues
-                  - ce:GetTags
-                  - ce:GetReservationCoverage
-                  - ce:GetReservationUtilization
-                  - ce:GetSavingsPlansUtilization
-                  - ce:GetSavingsPlansCoverage
-                Resource: '*'
+              # NOTE: Cost Explorer APIs (ce:*) have been REMOVED.
+              # They cost $0.01 per request and are billed to the customer.
+              # We now use CUR (Cost & Usage Reports) via S3 for cost data.
+              # See valdrix-cur-setup.yaml for the CUR automation template.
+
               
               # Read EC2 instances for zombie detection
               - Sid: EC2ReadOnly
@@ -100,8 +92,43 @@ Resources:
                 Action:
                   - sagemaker:ListEndpoints
                   - sagemaker:ListNotebookInstances
+                  - sagemaker:DescribeNotebookInstance
                   - sagemaker:ListModels
                 Resource: '*'
+
+              # EKS Cluster Detection (NEW)
+              - Sid: EKSReadOnly
+                Effect: Allow
+                Action:
+                  - eks:ListClusters
+                  - eks:DescribeCluster
+                  - eks:ListNodegroups
+                  - eks:DescribeNodegroup
+                Resource: '*'
+
+              # ElastiCache Detection (NEW)
+              - Sid: ElastiCacheReadOnly
+                Effect: Allow
+                Action:
+                  - elasticache:DescribeCacheClusters
+                  - elasticache:DescribeReplicationGroups
+                Resource: '*'
+
+              # Lambda Function Detection (NEW)
+              - Sid: LambdaReadOnly
+                Effect: Allow
+                Action:
+                  - lambda:ListFunctions
+                  - lambda:GetFunction
+                Resource: '*'
+
+              # VPC Endpoint Detection (NEW)
+              - Sid: VPCEndpointReadOnly
+                Effect: Allow
+                Action:
+                  - ec2:DescribeVpcEndpoints
+                Resource: '*'
+
 
               - Sid: ECRReadOnly
                 Effect: Allow

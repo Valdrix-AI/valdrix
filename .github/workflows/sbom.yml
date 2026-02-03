@@ -1,0 +1,103 @@
+name: SBOM Generation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Dockerfile'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: read
+  security-events: write
+
+jobs:
+  generate-sbom:
+    name: Generate Software Bill of Materials
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Python Dependencies SBOM
+      - name: Generate Python SBOM (CycloneDX)
+        uses: CycloneDX/gh-python-generate-sbom@v2
+        with:
+          input: ./pyproject.toml
+          output: ./sbom/valdrix-python-sbom.json
+          format: json
+      
+      # Container Image SBOM
+      - name: Build Docker Image
+        run: docker build -t valdrix/api:${{ github.sha }} .
+      
+      - name: Generate Container SBOM (Syft)
+        uses: anchore/sbom-action@v0
+        with:
+          image: valdrix/api:${{ github.sha }}
+          format: cyclonedx-json
+          output-file: ./sbom/valdrix-container-sbom.json
+      
+      # Vulnerability Scan
+      - name: Scan SBOM for Vulnerabilities (Grype)
+        uses: anchore/scan-action@v3
+        with:
+          sbom: ./sbom/valdrix-container-sbom.json
+          fail-build: true
+          severity-cutoff: high
+      
+      # Upload as Artifacts
+      - name: Upload SBOM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-reports
+          path: ./sbom/
+          retention-days: 90
+      
+      # Commit to repo (on release)
+      - name: Commit SBOM to Repository
+        if: github.event_name == 'release'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sbom/
+          git commit -m "chore: update SBOM for release ${{ github.ref_name }}"
+          git push
+      
+      # Upload to GitHub Security
+      - name: Upload to GitHub Dependency Graph
+        uses: advanced-security/sbom-generator-action@v1
+        with:
+          sbom-path: ./sbom/valdrix-python-sbom.json
+
+  compliance-report:
+    name: Generate Compliance Report
+    needs: generate-sbom
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download SBOM
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom-reports
+          path: ./sbom
+      
+      - name: Generate License Report
+        run: |
+          echo "# License Compliance Report" > compliance-report.md
+          echo "Generated: $(date -u)" >> compliance-report.md
+          echo "" >> compliance-report.md
+          jq -r '.components[] | "- \(.name)@\(.version): \(.licenses[0].license.id // "Unknown")"' \
+            ./sbom/valdrix-python-sbom.json >> compliance-report.md || true
+      
+      - name: Upload Compliance Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-report
+          path: compliance-report.md

@@ -83,7 +83,7 @@ class ZombieAnalyzer:
         self.llm = llm
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", ZOMBIE_ANALYSIS_PROMPT),
-            ("user", "Analyze these detected zombie resources:\n{zombie_data}")
+            ("user", "Analyze these detected zombie resources:\n\n[BEGIN DATA]\n{zombie_data}\n[END DATA]")
         ])
 
     def _strip_markdown(self, text: str) -> str:
@@ -120,22 +120,8 @@ class ZombieAnalyzer:
         provider: Optional[str] = None,
         model: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Analyze detected zombie resources with LLM.
-
-        Args:
-            detection_results: Raw output from ZombieDetector.scan_all()
-            tenant_id: For usage tracking and BYOK
-            db: Database session for budget/usage queries
-            provider: Override LLM provider
-            model: Override LLM model
-
-        Returns:
-            Dict with AI-generated analysis and explanations
-        """
-        # Flatten zombies for analysis
+        """Analyze detected zombie resources with LLM."""
         zombies = self._flatten_zombies(detection_results)
-
         if not zombies:
             return {
                 "summary": "No zombie resources detected.",
@@ -146,81 +132,30 @@ class ZombieAnalyzer:
 
         logger.info("zombie_analysis_starting", zombie_count=len(zombies))
 
-        # Determine provider and model
-        effective_provider = provider
-        effective_model = model
+        # 1. Resolve LLM Configuration
+        effective_provider, effective_model, byok_key = await self._get_effective_llm_config(
+            db, tenant_id, provider, model
+        )
 
-        if tenant_id and db and (not effective_provider or not effective_model):
-            from app.models.llm import LLMBudget
-            result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id))
-            budget = result.scalar_one_or_none()
-            if budget:
-                effective_provider = effective_provider or budget.preferred_provider
-                effective_model = effective_model or budget.preferred_model
-
-        # Fallbacks
-        effective_provider = effective_provider or get_settings().LLM_PROVIDER
-        effective_model = effective_model or "llama-3.3-70b-versatile"
-
-        # Check for BYOK (Bring Your Own Key)
-        byok_key = None
-        if tenant_id and db:
-            from app.models.llm import LLMBudget
-            result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id))
-            budget = result.scalar_one_or_none()
-            if budget:
-                if effective_provider == "openai":
-                    byok_key = budget.openai_api_key
-                elif effective_provider in ["claude", "anthropic"]:
-                    byok_key = budget.claude_api_key
-                elif effective_provider == "google":
-                    byok_key = budget.google_api_key
-                elif effective_provider == "groq":
-                    byok_key = budget.groq_api_key
-
-        # Build LLM with potential BYOK
+        # 2. Build/Get LLM Instance
         current_llm = self.llm
         if effective_provider != get_settings().LLM_PROVIDER or byok_key:
             from app.shared.llm.factory import LLMFactory
             current_llm = LLMFactory.create(effective_provider, api_key=byok_key)
 
-        # Sanitize zombie data to prevent prompt injection via resource tags/names
+        # 3. Sanitize and Format
         sanitized_zombies = await LLMGuardrails.sanitize_input(zombies)
-        
-        # Format zombie data for prompt
         formatted_data = json.dumps(sanitized_zombies, default=str, indent=2)
 
-        # Invoke LLM
+        # 4. Invoke LLM
         chain = self.prompt | current_llm
         response = await chain.ainvoke({"zombie_data": formatted_data})
 
-        # Track LLM usage
+        # 5. Track Usage
         if tenant_id and db:
-            try:
-                usage_metadata = response.response_metadata.get("token_usage", {})
-                input_tokens = usage_metadata.get("prompt_tokens", 0)
-                output_tokens = usage_metadata.get("completion_tokens", 0)
+            await self._record_usage(db, tenant_id, effective_provider, effective_model, response, byok_key is not None)
 
-                tracker = UsageTracker(db)
-                await tracker.record(
-                    tenant_id=tenant_id,
-                    provider=effective_provider,
-                    model=effective_model,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    is_byok=byok_key is not None,
-                    request_type="zombie_analysis",
-                )
-                logger.info("zombie_analysis_usage_tracked",
-                           input_tokens=input_tokens,
-                           output_tokens=output_tokens)
-            except Exception as e:
-                logger.warning("zombie_usage_tracking_failed", 
-                               tenant_id=str(tenant_id),
-                               error=str(e),
-                               exc_info=True)
-
-        # Parse and validate response
+        # 6. Parse and Validate
         try:
             validated_result = LLMGuardrails.validate_output(response.content, ZombieAnalysisResult)
             analysis = validated_result.model_dump()
@@ -236,3 +171,73 @@ class ZombieAnalyzer:
                 "raw_response": response.content,
                 "parse_error": str(e)
             }
+
+    async def _get_effective_llm_config(
+        self,
+        db: Optional[AsyncSession],
+        tenant_id: Optional[UUID],
+        provider: Optional[str],
+        model: Optional[str]
+    ) -> tuple[str, str, Optional[str]]:
+        """Resolves the best provider, model, and optional BYOK key."""
+        effective_provider = provider
+        effective_model = model
+        byok_key = None
+
+        if tenant_id and db:
+            from app.models.llm import LLMBudget
+            result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id).limit(1))
+            budget = result.scalar_one_or_none()
+            if budget:
+                effective_provider = effective_provider or budget.preferred_provider
+                effective_model = effective_model or budget.preferred_model
+                
+                # Extract BYOK key if applicable
+                prov = effective_provider or get_settings().LLM_PROVIDER
+                if prov == "openai":
+                    byok_key = budget.openai_api_key
+                elif prov in ["claude", "anthropic"]:
+                    byok_key = budget.claude_api_key
+                elif prov == "google":
+                    byok_key = budget.google_api_key
+                elif prov == "groq":
+                    byok_key = budget.groq_api_key
+
+        effective_provider = effective_provider or get_settings().LLM_PROVIDER
+        effective_model = effective_model or "llama-3.3-70b-versatile"
+        
+        return effective_provider, effective_model, byok_key
+
+    async def _record_usage(
+        self,
+        db: AsyncSession,
+        tenant_id: UUID,
+        provider: str,
+        model: str,
+        response: Any,
+        is_byok: bool
+    ) -> None:
+        """Records LLM usage metrics."""
+        try:
+            usage_metadata = response.response_metadata.get("token_usage", {})
+            input_tokens = usage_metadata.get("prompt_tokens", 0)
+            output_tokens = usage_metadata.get("completion_tokens", 0)
+
+            tracker = UsageTracker(db)
+            await tracker.record(
+                tenant_id=tenant_id,
+                provider=provider,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                is_byok=is_byok,
+                request_type="zombie_analysis",
+            )
+            logger.info("zombie_analysis_usage_tracked",
+                       input_tokens=input_tokens,
+                       output_tokens=output_tokens)
+        except Exception as e:
+            logger.warning("zombie_usage_tracking_failed", 
+                           tenant_id=str(tenant_id),
+                           error=str(e))
+

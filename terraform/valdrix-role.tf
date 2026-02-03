@@ -25,7 +25,7 @@ variable "external_id" {
 variable "valdrix_account_id" {
   description = "Valdrix's AWS Account ID (provided by Valdrix)"
   type        = string
-  default     = "YOUR_VALDRIX_ACCOUNT_ID"  # Replace with actual account ID
+  # No default - must be provided explicitly for security
 }
 
 # IAM Role for Valdrix

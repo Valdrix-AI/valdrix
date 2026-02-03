@@ -1,4 +1,3 @@
-import pytest
 from app.shared.llm.pricing_data import ProviderCost, LLM_PRICING, PROVIDER_COSTS
 
 class TestProviderCost:

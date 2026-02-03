@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, List, Any
-from app.shared.db.session import get_db
+from typing import Dict, Any
 from app.shared.core.auth import get_current_user
 from app.models.tenant import User
-from app.shared.core.currency import get_exchange_rate, _RATES_CACHE
+from app.shared.core.currency import get_exchange_rate
 from app.shared.core.config import get_settings
 
 router = APIRouter(tags=["Currency"])

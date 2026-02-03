@@ -5,11 +5,11 @@ Provides API rate limiting using slowapi (built on limits library).
 Configurable via environment variables.
 """
 
-from typing import Optional, Any, Callable, Awaitable, Dict, Union
+from typing import Optional, Any, Callable, Awaitable
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 import structlog
 from redis.asyncio import Redis, from_url
 

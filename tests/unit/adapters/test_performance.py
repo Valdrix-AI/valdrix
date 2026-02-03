@@ -1,7 +1,6 @@
 import pytest
 import time
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 from datetime import datetime, timezone
 from app.shared.adapters.aws import AWSAdapter
 

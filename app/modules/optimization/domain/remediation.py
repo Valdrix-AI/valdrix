@@ -11,7 +11,7 @@ Manages the remediation approval workflow:
 from datetime import datetime, timezone
 from uuid import UUID
 from decimal import Decimal
-from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING
+from typing import List, Dict, Any, Optional
 import aioboto3
 from botocore.exceptions import ClientError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +52,6 @@ class RemediationService:
 
     async def _get_client(self, service_name: str) -> Any:
         """Helper to get aioboto3 client with optional credentials and endpoint override."""
-        from app.shared.core.config import get_settings
         settings = get_settings()
         
         kwargs = {"region_name": self.region}

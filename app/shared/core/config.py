@@ -161,6 +161,11 @@ class Settings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM: str = "alerts@valdrix.ai"
+    
+    # GreenOps & Carbon APIs
+    WATT_TIME_API_KEY: Optional[str] = None
+    ELECTRICITY_MAPS_API_KEY: Optional[str] = None
+
 
     # Encryption & Secret Rotation
     ENCRYPTION_KEY: Optional[str] = None

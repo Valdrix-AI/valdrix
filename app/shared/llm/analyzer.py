@@ -201,8 +201,10 @@ class FinOpsAnalyzer:
                         tenant_id=tenant_id,
                         db=effective_db,
                         model=final_model,
+                        provider=effective_provider,
                         prompt_tokens=token_usage.get("prompt_tokens", 500),
                         completion_tokens=token_usage.get("completion_tokens", 500),
+                        is_byok=bool(byok_key),
                         operation_id=operation_id
                     )
                 except Exception as e:

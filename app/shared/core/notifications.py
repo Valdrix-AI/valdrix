@@ -6,7 +6,7 @@ This allows adding new channels (Teams, Discord, Email) without modifying domain
 """
 
 import structlog
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from app.modules.notifications.domain.slack import get_slack_service
 
 logger = structlog.get_logger()

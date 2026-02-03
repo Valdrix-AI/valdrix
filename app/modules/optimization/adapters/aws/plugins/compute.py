@@ -17,7 +17,8 @@ class UnusedElasticIpsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "unused_elastic_ips"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None) -> List[Dict[str, Any]]:
+
         zombies = []
         try:
             async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
@@ -77,7 +78,7 @@ class IdleInstancesPlugin(ZombiePlugin):
             logger.warning("cloudtrail_lookup_failed", instance_id=instance_id, error=str(e))
         return "Unknown"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
         instances = []
         cpu_threshold = 2.0  # Tightened from 5% (BE-ZD-3)
@@ -87,33 +88,81 @@ class IdleInstancesPlugin(ZombiePlugin):
         gpu_families = ["p3", "p4", "g4", "g5", "p5", "trn1", "dl1"]
 
         try:
-            async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
-                paginator = ec2.get_paginator("describe_instances")
-                async for page in paginator.paginate(
-                    Filters=[{"Name": "instance-state-name", "Values": ["running"]}]
-                ):
-                    for reservation in page.get("Reservations", []):
-                        for instance in reservation.get("Instances", []):
-                            # BE-ZD-3: Skip instances with "batch", "scheduled", or "cron" in tags
-                            tags = {t['Key'].lower(): t['Value'].lower() for t in instance.get("Tags", [])}
-                            if any(k in ["workload", "type"] and any(v in tags[k] for v in ["batch", "scheduled", "cron"]) for k in tags):
-                                continue
-                            if any("batch" in k or "batch" in tags[k] for k in tags):
-                                continue
+            # Phase 1: Use pre-fetched inventory if available (Hybrid Model)
+            if inventory and inventory.resources:
+                logger.info("idle_instance_scan_using_inventory", count=len(inventory.resources))
+                for res in inventory.resources:
+                    if res.resource_type == "EC2 Instance" or res.resource_type == "instance" or "instance" in res.arn:
+                        # Note: inventory only contains basic info, we still need 
+                        # LaunchTime and Tags for idle detection logic
+                        # But we can at least limit our describe_instances to these IDs 
+                        # OR if inventory is rich enough, skip it.
+                        # For now, we'll use IDs to target the describe call.
+                        instances.append({"id": res.id})
+                
+                # If we found instances in inventory, we fetch their full details in one batch
+                if instances:
+                    instance_ids = [inst["id"] for inst in instances]
+                    async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
+                        # Batch by 50 to avoid URI length issues
+                        for i in range(0, len(instance_ids), 50):
+                            batch_ids = instance_ids[i:i+50]
+                            response = await ec2.describe_instances(InstanceIds=batch_ids)
+                            for reservation in response.get("Reservations", []):
+                                for instance in reservation.get("Instances", []):
+                                    if instance["State"]["Name"] == "running":
+                                        tags = {t['Key'].lower(): t['Value'].lower() for t in instance.get("Tags", [])}
+                                        instance_type = instance.get("InstanceType", "unknown")
+                                        instances.append({
+                                            "id": instance["InstanceId"],
+                                            "type": instance_type,
+                                            "is_gpu": any(fam in instance_type for fam in gpu_families),
+                                            "launch_time": instance.get("LaunchTime"),
+                                            "tags": tags
+                                        })
+            else:
+                # Fallback to standard broad scan
+                async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
+                    paginator = ec2.get_paginator("describe_instances")
+                    async for page in paginator.paginate(
+                        Filters=[{"Name": "instance-state-name", "Values": ["running"]}]
+                    ):
+                        for reservation in page.get("Reservations", []):
+                            for instance in reservation.get("Instances", []):
+                                # BE-ZD-3: Skip instances with "batch", "scheduled", or "cron" in tags
+                                tags = {t['Key'].lower(): t['Value'].lower() for t in instance.get("Tags", [])}
+                                if any(k in ["workload", "type"] and any(v in tags[k] for v in ["batch", "scheduled", "cron"]) for k in tags):
+                                    continue
+                                if any("batch" in k or "batch" in tags[k] for k in tags):
+                                    continue
 
-                            instance_type = instance.get("InstanceType", "unknown")
-                            is_gpu = any(fam in instance_type for fam in gpu_families)
+                                instance_type = instance.get("InstanceType", "unknown")
+                                is_gpu = any(fam in instance_type for fam in gpu_families)
 
-                            instances.append({
-                                "id": instance["InstanceId"],
-                                "type": instance_type,
-                                "is_gpu": is_gpu,
-                                "launch_time": instance.get("LaunchTime"),
-                                "tags": tags
-                            })
+                                instances.append({
+                                    "id": instance["InstanceId"],
+                                    "type": instance_type,
+                                    "is_gpu": is_gpu,
+                                    "launch_time": instance.get("LaunchTime"),
+                                    "tags": tags
+                                })
 
             if not instances:
                 return []
+
+            # Phase 3: CUR-Based Idle Detection (Zero API Cost)
+            # If CUR records are available, use them instead of CloudWatch
+            cur_records = kwargs.get("cur_records")
+            if cur_records:
+                from app.shared.analysis.cur_usage_analyzer import CURUsageAnalyzer
+                analyzer = CURUsageAnalyzer(cur_records)
+                cur_zombies = analyzer.find_low_usage_instances(days=days)
+                logger.info("idle_instance_detection_via_cur", count=len(cur_zombies))
+                return cur_zombies
+
+            # Fallback: CloudWatch-Based Detection (API Cost to Customer)
+            logger.warning("idle_instance_detection_cloudwatch_fallback", 
+                           reason="CUR data not available, using CloudWatch")
 
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(days=days)

@@ -1,3 +1,4 @@
+from enum import Enum
 from uuid import UUID
 
 # System-level ID for automated actions (Audit & Remediation)
@@ -14,7 +15,6 @@ AWS_SUPPORTED_REGIONS = [
     "us-gov-west-1"
 ]
 
-from enum import Enum
 
 class LLMProvider(str, Enum):
     """Supported LLM Providers."""
@@ -24,3 +24,15 @@ class LLMProvider(str, Enum):
     CLAUDE = "anthropic" # Alias for backward compatibility in config
     GOOGLE = "google"
     AZURE = "azure"
+
+# Tables exempt from RLS enforcement (System/Global data)
+RLS_EXEMPT_TABLES = [
+    "ix_skipped_table",
+    "alembic",
+    "users",
+    "tenants",
+    "tenant_subscriptions",
+    "pricing_plans",
+    "exchange_rates"
+]
+

@@ -5,7 +5,7 @@ import asyncio
 import structlog
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any
 
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.processors import AnalysisProcessor
@@ -87,7 +87,7 @@ class SchedulerOrchestrator:
             stmt = sa.select(BackgroundJob).where(
                 BackgroundJob.status == JobStatus.PENDING,
                 BackgroundJob.created_at < cutoff,
-                BackgroundJob.is_deleted == False
+                sa.not_(BackgroundJob.is_deleted)
             )
             result = await db.execute(stmt)
             stuck_jobs = result.scalars().all()

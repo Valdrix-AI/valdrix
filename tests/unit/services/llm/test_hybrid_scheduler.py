@@ -1,8 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import date, datetime, timezone
+from datetime import date
 from uuid import uuid4
-from decimal import Decimal
 from app.shared.llm.hybrid_scheduler import HybridAnalysisScheduler, run_hybrid_analysis
 
 @pytest.fixture
@@ -21,7 +20,7 @@ def scheduler(mock_db, mock_cache):
         # Patch the original locations for in-function imports
         with patch("app.shared.llm.factory.LLMFactory") as mock_factory:
             with patch("app.shared.core.config.get_settings") as mock_settings:
-                with patch("app.shared.llm.hybrid_scheduler.FinOpsAnalyzer") as mock_analyzer:
+                with patch("app.shared.llm.hybrid_scheduler.FinOpsAnalyzer"):
                     mock_factory.create.return_value = MagicMock()
                     mock_settings.return_value.LLM_PROVIDER = "groq"
                     return HybridAnalysisScheduler(mock_db)
@@ -99,7 +98,7 @@ async def test_run_analysis_delta_path(scheduler, mock_cache):
             assert "context_from" in result
 
 @pytest.mark.asyncio
-async def test_run_full_analysis_logic(scheduler, mock_db):
+async def test_run_full_analysis_logic(scheduler):
     """Test internal _run_full_analysis logic."""
     tenant_id = uuid4()
     costs = [{"service": "EC2", "cost": 10}]
@@ -133,7 +132,7 @@ async def test_run_delta_analysis_insignificant(scheduler):
         assert result["has_significant_changes"] is False
 
 @pytest.mark.asyncio
-async def test_run_delta_analysis_significant(scheduler, mock_db):
+async def test_run_delta_analysis_significant(scheduler):
     """Test delta analysis when changes are significant."""
     tenant_id = uuid4()
     costs = [{"service": "EC2", "cost": 20}]
@@ -169,7 +168,7 @@ def test_merge_with_full(scheduler):
     assert merged["context_from"]["full_analysis_date"] == "2024-01-01"
 
 @pytest.mark.asyncio
-async def test_run_full_analysis_json_error(scheduler, mock_db):
+async def test_run_full_analysis_json_error(scheduler):
     """Test _run_full_analysis handles JSON decode error."""
     tenant_id = uuid4()
     

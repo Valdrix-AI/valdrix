@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from datetime import datetime, timezone
 from app.shared.adapters.gcp import GCPAdapter
 from app.shared.core.exceptions import AdapterError

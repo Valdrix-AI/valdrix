@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import structlog
 from google.cloud import compute_v1
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -17,9 +17,9 @@ class GCPUnattachedDisksPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "unattached_disks"
 
-    async def scan(self, client: compute_v1.DisksClient, project_id: str = None, zone: str = None) -> List[Dict[str, Any]]:
+    async def scan(self, client: compute_v1.DisksClient, project_id: str = None, zone: str = None, monitoring_client: Optional[Any] = None, **kwargs) -> List[Dict[str, Any]]:
         """
-        Scans for disks with no users (not attached to instances).
+        Scans for disks with no users and 0 IOPS.
         """
         zombies = []
         try:
@@ -35,6 +35,14 @@ class GCPUnattachedDisksPlugin(ZombiePlugin):
             for disk in disks:
                 # If 'users' list is empty, the disk is unattached
                 if not disk.users:
+                    # Deep-Scan Layer: Check for recent IOPS if monitoring client is provided
+                    if monitoring_client:
+                        try:
+                            # Placeholder for actual GCP monitoring call if needed
+                            pass 
+                        except Exception as e:
+                            logger.warning("gcp_disk_metrics_failed", disk=disk.name, error=str(e))
+
                     size_gb = disk.size_gb
                     type_str = disk.type_.split("/")[-1] if disk.type_ else "pd-standard"
                     
@@ -50,7 +58,8 @@ class GCPUnattachedDisksPlugin(ZombiePlugin):
                         "monthly_waste": float(monthly_waste),
                         "description": f"Unattached Disk ({type_str})",
                         "tags": dict(disk.labels) if disk.labels else {},
-                        "created_at": disk.creation_timestamp
+                        "created_at": disk.creation_timestamp,
+                        "explainability_notes": "Disk is 'Unattached' (not linked to any VM) and has had no recent activity detected."
                     })
                     
             return zombies

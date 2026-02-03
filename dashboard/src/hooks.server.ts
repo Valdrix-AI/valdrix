@@ -63,7 +63,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!session) {
 			return new Response(null, {
 				status: 303,
-				headers: { Location: '/login' }
+				headers: { Location: '/auth/login' }
 			});
 		}
 	}
@@ -75,3 +75,24 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	});
 };
+
+/**
+ * Global Error Handler - Catches unhandled errors during request processing
+ */
+export const handleError: import('@sveltejs/kit').HandleServerError = ({ error, event }) => {
+	const errorId = crypto.randomUUID();
+	
+	console.error('Unhandled server error:', {
+		errorId,
+		error: error instanceof Error ? error.message : error,
+		stack: error instanceof Error ? error.stack : undefined,
+		url: event.url.toString()
+	});
+
+	return {
+		message: 'A premium error occurred. Our engineering team has been notified.',
+		errorId,
+		code: 'INTERNAL_SERVER_ERROR'
+	};
+};
+

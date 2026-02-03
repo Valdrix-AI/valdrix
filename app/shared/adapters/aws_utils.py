@@ -1,5 +1,5 @@
 import aioboto3
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 from botocore.config import Config as BotoConfig
 from app.models.aws_connection import AWSConnection
 

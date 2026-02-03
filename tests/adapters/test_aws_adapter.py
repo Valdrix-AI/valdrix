@@ -4,6 +4,15 @@ from datetime import date
 from app.shared.adapters.aws import AWSAdapter
 from botocore.exceptions import ClientError
 
+def create_mock_connection():
+    """Create a mock AWSConnection for testing."""
+    mock_conn = MagicMock()
+    mock_conn.role_arn = "arn:aws:iam::123456789012:role/TestRole"
+    mock_conn.external_id = "test-external-id"
+    mock_conn.region = "us-east-1"
+    mock_conn.is_cur_enabled = False
+    return mock_conn
+
 @pytest.mark.asyncio
 async def test_get_daily_costs_success():
   # 1. Arrange (Setup the Mock)
@@ -34,7 +43,8 @@ async def test_get_daily_costs_success():
     mock_session = mock_session_cls.return_value
     mock_session.client.return_value = mock_cm
 
-    adapter = AWSAdapter()
+    mock_conn = create_mock_connection()
+    adapter = AWSAdapter(connection=mock_conn)
     
     # 2. Act (Run the code)
     result = await adapter.get_daily_costs(date(2026, 1, 1), date(2026, 1, 2))
@@ -62,10 +72,12 @@ async def test_get_daily_costs_failure():
         mock_session = mock_session_cls.return_value
         mock_session.client.return_value = mock_cm
 
-        adapter = AWSAdapter()
+        mock_conn = create_mock_connection()
+        adapter = AWSAdapter(connection=mock_conn)
         
         with pytest.raises(AdapterError) as excinfo:
             await adapter.get_daily_costs(date(2026, 1, 1), date(2026, 1, 2))
             
         assert "AWS Cost Explorer fetch failed" in str(excinfo.value)
         assert excinfo.value.code == "AccessDenied"
+

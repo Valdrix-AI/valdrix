@@ -2,7 +2,6 @@ import pytest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
-from app.modules.governance.domain.scheduler.orchestrator import SchedulerService
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.models.tenant import Tenant
 
@@ -48,7 +47,8 @@ async def test_scheduler_concurrency_lock():
             call_count += 1
             # First SELECT from any task returns tenant, second returns empty
             if "TENANT" in str(stmt).upper():
-                if call_count == 1: return mock_result_full
+                if call_count == 1:
+                    return mock_result_full
                 return mock_result_empty
             return MagicMock(rowcount=1)
         

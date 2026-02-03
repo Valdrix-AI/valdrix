@@ -3,9 +3,8 @@ from uuid import uuid4
 from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi import HTTPException
 from app.modules.governance.api.v1.settings.onboard import onboard, OnboardRequest
-from app.models.tenant import UserRole, User
+from app.models.tenant import User
 from app.shared.core.auth import CurrentUser
-from app.shared.core.pricing import PricingTier
 
 @pytest.fixture
 def mock_db():
@@ -45,7 +44,7 @@ async def test_onboard_success(mock_db, current_user):
     from fastapi import Request
     request_obj = Request(scope=scope)
     
-    with patch("app.modules.governance.api.v1.settings.onboard.audit_log") as mock_audit:
+    with patch("app.modules.governance.api.v1.settings.onboard.audit_log"):
         with patch("app.shared.core.rate_limit.get_limiter") as mock_limiter:
             mock_limiter.return_value.limit.return_value = lambda x: x
             

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import date, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from app.shared.db.session import get_db
 from app.shared.core.auth import get_current_user
 from app.modules.reporting.domain.aggregator import CostAggregator

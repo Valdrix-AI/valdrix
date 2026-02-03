@@ -1,5 +1,5 @@
 import jwt
-from typing import Optional, Any, Callable
+from typing import Optional, Callable
 from uuid import UUID
 from fastapi import HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials

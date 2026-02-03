@@ -1,16 +1,17 @@
 import pytest
-import json
-from unittest.mock import MagicMock, patch, AsyncMock
-from uuid import uuid4
-import sys
-
-# Mocks MUST be set up before importing the module under test
-sys.modules["pandas"] = MagicMock()
-sys.modules["numpy"] = MagicMock()
-sys.modules["prophet"] = MagicMock()
-
+from unittest.mock import MagicMock, patch
 from app.shared.llm.factory import LLMFactory, AnalysisComplexity
-from langchain_core.language_models.chat_models import BaseChatModel
+
+# Patch modules before they are used (if needed by underlying imports)
+# However, usually patch.dict(sys.modules) is safer or putting them in a fixture works better 
+# but if the import itself requires them, we must patch BEFORE import.
+# But 'from app.shared.llm.factory' is the top level import.
+# Let's try to mock them via sys.modules but after the import statement
+# if the import statement doesn't trigger the usage.
+# If `app.shared.llm.factory` imports pandas at top level, we might have issues.
+# Let's assume we can move the mock setup to a fixture or try `patch.dict`.
+
+# Re-structuring to standards compliant:
 
 @pytest.fixture
 def mock_settings():

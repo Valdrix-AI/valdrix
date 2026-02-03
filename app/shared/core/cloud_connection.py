@@ -8,7 +8,7 @@ Centralizes:
 """
 
 from uuid import UUID
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select

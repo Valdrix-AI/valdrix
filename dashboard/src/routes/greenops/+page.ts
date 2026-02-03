@@ -25,18 +25,21 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 	};
 
 	try {
-		const [carbonRes, gravitonRes, budgetRes] = await Promise.all([
+		const [carbonRes, gravitonRes, budgetRes, intensityRes] = await Promise.all([
 			fetch(
 				`${PUBLIC_API_URL}/carbon?start_date=${startDate}&end_date=${endDate}&region=${selectedRegion}`,
 				{ headers }
 			),
 			fetch(`${PUBLIC_API_URL}/graviton?region=${selectedRegion}`, { headers }),
-			fetch(`${PUBLIC_API_URL}/carbon/budget?region=${selectedRegion}`, { headers })
+			fetch(`${PUBLIC_API_URL}/carbon/budget?region=${selectedRegion}`, { headers }),
+			fetch(`${PUBLIC_API_URL}/carbon/intensity?region=${selectedRegion}&hours=24`, { headers })
 		]);
 
 		const carbonData = carbonRes.ok ? await carbonRes.json() : null;
 		const gravitonData = gravitonRes.ok ? await gravitonRes.json() : null;
 		const budgetData = budgetRes.ok ? await budgetRes.json() : null;
+		const intensityData = intensityRes.ok ? await intensityRes.json() : null;
+
 
 		let error = '';
 		if (!carbonRes.ok && carbonRes.status === 401) {
@@ -50,6 +53,7 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 			carbonData,
 			gravitonData,
 			budgetData,
+			intensityData,
 			error
 		};
 	} catch {
