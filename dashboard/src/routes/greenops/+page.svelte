@@ -13,15 +13,33 @@
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { api } from '$lib/api';
+	import { PUBLIC_API_URL } from '$env/static/public';
 
 	let { data } = $props();
 
 	let carbonData = $derived(data.carbonData);
 	let gravitonData = $derived(data.gravitonData);
 	let budgetData = $derived(data.budgetData);
+	let intensityData = $derived(data.intensityData);
 	let selectedRegion = $derived(data.selectedRegion);
 	let error = $derived(data.error || '');
 	let loading = $derived(false);
+	let workloadDuration = $state(1);
+	let scheduleResult = $state<{ optimal_start_time: string | null; recommendation: string } | null>(
+		null
+	);
+
+	async function getOptimalSchedule() {
+		const res = await api.get(
+			`${PUBLIC_API_URL}/carbon/schedule?region=${selectedRegion}&duration_hours=${workloadDuration}`
+		);
+		if (res.ok) {
+			scheduleResult = await res.json();
+		}
+	}
+
+
 
 	function handleRegionChange(e: Event) {
 		const target = e.target as HTMLSelectElement;
@@ -377,6 +395,99 @@
 				{/if}
 			</div>
 		{/if}
+
+		<!-- NEW: Carbon-Aware Scheduling -->
+		<div class="glass-panel mt-6">
+			<div class="flex items-center justify-between mb-6">
+				<div>
+					<h3 class="text-xl font-bold text-white flex items-center gap-2">
+						🕒 Carbon-Aware Scheduling
+					</h3>
+					<p class="text-ink-400 text-sm">
+						Optimize non-urgent workloads for low-carbon windows
+					</p>
+				</div>
+				<div class="flex items-center gap-2 text-xs">
+					{#if intensityData?.source === 'simulation'}
+						<span class="px-2 py-0.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-full">
+							Simulated Curves (No API Key)
+						</span>
+					{:else}
+						<span class="px-2 py-0.5 bg-green-500/10 text-green-500 border border-green-500/20 rounded-full">
+							Live Grid Data
+						</span>
+					{/if}
+				</div>
+			</div>
+
+			<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+				<!-- Intensity Forecast Curve (Simplified visualization) -->
+				<div class="lg:col-span-2">
+					<h4 class="text-white text-sm font-semibold mb-4 uppercase tracking-wider">
+						24h Intensity Forecast (gCO₂/kWh)
+					</h4>
+					<div class="flex items-end gap-1 h-32 w-full pt-4">
+						{#if intensityData?.forecast}
+							{#each intensityData.forecast as hour}
+								<div class="group relative flex-1 flex flex-col items-center justify-end h-full">
+									<div 
+										class="w-full rounded-t-sm transition-all hover:opacity-100 opacity-70"
+										class:bg-green-500={hour.level === 'very_low' || hour.level === 'low'}
+										class:bg-yellow-500={hour.level === 'medium'}
+										class:bg-red-500={hour.level === 'high' || hour.level === 'very_high'}
+										style="height: {(hour.intensity_gco2_kwh / 800) * 100}%"
+									></div>
+									<div class="absolute bottom-full mb-2 hidden group-hover:block bg-ink-900 border border-ink-700 p-2 rounded text-[10px] z-50 whitespace-nowrap">
+										{hour.hour_utc}:00 UTC <br/>
+										<span class="font-bold">{hour.intensity_gco2_kwh} g/kWh</span>
+									</div>
+								</div>
+							{/each}
+						{/if}
+					</div>
+					<div class="flex justify-between mt-2 text-[10px] text-ink-500 px-1">
+						<span>NOW</span>
+						<span>+12h</span>
+						<span>+24h</span>
+					</div>
+				</div>
+
+				<!-- Scheduling Tool -->
+				<div class="bg-ink-900/50 p-6 rounded-xl border border-ink-800">
+					<h4 class="text-white text-sm font-semibold mb-4 uppercase tracking-wider">
+						Optimal Scheduler
+					</h4>
+					<div class="space-y-4">
+						<div>
+							<label for="duration" class="block text-xs text-ink-400 mb-2">Workload Duration (Hours)</label>
+							<input 
+								type="range" 
+								id="duration"
+								min="1" 
+								max="24" 
+								bind:value={workloadDuration} 
+								class="w-full h-1.5 bg-ink-800 rounded-lg appearance-none cursor-pointer accent-accent-500"
+							/>
+							<div class="text-right text-xs font-mono text-ink-300 mt-1">{workloadDuration}h</div>
+						</div>
+
+						<button 
+							onclick={getOptimalSchedule}
+							class="w-full py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-semibold transition-colors shadow-lg shadow-accent-600/20"
+						>
+							Find Optimal Window
+						</button>
+
+						{#if scheduleResult}
+							<div class="mt-4 p-4 bg-accent-950/30 border border-accent-500/20 rounded-lg animate-in fade-in slide-in-from-bottom-2">
+								<div class="text-[10px] uppercase font-bold text-accent-400 mb-1">Recommendation</div>
+								<div class="text-sm text-white font-medium">{scheduleResult.recommendation}</div>
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</div>
 	{/if}
 </div>
 

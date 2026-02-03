@@ -1,14 +1,21 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from datetime import datetime, timezone
 from decimal import Decimal
 from botocore.exceptions import ClientError
 from app.shared.adapters.aws import AWSAdapter
 from app.shared.core.exceptions import AdapterError
+from app.models.aws_connection import AWSConnection
 
 @pytest.fixture
 def aws_adapter():
-    return AWSAdapter()
+    mock_connection = AsyncMock(spec=AWSConnection)
+    mock_connection.tenant_id = "test-tenant"
+    mock_connection.aws_account_id = "123456789012"
+    mock_connection.role_arn = "arn:aws:iam::123456789012:role/test"
+    mock_connection.external_id = "test-external-id"
+    mock_connection.region = "us-east-1"
+    return AWSAdapter(connection=mock_connection)
 
 @pytest.mark.asyncio
 async def test_aws_adapter_verify_connection(aws_adapter):

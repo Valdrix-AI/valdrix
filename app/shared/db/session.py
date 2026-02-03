@@ -198,20 +198,16 @@ def check_rls_policy(conn, _cursor, statement, parameters, _context, _executeman
         return statement, parameters
         
     # Skip internal/system queries or migrations
+    from app.shared.core.constants import RLS_EXEMPT_TABLES
     stmt_lower = statement.lower()
-    if (
-        "ix_skipped_table" in stmt_lower or 
-        "alembic" in stmt_lower or
-        "select 1" in stmt_lower or
-        "select version()" in stmt_lower or
-        "select pg_is_in_recovery()" in stmt_lower or
-        "from users" in stmt_lower or
-        "from tenants" in stmt_lower or
-        "from tenant_subscriptions" in stmt_lower or
-        "from pricing_plans" in stmt_lower or
-        "from exchange_rates" in stmt_lower
-    ):
+    
+    if "select 1" in stmt_lower or "select version()" in stmt_lower or "select pg_is_in_recovery()" in stmt_lower:
         return statement, parameters
+
+    for table in RLS_EXEMPT_TABLES:
+        if f"from {table}" in stmt_lower or f"into {table}" in stmt_lower or f"update {table}" in stmt_lower:
+            return statement, parameters
+
 
     # Identify the state from the connection info
     rls_status = conn.info.get("rls_context_set")

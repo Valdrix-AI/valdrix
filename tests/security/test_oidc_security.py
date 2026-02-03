@@ -5,14 +5,13 @@ from uuid import uuid4
 from app.shared.connections.oidc import OIDCService
 from app.shared.core.config import get_settings
 
-settings = get_settings()
-
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from app.models.security import OIDCKey
 from sqlalchemy.ext.asyncio import AsyncSession
-
 import pytest_asyncio
+
+settings = get_settings()
 
 @pytest_asyncio.fixture(autouse=True)
 async def seed_oidc_key(db: AsyncSession):

@@ -1,5 +1,6 @@
 from datetime import datetime
 from uuid import UUID, uuid4
+from typing import TYPE_CHECKING
 from sqlalchemy import String, Boolean, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -7,6 +8,9 @@ from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
 
 from app.shared.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.tenant import Tenant
 from app.shared.core.config import get_settings
 
 settings = get_settings()

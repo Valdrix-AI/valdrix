@@ -144,7 +144,6 @@ def test_setup_rate_limiting():
 @pytest.mark.asyncio
 async def test_get_redis_client_logic():
     """Test redis client lifecycle management."""
-    from app.shared.core.rate_limit import get_redis_client
     with patch("app.shared.core.rate_limit.get_settings") as mock_settings:
         mock_settings.return_value.REDIS_URL = "redis://localhost"
         with patch("app.shared.core.rate_limit.from_url") as mock_from_url:
@@ -156,6 +155,6 @@ async def test_get_redis_client_logic():
             with patch("asyncio.get_running_loop") as mock_loop:
                 mock_loop.return_value = "new_loop"
                 client._loop = "old_loop"
-                new_client = get_redis_client()
+                get_redis_client()
                 # Should have reset and re-created
                 mock_from_url.call_count == 2

@@ -13,6 +13,7 @@ Why this matters:
 
 from uuid import uuid4, UUID
 from datetime import datetime
+from typing import TYPE_CHECKING
 from sqlalchemy import String, Integer, Numeric, ForeignKey, Boolean, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -20,6 +21,9 @@ from sqlalchemy.ext.hybrid import hybrid_property
 
 from app.shared.core.security import encrypt_string, decrypt_string
 from app.shared.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.tenant import Tenant
 
 
 class LLMUsage(Base):
@@ -70,6 +74,9 @@ class LLMUsage(Base):
 
     # Request Type: What was this LLM call for?
     request_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    
+    # Trace ID for debugging/auditing
+    operation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     # is_byok: True if the user's personal API key was used
     is_byok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

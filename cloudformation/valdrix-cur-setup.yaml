@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+  Valdrix - Automated Cost & Usage Report Setup
+  
+  This template creates:
+  1. An S3 bucket for CUR data storage
+  2. A CUR 2.0 report definition (Parquet format)
+  3. Read-only access for the Valdrix IAM role
+  
+  Customer Cost Impact: ~$0.02/month for S3 storage (pennies)
+
+Parameters:
+  ValdrixRoleArn:
+    Type: String
+    Description: |
+      The ARN of the Valdrix IAM role from the first CloudFormation stack.
+      Example: arn:aws:iam::123456789012:role/ValdrixRole
+    AllowedPattern: 'arn:aws:iam::\d{12}:role/.+'
+
+Resources:
+  # S3 Bucket for CUR data
+  CURBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'valdrix-cur-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldReports
+            Status: Enabled
+            ExpirationInDays: 90  # Keep 3 months of data
+      Tags:
+        - Key: Purpose
+          Value: Valdrix-CostReports
+        - Key: ManagedBy
+          Value: Valdrix
+
+  # Bucket Policy: Allow CUR service and Valdrix to write/read
+  CURBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CURBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # Allow AWS CUR service to write reports
+          - Sid: AllowCURServiceWrite
+            Effect: Allow
+            Principal:
+              Service: billingreports.amazonaws.com
+            Action:
+              - s3:PutObject
+              - s3:GetBucketAcl
+              - s3:GetBucketPolicy
+            Resource:
+              - !Sub 'arn:aws:s3:::${CURBucket}'
+              - !Sub 'arn:aws:s3:::${CURBucket}/*'
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+          
+          # Allow Valdrix role to read reports
+          - Sid: AllowValdrixRead
+            Effect: Allow
+            Principal:
+              AWS: !Ref ValdrixRoleArn
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !Sub 'arn:aws:s3:::${CURBucket}'
+              - !Sub 'arn:aws:s3:::${CURBucket}/*'
+
+  # CUR 2.0 Report Definition
+  CostUsageReport:
+    Type: AWS::CUR::ReportDefinition
+    DependsOn: CURBucketPolicy
+    Properties:
+      ReportName: valdrix-cost-report
+      TimeUnit: DAILY
+      Format: Parquet
+      Compression: Parquet  # Parquet is self-compressing
+      S3Bucket: !Ref CURBucket
+      S3Prefix: reports/
+      S3Region: !Ref AWS::Region
+      AdditionalSchemaElements:
+        - RESOURCES  # Include resource IDs (critical for zombie detection)
+      RefreshClosedReports: true
+      ReportVersioning: OVERWRITE_REPORT
+
+Outputs:
+  CURBucketName:
+    Description: The S3 bucket where CUR data is stored. Copy this to Valdrix.
+    Value: !Ref CURBucket
+  
+  CURReportPrefix:
+    Description: The S3 prefix for CUR reports.
+    Value: 'reports/'
+  
+  SetupStatus:
+    Description: |
+      CUR reports are generated daily. Your first report will be available 
+      within 24 hours. Valdrix will automatically detect when data is ready.
+    Value: 'PENDING - First report available within 24 hours'

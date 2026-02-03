@@ -15,6 +15,9 @@ from app.modules.reporting.domain.calculator import CarbonCalculator
 from app.modules.reporting.domain.budget_alerts import CarbonBudgetService
 from app.models.carbon_settings import CarbonSettings
 from app.modules.reporting.domain.graviton_analyzer import GravitonAnalyzer
+from app.modules.reporting.domain.carbon_scheduler import CarbonAwareScheduler
+from app.shared.core.config import get_settings
+
 
 router = APIRouter(tags=["GreenOps & Carbon"])
 logger = structlog.get_logger()
@@ -33,7 +36,7 @@ async def get_carbon_footprint(
         raise HTTPException(status_code=400, detail="Date range cannot exceed 1 year")
     
     result = await db.execute(
-        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id).limit(1)
     )
     connection = result.scalar_one_or_none()
 
@@ -55,7 +58,7 @@ async def get_carbon_budget(
 ) -> Dict[str, Any]:
     """Get carbon budget status for the current month."""
     result = await db.execute(
-        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id).limit(1)
     )
     connection = result.scalar_one_or_none()
 
@@ -66,7 +69,7 @@ async def get_carbon_budget(
     month_start = date(today.year, today.month, 1)
 
     settings_result = await db.execute(
-        select(CarbonSettings).where(CarbonSettings.tenant_id == user.tenant_id)
+        select(CarbonSettings).where(CarbonSettings.tenant_id == user.tenant_id).limit(1)
     )
     carbon_settings = settings_result.scalar_one_or_none()
 
@@ -100,7 +103,7 @@ async def analyze_graviton_opportunities(
 ) -> Dict[str, Any]:
     """Analyze EC2 instances for Graviton migration opportunities."""
     result = await db.execute(
-        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id)
+        select(AWSConnection).where(AWSConnection.tenant_id == user.tenant_id).limit(1)
     )
     connection = result.scalar_one_or_none()
 
@@ -114,3 +117,44 @@ async def analyze_graviton_opportunities(
     analysis = await analyzer.analyze_instances()
 
     return analysis
+
+@router.get("/intensity")
+async def get_carbon_intensity_forecast(
+    user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
+    region: str = Query(default="us-east-1"),
+    hours: int = Query(default=24, ge=1, le=72)
+) -> Dict[str, Any]:
+    """Get current and forecasted carbon intensity for a region."""
+    settings = get_settings()
+    scheduler = CarbonAwareScheduler(
+        watttime_key=settings.WATT_TIME_API_KEY,
+        electricitymaps_key=settings.ELECTRICITY_MAPS_API_KEY
+    )
+    
+    forecast = scheduler.get_intensity_forecast(region, hours)
+    return {
+        "region": region,
+        "current_intensity": scheduler.get_region_intensity(region),
+        "forecast": forecast,
+        "source": "api" if not scheduler._use_static_data else "simulation"
+    }
+
+@router.get("/schedule")
+async def get_green_schedule(
+    user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
+    region: str = Query(default="us-east-1"),
+    duration_hours: int = Query(default=1, ge=1, le=24)
+) -> Dict[str, Any]:
+    """Find the optimal execution time for a workload."""
+    settings = get_settings()
+    scheduler = CarbonAwareScheduler(
+        watttime_key=settings.WATT_TIME_API_KEY,
+        electricitymaps_key=settings.ELECTRICITY_MAPS_API_KEY
+    )
+    
+    optimal_time = scheduler.get_optimal_execution_time(region)
+    return {
+        "region": region,
+        "optimal_start_time": optimal_time.isoformat() if optimal_time else None,
+        "recommendation": "Execute now" if not optimal_time else f"Defer to {optimal_time.hour}:00 UTC for lowest carbon footprint"
+    }

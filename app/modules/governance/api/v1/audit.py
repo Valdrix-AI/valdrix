@@ -243,7 +243,6 @@ async def request_data_erasure(
         from app.models.notification_settings import NotificationSettings
         from app.models.background_job import BackgroundJob
         from app.models.carbon_settings import CarbonSettings
-        from app.models.pricing import PricingPlan
         from app.models.remediation_settings import RemediationSettings
         from app.models.discovered_account import DiscoveredAccount
         from app.models.attribution import AttributionRule, CostAllocation

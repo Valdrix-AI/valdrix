@@ -79,6 +79,7 @@ async def get_leaderboard(
         )
         .group_by(User.email)
         .order_by(func.sum(RemediationRequest.estimated_monthly_savings).desc())
+        .limit(100)
     )
 
     if start_date:

@@ -5,6 +5,9 @@ from app.models.security import OIDCKey
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 import base64
+import structlog
+
+logger = structlog.get_logger()
 
 class OIDCService:
     @staticmethod

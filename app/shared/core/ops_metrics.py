@@ -31,7 +31,7 @@ SCAN_LATENCY = Histogram(
 SCAN_TIMEOUTS = Counter(
     "valdrix_ops_scan_timeouts_total",
     "Total number of scan timeouts",
-    ["level"] # 'plugin', 'region', 'overall'
+    ["level", "provider"] # 'plugin', 'region', 'overall'
 )
 
 # --- API & Remediation Metrics ---
@@ -46,6 +46,12 @@ REMEDIATION_DURATION_SECONDS = Histogram(
     "Duration of remediation execution in seconds",
     ["action", "provider"],
     buckets=(1, 5, 10, 30, 60, 120, 300, 600)
+)
+
+REMEDIATION_FAILURE = Counter(
+    "valdrix_ops_remediation_failure_total",
+    "Total number of remediation failures",
+    ["action", "provider", "error_type"]
 )
 
 # --- LLM & Financial Metrics ---

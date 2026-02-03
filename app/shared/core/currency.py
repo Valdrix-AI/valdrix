@@ -8,9 +8,10 @@ Prioritizes Paystack for NGN rates to ensure alignment with user billing.
 import time
 import httpx
 from decimal import Decimal
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 import structlog
 from app.shared.core.config import get_settings
+from datetime import timedelta
 
 logger = structlog.get_logger()
 
@@ -60,18 +61,41 @@ async def fetch_paystack_ngn_rate() -> Optional[Decimal]:
         
     return None
 
+async def fetch_public_exchange_rates() -> Dict[str, Decimal]:
+    """
+    Fetches exchange rates from a public API (e.g., ExchangeRate-API).
+    Provides a professional fallback for non-Paystack markets.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            # Using a reliable public API for global rates
+            response = await client.get("https://open.er-api.com/v6/latest/USD", timeout=10.0)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("result") == "success":
+                    rates = data.get("rates", {})
+                    return {k: Decimal(str(v)) for k, v in rates.items()}
+    except Exception as e:
+        logger.warning("public_rate_fetch_failed", error=str(e))
+    return {}
+
 async def fetch_fallback_rates() -> Dict[str, Decimal]:
     """
     Fetches exchange rates from a public API if possible.
     For MVP, we use hardcoded defaults if Paystack/Specific providers fail.
     """
-    # Future: Integrate with Open Exchange Rates or similar
+    public_rates = await fetch_public_exchange_rates()
+    if public_rates:
+        # Merge with hardcoded defaults, public rates taking precedence
+        merged = FALLBACK_RATES.copy()
+        merged.update({k: v for k, v in public_rates.items() if k in FALLBACK_RATES})
+        return merged
     return FALLBACK_RATES
 
 async def get_exchange_rate(to_currency: str) -> Decimal:
     """
     Returns the exchange rate for USD to to_currency.
-    Uses cached value if sync interval hasn't passed.
+    Uses Redis-backed cache for cross-service consistency.
     """
     settings = get_settings()
     to_currency = to_currency.upper()
@@ -80,14 +104,25 @@ async def get_exchange_rate(to_currency: str) -> Decimal:
         return Decimal("1.0")
         
     now = time.time()
-    cached_rate, last_updated = _RATES_CACHE.get(to_currency, (None, 0))
     
-    # Check if cache is fresh (Sync interval in hours)
-    sync_interval_sec = settings.EXCHANGE_RATE_SYNC_INTERVAL_HOURS * 3600
-    if cached_rate and (now - last_updated < sync_interval_sec):
+    # 1. Try In-Memory Cache (Short-lived L1)
+    cached_rate, last_updated = _RATES_CACHE.get(to_currency, (None, 0))
+    # sync_interval_sec unused
+    if cached_rate and (now - last_updated < 300): # 5 min in-memory stickiness
         return cached_rate
+
+    # 2. Try Redis Cache (L2)
+    from app.shared.core.cache import get_cache_service
+    cache = get_cache_service()
+    if cache.enabled:
+        redis_key = f"currency_rate:{to_currency}"
+        redis_data = await cache._get(redis_key)
+        if redis_data:
+            rate = Decimal(str(redis_data["rate"]))
+            _RATES_CACHE[to_currency] = (rate, now)
+            return rate
         
-    # Cache expired or missing: Fetch new rate
+    # 3. Cache expired or missing: Fetch new rate
     logger.info("syncing_exchange_rate", currency=to_currency)
     
     rate = None
@@ -95,15 +130,21 @@ async def get_exchange_rate(to_currency: str) -> Decimal:
         rate = await fetch_paystack_ngn_rate()
         
     if not rate:
-        # Fallback to other providers or hardcoded defaults
         all_fallbacks = await fetch_fallback_rates()
         rate = all_fallbacks.get(to_currency, FALLBACK_RATES.get(to_currency))
         
     if rate:
+        # Update L1 and L2
         _RATES_CACHE[to_currency] = (rate, now)
+        if cache.enabled:
+            await cache._set(
+                f"currency_rate:{to_currency}", 
+                {"rate": float(rate), "updated_at": now},
+                ttl=timedelta(hours=settings.EXCHANGE_RATE_SYNC_INTERVAL_HOURS)
+            )
         return rate
         
-    return Decimal("1.0") # Final fallback
+    return Decimal("1.0")
 
 async def convert_usd(amount_usd: float | Decimal, to_currency: str) -> Decimal:
     """

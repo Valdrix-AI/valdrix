@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import MagicMock, patch
-import sys
 
 # Import the adapter directly to avoid the domain/app dependency chain
 from app.modules.optimization.adapters.azure.plugins.idle_vms import AzureIdleVMPlugin

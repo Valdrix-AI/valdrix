@@ -4,7 +4,6 @@
 FROM node:20-slim AS builder
 
 # Enable corepack for pnpm
-# Enable corepack for pnpm
 # Optimization: Increase network timeouts for flaky connections
 RUN npm config set fetch-retries 5 \
     && npm config set fetch-retry-mintimeout 20000 \

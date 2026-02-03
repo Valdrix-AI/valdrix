@@ -42,10 +42,36 @@ class AzureIdleVMPlugin(ZombiePlugin):
                 vm_size = vm.hardware_profile.vm_size
                 is_gpu = any(gpu in vm_size for gpu in self.gpu_families)
                 
-                # We consider it a candidate if it's running
-                # In a real scenario, we'd check metrics here.
-                # For this implementation, we'll focus on the signal hardening (GPU + Attribution)
-                
+                # Deep-Scan Layer: CPU Utilization Check
+                cpu_utilization = None
+                if monitor_client:
+                    try:
+                        end_time = datetime.now(timezone.utc)
+                        start_time = end_time - timedelta(days=7)
+                        
+                        # Fetch 'Percentage CPU' metric
+                        metrics = await monitor_client.metrics.list(
+                            vm.id,
+                            timespan=f"{start_time.isoformat()}/{end_time.isoformat()}",
+                            interval=timedelta(hours=1),
+                            metricnames="Percentage CPU",
+                            aggregation="Average"
+                        )
+                        
+                        for metric in metrics.value:
+                            for timeseries in metric.timeseries:
+                                # Get the average of all data points
+                                data_points = [d.average for d in timeseries.data if d.average is not None]
+                                if data_points:
+                                    cpu_utilization = sum(data_points) / len(data_points)
+                                    break
+                    except Exception as e:
+                        logger.warning("azure_vm_metrics_failed", vm=vm.name, error=str(e))
+
+                # Filtering Logic: Only consider idle if CPU < 5% (or metrics missing/failed)
+                if cpu_utilization is not None and cpu_utilization > 5:
+                    continue
+
                 # 1. GPU Signal
                 confidence = Decimal("0.8")
                 if is_gpu:
@@ -70,10 +96,12 @@ class AzureIdleVMPlugin(ZombiePlugin):
                     "monthly_waste": float(monthly_cost),
                     "confidence_score": float(confidence),
                     "tags": vm.tags or {},
+                    "explainability_notes": f"VM average CPU utilization was {cpu_utilization:.2f}% over the last 7 days." if cpu_utilization is not None else "VM is running but no utilization data found.",
                     "metadata": {
                         "resource_id": vm.id,
                         "vm_id": vm.vm_id,
-                        "provisioning_state": vm.provisioning_state
+                        "provisioning_state": vm.provisioning_state,
+                        "cpu_utilization": cpu_utilization
                     }
                 })
                     

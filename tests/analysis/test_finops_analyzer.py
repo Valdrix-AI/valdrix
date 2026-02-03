@@ -63,10 +63,10 @@ class TestAnalyze:
         ]
 
         with patch(patch_paths[0], new_callable=AsyncMock) as m_reserve, \
-             patch(patch_paths[1], new_callable=AsyncMock) as m_record, \
+             patch(patch_paths[1], new_callable=AsyncMock), \
              patch(patch_paths[2], new_callable=AsyncMock) as m_forecast, \
              patch(patch_paths[3]) as m_cache_svc, \
-             patch(patch_paths[4]) as m_slack, \
+             patch(patch_paths[4]), \
              patch(patch_paths[5], new_callable=AsyncMock) as m_sanitize, \
              patch(patch_paths[6]) as m_validate, \
              patch(patch_paths[7], new_callable=AsyncMock) as m_budget:

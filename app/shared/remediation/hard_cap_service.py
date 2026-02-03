@@ -1,11 +1,9 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import update
 import structlog
 from app.models.aws_connection import AWSConnection
 from app.models.tenant import Tenant
-from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
-from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 

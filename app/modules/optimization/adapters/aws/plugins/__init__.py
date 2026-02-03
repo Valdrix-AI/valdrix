@@ -4,12 +4,26 @@ from .network import OrphanLoadBalancersPlugin, UnderusedNatGatewaysPlugin
 from .database import IdleRdsPlugin, ColdRedshiftPlugin
 from .analytics import IdleSageMakerPlugin
 from .containers import LegacyEcrImagesPlugin
+# New high-value and infrastructure plugins
+from .high_value import IdleEksPlugin, IdleElastiCachePlugin, IdleSageMakerNotebooksPlugin
+from .infrastructure import StoppedInstancesWithEbsPlugin, UnusedLambdaPlugin, OrphanVpcEndpointsPlugin
 
 __all__ = [
+    # Storage
     "UnattachedVolumesPlugin", "OldSnapshotsPlugin", "IdleS3BucketsPlugin",
+    # Compute
     "UnusedElasticIpsPlugin", "IdleInstancesPlugin",
+    # Network
     "OrphanLoadBalancersPlugin", "UnderusedNatGatewaysPlugin",
+    # Database
     "IdleRdsPlugin", "ColdRedshiftPlugin",
+    # Analytics
     "IdleSageMakerPlugin",
+    # Containers
     "LegacyEcrImagesPlugin",
+    # High-Value (NEW)
+    "IdleEksPlugin", "IdleElastiCachePlugin", "IdleSageMakerNotebooksPlugin",
+    # Infrastructure (NEW)
+    "StoppedInstancesWithEbsPlugin", "UnusedLambdaPlugin", "OrphanVpcEndpointsPlugin",
 ]
+

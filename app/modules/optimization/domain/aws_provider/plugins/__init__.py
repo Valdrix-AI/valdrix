@@ -4,6 +4,9 @@ from app.modules.optimization.adapters.aws.plugins.network import OrphanLoadBala
 from app.modules.optimization.adapters.aws.plugins.database import IdleRdsPlugin, ColdRedshiftPlugin
 from app.modules.optimization.adapters.aws.plugins.analytics import IdleSageMakerPlugin
 from app.modules.optimization.adapters.aws.plugins.containers import LegacyEcrImagesPlugin
+# New high-value and infrastructure plugins
+from app.modules.optimization.adapters.aws.plugins.high_value import IdleEksPlugin, IdleElastiCachePlugin, IdleSageMakerNotebooksPlugin
+from app.modules.optimization.adapters.aws.plugins.infrastructure import StoppedInstancesWithEbsPlugin, UnusedLambdaPlugin, OrphanVpcEndpointsPlugin
 
 __all__ = [
     "UnattachedVolumesPlugin",
@@ -17,4 +20,12 @@ __all__ = [
     "ColdRedshiftPlugin",
     "IdleSageMakerPlugin",
     "LegacyEcrImagesPlugin",
+    # New plugins
+    "IdleEksPlugin",
+    "IdleElastiCachePlugin",
+    "IdleSageMakerNotebooksPlugin",
+    "StoppedInstancesWithEbsPlugin",
+    "UnusedLambdaPlugin",
+    "OrphanVpcEndpointsPlugin",
 ]
+

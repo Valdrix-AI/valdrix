@@ -2,12 +2,10 @@ import pytest
 from decimal import Decimal
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
-import sys
 
 # conftest.py handles environment mocks
 
 from app.shared.llm.usage_tracker import UsageTracker, count_tokens, BudgetStatus
-from app.models.llm import LLMUsage, LLMBudget
 from app.shared.core.exceptions import BudgetExceededError
 
 @pytest.fixture
@@ -53,7 +51,7 @@ async def test_record_success(mock_db, tenant_id):
     with patch("app.shared.llm.usage_tracker.UsageTracker.calculate_cost", return_value=Decimal("1.00")), \
          patch("app.shared.llm.usage_tracker.get_cache_service", return_value=mock_cache), \
          patch("app.shared.llm.usage_tracker.UsageTracker.get_monthly_usage", new_callable=AsyncMock) as mock_get_usage, \
-         patch("app.shared.core.ops_metrics.LLM_SPEND_USD") as mock_metric, \
+         patch("app.shared.core.ops_metrics.LLM_SPEND_USD"), \
          patch("app.shared.core.pricing.get_tenant_tier", new_callable=AsyncMock) as mock_tier, \
          patch("app.shared.llm.usage_tracker.LLMUsage") as MockLLMUsage:
         
@@ -72,7 +70,7 @@ async def test_record_success(mock_db, tenant_id):
 async def test_authorize_request_allowed(mock_db, tenant_id):
     tracker = UsageTracker(mock_db)
     
-    with patch("sqlalchemy.select") as mock_select:
+    with patch("sqlalchemy.select"):
         budget = MagicMock()
         budget.monthly_limit_usd = Decimal("100.00")
         budget.hard_limit = True
@@ -92,7 +90,7 @@ async def test_authorize_request_allowed(mock_db, tenant_id):
 async def test_authorize_request_denied(mock_db, tenant_id):
     tracker = UsageTracker(mock_db)
     
-    with patch("sqlalchemy.select") as mock_select:
+    with patch("sqlalchemy.select"):
         budget = MagicMock()
         budget.monthly_limit_usd = Decimal("5.00")
         budget.hard_limit = True
@@ -133,7 +131,7 @@ async def test_check_budget_fail_closed(mock_db, tenant_id):
 async def test_alert_logic(mock_db, tenant_id):
     tracker = UsageTracker(mock_db)
     
-    with patch("sqlalchemy.select") as mock_select:
+    with patch("sqlalchemy.select"):
         budget = MagicMock()
         budget.tenant_id = tenant_id
         budget.monthly_limit_usd = Decimal("100.00")
@@ -147,7 +145,7 @@ async def test_alert_logic(mock_db, tenant_id):
         # Patch CLASS method here too
         with patch("app.shared.llm.usage_tracker.UsageTracker.get_monthly_usage", new_callable=AsyncMock) as mock_usage, \
              patch("app.shared.core.logging.audit_log") as mock_audit, \
-             patch("app.modules.notifications.domain.SlackService") as mock_slack:
+             patch("app.modules.notifications.domain.SlackService"):
             
             mock_usage.return_value = Decimal("85.00")
             await tracker._check_budget_and_alert(tenant_id)

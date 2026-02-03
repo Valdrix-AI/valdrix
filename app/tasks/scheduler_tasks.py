@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 import structlog
 from celery import shared_task
 from app.shared.db.session import async_session_maker
@@ -18,8 +19,6 @@ import time
 import uuid
 
 logger = structlog.get_logger()
-
-from typing import Any
 
 # Helper to run async code in sync Celery task
 def run_async(coro: Any) -> Any:
@@ -277,3 +276,13 @@ async def _maintenance_sweep_logic() -> None:
             await db.commit()
         except Exception:
             pass
+@shared_task(name="scheduler.currency_sync")
+def run_currency_sync() -> None:
+    """
+    Celery task to refresh currency exchange rates.
+    """
+    from app.shared.core.currency import get_exchange_rate
+    # Fetch common currencies to trigger refresh and Redis sync
+    for curr in ["NGN", "EUR", "GBP"]:
+        run_async(get_exchange_rate(curr))
+    logger.info("currency_sync_completed")

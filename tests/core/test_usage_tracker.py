@@ -10,7 +10,8 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from decimal import Decimal
 from uuid import uuid4
-from app.shared.llm.usage_tracker import UsageTracker, LLM_PRICING
+from app.shared.llm.usage_tracker import UsageTracker
+from app.shared.llm.pricing_data import LLM_PRICING
 
 
 class TestCalculateCost:

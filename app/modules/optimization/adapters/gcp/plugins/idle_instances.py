@@ -50,7 +50,55 @@ class GCPIdleInstancePlugin(ZombiePlugin):
 
                 machine_type = inst.machine_type.split('/')[-1]
                 is_gpu = "a2-" in machine_type or "g2-" in machine_type or inst.guest_accelerators
+
+                # Deep-Scan Layer: CPU Utilization Check
+                cpu_utilization = None
+                from google.cloud import monitoring_v3
+                from datetime import datetime, timedelta, timezone
                 
+                # Note: We need a monitoring client. If not passed, we skip metrics but log warning.
+                # In production, the orchestrator should pass it.
+                monitoring_client = kwargs.get("monitoring_client")
+                
+                if monitoring_client:
+                    try:
+                        end_time = datetime.now(timezone.utc)
+                        start_time = end_time - timedelta(days=7)
+                        
+                        interval = monitoring_v3.TimeInterval(
+                            start_time=start_time,
+                            end_time=end_time
+                        )
+                        
+                        # Filter for specific instance CPU metric
+                        filter_str = (
+                            f'metric.type="compute.googleapis.com/instance/cpu/utilization" AND '
+                            f'resource.labels.instance_id="{inst.id}"'
+                        )
+                        
+                        results = monitoring_client.list_time_series(
+                            request={
+                                "name": f"projects/{project_id}",
+                                "filter": filter_str,
+                                "interval": interval,
+                                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+                            }
+                        )
+                        
+                        data_points = []
+                        for result in results:
+                            for point in result.points:
+                                data_points.append(point.value.double_value)
+                        
+                        if data_points:
+                            cpu_utilization = (sum(data_points) / len(data_points)) * 100 # Convert to percentage
+                    except Exception as e:
+                        logger.warning("gcp_instance_metrics_failed", instance=inst.name, error=str(e))
+
+                # Filtering Logic: Only consider idle if CPU < 5% (or metrics missing)
+                if cpu_utilization is not None and cpu_utilization > 5:
+                    continue
+
                 # 1. GPU Signal
                 confidence = Decimal("0.8")
                 if is_gpu:
@@ -75,10 +123,12 @@ class GCPIdleInstancePlugin(ZombiePlugin):
                     "monthly_waste": float(monthly_cost),
                     "confidence_score": float(confidence),
                     "tags": dict(inst.labels) if inst.labels else {},
+                    "explainability_notes": f"Instance average CPU utilization was {cpu_utilization:.2f}% over the last 7 days." if cpu_utilization is not None else "Instance is running but no utilization data found.",
                     "metadata": {
                         "instance_id": inst.id,
                         "cpu_platform": inst.cpu_platform,
-                        "creation_timestamp": inst.creation_timestamp
+                        "creation_timestamp": inst.creation_timestamp,
+                        "cpu_utilization": cpu_utilization
                     }
                 })
                     

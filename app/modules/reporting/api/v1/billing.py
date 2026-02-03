@@ -7,7 +7,7 @@ Provides:
 - POST /billing/webhook - Handle Paystack webhooks
 """
 
-from typing import Annotated, Optional, Dict, Any, List, cast
+from typing import Annotated, Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel

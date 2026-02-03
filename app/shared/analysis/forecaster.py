@@ -9,12 +9,13 @@ from app.shared.analysis.carbon_data import REGION_CARBON_INTENSITY, DEFAULT_CAR
 logger = structlog.get_logger()
 
 # Optional dependency: Prophet (Requires pystan/holidays)
+_prophet_warned = False
 try:
     from prophet import Prophet
     PROPHET_AVAILABLE = True
 except ImportError:
     PROPHET_AVAILABLE = False
-    logger.warning("prophet_not_installed_forecasting_degraded")
+    # Logged on first usage to avoid noise during import in tests
 
 class SymbolicForecaster:
     """
@@ -74,10 +75,14 @@ class SymbolicForecaster:
             df = SymbolicForecaster._detect_outliers(df)
             
             # 2. Model Selection
-            # Prophet requires at least 2 non-outlier data points, but per our business logic,
-            # we want at least 14 days for seasonality to be worthwhile.
             if PROPHET_AVAILABLE and len(df[~df['is_outlier']]) >= 14:
                 return await SymbolicForecaster._run_prophet(df, days, db, tenant_id)
+            
+            if not PROPHET_AVAILABLE and len(df[~df['is_outlier']]) >= 14:
+                global _prophet_warned
+                if not _prophet_warned:
+                    logger.warning("prophet_not_installed_forecasting_degraded", msg="Using Holt-Winters fallback for long-term data.")
+                    _prophet_warned = True
             
             # Fallback to Holt-Winters logic
             return await SymbolicForecaster._run_holt_winters(df, days)

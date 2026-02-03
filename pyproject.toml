@@ -108,8 +108,11 @@ markers = [
     "integration: marks tests as integration tests (require database)",
 ]
 filterwarnings = [
+    "ignore::ResourceWarning",
 ]
+asyncio_mode = "auto"
 addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=80"
+
 
 [tool.coverage.run]
 source = ["app"]

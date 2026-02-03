@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from app.shared.adapters.aws_utils import map_aws_credentials
 
 
@@ -37,7 +37,8 @@ class ZombiePlugin(ABC):
         pass
 
     @abstractmethod
-    async def scan(self, *args, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(self, session: Any, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None) -> List[Dict[str, Any]]:
+
         """
         Scan for zombie resources.
         

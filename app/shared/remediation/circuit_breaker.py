@@ -1,5 +1,6 @@
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 import time
+import asyncio
 from enum import Enum
 from dataclasses import dataclass
 import structlog
@@ -78,4 +79,3 @@ class CircuitBreaker:
             
             raise e
 
-import asyncio # Needed for iscoroutinefunction

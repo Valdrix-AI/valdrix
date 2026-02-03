@@ -24,6 +24,10 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from app.shared.db.base import Base
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from app.models.tenant import Tenant, User
+
 
 class RemediationStatus(str, Enum):
     """Status of a remediation request."""

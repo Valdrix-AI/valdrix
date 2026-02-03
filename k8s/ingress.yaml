@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: valdrix-ingress
+  labels:
+    app: valdrix
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://app.valdrix.io"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "DENY" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+spec:
+  tls:
+    - hosts:
+        - api.valdrix.io
+      secretName: valdrix-tls
+  rules:
+    - host: api.valdrix.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: valdrix-api
+                port:
+                  number: 80

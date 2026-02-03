@@ -146,7 +146,8 @@ jobs:
       - name: Frontend Security Audit
         working-directory: ./dashboard
         run: |
-          npm install -g pnpm
+          corepack enable
+          corepack prepare pnpm@latest --activate
           pnpm audit --audit-level=high
 
   # JOB 3: BUILD INTEGRITY

@@ -43,6 +43,9 @@ class LLMBudgetManager:
     AVG_PROMPT_TOKENS = 500
     AVG_RESPONSE_TOKENS = 500
     
+    # PRODUCTION: 2026 BYOK Revenue Model
+    BYOK_PLATFORM_FEE_USD = Decimal("0.50")
+    
     @staticmethod
     def estimate_cost(prompt_tokens: int, completion_tokens: int, model: str, provider: str = "openai") -> Decimal:
         """
@@ -177,6 +180,7 @@ class LLMBudgetManager:
         completion_tokens: int,
         provider: str = "openai",
         actual_cost_usd: Decimal = None,
+        is_byok: bool = False,
         operation_id: str = None,
         request_type: str = "unknown"
     ) -> None:
@@ -184,11 +188,15 @@ class LLMBudgetManager:
         Record actual LLM usage and handle metrics/alerts.
         """
         try:
-            # Use actual cost if provided, else calculate from tokens
+            # 1. PRODUCTION: Implement BYOK Platform Fee
+            # If BYOK is used, we charge a flat orchestration fee instead of token cost.
             if actual_cost_usd is None:
-                actual_cost_usd = LLMBudgetManager.estimate_cost(
-                    prompt_tokens, completion_tokens, model, provider
-                )
+                if is_byok:
+                    actual_cost_usd = LLMBudgetManager.BYOK_PLATFORM_FEE_USD
+                else:
+                    actual_cost_usd = LLMBudgetManager.estimate_cost(
+                        prompt_tokens, completion_tokens, model, provider
+                    )
             
             # Create usage record
             usage = LLMUsage(
@@ -199,6 +207,7 @@ class LLMBudgetManager:
                 output_tokens=completion_tokens,
                 total_tokens=prompt_tokens + completion_tokens,
                 cost_usd=actual_cost_usd,
+                is_byok=is_byok, # Explicitly record BYOK status
                 operation_id=operation_id,
                 request_type=request_type
             )

@@ -15,11 +15,18 @@ class IdleRdsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_rds_databases"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
         dbs = []
         connection_threshold = 1
         days = 7
+
+        # CUR-First Detection (Zero API Cost)
+        cur_records = kwargs.get("cur_records")
+        if cur_records:
+            from app.shared.analysis.cur_usage_analyzer import CURUsageAnalyzer
+            analyzer = CURUsageAnalyzer(cur_records)
+            return analyzer.find_idle_rds_databases(days=days)
 
         try:
             async with self._get_client(session, "rds", region, credentials, config=config) as rds:
@@ -100,8 +107,17 @@ class ColdRedshiftPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "cold_redshift_clusters"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
+        days = 7
+
+        # CUR-First Detection (Zero API Cost)
+        cur_records = kwargs.get("cur_records")
+        if cur_records:
+            from app.shared.analysis.cur_usage_analyzer import CURUsageAnalyzer
+            analyzer = CURUsageAnalyzer(cur_records)
+            return analyzer.find_idle_redshift_clusters(days=days)
+
         try:
             async with self._get_client(session, "redshift", region, credentials, config=config) as redshift:
                 paginator = redshift.get_paginator("describe_clusters")

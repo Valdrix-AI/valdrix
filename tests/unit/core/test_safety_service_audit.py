@@ -1,11 +1,9 @@
 import pytest
 from uuid import uuid4
 from decimal import Decimal
-from datetime import datetime, timezone, date
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.shared.core.safety_service import SafetyGuardrailService
 from app.shared.core.exceptions import KillSwitchTriggeredError
-from app.models.remediation import RemediationStatus
 
 @pytest.fixture
 def mock_db():

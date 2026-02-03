@@ -3,7 +3,7 @@ from datetime import date
 from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import TYPE_CHECKING, Optional, List, Dict, Any, cast
+from typing import TYPE_CHECKING, Optional, List, Dict, Any
 import asyncio
 if TYPE_CHECKING:
     from app.shared.llm.guardrails import FinOpsAnalysisResult

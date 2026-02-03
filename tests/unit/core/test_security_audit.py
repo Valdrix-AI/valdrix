@@ -1,7 +1,7 @@
 import pytest
 import os
 import base64
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from cryptography.fernet import Fernet, MultiFernet
 from app.shared.core.security import (
     EncryptionKeyManager, encrypt_string, decrypt_string, 
@@ -34,13 +34,15 @@ class TestEncryptionKeyManager:
 
     def test_get_or_create_salt_dev_fallback(self):
         with patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=True):
-            if "KDF_SALT" in os.environ: del os.environ["KDF_SALT"]
+            if "KDF_SALT" in os.environ:
+                del os.environ["KDF_SALT"]
             salt = EncryptionKeyManager.get_or_create_salt()
             assert salt is not None
 
     def test_get_or_create_salt_prod_fail(self):
         with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=True):
-            if "KDF_SALT" in os.environ: del os.environ["KDF_SALT"]
+            if "KDF_SALT" in os.environ:
+                del os.environ["KDF_SALT"]
             with pytest.raises(ValueError, match="CRITICAL: KDF_SALT environment variable not set"):
                 EncryptionKeyManager.get_or_create_salt()
 

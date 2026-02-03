@@ -1,6 +1,5 @@
 import pytest
 import boto3
-import json
 from moto import mock_aws
 from uuid import uuid4
 from sqlalchemy import select

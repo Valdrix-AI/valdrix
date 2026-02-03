@@ -1,66 +1,125 @@
-# Deployment Guide: Valdrix AI
+# Deployment Guide
 
-> [!IMPORTANT]
-> This guide covers the production deployment process for the Valdrix AI platform. Ensure all [Security Requirements](#security-best-practices) are met before proceeding.
+## Prerequisites
 
-## 1. Prerequisites
+- Python 3.12+
 - Docker & Docker Compose
-- PostgreSQL 16+ (or RDS/Cloud SQL)
-- Redis 7+ (or Upstash/ElastiCache)
-- AWS/Azure/GCP credentials with read-only access for scanning and specific remediation permissions.
+- PostgreSQL (or Supabase)
+- Redis (for caching/Celery)
 
-## 2. Environment Configuration
-Create a `.env` file based on [.env.example](file:///.env.example). Critical variables:
+---
+
+## Local Development
 
 ```bash
-# Database
-DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/valdrix
+# Clone and setup
+git clone https://github.com/Valdrix-AI/valdrix.git
+cd valdrix
 
-# Security
-SECRET_KEY=generate_a_secure_random_string_here
-CSRF_SECRET_KEY=generate_another_random_string
+# Install dependencies (using uv)
+uv sync
 
-# Cloud Providers (Optional in env, preferred via encrypted DB storage)
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
+# Copy environment file
+cp .env.example .env
+
+# Start services
+docker-compose up -d
+
+# Run migrations
+uv run alembic upgrade head
+
+# Start API
+uv run uvicorn app.main:app --reload
 ```
 
-## 3. Docker Deployment
-We use a hardened, multi-stage Docker image for production.
+---
 
-### Building the Image
+## Docker Deployment
+
 ```bash
-docker build -t valdrix:latest .
+# Build
+docker build -t valdrix/api:latest .
+
+# Run
+docker run -d \
+  --name valdrix-api \
+  -p 8000:8000 \
+  --env-file .env \
+  valdrix/api:latest
 ```
 
-### Running with Docker Compose
-Use [docker-compose.prod.yml](file:///docker-compose.prod.yml) for a production-like local setup:
+---
+
+## Kubernetes Production
+
+### Quick Start
+
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+# Apply all manifests
+kubectl apply -f k8s/
+
+# Verify deployment
+kubectl get pods -l app=valdrix
+kubectl get hpa
 ```
 
-## 4. Database Migrations
-Always run migrations before starting the application:
+### Manifests
+
+| File | Description |
+|---|---|
+| `k8s/deployment.yaml` | API + Worker pods |
+| `k8s/service.yaml` | Internal services |
+| `k8s/configmap.yaml` | Configuration |
+| `k8s/hpa.yaml` | Autoscaling (3→20 replicas) |
+| `k8s/ingress.yaml` | External access with TLS |
+
+### Required Secrets
+
+Create before deployment:
 ```bash
-docker exec -it valdrix_api alembic upgrade head
+kubectl create secret generic valdrix-secrets \
+  --from-literal=database-url='postgresql://...' \
+  --from-literal=encryption-key='your-key' \
+  --from-literal=openai-api-key='sk-...'
 ```
 
-## 5. Security Best Practices
-- **Non-Root User:** The Docker image runs as `appuser` by default. Do not override this.
-- **Secret Management:** Use AWS Secrets Manager, HashiCorp Vault, or GitHub Secrets. Avoid plain-text `.env` in production.
-- **Network Isolation:** Ensure the database and Redis are not publicly accessible.
-- **Audit Logs:** Standardize on the `AuditLogger` for all sensitive operations (SOC2 compliance).
+---
 
-## 6. Monitoring & Health
-- **Prometheus:** Metrics are exposed at `/metrics`.
-- **Health Check:** Labeled health checks are at `/health`.
-- **Logging:** Structured JSON logs are sent to `stdout`.
+## Load Testing
 
-## 7. Troubleshooting
-Check logs via:
+Before production, validate performance:
+
 ```bash
-docker logs -f valdrix_api
+# Install k6
+brew install k6  # or apt/yum
+
+# Run load test
+k6 run loadtest/k6-test.js
+
+# Expected results:
+# - p95 latency < 500ms
+# - Error rate < 1%
 ```
-Common issues:
-- `ConnectionRefusedError`: Verify DB/Redis connectivity.
-- `403 Forbidden`: Check `SECRET_KEY` and CORS settings.
+
+---
+
+## Monitoring
+
+### Prometheus Metrics
+- Endpoint: `/metrics`
+- Includes: request latency, error rates, active connections
+
+### Health Check
+- Endpoint: `/health`
+- Returns: `{"status": "healthy"}`
+
+---
+
+## Production Checklist
+
+- [ ] Secrets configured in Kubernetes
+- [ ] TLS certificates deployed
+- [ ] Database migrations run
+- [ ] HPA tested under load
+- [ ] Monitoring/alerting configured
+- [ ] SBOM generated and reviewed

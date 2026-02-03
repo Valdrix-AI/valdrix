@@ -67,6 +67,10 @@ It connects to your cloud, uncovers waste, explains spend behavior, and gives yo
 3. **Reason** → The LLM brain (GPT-4o, Claude 3.5, Groq, Gemini) analyzes context, not just metrics.
 4. **Act** → Get Slack alerts, approve remediations, and watch your bill shrink.
 
+> [!TIP]
+> **Zero API Costs for Your AWS Account**: Valdrix uses [AWS CUR](https://docs.aws.amazon.com/cur/latest/userguide/what-is-cur.html) and [Resource Explorer 2](https://docs.aws.amazon.com/resource-explorer/latest/userguide/welcome.html) instead of expensive APIs like Cost Explorer ($0.01/request). Your AWS bill from Valdrix scans is **~$0.00/month**.
+
+
 ```
               ┌──────────────────┐
               │   Your Cloud ☁️  │

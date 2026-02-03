@@ -11,7 +11,6 @@ import uuid
 from decimal import Decimal
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 from app.models.cloud import CostRecord
@@ -299,7 +298,6 @@ class CostPersistenceService:
         Transition cost records from PRELIMINARY to FINAL after the restatement window.
         AWS typically finalizes costs within 24-48 hours.
         """
-        from sqlalchemy import update
         cutoff_date = date.today() - timedelta(days=days_ago)
         
         stmt = (

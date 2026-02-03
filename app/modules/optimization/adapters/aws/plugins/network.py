@@ -76,8 +76,17 @@ class UnderusedNatGatewaysPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "underused_nat_gateways"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
+        days = 7
+
+        # CUR-First Detection (Zero API Cost)
+        cur_records = kwargs.get("cur_records")
+        if cur_records:
+            from app.shared.analysis.cur_usage_analyzer import CURUsageAnalyzer
+            analyzer = CURUsageAnalyzer(cur_records)
+            return analyzer.find_idle_nat_gateways(days=days)
+
         try:
             async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
                 paginator = ec2.get_paginator("describe_nat_gateways")

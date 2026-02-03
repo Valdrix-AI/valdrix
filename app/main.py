@@ -4,6 +4,8 @@ import os
 from contextlib import asynccontextmanager
 from typing import Annotated, Dict, Any, Callable, Awaitable, List, cast
 from fastapi import FastAPI, Depends, Request, HTTPException, Response
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -44,6 +46,7 @@ import app.models.discovered_account
 import app.models.pricing
 import app.models.security
 import app.models.anomaly_marker
+import app.models.optimization
 import app.modules.governance.domain.security.audit_log
 
 
@@ -55,6 +58,7 @@ from app.modules.reporting.api.v1.leaderboards import router as leaderboards_rou
 from app.modules.reporting.api.v1.costs import router as costs_router
 from app.modules.reporting.api.v1.carbon import router as carbon_router
 from app.modules.optimization.api.v1.zombies import router as zombies_router
+from app.modules.optimization.api.v1.strategies import router as strategies_router
 from app.modules.governance.api.v1.admin import router as admin_router
 from app.modules.reporting.api.v1.billing import router as billing_router
 from app.modules.governance.api.v1.audit import router as audit_router
@@ -76,8 +80,8 @@ class CsrfSettings(BaseModel):
     cookie_samesite: str = "lax"
 
 @CsrfProtect.load_config
-def get_csrf_config() -> List[tuple[str, Any]]:
-    return [("secret_key", settings.CSRF_SECRET_KEY), ("cookie_samesite", "lax")]
+def get_csrf_config() -> CsrfSettings:
+    return CsrfSettings()
 
 logger = structlog.get_logger()
 
@@ -126,7 +130,9 @@ async def lifespan(app: FastAPI) -> Any:
 valdrix_app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None
 )
 # MyPy: 'app' shadows the package name, ignore the assignment error
 app = valdrix_app # type: ignore[assignment]
@@ -215,6 +221,29 @@ async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse
 
 # Setup rate limiting early for test visibility
 setup_rate_limiting(valdrix_app)
+
+# Serve static files for local Swagger UI
+valdrix_app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+@valdrix_app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    return get_swagger_ui_html(
+        openapi_url=valdrix_app.openapi_url, # type: ignore
+        title=valdrix_app.title + " - Swagger UI",
+        oauth2_redirect_url=valdrix_app.swagger_ui_oauth2_redirect_url,
+        swagger_js_url="/static/swagger-ui-bundle.js",
+        swagger_css_url="/static/swagger-ui.css",
+        swagger_favicon_url="/static/favicon.png",
+    )
+
+@valdrix_app.get("/redoc", include_in_schema=False)
+async def redoc_html():
+    return get_redoc_html(
+        openapi_url=valdrix_app.openapi_url, # type: ignore
+        title=valdrix_app.title + " - ReDoc",
+        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js", # Redoc still remote for now
+        redoc_favicon_url="/static/favicon.png",
+    )
 
 # Override handler to include metrics (SEC-03)
 # MyPy: 'exception_handlers' is dynamic on FastAPI instance
@@ -328,11 +357,6 @@ valdrix_app.add_middleware(
 # CSRF Protection Middleware - processes after CORS but before auth
 @valdrix_app.middleware("http")
 async def csrf_protect_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-    """
-    Global CSRF protection middleware.
-    Blocks unsafe methods (POST, PUT, DELETE, PATCH) if CSRF token is missing/invalid.
-    Allows safe methods (GET, HEAD, OPTIONS, TRACE).
-    """
     if request.method not in ("GET", "HEAD", "OPTIONS", "TRACE"):
         # Skip CSRF for health checks and in testing mode
         if settings.TESTING:
@@ -357,6 +381,7 @@ valdrix_app.include_router(leaderboards_router, prefix="/api/v1/leaderboards")
 valdrix_app.include_router(costs_router, prefix="/api/v1/costs")
 valdrix_app.include_router(carbon_router, prefix="/api/v1/carbon")
 valdrix_app.include_router(zombies_router, prefix="/api/v1/zombies")
+valdrix_app.include_router(strategies_router, prefix="/api/v1/strategies")
 valdrix_app.include_router(admin_router, prefix="/api/v1/admin")
 valdrix_app.include_router(billing_router, prefix="/api/v1/billing")
 valdrix_app.include_router(audit_router, prefix="/api/v1/audit")

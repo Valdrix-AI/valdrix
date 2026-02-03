@@ -1,6 +1,8 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from datetime import datetime, timedelta, timezone
 import structlog
 from azure.mgmt.compute import ComputeManagementClient
+from azure.mgmt.monitor.aio import MonitorManagementClient
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 from decimal import Decimal
@@ -17,26 +19,43 @@ class AzureUnattachedDisksPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "unattached_disks"
 
-    async def scan(self, client: ComputeManagementClient, region: str = None, credentials: Any = None) -> List[Dict[str, Any]]:
+    async def scan(self, client: ComputeManagementClient, region: str = None, monitor_client: Optional[MonitorManagementClient] = None, **kwargs) -> List[Dict[str, Any]]:
         """
-        Scans for disks with state 'Unattached'.
-        
-        Args:
-            client: An authenticated ComputeManagementClient instance (async).
+        Scans for disks with state 'Unattached' and 0 IOPS.
         """
         zombies = []
         try:
-            # list() returns an AsyncItemPaged, so we use async for
             async for disk in client.disks.list():
-                # Filter by region if specified
                 if region and disk.location.lower() != region.lower():
                     continue
 
                 if disk.disk_state.lower() == "unattached":
-                    # Estimate monthly cost
+                    # Deep-Scan Layer: Check for recent IOPS if monitor client is provided
+                    has_recent_activity = False
+                    if monitor_client:
+                        try:
+                            # Check disk metrics (e.g., Disk Read/Write Bytes) for the last 7 days
+                            timespan = f"{(datetime.now(timezone.utc) - timedelta(days=7)).isoformat()}/{datetime.now(timezone.utc).isoformat()}"
+                            metrics = await monitor_client.metrics.list(
+                                resource_uri=disk.id,
+                                timespan=timespan,
+                                interval="P7D",
+                                metricnames="Composite Disk Read Bytes,Composite Disk Write Bytes",
+                                aggregation="Total"
+                            )
+                            for metric in metrics.value:
+                                for timeseries in metric.timeseries:
+                                    if any(v.total > 0 for v in timeseries.data):
+                                        has_recent_activity = True
+                                        break
+                        except Exception as e:
+                            logger.warning("azure_disk_metrics_failed", disk=disk.name, error=str(e))
+                    
+                    if has_recent_activity:
+                        continue
+
                     size_gb = disk.disk_size_gb or 0
                     sku_name = disk.sku.name if disk.sku else "Standard_LRS"
-                    
                     monthly_cost = self._estimate_disk_cost(size_gb, sku_name)
                     
                     zombies.append({
@@ -48,7 +67,8 @@ class AzureUnattachedDisksPlugin(ZombiePlugin):
                         "monthly_cost": float(monthly_cost),
                         "monthly_waste": float(monthly_cost),
                         "tags": disk.tags or {},
-                        "created_at": disk.time_created.isoformat() if disk.time_created else None
+                        "created_at": disk.time_created.isoformat() if disk.time_created else None,
+                        "explainability_notes": "Disk is 'Unattached' and has shown 0 IOPS in the last 7 days."
                     })
                     
             return zombies

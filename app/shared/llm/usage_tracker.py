@@ -12,8 +12,6 @@ from datetime import datetime, timezone
 import structlog
 
 from app.models.llm import LLMUsage
-from app.shared.core.cache import get_cache_service
-from app.shared.llm.pricing_data import LLM_PRICING
 from app.shared.llm.budget_manager import LLMBudgetManager, BudgetStatus
 
 

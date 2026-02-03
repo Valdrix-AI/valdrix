@@ -1,6 +1,5 @@
 import pytest
 from uuid import uuid4
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi import HTTPException
 from app.shared.core.cloud_connection import CloudConnectionService

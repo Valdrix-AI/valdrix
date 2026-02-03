@@ -15,8 +15,17 @@ class IdleSageMakerPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_sagemaker_endpoints"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
+        days = 7
+
+        # CUR-First Detection (Zero API Cost)
+        cur_records = kwargs.get("cur_records")
+        if cur_records:
+            from app.shared.analysis.cur_usage_analyzer import CURUsageAnalyzer
+            analyzer = CURUsageAnalyzer(cur_records)
+            return analyzer.find_idle_sagemaker_endpoints(days=days)
+
         try:
             async with self._get_client(session, "sagemaker", region, credentials, config=config) as sagemaker:
                 paginator = sagemaker.get_paginator("list_endpoints")

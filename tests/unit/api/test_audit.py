@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from uuid import uuid4
 from datetime import datetime, timezone
@@ -185,7 +185,7 @@ async def test_request_data_erasure_success(mock_db, owner_user):
     mock_select_return = MagicMock()
     
     with patch.dict("sys.modules", mock_modules):
-        with patch("sqlalchemy.delete") as mock_delete, \
+        with patch("sqlalchemy.delete"), \
              patch("sqlalchemy.select", return_value=mock_select_return):
             
             res = await request_data_erasure(owner_user, mock_db, confirmation="DELETE ALL MY DATA")

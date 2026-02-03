@@ -80,8 +80,9 @@ class SlackService:
         """Send an alert message to Slack with retry logic and deduplication."""
         
         # BE-NOTIF-4: Check for duplicate alerts within dedup window
-        alert_hash = hashlib.md5(f"{title}:{severity}".encode()).hexdigest()
+        alert_hash = hashlib.sha256(f"{title}:{severity}".encode()).hexdigest()
         current_time = time.time()
+
         
         if alert_hash in self._sent_alerts:
             last_sent = self._sent_alerts[alert_hash]

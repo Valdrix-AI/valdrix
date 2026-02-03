@@ -1,11 +1,14 @@
 from uuid import UUID, uuid4
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime
+from typing import TYPE_CHECKING
 from sqlalchemy import String, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from app.shared.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.aws_connection import AWSConnection
 
 class DiscoveredAccount(Base):
     """

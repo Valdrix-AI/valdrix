@@ -8,13 +8,20 @@ def pii_redactor(_logger, _method_name, event_dict):
     Recursively redact common PII and sensitive fields from logs.
     Ensures GDPR/SOC2 compliance by preventing leakage into telemetry.
     """
-    pii_fields = {
-        "email", "user_email", "phone", "password", "token", "secret", 
-        "cvv", "api_key", "aws_secret_key", "stripe_customer_id",
-        "_openai_api_key", "_claude_api_key", "_google_api_key", "_groq_api_key",
-        "paystack_auth_code", "authorization_code", "client_secret", "aws_access_key_id",
-        "x-paystack-signature", "authorization", "credentials", "connection_string"
-    }
+    import re
+    email_regex = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+    phone_regex = re.compile(r"\+?\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}")
+    pii_fields = {"password", "token", "key", "secret", "authorization", "auth", "api_key", "ssn", "credit_card", "cc_number"}
+
+    def redact_text(text):
+        if not isinstance(text, str):
+            return text
+        text = email_regex.sub("[EMAIL_REDACTED]", text)
+        # Only redact phone if it looks long enough to be an actual number
+        # to avoid redacting random small numbers
+        if len(re.findall(r"\d", text)) >= 7:
+            text = phone_regex.sub("[PHONE_REDACTED]", text)
+        return text
 
     def redact_recursive(data):
         if isinstance(data, dict):
@@ -24,9 +31,12 @@ def pii_redactor(_logger, _method_name, event_dict):
             }
         elif isinstance(data, list):
             return [redact_recursive(item) for item in data]
+        elif isinstance(data, str):
+            return redact_text(data)
         return data
 
     return redact_recursive(event_dict)
+
 
 def add_otel_trace_id(_logger, _method_name, event_dict):
     """Integrate OTel Trace IDs into structured logs."""

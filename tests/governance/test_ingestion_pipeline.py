@@ -3,7 +3,7 @@ import uuid
 import sys
 from datetime import datetime, timezone
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 import sqlalchemy as sa
 from sqlalchemy import select
 from app.models.aws_connection import AWSConnection
