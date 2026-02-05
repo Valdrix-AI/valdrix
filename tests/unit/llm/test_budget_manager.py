@@ -33,6 +33,7 @@ class LLMUsage(Base):
     total_tokens = Column(Numeric)
     operation_id = Column(String)
     request_type = Column(String)
+    is_byok = Column(Boolean)
 
 class mock_tier(Enum):
     FREE = "free"

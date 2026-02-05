@@ -164,8 +164,9 @@ class CostPersistenceService:
                 existing = res.scalars().first()
                 
                 if existing:
-                    existing.cost_usd = Decimal(str(val["cost_usd"]))
-                    if "amount_raw" in val:
+                    if val.get("cost_usd") is not None:
+                        existing.cost_usd = Decimal(str(val["cost_usd"]))
+                    if val.get("amount_raw") is not None:
                         existing.amount_raw = Decimal(str(val["amount_raw"]))
                 else:
                     self.db.add(CostRecord(**val))

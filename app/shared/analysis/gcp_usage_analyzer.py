@@ -57,14 +57,14 @@ class GCPUsageAnalyzer:
             # Filter for Compute Engine instances
             compute_records = [r for r in records 
                              if r.get("service", "").lower() == "compute engine"
-                             and "/instances/" in resource_id]
+                             and ("/instances/" in resource_id or "/machine-types/" in resource_id)]
             
             if not compute_records:
                 continue
             
             total_cost = sum(r.get("cost", 0) for r in compute_records)
             total_cpu_hours = sum(r.get("usage_amount", 0) for r in compute_records
-                                 if "cpu" in r.get("sku_description", "").lower())
+                                 if any(x in r.get("sku_description", "").lower() for x in ["cpu", "core", "vcpus"]))
             total_network = sum(r.get("usage_amount", 0) for r in compute_records
                                if "egress" in r.get("sku_description", "").lower())
             

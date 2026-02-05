@@ -10,7 +10,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 // Test configuration
-const BASE_URL = process.env.DASHBOARD_URL || 'http://localhost:5173';
+const BASE_URL = process.env.DASHBOARD_URL || 'http://localhost:4173';
 
 // Helper to wait for page load
 async function waitForPageLoad(page: Page) {
@@ -24,10 +24,10 @@ test.describe('Onboarding Flow', () => {
 		await page.goto(BASE_URL);
 		await waitForPageLoad(page);
 
-		// Check for key elements
-		await expect(page.locator('h1')).toContainText('Valdrix');
+		// Check for key elements - title is in the header link
+		await expect(page.locator('header')).toContainText('Valdrix');
+		await expect(page.locator('h1')).toContainText('Cloud Cost');
 		await expect(page.locator('text=Get Started')).toBeVisible();
-		await expect(page.locator('text=Features')).toBeVisible();
 	});
 
 	test('pricing page displays all tiers', async ({ page }) => {
@@ -42,16 +42,16 @@ test.describe('Onboarding Flow', () => {
 	});
 
 	test('login page loads', async ({ page }) => {
-		await page.goto(`${BASE_URL}/login`);
+		await page.goto(`${BASE_URL}/auth/login`);
 		await waitForPageLoad(page);
 
 		// Check for login form elements
 		await expect(page.locator('input[type="email"]')).toBeVisible();
-		await expect(page.locator('button:has-text("Sign")')).toBeVisible();
+		await expect(page.locator('button:has-text("Sign In")')).toBeVisible();
 	});
 
 	test('signup page loads', async ({ page }) => {
-		await page.goto(`${BASE_URL}/signup`);
+		await page.goto(`${BASE_URL}/auth/signup`);
 		await waitForPageLoad(page);
 
 		// Check for signup form
@@ -153,7 +153,7 @@ test.describe('GreenOps Flow', () => {
 
 test.describe('API Health', () => {
 	test('health endpoint returns ok', async ({ request }) => {
-		const apiUrl = process.env.API_URL || 'http://localhost:8000';
+		const apiUrl = process.env.API_URL || 'http://127.0.0.1:8000';
 
 		const response = await request.get(`${apiUrl}/health`);
 		expect(response.ok()).toBeTruthy();

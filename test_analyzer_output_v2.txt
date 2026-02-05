@@ -1,0 +1,439 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.0.2, pluggy-1.6.0 -- /home/daretechie/DevProject/GitHub/CloudSentinel-AI/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/daretechie/DevProject/GitHub/CloudSentinel-AI
+configfile: pyproject.toml
+plugins: anyio-4.12.1, mock-3.15.1, langsmith-0.6.2, respx-0.22.0, cov-7.0.0, asyncio-1.3.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 13 items
+
+tests/unit/llm/test_analyzer_exhaustive.py::test_load_system_prompt_success PASSED [  7%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_load_system_prompt_fallback PASSED [ 15%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_strip_markdown PASSED   [ 23%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_analyze_cache_hit_full PASSED [ 30%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_analyze_budget_exceeded PASSED [ 38%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_analyze_budget_error_unexpected PASSED [ 46%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_analyze_flow_success PASSED [ 53%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_llm_invocation_primary_failure_fallback PASSED [ 61%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_process_results_fallback PASSED [ 69%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_analyze_force_refresh FAILED [ 76%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_analyze_with_delta_analysis_enabled FAILED [ 84%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_invoke_llm_failure_retry PASSED [ 92%]
+tests/unit/llm/test_analyzer_exhaustive.py::test_process_results_with_slack_alert FAILED [100%]
+ERROR: Coverage failure: total of 26 is less than fail-under=80
+
+
+=================================== FAILURES ===================================
+__________________________ test_analyze_force_refresh __________________________
+
+self = <app.shared.llm.analyzer.FinOpsAnalyzer object at 0x7d08373f9950>
+usage_summary = CloudUsageSummary(tenant_id='2bfce1d4-cc1c-4cab-9893-66e96de722a4', provider='aws', start_date=datetime.date(2026, 2, ...atetime.date(2026, 2, 5), total_cost=Decimal('100.0'), records=[], by_service={}, by_region={}, by_tag={}, metadata={})
+tenant_id = UUID('721a221c-ab24-40d0-a8ed-847b4e034415'), db = None
+provider = None, model = None, force_refresh = True
+
+    async def analyze(
+        self,
+        usage_summary: "CloudUsageSummary",
+        tenant_id: Optional[UUID] = None,
+        db: Optional[AsyncSession] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        force_refresh: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        PRODUCTION: Analyzes cloud costs with mandatory budget pre-authorization.
+    
+        Flow:
+        1. Check cache (return if hit)
+        2. Pre-authorize LLM budget (HARD BLOCK if exceeded)
+        3. Call LLM with authorized reservation
+        4. Record actual usage on success
+        5. Release reservation on failure (optional, handled by lack of record_usage)
+        """
+        operation_id = str(uuid.uuid4())
+        effective_db = db or self.db
+    
+        with tracer.start_as_current_span("analyze_costs") as span:
+            span.set_attribute("tenant_id", str(tenant_id) if tenant_id else "anonymous")
+            span.set_attribute("operation_id", operation_id)
+    
+            # 1. Cache & Delta Logic
+            cached_analysis, is_delta = await self._check_cache_and_delta(
+                tenant_id, force_refresh, usage_summary
+            )
+            if cached_analysis and not is_delta:
+                logger.info("analysis_cache_hit", tenant_id=str(tenant_id), operation_id=operation_id)
+                return cached_analysis
+    
+            logger.info("starting_analysis",
+                        tenant_id=str(tenant_id),
+                        data_points=len(usage_summary.records),
+                        mode="delta" if is_delta else "full",
+                        operation_id=operation_id)
+    
+            # 2. PRODUCTION: PRE-AUTHORIZE LLM BUDGET (HARD BLOCK)
+            reserved_amount = None
+    
+            # Safely get model name from LLM object, handling mocks in tests
+            llm_model = getattr(self.llm, "model_name", getattr(self.llm, "model", "llama-3.3-70b-versatile"))
+            effective_model = model or llm_model
+    
+            try:
+                if tenant_id and effective_db:
+                    # Estimate tokens: 1 record ≈ 20 tokens, min 500
+                    prompt_tokens = max(500, len(usage_summary.records) * 20)
+                    completion_tokens = 500
+    
+>                   reserved_amount = await LLMBudgetManager.check_and_reserve(
+                        tenant_id=tenant_id,
+                        db=effective_db,
+                        model=effective_model,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        operation_id=operation_id
+                    )
+
+app/shared/llm/analyzer.py:148: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tenant_id = UUID('721a221c-ab24-40d0-a8ed-847b4e034415')
+db = <AsyncMock id='137474240691376'>, provider = 'openai'
+model = 'llama-3.3-70b-versatile', prompt_tokens = 500, completion_tokens = 500
+operation_id = '182f8dbf-6b87-4e23-ac3a-c7cbe9eaeaf8'
+
+    @staticmethod
+    
+    async def check_and_reserve(
+        tenant_id: UUID,
+        db: AsyncSession,
+        provider: str = "openai",
+        model: str = "gpt-4o",
+        prompt_tokens: int = AVG_PROMPT_TOKENS,
+        completion_tokens: int = AVG_RESPONSE_TOKENS,
+        operation_id: str = None,
+    ) -> Decimal:
+        """
+        PRODUCTION: Check budget and atomically reserve funds.
+        """
+        estimated_cost = LLMBudgetManager.estimate_cost(
+            prompt_tokens, completion_tokens, model, provider
+        )
+    
+        try:
+            # 1. Fetch current budget state (with FOR UPDATE lock)
+            result = await db.execute(
+                select(LLMBudget).where(LLMBudget.tenant_id == tenant_id).with_for_update()
+            )
+            budget = result.scalar_one_or_none()
+    
+            if not budget:
+                logger.error(
+                    "budget_not_configured",
+                    tenant_id=str(tenant_id),
+                    error="LLMBudget record not found"
+                )
+>               raise ResourceNotFoundError(
+                    f"LLM budget not configured for tenant {tenant_id}",
+                    code="budget_not_found"
+                )
+E               app.shared.core.exceptions.ResourceNotFoundError: LLM budget not configured for tenant 721a221c-ab24-40d0-a8ed-847b4e034415
+
+app/shared/llm/budget_manager.py:104: ResourceNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+mock_llm = RunnableLambda(afunc=_ainvoke)
+usage_summary = CloudUsageSummary(tenant_id='2bfce1d4-cc1c-4cab-9893-66e96de722a4', provider='aws', start_date=datetime.date(2026, 2, ...atetime.date(2026, 2, 5), total_cost=Decimal('100.0'), records=[], by_service={}, by_region={}, by_tag={}, metadata={})
+mock_db = <AsyncMock id='137474240691376'>
+
+    @pytest.mark.asyncio
+    async def test_analyze_force_refresh(mock_llm, usage_summary, mock_db):
+        analyzer = FinOpsAnalyzer(mock_llm, mock_db)
+        tenant_id = uuid4()
+        mock_cache = MagicMock()
+        mock_cache.get_analysis = AsyncMock(return_value={"cached": True})
+    
+        with patch("app.shared.llm.analyzer.get_cache_service", return_value=mock_cache), \
+             patch("app.shared.llm.analyzer.get_settings") as mock_settings, \
+             patch.object(analyzer, "_invoke_llm", new_callable=AsyncMock) as mock_invoke, \
+             patch.object(analyzer, "_process_analysis_results", new_callable=AsyncMock) as mock_proc:
+                mock_settings.return_value.ENABLE_DELTA_ANALYSIS = False
+                mock_invoke.return_value = ('{"fresh": True}', {"metadata": "test"})
+                mock_proc.return_value = {"fresh": True}
+    
+                # Should skip cache because force_refresh=True
+>               result = await analyzer.analyze(usage_summary, tenant_id=tenant_id, force_refresh=True)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/llm/test_analyzer_exhaustive.py:240: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <app.shared.llm.analyzer.FinOpsAnalyzer object at 0x7d08373f9950>
+usage_summary = CloudUsageSummary(tenant_id='2bfce1d4-cc1c-4cab-9893-66e96de722a4', provider='aws', start_date=datetime.date(2026, 2, ...atetime.date(2026, 2, 5), total_cost=Decimal('100.0'), records=[], by_service={}, by_region={}, by_tag={}, metadata={})
+tenant_id = UUID('721a221c-ab24-40d0-a8ed-847b4e034415'), db = None
+provider = None, model = None, force_refresh = True
+
+    async def analyze(
+        self,
+        usage_summary: "CloudUsageSummary",
+        tenant_id: Optional[UUID] = None,
+        db: Optional[AsyncSession] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        force_refresh: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        PRODUCTION: Analyzes cloud costs with mandatory budget pre-authorization.
+    
+        Flow:
+        1. Check cache (return if hit)
+        2. Pre-authorize LLM budget (HARD BLOCK if exceeded)
+        3. Call LLM with authorized reservation
+        4. Record actual usage on success
+        5. Release reservation on failure (optional, handled by lack of record_usage)
+        """
+        operation_id = str(uuid.uuid4())
+        effective_db = db or self.db
+    
+        with tracer.start_as_current_span("analyze_costs") as span:
+            span.set_attribute("tenant_id", str(tenant_id) if tenant_id else "anonymous")
+            span.set_attribute("operation_id", operation_id)
+    
+            # 1. Cache & Delta Logic
+            cached_analysis, is_delta = await self._check_cache_and_delta(
+                tenant_id, force_refresh, usage_summary
+            )
+            if cached_analysis and not is_delta:
+                logger.info("analysis_cache_hit", tenant_id=str(tenant_id), operation_id=operation_id)
+                return cached_analysis
+    
+            logger.info("starting_analysis",
+                        tenant_id=str(tenant_id),
+                        data_points=len(usage_summary.records),
+                        mode="delta" if is_delta else "full",
+                        operation_id=operation_id)
+    
+            # 2. PRODUCTION: PRE-AUTHORIZE LLM BUDGET (HARD BLOCK)
+            reserved_amount = None
+    
+            # Safely get model name from LLM object, handling mocks in tests
+            llm_model = getattr(self.llm, "model_name", getattr(self.llm, "model", "llama-3.3-70b-versatile"))
+            effective_model = model or llm_model
+    
+            try:
+                if tenant_id and effective_db:
+                    # Estimate tokens: 1 record ≈ 20 tokens, min 500
+                    prompt_tokens = max(500, len(usage_summary.records) * 20)
+                    completion_tokens = 500
+    
+                    reserved_amount = await LLMBudgetManager.check_and_reserve(
+                        tenant_id=tenant_id,
+                        db=effective_db,
+                        model=effective_model,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        operation_id=operation_id
+                    )
+    
+                    logger.info("llm_budget_authorized",
+                                tenant_id=str(tenant_id),
+                                reserved_amount=float(reserved_amount),
+                                operation_id=operation_id)
+            except BudgetExceededError:
+                raise
+            except Exception as e:
+                logger.error("budget_check_failed_unexpected", error=str(e), operation_id=operation_id)
+                # Fail open or closed? PRODUCTION: Fail closed if it's a known tenant
+                if tenant_id:
+>                   raise AIAnalysisError(f"Budget verification failed: {str(e)}") from e
+E                   app.shared.core.exceptions.AIAnalysisError: Budget verification failed: LLM budget not configured for tenant 721a221c-ab24-40d0-a8ed-847b4e034415
+
+app/shared/llm/analyzer.py:167: AIAnalysisError
+----------------------------- Captured stdout call -----------------------------
+2026-02-05 12:23:43 [info     ] starting_analysis              data_points=0 mode=full operation_id=182f8dbf-6b87-4e23-ac3a-c7cbe9eaeaf8 tenant_id=721a221c-ab24-40d0-a8ed-847b4e034415
+2026-02-05 12:23:43 [error    ] budget_not_configured          error='LLMBudget record not found' tenant_id=721a221c-ab24-40d0-a8ed-847b4e034415
+2026-02-05 12:23:43 [error    ] budget_check_failed_unexpected error='LLM budget not configured for tenant 721a221c-ab24-40d0-a8ed-847b4e034415' operation_id=182f8dbf-6b87-4e23-ac3a-c7cbe9eaeaf8
+___________________ test_analyze_with_delta_analysis_enabled ___________________
+
+mock_llm = RunnableLambda(afunc=_ainvoke)
+usage_summary = CloudUsageSummary(tenant_id='c28068dd-cbb9-482f-bee4-28c5d1ed91a2', provider='aws', start_date=datetime.date(2026, 2, ...atetime.date(2026, 2, 5), total_cost=Decimal('100.0'), records=[], by_service={}, by_region={}, by_tag={}, metadata={})
+mock_db = <AsyncMock id='137474240690032'>
+
+    @pytest.mark.asyncio
+    async def test_analyze_with_delta_analysis_enabled(mock_llm, usage_summary, mock_db):
+        analyzer = FinOpsAnalyzer(mock_llm, mock_db)
+        tenant_id = uuid4()
+    
+        mock_cache = MagicMock()
+        mock_cache.get_analysis = AsyncMock(return_value={"cached": True})
+    
+        with patch("app.shared.llm.analyzer.get_cache_service", return_value=mock_cache), \
+             patch("app.shared.llm.analyzer.get_settings") as mock_settings, \
+             patch.object(analyzer, "_invoke_llm", new_callable=AsyncMock) as mock_invoke, \
+             patch.object(analyzer, "_process_analysis_results", new_callable=AsyncMock) as mock_proc:
+                mock_settings.return_value.ENABLE_DELTA_ANALYSIS = True
+                mock_settings.return_value.DELTA_ANALYSIS_DAYS = 7
+                mock_invoke.return_value = ('{"fresh": True}', {"metadata": "test"})
+                mock_proc.return_value = {"fresh": True}
+    
+                result = await analyzer.analyze(usage_summary, tenant_id=tenant_id)
+>               assert result == {"fresh": True}
+E               AssertionError: assert {'cached': True} == {'fresh': True}
+E                 
+E                 Left contains 1 more item:
+E                 {'cached': True}
+E                 Right contains 1 more item:
+E                 {'fresh': True}
+E                 
+E                 Full diff:
+E                   {
+E                 -     'fresh': True,
+E                 ?      ^^ ^^
+E                 +     'cached': True,
+E                 ?      ^^^^ ^
+E                   }
+
+tests/unit/llm/test_analyzer_exhaustive.py:262: AssertionError
+----------------------------- Captured stdout call -----------------------------
+2026-02-05 12:23:43 [info     ] analysis_delta_mode_enabled    tenant_id=0271510a-b8d4-40b9-ac20-892b10c727f5
+2026-02-05 12:23:43 [info     ] analysis_delta_no_new_data     tenant_id=0271510a-b8d4-40b9-ac20-892b10c727f5
+2026-02-05 12:23:43 [info     ] analysis_cache_hit             operation_id=5e10d0a1-4575-4462-8983-b6868c8e6ca0 tenant_id=0271510a-b8d4-40b9-ac20-892b10c727f5
+____________________ test_process_results_with_slack_alert _____________________
+
+mock_llm = RunnableLambda(afunc=_ainvoke)
+mock_db = <AsyncMock id='137474209786784'>
+
+    @pytest.mark.asyncio
+    async def test_process_results_with_slack_alert(mock_llm, mock_db):
+        analyzer = FinOpsAnalyzer(mock_llm, mock_db)
+    
+        with patch("app.shared.llm.analyzer.get_settings") as mock_settings, \
+             patch("app.shared.llm.analyzer.SlackService.send_alert", new_callable=AsyncMock) as mock_slack, \
+             patch("app.shared.llm.analyzer.SymbolicForecaster.forecast", new_callable=AsyncMock) as mock_forecast:
+                mock_settings.return_value.SLACK_BOT_TOKEN = "xoxb-test"
+                mock_settings.return_value.SLACK_CHANNEL_ID = "C123"
+                mock_forecast.return_value = {}
+    
+                # Content with anomaly to trigger alert
+>               content = json.dumps({
+                          ^^^^
+                    "insights": [],
+                    "recommendations": [],
+                    "anomalies": [{"resource": "ec2", "issue": "spike", "cost_impact": "$10", "severity": "high"}],
+                    "forecast": {}
+                })
+E               NameError: name 'json' is not defined. Did you forget to import 'json'?
+
+tests/unit/llm/test_analyzer_exhaustive.py:290: NameError
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.13.5-final-0 ________________
+
+Name                                                Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------------------------
+app/__init__.py                                         0      0      0      0   100%
+app/main.py                                           196    196     18      0     0%   1-399
+app/models/anomaly_marker.py                           21      1      0      0    95%   57
+app/models/attribution.py                              33      0      0      0   100%
+app/models/aws_connection.py                           40      3      0      0    92%   126, 129, 134
+app/models/azure_connection.py                         33      1      0      0    97%   68
+app/models/background_job.py                           55      4      0      0    93%   94, 103-105
+app/models/carbon_settings.py                          21      0      0      0   100%
+app/models/cloud.py                                    40      0      0      0   100%
+app/models/discovered_account.py                       19      1      0      0    95%   43
+app/models/gcp_connection.py                           34      1      0      0    97%   72
+app/models/llm.py                                      67     10      0      0    85%   97, 148, 152, 156, 160, 164, 168, 172, 176, 185
+app/models/notification_settings.py                    23      1      0      0    96%   61
+app/models/pricing.py                                  25      0      0      0   100%
+app/models/remediation.py                              67      1      0      0    99%   145
+app/models/security.py                                 17      0      0      0   100%
+app/models/tenant.py                                   50      3      2      1    92%   26, 83, 87
+app/modules/notifications/__init__.py                   2      0      0      0   100%
+app/modules/notifications/domain/__init__.py            3      0      0      0   100%
+app/modules/notifications/domain/email_service.py     102     86      4      0    15%   20-22, 41-45, 62-93, 97-105, 164-224, 228-280, 284-341
+app/modules/notifications/domain/slack.py              75     56     18      0    20%   33-35, 44-49, 53-72, 83-103, 128, 164-181, 201-209, 221-226
+app/schemas/costs.py                                   33      0      0      0   100%
+app/shared/__init__.py                                  0      0      0      0   100%
+app/shared/analysis/__init__.py                         0      0      0      0   100%
+app/shared/analysis/azure_usage_analyzer.py           120    120     64      0     0%   7-327
+app/shared/analysis/carbon_data.py                      3      0      0      0   100%
+app/shared/analysis/cur_usage_analyzer.py             180    180     98      0     0%   11-447
+app/shared/analysis/forecaster.py                     128    100     32      0    18%   15, 34-49, 61-92, 104-148, 163-191, 202-211, 216-227, 234-247
+app/shared/analysis/gcp_usage_analyzer.py             115    115     52      0     0%   7-333
+app/shared/cache/__init__.py                            3      3      0      0     0%   1-4
+app/shared/connections/__init__.py                      6      6      0      0     0%   1-7
+app/shared/connections/aws.py                          36     36      4      0     0%   1-59
+app/shared/connections/azure.py                        24     24      4      0     0%   1-36
+app/shared/connections/cur_automation.py                2      2      0      0     0%   1-3
+app/shared/connections/gcp.py                          21     21      4      0     0%   1-30
+app/shared/connections/instructions.py                 14     14      0      0     0%   1-49
+app/shared/connections/oidc.py                         64     64      8      0     0%   1-124
+app/shared/connections/organizations.py                39     39     10      0     0%   1-81
+app/shared/core/__init__.py                             0      0      0      0   100%
+app/shared/core/auth.py                                98     98     22      0     0%   1-247
+app/shared/core/cache.py                               86     57     18      0    28%   44-57, 63-76, 87-88, 92-93, 97-98, 102-103, 107-108, 112-120, 124-133, 137-149, 159-161
+app/shared/core/celery_app.py                          11     11      4      0     0%   1-48
+app/shared/core/cloud_connection.py                    69     69     22      0     0%   10-128
+app/shared/core/config.py                             130     33     32      1    60%   31-100, 238
+app/shared/core/constants.py                           12      0      0      0   100%
+app/shared/core/currency.py                            87     87     32      0     0%   8-173
+app/shared/core/dependencies.py                        25     25      2      0     0%   1-34
+app/shared/core/exceptions.py                          42     13      4      0    63%   25-26, 31-39, 44, 49, 59, 74
+app/shared/core/health.py                              58     58     10      0     0%   1-79
+app/shared/core/logging.py                             44     36     14      0    14%   11-38, 43-47, 50-82, 95-96
+app/shared/core/middleware.py                          34     34      4      0     0%   1-68
+app/shared/core/notifications.py                       26     26      6      0     0%   8-51
+app/shared/core/ops_metrics.py                         11      0      0      0   100%
+app/shared/core/pricing.py                            129     73     22      0    37%   233, 238-246, 253-255, 265-291, 298-324, 329-349, 362-364, 367-369, 372, 375, 378, 381-382
+app/shared/core/pricing_defaults.py                     2      2      0      0     0%   7-56
+app/shared/core/rate_limit.py                         111    111     34      0     0%   8-238
+app/shared/core/safety_service.py                      52     52      8      0     0%   10-131
+app/shared/core/security.py                           120     83     32      0    24%   40-41, 46-61, 75-90, 95-96, 106-129, 136-139, 145-147, 154-161, 170-187, 193-214, 221-232, 236
+app/shared/core/security_metrics.py                     5      5      0      0     0%   8-31
+app/shared/core/sentry.py                              53     53     18      0     0%   19-151
+app/shared/core/timeout.py                             19     19      0      0     0%   7-47
+app/shared/core/tracing.py                             41     41     10      0     0%   1-68
+app/shared/db/__init__.py                               0      0      0      0   100%
+app/shared/db/base.py                                  10      1      2      1    83%   21
+app/shared/db/session.py                              122    122     50      0     0%   1-250
+app/shared/health/__init__.py                           2      2      0      0     0%   1-3
+app/shared/lead_gen/__init__.py                         2      2      0      0     0%   1-3
+app/shared/lead_gen/assessment.py                       9      9      2      0     0%   1-17
+app/shared/llm/__init__.py                              5      0      0      0   100%
+app/shared/llm/analyzer.py                            227     48     56     16    74%   68->74, 70-71, 143->170, 166->170, 178-180, 191-193, 196->214, 210-211, 224, 251-253, 270->293, 276-277, 283-290, 306-315, 318-320, 324->331, 327->331, 372, 381-388, 409-414, 446-450
+app/shared/llm/budget_manager.py                      144     93     36      3    30%   59->63, 64-65, 110-164, 167, 170-178, 196-249, 267-319, 326-370
+app/shared/llm/circuit_breaker.py                      95     95     30      0     0%   25-232
+app/shared/llm/delta_analysis.py                      133    133     34      0     0%   16-407
+app/shared/llm/factory.py                              82     48     32      1    31%   23-34, 42, 47-52, 69-118, 128-139, 168, 190-200
+app/shared/llm/guardrails.py                          111     60     24      0    38%   44-104, 111-117, 122-126, 175-201
+app/shared/llm/hybrid_scheduler.py                     87     87     22      0     0%   11-282
+app/shared/llm/pricing_data.py                          9      0      0      0   100%
+app/shared/llm/providers/__init__.py                    5      0      0      0   100%
+app/shared/llm/providers/anthropic.py                  10      4      0      0    60%   8-12
+app/shared/llm/providers/base.py                       14      5      6      1    50%   21-26
+app/shared/llm/providers/google.py                     10      4      0      0    60%   8-12
+app/shared/llm/providers/groq.py                       10      4      0      0    60%   8-12
+app/shared/llm/providers/openai.py                     10      1      0      0    90%   12
+app/shared/llm/usage_tracker.py                        45     27      0      0    40%   28-49, 69, 81, 97, 119-129, 138-150, 156, 160, 164
+app/shared/llm/zombie_analyzer.py                      93     72     30      0    17%   83-84, 91-95, 99-113, 124-166, 183-209, 221-240
+-----------------------------------------------------------------------------------------------
+TOTAL                                                4211   2891    936     24    26%
+Coverage HTML written to dir htmlcov
+FAIL Required test coverage of 80% not reached. Total coverage: 26.38%
+=========================== short test summary info ============================
+FAILED tests/unit/llm/test_analyzer_exhaustive.py::test_analyze_force_refresh - app.shared.core.exceptions.AIAnalysisError: Budget verification failed: LLM budget not configured for tenant 721a221c-ab24-40d0-a8ed-847b4e034415
+FAILED tests/unit/llm/test_analyzer_exhaustive.py::test_analyze_with_delta_analysis_enabled - AssertionError: assert {'cached': True} == {'fresh': True}
+  
+  Left contains 1 more item:
+  {'cached': True}
+  Right contains 1 more item:
+  {'fresh': True}
+  
+  Full diff:
+    {
+  -     'fresh': True,
+  ?      ^^ ^^
+  +     'cached': True,
+  ?      ^^^^ ^
+    }
+FAILED tests/unit/llm/test_analyzer_exhaustive.py::test_process_results_with_slack_alert - NameError: name 'json' is not defined. Did you forget to import 'json'?
+========================= 3 failed, 10 passed in 5.61s =========================

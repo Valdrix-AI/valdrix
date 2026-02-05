@@ -76,6 +76,22 @@ async def test_check_growth_tier_logic(db, auth_user):
     auth_user.tier = PricingTier.GROWTH
     await check_growth_tier(auth_user, db) # Should not raise
 
+@pytest.mark.asyncio
+async def test_check_growth_tier_invalid_plan(db, auth_user):
+    from app.modules.governance.api.v1.settings.connections import check_growth_tier
+    from fastapi import HTTPException
+    
+    # Set invalid plan in DB
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = "super_legacy_plan"
+    await db.commit()
+    
+    # Should fall back to FREE and raise 403
+    with pytest.raises(HTTPException) as exc:
+        await check_growth_tier(auth_user, db)
+    assert exc.value.status_code == 403
+    assert "Free" in str(exc.value.detail) or "Growth" in str(exc.value.detail)
+
 # ==================== AWS API Tests ====================
 
 @pytest.mark.asyncio
@@ -152,6 +168,23 @@ async def test_sync_aws_org(ac, db, override_auth, auth_user):
         resp = await ac.post(f"/api/v1/settings/connections/aws/{conn.id}/sync-org")
         assert resp.status_code == 200
         assert resp.json()["count"] == 5
+
+@pytest.mark.asyncio
+async def test_sync_aws_org_not_management(ac, db, override_auth, auth_user):
+    # Standard connection (not management)
+    conn = AWSConnection(
+        tenant_id=auth_user.tenant_id,
+        aws_account_id="998877665544",
+        role_arn="arn:aws:iam::998877665544:role/Valdrix",
+        external_id="vx-998877665544",
+        is_management_account=False,
+        status="active"
+    )
+    db.add(conn)
+    await db.commit()
+    
+    resp = await ac.post(f"/api/v1/settings/connections/aws/{conn.id}/sync-org")
+    assert resp.status_code == 404
 
 @pytest.mark.asyncio
 async def test_list_aws_connections(ac, db, override_auth, auth_user):
@@ -317,3 +350,100 @@ async def test_link_discovered_account(ac, db, override_auth, auth_user):
     new_conn = res.scalar_one()
     assert new_conn.tenant_id == auth_user.tenant_id
     assert new_conn.external_id == mgmt.external_id
+
+@pytest.mark.asyncio
+async def test_link_discovered_account_idempotent(ac, db, override_auth, auth_user):
+    # 1. Management connection
+    mgmt = AWSConnection(
+        tenant_id=auth_user.tenant_id,
+        aws_account_id="888888888888",
+        role_arn="arn",
+        external_id="vx-unique-test-id-888",
+        is_management_account=True,
+        status="active"
+    )
+    db.add(mgmt)
+    await db.commit()
+    await db.refresh(mgmt)
+    
+    # 2. Discovered account
+    disc = DiscoveredAccount(
+        management_connection_id=mgmt.id,
+        account_id="777777777777",
+        name="Linked Member",
+        status="linked"
+    )
+    db.add(disc)
+    await db.commit()
+    await db.refresh(disc)
+    
+    # 3. Existing connection
+    conn = AWSConnection(
+        tenant_id=auth_user.tenant_id,
+        aws_account_id="777777777777",
+        role_arn="arn",
+        external_id=mgmt.external_id, # Sharing external ID
+        status="active"
+    )
+    db.add(conn)
+    await db.commit()
+    
+    # 4. Try to link again (should return existing)
+    resp = await ac.post(f"/api/v1/settings/connections/aws/discovered/{disc.id}/link")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "existing"
+
+@pytest.mark.asyncio
+async def test_create_azure_connection_duplicate(ac, db, override_auth, auth_user):
+    # Setup Growth tier
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.GROWTH.value
+    await db.commit()
+    auth_user.tier = PricingTier.GROWTH
+    
+    # Pre-create
+    conn = AzureConnection(
+        tenant_id=auth_user.tenant_id,
+        name="Existing",
+        azure_tenant_id="t-1",
+        client_id="c-1",
+        subscription_id="sub-duplicate"
+    )
+    db.add(conn)
+    await db.commit()
+    
+    payload = {
+        "name": "New",
+        "azure_tenant_id": "t-2",
+        "client_id": "c-2",
+        "subscription_id": "sub-duplicate",
+        "client_secret": "s"
+    }
+    resp = await ac.post("/api/v1/settings/connections/azure", json=payload)
+    assert resp.status_code == 409
+
+@pytest.mark.asyncio
+async def test_create_gcp_connection_duplicate(ac, db, override_auth, auth_user):
+    # Setup Growth tier
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.GROWTH.value
+    await db.commit()
+    auth_user.tier = PricingTier.GROWTH
+    
+    # Pre-create
+    conn = GCPConnection(
+        tenant_id=auth_user.tenant_id,
+        name="Existing",
+        project_id="proj-duplicate"
+    )
+    db.add(conn)
+    await db.commit()
+    
+    payload = {
+        "name": "New",
+        "project_id": "proj-duplicate",
+        "service_account_json": "{}",
+        "auth_method": "secret"
+    }
+    resp = await ac.post("/api/v1/settings/connections/gcp", json=payload)
+    assert resp.status_code == 409

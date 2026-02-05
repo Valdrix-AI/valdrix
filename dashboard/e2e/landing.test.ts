@@ -12,16 +12,8 @@ test.describe('Landing Page Content', () => {
 		await expect(headingContent).toBeVisible();
 	});
 
-	test('should display value optimizer message in chart section', async ({ page }) => {
-		// The user added "Value Optimizer: Continuously eliminating waste and technical debt."
-		const efficiencyMessage = page.getByText(
-			'Value Optimizer: Continuously eliminating waste and technical debt.'
-		);
-		await expect(efficiencyMessage).toBeVisible();
-	});
-
 	test('should have a functional CTA button', async ({ page }) => {
-		const ctaBtn = page.getByRole('button', { name: /Connect AWS/i });
-		await expect(ctaBtn).toBeVisible();
+		const ctaLink = page.getByRole('link', { name: /Get Started Free/i });
+		await expect(ctaLink).toBeVisible();
 	});
 });

@@ -234,14 +234,27 @@ class FinOpsAnalyzer:
         if cached_analysis and get_settings().ENABLE_DELTA_ANALYSIS:
             is_delta = True
             logger.info("analysis_delta_mode_enabled", tenant_id=str(tenant_id))
-            from datetime import date, timedelta
+            from datetime import date, datetime, timedelta, timezone
             settings = get_settings()
             delta_cutoff = date.today() - timedelta(days=settings.DELTA_ANALYSIS_DAYS)
             
             # BE-LLM-3: Data Safety - Pass a filtered copy to avoid polluting original object
             # This ensures subsequent processing in the same request uses the full data if needed.
-            records_to_analyze = [copy.deepcopy(r) for r in cached_analysis.get("records", []) if r.date >= delta_cutoff] \
-                if isinstance(cached_analysis, dict) else [copy.deepcopy(r) for r in usage_summary.records if r.date >= delta_cutoff]
+            from app.schemas.costs import CostRecord
+            
+            raw_records = cached_analysis.get("records", []) if isinstance(cached_analysis, dict) else usage_summary.records
+            records_to_analyze = []
+            for r in raw_records:
+                r_dt = r.get("date") if isinstance(r, dict) else r.date
+                # Normalize r_dt to date for comparison with delta_cutoff
+                r_date = r_dt.date() if isinstance(r_dt, datetime) else r_dt
+                
+                if r_date >= delta_cutoff:
+                    # Ensure we have CostRecord objects for the summary copy
+                    if isinstance(r, dict):
+                        records_to_analyze.append(CostRecord(**r))
+                    else:
+                        records_to_analyze.append(copy.deepcopy(r))
             
             if not records_to_analyze:
                 logger.info("analysis_delta_no_new_data", tenant_id=str(tenant_id))

@@ -21,10 +21,9 @@ class OrganizationsDiscoveryService:
             logger.warning("sync_skipped_not_management_account", connection_id=str(connection.id))
             return 0
             
-        session = aioboto3.Session()
-        
         # Step 1: Assume role for management account
         try:
+            session = aioboto3.Session()
             async with session.client("sts", region_name="us-east-1") as sts:
                 role = await sts.assume_role(
                     RoleArn=connection.role_arn,

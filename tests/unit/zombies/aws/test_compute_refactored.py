@@ -13,7 +13,6 @@ def mock_aws_session():
     return session, context_manager
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Mocking complexity with aioboto3 pagination")
 async def test_gpu_instance_detection_with_attribution():
     """
     Mock-First Test: Verifies that the refined plugin identifies 
@@ -51,19 +50,23 @@ async def test_gpu_instance_detection_with_attribution():
     mock_ec2.get_paginator.return_value = mock_paginator
     
     # 2. Mock CloudWatch Client
-    mock_cw = AsyncMock()
-    mock_cw.get_metric_data.return_value = {
+    mock_cw = MagicMock()
+    mock_cw.__aenter__ = AsyncMock(return_value=mock_cw)
+    mock_cw.__aexit__ = AsyncMock()
+    mock_cw.get_metric_data = AsyncMock(return_value={
         'MetricDataResults': [{
             'Id': 'm0',
             'Values': [1.5] # Low CPU for a G5 instance
         }]
-    }
+    })
     
     # 3. Mock CloudTrail Client
-    mock_ct = AsyncMock()
-    mock_ct.lookup_events.return_value = {
+    mock_ct = MagicMock()
+    mock_ct.__aenter__ = AsyncMock(return_value=mock_ct)
+    mock_ct.__aexit__ = AsyncMock()
+    mock_ct.lookup_events = AsyncMock(return_value={
         'Events': [{'EventName': 'RunInstances', 'Username': 'ml-engineer-target'}]
-    }
+    })
 
     # Setup the _get_client mock to return the correct client
     def mock_get_client(session_arg, service_name, region, creds, config=None):

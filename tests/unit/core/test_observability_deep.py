@@ -28,9 +28,14 @@ class TestObservabilityDeep:
     """Deep tests for sentry.py and tracing.py to reach 100% coverage."""
 
     def setup_method(self):
-        # Ensure sentry_sdk is defined in the module's globals even if it failed at original import time
+        # Ensure sentry_sdk and integrations are defined in the module's globals
         if not hasattr(sentry_module, 'sentry_sdk') or sentry_module.sentry_sdk is None:
             sentry_module.sentry_sdk = mock_sentry_sdk
+        
+        # Inject integrations into the module namespace to avoid NameError
+        sentry_module.FastApiIntegration = MagicMock
+        sentry_module.SqlalchemyIntegration = MagicMock
+        sentry_module.LoggingIntegration = MagicMock
         sentry_module.SENTRY_AVAILABLE = True
 
     def test_init_sentry_no_dsn(self):

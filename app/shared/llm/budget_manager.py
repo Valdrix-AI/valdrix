@@ -10,6 +10,7 @@ from decimal import Decimal
 from datetime import datetime, timezone
 from uuid import UUID
 from enum import Enum
+from typing import Optional, Any
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.llm import LLMBudget, LLMUsage
@@ -47,7 +48,18 @@ class LLMBudgetManager:
     BYOK_PLATFORM_FEE_USD = Decimal("0.50")
     
     @staticmethod
-    def estimate_cost(prompt_tokens: int, completion_tokens: int, model: str, provider: str = "openai") -> Decimal:
+    def _to_decimal(v: Any) -> Decimal:
+        """Safe conversion to Decimal for currency math."""
+        if v is None:
+            return Decimal("0")
+        try:
+            return Decimal(str(v))
+        except (ValueError, TypeError, Exception):
+            logger.warning("invalid_decimal_conversion", value=str(v))
+            return Decimal("0")
+
+    @classmethod
+    def estimate_cost(cls, prompt_tokens: int, completion_tokens: int, model: str, provider: str = "openai") -> Decimal:
         """
         Estimate LLM request cost in USD using shared pricing data.
         """
@@ -70,9 +82,9 @@ class LLMBudgetManager:
         
         return (input_cost + output_cost).quantize(Decimal("0.0001"))
 
-    @staticmethod
-
+    @classmethod
     async def check_and_reserve(
+        cls,
         tenant_id: UUID,
         db: AsyncSession,
         provider: str = "openai",
@@ -84,7 +96,7 @@ class LLMBudgetManager:
         """
         PRODUCTION: Check budget and atomically reserve funds.
         """
-        estimated_cost = LLMBudgetManager.estimate_cost(
+        estimated_cost = cls.estimate_cost(
             prompt_tokens, completion_tokens, model, provider
         )
         
@@ -117,9 +129,10 @@ class LLMBudgetManager:
                     (LLMUsage.created_at >= month_start)
                 )
             )
-            current_usage = result_usage.scalar()
+            current_usage = cls._to_decimal(result_usage.scalar())
             
-            remaining_budget = budget.monthly_limit_usd - current_usage
+            limit = cls._to_decimal(budget.monthly_limit_usd)
+            remaining_budget = limit - current_usage
             
             # 3. Enforce hard limit
             if estimated_cost > remaining_budget:
@@ -129,7 +142,7 @@ class LLMBudgetManager:
                     model=model,
                     requested_amount=float(estimated_cost),
                     remaining_budget=float(remaining_budget),
-                    monthly_limit=float(budget.monthly_limit_usd),
+                    monthly_limit=float(limit),
                     current_usage=float(current_usage)
                 )
                 
@@ -142,7 +155,7 @@ class LLMBudgetManager:
                 raise BudgetExceededError(
                     f"LLM budget exceeded. Required: ${float(estimated_cost):.4f}, Available: ${float(remaining_budget):.4f}",
                     details={
-                        "monthly_limit": float(budget.monthly_limit_usd),
+                        "monthly_limit": float(limit),
                         "current_usage": float(current_usage),
                         "requested_amount": float(estimated_cost),
                         "remaining_budget": float(remaining_budget),
@@ -163,9 +176,7 @@ class LLMBudgetManager:
             
             return estimated_cost
             
-        except BudgetExceededError:
-            raise
-        except ResourceNotFoundError:
+        except (BudgetExceededError, ResourceNotFoundError):
             raise
         except Exception as e:
             logger.error(
@@ -177,8 +188,9 @@ class LLMBudgetManager:
             )
             raise
     
-    @staticmethod
+    @classmethod
     async def record_usage(
+        cls,
         tenant_id: UUID,
         db: AsyncSession,
         model: str,
@@ -198,9 +210,9 @@ class LLMBudgetManager:
             # If BYOK is used, we charge a flat orchestration fee instead of token cost.
             if actual_cost_usd is None:
                 if is_byok:
-                    actual_cost_usd = LLMBudgetManager.BYOK_PLATFORM_FEE_USD
+                    actual_cost_usd = cls.BYOK_PLATFORM_FEE_USD
                 else:
-                    actual_cost_usd = LLMBudgetManager.estimate_cost(
+                    actual_cost_usd = cls.estimate_cost(
                         prompt_tokens, completion_tokens, model, provider
                     )
             
@@ -212,7 +224,7 @@ class LLMBudgetManager:
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 total_tokens=prompt_tokens + completion_tokens,
-                cost_usd=actual_cost_usd,
+                cost_usd=cls._to_decimal(actual_cost_usd),
                 is_byok=is_byok, # Explicitly record BYOK status
                 operation_id=operation_id,
                 request_type=request_type
@@ -234,7 +246,7 @@ class LLMBudgetManager:
             await db.commit()
             
             # Handle alerts
-            await LLMBudgetManager._check_budget_and_alert(tenant_id, db, actual_cost_usd)
+            await cls._check_budget_and_alert(tenant_id, db, actual_cost_usd)
             
             logger.info(
                 "llm_usage_recorded",
@@ -256,8 +268,8 @@ class LLMBudgetManager:
             # Don't fail the request if we can't record usage
             # (the usage is what matters, not the audit log)
 
-    @staticmethod
-    async def check_budget(tenant_id: UUID, db: AsyncSession):
+    @classmethod
+    async def check_budget(cls, tenant_id: UUID, db: AsyncSession):
         """
         Unified budget check for tenants.
         Returns: OK, SOFT_LIMIT, or HARD_LIMIT (via exception).
@@ -296,10 +308,10 @@ class LLMBudgetManager:
             select(func.coalesce(func.sum(LLMUsage.cost_usd), Decimal("0")))
             .where((LLMUsage.tenant_id == tenant_id) & (LLMUsage.created_at >= month_start))
         )
-        current_usage = result_usage.scalar()
+        current_usage = cls._to_decimal(result_usage.scalar())
         
-        limit = budget.monthly_limit_usd
-        threshold = Decimal(str(budget.alert_threshold_percent)) / 100
+        limit = cls._to_decimal(budget.monthly_limit_usd)
+        threshold = cls._to_decimal(budget.alert_threshold_percent) / Decimal("100")
 
         if current_usage >= limit:
             if budget.hard_limit:
@@ -318,8 +330,8 @@ class LLMBudgetManager:
 
         return BudgetStatus.OK
 
-    @staticmethod
-    async def _check_budget_and_alert(tenant_id: UUID, db: AsyncSession, last_cost: Decimal) -> None:
+    @classmethod
+    async def _check_budget_and_alert(cls, tenant_id: UUID, db: AsyncSession, last_cost: Decimal) -> None:
         """
         Checks budget threshold and sends Slack alerts if needed.
         """
@@ -335,10 +347,10 @@ class LLMBudgetManager:
             select(func.coalesce(func.sum(LLMUsage.cost_usd), Decimal("0")))
             .where((LLMUsage.tenant_id == tenant_id) & (LLMUsage.created_at >= month_start))
         )
-        current_usage = result_usage.scalar()
+        current_usage = cls._to_decimal(result_usage.scalar())
         
-        limit = budget.monthly_limit_usd
-        threshold_percent = budget.alert_threshold_percent
+        limit = cls._to_decimal(budget.monthly_limit_usd)
+        threshold_percent = cls._to_decimal(budget.alert_threshold_percent)
         usage_percent = (current_usage / limit * 100) if limit > 0 else Decimal("0")
 
         # Threshold check

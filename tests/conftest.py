@@ -30,6 +30,9 @@ os.environ["KDF_SALT"] = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=" # Base64
 def _register_models():
     try:
         from app.models.cloud import CloudAccount, CostRecord  # noqa: F401
+        from app.models.aws_connection import AWSConnection  # noqa: F401
+        from app.models.azure_connection import AzureConnection  # noqa: F401
+        from app.models.gcp_connection import GCPConnection  # noqa: F401
         from app.models.tenant import Tenant  # noqa: F401
         from app.models.remediation import RemediationRequest  # noqa: F401
         from app.models.security import OIDCKey  # noqa: F401

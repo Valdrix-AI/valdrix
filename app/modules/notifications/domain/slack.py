@@ -2,7 +2,7 @@
 Slack notification service for Valdrix.
 Sends alerts and daily digests to configured Slack channel.
 """
-import logging
+import structlog
 from typing import Any
 import asyncio
 import hashlib
@@ -11,7 +11,7 @@ import time
 from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.errors import SlackApiError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class SlackService:

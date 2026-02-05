@@ -8,7 +8,7 @@ class TestGCPUsageAnalyzer:
             {
                 "resource_id": "projects/p1/zones/z1/instances/vm-idle",
                 "service": "Compute Engine",
-                "sku_description": "N1 Predefined Instance Core",
+                "sku_description": "N1 Predefined Instance vCPU",
                 "usage_amount": 0.5, # 0.5 hours over 7 days (168h expected)
                 "cost": 10.0,
                 "usage_unit": "hour"
@@ -17,7 +17,7 @@ class TestGCPUsageAnalyzer:
             {
                 "resource_id": "projects/p1/zones/z1/instances/vm-active",
                 "service": "Compute Engine",
-                "sku_description": "N1 Predefined Instance Core",
+                "sku_description": "N1 Predefined Instance vCPU",
                 "usage_amount": 160.0,
                 "cost": 50.0,
                 "usage_unit": "hour"
@@ -41,7 +41,7 @@ class TestGCPUsageAnalyzer:
             {
                 "resource_id": "projects/p1/zones/z1/disks/disk-orphan",
                 "service": "Compute Engine",
-                "sku_description": "PD Standard",
+                "sku_description": "Storage PD Capacity",
                 "usage_amount": 100.0,
                 "cost": 5.0,
                 "usage_unit": "gibibyte month"
