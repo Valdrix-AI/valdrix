@@ -33,7 +33,9 @@ if ssl_mode == "disable":
     # WARNING: Only for local development with no SSL
     logger.warning("database_ssl_disabled",
                    msg="SSL disabled - INSECURE, do not use in production!")
-    connect_args["ssl"] = False
+    if "postgresql" in settings.DATABASE_URL:
+        connect_args["ssl"] = False
+
 
 elif ssl_mode == "require":
     # Item 2: Secure by Default - Try to use CA cert even in require mode if available
@@ -53,17 +55,20 @@ elif ssl_mode == "require":
         ssl_context.verify_mode = ssl.CERT_NONE
         logger.warning("database_ssl_require_insecure", 
                        msg="SSL enabled but CA verification skipped. MitM risk!")
-    connect_args["ssl"] = ssl_context
+    if "postgresql" in settings.DATABASE_URL:
+        connect_args["ssl"] = ssl_context
+
 
 elif ssl_mode in ("verify-ca", "verify-full"):
-    # Full verification - recommended for production with known CA
     if not settings.DB_SSL_CA_CERT_PATH:
         raise ValueError(f"DB_SSL_CA_CERT_PATH required for ssl_mode={ssl_mode}")
     ssl_context = ssl.create_default_context(cafile=settings.DB_SSL_CA_CERT_PATH)
     ssl_context.verify_mode = ssl.CERT_REQUIRED
     ssl_context.check_hostname = (ssl_mode == "verify-full")
-    connect_args["ssl"] = ssl_context
+    if "postgresql" in settings.DATABASE_URL:
+        connect_args["ssl"] = ssl_context
     logger.info("database_ssl_verified", mode=ssl_mode, ca_cert=settings.DB_SSL_CA_CERT_PATH)
+
 
 else:
     raise ValueError(f"Invalid DB_SSL_MODE: {ssl_mode}. Use: disable, require, verify-ca, verify-full")
@@ -138,11 +143,14 @@ async def get_db(request: Request = None) -> AsyncSession:
             tenant_id = getattr(request.state, "tenant_id", None)
             if tenant_id:
                 try:
-                    await session.execute(
-                        text("SELECT set_config('app.current_tenant_id', :tid, true)"),
-                        {"tid": str(tenant_id)}
-                    )
+                    # RLS: Only execute on PostgreSQL
+                    if "postgresql" in str(session.bind.url if session.bind else ""):
+                        await session.execute(
+                            text("SELECT set_config('app.current_tenant_id', :tid, true)"),
+                            {"tid": str(tenant_id)}
+                        )
                     rls_context_set = True
+
                 except Exception as e:
                     logger.warning("rls_context_set_failed", error=str(e))
         else:

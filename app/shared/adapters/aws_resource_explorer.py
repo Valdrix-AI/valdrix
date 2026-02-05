@@ -5,7 +5,7 @@ Provides a unified interface for global resource discovery using AWS Resource Ex
 This is significantly faster and cheaper than iterating through all regions and services manually.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import aioboto3
 import structlog
 from botocore.exceptions import ClientError

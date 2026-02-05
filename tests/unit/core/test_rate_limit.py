@@ -1,15 +1,19 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import Request
-from app.shared.core.rate_limit import context_aware_key, get_analysis_limit, check_remediation_rate_limit
+from types import SimpleNamespace
 from uuid import uuid4
+from app.shared.core.rate_limit import context_aware_key, get_analysis_limit, check_remediation_rate_limit
 
 @pytest.fixture
 def mock_request():
-    request = MagicMock(spec=Request)
-    request.state = MagicMock()
+    request = SimpleNamespace()
+    request.state = SimpleNamespace()
     request.headers = {}
     return request
+
+
+
 
 def test_context_aware_key_tenant(mock_request):
     tid = uuid4()

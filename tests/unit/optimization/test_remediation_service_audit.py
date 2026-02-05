@@ -7,7 +7,15 @@ from app.models.remediation import RemediationRequest
 
 @pytest.fixture
 def mock_db():
-    return AsyncMock()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.commit = AsyncMock()
+    db.add = MagicMock()
+    db.refresh = AsyncMock()
+    db.merge = AsyncMock()
+    return db
+
+
 
 @pytest.fixture
 def tenant_id():
@@ -236,7 +244,7 @@ async def test_generate_iac_plan_pro_tier(mock_db, tenant_id):
     )
     
     # Patch source for local imports
-    with patch("app.shared.core.pricing.get_tenant_tier"):
+    with patch("app.shared.core.pricing.get_tenant_tier", AsyncMock(return_value="starter")):
         with patch("app.shared.core.pricing.is_feature_enabled", return_value=True):
             plan = await service.generate_iac_plan(req, tenant_id)
             
@@ -244,13 +252,16 @@ async def test_generate_iac_plan_pro_tier(mock_db, tenant_id):
             assert "removed {" in plan
             assert "i_1234567890abcdef0" in plan # Sanitized ID
 
+
 @pytest.mark.asyncio
 async def test_generate_iac_plan_free_tier(mock_db, tenant_id):
     service = RemediationService(mock_db)
     req = RemediationRequest(resource_id="i-1", resource_type="EC2", action=RemediationAction.TERMINATE_INSTANCE, provider="aws")
     
     # Patch source for local imports
-    with patch("app.shared.core.pricing.get_tenant_tier"), \
+    with patch("app.shared.core.pricing.get_tenant_tier", AsyncMock(return_value="starter")), \
          patch("app.shared.core.pricing.is_feature_enabled", return_value=False):
-            plan = await service.generate_iac_plan(req, tenant_id)
-            assert "upgrade" in plan
+        plan = await service.generate_iac_plan(req, tenant_id)
+        assert "upgrade" in plan
+
+

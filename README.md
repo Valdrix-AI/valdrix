@@ -219,8 +219,42 @@ The dashboard will guide you through deploying our read-only IAM role via CloudF
 | **Frontend** | SvelteKit (Svelte 5 Runes), TailwindCSS v4, Shadcn-Svelte |
 | **Database** | PostgreSQL (Neon), Supabase Auth |
 | **LLM** | LangChain, OpenAI, Anthropic, Google Genai, Groq |
-| **Infra** | Docker, GitHub Actions, Prometheus |
+| **Infra** | Docker, Kubernetes (Helm), GitHub Actions, Prometheus |
+| **Observability** | OpenTelemetry, Grafana Dashboards, Prometheus Metrics |
 | **GreenOps** | CodeCarbon integration |
+
+---
+
+## 🏗️ Production Infrastructure
+
+Valdrix includes production-ready infrastructure components:
+
+### Kubernetes Deployment
+```bash
+# Deploy with Helm
+helm install valdrix helm/valdrix/ \
+  --set image.tag=latest \
+  --set existingSecrets.name=valdrix-secrets
+
+# Or customize values
+helm install valdrix helm/valdrix/ -f my-values.yaml
+```
+
+### Pre-configured Components
+| Component | Location | Description |
+|-----------|----------|-------------|
+| **Helm Chart** | `helm/valdrix/` | Full K8s deployment (HPA, Ingress, Service) |
+| **K8s Manifests** | `k8s/` | Raw YAML manifests for non-Helm deploys |
+| **Grafana Dashboards** | `grafana/dashboards/` | API Overview + FinOps metrics |
+| **Load Tests** | `loadtest/` | k6 + Locust performance tests |
+| **SBOM Generation** | `.github/workflows/sbom.yml` | CycloneDX + vulnerability scanning |
+
+### CI/CD Pipeline
+- ✅ **Linting**: Ruff + MyPy
+- ✅ **Testing**: Pytest with coverage
+- ✅ **Security**: Bandit (SAST), Trivy (containers), TruffleHog (secrets)
+- ✅ **GreenOps**: CodeCarbon emissions tracking
+- ✅ **E2E**: Playwright browser tests
 
 ---
 

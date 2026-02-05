@@ -1,6 +1,13 @@
 import pytest
 from unittest.mock import patch
-from app.shared.core.config import Settings
+from app.shared.core.config import Settings, get_settings
+
+@pytest.fixture(autouse=True)
+def clear_settings_cache():
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
 
 def test_settings_defaults():
     settings = Settings(SUPABASE_JWT_SECRET="x"*32, DATABASE_URL="postgresql://user:pass@host/db")
@@ -9,17 +16,23 @@ def test_settings_defaults():
 
 def test_settings_production_validation():
     # Production without CSRF secret should fail
-    with pytest.raises(ValueError) as exc:
-        Settings(
-            DEBUG=False, 
-            TESTING=False,
-            SUPABASE_JWT_SECRET="x"*32,
-            DATABASE_URL="postgresql://host/db",
-            ENCRYPTION_KEY="k"*32,
-            KDF_SALT="s"*32,
-            # CSRF_SECRET_KEY missing
-        )
-    assert "CSRF_SECRET_KEY must be set" in str(exc.value)
+    # We MUST ensure TESTING=False and DEBUG=False to trigger production validation
+    with patch.dict("os.environ", {}, clear=True):
+        with pytest.raises(ValueError) as exc:
+            Settings(
+                DEBUG=False, 
+                TESTING=False,
+                SUPABASE_JWT_SECRET="x"*32,
+                DATABASE_URL="postgresql://user:pass@host/db",
+                ENCRYPTION_KEY="k"*32,
+                KDF_SALT="s"*32,
+                CSRF_SECRET_KEY=None,
+            )
+        assert "CSRF_SECRET_KEY must be set" in str(exc.value)
+
+
+
+
 
 def test_settings_production_encryption_key_length():
     with pytest.raises(ValueError) as exc:

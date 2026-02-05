@@ -53,19 +53,25 @@ class LLMBudgetManager:
         """
         # Find pricing data for provider and model
         provider_data = LLM_PRICING.get(provider, {})
-        pricing = provider_data.get(model, provider_data.get("default"))
+        pricing = provider_data.get(model)
         
+        # PRODUCTION: Fallback to provider default if model is unknown
         if not pricing:
-            logger.warning("llm_pricing_not_found_for_estimation", provider=provider, model=model)
-            # Fallback to a safe estimate ($0.01 per 1K tokens)
-            pricing = {"input": 10.0, "output": 10.0} # Per 1M
+            pricing = provider_data.get("default")
             
-        input_cost = Decimal(str(prompt_tokens)) * Decimal(str(pricing["input"])) / Decimal("1000000")
-        output_cost = Decimal(str(completion_tokens)) * Decimal(str(pricing["output"])) / Decimal("1000000")
+        # PRODUCTION: Global Fallback ($10 per 1M tokens) if still not found
+        if not pricing:
+            logger.warning("llm_pricing_using_global_fallback", provider=provider, model=model)
+            pricing = {"input": 10.0, "output": 10.0}
+        
+        # Calculate cost
+        input_cost = (Decimal(str(prompt_tokens)) * Decimal(str(pricing["input"]))) / Decimal("1000000")
+        output_cost = (Decimal(str(completion_tokens)) * Decimal(str(pricing["output"]))) / Decimal("1000000")
         
         return (input_cost + output_cost).quantize(Decimal("0.0001"))
-    
+
     @staticmethod
+
     async def check_and_reserve(
         tenant_id: UUID,
         db: AsyncSession,
@@ -225,6 +231,7 @@ class LLMBudgetManager:
                 pass
 
             await db.flush()
+            await db.commit()
             
             # Handle alerts
             await LLMBudgetManager._check_budget_and_alert(tenant_id, db, actual_cost_usd)
@@ -264,8 +271,17 @@ class LLMBudgetManager:
                     return BudgetStatus.HARD_LIMIT
                 if await cache.client.get(f"budget_soft:{tenant_id}"):
                     return BudgetStatus.SOFT_LIMIT
-            except Exception:
-                pass
+            except Exception as e:
+                # Fail-Closed: If budget state is unknown due to infrastructure failure,
+                # we must deny the request to prevent uncontrolled costs.
+                logger.error("llm_budget_check_cache_error_fail_closed", 
+                            error=str(e), 
+                            tenant_id=str(tenant_id))
+                raise BudgetExceededError(
+                    "Fail-Closed: LLM Budget check failed due to system error.",
+                    details={"error": "service_unavailable", "reason": str(e)}
+                )
+
 
         # 2. DB Check
         result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id))

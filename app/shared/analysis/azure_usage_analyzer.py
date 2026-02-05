@@ -5,7 +5,6 @@ This module analyzes Azure cost export data to detect idle and underutilized
 resources without making expensive Monitor API calls.
 """
 from typing import List, Dict, Any
-from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import structlog
 
@@ -138,7 +137,7 @@ class AzureUsageAnalyzer:
         zombies = []
         
         for resource_id, records in self._resource_costs.items():
-            if "microsoft.sql/servers/databases" not in resource_id.lower():
+            if "microsoft.sql/servers" not in resource_id.lower() or "/databases/" not in resource_id.lower():
                 continue
             
             sql_records = [r for r in records 

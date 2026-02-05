@@ -1,0 +1,60 @@
+# Alertmanager configuration for Valdrix
+global:
+  resolve_timeout: 5m
+
+# Route configuration
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'default-receiver'
+  routes:
+    # Critical alerts go to PagerDuty/Slack immediately
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      continue: true
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'warning-receiver'
+    # Info alerts (opportunity notifications)
+    - match:
+        severity: info
+      receiver: 'info-receiver'
+
+# Inhibit rules - prevent lower severity alerts when critical fires
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname']
+
+# Receivers
+receivers:
+  - name: 'default-receiver'
+    # Default: do nothing (or configure email)
+
+  - name: 'critical-receiver'
+    # Uncomment and configure for production
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+    #     channel: '#valdrix-alerts'
+    #     send_resolved: true
+    #     title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+  - name: 'warning-receiver'
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+    #     channel: '#valdrix-alerts'
+    #     send_resolved: true
+    #     title: '⚠️ Warning: {{ .GroupLabels.alertname }}'
+
+  - name: 'info-receiver'
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+    #     channel: '#valdrix-savings'
+    #     title: '💰 Savings Opportunity: {{ .GroupLabels.alertname }}'

@@ -35,9 +35,13 @@ class SchedulerOrchestrator:
         PRODUCTION: Enqueues a distributed task for cohort analysis.
         """
         logger.info("scheduler_dispatching_cohort_job", cohort=target_cohort.value)
-        # Dispatch to Celery
-        from app.shared.core.celery_app import celery_app
-        celery_app.send_task("scheduler.cohort_analysis", args=[target_cohort.value])
+        
+        # Skip Celery dispatch if Redis unavailable (local dev)
+        try:
+            from app.shared.core.celery_app import celery_app
+            celery_app.send_task("scheduler.cohort_analysis", args=[target_cohort.value])
+        except Exception as e:
+            logger.warning("scheduler_celery_unavailable", error=str(e), cohort=target_cohort.value)
         
         self._last_run_success = True
         self._last_run_time = datetime.now(timezone.utc).isoformat()
@@ -62,14 +66,20 @@ class SchedulerOrchestrator:
     async def auto_remediation_job(self) -> None:
         """Dispatches weekly remediation sweep."""
         logger.info("scheduler_dispatching_remediation_sweep")
-        from app.shared.core.celery_app import celery_app
-        celery_app.send_task("scheduler.remediation_sweep")
+        try:
+            from app.shared.core.celery_app import celery_app
+            celery_app.send_task("scheduler.remediation_sweep")
+        except Exception as e:
+            logger.warning("scheduler_celery_unavailable", error=str(e), job="remediation")
 
     async def billing_sweep_job(self) -> None:
         """Dispatches billing sweep."""
         logger.info("scheduler_dispatching_billing_sweep")
-        from app.shared.core.celery_app import celery_app
-        celery_app.send_task("scheduler.billing_sweep")
+        try:
+            from app.shared.core.celery_app import celery_app
+            celery_app.send_task("scheduler.billing_sweep")
+        except Exception as e:
+            logger.warning("scheduler_celery_unavailable", error=str(e), job="billing")
 
 
     async def detect_stuck_jobs(self) -> None:

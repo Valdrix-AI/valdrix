@@ -14,7 +14,6 @@ from botocore.exceptions import ClientError
 import structlog
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
-from app.modules.reporting.domain.pricing.service import PricingService
 
 logger = structlog.get_logger()
 

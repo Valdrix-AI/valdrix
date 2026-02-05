@@ -10,8 +10,13 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from decimal import Decimal
 from uuid import uuid4
+from app.shared.core.pricing import PricingTier
 from app.shared.llm.usage_tracker import UsageTracker
+
 from app.shared.llm.pricing_data import LLM_PRICING
+# Import all models to prevent mapper errors during Mock usage
+from app.models import cloud, llm, tenant, gcp_connection, azure_connection, aws_connection, remediation, notification_settings, background_job
+
 
 
 class TestCalculateCost:
@@ -66,8 +71,8 @@ class TestCalculateCost:
         expected = Decimal("0.0105")
         assert abs(cost - expected) < Decimal("0.0001")
     
-    def test_unknown_model_returns_zero(self):
-        """Test that unknown models return zero cost (graceful degradation)."""
+    def test_unknown_model_returns_fallback_cost(self):
+        """Test that unknown models return fallback cost instead of zero."""
         mock_db = MagicMock()
         tracker = UsageTracker(mock_db)
         
@@ -78,10 +83,11 @@ class TestCalculateCost:
             output_tokens=500
         )
         
-        assert cost == Decimal("0")
-    
-    def test_known_provider_unknown_model_returns_zero(self):
-        """Test that known provider with unknown model returns zero."""
+        # Expected (Fallback $10/1M): (1000 * 10 / 1M) + (500 * 10 / 1M) = 0.015
+        assert cost == Decimal("0.0150")
+
+    def test_known_provider_unknown_model_returns_provider_default(self):
+        """Test that known provider with unknown model returns provider default."""
         mock_db = MagicMock()
         tracker = UsageTracker(mock_db)
         
@@ -92,7 +98,10 @@ class TestCalculateCost:
             output_tokens=500
         )
         
-        assert cost == Decimal("0")
+        # Expected (OpenAI Default): (1000 * 0.15 / 1M) + (500 * 0.6 / 1M) = 0.00045 -> 0.0004
+        assert cost == Decimal("0.0004")
+
+
     
     def test_zero_tokens_returns_zero(self):
         """Test that zero tokens returns zero cost."""
@@ -136,14 +145,24 @@ class TestRecordUsage:
     async def test_record_creates_usage_entry(self):
         """Test that record creates a usage entry in the database."""
         mock_db = MagicMock()
+        mock_db.execute = AsyncMock()
         mock_db.commit = AsyncMock()
+        mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
+        mock_db.add = MagicMock() # Ensure it's a mock we can assert on
+
+
+
         tracker = UsageTracker(mock_db)
         
         tenant_id = uuid4()
         
-        # Mock the budget check to do nothing
-        with patch.object(tracker, '_check_budget_and_alert', new_callable=AsyncMock):
+        # Mock the budget check to do nothing and get_tenant_tier to return a mock
+        from app.shared.llm.budget_manager import LLMBudgetManager
+        with patch.object(LLMBudgetManager, '_check_budget_and_alert', new_callable=AsyncMock), \
+             patch('app.shared.llm.budget_manager.get_tenant_tier', new_callable=AsyncMock) as mock_tier:
+            
+            mock_tier.return_value = PricingTier.PRO
             await tracker.record(
                 tenant_id=tenant_id,
                 provider="groq",
@@ -152,6 +171,7 @@ class TestRecordUsage:
                 output_tokens=500,
                 request_type="test"
             )
+
         
         # Verify db.add was called
         mock_db.add.assert_called_once()
@@ -167,7 +187,9 @@ class TestBudgetCheck:
         mock_db = MagicMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
+        mock_result.scalar.return_value = Decimal("0")
         mock_db.execute = AsyncMock(return_value=mock_result)
+
         
         tracker = UsageTracker(mock_db)
         tenant_id = uuid4()
@@ -188,7 +210,9 @@ class TestBudgetCheck:
         
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_budget
+        mock_result.scalar.return_value = Decimal("5.00") # 50%
         mock_db.execute = AsyncMock(return_value=mock_result)
+
         
         tracker = UsageTracker(mock_db)
         

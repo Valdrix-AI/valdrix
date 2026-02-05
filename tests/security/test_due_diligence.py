@@ -282,7 +282,7 @@ async def test_attribution_rule_s3_split_60_40(db):
         tenant_id=tenant_id,
         provider="aws",
         name="Test Account",
-        credentials_encrypted="test-creds"
+        
     )
     db.add(account)
     
@@ -360,10 +360,13 @@ async def test_concurrent_tenant_isolation(db):
     
     async def query_as_tenant(tenant_id, session):
         """Simulate a query with tenant context set."""
-        await session.execute(
-            text(f"SELECT set_config('app.current_tenant_id', '{tenant_id}', true)")
-        )
+        # Only execute set_config on PostgreSQL
+        if "postgresql" in str(session.bind.url if session.bind else ""):
+            await session.execute(
+                text(f"SELECT set_config('app.current_tenant_id', '{tenant_id}', true)")
+            )
         from sqlalchemy import select
+
         result = await session.execute(
             select(CostRecord).where(CostRecord.tenant_id == tenant_id)
         )

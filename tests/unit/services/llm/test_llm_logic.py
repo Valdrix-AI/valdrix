@@ -63,9 +63,11 @@ def test_select_provider_waterfall_complex():
 
 
 def test_estimate_cost_groq():
-    """Test cost estimation for Groq (free)."""
+    """Test cost estimation for Groq."""
     cost = LLMProviderSelector.estimate_cost("groq", 1000, 500)
-    assert cost == 0.0
+    # Expected: (1000*0.59 + 500*0.79) / 1,000,000 = 0.000985
+    assert abs(cost - 0.000985) < 1e-6
+
 
 
 def test_estimate_cost_paid_provider():

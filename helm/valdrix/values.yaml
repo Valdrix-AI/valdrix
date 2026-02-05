@@ -1,0 +1,143 @@
+# Valdrix Helm Chart Values
+# Override these in your values.yaml or via --set
+
+# -- Number of API replicas
+replicaCount: 3
+
+image:
+  # -- Container image repository
+  repository: valdrix/api
+  # -- Container image pull policy
+  pullPolicy: IfNotPresent
+  # -- Container image tag (defaults to Chart appVersion)
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Create a ServiceAccount
+  create: true
+  # -- ServiceAccount annotations
+  annotations: {}
+  # -- ServiceAccount name (auto-generated if not set)
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  # -- Kubernetes Service type
+  type: ClusterIP
+  # -- Service port
+  port: 80
+  # -- Container port
+  targetPort: 8000
+
+ingress:
+  # -- Enable ingress
+  enabled: true
+  # -- Ingress class name
+  className: nginx
+  # -- Ingress annotations
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  # -- Ingress hosts
+  hosts:
+    - host: api.valdrix.io
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS configuration
+  tls:
+    - secretName: valdrix-tls
+      hosts:
+        - api.valdrix.io
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  # -- Enable HPA
+  enabled: true
+  # -- Minimum replicas
+  minReplicas: 3
+  # -- Maximum replicas
+  maxReplicas: 20
+  # -- Target CPU utilization
+  targetCPUUtilizationPercentage: 70
+  # -- Target memory utilization
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: valdrix
+          topologyKey: kubernetes.io/hostname
+
+# -- Environment variables
+env:
+  ENVIRONMENT: production
+  LOG_LEVEL: INFO
+  WORKERS: "4"
+
+# -- Secrets to inject (must exist in cluster)
+existingSecrets:
+  # -- Name of secret containing DATABASE_URL, ENCRYPTION_KEY, etc.
+  name: valdrix-secrets
+
+# -- Worker configuration
+worker:
+  # -- Enable background worker
+  enabled: true
+  # -- Worker replicas
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+# -- Redis configuration (external)
+redis:
+  # -- Redis host
+  host: redis-master
+  # -- Redis port
+  port: 6379
+
+# -- Database configuration
+database:
+  # -- Use external database
+  external: true

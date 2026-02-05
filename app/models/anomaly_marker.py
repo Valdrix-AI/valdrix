@@ -7,7 +7,8 @@ so the forecasting engine can exclude or weight them appropriately.
 Phase 3.2: Manual intervention markers for forecast tuning.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+
 from uuid import UUID, uuid4
 from sqlalchemy import String, Text, ForeignKey, Date, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,7 +50,8 @@ class AnomalyMarker(Base):
     
     # Audit
     created_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
     
     def __repr__(self) -> str:
         return f"<AnomalyMarker {self.label} ({self.start_date} - {self.end_date})>"

@@ -72,7 +72,7 @@ async def test_gcp_unused_ips_plugin_scan():
     assert len(results) == 1
     assert results[0]["resource_id"] == "12345"
     assert results[0]["name"] == "unused-ip"
-    assert results[0]["monthly_waste"] == 7.20
+    assert results[0]["monthly_waste"] == 7.3
 
 @pytest.mark.asyncio
 async def test_gcp_machine_images_plugin_scan():

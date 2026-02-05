@@ -7,7 +7,6 @@ Implements a hybrid model:
 2. Fallback to regional/service-specific discovery if global is unavailable or incomplete.
 """
 
-from typing import List, Dict, Any, Optional
 from datetime import datetime
 import structlog
 from app.models.aws_connection import AWSConnection

@@ -12,7 +12,11 @@ from app.modules.governance.domain.scheduler.processors import AnalysisProcessor
 
 @pytest.fixture
 def mock_db():
-    return AsyncMock()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.commit = AsyncMock()
+    return db
+
 
 
 @pytest.fixture
@@ -122,11 +126,12 @@ class TestSavingsProcessor:
         
         # Patch in the module where it's imported
         with patch("app.modules.optimization.domain.remediation_service.RemediationService") as mock_service:
-            mock_service_instance = AsyncMock()
-            mock_service_instance.create_request.return_value = MagicMock(id=uuid4())
+            mock_service_instance = MagicMock()
+            mock_service_instance.create_request = AsyncMock(return_value=MagicMock(id=uuid4()))
             mock_service_instance.approve = AsyncMock()
             mock_service_instance.execute = AsyncMock()
             mock_service.return_value = mock_service_instance
+
             
             await processor.process_recommendations(
                 mock_db, tenant_id, mock_result

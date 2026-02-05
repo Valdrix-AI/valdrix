@@ -235,7 +235,8 @@ class RemediationService:
             raise ValueError("Remediation request not found.")
 
         # Check all safety guards (Kill Switch, Circuit Breaker, Hard Cap)
-        await safety.check_all_guards(tenant_id, request.estimated_monthly_savings)
+        await safety.check_all_guards(tenant_id, request.estimated_monthly_savings or Decimal("0"))
+
 
         # 1. Validation & Pre-execution State Check
         if request.status != RemediationStatus.APPROVED:
@@ -317,6 +318,9 @@ class RemediationService:
         start_time = time.time()
         try:
             # 2. Create backup BEFORE any deletion
+
+
+
             if request.create_backup:
                 try:
                     if request.action == RemediationAction.DELETE_VOLUME:

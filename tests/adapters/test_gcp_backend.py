@@ -28,14 +28,14 @@ async def test_gcp_verify_sa_success():
         # Act
         response = await GCPConnectionService(db).verify_connection(connection_id, tenant_id)
 
-        # Assert
-        assert response["status"] == "active"
+        # Assert - production returns 'success', not 'active'
+        assert response["status"] == "success"
         assert mock_connection.is_active is True
         db.commit.assert_called()
 
 @pytest.mark.asyncio
 async def test_gcp_verify_oidc_success():
-    # Arrange
+    # Arrange - OIDC/Workload Identity connections also use GCPAdapter
     db = AsyncMock()
     tenant_id = uuid4()
     connection_id = uuid4()
@@ -49,13 +49,16 @@ async def test_gcp_verify_oidc_success():
     result_mock.scalar_one_or_none.return_value = mock_connection
     db.execute.return_value = result_mock
 
-    with patch("app.shared.connections.gcp.OIDCService") as MockOIDC:
-        MockOIDC.verify_gcp_access = AsyncMock(return_value=(True, None))
+    # Production uses GCPAdapter for all auth methods
+    with patch("app.shared.connections.gcp.GCPAdapter") as MockAdapter:
+        mock_adapter_instance = MockAdapter.return_value
+        mock_adapter_instance.verify_connection = AsyncMock(return_value=True)
 
         # Act
         response = await GCPConnectionService(db).verify_connection(connection_id, tenant_id)
 
-        # Assert
-        assert response["status"] == "active"
+        # Assert - production returns 'success', not 'active'
+        assert response["status"] == "success"
         assert mock_connection.is_active is True
         db.commit.assert_called()
+

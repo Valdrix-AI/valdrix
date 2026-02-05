@@ -4,9 +4,7 @@ GCP Compute Plugins - Zero-Cost Zombie Detection.
 Detects idle VMs and GPU instances using BigQuery billing export data.
 """
 from typing import List, Dict, Any
-from datetime import datetime, timedelta, timezone
 from google.cloud import compute_v1
-from google.cloud.asset_v1 import AssetServiceClient
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin

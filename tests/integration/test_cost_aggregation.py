@@ -43,9 +43,9 @@ async def test_cost_aggregation_and_filtering(ac: AsyncClient, db, mock_auth_use
             tenant_id=tenant_id,
             provider="aws",
             name="AWS Prod",
-            credentials_encrypted="mock",
             is_active=True
         )
+
         db.add(aws_cloud)
 
         # 2. Azure Account
@@ -55,9 +55,9 @@ async def test_cost_aggregation_and_filtering(ac: AsyncClient, db, mock_auth_use
             tenant_id=tenant_id,
             provider="azure",
             name="Azure Dev",
-            credentials_encrypted="mock",
             is_active=True
         )
+
         db.add(azure_cloud)
 
         # 3. Insert Cost Records

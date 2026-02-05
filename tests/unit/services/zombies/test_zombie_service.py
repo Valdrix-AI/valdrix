@@ -4,12 +4,29 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.optimization.domain.service import ZombieService
+from app.models import (
+    cloud, llm, tenant, gcp_connection, azure_connection, aws_connection,
+    remediation, notification_settings, background_job, attribution,
+    anomaly_marker, carbon_settings, cost_audit, discovered_account,
+    optimization, pricing, remediation_settings, security
+) # noqa: F401
 from app.models.aws_connection import AWSConnection
 from app.models.gcp_connection import GCPConnection
 
+
 @pytest.fixture
 def db_session():
-    return AsyncMock(spec=AsyncSession)
+    """Mock database session."""
+    session = MagicMock(spec=AsyncSession)
+    session.bind = MagicMock()
+    session.bind.url = "sqlite://"
+    session.execute = AsyncMock()
+    session.commit = AsyncMock()
+    session.rollback = AsyncMock()
+    session.close = AsyncMock()
+    session.info = {}
+    return session
+
 
 @pytest.fixture
 def zombie_service(db_session):
@@ -45,20 +62,34 @@ async def test_scan_for_tenant_parallel_success(zombie_service, db_session):
     db_session.execute.return_value = mock_res
     
     # Mock Detector Success
-    mock_detector = AsyncMock()
-    mock_detector.scan_all.return_value = {
+    mock_detector = MagicMock()
+    mock_detector.scan_all = AsyncMock(return_value={
         "unattached_volumes": [{"id": "v-1", "monthly_waste": 10.0}],
         "idle_instances": [{"id": "i-1", "monthly_waste": 20.0}]
-    }
+    })
+    mock_detector.get_credentials = AsyncMock(return_value={"AccessKeyId": "AK"}) # BE-DETECTOR-5
     mock_detector.provider_name = "aws"
+
+
     
+    # Mock RegionDiscovery
+    mock_rd = MagicMock()
+    mock_rd.get_enabled_regions = AsyncMock(return_value=["us-east-1"])
+
     with patch("app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector", return_value=mock_detector):
-        with patch("app.modules.optimization.domain.service.is_feature_enabled", return_value=False): # Skip AI
-            results = await zombie_service.scan_for_tenant(tenant_id, user)
-            
-            assert results["total_monthly_waste"] == 60.0 # 30 (aws) + 30 (gcp)
-            assert len(results["unattached_volumes"]) == 2 # 1 from each
-            assert results["scanned_connections"] == 2
+        with patch("app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery", return_value=mock_rd):
+            with patch("app.modules.optimization.domain.service.is_feature_enabled", return_value=False): # Skip AI
+                with patch("app.shared.core.pricing.get_tenant_tier", AsyncMock(return_value="starter")): # BE-PRICING-5
+
+                    with patch("app.shared.core.notifications.NotificationDispatcher.notify_zombies", new_callable=AsyncMock):
+                        with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
+                            results = await zombie_service.scan_for_tenant(tenant_id, user)
+                            
+                            assert results["total_monthly_waste"] == 60.0 # 30 (aws) + 30 (gcp)
+                            assert len(results["unattached_volumes"]) == 2 # 1 from each
+                            assert results["scanned_connections"] == 2
+
+
 
 @pytest.mark.asyncio
 async def test_scan_for_tenant_timeout_handling(zombie_service, db_session):
@@ -70,11 +101,16 @@ async def test_scan_for_tenant_timeout_handling(zombie_service, db_session):
     mock_res.scalars.return_value.all.side_effect = [[aws_conn], [], []]
     db_session.execute.return_value = mock_res
     
-    with patch("app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector", return_value=AsyncMock()):
-        with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError()):
-            results = await zombie_service.scan_for_tenant(tenant_id, user)
-            assert results.get("scan_timeout") is True
-            assert results.get("partial_results") is True
+    mock_detector = MagicMock()
+    mock_detector.scan_all = AsyncMock()
+    with patch("app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector", return_value=mock_detector):
+
+        with patch("app.shared.core.ops_metrics.SCAN_TIMEOUTS"):
+            with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError()):
+                results = await zombie_service.scan_for_tenant(tenant_id, user)
+                assert results.get("scan_timeout") is True
+                assert results.get("partial_results") is True
+
 
 @pytest.mark.asyncio
 async def test_ai_enrichment_tier_gating(zombie_service, db_session):
@@ -109,8 +145,10 @@ async def test_parallel_scan_exception_handling(zombie_service, db_session):
     mock_res.scalars.return_value.all.side_effect = [[aws_conn], [], []]
     db_session.execute.return_value = mock_res
     
-    mock_detector = AsyncMock()
-    mock_detector.scan_all.side_effect = Exception("Provider Failure")
+    mock_detector = MagicMock()
+    mock_detector.provider_name = "aws"
+    mock_detector.scan_all = AsyncMock(side_effect=Exception("Provider Failure"))
+
     
     with patch("app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector", return_value=mock_detector):
         results = await zombie_service.scan_for_tenant(tenant_id, user)

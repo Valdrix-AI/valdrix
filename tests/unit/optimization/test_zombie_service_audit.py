@@ -54,15 +54,25 @@ async def test_scan_for_tenant_success(mock_db, tenant_id):
         "unattached_volumes": [{"resource_id": "vol-1", "monthly_cost": 10.0}]
     }
     
+    # Mock RegionDiscovery
+    mock_rd = MagicMock()
+    mock_rd.get_enabled_regions = AsyncMock(return_value=["us-east-1"])
+    
     with patch("app.modules.optimization.domain.service.ZombieDetectorFactory.get_detector", return_value=mock_detector):
-        with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE):
-            # Mock metrics
-            with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
-                result = await service.scan_for_tenant(tenant_id)
-                
-                assert result["total_monthly_waste"] == 10.0
-                assert len(result["unattached_volumes"]) == 1
-                assert result["unattached_volumes"][0]["resource_id"] == "vol-1"
+        with patch("app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery", return_value=mock_rd):
+            with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE):
+                # Mock metrics and notifications
+                with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
+                    with patch("app.shared.core.notifications.NotificationDispatcher.notify_zombies") as mock_notify:
+                        result = await service.scan_for_tenant(tenant_id)
+                        
+                        assert result["total_monthly_waste"] == 10.0
+                        assert len(result["unattached_volumes"]) == 1
+                        assert result["unattached_volumes"][0]["resource_id"] == "vol-1"
+                        mock_notify.assert_called_once()
+
+
+
 
 @pytest.mark.asyncio
 async def test_scan_for_tenant_timeout(mock_db, tenant_id):

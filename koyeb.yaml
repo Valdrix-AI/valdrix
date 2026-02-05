@@ -1,0 +1,54 @@
+# Valdrix Koyeb Configuration
+# https://www.koyeb.com/docs/deploy/koyeb-files
+
+name: valdrix-api
+type: WEB
+definition:
+  git:
+    repository: github.com/Valdrix-AI/valdrix
+    branch: main
+    builder: docker
+    dockerfile: Dockerfile
+
+  scaling:
+    min: 1
+    max: 3
+    targets:
+      cpu:
+        value: 70
+
+  instance_type: nano
+
+  ports:
+    - port: 8000
+      protocol: http
+
+  routes:
+    - path: /
+      port: 8000
+
+  health_checks:
+    - type: http
+      path: /health
+      port: 8000
+      interval_seconds: 30
+      timeout_seconds: 10
+      healthy_threshold: 2
+      unhealthy_threshold: 3
+
+  env:
+    - name: ENVIRONMENT
+      value: production
+    - name: LOG_LEVEL
+      value: INFO
+    - name: WORKERS
+      value: "2"
+    # Secrets - set via Koyeb dashboard
+    - name: DATABASE_URL
+      secret: valdrix-database-url
+    - name: SUPABASE_JWT_SECRET
+      secret: valdrix-jwt-secret
+    - name: ENCRYPTION_KEY
+      secret: valdrix-encryption-key
+    - name: GROQ_API_KEY
+      secret: valdrix-groq-key

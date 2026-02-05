@@ -1,0 +1,99 @@
+# Prometheus Alerting Rules for Valdrix
+groups:
+  - name: valdrix-api
+    rules:
+      # High latency alert
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency detected"
+          description: "95th percentile latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+
+      # Error rate spike
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      # API down
+      - alert: APIDown
+        expr: up{job="valdrix-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Valdrix API is down"
+          description: "The API has been unreachable for more than 1 minute"
+
+  - name: valdrix-finops
+    rules:
+      # LLM budget exceeded
+      - alert: LLMBudgetExceeded
+        expr: sum(valdrix_llm_cost_usd) > 50
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM budget threshold exceeded"
+          description: "Total LLM cost is ${{ $value | printf \"%.2f\" }} (threshold: $50)"
+
+      # Many zombies detected (opportunity alert)
+      - alert: HighZombieCount
+        expr: sum(valdrix_zombies_detected_total) > 100
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "High number of zombie resources detected"
+          description: "{{ $value }} zombie resources found - potential savings opportunity"
+
+      # Scan failure
+      - alert: ScanFailure
+        expr: increase(valdrix_scan_errors_total[1h]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Multiple scan failures detected"
+          description: "{{ $value }} scan errors in the last hour"
+
+  - name: valdrix-infrastructure
+    rules:
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 > 1500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Process memory usage is {{ $value | humanize1024 }}B"
+
+      # Redis connection issues
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been unreachable for more than 1 minute"
+
+  - name: valdrix-greenops
+    rules:
+      # Carbon emissions spike
+      - alert: HighCarbonEmissions
+        expr: sum(increase(valdrix_carbon_emissions_kg[24h])) > 10
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "High carbon emissions in last 24h"
+          description: "{{ $value | printf \"%.2f\" }} kgCO2eq emitted - consider optimization"

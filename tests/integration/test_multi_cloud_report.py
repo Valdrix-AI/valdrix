@@ -45,10 +45,11 @@ async def test_multi_cloud_unified_report(ac: AsyncClient, db, mock_auth_user_mu
         gcp_id = uuid4()
         
         db.add_all([
-            CloudAccount(id=aws_id, tenant_id=tenant_id, provider="aws", name="AWS Prod", credentials_encrypted="x", is_active=True),
-            CloudAccount(id=azure_id, tenant_id=tenant_id, provider="azure", name="Azure Dev", credentials_encrypted="x", is_active=True),
-            CloudAccount(id=gcp_id, tenant_id=tenant_id, provider="gcp", name="GCP Analytics", credentials_encrypted="x", is_active=True),
+            CloudAccount(id=aws_id, tenant_id=tenant_id, provider="aws", name="AWS Prod", is_active=True),
+            CloudAccount(id=azure_id, tenant_id=tenant_id, provider="azure", name="Azure Dev", is_active=True),
+            CloudAccount(id=gcp_id, tenant_id=tenant_id, provider="gcp", name="GCP Analytics", is_active=True),
         ])
+
         
         # 2. Insert Cost Data across 3 clouds
         today = date.today()
