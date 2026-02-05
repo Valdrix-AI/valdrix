@@ -35,7 +35,6 @@ async def test_scan_for_tenant_multi_provider(zombie_service, db):
     
     # Mock connections
     aws_conn = AWSConnection(id=uuid4(), tenant_id=tenant_id, region="us-east-1")
-    # Setting name as an attribute because it's missing from the model currently
     setattr(aws_conn, "name", "AWS Test")
     azure_conn = AzureConnection(id=uuid4(), tenant_id=tenant_id, name="Azure Test")
     
@@ -51,33 +50,44 @@ async def test_scan_for_tenant_multi_provider(zombie_service, db):
     
     db.execute = AsyncMock(side_effect=mock_execute)
     
-    # Mock Detectors
-    with patch("app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector") as mock_factory:
-        # AWS Detector
-        mock_aws_detector = AsyncMock()
-        mock_aws_detector.provider_name = "aws"
-        mock_aws_detector.scan_all.return_value = {
-            "unattached_volumes": [{"id": "vol-1", "monthly_waste": 10.0}],
-            "idle_instances": [{"id": "i-1", "monthly_waste": 50.0}]
-        }
-        
-        # Azure Detector
-        mock_azure_detector = AsyncMock()
-        mock_azure_detector.provider_name = "azure"
-        mock_azure_detector.scan_all.return_value = {
-            "unattached_disks": [{"id": "disk-1", "monthly_waste": 20.0}], # Should map to unattached_volumes
-            "orphaned_ips": [{"id": "ip-1", "monthly_waste": 5.0}]        # Should map to unused_elastic_ips
-        }
-        
-        mock_factory.side_effect = [mock_aws_detector, mock_azure_detector]
-        
-        with patch.object(zombie_service, "_send_notifications", AsyncMock()):
-            results = await zombie_service.scan_for_tenant(tenant_id, user)
+    # Mock Tiers and Regions
+    with patch("app.shared.core.pricing.get_tenant_tier", AsyncMock(return_value=PricingTier.ENTERPRISE)):
+        with patch("app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery") as mock_rd_class:
+            mock_rd = MagicMock()
+            mock_rd.get_enabled_regions = AsyncMock(return_value=["us-east-1"])
+            mock_rd_class.return_value = mock_rd
             
-            assert results["total_monthly_waste"] == 85.0
-            assert len(results["unattached_volumes"]) == 2 # vol-1 + disk-1
-            assert len(results["unused_elastic_ips"]) == 1 # ip-1
-            assert results["scanned_connections"] == 2
+            # Mock Detectors
+            with patch("app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector") as mock_factory:
+                # AWS Detector
+                mock_aws_detector = AsyncMock()
+                mock_aws_detector.provider_name = "aws"
+                mock_aws_detector.scan_all.return_value = {
+                    "unattached_volumes": [{"id": "vol-1", "monthly_waste": 10.0}],
+                    "idle_instances": [{"id": "i-1", "monthly_waste": 50.0}]
+                }
+                # AWS regional scan needs credentials
+                mock_aws_detector.get_credentials = AsyncMock(return_value={"AccessKeyId": "test"})
+                
+                # Azure Detector
+                mock_azure_detector = AsyncMock()
+                mock_azure_detector.provider_name = "azure"
+                mock_azure_detector.scan_all.return_value = {
+                    "unattached_disks": [{"id": "disk-1", "monthly_waste": 20.0}],
+                    "orphaned_ips": [{"id": "ip-1", "monthly_waste": 5.0}]
+                }
+                
+                # Setup factory to return AWS then Azure
+                # Note: AWS is called twice (once for temp_detector, once for regional)
+                mock_factory.side_effect = [mock_aws_detector, mock_aws_detector, mock_azure_detector]
+                
+                with patch.object(zombie_service, "_send_notifications", AsyncMock()):
+                    results = await zombie_service.scan_for_tenant(tenant_id, user)
+                    
+                    assert results["total_monthly_waste"] == 85.0
+                    assert len(results["unattached_volumes"]) == 2 # vol-1 + disk-1
+                    assert len(results["unused_elastic_ips"]) == 1 # ip-1
+                    assert results["scanned_connections"] == 2
 
 @pytest.mark.asyncio
 async def test_enrich_with_ai_tier_restriction(zombie_service):

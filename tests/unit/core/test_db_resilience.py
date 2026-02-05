@@ -6,7 +6,9 @@ from fastapi import HTTPException
 @pytest.mark.asyncio
 async def test_db_connection_failure():
     """Verify that DB operational errors are handled gracefully (e.g., return 500/503)."""
-    mock_session = AsyncMock()
+    mock_session = MagicMock()
+    mock_session.execute = AsyncMock()
+
     mock_session.execute.side_effect = OperationalError("db connection failed", {}, None)
     
     # We test the dependency or a service that uses the session
@@ -28,8 +30,12 @@ async def test_db_connection_failure():
 @pytest.mark.asyncio
 async def test_transaction_rollback_on_failure():
     """Verify that a failure mid-transaction triggers a rollback."""
-    mock_session = AsyncMock()
-    mock_session.commit.side_effect = Exception("Commit failed")
+    mock_session = MagicMock()
+    mock_session.add = MagicMock()
+    mock_session.commit = AsyncMock(side_effect=Exception("Commit failed"))
+
+    mock_session.rollback = AsyncMock()
+
     
     async def failing_transaction(db=mock_session):
         try:

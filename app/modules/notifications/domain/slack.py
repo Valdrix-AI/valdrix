@@ -103,9 +103,12 @@ class SlackService:
         return await self._send_with_retry(
             "chat_postMessage",
             channel=self.channel_id,
+            text=f"Alert: {title}", # BE-NOTIF-5: Fallback text for notifications
             attachments=[
                 {
+                    "fallback": message, # BE-NOTIF-5: Legacy fallback for mobile
                     "color": color,
+
                     "blocks": [
                         {
                             "type": "header",
@@ -125,7 +128,9 @@ class SlackService:
         return await self._send_with_retry(
             "chat_postMessage",
             channel=self.channel_id,
+            text="Daily Cloud Cost Digest", # BE-NOTIF-5: Fallback text
             blocks=[
+
                 {
                     "type": "header",
                     "text": {"type": "plain_text", "text": "📊 Daily Cloud Cost Digest"}

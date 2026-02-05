@@ -5,7 +5,7 @@ This module analyzes GCP billing export data from BigQuery to detect idle and
 underutilized resources without making expensive monitoring API calls.
 """
 from typing import List, Dict, Any
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from collections import defaultdict
 import structlog
 
@@ -145,7 +145,8 @@ class GCPUsageAnalyzer:
             instance_cost = sum(r.get("cost", 0) for r in sql_records)
             network_bytes = sum(r.get("usage_amount", 0) for r in sql_records
                                if "network" in r.get("sku_description", "").lower())
-            storage_usage = sum(r.get("usage_amount", 0) for r in sql_records
+            # Calculate storage usage for context
+            total_storage_gb = sum(r.get("usage_amount", 0) for r in sql_records
                                if "storage" in r.get("sku_description", "").lower())
             
             # Low network activity indicates no connections
@@ -159,7 +160,7 @@ class GCPUsageAnalyzer:
                     "recommendation": "Stop instance or delete if not needed",
                     "action": "stop_cloud_sql",
                     "confidence_score": 0.88,
-                    "explainability_notes": f"Cloud SQL instance has minimal network traffic ({network_bytes:.2f} GB) indicating no active connections."
+                    "explainability_notes": f"Cloud SQL instance has minimal network traffic ({network_bytes:.2f} GB), {total_storage_gb:.1f} GB storage, indicating no active connections."
                 })
         
         return zombies
@@ -295,7 +296,7 @@ class GCPUsageAnalyzer:
         
         return zombies
     
-    def find_old_snapshots(self, age_days: int = 90) -> List[Dict[str, Any]]:
+    def find_old_snapshots(self, age_days: int = 90) -> List[Dict[str, Any]]:  # noqa: ARG002
         """
         Detect old disk snapshots with ongoing storage costs.
         """
@@ -312,8 +313,9 @@ class GCPUsageAnalyzer:
             storage_cost = sum(r.get("cost", 0) for r in snapshot_records)
             
             # Check creation date from labels or metadata if available
+            # Get oldest record for context
             oldest_record = min(snapshot_records, key=lambda x: x.get("usage_start_time", now))
-            record_date = oldest_record.get("usage_start_time")
+            record_start = oldest_record.get("usage_start_time")
             
             if storage_cost > 0:
                 snapshot_name = resource_id.split("/")[-1] if "/" in resource_id else resource_id
@@ -325,7 +327,7 @@ class GCPUsageAnalyzer:
                     "recommendation": "Review and delete if no longer needed",
                     "action": "delete_snapshot",
                     "confidence_score": 0.70,
-                    "explainability_notes": f"Snapshot has ongoing storage costs. Review retention policy."
+                    "explainability_notes": f"Snapshot (first seen: {record_start}) has ongoing storage costs. Review retention policy."
                 })
         
         return zombies

@@ -12,16 +12,19 @@ from datetime import date
 async def test_graceful_degradation_soft_limit():
     """Verify that analyzer switches to a cheaper model on SOFT_LIMIT."""
     # Mock dependencies
-    mock_db = AsyncMock()
-    mock_llm = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_llm = MagicMock()
+    mock_llm.model_name = "gpt-4"
+    mock_llm.ainvoke = AsyncMock()
     
     # Setup Analyzer
     analyzer = FinOpsAnalyzer(llm=mock_llm)
     
     # Mock UsageTracker and Budget
     tenant_id = uuid4()
-    usage_tracker_mock = AsyncMock()
-    usage_tracker_mock.check_budget.return_value = BudgetStatus.SOFT_LIMIT
+    usage_tracker_mock = MagicMock()
+    usage_tracker_mock.check_budget = AsyncMock(return_value=BudgetStatus.SOFT_LIMIT)
     
     # Patch dependencies in analyzer
     from app.shared.llm.budget_manager import LLMBudgetManager
@@ -41,12 +44,15 @@ async def test_graceful_degradation_soft_limit():
                     mock_db.execute.return_value = mock_result
 
                     # Configure mocked LLM
-                    mock_degraded_llm = AsyncMock()
+                    mock_degraded_llm = MagicMock()
+                    mock_degraded_llm.model_name = "gpt-4o-mini"
+                    mock_degraded_llm.ainvoke = AsyncMock()
                     response_mock = MagicMock()
                     response_mock.content = '{"insights": [], "recommendations": [], "anomalies": [], "forecast": {}}'
                     response_mock.response_metadata = {}
                     mock_degraded_llm.ainvoke.return_value = response_mock
                     mock_factory.return_value = mock_degraded_llm
+
                     
                     summary = CloudUsageSummary(
                         tenant_id=str(tenant_id),
@@ -75,13 +81,15 @@ async def test_graceful_degradation_soft_limit():
 @pytest.mark.asyncio
 async def test_hard_limit_blocking():
     """Verify that analyzer blocks requests on HARD_LIMIT."""
-    mock_db = AsyncMock()
-    mock_llm = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_llm = MagicMock()
+    mock_llm.model_name = "gpt-4"
     analyzer = FinOpsAnalyzer(llm=mock_llm)
     
     tenant_id = uuid4()
-    usage_tracker_mock = AsyncMock()
-    usage_tracker_mock.check_budget.return_value = BudgetStatus.HARD_LIMIT
+    usage_tracker_mock = MagicMock()
+    usage_tracker_mock.check_budget = AsyncMock(return_value=BudgetStatus.HARD_LIMIT)
     
     from app.shared.llm.budget_manager import LLMBudgetManager, BudgetExceededError
     with patch("app.shared.llm.analyzer.UsageTracker", return_value=usage_tracker_mock):
@@ -99,3 +107,4 @@ async def test_hard_limit_blocking():
                 await analyzer.analyze(summary, tenant_id=tenant_id, db=mock_db)
         
         assert "Hard Limit" in str(excinfo.value)
+

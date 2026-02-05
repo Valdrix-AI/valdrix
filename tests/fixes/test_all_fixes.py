@@ -47,14 +47,18 @@ def setup_env(monkeypatch):
 @pytest.fixture
 def mock_db():
     """Mock AsyncSession for tests."""
-    db = AsyncMock(spec=AsyncSession)
-    db.execute = AsyncMock()
+    db = MagicMock(spec=AsyncSession)
+    db.execute = AsyncMock(return_value=MagicMock())
     db.add = MagicMock()
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
-    db.begin = AsyncMock()
+    db.begin = MagicMock(return_value=AsyncMock())
+    db.begin_nested = MagicMock(return_value=AsyncMock())
     db.flush = AsyncMock()
+    db.refresh = AsyncMock()
     return db
+
+
 
 
 @pytest.fixture

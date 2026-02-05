@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# OpenAPI TypeScript Client Generation Script
+# Generates type-safe API client from FastAPI's OpenAPI spec
+
+set -euo pipefail
+
+# Configuration
+API_URL="${API_URL:-http://localhost:8000}"
+OPENAPI_URL="${API_URL}/openapi.json"
+OUTPUT_DIR="dashboard/src/lib/api"
+
+echo "🔄 Generating TypeScript client from OpenAPI spec..."
+echo "   Source: ${OPENAPI_URL}"
+echo "   Output: ${OUTPUT_DIR}"
+
+# Ensure output directory exists
+mkdir -p "${OUTPUT_DIR}"
+
+# Check if openapi-typescript-codegen is installed
+if ! command -v openapi-generator-cli &> /dev/null; then
+    echo "📦 Installing openapi-generator-cli..."
+    npm install -g @openapitools/openapi-generator-cli
+fi
+
+# Fetch OpenAPI spec
+echo "📥 Fetching OpenAPI specification..."
+curl -sSf "${OPENAPI_URL}" -o /tmp/openapi.json
+
+# Generate TypeScript client
+echo "⚙️  Generating TypeScript client..."
+openapi-generator-cli generate \
+    -i /tmp/openapi.json \
+    -g typescript-fetch \
+    -o "${OUTPUT_DIR}" \
+    --additional-properties=typescriptThreePlus=true,supportsES6=true,npmName=@valdrix/api-client
+
+# Alternative: Use openapi-typescript for types only
+# npm install -g openapi-typescript
+# openapi-typescript /tmp/openapi.json -o "${OUTPUT_DIR}/types.ts"
+
+echo "✅ TypeScript client generated successfully!"
+echo ""
+echo "Usage in SvelteKit:"
+echo "  import { DefaultApi, Configuration } from '\$lib/api';"
+echo ""
+echo "  const api = new DefaultApi(new Configuration({"
+echo "    basePath: 'http://localhost:8000',"
+echo "    accessToken: token"
+echo "  }));"
+echo ""
+echo "  const resources = await api.listResources();"

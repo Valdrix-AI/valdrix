@@ -14,8 +14,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob, JobStatus, JobType
 from app.modules.governance.domain.jobs.processor import JobProcessor, enqueue_job, BACKOFF_BASE_SECONDS
+
 
 
 def create_mock_job(
@@ -49,10 +51,15 @@ class TestJobProcessor:
     @pytest.mark.asyncio
     async def test_process_pending_jobs_empty_queue(self):
         """Should handle empty queue gracefully."""
-        mock_db = AsyncMock()
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "sqlite://"
+        mock_db.execute = AsyncMock()
+
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = mock_result
+
         
         processor = JobProcessor(mock_db)
         results = await processor.process_pending_jobs()
@@ -65,7 +72,13 @@ class TestJobProcessor:
     @patch('app.modules.governance.domain.jobs.processor.get_handler_factory')
     async def test_marks_job_running_on_start(self, mock_factory):
         """Job status should change to RUNNING when processing starts."""
-        mock_db = AsyncMock()
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "sqlite://"
+        mock_db.execute = AsyncMock()
+
+        mock_db.commit = AsyncMock()
+
         mock_job = create_mock_job()
         
         mock_result = MagicMock()
@@ -88,7 +101,13 @@ class TestJobProcessor:
     @patch('app.modules.governance.domain.jobs.processor.get_handler_factory')
     async def test_marks_job_completed_on_success(self, mock_factory):
         """Job status should change to COMPLETED on success."""
-        mock_db = AsyncMock()
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "sqlite://"
+        mock_db.execute = AsyncMock()
+
+        mock_db.commit = AsyncMock()
+
         mock_db.begin_nested = MagicMock()
         mock_ctx = MagicMock()
         mock_ctx.__aenter__ = AsyncMock()
@@ -116,7 +135,13 @@ class TestJobProcessor:
     @patch('app.modules.governance.domain.jobs.processor.get_handler_factory')
     async def test_retries_on_failure(self, mock_factory):
         """Job should be rescheduled on failure with backoff."""
-        mock_db = AsyncMock()
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "sqlite://"
+        mock_db.execute = AsyncMock()
+
+        mock_db.commit = AsyncMock()
+
         mock_db.begin_nested = MagicMock()
         mock_ctx = MagicMock()
         mock_ctx.__aenter__ = AsyncMock()
@@ -147,7 +172,13 @@ class TestJobProcessor:
     @patch('app.modules.governance.domain.jobs.processor.get_handler_factory')
     async def test_dead_letter_on_max_attempts(self, mock_factory):
         """Job should go to dead letter after max attempts."""
-        mock_db = AsyncMock()
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "sqlite://"
+        mock_db.execute = AsyncMock()
+
+        mock_db.commit = AsyncMock()
+
         mock_db.begin_nested = MagicMock()
         mock_ctx = MagicMock()
         mock_ctx.__aenter__ = AsyncMock()
@@ -175,7 +206,13 @@ class TestJobProcessor:
     @patch('app.modules.governance.domain.jobs.processor.get_handler_factory')
     async def test_increments_attempts(self, mock_factory):
         """Attempts should increment on each processing."""
-        mock_db = AsyncMock()
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "sqlite://"
+        mock_db.execute = AsyncMock()
+
+        mock_db.commit = AsyncMock()
+
         mock_job = create_mock_job(attempts=0)
         
         mock_result = MagicMock()
@@ -195,7 +232,13 @@ class TestJobProcessor:
     @pytest.mark.asyncio
     async def test_handles_missing_handler(self):
         """Should set error message if no handler for job type."""
-        mock_db = AsyncMock()
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "sqlite://"
+        mock_db.execute = AsyncMock()
+
+        mock_db.commit = AsyncMock()
+
         mock_job = create_mock_job(job_type="unknown_type")
         
         mock_result = MagicMock()
@@ -217,8 +260,12 @@ class TestEnqueueJob:
     @pytest.mark.asyncio
     async def test_creates_job_with_defaults(self):
         """Should create job with default values."""
-        mock_db = AsyncMock()
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "sqlite://"
+        mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
+
         
         with patch('app.modules.governance.domain.jobs.processor.BackgroundJob') as MockJob:
             mock_instance = MagicMock()
@@ -237,8 +284,12 @@ class TestEnqueueJob:
     @pytest.mark.asyncio
     async def test_respects_scheduled_for(self):
         """Should use provided scheduled_for time."""
-        mock_db = AsyncMock()
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "sqlite://"
+        mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
+
         future_time = datetime.now(timezone.utc) + timedelta(hours=1)
         
         with patch('app.modules.governance.domain.jobs.processor.BackgroundJob') as MockJob:

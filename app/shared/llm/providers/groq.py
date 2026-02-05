@@ -9,12 +9,8 @@ class GroqProvider(BaseProvider):
         key = api_key or settings.GROQ_API_KEY
         self.validate_api_key(key, "groq")
         
-        import httpx
-        custom_client = httpx.AsyncClient(verify=False)
-        
         return ChatGroq(
             api_key=key,
             model=model or settings.GROQ_MODEL,
             temperature=0,
-            http_client=custom_client
         )

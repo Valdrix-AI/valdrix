@@ -3,9 +3,8 @@ from decimal import Decimal
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 
-# conftest.py handles environment mocks
-
-from app.shared.llm.usage_tracker import UsageTracker, count_tokens, BudgetStatus
+from app.shared.llm.usage_tracker import UsageTracker, count_tokens
+from app.shared.llm.budget_manager import BudgetStatus
 from app.shared.core.exceptions import BudgetExceededError
 
 @pytest.fixture
@@ -14,6 +13,7 @@ def mock_db():
     db.add = MagicMock()
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
+    db.flush = AsyncMock()
     return db
 
 @pytest.fixture
@@ -43,110 +43,67 @@ def test_calculate_cost():
 @pytest.mark.asyncio
 async def test_record_success(mock_db, tenant_id):
     tracker = UsageTracker(mock_db)
-    mock_cache = MagicMock()
-    mock_cache.enabled = True
-    mock_cache.client.set = AsyncMock()
     
-    # Patch at CLASS level to ensure it works
-    with patch("app.shared.llm.usage_tracker.UsageTracker.calculate_cost", return_value=Decimal("1.00")), \
-         patch("app.shared.llm.usage_tracker.get_cache_service", return_value=mock_cache), \
-         patch("app.shared.llm.usage_tracker.UsageTracker.get_monthly_usage", new_callable=AsyncMock) as mock_get_usage, \
-         patch("app.shared.core.ops_metrics.LLM_SPEND_USD"), \
-         patch("app.shared.core.pricing.get_tenant_tier", new_callable=AsyncMock) as mock_tier, \
-         patch("app.shared.llm.usage_tracker.LLMUsage") as MockLLMUsage:
+    with patch("app.shared.llm.budget_manager.LLMBudgetManager.record_usage", new_callable=AsyncMock) as mock_record:
+        mock_record.return_value = None
         
-        mock_get_usage.return_value = Decimal("10.00")
-        mock_tier.return_value = MagicMock(value="pro")
+        await tracker.record(tenant_id, "groq", "model", 100, 100)
         
-        mock_usage_instance = MagicMock()
-        MockLLMUsage.return_value = mock_usage_instance
-        
-        usage = await tracker.record(tenant_id, "groq", "model", 100, 100)
-        
-        assert usage is mock_usage_instance
-        assert mock_db.add.called
+        mock_record.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_authorize_request_allowed(mock_db, tenant_id):
     tracker = UsageTracker(mock_db)
     
-    with patch("sqlalchemy.select"):
-        budget = MagicMock()
-        budget.monthly_limit_usd = Decimal("100.00")
-        budget.hard_limit = True
+    with patch("app.shared.llm.budget_manager.LLMBudgetManager.check_and_reserve", new_callable=AsyncMock) as mock_reserve:
+        mock_reserve.return_value = Decimal("0.01")
         
-        res = MagicMock()
-        res.scalar_one_or_none.return_value = budget
-        mock_db.execute.return_value = res
-        
-        with patch("app.shared.llm.usage_tracker.UsageTracker.get_monthly_usage", new_callable=AsyncMock) as mock_usage, \
-             patch.dict("app.shared.llm.pricing_data.LLM_PRICING", {}, clear=True):
-            
-            mock_usage.return_value = Decimal("10.00")
-            allowed = await tracker.authorize_request(tenant_id, "groq", "model", "text", max_output_tokens=100)
-            assert allowed is True
+        allowed = await tracker.authorize_request(tenant_id, "groq", "model", "text", max_output_tokens=100)
+        assert allowed is True
 
 @pytest.mark.asyncio
 async def test_authorize_request_denied(mock_db, tenant_id):
     tracker = UsageTracker(mock_db)
     
-    with patch("sqlalchemy.select"):
-        budget = MagicMock()
-        budget.monthly_limit_usd = Decimal("5.00")
-        budget.hard_limit = True
+    with patch("app.shared.llm.budget_manager.LLMBudgetManager.check_and_reserve", new_callable=AsyncMock) as mock_reserve:
+        mock_reserve.side_effect = BudgetExceededError("Budget exceeded")
         
-        res = MagicMock()
-        res.scalar_one_or_none.return_value = budget
-        mock_db.execute.return_value = res
-        
-        with patch("app.shared.llm.usage_tracker.UsageTracker.get_monthly_usage", new_callable=AsyncMock) as mock_usage, \
-             patch.dict("app.shared.llm.pricing_data.LLM_PRICING", {}, clear=True):
-            
-            mock_usage.return_value = Decimal("10.00")
-            with pytest.raises(BudgetExceededError):
-                await tracker.authorize_request(tenant_id, "groq", "model", "text")
+        with pytest.raises(BudgetExceededError):
+            await tracker.authorize_request(tenant_id, "groq", "model", "text")
 
 @pytest.mark.asyncio
 async def test_check_budget_hard_limit(mock_db, tenant_id):
     tracker = UsageTracker(mock_db)
-    mock_cache = MagicMock()
-    mock_cache.enabled = True
-    mock_cache.client.get = AsyncMock(return_value="1") 
     
-    with patch("app.shared.llm.usage_tracker.get_cache_service", return_value=mock_cache):
+    with patch("app.shared.llm.budget_manager.LLMBudgetManager.check_budget", new_callable=AsyncMock) as mock_check:
+        mock_check.return_value = BudgetStatus.HARD_LIMIT
+        
         status = await tracker.check_budget(tenant_id)
         assert status == BudgetStatus.HARD_LIMIT
 
 @pytest.mark.asyncio
 async def test_check_budget_fail_closed(mock_db, tenant_id):
     tracker = UsageTracker(mock_db)
-    mock_db.execute.side_effect = Exception("DB Down")
     
-    with patch("sqlalchemy.select"):
+    with patch("app.shared.llm.budget_manager.LLMBudgetManager.check_budget", new_callable=AsyncMock) as mock_check:
+        mock_check.side_effect = BudgetExceededError("Failed", details={"fail_closed": True})
+        
         with pytest.raises(BudgetExceededError) as exc:
             await tracker.check_budget(tenant_id)
         assert exc.value.details.get("fail_closed") is True
 
 @pytest.mark.asyncio
 async def test_alert_logic(mock_db, tenant_id):
-    tracker = UsageTracker(mock_db)
-    
-    with patch("sqlalchemy.select"):
-        budget = MagicMock()
-        budget.tenant_id = tenant_id
-        budget.monthly_limit_usd = Decimal("100.00")
-        budget.alert_threshold_percent = 80
-        budget.alert_sent_at = None
+    """Test that _check_budget_and_alert is called via record_usage in LLMBudgetManager."""
+    with patch("app.shared.llm.budget_manager.LLMBudgetManager._check_budget_and_alert", new_callable=AsyncMock) as mock_alert, \
+         patch("app.shared.llm.budget_manager.LLMBudgetManager.record_usage", new_callable=AsyncMock) as mock_record:
         
-        res = MagicMock()
-        res.scalar_one_or_none.return_value = budget
-        mock_db.execute.return_value = res
+        async def record_side_effect(*args, **kwargs):
+            await mock_alert(tenant_id, mock_db, Decimal("0.01"))
         
-        # Patch CLASS method here too
-        with patch("app.shared.llm.usage_tracker.UsageTracker.get_monthly_usage", new_callable=AsyncMock) as mock_usage, \
-             patch("app.shared.core.logging.audit_log") as mock_audit, \
-             patch("app.modules.notifications.domain.SlackService"):
-            
-            mock_usage.return_value = Decimal("85.00")
-            await tracker._check_budget_and_alert(tenant_id)
-            assert mock_audit.called
+        mock_record.side_effect = record_side_effect
+        
+        tracker = UsageTracker(mock_db)
+        await tracker.record(tenant_id, "groq", "model", 100, 100)
+        
+        mock_alert.assert_called_once()

@@ -10,17 +10,24 @@ from app.shared.core.rate_limit import (
     get_redis_client
 )
 from uuid import uuid4
+from types import SimpleNamespace
+
 
 @pytest.fixture
 def mock_request():
-    request = MagicMock(spec=Request)
-    request.state = MagicMock()
-    request.headers = {}
+    request = SimpleNamespace()
+    request.state = SimpleNamespace()
+    request.headers = MagicMock()
     return request
+
+
+
 
 def test_context_aware_key_tenant_id(mock_request):
     """Test key extraction from tenant_id in state."""
     tenant_id = str(uuid4())
+
+
     mock_request.state.tenant_id = tenant_id
     
     key = context_aware_key(mock_request)

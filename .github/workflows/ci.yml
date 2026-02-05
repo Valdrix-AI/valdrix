@@ -215,3 +215,24 @@ jobs:
           path: dashboard/playwright-report/
           retention-days: 7
 
+  # JOB 5: HELM CHART VALIDATION
+  helm-lint:
+    name: Validate Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Lint Helm chart
+        run: helm lint helm/valdrix/
+
+      - name: Template Helm chart (dry-run)
+        run: |
+          helm template valdrix helm/valdrix/ \
+            --set existingSecrets.name=test-secrets \
+            --debug > /dev/null

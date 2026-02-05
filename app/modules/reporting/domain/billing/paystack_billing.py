@@ -487,8 +487,17 @@ class WebhookHandler:
     async def _handle_charge_success(self, data: Dict) -> None:
         """Handle successful charge - primary activation point."""
         metadata = data.get("metadata", {})
+        if isinstance(metadata, str):
+            try:
+                import json
+                metadata = json.loads(metadata)
+            except:
+                metadata = {}
+        
         tenant_id_str = metadata.get("tenant_id")
         tier = metadata.get("tier")
+        logger.info("paystack_webhook_data_parsed", tenant_id=tenant_id_str, tier=tier)
+
         
         customer = data.get("customer", {})
         customer_code = customer.get("customer_code")
@@ -529,7 +538,8 @@ class WebhookHandler:
         # If this is a subscription charge, we might get plan info
         plan = data.get("plan", {})
         
-        if tenant_id and plan:
+        if tenant_id:
+
             # It's a subscription payment
             result = await self.db.execute(
                 select(TenantSubscription).where(

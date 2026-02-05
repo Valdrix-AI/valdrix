@@ -2,7 +2,7 @@ import structlog
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from typing import Annotated, Dict, Any, Callable, Awaitable, List, cast
+from typing import Annotated, Dict, Any, Callable, Awaitable, cast
 from fastapi import FastAPI, Depends, Request, HTTPException, Response
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.staticfiles import StaticFiles
@@ -21,7 +21,7 @@ from app.shared.core.middleware import RequestIDMiddleware, SecurityHeadersMiddl
 from app.shared.core.security_metrics import CSRF_ERRORS, RATE_LIMIT_EXCEEDED
 from app.shared.core.ops_metrics import API_ERRORS_TOTAL
 from app.shared.core.sentry import init_sentry
-from app.modules.governance.domain.scheduler import SchedulerService
+# SchedulerService imported lazily in lifespan() to avoid Celery blocking on startup
 from app.shared.core.timeout import TimeoutMiddleware
 from app.shared.core.tracing import setup_tracing
 from app.shared.db.session import get_db, async_session_maker, engine
@@ -106,12 +106,16 @@ async def lifespan(app: FastAPI) -> Any:
     app.state.emissions_tracker = tracker
 
     # Pass shared session factory to scheduler (DI pattern)
+    # Lazy import to avoid Celery blocking on module load
+    from app.modules.governance.domain.scheduler import SchedulerService
     scheduler = SchedulerService(session_maker=async_session_maker)  # type: ignore[no-untyped-call]
-    if not settings.TESTING:
+    if not settings.TESTING and settings.REDIS_URL:
         scheduler.start()  # type: ignore[no-untyped-call]
         logger.info("scheduler_started")
-    else:
+    elif settings.TESTING:
         logger.info("scheduler_skipped_in_testing")
+    else:
+        logger.warning("scheduler_skipped_no_redis", msg="Set REDIS_URL to enable background job")
     app.state.scheduler = scheduler
 
     yield
@@ -290,6 +294,8 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
             "error_id": error_id
         }
     )
+
+
 
 # Prometheus Gauge for System Health
 SYSTEM_HEALTH = Gauge("valdrix_system_health", "System health status (1=healthy, 0.5=degraded, 0=unhealthy)")

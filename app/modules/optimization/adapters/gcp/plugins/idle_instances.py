@@ -49,7 +49,8 @@ class GCPIdleInstancePlugin(ZombiePlugin):
                     continue
 
                 machine_type = inst.machine_type.split('/')[-1]
-                is_gpu = "a2-" in machine_type or "g2-" in machine_type or inst.guest_accelerators
+                is_gpu = "a2-" in machine_type or "g2-" in machine_type or bool(inst.guest_accelerators)
+
 
                 # Deep-Scan Layer: CPU Utilization Check
                 cpu_utilization = None

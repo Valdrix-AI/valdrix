@@ -42,9 +42,14 @@ async def test_execute_fails_if_backup_fails(remediation_service, mock_db):
     mock_db.execute.return_value = mock_result
     
     # Mock backup failure
-    with patch("app.modules.optimization.domain.remediation.RemediationService._create_volume_backup", side_effect=Exception("AWS Backup Error")):
+    with patch("app.modules.optimization.domain.remediation.RemediationService._create_volume_backup", side_effect=Exception("AWS Backup Error")), \
+         patch("app.modules.optimization.domain.remediation.SafetyGuardrailService") as mock_safety_cls:
+        
+        mock_safety_cls.return_value.check_all_guards = AsyncMock()
+        
         # Mock deletion action to track if it's called
         with patch("app.modules.optimization.domain.remediation.RemediationService._execute_action", AsyncMock()) as mock_delete:
+
             
             # Mock AuditLogger to verify logging
             with patch("app.modules.optimization.domain.remediation.AuditLogger") as MockAuditLogger:
@@ -95,8 +100,13 @@ async def test_execute_success_with_audit_trail(remediation_service, mock_db):
     mock_result.scalar_one_or_none.return_value = request
     mock_db.execute.return_value = mock_result
     
-    with patch("app.modules.optimization.domain.remediation.RemediationService._create_volume_backup", AsyncMock(return_value="snap-123")):
+    with patch("app.modules.optimization.domain.remediation.RemediationService._create_volume_backup", AsyncMock(return_value="snap-123")), \
+         patch("app.modules.optimization.domain.remediation.SafetyGuardrailService") as mock_safety_cls:
+        
+        mock_safety_cls.return_value.check_all_guards = AsyncMock()
+        
         with patch("app.modules.optimization.domain.remediation.RemediationService._execute_action", AsyncMock()) as mock_delete:
+
             with patch("app.modules.optimization.domain.remediation.AuditLogger") as MockAuditLogger:
                 mock_audit = AsyncMock()
                 MockAuditLogger.return_value = mock_audit

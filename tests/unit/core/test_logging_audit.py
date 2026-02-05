@@ -18,11 +18,13 @@ def test_pii_redactor_nested():
     
     redacted = pii_redactor(None, None, event_dict)
     
-    assert redacted["email"] == "[REDACTED]"
+    # Email is regex-redacted in the value, not key-based
+    assert redacted["email"] == "[EMAIL_REDACTED]"
     assert redacted["nested"]["token"] == "[REDACTED]"
     assert redacted["nested"]["safe"] == "data"
     assert redacted["list"][0]["password"] == "[REDACTED]"
     assert redacted["list"][1] == "safe_item"
+
 
 def test_pii_redactor_regex():
     """Verify regex-based PII redaction for unstructured text in logs."""

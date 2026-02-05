@@ -35,7 +35,8 @@ async def test_execute_plugin_scan(detector):
     
     assert results == [{"id": "vol-123"}]
     mock_plugin.scan.assert_called_once()
-    call_args = mock_plugin.scan.call_args
-    assert call_args[0][0] == detector.session
-    assert call_args[0][1] == "us-west-2"
-    assert call_args[0][2] == detector.credentials
+    kwargs = mock_plugin.scan.call_args.kwargs
+    assert kwargs["session"] == detector.session
+    assert kwargs["region"] == "us-west-2"
+    assert kwargs["credentials"] == detector.credentials
+

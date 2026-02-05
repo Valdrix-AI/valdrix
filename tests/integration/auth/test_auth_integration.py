@@ -53,6 +53,8 @@ async def test_tenant_isolation(ac: AsyncClient, db: AsyncSession):
     # 4. Attempt to List Connections (Should only see A's, so 0)
     response = await ac.get("/api/v1/settings/connections/aws", headers=headers_a)
     assert response.status_code == 200
+
+
     data = response.json()
     assert isinstance(data, list)
     assert not any(c["id"] == str(conn_b_id) for c in data)

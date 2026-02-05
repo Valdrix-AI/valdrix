@@ -407,7 +407,6 @@ class CURUsageAnalyzer:
         
         for record in self.records:
             resource_id = record.get("line_item_resource_id", "")
-            usage_type = record.get("line_item_usage_type", "")
             product_code = record.get("line_item_product_code", "")
             
             if product_code != "AmazonEKS":

@@ -2,9 +2,19 @@ import pytest
 from uuid import uuid4
 from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi import HTTPException
+
+# Import all models to register them in SQLAlchemy mapper
+from app.models import (  # noqa: F401
+    cloud, llm, tenant, gcp_connection, aws_connection, azure_connection, 
+    remediation, notification_settings, background_job, attribution,
+    anomaly_marker, carbon_settings, cost_audit, discovered_account,
+    optimization, pricing, remediation_settings, security
+)
+
 from app.modules.governance.api.v1.settings.onboard import onboard, OnboardRequest
 from app.models.tenant import User
 from app.shared.core.auth import CurrentUser
+
 
 @pytest.fixture
 def mock_db():
@@ -30,7 +40,23 @@ async def test_onboard_success(mock_db, current_user):
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
     
+    # Mock tenant_id to be returned by tenant.id
+    expected_tenant_id = uuid4()
+    
+    # We need to ensure that the Tenant object created inside onboard() 
+    # has its ID set after flush.
+    async def mock_flush():
+        # Find the Tenant object in mock_db.add calls
+        for call in mock_db.add.call_args_list:
+            args, _ = call
+            obj = args[0]
+            if hasattr(obj, "name") and not hasattr(obj, "email"): # It's a Tenant
+                obj.id = expected_tenant_id
+    
+    mock_db.flush = AsyncMock(side_effect=mock_flush)
+    
     req = OnboardRequest(tenant_name="Acme Corp")
+
     scope = {
         "type": "http",
         "method": "POST",
@@ -51,8 +77,10 @@ async def test_onboard_success(mock_db, current_user):
             response = await onboard(request_obj, req, current_user, mock_db)
             
             assert response.status == "onboarded"
-            assert response.tenant_id is not None
+            assert response.tenant_id == expected_tenant_id
             mock_db.commit.assert_awaited_once()
+
+
 
 @pytest.mark.asyncio
 async def test_onboard_already_exists(mock_db, current_user):

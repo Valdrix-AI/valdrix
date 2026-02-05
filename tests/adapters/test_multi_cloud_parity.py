@@ -9,7 +9,7 @@ from app.modules.reporting.domain.attribution_engine import AttributionEngine
 from app.models.cloud import CostRecord
 
 @pytest.mark.asyncio
-async def test_gcp_multi_credit_extraction():
+async def test_gcp_multi_credit_extraction(db_session):
     """
     Verify that GCPAdapter correctly sums all credit types.
     """
@@ -41,7 +41,7 @@ async def test_gcp_multi_credit_extraction():
         assert records[0]["credits"] == -25.0
 
 @pytest.mark.asyncio
-async def test_untagged_recommendations(db):
+async def test_untagged_recommendations(db_session):
     """
     Verify that AttributionEngine identifies top unallocated services.
     """
@@ -53,19 +53,18 @@ async def test_untagged_recommendations(db):
     
     # Setup: Create tenant and cloud account
     tenant = Tenant(id=tenant_id, name="Test Tenant")
-    db.add(tenant)
-    await db.commit()
+    db_session.add(tenant)
+    await db_session.commit()
     
     cloud_account = CloudAccount(
         id=account_id,
         tenant_id=tenant_id,
         provider="gcp",
         name="Test Project",
-        is_active=True,
-        credentials_encrypted="{}"
+        is_active=True
     )
-    db.add(cloud_account)
-    await db.commit()
+    db_session.add(cloud_account)
+    await db_session.commit()
     
     # Create unallocated records
     records = [
@@ -88,12 +87,13 @@ async def test_untagged_recommendations(db):
             account_id=account_id
         )
     ]
-    db.add_all(records)
-    await db.commit()
+    db_session.add_all(records)
+    await db_session.commit()
     
-    engine = AttributionEngine(db)
+    engine = AttributionEngine(db_session)
     analysis = await engine.get_unallocated_analysis(tenant_id, date.today(), date.today())
     
     assert len(analysis) >= 2
     assert analysis[0]["service"] == "Compute Engine"
     assert "Create a DIRECT rule" in analysis[0]["recommendation"]
+

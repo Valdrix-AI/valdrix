@@ -26,6 +26,7 @@ class Settings(BaseSettings):
         """Ensure critical production keys are present and valid."""
         if self.TESTING:
             return self
+
             
         if self.is_production:
             # SEC-01: CSRF key must be changed
@@ -51,7 +52,8 @@ class Settings(BaseSettings):
 
             # SEC-04: Database SSL Mode
             if self.DB_SSL_MODE not in ["require", "verify-ca", "verify-full"]:
-                 raise ValueError(f"SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production. Current: {self.DB_SSL_MODE}")
+                raise ValueError(f"SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production. Current: {self.DB_SSL_MODE}")
+
 
         # SEC-05: Admin API Key validation for staging/production
         if self.ENVIRONMENT in ["production", "staging"]:

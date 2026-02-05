@@ -49,7 +49,8 @@ async def test_oidc_token_claims(db: AsyncSession):
     tenant_id = str(uuid4())
     audience = "https://iam.googleapis.com/"
     
-    token = await OIDCService.create_token(tenant_id, audience)
+    token = await OIDCService.create_token(tenant_id, audience, db=db)
+
     
     # Decode without verification to check claims
     decoded = jwt.decode(token, options={"verify_signature": False})
@@ -72,7 +73,8 @@ async def test_oidc_jwks_structure(db: AsyncSession):
     """
     Verify JWKS contains correctly formatted RSA keys.
     """
-    jwks = await OIDCService.get_jwks()
+    jwks = await OIDCService.get_jwks(db=db)
+
     
     assert "keys" in jwks
     assert len(jwks["keys"]) > 0

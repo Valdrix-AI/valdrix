@@ -1,3 +1,4 @@
+from decimal import Decimal
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
@@ -65,6 +66,8 @@ def mock_db():
     # Configure default behaviors
     result_mock.scalars.return_value.all.return_value = []
     result_mock.scalar_one_or_none.return_value = None
+    result_mock.scalar.return_value = Decimal("0") # Fixed: ensure comparisons work
+
     
     return db
 
@@ -132,9 +135,16 @@ async def test_execute_request_success(service, mock_db):
                 pass
         return MockContextManager()
     
-    with patch.object(service, '_get_client', side_effect=mock_get_client):
+    # Patch SafetyGuardrailService to avoid database mock conflicts
+    with patch.object(service, '_get_client', side_effect=mock_get_client), \
+         patch('app.modules.optimization.domain.remediation.SafetyGuardrailService', new_callable=MagicMock) as mock_safety_cls:
+        
+        mock_safety = mock_safety_cls.return_value
+        mock_safety.check_all_guards = AsyncMock()
+        
         # Bypass grace period for testing
         result = await service.execute(req.id, req.tenant_id, bypass_grace_period=True)
+
         
         # Verify the delete was called (may not be called if audit log fails first)
         # In unit test without full DB, we just verify no exception was raised

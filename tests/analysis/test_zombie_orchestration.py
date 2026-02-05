@@ -91,11 +91,12 @@ async def test_remediation_service_execute_delete_volume(mock_db):
     mock_ec2 = AsyncMock()
     with patch.object(service, "_get_client", return_value=MagicMock(__aenter__=AsyncMock(return_value=mock_ec2))):
         with patch("app.modules.governance.domain.security.audit_log.AuditLogger.log", new_callable=AsyncMock):
-            # Use bypass_grace_period=True to test immediate execution
-            executed_req = await service.execute(req_id, tenant_id, bypass_grace_period=True)
-            
-            assert executed_req.status == RemediationStatus.COMPLETED
-            mock_ec2.delete_volume.assert_called_with(VolumeId="vol-12345")
+            with patch("app.shared.core.safety_service.SafetyGuardrailService.check_all_guards", new_callable=AsyncMock):
+                # Use bypass_grace_period=True to test immediate execution
+                executed_req = await service.execute(req_id, tenant_id, bypass_grace_period=True)
+                
+                assert executed_req.status == RemediationStatus.COMPLETED
+                mock_ec2.delete_volume.assert_called_with(VolumeId="vol-12345")
 
 @pytest.mark.asyncio
 async def test_remediation_service_schedules_grace_period(mock_db):
@@ -117,9 +118,10 @@ async def test_remediation_service_schedules_grace_period(mock_db):
     mock_db.execute.return_value = mock_result
     
     with patch("app.modules.governance.domain.security.audit_log.AuditLogger.log", new_callable=AsyncMock):
-        with patch("app.modules.governance.domain.jobs.processor.enqueue_job", new_callable=AsyncMock):
-            # Execute without bypass - should schedule, not complete
-            scheduled_req = await service.execute(req_id, tenant_id)
+        with patch("app.shared.core.safety_service.SafetyGuardrailService.check_all_guards", new_callable=AsyncMock):
+            with patch("app.modules.governance.domain.jobs.processor.enqueue_job", new_callable=AsyncMock):
+                # Execute without bypass - should schedule, not complete
+                scheduled_req = await service.execute(req_id, tenant_id)
             
             assert scheduled_req.status == RemediationStatus.SCHEDULED
             assert scheduled_req.scheduled_execution_at is not None

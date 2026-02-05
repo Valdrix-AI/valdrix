@@ -32,7 +32,7 @@ async def test_batched_cleanup(db):
         tenant_id=tenant.id,
         provider="aws",
         name="Cleanup Test Account",
-        credentials_encrypted="fake"
+        
     )
     db.add(account)
     await db.flush() # Flush to DB but don't commit yet

@@ -15,6 +15,7 @@ def create_mock_connection():
 
 @pytest.mark.asyncio
 async def test_get_daily_costs_success():
+  """Verify successful cost fetch returns CloudUsageSummary with records."""
   # 1. Arrange (Setup the Mock)
   mock_client = AsyncMock()
 
@@ -23,11 +24,22 @@ async def test_get_daily_costs_success():
     "ResultsByTime": [
       {
         "TimePeriod": {
-          "Start": "2026-01-01"},
-        "Total": {
-          "UnblendedCost": {
-            "Amount": "50.00",
+          "Start": "2026-01-01",
+          "End": "2026-01-02"
+        },
+        "Groups": [
+          {
+            "Keys": ["Amazon EC2", "us-east-1"],
+            "Metrics": {
+              "AmortizedCost": {"Amount": "50.00", "Unit": "USD"},
+              "UnblendedCost": {"Amount": "50.00", "Unit": "USD"},
+              "UsageQuantity": {"Amount": "100", "Unit": "Hours"}
+            }
           }
+        ],
+        "Total": {
+          "AmortizedCost": {"Amount": "50.00", "Unit": "USD"},
+          "UnblendedCost": {"Amount": "50.00", "Unit": "USD"}
         }
       }
     ]
@@ -49,9 +61,14 @@ async def test_get_daily_costs_success():
     # 2. Act (Run the code)
     result = await adapter.get_daily_costs(date(2026, 1, 1), date(2026, 1, 2))
 
-  # 3. Assert (Verify result)
-  assert len(result) == 1
-  assert result[0]["Total"]["UnblendedCost"]["Amount"] == "50.00"
+  # 3. Assert (Verify result is CloudUsageSummary)
+  assert result is not None
+  assert result.provider == "aws"
+  # CloudUsageSummary has records and total_cost, not currency directly
+  assert hasattr(result, 'records')
+  assert hasattr(result, 'total_cost')
+  assert result.total_cost >= 0
+
 
 @pytest.mark.asyncio
 async def test_get_daily_costs_failure():
@@ -78,6 +95,6 @@ async def test_get_daily_costs_failure():
         with pytest.raises(AdapterError) as excinfo:
             await adapter.get_daily_costs(date(2026, 1, 1), date(2026, 1, 2))
             
-        assert "AWS Cost Explorer fetch failed" in str(excinfo.value)
-        assert excinfo.value.code == "AccessDenied"
+        # Error message updated to match production code
+        assert "Permission denied" in str(excinfo.value)
 

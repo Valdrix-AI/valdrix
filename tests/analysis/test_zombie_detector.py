@@ -19,7 +19,9 @@ from app.modules.optimization.domain.aws_provider.plugins import (
     UnusedElasticIpsPlugin, IdleInstancesPlugin,
     OrphanLoadBalancersPlugin, UnderusedNatGatewaysPlugin,
     IdleRdsPlugin, ColdRedshiftPlugin,
-    IdleSageMakerPlugin, LegacyEcrImagesPlugin
+    IdleSageMakerPlugin, LegacyEcrImagesPlugin,
+    IdleEksPlugin, IdleElastiCachePlugin, IdleSageMakerNotebooksPlugin,
+    StoppedInstancesWithEbsPlugin, UnusedLambdaPlugin, OrphanVpcEndpointsPlugin
 )
 
 
@@ -53,9 +55,9 @@ class TestZombieDetectorInstantiation:
         assert detector.credentials == creds
     
     def test_plugins_loaded(self):
-        """Should load all 11 zombie plugins."""
+        """Should load all 17 zombie plugins."""
         detector = ZombieDetector()
-        assert len(detector.plugins) == 11
+        assert len(detector.plugins) == 17
     
     def test_all_plugin_types_present(self):
         """Should include all expected plugin types."""
@@ -67,7 +69,9 @@ class TestZombieDetectorInstantiation:
             UnusedElasticIpsPlugin, IdleInstancesPlugin,
             OrphanLoadBalancersPlugin, UnderusedNatGatewaysPlugin,
             IdleRdsPlugin, ColdRedshiftPlugin,
-            IdleSageMakerPlugin, LegacyEcrImagesPlugin
+            IdleSageMakerPlugin, LegacyEcrImagesPlugin,
+            IdleEksPlugin, IdleElastiCachePlugin, IdleSageMakerNotebooksPlugin,
+            StoppedInstancesWithEbsPlugin, UnusedLambdaPlugin, OrphanVpcEndpointsPlugin
         ]
         
         for expected_class in expected:

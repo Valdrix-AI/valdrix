@@ -43,7 +43,9 @@ class SafetyGuardrailService:
 
     async def _check_global_kill_switch(self, estimated_impact: Decimal) -> None:
         """Checks if the daily global savings limit has been reached."""
+        estimated_impact = estimated_impact or Decimal("0")
         today = datetime.now(timezone.utc).date()
+
         
         result = await self.db.execute(
             select(func.sum(RemediationRequest.estimated_monthly_savings))

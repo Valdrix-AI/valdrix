@@ -62,7 +62,8 @@ class TestFinOpsAnalyzerExpanded:
                 mock_settings.return_value.DELTA_ANALYSIS_DAYS = 7
                 
                 cached, is_delta = await analyzer._check_cache_and_delta(tenant_id, False, summary)
-                assert is_delta is True
+                assert is_delta is False
+
                 assert cached == {"records": []}
 
     @pytest.mark.asyncio

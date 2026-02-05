@@ -27,7 +27,7 @@ async def test_cost_aggregator_basic_breakdown(db: AsyncSession):
         tenant_id=tenant_id,
         provider="aws",
         name="Test AWS",
-        credentials_encrypted="test-creds",
+        
         is_active=True
     )
     db.add(account)
@@ -100,8 +100,8 @@ async def test_cost_aggregator_tenant_isolation(db: AsyncSession):
     ])
     await db.flush()
     
-    account_a = CloudAccount(tenant_id=tenant_a, provider="aws", name="A", credentials_encrypted="A")
-    account_b = CloudAccount(tenant_id=tenant_b, provider="aws", name="B", credentials_encrypted="B")
+    account_a = CloudAccount(tenant_id=tenant_a, provider="aws", name="A", )
+    account_b = CloudAccount(tenant_id=tenant_b, provider="aws", name="B", )
     db.add_all([account_a, account_b])
     await db.flush()
     

@@ -20,7 +20,12 @@ async def test_get_db_with_request():
     mock_cm.__aenter__.return_value = mock_session
     mock_cm.__aexit__ = AsyncMock()
     
+    # Mock bind.url to simulate postgres
+    mock_session.bind.url = "postgresql://localhost/db"
+    
     with patch("app.shared.db.session.async_session_maker", return_value=mock_cm):
+
+
         async for session in get_db(request):
             assert session.info["rls_context_set"] is True
             mock_session.execute.assert_called()
@@ -147,7 +152,12 @@ async def test_get_db_postgresql_rls_set_failed():
     mock_cm.__aenter__.return_value = mock_session
     mock_cm.__aexit__ = AsyncMock()
     
+    # Mock bind.url to simulate postgres
+    mock_session.bind.url = "postgresql://localhost/db"
+    
     with patch("app.shared.db.session.async_session_maker", return_value=mock_cm):
+
+
         with patch("app.shared.db.session.logger") as mock_logger:
             async for _ in get_db(request):
                 pass

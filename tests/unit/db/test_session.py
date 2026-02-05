@@ -20,10 +20,13 @@ async def test_get_db_yields_session():
     
     with patch("app.shared.db.session.async_session_maker") as mock_maker:
         mock_session = AsyncMock()
+        # Mock bind.url to simulate postgres
+        mock_session.bind.url = "postgresql://localhost/db"
         # async_session_maker() returns mock_session
         mock_maker.return_value = mock_session
         # async with mock_session as session: session becomes mock_session
         mock_session.__aenter__.return_value = mock_session
+
         
         # Test generator
         db_gen = get_db(mock_request)

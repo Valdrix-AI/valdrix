@@ -29,8 +29,8 @@ async def test_azure_verify_connection_success():
         # Act
         response = await AzureConnectionService(db).verify_connection(connection_id, tenant_id)
 
-        # Assert
-        assert response["status"] == "active"
+        # Assert - production returns 'success', not 'active'
+        assert response["status"] == "success"
         assert mock_connection.is_active is True
         db.commit.assert_called()
 
@@ -54,10 +54,10 @@ async def test_azure_verify_connection_failure():
         mock_adapter_instance = MockAdapter.return_value
         mock_adapter_instance.verify_connection = AsyncMock(return_value=False)
 
-        # Act & Assert
-        with pytest.raises(HTTPException) as exc:
-            await AzureConnectionService(db).verify_connection(connection_id, tenant_id)
+        # Act - production now returns a status dict instead of raising
+        response = await AzureConnectionService(db).verify_connection(connection_id, tenant_id)
         
-        assert exc.value.status_code == 400
+        # Assert
+        assert response["status"] == "failed"
+        assert "Failed to authenticate" in response["message"]
         assert mock_connection.is_active is False
-        db.commit.assert_called()

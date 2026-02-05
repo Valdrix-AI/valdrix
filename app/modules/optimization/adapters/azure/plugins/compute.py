@@ -5,7 +5,6 @@ Detects idle VMs using Cost Management export data.
 """
 from typing import List, Dict, Any
 from azure.mgmt.compute.aio import ComputeManagementClient
-from azure.mgmt.resource.resources.aio import ResourceManagementClient
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin

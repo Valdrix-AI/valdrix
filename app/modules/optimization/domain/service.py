@@ -171,7 +171,8 @@ class ZombieService:
             logger.error("scan_overall_timeout", tenant_id=str(tenant_id))
             all_zombies["scan_timeout"] = True
             all_zombies["partial_results"] = True
-            SCAN_TIMEOUTS.labels(level="overall").inc()
+            SCAN_TIMEOUTS.labels(level="overall", provider="multi").inc()
+
 
         all_zombies["total_monthly_waste"] = round(total_waste, 2)
 

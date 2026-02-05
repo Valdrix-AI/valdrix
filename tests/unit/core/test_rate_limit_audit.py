@@ -7,6 +7,7 @@ from app.shared.core.rate_limit import (
     check_remediation_rate_limit, get_redis_client, setup_rate_limiting
 )
 
+from types import SimpleNamespace
 @pytest.fixture
 def mock_settings():
     with patch("app.shared.core.rate_limit.get_settings") as mock:
@@ -15,14 +16,19 @@ def mock_settings():
         yield mock
 
 def test_context_aware_key_tenant_id():
-    request = MagicMock(spec=Request)
+    request = SimpleNamespace()
+    request.state = SimpleNamespace()
     request.state.tenant_id = "tenant-123"
     assert context_aware_key(request) == "tenant:tenant-123"
 
 def test_context_aware_key_auth_header():
-    request = MagicMock(spec=Request)
-    del request.state.tenant_id
+    request = SimpleNamespace()
+    request.state = SimpleNamespace()
+    request.headers = MagicMock()
     request.headers.get.return_value = "Bearer validtoken"
+
+
+
     
     # Mock hashlib to return deterministic hash
     with patch("hashlib.sha256") as mock_sha:
@@ -30,9 +36,13 @@ def test_context_aware_key_auth_header():
         assert context_aware_key(request) == "token:hashedtoken12345"
 
 def test_context_aware_key_ip_fallback():
-    request = MagicMock(spec=Request)
-    del request.state.tenant_id
+    request = SimpleNamespace()
+    request.state = SimpleNamespace()
+    request.headers = MagicMock()
     request.headers.get.return_value = None
+
+
+
     
     with patch("app.shared.core.rate_limit.get_remote_address", return_value="127.0.0.1"):
         assert context_aware_key(request) == "127.0.0.1"
@@ -45,10 +55,14 @@ def test_get_limiter(mock_settings):
         assert limiter._storage_uri == "redis://localhost:6379"
 
 def test_get_analysis_limit():
-    request = MagicMock(spec=Request)
+    request = SimpleNamespace()
+    request.state = SimpleNamespace()
     
     # Default/Starter
     request.state.tier = "starter"
+
+
+
     assert get_analysis_limit(request) == "2/hour"
     
     # Pro

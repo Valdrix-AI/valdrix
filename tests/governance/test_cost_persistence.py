@@ -19,7 +19,7 @@ async def test_cost_persistence_idempotency(db):
         tenant_id=tenant.id,
         provider="aws",
         name="Test AWS",
-        credentials_encrypted="fake"
+        
     )
     db.add(account)
     await db.flush()
