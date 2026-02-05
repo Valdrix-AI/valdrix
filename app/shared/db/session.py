@@ -22,18 +22,21 @@ if not settings.DATABASE_URL:
                    msg="DATABASE_URL is not set. The application cannot start.")
     sys.exit(1)
 
+# Ensure DATABASE_URL is a string before string comparison
+db_url = settings.DATABASE_URL or ""
+
 # SSL Context: Configurable SSL modes for different environments
 # Options: disable, require, verify-ca, verify-full
 ssl_mode = settings.DB_SSL_MODE.lower()
 connect_args = {}
-if "postgresql" in settings.DATABASE_URL:
+if "postgresql" in db_url:
     connect_args["statement_cache_size"] = 0  # Required for Supavisor
 
 if ssl_mode == "disable":
     # WARNING: Only for local development with no SSL
     logger.warning("database_ssl_disabled",
                    msg="SSL disabled - INSECURE, do not use in production!")
-    if "postgresql" in settings.DATABASE_URL:
+    if "postgresql" in db_url:
         connect_args["ssl"] = False
 
 
@@ -81,7 +84,7 @@ else:
 # - pool_recycle: Recycle connections after 5 min (Supavisor/Neon compatibility)
 # Pool Configuration: Use NullPool for testing to avoid connection leaks across loops
 pool_args: Dict[str, Any] = {}
-if "sqlite" in settings.DATABASE_URL:
+if "sqlite" in db_url:
     pool_args["poolclass"] = StaticPool
     connect_args["check_same_thread"] = False
 elif settings.TESTING:
@@ -91,7 +94,7 @@ else:
     pool_args["max_overflow"] = settings.DB_MAX_OVERFLOW
 
 # Determine the actual URL to use. If testing, default to in-memory sqlite to avoid side-effects.
-effective_url = settings.DATABASE_URL
+effective_url = db_url
 if settings.TESTING and "sqlite" not in effective_url:
     effective_url = "sqlite+aiosqlite:///:memory:"
 
