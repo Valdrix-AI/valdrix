@@ -7,7 +7,7 @@ These tests verify:
 3. Cost estimation integration with PricingService
 """
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 from decimal import Decimal
 import sys
 

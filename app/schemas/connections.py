@@ -23,7 +23,7 @@ class AWSConnectionResponse(BaseModel):
     error_message: str | None
     is_management_account: bool
     organization_id: str | None
-    created_at: datetime
+    created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
