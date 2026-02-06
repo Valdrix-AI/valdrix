@@ -75,8 +75,8 @@ jobs:
       - name: Build Dashboard Docker Image
         uses: docker/build-push-action@v6
         with:
-          context: ./dashboard
-          file: ./dashboard/Dockerfile
+          context: .
+          file: ./Dockerfile.dashboard
           push: false
           load: true
           tags: valdrix-dashboard:latest
@@ -104,15 +104,15 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Backend Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-backend-results.sarif') != ''
         with:
           sarif_file: 'trivy-backend-results.sarif'
           category: 'trivy-backend'
 
       - name: Upload Dashboard Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-dashboard-results.sarif') != ''
         with:
           sarif_file: 'trivy-dashboard-results.sarif'
           category: 'trivy-dashboard'
