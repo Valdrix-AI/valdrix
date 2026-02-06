@@ -7,7 +7,7 @@ from app.schemas.costs import CloudUsageSummary, CostRecord as CostRecordSchema
 from app.modules.reporting.domain.persistence import CostPersistenceService
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="SQLite driver conflict with AsyncSession.execute in AI environment")
+@pytest.mark.xfail(reason="CloudAccount model not found in test context - needs fixture update")
 async def test_cost_persistence_idempotency(db):
     # 1. Setup - Create a tenant and account
     from app.models.tenant import Tenant

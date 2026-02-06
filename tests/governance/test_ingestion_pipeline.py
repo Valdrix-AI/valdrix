@@ -13,7 +13,7 @@ from app.models.cloud import CostRecord as CostRecordModel
 from app.modules.governance.domain.jobs.processor import JobProcessor, enqueue_job
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="SQLite driver conflict with AsyncSession.execute in AI environment")
+@pytest.mark.xfail(reason="Model schema mismatch with test fixture - needs AWSConnection.credentials_encrypted column")
 async def test_end_to_end_cost_ingestion_pipeline(db):
     # Set RLS context for the session
     tenant_id = uuid.uuid4()
@@ -22,13 +22,6 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
     
     # 1. Setup Initial Data
     tenant = Tenant(id=tenant_id, name="Enterprise Corp", plan="enterprise")
-    
-    # Cleanup for test (Uses the existing transaction)
-    await db.execute(sa.text("DELETE FROM background_jobs"))
-    await db.execute(sa.text("DELETE FROM cost_records"))
-    await db.execute(sa.text("DELETE FROM aws_connections"))
-    await db.execute(sa.text("DELETE FROM tenants"))
-    await db.execute(sa.text("DELETE FROM users"))
     
     db.add(tenant)
     await db.flush()
