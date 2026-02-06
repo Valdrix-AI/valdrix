@@ -4,13 +4,12 @@ Tests for Billing API - Paystack Integration
 Tests:
 1. Get subscription status
 2. Create checkout session
-3. Cancel subscription
-4. Webhook handling
 """
 
 import pytest
-from unittest.mock import AsyncMock
-
+from decimal import Decimal
+from unittest.mock import patch, MagicMock, AsyncMock
+from uuid import uuid4
 from app.modules.billing import (
     CheckoutRequest,
     SubscriptionResponse,
@@ -73,11 +72,15 @@ class TestBillingService:
         """BillingService should have expected methods."""
         from app.modules.reporting.domain.billing.paystack_billing import BillingService
         
-        mock_db = AsyncMock()
-        service = BillingService(mock_db)
-        
-        assert hasattr(service, 'create_checkout_session')
-        assert hasattr(service, 'cancel_subscription')
+        with patch("app.modules.reporting.domain.billing.paystack_billing.get_settings") as mock_settings:
+            # Mock settings to avoid Paystack key validation
+            mock_settings.return_value.PAYSTACK_SECRET_KEY = "test-secret-key"
+            
+            mock_db = AsyncMock()
+            service = BillingService(mock_db)
+            
+            assert hasattr(service, 'create_checkout_session')
+            assert hasattr(service, 'cancel_subscription')
 
 
 class TestWebhookHandler:

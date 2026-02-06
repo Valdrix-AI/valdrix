@@ -63,7 +63,8 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)) -> List[Dict[str,
             return [{
                 "id": p.id,
                 "name": p.name,
-                "price": float(p.price_usd),
+                "price_monthly": float(p.price_usd),
+                "price_annual": float(p.price_usd) * 10, # Standard 2-months-free fallback
                 "period": "/mo",
                 "description": p.description,
                 "features": p.display_features,
@@ -85,13 +86,13 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)) -> List[Dict[str,
             
             public_plans.append({
                 "id": tier.value,
-                "name": config["name"],
+                "name": config.get("name", tier.value.capitalize()),
                 "price_monthly": monthly,
                 "price_annual": annual,
                 "period": "/mo",
-                "description": config["description"],
-                "features": config["display_features"],
-                "cta": config["cta"],
+                "description": config.get("description", ""),
+                "features": config.get("display_features", []),
+                "cta": config.get("cta", "Get Started"),
                 "popular": tier == PricingTier.GROWTH
             })
             
@@ -125,6 +126,8 @@ async def get_subscription(
             status=sub.status,
             next_payment_date=sub.next_payment_date.isoformat() if sub.next_payment_date else None
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("get_subscription_failed", error=str(e))
         raise HTTPException(500, "Failed to fetch subscription") from e
@@ -193,6 +196,8 @@ async def create_checkout(
 
         return {"checkout_url": result["url"], "reference": result["reference"]}
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
@@ -216,6 +221,8 @@ async def cancel_subscription(
 
         return {"status": "cancelled"}
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:

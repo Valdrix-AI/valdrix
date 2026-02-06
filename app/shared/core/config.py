@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
 from typing import Optional
 from app.shared.core.constants import AWS_SUPPORTED_REGIONS, LLMProvider
+import structlog
 
 
 class Settings(BaseSettings):
@@ -53,6 +54,9 @@ class Settings(BaseSettings):
             # SEC-04: Database SSL Mode
             if self.DB_SSL_MODE not in ["require", "verify-ca", "verify-full"]:
                 raise ValueError(f"SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production. Current: {self.DB_SSL_MODE}")
+            
+            if self.DB_SSL_MODE in ["verify-ca", "verify-full"] and not self.DB_SSL_CA_CERT_PATH:
+                 raise ValueError(f"SECURITY ERROR: DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE is '{self.DB_SSL_MODE}'.")
 
 
         # SEC-05: Admin API Key validation for staging/production
@@ -66,7 +70,6 @@ class Settings(BaseSettings):
             # SEC-A1: CORS origins should not include localhost in production
             localhost_origins = [o for o in self.CORS_ORIGINS if 'localhost' in o or '127.0.0.1' in o]
             if localhost_origins:
-                import structlog
                 structlog.get_logger().warning(
                     "cors_localhost_in_production",
                     origins=localhost_origins,
@@ -77,7 +80,6 @@ class Settings(BaseSettings):
             for attr_name in ["API_URL", "FRONTEND_URL"]:
                 val = getattr(self, attr_name)
                 if val and val.startswith("http://"):
-                    import structlog
                     structlog.get_logger().warning(
                         f"{attr_name.lower()}_not_https",
                         **{attr_name.lower(): val},

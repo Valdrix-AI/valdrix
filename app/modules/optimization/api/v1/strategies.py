@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.shared.core.auth import CurrentUser, requires_role, require_tenant_access
 from app.shared.db.session import get_db
@@ -14,6 +14,8 @@ router = APIRouter(tags=["FinOps Strategy (RI/SP)"])
 
 # --- Schemas ---
 class RecommendationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: UUID
     resource_type: str
     region: str
@@ -24,9 +26,6 @@ class RecommendationRead(BaseModel):
     estimated_monthly_savings: float
     roi_percentage: float
     status: str
-
-    class Config:
-        from_attributes = True
 
 # --- Endpoints ---
 

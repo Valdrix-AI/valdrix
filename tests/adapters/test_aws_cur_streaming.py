@@ -48,6 +48,7 @@ async def test_ingest_latest_parquet_streaming():
     # Write as multiple row groups to test chunked reading
     # PyArrow engine supports row_group_size
     df.to_parquet(parquet_buffer, row_group_size=2, engine="pyarrow")
+    parquet_buffer.seek(0)  # Reset buffer position to beginning
     parquet_bytes = parquet_buffer.getvalue()
 
     # 3. Mock S3 Client

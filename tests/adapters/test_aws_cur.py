@@ -47,6 +47,7 @@ async def test_ingest_latest_parquet():
     df = pd.DataFrame(MOCK_CUR_DATA)
     parquet_buffer = io.BytesIO()
     df.to_parquet(parquet_buffer)
+    parquet_buffer.seek(0)  # Reset buffer position to beginning
     parquet_bytes = parquet_buffer.getvalue()
     
     class MockStream:

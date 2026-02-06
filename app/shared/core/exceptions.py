@@ -16,6 +16,9 @@ class ValdrixException(Exception):
         self.status_code = status_code
         self.details = details or {}
 
+    def __str__(self) -> str:
+        return f"[{self.code}] {self.message} (Status: {self.status_code})"
+
 class AdapterError(ValdrixException):
     """
     Raised when an external cloud adapter fails.

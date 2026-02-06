@@ -12,13 +12,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         # HSTS: Disable in debug mode for local development
-        if settings.DEBUG:
-            response.headers["Strict-Transport-Security"] = "max-age=0"
-        else:
-            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        # HSTS: Disable in debug mode for local development, only send on HTTPS
+        if request.url.scheme == "https":
+            if settings.DEBUG:
+                response.headers["Strict-Transport-Security"] = "max-age=0"
+            else:
+                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
 
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        if "X-Content-Type-Options" not in response.headers:
+            response.headers["X-Content-Type-Options"] = "nosniff"
+        
+        if "X-Frame-Options" not in response.headers:
+             response.headers["X-Frame-Options"] = "DENY"
 
         # Skip strict CSP for Swagger UI (requires inline scripts)
         if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
@@ -39,10 +44,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "form-action 'self'; "
             "base-uri 'self';"
         )
-        response.headers["Content-Security-Policy"] = csp_policy
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
+        if "Content-Security-Policy" not in response.headers:
+            response.headers["Content-Security-Policy"] = csp_policy
+            
+        if "Referrer-Policy" not in response.headers:
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            
+        if "Permissions-Policy" not in response.headers:
+            response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+            
+        if "X-XSS-Protection" not in response.headers:
+            response.headers["X-XSS-Protection"] = "1; mode=block"
 
         return response
 
@@ -58,6 +70,9 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         
         # Set unified tracing context
         set_correlation_id(request_id)
+        
+        # Store in state for easy access in endpoints and tests
+        request.state.request_id = request_id
 
         # Log injection via contextvars (supported by structlog)
         structlog.contextvars.clear_contextvars()

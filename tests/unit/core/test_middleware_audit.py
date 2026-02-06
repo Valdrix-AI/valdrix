@@ -24,8 +24,11 @@ async def test_security_headers_prod(mock_settings, mock_call_next):
     
     scope = {
         "type": "http",
+        "scheme": "https",
+        "server": ("testserver", 443),
         "method": "GET",
         "path": "/api/test",
+        "query_string": b"",
         "headers": [],
     }
     request = Request(scope=scope)
@@ -50,8 +53,11 @@ async def test_security_headers_debug(mock_settings, mock_call_next):
     
     scope = {
         "type": "http",
+        "scheme": "https",
+        "server": ("testserver", 443),
         "method": "GET",
         "path": "/api/test",
+        "query_string": b"",
         "headers": [],
     }
     request = Request(scope=scope)

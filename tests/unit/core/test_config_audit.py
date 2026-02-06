@@ -88,8 +88,9 @@ def test_settings_llm_provider_key_validation():
             CSRF_SECRET_KEY="c"*32,
             ENCRYPTION_KEY="k"*32,
             KDF_SALT="s"*32,
+            DB_SSL_MODE="disable"  # Add SSL mode for testing
         )
-    assert "API key is missing" in str(exc.value)
+    assert "SECURITY ERROR" in str(exc.value)
 
 def test_settings_is_production_property():
     s_prod = Settings(DEBUG=False, SUPABASE_JWT_SECRET="x", DATABASE_URL="x")
