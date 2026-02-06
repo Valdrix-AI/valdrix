@@ -11,6 +11,11 @@ on:
     types: [published]
   workflow_dispatch:
 
+# Performance: Cancel in-flight runs for same PR/branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   packages: read
@@ -23,8 +28,14 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          # Needed for git push on release
+          token: ${{ secrets.GITHUB_TOKEN }}
       
+      - name: Create SBOM output directory
+        run: mkdir -p sbom
+
       # Python Dependencies SBOM
       - name: Generate Python SBOM (CycloneDX)
         uses: CycloneDX/gh-python-generate-sbom@v2
@@ -32,10 +43,20 @@ jobs:
           input: ./pyproject.toml
           output: ./sbom/valdrix-python-sbom.json
           format: json
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       
       # Container Image SBOM
       - name: Build Docker Image
-        run: docker build -t valdrix/api:${{ github.sha }} .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: valdrix/api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       
       - name: Generate Container SBOM (Syft)
         uses: anchore/sbom-action@v0
@@ -46,7 +67,7 @@ jobs:
       
       # Vulnerability Scan
       - name: Scan SBOM for Vulnerabilities (Grype)
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@v5
         with:
           sbom: ./sbom/valdrix-container-sbom.json
           fail-build: true
@@ -60,21 +81,23 @@ jobs:
           path: ./sbom/
           retention-days: 90
       
-      # Commit to repo (on release)
+      # Commit to repo (on release only)
       - name: Commit SBOM to Repository
         if: github.event_name == 'release'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
           git add sbom/
-          git commit -m "chore: update SBOM for release ${{ github.ref_name }}"
-          git push
+          git diff --staged --quiet || git commit -m "chore: update SBOM for release ${{ github.ref_name }}"
+          git push origin main
       
       # Upload to GitHub Security
       - name: Upload to GitHub Dependency Graph
-        uses: advanced-security/sbom-generator-action@v1
-        with:
-          sbom-path: ./sbom/valdrix-python-sbom.json
+        uses: actions/dependency-review-action@v4
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
 
   compliance-report:
     name: Generate Compliance Report
@@ -93,8 +116,9 @@ jobs:
           echo "# License Compliance Report" > compliance-report.md
           echo "Generated: $(date -u)" >> compliance-report.md
           echo "" >> compliance-report.md
+          echo "## Python Dependencies" >> compliance-report.md
           jq -r '.components[] | "- \(.name)@\(.version): \(.licenses[0].license.id // "Unknown")"' \
-            ./sbom/valdrix-python-sbom.json >> compliance-report.md || true
+            ./sbom/valdrix-python-sbom.json >> compliance-report.md 2>/dev/null || echo "- No components found" >> compliance-report.md
       
       - name: Upload Compliance Report
         uses: actions/upload-artifact@v4
