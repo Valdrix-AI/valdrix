@@ -1,24 +1,24 @@
 import pytest
 import os
-import sys
+import pytest
 from unittest.mock import MagicMock, patch
+import os
+import sys
 
-# Mock sentry_sdk before it's even imported anywhere
-sys.modules["sentry_sdk"] = MagicMock()
-sys.modules["sentry_sdk.integrations.fastapi"] = MagicMock()
-sys.modules["sentry_sdk.integrations.sqlalchemy"] = MagicMock()
-sys.modules["sentry_sdk.integrations.logging"] = MagicMock()
-
-from app.shared.core.sentry import init_sentry, _before_send, capture_message, set_user, set_tenant_context
+# Import app modules locally inside tests to allow patching
+from app.shared.core.sentry import (
+    init_sentry, capture_message, set_user, set_tenant_context,
+    SENTRY_AVAILABLE, _before_send
+)
 
 class TestSentryDeep:
     @patch("app.shared.core.sentry.SENTRY_AVAILABLE", True)
-    def test_init_sentry_success(self):
+    @patch("app.shared.core.sentry.sentry_sdk")
+    def test_init_sentry_success(self, mock_sentry):
         with patch.dict(os.environ, {"SENTRY_DSN": "http://test@sentry.io/1"}):
-            import sentry_sdk
             result = init_sentry()
             assert result is True
-            assert sentry_sdk.init.called
+            assert mock_sentry.init.called
 
     @patch("app.shared.core.sentry.SENTRY_AVAILABLE", False)
     def test_init_sentry_unavailable(self):

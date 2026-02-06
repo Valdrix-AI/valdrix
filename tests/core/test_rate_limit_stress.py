@@ -94,14 +94,14 @@ async def test_rate_limiter_stress_5000_instances():
         test_limiter = RateLimiter(rate_per_second=1.0)
         # Ensure it starts empty
         test_limiter.tokens = 0
-        test_limiter.last_update = asyncio.get_event_loop().time()
+        test_limiter.last_update = asyncio.get_running_loop().time()
         
         with patch("app.modules.optimization.adapters.aws.plugins.compute.cloudwatch_limiter", test_limiter):
-            start_time = asyncio.get_event_loop().time()
+            start_time = asyncio.get_running_loop().time()
             
             await plugin.scan(mock_session, region)
             
-            end_time = asyncio.get_event_loop().time()
+            end_time = asyncio.get_running_loop().time()
             duration = end_time - start_time
             
             # ASSERTIONS

@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 
@@ -44,12 +45,16 @@ async def test_cors_allowed_origin():
         "Access-Control-Request-Method": "GET"
     }
     
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        # Preflight check simulation or just a simple request with Origin
-        response = await ac.get("/health", headers=headers)
+    # Mock settings to include our test origin
+    with patch("app.shared.core.config.get_settings") as mock_settings:
+        mock_settings.return_value.CORS_ORIGINS = [origin]
         
-    assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == origin
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            # Preflight check simulation or just a simple request with Origin
+            response = await ac.get("/health", headers=headers)
+            
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == origin
 
 @pytest.mark.asyncio
 async def test_cors_blocked_origin():

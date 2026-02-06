@@ -13,16 +13,20 @@ async def test_convert_usd_to_ngn_paystack_success():
         "data": {"rate": 1500.5}
     }
     
-    with patch("httpx.AsyncClient.get", return_value=mock_response):
-        with patch("app.shared.core.currency._RATES_CACHE", {}): # Clear cache
-            rate = await get_exchange_rate("NGN")
-            assert rate == Decimal("1500.5")
-            
-            amount_ngn = await convert_usd(10, "NGN")
-            assert amount_ngn == Decimal("15005.0")
-            
-            formatted = await format_currency(10, "NGN")
-            assert "₦15,005.00" in formatted
+    with patch("app.shared.core.currency.get_settings") as mock_settings:
+        # Mock Paystack key to enable API call
+        mock_settings.return_value.PAYSTACK_SECRET_KEY = "test-secret-key"
+        
+        with patch("httpx.AsyncClient.get", return_value=mock_response):
+            with patch("app.shared.core.currency._RATES_CACHE", {}): # Clear cache
+                rate = await get_exchange_rate("NGN")
+                assert rate == Decimal("1500.5")
+                
+                amount_ngn = await convert_usd(10, "NGN")
+                assert amount_ngn == Decimal("15005.0")
+                
+                formatted = await format_currency(10, "NGN")
+                assert "₦15,005.00" in formatted
 
 @pytest.mark.asyncio
 async def test_convert_usd_fallback_rates():

@@ -184,10 +184,16 @@ async def test_run_full_analysis_json_error(scheduler):
 @pytest.mark.asyncio
 async def test_convenience_wrapper(mock_db):
     """Test run_hybrid_analysis convenience wrapper."""
-    with patch("app.shared.llm.hybrid_scheduler.HybridAnalysisScheduler.run_analysis", new_callable=AsyncMock) as mock_run:
-        mock_run.return_value = {"status": "ok"}
+    # Mock LLMFactory to prevent real LLM instantiation and API key errors
+    with patch("app.shared.llm.factory.LLMFactory") as mock_factory:
+        mock_factory.create.return_value = MagicMock()
         
-        result = await run_hybrid_analysis(mock_db, uuid4(), [])
-        
-        assert result["status"] == "ok"
-        mock_run.assert_called_once()
+        # Mock the class to ensure run_analysis is mocked
+        with patch("app.shared.llm.hybrid_scheduler.HybridAnalysisScheduler") as MockScheduler:
+            mock_instance = MockScheduler.return_value
+            mock_instance.run_analysis = AsyncMock(return_value={"status": "ok"})
+            
+            result = await run_hybrid_analysis(mock_db, uuid4(), [])
+            
+            assert result["status"] == "ok"
+            mock_instance.run_analysis.assert_called_once()

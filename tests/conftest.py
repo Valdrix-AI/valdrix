@@ -6,6 +6,7 @@ Provides:
 - Mock FastAPI test client
 - Authentication fixtures
 - Test data factories
+- Test isolation utilities
 """
 import os
 import sys
@@ -17,6 +18,14 @@ import pytest_asyncio
 from typing import AsyncGenerator, Generator
 from datetime import datetime, timezone
 
+# Import test isolation utilities
+from .conftest_isolation import (
+    TestIsolationManager, 
+    MockStateManager, 
+    AsyncEventLoopManager,
+    DatabaseIsolationManager
+)
+
 # Set test environment BEFORE any app imports
 os.environ["TESTING"] = "true"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
@@ -24,6 +33,8 @@ os.environ["SUPABASE_JWT_SECRET"] = "test-jwt-secret-for-testing-at-least-32-byt
 os.environ["ENCRYPTION_KEY"] = "32-byte-long-test-encryption-key"
 os.environ["CSRF_SECRET_KEY"] = "test-csrf-secret-key-at-least-32-bytes"
 os.environ["KDF_SALT"] = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=" # Base64 for 'KDF_SALT_FOR_TESTING_32_BYTES_OK'
+os.environ["DB_SSL_MODE"] = "disable"  # Disable SSL for tests
+os.environ["is_production"] = "false"  # Ensure we're not in production mode
  
 # Import all models to register them in SQLAlchemy mapper globally for all tests
 # Import all models to register them in SQLAlchemy mapper globally for all tests
@@ -94,22 +105,24 @@ async def db_session(async_engine) -> AsyncGenerator:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
     from app.shared.db.base import Base
     
-    # Models are already imported at top level
-    pass
-
-    
+    # Create all tables
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
+    # Create session factory
     async_session_maker = async_sessionmaker(
         async_engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
     
+    # Provide session with proper cleanup
     async with async_session_maker() as session:
-        yield session
-        await session.rollback()
+        try:
+            yield session
+        finally:
+            await session.rollback()
+            await session.close()
 
 
 # ============================================================================

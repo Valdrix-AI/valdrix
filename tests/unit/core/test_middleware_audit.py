@@ -24,6 +24,7 @@ async def test_security_headers_prod(mock_settings, mock_call_next):
     
     scope = {
         "type": "http",
+        "scheme": "https",
         "method": "GET",
         "path": "/api/test",
         "headers": [],
@@ -50,6 +51,7 @@ async def test_security_headers_debug(mock_settings, mock_call_next):
     
     scope = {
         "type": "http",
+        "scheme": "https",
         "method": "GET",
         "path": "/api/test",
         "headers": [],
