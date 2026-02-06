@@ -1,7 +1,7 @@
 [project]
 name = "valdrix"
 version = "0.1.0"
-description = "Heroic Intelligence for Cloud Spend - The Autonomous FinOps & GreenOps Guardian"
+description = "Value Intelligence for Cloud Spend - The Autonomous FinOps & GreenOps Guardian"
 authors = [
     { name = "Dare AbdulGoniyy", email = "adelekedare2012@gmail.com" }
 ]
@@ -111,7 +111,7 @@ filterwarnings = [
     "ignore::ResourceWarning",
 ]
 asyncio_mode = "auto"
-addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=80"
+addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=95"
 
 
 [tool.coverage.run]

@@ -12,7 +12,7 @@ async def test_security_headers_presence():
     # Mock scheduler state to prevent health check crash
     app.state.scheduler = type("MockScheduler", (), {"get_status": lambda: "active"})
     
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/health")
     
     assert response.status_code == 200

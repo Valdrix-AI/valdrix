@@ -204,10 +204,18 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             "max_aws_accounts": 25,
             "ai_insights_per_month": 100,
             "scan_frequency_hours": 1,
-            "zombie_scans_per_day": 100,
-            "llm_analyses_per_day": 100,
             "retention_days": 730,
-        }
+        },
+        "description": "For enterprises requiring high-scale cloud governance.",
+        "cta": "Contact Sales",
+        "display_features": [
+            "Includes all Growth features",
+            "SSO / SAML integration",
+            "Hourly zombie scanning",
+            "Dedicated support engineer",
+            "Audit logs & compliance reporting",
+            "Custom GitOps remediation",
+        ]
     },
     PricingTier.ENTERPRISE: {
         "name": "Enterprise",
@@ -216,10 +224,18 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
         "limits": {
             "max_aws_accounts": 999,
             "ai_insights_per_month": 999,
-            "zombie_scans_per_day": None,
-            "llm_analyses_per_day": None,
+            "scan_frequency_hours": 1,
             "retention_days": None,
-        }
+        },
+        "description": "Custom solutions for global-scale infrastructure.",
+        "cta": "Talk to Expert",
+        "display_features": [
+            "Unlimited accounts & users",
+            "Custom feature development",
+            "On-premise deployment options",
+            "White-labeling support",
+            "24/7/365 multi-region support",
+        ]
     },
 }
 
