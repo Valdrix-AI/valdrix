@@ -64,7 +64,7 @@ class LLMUsageRecord(BaseModel):
     output_tokens: int
     total_tokens: int
     cost_usd: float
-    request_type: str
+    request_type: str | None = None
 
 
 class UsageResponse(BaseModel):
