@@ -49,12 +49,9 @@ jobs:
           uv run pip install --upgrade pip
           uv run pip-audit --ignore-vuln CVE-2026-1703
         
-      - name: Secret Scanning
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
 
-  # Separate job for container scanning (parallelization)
   container-scan:
     runs-on: ubuntu-latest
     steps:
