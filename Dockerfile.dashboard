@@ -18,6 +18,12 @@ RUN pnpm install --frozen-lockfile
 # Copy dashboard source code
 COPY dashboard/ ./
 
+# Build-time environment variables for SvelteKit static env
+ARG PUBLIC_SUPABASE_URL=http://localhost:54321
+ARG PUBLIC_SUPABASE_ANON_KEY=dummy-key
+ENV PUBLIC_SUPABASE_URL=$PUBLIC_SUPABASE_URL
+ENV PUBLIC_SUPABASE_ANON_KEY=$PUBLIC_SUPABASE_ANON_KEY
+
 # Build the app. Output goes to /app/build
 RUN pnpm run build
 
