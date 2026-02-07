@@ -77,3 +77,124 @@ class TestHealthServiceMissingCoverage:
             
             assert success is True
             assert details["reachable"] is True
+
+    @pytest.mark.asyncio
+    async def test_check_all_unhealthy_db_down(self, health_service):
+        """Test overall health check when database is down (line 24)."""
+        with patch.object(health_service, 'check_database', return_value=(False, {"error": "Connection failed"})):
+            with patch.object(health_service, 'check_redis', return_value=(True, {"latency_ms": 5.2})):
+                with patch.object(health_service, 'check_aws', return_value=(True, {"reachable": True})):
+                    
+                    result = await health_service.check_all()
+                    
+                    assert result["status"] == "unhealthy"
+                    assert result["database"]["status"] == "down"
+
+    @pytest.mark.asyncio
+    async def test_check_database_exception(self, health_service, mock_db):
+        """Test database check handling exception (lines 43-45)."""
+        mock_db.execute.side_effect = Exception("DB error")
+        
+        success, details = await health_service.check_database()
+        
+        assert success is False
+        assert "DB error" in details["error"]
+
+    @pytest.mark.asyncio
+    async def test_check_redis_not_configured(self, health_service):
+        """Test redis check when not configured (lines 49-50)."""
+        with patch("app.shared.core.health.settings") as mock_settings:
+            mock_settings.REDIS_URL = None
+            
+            success, details = await health_service.check_redis()
+            
+            assert success is True
+            assert details["status"] == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_check_redis_client_missing(self, health_service):
+        """Test redis check when client is missing (lines 55-56)."""
+        with patch("app.shared.core.health.settings") as mock_settings:
+            mock_settings.REDIS_URL = "redis://host"
+            with patch("app.shared.core.rate_limit.get_redis_client", return_value=None):
+                
+                success, details = await health_service.check_redis()
+                
+                assert success is False
+                assert "not available" in details["error"]
+
+    @pytest.mark.asyncio
+    async def test_check_redis_exception(self, health_service):
+        """Test redis check exception (lines 63-65)."""
+        with patch("app.shared.core.health.settings") as mock_settings:
+            mock_settings.REDIS_URL = "redis://host"
+            with patch("app.shared.core.rate_limit.get_redis_client") as mock_get_client:
+                mock_client = MagicMock()
+                mock_client.ping = AsyncMock(side_effect=Exception("Redis error"))
+                mock_get_client.return_value = mock_client
+                
+                success, details = await health_service.check_redis()
+                
+                assert success is False
+                assert "Redis error" in details["error"]
+
+    @pytest.mark.asyncio
+    async def test_check_database_success(self, health_service, mock_db):
+        """Test database check success (lines 41-42)."""
+        mock_db.execute = AsyncMock()
+        
+        success, details = await health_service.check_database()
+        
+        assert success is True
+        assert "latency_ms" in details
+
+    @pytest.mark.asyncio
+    async def test_check_redis_success(self, health_service):
+        """Test redis check success (lines 62)."""
+        with patch("app.shared.core.health.settings") as mock_settings:
+            mock_settings.REDIS_URL = "redis://host"
+            with patch("app.shared.core.rate_limit.get_redis_client") as mock_get_client:
+                mock_client = MagicMock()
+                mock_client.ping = AsyncMock()
+                mock_get_client.return_value = mock_client
+                
+                success, details = await health_service.check_redis()
+                
+                assert success is True
+                assert "latency_ms" in details
+
+    @pytest.mark.asyncio
+    async def test_check_all_healthy(self, health_service):
+        """Test overall health check when all services are healthy (line 22)."""
+        with patch.object(health_service, 'check_database', return_value=(True, {"latency_ms": 10.5})):
+            with patch.object(health_service, 'check_redis', return_value=(True, {"latency_ms": 5.2})):
+                with patch.object(health_service, 'check_aws', return_value=(True, {"reachable": True})):
+                    
+                    result = await health_service.check_all()
+                    
+                    assert result["status"] == "healthy"
+
+    @pytest.mark.asyncio
+    async def test_check_aws_server_error(self, health_service):
+        """Test AWS health check with server error (line 76)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
+            
+            success, details = await health_service.check_aws()
+            
+            assert success is False
+            assert "STS returned 500" in details["error"]
+
+    @pytest.mark.asyncio
+    async def test_check_aws_exception(self, health_service):
+        """Test AWS health check exception (lines 78-79)."""
+        with patch('httpx.AsyncClient') as mock_client:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(side_effect=Exception("Network fail"))
+            
+            success, details = await health_service.check_aws()
+            
+            assert success is False
+            assert "Network fail" in details["error"]

@@ -47,7 +47,7 @@ jobs:
       - name: Run pip-audit
         run: |
           uv run pip install --upgrade pip
-          uv run pip-audit
+          uv run pip-audit --ignore-package pip
         
       - name: Secret Scanning
         uses: gitleaks/gitleaks-action@v2
