@@ -55,11 +55,24 @@ class FeatureUsageMetrics(BaseModel):
     total_remediations: int
 
 
+class LLMUsageRecord(BaseModel):
+    """Individual LLM usage record."""
+    id: UUID
+    created_at: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    cost_usd: float
+    request_type: str
+
+
 class UsageResponse(BaseModel):
     """Complete usage metering response."""
     tenant_id: UUID
     period: str
     llm: LLMUsageMetrics
+    usage: list[LLMUsageRecord]  # Added for dashboard
     aws: AWSMeteringMetrics
     features: FeatureUsageMetrics
     generated_at: str
@@ -77,12 +90,16 @@ async def get_usage_metrics(
     - LLM token consumption vs budget
     - AWS API call counts
     - Feature adoption
+    - Recent LLM usage (last 20 records)
     """
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # LLM Usage
+    # LLM Usage Aggregates
     llm_metrics = await _get_llm_usage(db, user.tenant_id, now)
+
+    # Recent LLM Usage Records
+    recent_usage = await _get_recent_llm_activity(db, user.tenant_id)
     
     # AWS Metering
     aws_metrics = await _get_aws_metering(db, user.tenant_id, today_start)
@@ -94,10 +111,36 @@ async def get_usage_metrics(
         tenant_id=user.tenant_id,
         period="current_month",
         llm=llm_metrics,
+        usage=recent_usage,
         aws=aws_metrics,
         features=feature_metrics,
         generated_at=now.isoformat()
     )
+
+
+async def _get_recent_llm_activity(db: AsyncSession, tenant_id: UUID) -> list[LLMUsageRecord]:
+    """Get the 20 most recent LLM usage records."""
+    result = await db.execute(
+        select(LLMUsage)
+        .where(LLMUsage.tenant_id == tenant_id)
+        .order_by(LLMUsage.created_at.desc())
+        .limit(20)
+    )
+    records = result.scalars().all()
+    
+    return [
+        LLMUsageRecord(
+            id=rec.id,
+            created_at=rec.created_at.isoformat(),
+            model=rec.model,
+            input_tokens=rec.input_tokens,
+            output_tokens=rec.output_tokens,
+            total_tokens=rec.total_tokens,
+            cost_usd=rec.cost_usd,
+            request_type=rec.request_type
+        )
+        for rec in records
+    ]
 
 
 async def _get_llm_usage(
