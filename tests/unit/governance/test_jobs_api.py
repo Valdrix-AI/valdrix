@@ -1,8 +1,7 @@
 import pytest
-import asyncio
 import uuid
 from httpx import AsyncClient
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 from app.main import app
 from app.models.background_job import BackgroundJob, JobStatus, JobType
 from app.shared.core.auth import get_current_user
