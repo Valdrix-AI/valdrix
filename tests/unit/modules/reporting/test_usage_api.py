@@ -4,7 +4,7 @@ Tests for Usage Metering API.
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime
+
 
 from app.modules.reporting.api.v1.usage import get_usage_metrics, UsageResponse, LLMUsageRecord
 

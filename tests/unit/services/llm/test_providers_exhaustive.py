@@ -3,8 +3,8 @@ Exhaustive tests for LLM Providers to achieve 100% coverage.
 Covers: Groq, Google, OpenAI, Anthropic
 """
 import pytest
-from unittest.mock import patch, MagicMock
-from app.shared.llm.providers.groq import GroqProvider
+from unittest.mock import patch
+from app.shared.llm.providers.groq import GroqProvider 
 from app.shared.llm.providers.google import GoogleProvider
 from app.shared.llm.providers.openai import OpenAIProvider
 from app.shared.llm.providers.anthropic import AnthropicProvider
@@ -39,7 +39,7 @@ def test_groq_provider_explicit():
     with patch("app.shared.llm.providers.groq.get_settings"):
         with patch("app.shared.llm.providers.groq.ChatGroq") as MockChat:
             provider = GroqProvider()
-            model = provider.create_model(model="mixtral-8x7b", api_key=VALID_KEY_GROQ)
+            provider.create_model(model="mixtral-8x7b", api_key=VALID_KEY_GROQ)
             
             MockChat.assert_called_once_with(
                 api_key=VALID_KEY_GROQ,
@@ -67,7 +67,7 @@ def test_google_provider_defaults():
         
         with patch("app.shared.llm.providers.google.ChatGoogleGenerativeAI") as MockChat:
             provider = GoogleProvider()
-            model = provider.create_model()
+            provider.create_model()
             
             MockChat.assert_called_once_with(
                 google_api_key=VALID_KEY_GOOGLE,
@@ -80,7 +80,7 @@ def test_google_provider_explicit():
     with patch("app.shared.llm.providers.google.get_settings"):
         with patch("app.shared.llm.providers.google.ChatGoogleGenerativeAI") as MockChat:
             provider = GoogleProvider()
-            model = provider.create_model(model="gemini-ultra", api_key=VALID_KEY_GOOGLE)
+            provider.create_model(model="gemini-ultra", api_key=VALID_KEY_GOOGLE)
             
             MockChat.assert_called_once_with(
                 google_api_key=VALID_KEY_GOOGLE,
@@ -107,7 +107,7 @@ def test_openai_provider_defaults():
         
         with patch("app.shared.llm.providers.openai.ChatOpenAI") as MockChat:
             provider = OpenAIProvider()
-            model = provider.create_model()
+            provider.create_model()
             
             MockChat.assert_called_once_with(
                 api_key=VALID_KEY_OPENAI,
@@ -120,7 +120,7 @@ def test_openai_provider_explicit():
     with patch("app.shared.llm.providers.openai.get_settings"):
         with patch("app.shared.llm.providers.openai.ChatOpenAI") as MockChat:
             provider = OpenAIProvider()
-            model = provider.create_model(model="gpt-3.5-turbo", api_key=VALID_KEY_OPENAI)
+            provider.create_model(model="gpt-3.5-turbo", api_key=VALID_KEY_OPENAI)
             
             MockChat.assert_called_once_with(
                 api_key=VALID_KEY_OPENAI,
@@ -148,7 +148,7 @@ def test_anthropic_provider_defaults():
         
         with patch("app.shared.llm.providers.anthropic.ChatAnthropic") as MockChat:
             provider = AnthropicProvider()
-            model = provider.create_model()
+            provider.create_model()
             
             MockChat.assert_called_once_with(
                 api_key=VALID_KEY_ANTHROPIC,
@@ -165,7 +165,7 @@ def test_anthropic_provider_legacy_key():
         
         with patch("app.shared.llm.providers.anthropic.ChatAnthropic") as MockChat:
             provider = AnthropicProvider()
-            model = provider.create_model()
+            provider.create_model()
             
             MockChat.assert_called_once_with(
                 api_key=VALID_KEY_ANTHROPIC,
@@ -178,7 +178,7 @@ def test_anthropic_provider_explicit():
     with patch("app.shared.llm.providers.anthropic.get_settings"):
         with patch("app.shared.llm.providers.anthropic.ChatAnthropic") as MockChat:
             provider = AnthropicProvider()
-            model = provider.create_model(model="claude-instant-1", api_key=VALID_KEY_ANTHROPIC)
+            provider.create_model(model="claude-instant-1", api_key=VALID_KEY_ANTHROPIC)
             
             MockChat.assert_called_once_with(
                 api_key=VALID_KEY_ANTHROPIC,
