@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from datetime import datetime, timezone
 import jwt
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -61,7 +60,7 @@ class TestOIDCDeep:
         mock_result.scalars.return_value.first.return_value = None
         mock_session.execute.return_value = mock_result
         
-        with patch("app.shared.connections.oidc.get_settings") as mock_settings:
+        with patch("app.shared.connections.oidc.get_settings"):
             with pytest.raises(ValdrixException, match="No active OIDC key found"):
                 await OIDCService.create_token("t1", "aud1", db=mock_session)
 

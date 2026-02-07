@@ -1,7 +1,5 @@
-import pytest
-import os
 from unittest.mock import MagicMock, patch
-from app.shared.core.tracing import setup_tracing, get_tracer, set_correlation_id, get_current_trace_id
+from app.shared.core.tracing import setup_tracing, set_correlation_id, get_current_trace_id
 
 class TestTracingDeep:
     def test_setup_tracing_skipped_in_test(self):

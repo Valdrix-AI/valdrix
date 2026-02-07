@@ -1,8 +1,5 @@
 import pytest
-import ssl
 from unittest.mock import MagicMock, AsyncMock, patch
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.db.session import get_db, set_session_tenant_id, before_cursor_execute, after_cursor_execute, check_rls_policy
 from app.shared.core.exceptions import ValdrixException
 
@@ -71,7 +68,7 @@ class TestSessionDeep:
             assert exc.value.code == "rls_enforcement_failed"
 
     @pytest.mark.asyncio
-    async def test_check_rls_policy_violation(self):
+    async def test_check_rls_policy_violation_async(self):
         with patch("app.shared.db.session.settings") as mock_settings:
             mock_settings.TESTING = False
             mock_conn = MagicMock()

@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Any
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.db.session import async_session_maker
 from sqlalchemy import select
@@ -30,8 +30,6 @@ class OIDCService:
     @staticmethod
     async def create_token(tenant_id: str, audience: str, db: Optional[AsyncSession] = None):
         """Create a signed OIDC token for GCP/AWS federated identity."""
-        import jwt
-        from datetime import datetime, timedelta, timezone
         
         settings = get_settings()
         now = datetime.now(timezone.utc)

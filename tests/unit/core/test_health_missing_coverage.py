@@ -5,9 +5,6 @@ import pytest
 import pytest_asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-import asyncio
-import httpx
 
 from app.shared.core.health import HealthService
 

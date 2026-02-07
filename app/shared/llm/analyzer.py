@@ -234,7 +234,7 @@ class FinOpsAnalyzer:
         if cached_analysis and get_settings().ENABLE_DELTA_ANALYSIS:
             is_delta = True
             logger.info("analysis_delta_mode_enabled", tenant_id=str(tenant_id))
-            from datetime import date, datetime, timedelta, timezone
+            from datetime import date, datetime, timedelta
             settings = get_settings()
             delta_cutoff = date.today() - timedelta(days=settings.DELTA_ANALYSIS_DAYS)
             

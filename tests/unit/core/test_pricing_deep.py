@@ -1,6 +1,5 @@
 import pytest
 import uuid
-from decimal import Decimal
 from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi import HTTPException, status
 from app.shared.core.pricing import (

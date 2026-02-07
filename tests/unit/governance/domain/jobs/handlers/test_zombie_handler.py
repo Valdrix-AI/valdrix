@@ -1,6 +1,6 @@
 
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock, ANY
+from unittest.mock import patch, AsyncMock, ANY
 from uuid import uuid4
 from app.modules.governance.domain.jobs.handlers.zombie import ZombieScanHandler
 from app.models.background_job import BackgroundJob

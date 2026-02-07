@@ -1,8 +1,6 @@
 """
 Tests for app/shared/core/exceptions.py - Custom exception classes
 """
-import pytest
-from fastapi import status
 from app.shared.core.exceptions import ValdrixException
 
 

@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.shared.llm.usage_tracker import UsageTracker
 from app.shared.llm.budget_manager import BudgetStatus
-from app.models.llm import LLMBudget
 from uuid import uuid4
 from decimal import Decimal
 from app.shared.core.exceptions import BudgetExceededError

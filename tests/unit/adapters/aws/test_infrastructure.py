@@ -5,7 +5,6 @@ Tests for StoppedInstancesWithEbsPlugin, UnusedLambdaPlugin, and OrphanVpcEndpoi
 """
 
 import pytest
-from unittest.mock import MagicMock
 
 from app.modules.optimization.adapters.aws.plugins.infrastructure import (
     StoppedInstancesWithEbsPlugin,

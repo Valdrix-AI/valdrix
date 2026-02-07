@@ -1,5 +1,3 @@
-import pytest
-from decimal import Decimal
 from app.shared.analysis.cur_usage_analyzer import CURUsageAnalyzer
 from app.shared.analysis.azure_usage_analyzer import AzureUsageAnalyzer
 

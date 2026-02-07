@@ -5,8 +5,6 @@ from uuid import uuid4
 from decimal import Decimal
 from app.modules.reporting.domain.persistence import CostPersistenceService
 from app.schemas.costs import CloudUsageSummary, CostRecord as CostRecordSchema
-from app.models.cloud import CostRecord
-from app.models.cost_audit import CostAuditLog
 
 @pytest.fixture
 def mock_db():

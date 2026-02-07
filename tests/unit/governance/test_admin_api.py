@@ -3,7 +3,6 @@ import pytest
 from fastapi import Request, HTTPException
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.modules.governance.api.v1.admin import validate_admin_key, trigger_analysis, reconcile_tenant_costs
-from app.shared.core.config import Settings
 
 @pytest.mark.asyncio
 async def test_validate_admin_key_missing():

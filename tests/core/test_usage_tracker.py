@@ -15,7 +15,6 @@ from app.shared.llm.usage_tracker import UsageTracker
 
 from app.shared.llm.pricing_data import LLM_PRICING
 # Import all models to prevent mapper errors during Mock usage
-from app.models import cloud, llm, tenant, gcp_connection, azure_connection, aws_connection, remediation, notification_settings, background_job
 
 
 

@@ -1,9 +1,7 @@
 import pytest
 import pytest_asyncio
 from uuid import uuid4
-from unittest.mock import MagicMock, patch, AsyncMock
-from fastapi import status
-from app.modules.governance.api.v1.settings.connections import router
+from unittest.mock import patch
 from app.shared.core.pricing import PricingTier
 from app.shared.core.auth import CurrentUser, get_current_user
 from app.models.tenant import Tenant, User, UserRole

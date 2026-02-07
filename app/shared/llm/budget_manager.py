@@ -10,7 +10,7 @@ from decimal import Decimal
 from datetime import datetime, timezone
 from uuid import UUID
 from enum import Enum
-from typing import Optional, Any
+from typing import Any
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.llm import LLMBudget, LLMUsage

@@ -4,7 +4,6 @@ Tests for Tenant Cohort Classification
 Tests the scheduler's tenant cohort logic for tiered scheduling decisions.
 """
 
-import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock
 

@@ -5,8 +5,7 @@ from decimal import Decimal
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.reporting.domain.aggregator import CostAggregator
-from app.models.cloud import CostRecord, CloudAccount
-from app.schemas.costs import CloudUsageSummary
+from app.models.cloud import CostRecord
 
 @pytest.fixture
 def mock_db():
@@ -99,8 +98,14 @@ async def test_get_dashboard_summary(mock_db, tenant_id):
 
 @pytest.mark.asyncio
 async def test_get_basic_breakdown(mock_db, tenant_id):
-    row1 = MagicMock(); row1.service = "EC2"; row1.total_cost = Decimal("50.00"); row1.total_carbon = Decimal("2.0")
-    row2 = MagicMock(); row2.service = None; row2.total_cost = Decimal("10.00"); row2.total_carbon = Decimal("0.5")
+    row1 = MagicMock()
+    row1.service = "EC2"
+    row1.total_cost = Decimal("50.00")
+    row1.total_carbon = Decimal("2.0")
+    row2 = MagicMock()
+    row2.service = None
+    row2.total_cost = Decimal("10.00")
+    row2.total_carbon = Decimal("0.5")
     
     mock_result = MagicMock()
     mock_result.all.return_value = [row1, row2]
@@ -113,10 +118,14 @@ async def test_get_basic_breakdown(mock_db, tenant_id):
 
 @pytest.mark.asyncio
 async def test_get_governance_report(mock_db, tenant_id):
-    row = MagicMock(); row.total_untagged_cost = Decimal("20.00"); row.untagged_count = 5
-    mock_result = MagicMock(); mock_result.one.return_value = row
+    row = MagicMock()
+    row.total_untagged_cost = Decimal("20.00")
+    row.untagged_count = 5
+    mock_result = MagicMock()
+    mock_result.one.return_value = row
     
-    mock_total_result = MagicMock(); mock_total_result.scalar.return_value = Decimal("100.00")
+    mock_total_result = MagicMock()
+    mock_total_result.scalar.return_value = Decimal("100.00")
     mock_db.execute.side_effect = [mock_total_result, mock_result]
     
     with patch("app.modules.reporting.domain.attribution_engine.AttributionEngine") as mock_engine_cls:
@@ -127,8 +136,12 @@ async def test_get_governance_report(mock_db, tenant_id):
 
 @pytest.mark.asyncio
 async def test_get_cached_breakdown_hit(mock_db, tenant_id):
-    row = MagicMock(); row.service = "S3"; row.total_cost = Decimal("30.00"); row.total_carbon = Decimal("1.0")
-    mock_result = MagicMock(); mock_result.all.return_value = [row]
+    row = MagicMock()
+    row.service = "S3"
+    row.total_cost = Decimal("30.00")
+    row.total_carbon = Decimal("1.0")
+    mock_result = MagicMock()
+    mock_result.all.return_value = [row]
     mock_db.execute.return_value = mock_result
     mock_db.begin_nested.return_value.__aenter__.return_value = MagicMock()
 

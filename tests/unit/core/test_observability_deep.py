@@ -1,5 +1,4 @@
 import os
-import pytest
 from unittest.mock import MagicMock, patch
 import sys
 
@@ -11,16 +10,15 @@ sys.modules["sentry_sdk.integrations.sqlalchemy"] = MagicMock()
 sys.modules["sentry_sdk.integrations.logging"] = MagicMock()
 
 # Import the module under test AFTER mocking sys.modules
-import app.shared.core.sentry as sentry_module
-from app.shared.core.sentry import (
+import app.shared.core.sentry as sentry_module  # noqa: E402
+from app.shared.core.sentry import (  # noqa: E402
     init_sentry,
     _before_send,
     capture_message,
     set_user,
     set_tenant_context
 )
-from app.shared.core.tracing import (
-    get_current_trace_id,
+from app.shared.core.tracing import (  # noqa: E402
     set_correlation_id
 )
 

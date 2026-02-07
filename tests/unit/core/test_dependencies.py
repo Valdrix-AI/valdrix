@@ -7,7 +7,7 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 
 from app.shared.core.dependencies import get_llm_provider, get_analyzer, requires_feature
-from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.auth import CurrentUser
 from app.shared.core.pricing import PricingTier, FeatureFlag
 
 

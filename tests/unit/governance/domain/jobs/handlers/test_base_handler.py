@@ -1,6 +1,6 @@
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler, JobTimeoutError

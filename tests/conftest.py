@@ -10,21 +10,16 @@ Provides:
 """
 import os
 import sys
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 from uuid import uuid4
 from decimal import Decimal
 import pytest
 import pytest_asyncio
+import tenacity
 from typing import AsyncGenerator, Generator
 from datetime import datetime, timezone
 
 # Import test isolation utilities
-from .conftest_isolation import (
-    TestIsolationManager, 
-    MockStateManager, 
-    AsyncEventLoopManager,
-    DatabaseIsolationManager
-)
 
 # Set test environment BEFORE any app imports
 os.environ["TESTING"] = "true"
@@ -74,7 +69,6 @@ if "tiktoken" not in sys.modules:
     sys.modules["tiktoken"] = MagicMock()
 
 # Mock tenacity to avoid retry delays
-import tenacity
 def mock_retry(*args, **kwargs):
     def decorator(f):
         return f
@@ -133,6 +127,9 @@ async def db_session(async_engine) -> AsyncGenerator:
 def app():
     """Use the real Valdrix app for integration tests."""
     from app.main import app as valdrix_app
+    from app.main import settings
+    # Force TESTING mode to True to bypass CSRF and other secure middlewares
+    settings.TESTING = True
     return valdrix_app
 
 

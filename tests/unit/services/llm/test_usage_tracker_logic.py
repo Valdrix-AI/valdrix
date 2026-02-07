@@ -8,7 +8,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from decimal import Decimal
-from datetime import datetime, timezone
 from app.shared.llm.usage_tracker import UsageTracker
 from app.shared.llm.budget_manager import BudgetStatus
 from app.shared.core.exceptions import BudgetExceededError
@@ -166,7 +165,7 @@ async def test_check_budget_and_alert_skip_if_already_sent(mock_db):
     tracker = UsageTracker(mock_db)
     tenant_id = uuid4()
     
-    with patch("app.shared.llm.budget_manager.LLMBudgetManager._check_budget_and_alert", new_callable=AsyncMock) as mock_alert, \
+    with patch("app.shared.llm.budget_manager.LLMBudgetManager._check_budget_and_alert", new_callable=AsyncMock), \
          patch("app.shared.llm.budget_manager.LLMBudgetManager.record_usage", new_callable=AsyncMock) as mock_record:
         
         # In production, record_usage calls _check_budget_and_alert
@@ -184,7 +183,7 @@ async def test_check_budget_and_alert_slack_error_graceful(mock_db):
     tracker = UsageTracker(mock_db)
     tenant_id = uuid4()
     
-    with patch("app.shared.llm.budget_manager.LLMBudgetManager._check_budget_and_alert", new_callable=AsyncMock) as mock_alert, \
+    with patch("app.shared.llm.budget_manager.LLMBudgetManager._check_budget_and_alert", new_callable=AsyncMock), \
          patch("app.shared.llm.budget_manager.LLMBudgetManager.record_usage", new_callable=AsyncMock) as mock_record:
         
         # Simulate _check_budget_and_alert raising but record_usage catching it

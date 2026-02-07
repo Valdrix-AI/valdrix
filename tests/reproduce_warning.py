@@ -1,6 +1,6 @@
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 @pytest.mark.asyncio
 async def test_async_mock_warning():
@@ -11,5 +11,5 @@ async def test_async_mock_warning():
     # result is an AsyncMock. Calling a method on it returns a coroutine.
     # In app code: tenant = result.scalar_one_or_none()
     # In test, if we don't await this, we get a warning.
-    val = result.scalar_one_or_none()
+    result.scalar_one_or_none()
     # val is now a coroutine that is never awaited.

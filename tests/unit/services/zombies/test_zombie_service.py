@@ -4,12 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.optimization.domain.service import ZombieService
-from app.models import (
-    cloud, llm, tenant, gcp_connection, azure_connection, aws_connection,
-    remediation, notification_settings, background_job, attribution,
-    anomaly_marker, carbon_settings, cost_audit, discovered_account,
-    optimization, pricing, remediation_settings, security
-) # noqa: F401
 from app.models.aws_connection import AWSConnection
 from app.models.gcp_connection import GCPConnection
 

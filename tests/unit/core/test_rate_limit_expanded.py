@@ -1,7 +1,6 @@
 import pytest
 import time
 from unittest.mock import MagicMock, patch, AsyncMock
-from fastapi import Request
 from app.shared.core.rate_limit import (
     context_aware_key,
     get_analysis_limit,

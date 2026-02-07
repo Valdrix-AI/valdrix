@@ -5,8 +5,7 @@ Tests the hard cap enforcement logic which suspends connections
 and deactivates tenants when budget is critically exceeded.
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from decimal import Decimal
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 from app.shared.remediation.hard_cap_service import BudgetHardCapService
 

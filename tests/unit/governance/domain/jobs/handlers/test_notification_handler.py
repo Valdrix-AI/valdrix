@@ -1,7 +1,6 @@
 
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
-from uuid import uuid4
 from app.modules.governance.domain.jobs.handlers.notifications import NotificationHandler, WebhookRetryHandler
 from app.models.background_job import BackgroundJob
 

@@ -2,7 +2,6 @@ import pytest
 import datetime
 from unittest.mock import MagicMock, AsyncMock, patch
 from app.modules.optimization.domain.aws_provider.plugins.compute import IdleInstancesPlugin
-from app.models.notification_settings import NotificationSettings  # Required for SQLAlchemy relationship resolution
 
 @pytest.fixture
 def mock_aws_session():

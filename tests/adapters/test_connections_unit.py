@@ -4,7 +4,6 @@ from uuid import uuid4
 from app.shared.connections.aws import AWSConnectionService
 from app.models.aws_connection import AWSConnection
 # Import all models to prevent mapper errors during Mock usage
-from app.models import cloud, llm, tenant, gcp_connection, aws_connection, azure_connection, remediation, notification_settings, background_job, attribution
 
 @pytest.mark.asyncio
 async def test_verify_connection_success():

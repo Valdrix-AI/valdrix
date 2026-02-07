@@ -20,9 +20,11 @@ class AWSConnectionService:
         # Simplistic implementation for now, usually reads from files or templates
         return {
             "external_id": external_id,
-            "cloudformation": f"https://valdrix-public.s3.amazonaws.com/templates/valdrix-role.yaml?external_id={external_id}",
-            "terraform": f"module \"valdrix_connection\" {{ source = \"valdrix/aws-connection\" external_id = \"{external_id}\" }}",
-            "magic_link": f"https://app.valdrix.ai/onboard/aws?external_id={external_id}"
+            "cloudformation_yaml": f"https://valdrix-public.s3.amazonaws.com/templates/valdrix-role.yaml?external_id={external_id}",
+            "terraform_hcl": f"module \"valdrix_connection\" {{ source = \"valdrix/aws-connection\" external_id = \"{external_id}\" }}",
+            "magic_link": f"https://app.valdrix.ai/onboard/aws?external_id={external_id}",
+            "instructions": "Follow the link to setup your AWS connection.",
+            "permissions_summary": ["sts:AssumeRole", "ce:GetCostAndUsage"]
         }
 
     async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict:

@@ -40,7 +40,14 @@ async def run_public_assessment(request: Request, body: Dict[str, Any]):
         result = await assessment_service.run_assessment(body)
         return result
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Bad Request",
+                "code": "VALUE_ERROR",
+                "message": str(e)
+            }
+        )
     except Exception:
         # Don't leak internals for public endpoints
         raise HTTPException(status_code=500, detail="An unexpected error occurred during assessment")

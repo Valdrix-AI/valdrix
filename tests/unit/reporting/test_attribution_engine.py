@@ -1,11 +1,11 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import date, datetime, timezone
+from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.reporting.domain.attribution_engine import AttributionEngine
-from app.models.attribution import AttributionRule, CostAllocation
+from app.models.attribution import AttributionRule
 from app.models.cloud import CostRecord
 
 @pytest.fixture

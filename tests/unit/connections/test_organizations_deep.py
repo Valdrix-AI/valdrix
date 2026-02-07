@@ -6,10 +6,13 @@ from app.models.aws_connection import AWSConnection
 from app.models.discovered_account import DiscoveredAccount
 
 class MockPaginator:
-    def __init__(self, items): self.items = items
-    def __aiter__(self): return self
+    def __init__(self, items):
+        self.items = items
+    def __aiter__(self):
+        return self
     async def __anext__(self):
-        if not self.items: raise StopAsyncIteration
+        if not self.items:
+            raise StopAsyncIteration
         return self.items.pop(0)
 
 class TestOrganizationsDiscoveryDeep:

@@ -1,8 +1,7 @@
 import pytest
 import time
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime, timezone
-from decimal import Decimal
 from app.shared.adapters.aws import AWSAdapter
 from app.models.aws_connection import AWSConnection
 

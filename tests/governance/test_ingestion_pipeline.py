@@ -4,7 +4,6 @@ import sys
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
-import sqlalchemy as sa
 from sqlalchemy import select
 from app.models.aws_connection import AWSConnection
 from app.models.tenant import Tenant

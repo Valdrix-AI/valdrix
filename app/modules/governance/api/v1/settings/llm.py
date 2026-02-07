@@ -180,7 +180,7 @@ async def update_llm_settings(
 @router.get("/llm/models")
 async def get_llm_models():
     """Returns available LLM providers and models."""
-    from app.shared.llm.usage_tracker import LLM_PRICING
+    from app.shared.llm.pricing_data import LLM_PRICING
 
     result = {}
     for provider, models in LLM_PRICING.items():

@@ -5,12 +5,9 @@ import pytest
 import pytest_asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from fastapi import FastAPI, Request
-from httpx import AsyncClient
+from fastapi import Request
 import uuid
 import asyncio
-from datetime import datetime, timezone
 
 from app.modules.optimization.domain.service import ZombieService
 from app.shared.core.health import HealthService
@@ -62,8 +59,10 @@ class TestZombieServiceEdgeCases:
         mock_connection.region = "us-east-1"
         
         # Prepare DB results for 3 calls (AWS, Azure, GCP) to avoid duplications
-        res_conn = MagicMock(); res_conn.scalars.return_value.all.return_value = [mock_connection]
-        res_empty = MagicMock(); res_empty.scalars.return_value.all.return_value = []
+        res_conn = MagicMock()
+        res_conn.scalars.return_value.all.return_value = [mock_connection]
+        res_empty = MagicMock()
+        res_empty.scalars.return_value.all.return_value = []
         mock_db.execute.side_effect = [res_conn, res_empty, res_empty]
         
         with patch('app.modules.optimization.domain.service.select'), \
@@ -96,9 +95,12 @@ class TestZombieServiceEdgeCases:
         mock_azure.region = "eastus"
         
         # Prepare DB: AWS, Azure, GCP (Empty)
-        res_aws = MagicMock(); res_aws.scalars.return_value.all.return_value = [mock_aws]
-        res_azure = MagicMock(); res_azure.scalars.return_value.all.return_value = [mock_azure]
-        res_gcp = MagicMock(); res_gcp.scalars.return_value.all.return_value = []
+        res_aws = MagicMock()
+        res_aws.scalars.return_value.all.return_value = [mock_aws]
+        res_azure = MagicMock()
+        res_azure.scalars.return_value.all.return_value = [mock_azure]
+        res_gcp = MagicMock()
+        res_gcp.scalars.return_value.all.return_value = []
         mock_db.execute.side_effect = [res_aws, res_azure, res_gcp]
         
         with patch('app.modules.optimization.domain.service.select'), \
@@ -152,8 +154,10 @@ class TestZombieServiceEdgeCases:
         mock_connection.region = "us-east-1"
         
         # Prepare DB results for 3 calls to prevent duplication
-        res_conn = MagicMock(); res_conn.scalars.return_value.all.return_value = [mock_connection]
-        res_empty = MagicMock(); res_empty.scalars.return_value.all.return_value = []
+        res_conn = MagicMock()
+        res_conn.scalars.return_value.all.return_value = [mock_connection]
+        res_empty = MagicMock()
+        res_empty.scalars.return_value.all.return_value = []
         mock_db.execute.side_effect = [res_conn, res_empty, res_empty]
         
         with patch('app.modules.optimization.domain.service.select'), \
@@ -198,8 +202,10 @@ class TestZombieServiceEdgeCases:
         mock_connection.region = "us-east-1"
         
         # DB Sequence: AWS=1, others=empty
-        res_conn = MagicMock(); res_conn.scalars.return_value.all.return_value = [mock_connection]
-        res_empty = MagicMock(); res_empty.scalars.return_value.all.return_value = []
+        res_conn = MagicMock()
+        res_conn.scalars.return_value.all.return_value = [mock_connection]
+        res_empty = MagicMock()
+        res_empty.scalars.return_value.all.return_value = []
         mock_db.execute.side_effect = [res_conn, res_empty, res_empty]
         
         with patch('app.modules.optimization.domain.service.select'), \
@@ -227,7 +233,6 @@ class TestHealthServiceIntegration:
     @pytest_asyncio.fixture
     async def health_service(self, mock_db):
         """Create HealthService instance."""
-        from app.shared.core.health import HealthService
         return HealthService(mock_db)
 
     @pytest.mark.asyncio
@@ -314,7 +319,7 @@ class TestNotificationDispatcherIntegration:
         mock_slack.notify_budget_alert.side_effect = Exception("Rate limited")
         
         with patch('app.shared.core.notifications.get_slack_service', return_value=mock_slack):
-            with patch('app.shared.core.notifications.logger') as mock_logger:
+            with patch('app.shared.core.notifications.logger'):
                 # All methods should propagate failures or handle them if implemented
                 # Since Dispatcher doesn't suppress, we expect exceptions OR check individual calls
                 # For this test, we verify that they are called.

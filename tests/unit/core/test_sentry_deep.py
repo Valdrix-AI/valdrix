@@ -1,14 +1,10 @@
-import pytest
 import os
-import pytest
 from unittest.mock import MagicMock, patch
-import os
-import sys
 
 # Import app modules locally inside tests to allow patching
 from app.shared.core.sentry import (
     init_sentry, capture_message, set_user, set_tenant_context,
-    SENTRY_AVAILABLE, _before_send
+    _before_send
 )
 
 class TestSentryDeep:

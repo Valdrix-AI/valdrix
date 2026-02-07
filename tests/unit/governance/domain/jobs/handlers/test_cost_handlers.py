@@ -1,7 +1,6 @@
 
 import pytest
 from uuid import uuid4
-from datetime import date
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.modules.governance.domain.jobs.handlers.costs import CostIngestionHandler, CostForecastHandler, CostExportHandler
 from app.models.background_job import BackgroundJob
@@ -51,8 +50,7 @@ async def test_ingestion_execute_success(db):
     db.commit = AsyncMock()
     
     with patch("app.shared.adapters.factory.AdapterFactory.get_adapter") as mock_factory, \
-         patch("app.modules.reporting.domain.persistence.CostPersistenceService") as MockPersistence, \
-         patch("app.modules.reporting.domain.attribution_engine.AttributionEngine") as MockEngine:
+         patch("app.modules.reporting.domain.persistence.CostPersistenceService") as MockPersistence:
          
         adapter = mock_factory.return_value
         # Mock stream

@@ -3,7 +3,7 @@ Test isolation utilities to prevent test interference
 """
 import asyncio
 from typing import Any, Dict
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import pytest
 
 class TestIsolationManager:

@@ -1,9 +1,8 @@
 import time
 import json
-import asyncio
 from enum import Enum
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional
 import structlog
 
 from app.shared.core.config import get_settings
@@ -48,7 +47,7 @@ class CircuitBreakerState:
             if val is not None:
                 try:
                     return json.loads(val)
-                except:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     return val
             return default
         return self._memory_state.get(key, default)

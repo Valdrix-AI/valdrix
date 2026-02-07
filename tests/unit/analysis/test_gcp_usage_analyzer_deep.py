@@ -1,4 +1,3 @@
-import pytest
 from app.shared.analysis.gcp_usage_analyzer import GCPUsageAnalyzer
 
 class TestGCPUsageAnalyzer:

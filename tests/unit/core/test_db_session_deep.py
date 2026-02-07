@@ -1,9 +1,6 @@
 import pytest
-import ssl
 import uuid
-import sys
 from unittest.mock import MagicMock, AsyncMock, patch
-from sqlalchemy import text
 from app.shared.db.session import (
     get_db,
     set_session_tenant_id,
@@ -101,7 +98,6 @@ class TestDBSessionDeep:
 
     def test_check_rls_policy_production_violation(self):
         """Test RLS policy listener raises exception on violation in production mode."""
-        from app.shared.core.config import Settings
         
         conn = MagicMock()
         conn.info = {"rls_context_set": False} # Context explicitly missing
@@ -145,7 +141,6 @@ class TestDBSessionDeep:
         # Since ssl_mode logic is at module level, we test by mocking the branches
         # actually we should have refactored session.py but we can test logic by
         # re-running the logic block in isolation here
-        from app.shared.db.session import settings as real_settings
         
         mock_settings = MagicMock()
         mock_settings.DB_SSL_MODE = ssl_mode
@@ -158,7 +153,8 @@ class TestDBSessionDeep:
         if ssl_mode in ("verify-ca", "verify-full") and not ca_path:
             with pytest.raises(ValueError):
                  # Simulate what would happen at module level
-                 if not ca_path: raise ValueError("...")
+                 if not ca_path:
+                     raise ValueError("...")
         
         if ssl_mode == "require" and is_prod and not ca_path:
              with pytest.raises(ValueError):

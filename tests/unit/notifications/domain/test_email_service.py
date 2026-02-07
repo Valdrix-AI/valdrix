@@ -1,6 +1,6 @@
 
 import pytest
-from unittest.mock import MagicMock, patch, ANY
+from unittest.mock import patch, ANY
 from app.modules.notifications.domain.email_service import EmailService
 
 @pytest.fixture
@@ -49,7 +49,7 @@ async def test_send_carbon_alert_failure(email_service):
 async def test_send_dunning_notification_success(email_service):
     from datetime import datetime
     
-    with patch("smtplib.SMTP") as mock_smtp:
+    with patch("smtplib.SMTP"):
         result = await email_service.send_dunning_notification(
             to_email="user@example.com",
             attempt=1,
@@ -61,12 +61,12 @@ async def test_send_dunning_notification_success(email_service):
 
 @pytest.mark.asyncio
 async def test_send_payment_recovered(email_service):
-    with patch("smtplib.SMTP") as mock_smtp:
+    with patch("smtplib.SMTP"):
         result = await email_service.send_payment_recovered_notification("user@example.com")
         assert result is True
 
 @pytest.mark.asyncio
 async def test_send_account_downgraded(email_service):
-    with patch("smtplib.SMTP") as mock_smtp:
+    with patch("smtplib.SMTP"):
         result = await email_service.send_account_downgraded_notification("user@example.com")
         assert result is True

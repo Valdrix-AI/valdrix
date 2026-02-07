@@ -1,7 +1,7 @@
 import pytest
 import time
 import json
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock
 from app.shared.remediation.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState, get_circuit_breaker
 
 class TestCircuitBreakerDeep:

@@ -1,7 +1,6 @@
 import pytest
 import json
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import timedelta
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 from app.shared.core.cache import CacheService, get_cache_service
 

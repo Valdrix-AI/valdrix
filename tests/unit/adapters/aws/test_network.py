@@ -5,7 +5,6 @@ Tests for OrphanLoadBalancersPlugin and UnderusedNatGatewaysPlugin.
 """
 
 import pytest
-from unittest.mock import MagicMock
 
 from app.modules.optimization.adapters.aws.plugins.network import (
     OrphanLoadBalancersPlugin,

@@ -491,7 +491,7 @@ class WebhookHandler:
             try:
                 import json
                 metadata = json.loads(metadata)
-            except:
+            except (json.JSONDecodeError, TypeError, ValueError):
                 metadata = {}
         
         tenant_id_str = metadata.get("tenant_id")
@@ -536,7 +536,7 @@ class WebhookHandler:
         _ = data.get("authorization", {})
         
         # If this is a subscription charge, we might get plan info
-        plan = data.get("plan", {})
+        # plan = data.get("plan", {}) # F841: Local variable `plan` is assigned to but never used
         
         if tenant_id:
 

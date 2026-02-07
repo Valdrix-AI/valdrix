@@ -5,7 +5,6 @@ Tests the LegacyEcrImagesPlugin for detecting untagged ECR images.
 """
 
 import pytest
-from unittest.mock import MagicMock
 
 from app.modules.optimization.adapters.aws.plugins.containers import LegacyEcrImagesPlugin
 

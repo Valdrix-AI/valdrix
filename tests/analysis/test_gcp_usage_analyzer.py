@@ -3,7 +3,6 @@ Unit tests for GCP Usage Analyzer.
 
 Tests zero-cost zombie detection logic using mock billing data.
 """
-import pytest
 from app.shared.analysis.gcp_usage_analyzer import GCPUsageAnalyzer
 
 

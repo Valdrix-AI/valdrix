@@ -2,7 +2,6 @@ import pytest
 import time
 from decimal import Decimal
 from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import timedelta
 from app.shared.core.currency import (
     get_exchange_rate,
     convert_usd,

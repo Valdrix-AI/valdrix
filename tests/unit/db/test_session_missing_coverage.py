@@ -2,13 +2,10 @@
 Targeted tests for app/shared/db/session.py missing coverage line 21
 """
 import pytest
-import pytest_asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
 from fastapi import Request
 import uuid
-import sys
 import os
 
 # Set test environment before importing app modules
@@ -16,8 +13,7 @@ os.environ["TESTING"] = "true"
 os.environ["DB_SSL_MODE"] = "disable"
 os.environ["is_production"] = "false"
 
-from app.shared.db.session import get_db, set_session_tenant_id, engine, async_session_maker
-from app.shared.core.exceptions import ValdrixException
+from app.shared.db.session import get_db
 
 
 class TestDatabaseSessionMissingCoverage:

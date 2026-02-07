@@ -1,11 +1,10 @@
 import pytest
 from decimal import Decimal
-from datetime import datetime, timezone
 from uuid import uuid4
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.shared.llm.budget_manager import LLMBudgetManager, BudgetStatus
-from app.shared.core.exceptions import BudgetExceededError, ResourceNotFoundError
-from app.models.llm import LLMBudget, LLMUsage
+from app.shared.core.exceptions import BudgetExceededError
+from app.models.llm import LLMBudget
 
 @pytest.fixture
 def mock_db():

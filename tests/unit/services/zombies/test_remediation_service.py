@@ -8,7 +8,6 @@ from app.modules.optimization.domain.remediation_service import RemediationServi
 from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
 from app.models.aws_connection import AWSConnection
 # Import all models to prevent mapper errors during Mock usage
-from app.models import cloud, llm, tenant, gcp_connection, aws_connection, azure_connection, remediation, notification_settings, background_job
 
 
 @pytest.fixture

@@ -2,9 +2,7 @@
 Targeted tests for app/shared/core/notifications.py missing coverage
 """
 import pytest
-import pytest_asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-from typing import Dict, Any
+from unittest.mock import AsyncMock, patch
 
 from app.shared.core.notifications import NotificationDispatcher
 
