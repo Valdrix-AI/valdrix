@@ -2,8 +2,7 @@ import pytest
 import json
 from datetime import timedelta
 from unittest.mock import MagicMock, AsyncMock, patch
-from uuid import uuid4
-from app.shared.core.cache import CacheService, get_cache_service
+from app.shared.core.cache import get_cache_service
 
 @pytest.fixture(autouse=True)
 def reset_cache_singleton():
@@ -11,6 +10,11 @@ def reset_cache_singleton():
     import app.shared.core.cache as cache_mod
     cache_mod._cache_service = None
     cache_mod._async_client = None
+    # Patch get_settings globally to ensure enabled=True
+    with patch("app.shared.core.cache.get_settings") as mock_settings:
+        mock_settings.return_value.UPSTASH_REDIS_URL = "redis://test:6379"
+        mock_settings.return_value.UPSTASH_REDIS_TOKEN = "test-token"
+        yield
 
 @pytest.fixture
 def mock_redis():
@@ -46,7 +50,7 @@ async def test_cache_delete_pattern(mock_redis):
         for k in ["key1", "key2"]:
             yield k
             
-    mock_redis.scan_iter.side_effect = mock_scan_iter
+    mock_redis.scan_iter = MagicMock(side_effect=mock_scan_iter)
     
     with patch("app.shared.core.cache._get_async_client", return_value=mock_redis):
         from app.shared.core.cache import CacheService

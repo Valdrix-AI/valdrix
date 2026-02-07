@@ -1,10 +1,9 @@
 from unittest.mock import MagicMock, patch
 from starlette.datastructures import Headers
-from fastapi import Request
 from app.shared.core.rate_limit import context_aware_key, get_analysis_limit, get_redis_client
 
 def mock_request(headers=None, state_attrs=None):
-    req = MagicMock(spec=Request)
+    req = MagicMock()
     req.headers = Headers(headers or {})
     # Properly configure state mock
     state = MagicMock()
@@ -41,17 +40,14 @@ def test_context_aware_key():
 
 def test_get_analysis_limit():
     """Test dynamic rate limits based on tier."""
-    # Starter default (when tier is not set or not string)
+    # Starter default
     req_default = mock_request()
-    # Ensure tier attribute raises AttributeError or returns None if not set? 
-    # MagicMock returns a child MagicMock by default.
-    # Code: getattr(..., "tier", "starter").
-    # If req.state is MagicMock, req.state.tier is a MagicMock.
-    # Code checks: if not isinstance(tier, str): tier = "starter"
-    # MagicMock is not str, so it becomes "starter".
-    assert get_analysis_limit(req_default) == "2/hour"
+    limit = get_analysis_limit(req_default)
+    # The default for requests with no tier is "starter" -> 2/hour
+    assert limit == "2/hour"
     
     # Tier mapping
+    assert get_analysis_limit(mock_request(state_attrs={"tier": "starter"})) == "2/hour"
     assert get_analysis_limit(mock_request(state_attrs={"tier": "pro"})) == "50/hour"
     assert get_analysis_limit(mock_request(state_attrs={"tier": "enterprise"})) == "200/hour"
     

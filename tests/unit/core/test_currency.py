@@ -13,9 +13,12 @@ async def test_convert_usd_to_ngn_paystack_success():
         "data": {"rate": 1500.5}
     }
     
-    with patch("app.shared.core.currency.get_settings") as mock_settings:
+    with patch("app.shared.core.currency.get_settings") as mock_settings, \
+         patch("app.shared.core.cache.get_cache_service") as mock_cache_cls:
         # Mock Paystack key to enable API call
         mock_settings.return_value.PAYSTACK_SECRET_KEY = "test-secret-key"
+        # Disable cache for unit tests
+        mock_cache_cls.return_value.enabled = False
         
         with patch("httpx.AsyncClient.get", return_value=mock_response):
             with patch("app.shared.core.currency._RATES_CACHE", {}): # Clear cache
@@ -34,7 +37,9 @@ async def test_convert_usd_fallback_rates():
     mock_response = MagicMock()
     mock_response.status_code = 401 # Unauthorized or generic failure
     
-    with patch("httpx.AsyncClient.get", return_value=mock_response):
+    with patch("httpx.AsyncClient.get", return_value=mock_response), \
+         patch("app.shared.core.cache.get_cache_service") as mock_cache_cls:
+        mock_cache_cls.return_value.enabled = False
         with patch("app.shared.core.currency._RATES_CACHE", {}):
             rate = await get_exchange_rate("EUR")
             # EUR is in FALLBACK_RATES as 0.92

@@ -15,10 +15,12 @@ from app.shared.core.currency import (
 
 @pytest.fixture(autouse=True)
 def clear_cache():
-    """Clear memory cache before each test."""
+    """Clear memory cache and disable redis cache before each test."""
     _RATES_CACHE.clear()
     _RATES_CACHE["USD"] = (Decimal("1.0"), time.time())
-    yield
+    with patch("app.shared.core.cache.get_cache_service") as mock_cache_cls:
+        mock_cache_cls.return_value.enabled = False
+        yield
 
 class TestCurrencyDeep:
     """Deep tests for currency module to reach 100% coverage."""

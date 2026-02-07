@@ -126,8 +126,8 @@ def get_analysis_limit(request: Optional[Request] = None) -> str:
         
     try:
         tier = getattr(request.state, "tier", "starter")
-        # Ensure we don't return a Mock object as the tier string
-        if not isinstance(tier, str):
+        # Ensure we don't return None or a Mock object as the tier string
+        if not tier or not isinstance(tier, str):
             tier = "starter"
     except (AttributeError, Exception):
         tier = "starter"
