@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from app.shared.llm.circuit_breaker import LLMCircuitBreaker, CircuitState, CircuitOpenError
 
 @pytest.fixture

@@ -119,6 +119,30 @@ class CacheService:
             logger.warning("cache_invalidate_error", error=str(e))
             return False
 
+    async def get(self, key: str) -> Optional[Any]:
+        """Public helper for Redis GET."""
+        return await self._get(key)
+
+    async def set(self, key: str, value: Any, ttl: Optional[timedelta] = None) -> bool:
+        """Public helper for Redis SET."""
+        return await self._set(key, value, ttl or ANALYSIS_TTL)
+
+    async def delete_pattern(self, pattern: str) -> bool:
+        """Delete keys matching pattern."""
+        if not self.enabled:
+            return False
+        try:
+            keys = []
+            async for key in self.client.scan_iter(match=pattern):
+                keys.append(key)
+            if keys:
+                await self.client.delete(*keys)
+                logger.info("cache_pattern_deleted", pattern=pattern, count=len(keys))
+            return True
+        except Exception as e:
+            logger.warning("cache_delete_pattern_error", pattern=pattern, error=str(e))
+            return False
+
     async def _get(self, key: str) -> Optional[Any]:
         """Internal helper for Redis GET with error handling."""
         if not self.enabled:

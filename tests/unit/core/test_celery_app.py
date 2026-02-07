@@ -1,4 +1,3 @@
-import pytest
 from app.shared.core.celery_app import celery_app
 
 def test_celery_config():

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 from starlette.responses import Response
 from app.shared.core.middleware import SecurityHeadersMiddleware, RequestIDMiddleware
 

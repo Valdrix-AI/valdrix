@@ -1,13 +1,12 @@
 import pytest
 import os
 import base64
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from app.shared.core.security import (
     EncryptionKeyManager, 
     encrypt_string, 
     decrypt_string, 
-    generate_blind_index,
-    generate_new_key
+    generate_blind_index
 )
 
 @pytest.fixture

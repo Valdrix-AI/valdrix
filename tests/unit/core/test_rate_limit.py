@@ -1,5 +1,4 @@
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 from starlette.datastructures import Headers
 from fastapi import Request
 from app.shared.core.rate_limit import context_aware_key, get_analysis_limit, get_redis_client
@@ -7,12 +6,17 @@ from app.shared.core.rate_limit import context_aware_key, get_analysis_limit, ge
 def mock_request(headers=None, state_attrs=None):
     req = MagicMock(spec=Request)
     req.headers = Headers(headers or {})
-    # Properly configure state mock to return specific attributes
+    # Properly configure state mock
     state = MagicMock()
+    # Explicitly set defaults to None so getattr(state, "tenant_id", None) works as expected
+    state.tenant_id = None
+    state.tier = None
+    
     if state_attrs:
         for k, v in state_attrs.items():
             setattr(state, k, v)
     req.state = state
+    req.client = MagicMock()
     req.client.host = "127.0.0.1"
     return req
 

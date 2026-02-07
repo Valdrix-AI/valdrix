@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from app.shared.llm.factory import LLMFactory, AnalysisComplexity
 
 def test_validate_api_key():

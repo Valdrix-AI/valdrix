@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
 from app.modules.governance.domain.scheduler.orchestrator import SchedulerOrchestrator
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
-from app.models.background_job import BackgroundJob, JobStatus, JobType
+from app.models.background_job import BackgroundJob, JobStatus
 import uuid
 
 @pytest.fixture
