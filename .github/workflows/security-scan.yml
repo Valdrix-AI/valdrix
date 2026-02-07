@@ -47,7 +47,7 @@ jobs:
       - name: Run pip-audit
         run: |
           uv run pip install --upgrade pip
-          uv run pip-audit --ignore-package pip
+          uv run pip-audit --ignore-vuln CVE-2026-1703
         
       - name: Secret Scanning
         uses: gitleaks/gitleaks-action@v2
