@@ -21,8 +21,10 @@ COPY dashboard/ ./
 # Build-time environment variables for SvelteKit static env
 ARG PUBLIC_SUPABASE_URL=http://localhost:54321
 ARG PUBLIC_SUPABASE_ANON_KEY=dummy-key
+ARG PUBLIC_API_URL=http://localhost:8000
 ENV PUBLIC_SUPABASE_URL=$PUBLIC_SUPABASE_URL
 ENV PUBLIC_SUPABASE_ANON_KEY=$PUBLIC_SUPABASE_ANON_KEY
+ENV PUBLIC_API_URL=$PUBLIC_API_URL
 
 # Build the app. Output goes to /app/build
 RUN pnpm run build
