@@ -146,7 +146,7 @@ jobs:
           path: ./
           base: ${{ github.event.before || github.event.repository.default_branch }}
           head: HEAD
-          extra_args: --only-verified --fail=false
+          extra_args: --only-verified
 
       - name: Setup Node
         uses: actions/setup-node@v4

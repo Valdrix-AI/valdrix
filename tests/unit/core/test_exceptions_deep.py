@@ -1,6 +1,4 @@
-import pytest
 from app.shared.core.exceptions import (
-    ValdrixException,
     AdapterError,
     AuthError,
     ConfigurationError,

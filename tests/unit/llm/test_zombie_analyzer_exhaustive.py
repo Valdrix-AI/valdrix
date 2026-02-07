@@ -1,6 +1,5 @@
 import pytest
 import json
-from decimal import Decimal
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 from app.shared.llm.zombie_analyzer import ZombieAnalyzer
