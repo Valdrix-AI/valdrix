@@ -1,6 +1,14 @@
 # Valdrix Helm Chart Values
 # Override these in your values.yaml or via --set
 
+global:
+  # -- Application name (can be changed to 'valtric' etc.)
+  appName: valdrix
+  # -- Base domain for the application
+  baseDomain: valdrix.ai
+  # -- Subdomain for the API service
+  subdomain: api
+
 # -- Number of API replicas
 replicaCount: 3
 
@@ -61,15 +69,15 @@ ingress:
     nginx.ingress.kubernetes.io/rate-limit: "100"
   # -- Ingress hosts
   hosts:
-    - host: api.valdrix.io
+    - host: "" # Leave empty to use global.subdomain.global.baseDomain
       paths:
         - path: /
           pathType: Prefix
   # -- TLS configuration
   tls:
-    - secretName: valdrix-tls
+    - secretName: "" # Leave empty to use global.appName-tls
       hosts:
-        - api.valdrix.io
+        - "" # Leave empty to use global.subdomain.global.baseDomain
 
 resources:
   limits:
@@ -141,3 +149,12 @@ redis:
 database:
   # -- Use external database
   external: true
+
+# -- Monitoring configuration
+monitoring:
+  prometheus:
+    # -- Prometheus URL for Grafana
+    url: "http://prometheus-server.monitoring.svc.cluster.local:9090"
+  alertmanager:
+    # -- Alertmanager URL for Grafana
+    url: "http://alertmanager.monitoring.svc.cluster.local:9093"

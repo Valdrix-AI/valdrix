@@ -28,9 +28,16 @@ variable "valdrix_account_id" {
   # No default - must be provided explicitly for security
 }
 
+# Tag name used for resources (can be Valdrix or Valtric)
+variable "resource_tag_name" {
+  description = "Application name used for tagging and resource naming"
+  type        = string
+  default     = "Valdrix"
+}
+
 # IAM Role for Valdrix
 resource "aws_iam_role" "valdrix" {
-  name               = "ValdrixReadOnly"
+  name               = "${var.resource_tag_name}ReadOnly"
   description        = "Allows Valdrix to read cost data for analysis"
   max_session_duration = 3600  # 1 hour
 
@@ -53,14 +60,15 @@ resource "aws_iam_role" "valdrix" {
   })
 
   tags = {
-    Purpose   = "Valdrix-CostAnalysis"
-    ManagedBy = "Valdrix"
+    Purpose   = "${var.resource_tag_name}-CostAnalysis"
+    ManagedBy = var.resource_tag_name
   }
 }
 
-# Cost Explorer Read-Only Policy
+# Cost Explorer Read-Only Policy (Removed for security/cost to avoid customer charges)
+/*
 resource "aws_iam_role_policy" "cost_explorer" {
-  name = "ValdrixCostExplorerReadOnly"
+  name = "${var.resource_tag_name}CostExplorerReadOnly"
   role = aws_iam_role.valdrix.id
 
   policy = jsonencode({
@@ -80,7 +88,11 @@ resource "aws_iam_role_policy" "cost_explorer" {
           "ce:GetSavingsPlansCoverage"
         ]
         Resource = "*"
-      },
+      }
+    ]
+  })
+}
+*/
       {
         Sid    = "EC2ReadOnly"
         Effect = "Allow"

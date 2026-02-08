@@ -23,8 +23,8 @@ k6 run loadtest/k6-test.js
 # With custom options
 k6 run --vus 50 --duration 5m loadtest/k6-test.js
 
-# Against production
-BASE_URL=https://api.valdrix.io k6 run loadtest/k6-test.js
+# Against production (Override TLD if necessary)
+BASE_URL=https://api.valdrix.ai k6 run loadtest/k6-test.js
 ```
 
 ---

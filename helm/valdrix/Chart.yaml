@@ -12,8 +12,8 @@ keywords:
   - zombie-detection
 maintainers:
   - name: Valdrix Team
-    email: team@valdrix.io
-home: https://valdrix.io
+    email: team@valdrix.ai
+home: https://valdrix.ai
 sources:
   - https://github.com/Valdrix-AI/valdrix
 dependencies: []

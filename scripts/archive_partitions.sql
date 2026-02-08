@@ -24,17 +24,19 @@ BEGIN
         WHERE parent.relname='cost_records' 
           AND nmsp_parent.nspname='public'
     LOOP
-        -- Simple check: if partition name contains YYYYMM format and is older than cutoff
-        -- For RANGE (recorded_at), we'd ideally parse pg_get_expr but that's complex
-        -- Assumption: partition naming convention is cost_records_pYYYY_MM
-        IF partition_record.child_table ~ '^cost_records_p[0-9]{4}_[0-9]{2}$' THEN
-            DECLARE
-                part_year INTEGER := split_part(substring(partition_record.child_table from 15), '_', 1)::integer;
-                part_month INTEGER := split_part(substring(partition_record.child_table from 15), '_', 2)::integer;
-                part_date DATE := make_date(part_year, part_month, 1);
-            BEGIN
-                IF part_date < cutoff_date THEN
-                    RAISE NOTICE 'Archiving partition % (Date: %)', partition_record.child_table, part_date;
+        -- Parse pg_get_expr(relpartbound) to extract the upper partition bound
+        -- Format is usually: FOR VALUES FROM ('YYYY-MM-DD') TO ('YYYY-MM-DD')
+        DECLARE
+            upper_bound_str TEXT;
+            part_end_date DATE;
+        BEGIN
+            upper_bound_str := substring(partition_record.partition_expr from 'TO \(''(.*)''\)');
+            IF upper_bound_str IS NOT NULL THEN
+                part_end_date := upper_bound_str::DATE;
+                
+                IF part_end_date <= cutoff_date THEN
+                    RAISE NOTICE 'Archiving partition % (Upper Bound: %)', 
+                        partition_record.child_table, part_end_date;
                     
                     -- 2. Copy data to archive table
                     EXECUTE format('INSERT INTO cost_records_archive SELECT *, NOW() FROM %I.%I', 
@@ -48,8 +50,8 @@ BEGIN
                         
                     archive_count := archive_count + 1;
                 END IF;
-            END;
-        END IF;
+            END IF;
+        END;
     END LOOP;
 
     RAISE NOTICE 'Finished archival. % partitions moved to cost_records_archive', archive_count;

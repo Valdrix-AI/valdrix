@@ -109,6 +109,14 @@ class Settings(BaseSettings):
         if self.LLM_PROVIDER in provider_keys and not provider_keys[self.LLM_PROVIDER]:
             if self.is_production:
                 raise ValueError(f"LLM_PROVIDER is set to '{self.LLM_PROVIDER}' but corresponding API key is missing.")
+        
+        # Redis fallback: construct REDIS_URL if missing but HOST/PORT are present
+        if not self.REDIS_URL and hasattr(self, 'REDIS_HOST') and hasattr(self, 'REDIS_PORT'):
+            # These are defined as attributes below, so they will be available if set via env
+            host = getattr(self, 'REDIS_HOST', None)
+            port = getattr(self, 'REDIS_PORT', None)
+            if host and port:
+                self.REDIS_URL = f"redis://{host}:{port}"
                 
         return self
 
@@ -199,6 +207,8 @@ class Settings(BaseSettings):
 
     # Cache (Redis for production, in-memory for dev)
     REDIS_URL: Optional[str] = None  # e.g., redis://localhost:6379
+    REDIS_HOST: Optional[str] = None # Added for K8s compatibility
+    REDIS_PORT: Optional[str] = "6379"
     
     # Upstash Redis (Serverless - Free tier: 10K commands/day)
     UPSTASH_REDIS_URL: Optional[str] = None  # e.g., https://xxx.upstash.io

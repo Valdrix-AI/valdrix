@@ -4,8 +4,13 @@ from uuid import uuid4
 from datetime import datetime, timezone
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from app.models.remediation import RemediationRequest, RemediationStatus
-from app.models.tenant import User
+from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
+from app.models.tenant import User, Tenant
+from app.models.llm import LLMUsage, LLMBudget
+from app.models.background_job import BackgroundJob
+from app.models.aws_connection import AWSConnection
+from app.models.notification_settings import NotificationSettings
+from app.models.pricing import PricingPlan
 
 async def stress_test_leaderboard(n_users=100, n_remediations=5000):
     """
@@ -46,7 +51,7 @@ async def stress_test_leaderboard(n_users=100, n_remediations=5000):
                 resource_type="ec2",
                 provider="aws", # Explicitly set provider
                 region="us-east-1", # Explicitly set region
-                action="stop_idle",
+                action=RemediationAction.STOP_INSTANCE,
                 estimated_monthly_savings=i * 0.1,
                 status=RemediationStatus.COMPLETED,
                 requested_by_user_id=user.id, # Mandatory field
