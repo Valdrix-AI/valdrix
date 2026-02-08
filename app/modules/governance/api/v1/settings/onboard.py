@@ -5,16 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timezone
-import logging
+import structlog
 
 from app.shared.db.session import get_db
 from app.shared.core.logging import audit_log
-from app.shared.core.auth import get_current_user_from_jwt, CurrentUser
-from app.models.tenant import Tenant, User, UserRole
+from app.shared.core.auth import get_current_user_from_jwt, CurrentUser, UserRole
+from app.models.tenant import Tenant, User
 from app.shared.core.pricing import PricingTier
 from app.shared.core.rate_limit import auth_limit
 
-logger = logging.getLogger("Valdrix.Governance.Onboard")
+logger = structlog.get_logger()
 
 class OnboardRequest(BaseModel):
     tenant_name: str = Field(..., min_length=3, max_length=100)
