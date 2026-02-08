@@ -10,7 +10,18 @@ Provides:
 """
 import os
 import sys
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
+import sys
+
+# Mock heavy dependencies to avoid native extension issues in Python 3.13
+sys.modules["codecarbon"] = MagicMock()
+sys.modules["pandas"] = MagicMock()
+sys.modules["pyarrow"] = MagicMock()
+sys.modules["pyarrow.parquet"] = MagicMock()
+sys.modules["pyarrow.lib"] = MagicMock()
+# We don't mock numpy directly here to allow other libs that might need it a bit,
+# but we mock the things that trigger the re-load of native extensions.
+
 from uuid import uuid4
 from decimal import Decimal
 import pytest
@@ -32,27 +43,28 @@ os.environ["DB_SSL_MODE"] = "disable"  # Disable SSL for tests
 os.environ["is_production"] = "false"  # Ensure we're not in production mode
  
 # Import all models to register them in SQLAlchemy mapper globally for all tests
-# Import all models to register them in SQLAlchemy mapper globally for all tests
+
 def _register_models():
-    try:
-        from app.models.cloud import CloudAccount, CostRecord  # noqa: F401
-        from app.models.aws_connection import AWSConnection  # noqa: F401
-        from app.models.azure_connection import AzureConnection  # noqa: F401
-        from app.models.gcp_connection import GCPConnection  # noqa: F401
-        from app.models.tenant import Tenant  # noqa: F401
-        from app.models.remediation import RemediationRequest  # noqa: F401
-        from app.models.security import OIDCKey  # noqa: F401
-        from app.models.notification_settings import NotificationSettings  # noqa: F401
-        from app.models.background_job import BackgroundJob  # noqa: F401
-        from app.models.llm import LLMUsage, LLMBudget  # noqa: F401
-        from app.models.attribution import AttributionRule  # noqa: F401
-        from app.models.anomaly_marker import AnomalyMarker  # noqa: F401
-        from app.models.carbon_settings import CarbonSettings  # noqa: F401
-        from app.models.discovered_account import DiscoveredAccount  # noqa: F401
-        from app.models.pricing import PricingTier  # noqa: F401
-        from app.models.remediation_settings import RemediationSettings  # noqa: F401
-    except ImportError:
-        pass
+    # Import all models to register them in SQLAlchemy mapper globally for all tests
+    # We do NOT catch ImportError anymore to expose broken models immediately
+    from app.models.cloud import CloudAccount, CostRecord  # noqa: F401
+    from app.models.aws_connection import AWSConnection  # noqa: F401
+    from app.models.azure_connection import AzureConnection  # noqa: F401
+    from app.models.gcp_connection import GCPConnection  # noqa: F401
+    from app.models.tenant import Tenant  # noqa: F401
+    from app.models.remediation import RemediationRequest  # noqa: F401
+    from app.models.security import OIDCKey  # noqa: F401
+    from app.models.notification_settings import NotificationSettings  # noqa: F401
+    from app.models.background_job import BackgroundJob  # noqa: F401
+    from app.models.llm import LLMUsage, LLMBudget  # noqa: F401
+    from app.models.attribution import AttributionRule  # noqa: F401
+    from app.models.anomaly_marker import AnomalyMarker  # noqa: F401
+    from app.models.carbon_settings import CarbonSettings  # noqa: F401
+    from app.models.discovered_account import DiscoveredAccount  # noqa: F401
+    from app.shared.core.pricing import PricingTier  # noqa: F401
+    from app.models.remediation_settings import RemediationSettings  # noqa: F401
+    from app.models.optimization import OptimizationStrategy, StrategyRecommendation  # noqa: F401
+    from app.models.cost_audit import CostAuditLog  # noqa: F401
 
 
 _register_models()
@@ -82,15 +94,20 @@ tenacity.retry = mock_retry
 
 @pytest_asyncio.fixture
 async def async_engine():
-    """Create async SQLite in-memory engine for testing."""
+    """Create async SQLite engine for testing using a temporary file."""
     from sqlalchemy.ext.asyncio import create_async_engine
+    import os
     
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        echo=False,
-    )
+    db_file = f"test_{uuid4().hex}.sqlite"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    
+    engine = create_async_engine(db_url, echo=False)
     yield engine
     await engine.dispose()
+    
+    # Cleanup
+    if os.path.exists(db_file):
+        os.remove(db_file)
 
 
 @pytest_asyncio.fixture
@@ -144,24 +161,35 @@ def client(app) -> Generator:
 
 
 @pytest_asyncio.fixture
-async def async_client(app, db) -> AsyncGenerator:
+async def async_client(app, db, async_engine) -> AsyncGenerator:
     """Async test client for FastAPI. Overrides get_db to share test session."""
     from httpx import AsyncClient, ASGITransport
     from app.shared.db.session import get_db
     
-    # Store old override if any
-    old_override = app.dependency_overrides.get(get_db)
-    app.dependency_overrides[get_db] = lambda: db
-    
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+    # Create test global session maker
+    from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+    test_session_maker = async_sessionmaker(
+        bind=async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    # Patch modules using async_session_maker directly
+    with patch("app.shared.connections.oidc.async_session_maker", test_session_maker), \
+         patch("app.modules.governance.api.v1.jobs.async_session_maker", test_session_maker):
+        # Store old override if any
+        old_override = app.dependency_overrides.get(get_db)
+        app.dependency_overrides[get_db] = lambda: db
         
-    # Restore or remove override
-    if old_override:
-        app.dependency_overrides[get_db] = old_override
-    else:
-        app.dependency_overrides.pop(get_db, None)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
+            
+        # Restore or remove override
+        if old_override:
+            app.dependency_overrides[get_db] = old_override
+        else:
+            app.dependency_overrides.pop(get_db, None)
 
 
 @pytest_asyncio.fixture
