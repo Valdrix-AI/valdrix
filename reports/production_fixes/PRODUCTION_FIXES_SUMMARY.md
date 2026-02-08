@@ -116,7 +116,7 @@ NEXT STEPS:
 
 1. /app/db/session.py
    - CHANGE: check_rls_policy() listener (replace logging with exception)
-   - LINE: ~150-160 (exact line TBD - see deployment guide)
+   - LINE: 206-260 (Exception raised at L250)
    - IMPACT: RLS enforcement now blocks queries instead of logging
 
 2. /app/core/config.py

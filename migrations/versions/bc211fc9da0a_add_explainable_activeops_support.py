@@ -61,11 +61,20 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name=op.f('pk_carbon_settings')),
     sa.UniqueConstraint('tenant_id', name=op.f('uq_carbon_settings_tenant_id'))
     )
-    # NOTE: These columns already exist from a partial prior migration run
-    # op.add_column('llm_budgets', sa.Column('openai_api_key', sa.String(length=512), nullable=True))
-    # op.add_column('llm_budgets', sa.Column('claude_api_key', sa.String(length=512), nullable=True))
-    # op.add_column('llm_budgets', sa.Column('google_api_key', sa.String(length=512), nullable=True))
-    # op.add_column('llm_budgets', sa.Column('groq_api_key', sa.String(length=512), nullable=True))
+    # Idempotent column additions for llm_budgets
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    
+    llm_budgets_cols = [c['name'] for c in inspector.get_columns('llm_budgets')]
+    if 'openai_api_key' not in llm_budgets_cols:
+        op.add_column('llm_budgets', sa.Column('openai_api_key', sa.String(length=512), nullable=True))
+    if 'claude_api_key' not in llm_budgets_cols:
+        op.add_column('llm_budgets', sa.Column('claude_api_key', sa.String(length=512), nullable=True))
+    if 'google_api_key' not in llm_budgets_cols:
+        op.add_column('llm_budgets', sa.Column('google_api_key', sa.String(length=512), nullable=True))
+    if 'groq_api_key' not in llm_budgets_cols:
+        op.add_column('llm_budgets', sa.Column('groq_api_key', sa.String(length=512), nullable=True))
+
     op.alter_column('llm_budgets', 'hard_limit',
                existing_type=sa.VARCHAR(length=10),
                type_=sa.Boolean(),
@@ -76,9 +85,13 @@ def upgrade() -> None:
                type_=sa.DateTime(timezone=True),
                existing_nullable=True,
                postgresql_using="alert_sent_at::timestamp with time zone")
-    # op.add_column('llm_usage', sa.Column('is_byok', sa.Boolean(), nullable=True))
-    # op.execute("UPDATE llm_usage SET is_byok = false")
-    # op.alter_column('llm_usage', 'is_byok', nullable=False)
+    
+    llm_usage_cols = [c['name'] for c in inspector.get_columns('llm_usage')]
+    if 'is_byok' not in llm_usage_cols:
+        op.add_column('llm_usage', sa.Column('is_byok', sa.Boolean(), nullable=True))
+        op.execute("UPDATE llm_usage SET is_byok = false")
+        op.alter_column('llm_usage', 'is_byok', nullable=False)
+
     op.drop_index(op.f('ix_notification_settings_tenant_id'), table_name='notification_settings')
     op.add_column('remediation_requests', sa.Column('confidence_score', sa.Numeric(precision=3, scale=2), nullable=True))
     op.add_column('remediation_requests', sa.Column('explainability_notes', sa.String(length=1000), nullable=True))

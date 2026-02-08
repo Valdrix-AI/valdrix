@@ -174,9 +174,21 @@ async def async_client(app, db, async_engine) -> AsyncGenerator:
         expire_on_commit=False,
     )
 
-    # Patch modules using async_session_maker directly
-    with patch("app.shared.connections.oidc.async_session_maker", test_session_maker), \
-         patch("app.modules.governance.api.v1.jobs.async_session_maker", test_session_maker):
+    # Patch all modules that use the global async_session_maker directly
+    # to ensure they use our test session maker connected to the test DB.
+    modules_to_patch = [
+        "app.shared.connections.oidc.async_session_maker",
+        "app.modules.governance.api.v1.jobs.async_session_maker",
+        "app.modules.governance.domain.jobs.cur_ingestion.async_session_maker",
+        "app.tasks.scheduler_tasks.async_session_maker",
+        "app.main.async_session_maker"
+    ]
+    
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        for target in modules_to_patch:
+            stack.enter_context(patch(target, test_session_maker))
+            
         # Store old override if any
         old_override = app.dependency_overrides.get(get_db)
         app.dependency_overrides[get_db] = lambda: db

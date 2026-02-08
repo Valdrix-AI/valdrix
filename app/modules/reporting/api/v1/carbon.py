@@ -131,10 +131,10 @@ async def get_carbon_intensity_forecast(
         electricitymaps_key=settings.ELECTRICITY_MAPS_API_KEY
     )
     
-    forecast = scheduler.get_intensity_forecast(region, hours)
+    forecast = await scheduler.get_intensity_forecast(region, hours)
     return {
         "region": region,
-        "current_intensity": scheduler.get_region_intensity(region),
+        "current_intensity": await scheduler.get_region_intensity(region),
         "forecast": forecast,
         "source": "api" if not scheduler._use_static_data else "simulation"
     }
@@ -152,7 +152,7 @@ async def get_green_schedule(
         electricitymaps_key=settings.ELECTRICITY_MAPS_API_KEY
     )
     
-    optimal_time = scheduler.get_optimal_execution_time(region)
+    optimal_time = await scheduler.get_optimal_execution_time(region)
     return {
         "region": region,
         "optimal_start_time": optimal_time.isoformat() if optimal_time else None,

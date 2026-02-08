@@ -171,7 +171,7 @@ class CURAdapter(CostAdapter):
                         
                         # Read parquet from bytes
                         from io import BytesIO
-                        df = pd.read_parquet(BytesIO(content))
+                        df = pd.read_parquet(BytesIO(content), engine="pyarrow")
                         
                         # Basic filters
                         if "line_item_usage_start_date" in df.columns:

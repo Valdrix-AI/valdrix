@@ -47,9 +47,10 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # NOTE: Cost Explorer APIs (ce:*) have been REMOVED.
-              # They cost $0.01 per request and are billed to the customer.
-              # We now use CUR (Cost & Usage Reports) via S3 for cost data.
+              # IMPORTANT: Cost Explorer APIs (ce:*) are EXPLICITLY REMOVED to prevent
+              # unintended charges to the customer ($0.01/request). Valdrix MUST use
+              # CUR (Cost & Usage Reports) via S3 for cost data. DO NOT re-add ce:*
+              # permissions without explicit architectural approval.
               # See valdrix-cur-setup.yaml for the CUR automation template.
 
               
