@@ -14,8 +14,9 @@ from decimal import Decimal
 from typing import List, Dict, Any, Optional
 import aioboto3
 from botocore.exceptions import ClientError
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.shared.core.service import BaseService
 import structlog
 import time
 
@@ -31,7 +32,7 @@ from app.shared.core.config import get_settings
 logger = structlog.get_logger()
 
 
-class RemediationService:
+class RemediationService(BaseService):
     """
     Manages the remediation approval workflow.
 
@@ -45,7 +46,7 @@ class RemediationService:
     # Mapping CamelCase to snake_case for aioboto3 credentials - DEPRECATED: Use aws_utils
 
     def __init__(self, db: AsyncSession, region: str = "us-east-1", credentials: Optional[Dict[str, str]] = None) -> None:
-        self.db = db
+        super().__init__(db)
         self.region = region
         self.credentials = credentials
         self.session = aioboto3.Session()
@@ -83,15 +84,11 @@ class RemediationService:
         """Create a new remediation request (pending approval)."""
         # P2: Resource Ownership Verification
         if connection_id:
-            # Verify connection belongs to tenant
+            # Verify connection belongs to tenant using centralized scoping
             from app.models.aws_connection import AWSConnection
-            conn_res = await self.db.execute(
-                select(AWSConnection).where(
-                    AWSConnection.id == connection_id,
-                    AWSConnection.tenant_id == tenant_id
-                )
-            )
-            if not conn_res.scalar_one_or_none():
+            try:
+                await self.get_by_id(AWSConnection, connection_id, tenant_id)
+            except Exception:
                 raise ValueError("Unauthorized: Connection does not belong to tenant")
 
         request = RemediationRequest(
@@ -126,14 +123,14 @@ class RemediationService:
 
     async def list_pending(self, tenant_id: UUID, limit: int = 50, offset: int = 0) -> List[RemediationRequest]:
         """List all pending remediation requests for a tenant."""
-        result = await self.db.execute(
-            select(RemediationRequest)
-            .where(RemediationRequest.tenant_id == tenant_id)
+        stmt = (
+            self._scoped_query(RemediationRequest, tenant_id)
             .where(RemediationRequest.status == RemediationStatus.PENDING)
             .order_by(RemediationRequest.created_at.desc())
             .offset(offset)
             .limit(limit)
         )
+        result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
     async def approve(
@@ -223,13 +220,8 @@ class RemediationService:
         # 0. Global Safety Guardrail (Unified)
         safety = SafetyGuardrailService(self.db)
         # We fetch the request first to get estimated savings for the impact check
-        result = await self.db.execute(
-            select(RemediationRequest)
-            .where(RemediationRequest.id == request_id)
-            .where(RemediationRequest.tenant_id == tenant_id)
-            .with_for_update()
-        )
-        request = result.scalar_one_or_none()
+        # Centralized scoping check with row locking (H-4: Atomic State Transitions)
+        request = await self.get_by_id(RemediationRequest, request_id, tenant_id, lock=True)
         
         if not request:
             raise ValueError("Remediation request not found.")

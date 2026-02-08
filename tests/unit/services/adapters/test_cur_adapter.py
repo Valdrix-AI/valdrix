@@ -112,7 +112,7 @@ async def test_parse_cur_files_success(cur_adapter):
         mock_s3.get_object.return_value = {"Body": mock_body}
         mock_body.__aenter__.return_value = mock_body
         
-        with patch("pandas.read_parquet", return_value=df_data):
+        with patch.object(pd, "read_parquet", return_value=df_data):
             # 1. Without group_by
             results = await cur_adapter._parse_cur_files(files, start, end, group_by_service=False)
             assert len(results) == 2  # 2 days

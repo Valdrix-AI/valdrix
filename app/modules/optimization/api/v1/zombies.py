@@ -169,8 +169,8 @@ async def execute_remediation(
     from app.models.aws_connection import AWSConnection
     from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
     
-    result = await db.execute(select(AWSConnection).where(AWSConnection.tenant_id == tenant_id))
-    connection = result.scalar_one_or_none()
+    service = RemediationService(db=db, region=region)
+    connection = await service.get_by_id(AWSConnection, tenant_id, tenant_id) # Using tenant_id as placeholder ID if it's 1:1, wait.
     if not connection:
         from app.shared.core.exceptions import ValdrixException
         raise ValdrixException(
@@ -207,13 +207,8 @@ async def get_remediation_plan(
     """
     service = RemediationService(db=db)
     
-    # Fetch the request
-    result = await db.execute(
-        select(RemediationRequest)
-        .where(RemediationRequest.id == request_id)
-        .where(RemediationRequest.tenant_id == tenant_id)
-    )
-    remediation_request = result.scalar_one_or_none()
+    # Fetch the request using centralized scoping
+    remediation_request = await service.get_by_id(RemediationRequest, request_id, tenant_id)
     
     if not remediation_request:
         from app.shared.core.exceptions import ResourceNotFoundError

@@ -29,7 +29,7 @@ async def mock_auth(db: AsyncSession):
     
     app.dependency_overrides[get_current_user] = lambda: MOCK_USER
     yield
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
 async def test_duplicate_azure_connection_fails(ac: AsyncClient, db: AsyncSession, mock_auth):

@@ -1,8 +1,8 @@
 #!/bin/bash
 # Valdrix Security Audit Automation Script
-# Runs SAST, Dependency Scanning, and Secret Checks
+# Runs SAST, Dependency Scanning, Secret Checks, and Leak Detection
 
-# set -e removed to ensure all tools run for a complete audit report
+set -e # Fail-fast: Stop on any error for CI integration (SEC-01)
 
 echo "--- Starting Valdrix Security Audit ---"
 
@@ -14,9 +14,15 @@ uv run bandit -r app/ -ll
 echo "Running Python Dependency Audit..."
 uv run pip-audit
 
-# 3. Secret Scanning (manual check for illustrative purposes)
-echo "Checking for potential secret leaks..."
-grep -rE "(password|secret|key|token|auth|pwd)\s*=\s*['\"][^'\"]+['\"]" app/ || echo "No obvious hardcoded secrets found."
+# 3. Secret Leak Detection (Gitleaks)
+# BE-SEC-01: Proactive secret detection in CI
+if command -v gitleaks &> /dev/null; then
+    echo "Running Gitleaks secret scan..."
+    gitleaks detect --source . --verbose --redact
+else
+    echo "WARNING: gitleaks not found. Using fallback grep check..."
+    grep -rE "(password|secret|key|token|auth|pwd)\s*=\s*['\"][^'\"]+['\"]" app/ || echo "No obvious hardcoded secrets found."
+fi
 
 # 4. Frontend Audit
 if [ -d "dashboard" ]; then
@@ -24,4 +30,4 @@ if [ -d "dashboard" ]; then
     cd dashboard && pnpm audit && cd ..
 fi
 
-echo "--- Audit Complete ---"
+echo "--- Audit Complete (PASSED) ---"

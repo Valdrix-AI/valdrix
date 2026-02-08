@@ -22,7 +22,7 @@ def mock_user():
 def override_auth(mock_user):
     app.dependency_overrides[get_current_user] = lambda: mock_user
     yield
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
 async def test_get_aws_setup_templates(async_client: AsyncClient):

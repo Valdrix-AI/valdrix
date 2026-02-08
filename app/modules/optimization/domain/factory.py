@@ -1,4 +1,5 @@
 from typing import Any
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.adapters.aws.detector import AWSZombieDetector
 from app.modules.optimization.adapters.azure.detector import AzureZombieDetector
@@ -8,7 +9,6 @@ class ZombieDetectorFactory:
     """
     Factory to instantiate the correct ZombieDetector based on connection type.
     """
-    from sqlalchemy.ext.asyncio import AsyncSession
     @staticmethod
     def get_detector(connection: Any, region: str = "us-east-1", db: AsyncSession = None) -> BaseZombieDetector:
         type_name = type(connection).__name__

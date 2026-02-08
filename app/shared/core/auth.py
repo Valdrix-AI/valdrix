@@ -237,12 +237,13 @@ def require_tenant_access(user: CurrentUser = Depends(get_current_user)) -> UUID
     """
     Ensures that the current user has access to the tenant context.
     Standardizes BE-SEC-02: Strict Tenant Isolation.
+    Mandated for all sensitive API routes.
     """
     if not user.tenant_id:
         logger.error("tenant_id_missing_in_user_context", user_id=str(user.id))
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant context required"
+            detail="Tenant context required. Please complete onboarding."
         )
     return user.tenant_id
 

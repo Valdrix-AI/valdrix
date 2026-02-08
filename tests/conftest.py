@@ -13,12 +13,12 @@ import sys
 from unittest.mock import MagicMock, AsyncMock, patch
 import sys
 
-# Mock heavy dependencies to avoid native extension issues in Python 3.13
-sys.modules["codecarbon"] = MagicMock()
-sys.modules["pandas"] = MagicMock()
-sys.modules["pyarrow"] = MagicMock()
-sys.modules["pyarrow.parquet"] = MagicMock()
-sys.modules["pyarrow.lib"] = MagicMock()
+# Mock heavy dependencies only if they cause issues in specific environments
+# sys.modules["codecarbon"] = MagicMock()
+# sys.modules["pandas"] = MagicMock()
+# sys.modules["pyarrow"] = MagicMock()
+# sys.modules["pyarrow.parquet"] = MagicMock()
+# sys.modules["pyarrow.lib"] = MagicMock()
 # We don't mock numpy directly here to allow other libs that might need it a bit,
 # but we mock the things that trigger the re-load of native extensions.
 

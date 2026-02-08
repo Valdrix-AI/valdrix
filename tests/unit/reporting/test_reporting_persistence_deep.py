@@ -9,6 +9,9 @@ from app.schemas.costs import CloudUsageSummary, CostRecord as CostRecordSchema
 @pytest.fixture
 def mock_db():
     db = AsyncMock()
+    # add and add_all are sync methods in AsyncSession
+    db.add = MagicMock()
+    db.add_all = MagicMock()
     # Mocking db.bind.url for the _bulk_upsert logic
     db.bind = MagicMock()
     db.bind.url = "postgresql://user:pass@localhost/db"

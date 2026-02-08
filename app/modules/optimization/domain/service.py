@@ -14,8 +14,9 @@ from typing import Dict, Any, List, Optional, Union, Callable, Awaitable, TYPE_C
 from uuid import UUID
 import structlog
 import time
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.shared.core.service import BaseService
 
 if TYPE_CHECKING:
     from app.models.optimization import StrategyRecommendation
@@ -28,9 +29,9 @@ from app.shared.core.pricing import PricingTier, FeatureFlag, is_feature_enabled
 
 logger = structlog.get_logger()
 
-class ZombieService:
+class ZombieService(BaseService):
     def __init__(self, db: AsyncSession):
-        self.db = db
+        super().__init__(db)
     async def scan_for_tenant(
         self, 
         tenant_id: UUID, 
@@ -46,9 +47,8 @@ class ZombieService:
         # Phase 21: Decoupling from concrete models
         all_connections: List[Union[AWSConnection, AzureConnection, GCPConnection]] = []
         for model in [AWSConnection, AzureConnection, GCPConnection]:
-            # Use cast or ignore if mypy cannot verify tenant_id exists on all models
-            # but they all do in this codebase.
-            q = await self.db.execute(select(model).where(model.tenant_id == tenant_id)) # type: ignore
+            # Use centralized scoping
+            q = await self.db.execute(self._scoped_query(model, tenant_id)) # type: ignore
             all_connections.extend(q.scalars().all())
 
         if not all_connections:
@@ -267,12 +267,12 @@ class ZombieService:
             logger.error("service_zombie_notification_failed", error=str(e))
 
 
-class OptimizationService:
+class OptimizationService(BaseService):
     """
     Orchestrates FinOps optimization strategies (RIs, Savings Plans).
     """
     def __init__(self, db: AsyncSession):
-        self.db = db
+        super().__init__(db)
 
     async def generate_recommendations(self, tenant_id: UUID) -> List["StrategyRecommendation"]:
         """
@@ -340,10 +340,11 @@ class OptimizationService:
         thirty_days_ago = datetime.now() - timedelta(days=30)
         
         # Calculate Total Cost in last 30 days
-        q = select(func.sum(CostRecord.cost_usd)).where(
-            CostRecord.tenant_id == tenant_id,
+        # Using centralized scoping
+        q = self._scoped_query(CostRecord, tenant_id).where(
             CostRecord.recorded_at >= thirty_days_ago.date()
-        )
+        ).with_only_columns(func.sum(CostRecord.cost_usd))
+        
         result = await self.db.execute(q)
         total_spend = result.scalar() or 0.0
         

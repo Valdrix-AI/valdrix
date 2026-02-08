@@ -40,7 +40,10 @@ def override_deps(mock_user, mock_db):
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_db] = lambda: mock_db
     yield
-    app.dependency_overrides = {}
+    from app.shared.core.auth import get_current_user
+    from app.shared.db.session import get_db
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_db, None)
 
 # --- Plan Tests ---
 

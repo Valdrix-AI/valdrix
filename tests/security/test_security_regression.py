@@ -86,7 +86,9 @@ async def test_tenant_isolation_regression(ac: AsyncClient, db):
         for r in requests:
             assert r["resource_id"] != "vol-tenant-b", "Cross-tenant data leakage detected!"
     finally:
-        app.dependency_overrides.clear()
+        from app.shared.core.auth import get_current_user, require_tenant_access
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(require_tenant_access, None)
 
 @pytest.mark.asyncio
 async def test_bound_pagination_enforcement(ac: AsyncClient, db):
@@ -122,7 +124,9 @@ async def test_bound_pagination_enforcement(ac: AsyncClient, db):
             print(f"DEBUG PAGINATION: {response.status_code} {response.json()}")
         assert response.status_code == 200
     finally:
-        app.dependency_overrides.clear()
+        from app.shared.core.auth import get_current_user, require_tenant_access
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(require_tenant_access, None)
 
 @pytest.mark.skip(reason="Starlette/httpx ASGITransport exception handling in tests differs from production. Error sanitization works in production but not through test client.")
 @pytest.mark.asyncio

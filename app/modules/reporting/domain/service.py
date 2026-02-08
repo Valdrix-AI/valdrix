@@ -16,19 +16,18 @@ from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
 from app.models.cloud import CloudAccount
+from app.shared.core.service import BaseService
 
 logger = structlog.get_logger()
 
-class ReportingService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
-
+class ReportingService(BaseService):
     async def _get_all_connections(self, tenant_id: Any) -> List[Any]:
         """Fetch all cloud connections for a tenant."""
         connections = []
         for model in [AWSConnection, AzureConnection, GCPConnection]:
-            q = await self.db.execute(select(model).where(model.tenant_id == tenant_id))
-            connections.extend(q.scalars().all())
+            stmt = self._scoped_query(model, tenant_id)
+            result = await self.db.execute(stmt)
+            connections.extend(result.scalars().all())
         return connections
 
     async def ingest_costs_for_tenant(self, tenant_id: Any, days: int = 7) -> Dict[str, Any]:

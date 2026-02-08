@@ -50,13 +50,15 @@ async def seed_data():
             existing_rate = res.scalar_one_or_none()
             
             if not existing_rate:
+                # Seed with a realistic starting rate (1600 NGN/USD) 
+                # Managed by update_exchange_rates.py for automation (BE-FIN-01)
                 db.add(ExchangeRate(
                     from_currency="USD",
                     to_currency="NGN",
-                    rate=1450.0,
-                    provider="manual"
+                    rate=1600.0,
+                    provider="manual-initial-seed"
                 ))
-                print("  + Added Exchange Rate: 1450.0 NGN/USD")
+                print("  + Added Exchange Rate: 1600.0 NGN/USD (Automation target: update_exchange_rates.py)")
             else:
                 print(f"  ~ Exchange Rate exists: {existing_rate.rate}")
 

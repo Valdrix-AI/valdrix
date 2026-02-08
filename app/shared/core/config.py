@@ -220,10 +220,10 @@ class Settings(BaseSettings):
     EXCHANGERATE_API_KEY: Optional[str] = None # Added for dynamic currency
     FALLBACK_NGN_RATE: float = 1450.0 # SEC: Centralized financial fallback
     # Monthly plans
-    PAYSTACK_PLAN_STARTER: str = "PLN_starter_xxx"    # ₦41,250/mo ($29)
-    PAYSTACK_PLAN_GROWTH: str = "PLN_growth_xxx"      # ₦112,350/mo ($79)
-    PAYSTACK_PLAN_PRO: str = "PLN_pro_xxx"            # ₦283,000/mo ($199)
-    PAYSTACK_PLAN_ENTERPRISE: str = "PLN_ent_xxx"     # Custom
+    PAYSTACK_PLAN_STARTER: Optional[str] = None
+    PAYSTACK_PLAN_GROWTH: Optional[str] = None
+    PAYSTACK_PLAN_PRO: Optional[str] = None
+    PAYSTACK_PLAN_ENTERPRISE: Optional[str] = None
     # Annual plans (17% discount - 2 months free)
     PAYSTACK_PLAN_STARTER_ANNUAL: Optional[str] = None
     PAYSTACK_PLAN_GROWTH_ANNUAL: Optional[str] = None

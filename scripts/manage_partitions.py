@@ -28,7 +28,13 @@ import os
 
 logger = structlog.get_logger()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://localhost/valdrix")
+# ENV mandated for production safety to prevent accidental targeting of local DB
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    logger.error("missing_required_environment_variable", variable="DATABASE_URL")
+    print("CRITICAL: DATABASE_URL environment variable not set. Aborting for safety.")
+    import sys
+    sys.exit(1)
 
 async def get_db_session():
     """Create an async database session."""

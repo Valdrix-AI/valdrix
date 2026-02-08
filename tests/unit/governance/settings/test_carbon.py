@@ -20,7 +20,8 @@ async def mock_user():
 def override_auth(mock_user):
     app.dependency_overrides[get_current_user] = lambda: mock_user
     yield
-    app.dependency_overrides.clear()
+    from app.shared.core.auth import get_current_user
+    app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
 async def test_get_carbon_settings_creates_default(async_client: AsyncClient, db_session):

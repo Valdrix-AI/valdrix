@@ -41,10 +41,36 @@ async def verify_active_ops():
             
         user_id = user.id
         
-        # 3. Simulate finding a zombie
-        print("🔍 Creating remediation request...")
-        # We manually create a request to bypass provider connection for dry-run
-        rem_service = RemediationService(db=db, region="us-east-1")
+        # 3. Simulate finding a zombie with Provider Integration
+        print("🔍 Creating remediation request via mock provider...")
+        
+        # P-8: Resource Ownership Verification - Create mock AWS connection
+        from app.models.aws_connection import AWSConnection
+        result = await db.execute(select(AWSConnection).where(AWSConnection.tenant_id == tenant_id).limit(1))
+        connection = result.scalar_one_or_none()
+        if not connection:
+            connection = AWSConnection(
+                tenant_id=tenant_id,
+                name="E2E Mock AWS",
+                role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
+                external_id="e2e-external-id",
+                region="us-east-1",
+                status="active"
+            )
+            db.add(connection)
+            await db.flush()
+            print(f"✨ Created mock AWS connection: {connection.id}")
+        
+        # Mock credentials for the service
+        from unittest.mock import MagicMock
+        mock_creds = {
+            "AccessKeyId": "ASIA_MOCK_ID",
+            "SecretAccessKey": "MOCK_SECRET",
+            "SessionToken": "MOCK_TOKEN",
+            "Expiration": "2099-01-01T00:00:00Z"
+        }
+        
+        rem_service = RemediationService(db=db, region="us-east-1", credentials=mock_creds)
         
         req = await rem_service.create_request(
             tenant_id=tenant_id,
@@ -53,7 +79,8 @@ async def verify_active_ops():
             resource_type="ec2_instance",
             action=RemediationAction.TERMINATE_INSTANCE,
             estimated_savings=15.75,
-            provider="aws"
+            provider="aws",
+            connection_id=connection.id # REQUIRED for provider verification (BE-SEC-02)
         )
         
         await db.commit()

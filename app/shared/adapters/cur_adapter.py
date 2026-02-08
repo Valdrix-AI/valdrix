@@ -143,14 +143,14 @@ class CURAdapter(CostAdapter):
         end_date: date,
         group_by_service: bool
     ) -> List[Dict[str, Any]]:
-        print(f"DEBUG: Entered _parse_cur_files with {len(files)} files")
+        """
+        Parse CUR Parquet files and aggregate costs.
+        """
         all_dfs = []
         
         try:
             import pandas as pd
-            print("DEBUG: pandas imported")
         except ImportError as e:
-            print(f"DEBUG: ImportError: {e}")
             logger.error("cur_parsing_missing_dependency", msg="pandas/pyarrow not installed")
             return []
 
@@ -177,7 +177,6 @@ class CURAdapter(CostAdapter):
                         from io import BytesIO
                         # NOTE: Using engine="pyarrow" here. If patch mocks read_parquet, it should be fine.
                         df = pd.read_parquet(BytesIO(content), engine="pyarrow")
-                        print(f"DEBUG: Read DF with {len(df)} rows")
                         
                         # Basic filters
                         if "line_item_usage_start_date" in df.columns:
@@ -188,10 +187,8 @@ class CURAdapter(CostAdapter):
                             ]
                         
                         all_dfs.append(df)
-                        print(f"DEBUG: Appended DF")
                         
                 except Exception as e:
-                    print(f"DEBUG: Exception in loop for {file_key}: {e}")
                     logger.error("cur_file_parse_error", file=file_key, error=str(e))
                     continue
                 

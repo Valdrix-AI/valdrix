@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 import structlog
 from datetime import datetime, timezone
 from decimal import Decimal
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.core.config import get_settings
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -22,7 +23,6 @@ class BaseZombieDetector(ABC):
     - Provide a bridge between generic plugins and provider-specific clients.
     """
 
-    from sqlalchemy.ext.asyncio import AsyncSession
     def __init__(self, region: str = "global", credentials: Optional[Dict[str, str]] = None, db: Optional[AsyncSession] = None, connection: Any = None):
         """
         Initializes the detector for a specific region.

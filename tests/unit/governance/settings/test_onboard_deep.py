@@ -58,7 +58,10 @@ async def test_onboard_lifecycle(async_client: AsyncClient, db, app):
         assert str(db_user.tenant_id) == generated_tenant_id
         
     finally:
-        app.dependency_overrides.clear()
+        from app.shared.db.session import get_db
+    from app.shared.core.auth import get_current_user_from_jwt
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user_from_jwt, None)
 
 @pytest.mark.asyncio
 async def test_onboard_endpoint(mock_db, mock_user):
@@ -75,7 +78,10 @@ async def test_onboard_endpoint(mock_db, mock_user):
         assert response.status_code == 200
         assert "tenant_id" in response.json()
     
-    app.dependency_overrides.clear()
+    from app.shared.db.session import get_db
+    from app.shared.core.auth import get_current_user_from_jwt
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user_from_jwt, None)
 
 @pytest.mark.asyncio
 async def test_onboard_duplicate(mock_db, mock_user):
@@ -94,7 +100,10 @@ async def test_onboard_duplicate(mock_db, mock_user):
         data = response.json()
         assert "Already onboarded" in (data.get("error") or data.get("message") or "")
 
-    app.dependency_overrides.clear()
+    from app.shared.db.session import get_db
+    from app.shared.core.auth import get_current_user_from_jwt
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user_from_jwt, None)
 
 @pytest.mark.asyncio
 async def test_onboard_with_cloud_config_multi(mock_db, mock_user):
@@ -125,7 +134,10 @@ async def test_onboard_with_cloud_config_multi(mock_db, mock_user):
                 response = await ac.post("/api/v1/settings/onboard", json=payload)
                 assert response.status_code == 200, f"Failed for {platform}: {response.json()}"
     
-    app.dependency_overrides.clear()
+    from app.shared.db.session import get_db
+    from app.shared.core.auth import get_current_user_from_jwt
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user_from_jwt, None)
 
 @pytest.mark.asyncio
 async def test_onboard_invalid_platform(mock_db, mock_user):
@@ -146,7 +158,10 @@ async def test_onboard_invalid_platform(mock_db, mock_user):
         data = response.json()
         assert "Unsupported platform" in (data.get("error") or data.get("message") or "")
 
-    app.dependency_overrides.clear()
+    from app.shared.db.session import get_db
+    from app.shared.core.auth import get_current_user_from_jwt
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user_from_jwt, None)
 
 @pytest.mark.asyncio
 async def test_onboard_connection_fail(mock_db, mock_user):
@@ -171,7 +186,10 @@ async def test_onboard_connection_fail(mock_db, mock_user):
             data = response.json()
             assert "verification failed" in (data.get("error") or data.get("message") or "")
 
-    app.dependency_overrides.clear()
+    from app.shared.db.session import get_db
+    from app.shared.core.auth import get_current_user_from_jwt
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user_from_jwt, None)
 
 @pytest.mark.asyncio
 async def test_onboard_exception_handler(mock_db, mock_user):
@@ -192,4 +210,7 @@ async def test_onboard_exception_handler(mock_db, mock_user):
             assert response.status_code == 400
             assert "Unexpected crash" in str(response.json())
 
-    app.dependency_overrides.clear()
+    from app.shared.db.session import get_db
+    from app.shared.core.auth import get_current_user_from_jwt
+    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.pop(get_current_user_from_jwt, None)

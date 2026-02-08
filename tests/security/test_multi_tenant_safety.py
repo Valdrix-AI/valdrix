@@ -78,7 +78,9 @@ async def test_large_dataset_async_shift(ac, monkeypatch):
     assert "job_id" in response.json()
     assert response.json()["status"] == "accepted"
     
-    app.dependency_overrides.clear()
+    from app.shared.core.auth import get_current_user, require_tenant_access
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(require_tenant_access, None)
 
 @pytest.mark.asyncio
 async def test_tier_aware_rate_limiting():

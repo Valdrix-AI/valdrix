@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Configuration
-API_URL="${API_URL:-http://localhost:8000}"
+API_URL="${API_URL:-https://api.valdrix.ai}"
 OPENAPI_URL="${API_URL}/openapi.json"
 OUTPUT_DIR="dashboard/src/lib/api"
 
