@@ -20,9 +20,9 @@ from app.models.remediation_settings import RemediationSettings  # noqa: F401 # 
 from app.models.azure_connection import AzureConnection  # noqa: F401 # pylint: disable=unused-import
 from app.models.gcp_connection import GCPConnection  # noqa: F401 # pylint: disable=unused-import
 from app.models.tenant import User, Tenant  # noqa: F401 # pylint: disable=unused-import
-from app.models.pricing import PricingPlan, ExchangeRate  # noqa: F401 # pylint: disable=unused-import
+from app.models.pricing import PricingPlan, ExchangeRate, TenantSubscription, LLMProviderPricing  # noqa: F401
 from app.models.background_job import BackgroundJob  # noqa: F401 # pylint: disable=unused-import
-from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription  # noqa: F401 # pylint: disable=unused-import
+# TenantSubscription now imported from app.models.pricing
 from app.modules.governance.domain.security.audit_log import AuditLog  # noqa: F401 # pylint: disable=unused-import
 from app.models.attribution import AttributionRule, CostAllocation  # noqa: F401 # pylint: disable=unused-import
 from app.models.anomaly_marker import AnomalyMarker  # noqa: F401 # pylint: disable=unused-import

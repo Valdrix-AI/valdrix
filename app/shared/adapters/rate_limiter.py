@@ -18,7 +18,17 @@ import structlog
 logger = structlog.get_logger()
 
 # Rate limiting constants
-DEFAULT_RATE_LIMIT = 5  # 5 requests per second
+# CE is notoriously restrictive (5/s across account)
+# EC2/CW have higher burst/refill limits but we keep them safe for 10K scale
+SERVICE_LIMITS = {
+    "ce": 5,          # Cost Explorer
+    "cur": 10,         # Cost & Usage Report
+    "ec2": 20,        # EC2
+    "cw": 20,         # CloudWatch
+    "trust": 10,      # Trusted Advisor
+    "default": 5      # Safe fallback
+}
+
 INITIAL_BACKOFF_SECONDS = 1.0
 MAX_BACKOFF_SECONDS = 60.0
 MAX_RETRIES = 5
@@ -34,7 +44,7 @@ class RateLimiter:
     Ensures we don't exceed AWS service limits across all tenants.
     """
     
-    def __init__(self, rate_per_second: float = DEFAULT_RATE_LIMIT):
+    def __init__(self, rate_per_second: float):
         self.rate = rate_per_second
         self.tokens = rate_per_second
         import time
@@ -48,13 +58,10 @@ class RateLimiter:
             now = time.monotonic()
             elapsed = now - self.last_update
             
-            # If elapsed is negative (e.g. system clock jump or loop reset if using loop.time)
-            # or if it's been a long time, just reset tokens to max
             if elapsed < 0:
                 elapsed = 0
-                self.tokens = self.rate
             
-            # Refill tokens based on elapsed time
+            # Refill tokens
             self.tokens = min(
                 self.rate,
                 self.tokens + elapsed * self.rate
@@ -62,7 +69,6 @@ class RateLimiter:
             self.last_update = now
             
             if self.tokens < 1:
-                # Wait for next token
                 wait_time = (1 - self.tokens) / self.rate
                 logger.debug(
                     "rate_limit_waiting",
@@ -74,26 +80,28 @@ class RateLimiter:
                 self.tokens -= 1
 
 
-# Global rate limiter for AWS Cost Explorer
-_aws_rate_limiter: RateLimiter | None = None
+# Registry of service-specific limiters
+_limiters: dict[str, RateLimiter] = {}
 
 
-def get_aws_rate_limiter() -> RateLimiter:
-    """Get or create the global AWS rate limiter."""
-    global _aws_rate_limiter
-    if _aws_rate_limiter is None:
-        _aws_rate_limiter = RateLimiter(rate_per_second=DEFAULT_RATE_LIMIT)
-    return _aws_rate_limiter
+def get_aws_rate_limiter(service: str = "ce") -> RateLimiter:
+    """Get or create the rate limiter for a specific AWS service."""
+    global _limiters
+    service = service.lower()
+    if service not in _limiters:
+        rate = SERVICE_LIMITS.get(service, SERVICE_LIMITS["default"])
+        _limiters[service] = RateLimiter(rate_per_second=rate)
+    return _limiters[service]
 
 
-async def with_rate_limit(coro: Callable[..., Any], *args, **kwargs) -> Any:
+async def with_rate_limit(coro: Callable[..., Any], *args, service: str = "ce", **kwargs) -> Any:
     """
-    Execute a coroutine with rate limiting.
+    Execute a coroutine with service-specific rate limiting.
     
     Usage:
-        result = await with_rate_limit(client.get_cost_and_usage, **params)
+        result = await with_rate_limit(client.get_cost_and_usage, service="ce", **params)
     """
-    limiter = get_aws_rate_limiter()
+    limiter = get_aws_rate_limiter(service)
     await limiter.acquire()
     return await coro(*args, **kwargs)
 

@@ -40,3 +40,50 @@ LLM_PRICING: Dict[str, Dict[str, Any]] = {
 
 # Alias for backward compatibility
 PROVIDER_COSTS = LLM_PRICING
+
+async def refresh_llm_pricing(db_session=None):
+    """
+    Refresh the global LLM_PRICING dictionary from the database.
+    Falls back to static defaults if DB is empty or unavailable.
+    """
+    from sqlalchemy import select
+    from app.models.pricing import LLMProviderPricing
+    
+    try:
+        if db_session is None:
+            # Avoid top-level import to prevent circularity
+            from app.shared.db.base import async_session_maker
+            async with async_session_maker() as session:
+                stmt = select(LLMProviderPricing).where(LLMProviderPricing.is_active == True)
+                result = await session.execute(stmt)
+                pricing_records = result.scalars().all()
+        else:
+            stmt = select(LLMProviderPricing).where(LLMProviderPricing.is_active == True)
+            result = await db_session.execute(stmt)
+            pricing_records = result.scalars().all()
+
+        if not pricing_records:
+            return
+
+        # Clear existing dynamic entries (keep default fallbacks if desired)
+        # For safety, we only update/add what we find in the DB
+        for record in pricing_records:
+            provider = record.provider
+            model = record.model
+            
+            if provider not in LLM_PRICING:
+                LLM_PRICING[provider] = {}
+                
+            LLM_PRICING[provider][model] = ProviderCost(
+                input=float(record.input_cost_per_million),
+                output=float(record.output_cost_per_million),
+                free_tier_tokens=int(record.free_tier_tokens)
+            )
+            
+            # Update default if it's the first one or matches some logic
+            if "default" not in LLM_PRICING[provider]:
+                 LLM_PRICING[provider]["default"] = LLM_PRICING[provider][model]
+
+    except Exception:
+        # Silently fail and use static defaults to prevent app crash
+        pass

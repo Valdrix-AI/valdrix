@@ -47,53 +47,7 @@ class SubscriptionStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
-class TenantSubscription(Base):
-    """
-    Persistent subscription state per tenant.
-    """
-    __tablename__ = "tenant_subscriptions"
-
-    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
-    tenant_id: Mapped[UUID] = mapped_column(
-        Uuid(),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
-        unique=True,
-        nullable=False,
-        index=True
-    )
-
-    # Paystack IDs
-    paystack_customer_code: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # CUS_xxx
-    paystack_subscription_code: Mapped[Optional[str]] = mapped_column(String(255), nullable=True) # SUB_xxx (Legacy)
-    paystack_email_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True) # For charging auth (Legacy)
-    paystack_auth_code: Mapped[Optional[str]] = mapped_column(String(255), nullable=True) # AUTH_xxx (Reusable token)
-
-    # Current state
-    tier: Mapped[str] = mapped_column(String(20), default=PricingTier.TRIAL.value)
-    status: Mapped[str] = mapped_column(String(20), default=SubscriptionStatus.ACTIVE.value)
-
-    # Billing dates
-    next_payment_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    # Dunning tracking (payment retry)
-    dunning_attempts: Mapped[int] = mapped_column(Integer, default=0)
-    last_dunning_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    dunning_next_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc)
-    )
-
-    # Relationship
-    tenant = relationship("Tenant")
+from app.models.pricing import TenantSubscription
 
 
 class PaystackClient:

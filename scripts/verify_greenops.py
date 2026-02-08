@@ -14,14 +14,25 @@ async def verify_greenops_api():
     settings = get_settings()
     base_url = os.getenv("API_URL", "http://localhost:8000")
     
-    # Use the same mock token pattern as verify_backend_e2e for dry-run verification
-    # In production, this would be a real service token.
-    token = os.getenv("VERIFICATION_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL291ZmxuamdzeWZxcXZqcWxwY2ljLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJiOTMxNDZkOS00OTkzLTQyY2UtODM2Mi05NzFiYmE5ZTc5ZjAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcwMzQyMjQwLCJpYXQiOjE3NzAyNTU4NDAsImVtYWlsIjoyIn0.7") 
+    # Require real auth in production; allow dev defaults ONLY if not in prod
+    token = os.getenv("VERIFICATION_TOKEN")
+    admin_key = os.getenv("ADMIN_API_KEY") or settings.ADMIN_API_KEY
     
+    if not token and not admin_key and settings.ENVIRONMENT == "production":
+        print("❌ ERROR: No authentication provided (VERIFICATION_TOKEN or ADMIN_API_KEY).")
+        print("Aborting GreenOps verification for safety.")
+        return
+
     print(f"🧪 Starting Authenticated GreenOps API Verification on {base_url}...")
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        headers = {"Authorization": f"Bearer {token}"}
+        # Prefer ADMIN_API_KEY if available for internal verification
+        if admin_key:
+            headers = {"X-Admin-API-Key": admin_key}
+            print("🔑 Using Admin API Key for authentication.")
+        else:
+            headers = {"Authorization": f"Bearer {token}"}
+            print("🔑 Using Bearer Token for authentication.")
         
         # 1. Test Intensity Forecast
         print("📡 Testing Intensity Forecast API (/api/v1/carbon/intensity)...")
