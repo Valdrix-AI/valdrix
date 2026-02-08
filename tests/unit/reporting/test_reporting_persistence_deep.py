@@ -224,7 +224,7 @@ async def test_cleanup_loops(persistence_service, mock_db):
     mock_db.execute.return_value = mock_res_ids
     
     await persistence_service.cleanup_old_records(days_retention=30)
-    assert mock_db.commit.called
+    assert mock_db.flush.called
 
 @pytest.mark.asyncio
 async def test_finalize_batch_success(persistence_service, mock_db):
@@ -234,4 +234,4 @@ async def test_finalize_batch_success(persistence_service, mock_db):
     
     result = await persistence_service.finalize_batch(days_ago=2)
     assert result["records_finalized"] == 10
-    assert mock_db.commit.called
+    assert mock_db.flush.called

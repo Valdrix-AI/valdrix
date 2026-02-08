@@ -143,14 +143,14 @@ class CURAdapter(CostAdapter):
         end_date: date,
         group_by_service: bool
     ) -> List[Dict[str, Any]]:
-        """
-        Parse CUR Parquet files and aggregate costs.
-        """
+        print(f"DEBUG: Entered _parse_cur_files with {len(files)} files")
         all_dfs = []
         
         try:
             import pandas as pd
-        except ImportError:
+            print("DEBUG: pandas imported")
+        except ImportError as e:
+            print(f"DEBUG: ImportError: {e}")
             logger.error("cur_parsing_missing_dependency", msg="pandas/pyarrow not installed")
             return []
 
@@ -161,17 +161,23 @@ class CURAdapter(CostAdapter):
             aws_secret_access_key=self.credentials.get("SecretAccessKey"),
             aws_session_token=self.credentials.get("SessionToken"),
         ) as s3:
+            print("DEBUG: S3 client context entered")
             for file_key in files:
                 try:
+                    print(f"DEBUG: Processing file {file_key}")
                     # Stream file from S3 into memory
                     response = await s3.get_object(Bucket=self.bucket_name, Key=file_key)
+                    print(f"DEBUG: Got object {file_key}")
                     
                     async with response["Body"] as stream:
                         content = await stream.read()
+                        print(f"DEBUG: Read content {len(content)} bytes")
                         
                         # Read parquet from bytes
                         from io import BytesIO
+                        # NOTE: Using engine="pyarrow" here. If patch mocks read_parquet, it should be fine.
                         df = pd.read_parquet(BytesIO(content), engine="pyarrow")
+                        print(f"DEBUG: Read DF with {len(df)} rows")
                         
                         # Basic filters
                         if "line_item_usage_start_date" in df.columns:
@@ -182,12 +188,15 @@ class CURAdapter(CostAdapter):
                             ]
                         
                         all_dfs.append(df)
+                        print(f"DEBUG: Appended DF")
                         
                 except Exception as e:
+                    print(f"DEBUG: Exception in loop for {file_key}: {e}")
                     logger.error("cur_file_parse_error", file=file_key, error=str(e))
                     continue
                 
         if not all_dfs:
+            print("DEBUG: all_dfs is empty at end")
             return []
             
         # Merge and Aggregate
