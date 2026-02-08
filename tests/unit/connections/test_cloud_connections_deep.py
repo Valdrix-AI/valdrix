@@ -176,8 +176,8 @@ class TestCloudConnectionsDeep:
     def test_aws_setup_templates(self):
         templates = AWSConnectionService.get_setup_templates("ext-123")
         assert templates["external_id"] == "ext-123"
-        assert "valdrix-role" in templates["cloudformation"]
-        assert "valdrix/aws-connection" in templates["terraform"]
+        assert "valdrix-role" in templates["cloudformation_yaml"]
+        assert "valdrix/aws-connection" in templates["terraform_hcl"]
 
     @pytest.mark.asyncio
     async def test_azure_list_connections(self, mock_db):

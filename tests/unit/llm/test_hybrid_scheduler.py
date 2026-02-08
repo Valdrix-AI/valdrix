@@ -50,10 +50,12 @@ async def test_run_analysis_hybrid_flow():
         scheduler._merge_with_full = MagicMock(return_value={"type": "merged"})
         
         # Force full
-        res = await scheduler.run_analysis(uuid4(), [], force_full=True)
-        assert res["type"] == "full"
-        
-        # Delta (default if cached present and not Sunday)
-        with patch.object(scheduler, "should_run_full_analysis", AsyncMock(return_value=False)):
-            res = await scheduler.run_analysis(uuid4(), [])
-            assert res["type"] == "merged"
+        with patch("app.shared.llm.factory.LLMFactory.create") as mock_create:
+            mock_create.return_value = MagicMock()
+            res = await scheduler.run_analysis(uuid4(), [], force_full=True)
+            assert res["type"] == "full"
+            
+            # Delta (default if cached present and not Sunday)
+            with patch.object(scheduler, "should_run_full_analysis", AsyncMock(return_value=False)):
+                res = await scheduler.run_analysis(uuid4(), [])
+                assert res["type"] == "merged"

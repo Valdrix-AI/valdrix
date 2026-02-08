@@ -76,7 +76,7 @@ settings = get_settings()
 
 class CsrfSettings(BaseModel):
     """Configuration for CSRF protection."""
-    secret_key: str = settings.CSRF_SECRET_KEY
+    secret_key: str = cast(str, settings.CSRF_SECRET_KEY)
     cookie_samesite: str = "lax"
 
 @CsrfProtect.load_config

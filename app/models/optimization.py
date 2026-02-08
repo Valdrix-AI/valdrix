@@ -3,8 +3,9 @@ from enum import Enum
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from uuid import uuid4, UUID
 
-from sqlalchemy import String, Numeric, Boolean, JSON, ForeignKey, DateTime
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy import String, Numeric, Boolean, JSON, ForeignKey, DateTime, Uuid as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.db.base import Base
@@ -33,7 +34,7 @@ class OptimizationStrategy(Base):
     """
     __tablename__ = "optimization_strategies"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(500))
     type: Mapped[StrategyType] = mapped_column(String(50), nullable=False)
@@ -54,15 +55,15 @@ class StrategyRecommendation(Base):
     """
     __tablename__ = "strategy_recommendations"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), 
+        PG_UUID(), 
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
     strategy_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         ForeignKey("optimization_strategies.id"),
         nullable=False
     )

@@ -1,123 +1,83 @@
-"""
-Tests for Auth Module
-
-Tests:
-1. JWT decoding
-2. CurrentUser model
-3. Role checking
-4. RBAC decorator
-"""
-
 import pytest
-from uuid import UUID
+from uuid import UUID, uuid4
+from fastapi import HTTPException
+from app.shared.core.auth import (
+    CurrentUser,
+    requires_role,
+    create_access_token,
+    decode_jwt,
+    get_current_user_from_jwt,
+    UserRole
+)
+from app.shared.core.pricing import PricingTier
+from unittest.mock import MagicMock
 
-from app.shared.core.auth import CurrentUser, requires_role
+class TestAuthLogic:
+    """Thoroughly test authentication and JWT logic."""
 
-
-class TestCurrentUserModel:
-    """Test CurrentUser Pydantic model."""
-    
-    def test_current_user_minimal(self):
-        """CurrentUser should accept minimal fields."""
-        user = CurrentUser(
-            id=UUID("12345678-1234-1234-1234-123456789012"),
-            email="test@example.com"
-        )
+    def test_jwt_lifecycle(self):
+        """Test creating and then decoding a token."""
+        user_id = uuid4()
+        data = {"sub": str(user_id), "email": "test@valdrix.io", "role": "admin"}
         
-        assert user.email == "test@example.com"
-        assert user.role == "member"  # Default
-        assert user.tenant_id is None  # Optional
-    
-    def test_current_user_full(self):
-        """CurrentUser should accept all fields."""
-        user = CurrentUser(
-            id=UUID("12345678-1234-1234-1234-123456789012"),
-            email="admin@example.com",
-            tenant_id=UUID("87654321-4321-4321-4321-210987654321"),
-            role="admin"
-        )
+        token = create_access_token(data)
+        assert isinstance(token, str)
         
-        assert user.role == "admin"
-        assert user.tenant_id is not None
-    
-    def test_user_roles(self):
-        """User roles should be valid strings."""
-        valid_roles = ["owner", "admin", "member"]
+        decoded = decode_jwt(token)
+        assert decoded["sub"] == str(user_id)
+        assert decoded["email"] == "test@valdrix.io"
+        assert decoded["role"] == "admin"
+        assert "exp" in decoded
+
+    def test_decode_invalid_token(self):
+        """Rejects malformed or poorly signed tokens."""
+        with pytest.raises(HTTPException) as exc:
+            decode_jwt("definitely.not.a.token")
+        assert exc.value.status_code == 401
+        assert "Invalid token" in str(exc.value.detail)
+
+    @pytest.mark.asyncio
+    async def test_get_current_user_from_jwt(self):
+        """Test dependency that extracts user from JWT without DB."""
+        user_id = uuid4()
+        token = create_access_token({"sub": str(user_id), "email": "onboard@valdrix.io"})
         
-        for role in valid_roles:
-            user = CurrentUser(
-                id=UUID("12345678-1234-1234-1234-123456789012"),
-                email="test@example.com",
-                role=role
-            )
-            assert user.role == role
-
-
-class TestRoleHierarchy:
-    """Test role-based access control hierarchy."""
-    
-    def test_role_hierarchy_exists(self):
-        """Role hierarchy should define access levels."""
-        hierarchy = {
-            "owner": 100,
-            "admin": 50,
-            "member": 10
-        }
+        credentials = MagicMock()
+        credentials.credentials = token
         
-        assert hierarchy["owner"] > hierarchy["admin"]
-        assert hierarchy["admin"] > hierarchy["member"]
-    
-    def test_owner_highest_privilege(self):
-        """Owner should have highest privilege."""
-        hierarchy = {"owner": 100, "admin": 50, "member": 10}
-        assert hierarchy["owner"] == max(hierarchy.values())
+        user = await get_current_user_from_jwt(credentials)
+        assert user.id == user_id
+        assert user.email == "onboard@valdrix.io"
 
-
-class TestRequiresRoleDecorator:
-    """Test requires_role dependency factory."""
-    
-    def test_requires_role_returns_callable(self):
-        """requires_role should return a dependency function."""
-        role_checker = requires_role("admin")
-        assert callable(role_checker)
-    
-    def test_multiple_role_levels(self):
-        """Should create checkers for different role levels."""
-        member_checker = requires_role("member")
-        admin_checker = requires_role("admin")
-        owner_checker = requires_role("owner")
+    def test_role_hierarchy_enforcement(self):
+        """Verify owner > admin > member logic."""
+        # Setup users
+        owner = CurrentUser(id=uuid4(), email="o@v.io", role=UserRole.OWNER)
+        admin = CurrentUser(id=uuid4(), email="a@v.io", role=UserRole.ADMIN)
+        member = CurrentUser(id=uuid4(), email="m@v.io", role=UserRole.MEMBER)
         
-        assert callable(member_checker)
-        assert callable(admin_checker)
-        assert callable(owner_checker)
-
-
-class TestJWTDecoding:
-    """Test JWT token handling."""
-    
-    def test_jwt_decode_function_exists(self):
-        """decode_jwt should be importable."""
-        from app.shared.core.auth import decode_jwt
-        assert callable(decode_jwt)
-    
-    def test_invalid_token_raises(self):
-        """Invalid JWT should raise HTTPException."""
-        from app.shared.core.auth import decode_jwt
-        from fastapi import HTTPException
+        # Test Admin requirement
+        admin_dependency = requires_role(UserRole.ADMIN.value)
         
+        # Owner pass
+        assert admin_dependency(owner) == owner
+        # Admin pass
+        assert admin_dependency(admin) == admin
+        # Member fail
+        with pytest.raises(HTTPException) as exc:
+            admin_dependency(member)
+        assert exc.value.status_code == 403
+
+        # Test Owner requirement
+        owner_dependency = requires_role(UserRole.OWNER.value)
+        assert owner_dependency(owner) == owner
         with pytest.raises(HTTPException):
-            decode_jwt("invalid_token_here")
+            owner_dependency(admin)
 
-
-class TestAuthDependencies:
-    """Test auth dependency functions."""
-    
-    def test_get_current_user_exists(self):
-        """get_current_user should be importable."""
-        from app.shared.core.auth import get_current_user
-        assert callable(get_current_user)
-    
-    def test_get_current_user_from_jwt_exists(self):
-        """get_current_user_from_jwt should be importable."""
-        from app.shared.core.auth import get_current_user_from_jwt
-        assert callable(get_current_user_from_jwt)
+    def test_user_minimal(self):
+        """CurrentUser should accept minimal fields."""
+        uid = uuid4()
+        user = CurrentUser(id=uid, email="test@example.com")
+        assert user.id == uid
+        assert user.role == UserRole.MEMBER
+        assert user.tier == PricingTier.STARTER

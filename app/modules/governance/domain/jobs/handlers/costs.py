@@ -53,7 +53,6 @@ class CostIngestionHandler(BaseJobHandler):
                 tenant_id=conn.tenant_id,
                 provider=conn.provider,
                 name=getattr(conn, "name", f"{conn.provider.upper()} Connection"),
-                credentials_encrypted="managed_by_connection_table",
                 is_active=True
             ).on_conflict_do_update(
                 index_elements=['id'],
@@ -63,7 +62,7 @@ class CostIngestionHandler(BaseJobHandler):
                 }
             )
             await db.execute(stmt)
-        await db.commit()
+        # Removed redundant commit here as JobProcessor handles it (BE-TRANS-1)
         
         # 2. Process each connection via its appropriate adapter
         checkpoint = job.payload.get("checkpoint", {}) if job.payload else {}
@@ -101,8 +100,8 @@ class CostIngestionHandler(BaseJobHandler):
 
                 save_result = await persistence.save_records_stream(
                     records=tracking_wrapper(cost_stream),
-                    tenant_id=str(conn.tenant_id),
-                    account_id=str(conn.id)
+                    tenant_id=tenant_id,  # Use UUID object
+                    account_id=conn.id  # Use UUID object (BE-UUID-1)
                 )
                 
                 conn.last_ingested_at = datetime.now(timezone.utc)
@@ -125,13 +124,16 @@ class CostIngestionHandler(BaseJobHandler):
             if "completed_connections" not in completed_conns:
                 completed_conns.append(conn_id_str)
                 job.payload = {**checkpoint, "completed_connections": completed_conns}
-                await db.commit()
+                # Redundant commit removed (BE-TRANS-1)
         
         # 3. Trigger Attribution Engine (FinOps Audit 2)
         try:
             from app.modules.reporting.domain.attribution_engine import AttributionEngine
             engine = AttributionEngine(db)
-            await engine.apply_rules_to_tenant(tenant_id)
+            # Use last 30 days for attribution context (FinOps Audit 2)
+            now = datetime.now(timezone.utc).date()
+            thirty_days_ago = now - timedelta(days=30)
+            await engine.apply_rules_to_tenant(tenant_id, start_date=thirty_days_ago, end_date=now)
             logger.info("attribution_applied_post_ingestion", tenant_id=str(tenant_id))
         except Exception as e:
             logger.error("attribution_trigger_failed", tenant_id=str(tenant_id), error=str(e))

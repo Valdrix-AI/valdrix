@@ -95,8 +95,70 @@ class TestValdrixException:
         for code, expected_status in test_cases:
             exc = ValdrixException(
                 message=f"Test with code: {code}",
-                code=code,
+                code=code or "internal_error",
                 status_code=expected_status
             )
-            assert exc.code == code or "internal_error"
+            assert exc.code == (code or "internal_error")
             assert exc.status_code == expected_status
+
+from app.shared.core.exceptions import (
+    AdapterError, AuthError, ConfigurationError, ResourceNotFoundError,
+    BillingError, AIAnalysisError, BudgetExceededError, KillSwitchTriggeredError
+)
+
+class TestCustomExceptions:
+    """Test specific ValdrixException subclasses."""
+
+    def test_adapter_error_sanitization(self):
+        """Test that AdapterError sanitizes sensitive info."""
+        raw_msg = "AWS Error: RequestId: 12345678-1234-1234-1234-1234567890ab failed. access_key=AKIA123 with signature=XYZ"
+        exc = AdapterError(raw_msg)
+        
+        assert "12345678-1234-1234-1234-1234567890ab" not in str(exc)
+        assert "[REDACTED_ID]" in str(exc)
+        assert "access_key=[REDACTED]" in str(exc)
+        assert "signature=[REDACTED]" in str(exc)
+        assert exc.status_code == 502
+
+    def test_adapter_error_simplification(self):
+        """Test that common cloud errors are simplified."""
+        exc1 = AdapterError("Some AccessDenied error from AWS")
+        assert "Permission denied" in str(exc1)
+        
+        exc2 = AdapterError("ThrottlingException: Rate exceeded")
+        assert "rate limit exceeded" in str(exc2)
+
+    def test_auth_error(self):
+        exc = AuthError("Login failed")
+        assert exc.status_code == 401
+        assert exc.code == "auth_error"
+
+    def test_config_error(self):
+        exc = ConfigurationError("Missing key")
+        assert exc.status_code == 500
+        assert exc.code == "config_error"
+
+    def test_not_found_error(self):
+        exc = ResourceNotFoundError("User not found")
+        assert exc.status_code == 404
+        assert exc.code == "not_found"
+
+    def test_billing_error(self):
+        exc = BillingError("Card declined")
+        assert exc.status_code == 400
+        assert exc.code == "billing_error"
+
+    def test_ai_error(self):
+        exc = AIAnalysisError("LLM failed")
+        assert exc.status_code == 500
+        assert exc.code == "ai_error"
+
+    def test_budget_error(self):
+        exc = BudgetExceededError("Limit reached")
+        assert exc.status_code == 402
+        assert exc.code == "budget_exceeded"
+
+    def test_kill_switch_error(self):
+        exc = KillSwitchTriggeredError("Unsafe action")
+        assert exc.status_code == 403
+        assert exc.code == "kill_switch_triggered"

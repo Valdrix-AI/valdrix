@@ -305,11 +305,9 @@ class DeltaAnalysisService:
                     resource_id = keys[-1] if len(keys) > 1 else keys[0]
                     resource_type = keys[0] if len(keys) > 1 else "Service"
                     
-                    metrics = group.get("Metrics", {})
-                    amount = float(
-                        metrics.get("UnblendedCost", {}).get("Amount", 0) or
-                        metrics.get("BlendedCost", {}).get("Amount", 0) or 0
-                    )
+                    metrics = group.get("Metrics")
+                    if metrics is None:
+                        continue
                     
                     if resource_id not in resource_totals:
                         resource_totals[resource_id] = {
@@ -318,6 +316,14 @@ class DeltaAnalysisService:
                             "days": 0,
                             "region": ""
                         }
+                    
+                    if not metrics:
+                        continue
+                        
+                    amount = float(
+                        metrics.get("UnblendedCost", {}).get("Amount", 0) or
+                        metrics.get("BlendedCost", {}).get("Amount", 0) or 0
+                    )
                     
                     resource_totals[resource_id]["total_cost"] += amount
                     resource_totals[resource_id]["days"] += 1

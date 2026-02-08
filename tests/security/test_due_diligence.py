@@ -28,7 +28,7 @@ async def test_remediation_rate_limiting():
     
     Verifies that remediation has rate limits to prevent runaway deletions.
     """
-    from app.shared.core.rate_limit import check_remediation_rate_limit, _remediation_counts
+    from app.shared.core.rate_limit import check_remediation_rate_limit, _remediation_counts, get_redis_client
     
     # Clear any existing state
     _remediation_counts.clear()
@@ -37,6 +37,15 @@ async def test_remediation_rate_limiting():
     
     # Use a smaller limit for testing (10 instead of 50)
     test_limit = 10
+    
+    # Clear Redis key if Redis is available to ensure clean test state
+    redis = get_redis_client()
+    if redis:
+        try:
+            key = f"remediation_rate:{tenant_id}:DELETE_VOLUME"
+            await redis.delete(key)
+        except Exception:
+            pass  # Redis might be unavailable, that's ok
     
     allowed_count = 0
     blocked_count = 0
@@ -58,6 +67,12 @@ async def test_remediation_rate_limiting():
     
     # Clean up
     _remediation_counts.clear()
+    if redis:
+        try:
+            key = f"remediation_rate:{tenant_id}:DELETE_VOLUME"
+            await redis.delete(key)
+        except Exception:
+            pass
 
 
 @pytest.mark.asyncio

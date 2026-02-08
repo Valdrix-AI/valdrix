@@ -2,9 +2,9 @@ from datetime import datetime, timezone
 
 from uuid import UUID, uuid4
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Boolean, ForeignKey, DateTime, Text, UniqueConstraint
+from sqlalchemy import String, Boolean, ForeignKey, DateTime, Text, UniqueConstraint, Uuid as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
 
@@ -31,7 +31,7 @@ class GCPConnection(Base):
         UniqueConstraint('tenant_id', 'project_id', name='uq_tenant_gcp_project'),
     )
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     
     # Connection Name (e.g. "Production Project")

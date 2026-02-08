@@ -14,8 +14,8 @@ Why this matters:
 from uuid import uuid4, UUID
 from datetime import datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Integer, Numeric, ForeignKey, Boolean, DateTime, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import String, Integer, Numeric, ForeignKey, Boolean, DateTime, func, Uuid as PG_UUID
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.hybrid import hybrid_property
 
@@ -48,11 +48,11 @@ class LLMUsage(Base):
     __tablename__ = "llm_usage"
 
     # Primary Key: UUID prevents enumeration attacks
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
 
     # Foreign Key: Links this record to a tenant
     tenant_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True,  # Fast filtering by tenant
@@ -112,11 +112,11 @@ class LLMBudget(Base):
     __tablename__ = "llm_budgets"
 
     # Primary Key
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
 
     # Foreign Key: One budget per tenant
     tenant_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,  # One budget per tenant

@@ -4,6 +4,17 @@ from pydantic import model_validator
 from typing import Optional
 from app.shared.core.constants import AWS_SUPPORTED_REGIONS, LLMProvider
 import structlog
+import secrets
+
+
+@lru_cache
+def get_settings():
+    """Returns a singleton instance of the application settings."""
+    settings = Settings()
+    if not settings.CSRF_SECRET_KEY and not settings.is_production:
+        # Generate a random key for non-production if missing
+        settings.CSRF_SECRET_KEY = secrets.token_hex(32)
+    return settings
 
 
 class Settings(BaseSettings):
@@ -18,7 +29,7 @@ class Settings(BaseSettings):
     API_URL: str = "http://localhost:8000"  # Base URL for OIDC and Magic Links
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None # Added for D5: Telemetry Sink
     OTEL_EXPORTER_OTLP_INSECURE: bool = False # SEC-07: Secure Tracing
-    CSRF_SECRET_KEY: Optional[str] = None # SEC-01: CSRF
+    CSRF_SECRET_KEY: str = "dev_secret_key_change_me_in_prod" # SEC-01: CSRF
     TESTING: bool = False
     RATELIMIT_ENABLED: bool = True
 
@@ -56,7 +67,7 @@ class Settings(BaseSettings):
                 raise ValueError(f"SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production. Current: {self.DB_SSL_MODE}")
             
             if self.DB_SSL_MODE in ["verify-ca", "verify-full"] and not self.DB_SSL_CA_CERT_PATH:
-                 raise ValueError(f"SECURITY ERROR: DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE is '{self.DB_SSL_MODE}'.")
+                raise ValueError(f"SECURITY ERROR: DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE is '{self.DB_SSL_MODE}'.")
 
 
         # SEC-05: Admin API Key validation for staging/production
@@ -145,7 +156,7 @@ class Settings(BaseSettings):
     ADMIN_API_KEY: Optional[str] = None
 
     # Database
-    DATABASE_URL: str # Required in prod
+    DATABASE_URL: Optional[str] = None # Required in prod, optional in dev/test
     DB_SSL_MODE: str = "require"  # Options: disable, require, verify-ca, verify-full
     DB_SSL_CA_CERT_PATH: Optional[str] = None  # Path to CA cert for verify-ca/verify-full modes
     DB_POOL_SIZE: int = 20  # Standard for Supabase/Neon free tiers
@@ -240,7 +251,3 @@ class Settings(BaseSettings):
         return not self.DEBUG
 
 
-@lru_cache
-def get_settings():
-    """Returns a singleton instance of the application settings."""
-    return Settings()

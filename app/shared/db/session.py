@@ -29,14 +29,22 @@ db_url = settings.DATABASE_URL or ""
 # Options: disable, require, verify-ca, verify-full
 ssl_mode = settings.DB_SSL_MODE.lower()
 connect_args = {}
-if "postgresql" in db_url:
+
+# Determine if we're using sqlite (for pool and connection settings)
+is_sqlite = "sqlite" in db_url
+# Determine the actual URL to use. If testing, default to in-memory sqlite to avoid side-effects.
+effective_url = db_url
+if settings.TESTING and not is_sqlite:
+    effective_url = "sqlite+aiosqlite:///:memory:"
+
+if "postgresql" in effective_url:
     connect_args["statement_cache_size"] = 0  # Required for Supavisor
 
 if ssl_mode == "disable":
     # WARNING: Only for local development with no SSL
     logger.warning("database_ssl_disabled",
                    msg="SSL disabled - INSECURE, do not use in production!")
-    if "postgresql" in db_url:
+    if "postgresql" in effective_url:
         connect_args["ssl"] = False
 
 
@@ -58,7 +66,7 @@ elif ssl_mode == "require":
         ssl_context.verify_mode = ssl.CERT_NONE
         logger.warning("database_ssl_require_insecure", 
                        msg="SSL enabled but CA verification skipped. MitM risk!")
-    if "postgresql" in settings.DATABASE_URL:
+    if "postgresql" in effective_url:
         connect_args["ssl"] = ssl_context
 
 
@@ -68,7 +76,7 @@ elif ssl_mode in ("verify-ca", "verify-full"):
     ssl_context = ssl.create_default_context(cafile=settings.DB_SSL_CA_CERT_PATH)
     ssl_context.verify_mode = ssl.CERT_REQUIRED
     ssl_context.check_hostname = (ssl_mode == "verify-full")
-    if "postgresql" in settings.DATABASE_URL:
+    if "postgresql" in effective_url:
         connect_args["ssl"] = ssl_context
     logger.info("database_ssl_verified", mode=ssl_mode, ca_cert=settings.DB_SSL_CA_CERT_PATH)
 
@@ -84,7 +92,7 @@ else:
 # - pool_recycle: Recycle connections after 5 min (Supavisor/Neon compatibility)
 # Pool Configuration: Use NullPool for testing to avoid connection leaks across loops
 pool_args: Dict[str, Any] = {}
-if "sqlite" in db_url:
+if is_sqlite:
     pool_args["poolclass"] = StaticPool
     connect_args["check_same_thread"] = False
 elif settings.TESTING:
@@ -92,11 +100,6 @@ elif settings.TESTING:
 else:
     pool_args["pool_size"] = settings.DB_POOL_SIZE
     pool_args["max_overflow"] = settings.DB_MAX_OVERFLOW
-
-# Determine the actual URL to use. If testing, default to in-memory sqlite to avoid side-effects.
-effective_url = db_url
-if settings.TESTING and "sqlite" not in effective_url:
-    effective_url = "sqlite+aiosqlite:///:memory:"
 
 engine = create_async_engine(
     effective_url,

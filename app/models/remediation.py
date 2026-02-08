@@ -18,8 +18,8 @@ from decimal import Decimal
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Integer, Boolean, ForeignKey, Enum as SQLEnum, Numeric, Index, DateTime, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import String, Integer, Boolean, ForeignKey, Enum as SQLEnum, Numeric, Index, DateTime, func, Uuid as PG_UUID
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from app.shared.db.base import Base
@@ -74,11 +74,11 @@ class RemediationRequest(Base):
     )
 
     # Primary Key
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
 
     # Multi-tenancy
     tenant_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -88,7 +88,7 @@ class RemediationRequest(Base):
     resource_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     resource_type: Mapped[str] = mapped_column(String(50), nullable=False)
     provider: Mapped[str] = mapped_column(String(20), nullable=False, default="aws") # aws, azure, gcp
-    connection_id: Mapped[Optional[UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)     # ID of the specific cloud connection
+    connection_id: Mapped[Optional[UUID]] = mapped_column(PG_UUID(), nullable=True)     # ID of the specific cloud connection
     region: Mapped[str] = mapped_column(String(20), nullable=False, default="us-east-1")
 
     # Action details
@@ -114,14 +114,14 @@ class RemediationRequest(Base):
     backup_cost_estimate: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 4), nullable=True)  # Monthly cost of backup
 
     requested_by_user_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         ForeignKey("users.id"),
         nullable=False,
     )
 
     # Audit trail - who approved/rejected
     reviewed_by_user_id: Mapped[Optional[UUID]] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         ForeignKey("users.id"),
         nullable=True,
     )

@@ -21,8 +21,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 from enum import Enum
 from uuid import UUID
-from sqlalchemy import select, String, DateTime, ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy import select, String, DateTime, ForeignKey, Integer, Uuid
+# from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import structlog
@@ -53,9 +53,9 @@ class TenantSubscription(Base):
     """
     __tablename__ = "tenant_subscriptions"
 
-    id: Mapped[PGUUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
-    tenant_id: Mapped[PGUUID] = mapped_column(
-        PGUUID(as_uuid=True),
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,

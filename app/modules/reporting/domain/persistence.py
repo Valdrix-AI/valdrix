@@ -290,7 +290,7 @@ class CostPersistenceService:
             await self.db.execute(stmt)
             
             total_deleted += len(ids)
-            await self.db.commit() # Commit each batch to free locks and logs
+            await self.db.flush() # Flush each batch to DB but don't commit outer transaction
         
         logger.info("cost_retention_cleanup_complete", cutoff_date=str(cutoff_date), total_deleted=total_deleted)
         return {"deleted_count": total_deleted}
@@ -314,7 +314,7 @@ class CostPersistenceService:
         )
         
         result = await self.db.execute(stmt)
-        await self.db.commit()
+        await self.db.flush()
         
         count = result.rowcount
         logger.info("cost_batch_finalization_complete", 

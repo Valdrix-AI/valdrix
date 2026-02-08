@@ -17,13 +17,22 @@ logger = structlog.get_logger()
 class OIDCService:
     @staticmethod
     async def get_discovery_doc():
+        """
+        Standard OIDC Discovery document.
+        Enhanced with recommended fields for AWS/GCP federated identity compatibility.
+        """
         settings = get_settings()
         base_url = settings.API_URL.rstrip("/")
         return {
             "issuer": base_url,
             "jwks_uri": f"{base_url}/oidc/jwks.json",
+            "authorization_endpoint": f"{base_url}/oidc/auth", # Placeholder for standard compliance
+            "token_endpoint": f"{base_url}/api/v1/public/oidc/token", # Placeholder for federated exchange
+            "scopes_supported": ["openid", "profile", "email"],
+            "response_types_supported": ["id_token", "token"],
             "subject_types_supported": ["public"],
             "id_token_signing_alg_values_supported": ["RS256"],
+            "token_endpoint_auth_methods_supported": ["none"],
             "claims_supported": ["sub", "iss", "aud", "iat", "exp", "nbf", "tenant_id"]
         }
 

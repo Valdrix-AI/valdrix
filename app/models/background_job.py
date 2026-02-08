@@ -9,9 +9,10 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Boolean, event, JSON
+from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Boolean, event, JSON, Uuid as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.shared.db.base import Base
 
 if TYPE_CHECKING:
@@ -57,7 +58,7 @@ class BackgroundJob(Base):
     __tablename__ = "background_jobs"
     
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), 
+        PG_UUID(), 
         primary_key=True, 
         default=uuid4
     )

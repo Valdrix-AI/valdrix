@@ -70,9 +70,9 @@ class TestBillingService:
         """BillingService should have expected methods."""
         from app.modules.reporting.domain.billing.paystack_billing import BillingService
         
-        with patch("app.modules.reporting.domain.billing.paystack_billing.get_settings") as mock_settings:
+        with patch("app.modules.reporting.domain.billing.paystack_billing.settings") as mock_settings:
             # Mock settings to avoid Paystack key validation
-            mock_settings.return_value.PAYSTACK_SECRET_KEY = "test-secret-key"
+            mock_settings.PAYSTACK_SECRET_KEY = "test-secret-key"
             
             mock_db = AsyncMock()
             service = BillingService(mock_db)
