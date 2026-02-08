@@ -42,10 +42,10 @@ class Settings(BaseSettings):
             
         if self.is_production:
             # SEC-01: CSRF key must be changed
-            if not self.CSRF_SECRET_KEY:
+            if not self.CSRF_SECRET_KEY or self.CSRF_SECRET_KEY == "dev_secret_key_change_me_in_prod":
                 raise ValueError(
-                    "SECURITY ERROR: CSRF_SECRET_KEY must be set in production! "
-                    "Set CSRF_SECRET_KEY environment variable to a secure random value."
+                    "SECURITY ERROR: CSRF_SECRET_KEY must be set to a secure unique value in production! "
+                    "The default development key is not allowed."
                 )
             
             # SEC-02: Encryption Key must be secure

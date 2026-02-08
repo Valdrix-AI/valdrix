@@ -25,6 +25,10 @@ if not settings.DATABASE_URL:
 # Ensure DATABASE_URL is a string before string comparison
 db_url = settings.DATABASE_URL or ""
 
+# Fix missing async driver in PostgreSQL URLs (common with Supabase/Neon copy-paste)
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
 # SSL Context: Configurable SSL modes for different environments
 # Options: disable, require, verify-ca, verify-full
 ssl_mode = settings.DB_SSL_MODE.lower()

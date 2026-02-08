@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, AsyncMock
 from app.shared.connections.oidc import OIDCService
+from sqlalchemy import select
 from app.models.security import OIDCKey
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -111,3 +112,53 @@ async def test_oidc_verify_gcp():
     success, error = await OIDCService.verify_gcp_access("proj", "tenant")
     assert success is True
     assert error is None
+
+@pytest.mark.asyncio
+async def test_oidc_token_expired(db):
+    from datetime import timedelta
+    # Create a token that expired 1 hour ago
+    with patch("app.shared.connections.oidc.datetime") as mock_datetime:
+        real_now = datetime.now(timezone.utc)
+        mock_now = real_now - timedelta(hours=1)
+        mock_datetime.now.return_value = mock_now
+        token = await OIDCService.create_token("t1", "a1", db=db)
+    
+    # Try to decode with verification - should raise ExpiredSignatureError
+    pub_key_pem = (await db.execute(select(OIDCKey).where(OIDCKey.is_active))).scalars().first().public_key_pem
+    
+    with pytest.raises(jwt.ExpiredSignatureError):
+        jwt.decode(token, pub_key_pem, algorithms=["RS256"], audience="a1")
+
+@pytest.mark.asyncio
+async def test_oidc_token_invalid_signature(db):
+    token = await OIDCService.create_token("t1", "a1", db=db)
+    
+    # Generate a DIFFERENT key to try and verify
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    
+    # Actually public key format
+    other_pub_pem = other_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode()
+    
+    with pytest.raises(jwt.InvalidSignatureError):
+        jwt.decode(token, other_pub_pem, algorithms=["RS256"], audience="a1")
+
+@pytest.mark.asyncio
+async def test_oidc_token_tampered_payload(db):
+    token = await OIDCService.create_token("t1", "a1", db=db)
+    header, payload, signature = token.split(".")
+    
+    # Tamper with the payload
+    import base64
+    import json
+    decoded_payload = json.loads(base64.urlsafe_b64decode(payload + "==").decode())
+    decoded_payload["tenant_id"] = "attacker-tenant"
+    tampered_payload = base64.urlsafe_b64encode(json.dumps(decoded_payload).encode()).decode().rstrip("=")
+    
+    tampered_token = f"{header}.{tampered_payload}.{signature}"
+    pub_key_pem = (await db.execute(select(OIDCKey).where(OIDCKey.is_active))).scalars().first().public_key_pem
+    
+    with pytest.raises(jwt.InvalidSignatureError):
+        jwt.decode(tampered_token, pub_key_pem, algorithms=["RS256"], audience="a1")
