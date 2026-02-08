@@ -7,9 +7,9 @@ Stores per-tenant carbon budget configuration.
 from uuid import UUID, uuid4
 from datetime import datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Integer, Float, Boolean, ForeignKey, DateTime
+from sqlalchemy import String, Integer, Float, Boolean, ForeignKey, DateTime, Uuid as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.sql import func
 from app.shared.db.base import Base
 
@@ -30,7 +30,7 @@ class CarbonSettings(Base):
     """
     __tablename__ = "carbon_settings"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), unique=True, nullable=False)
 
     # Budget configuration

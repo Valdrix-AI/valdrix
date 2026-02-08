@@ -72,8 +72,31 @@ async def test_process_jobs_internal_success(async_client: AsyncClient):
         assert response.status_code == 200
         assert response.json()["status"] == "accepted"
 
-@pytest.mark.skip(reason="SSE stream test hangs in CI/CD environments with sse-starlette")
 @pytest.mark.asyncio
 async def test_stream_jobs_sse(async_client: AsyncClient):
     """Test SSE streaming endpoint connectivity."""
-    pass
+    from sse_starlette.sse import EventSourceResponse
+    import asyncio
+
+    async def mock_generator():
+        yield {"event": "ping", "data": "heartbeat"}
+
+    # Patch EventSourceResponse to use our finite generator
+    with patch("app.modules.governance.api.v1.jobs.EventSourceResponse") as mock_sse_class:
+        mock_sse_class.side_effect = lambda gen: EventSourceResponse(mock_generator())
+
+        try:
+            # Use a strict timeout for the streaming request
+            async with asyncio.timeout(5):
+                async with async_client.stream("GET", "/api/v1/jobs/stream") as response:
+                    assert response.status_code == 200
+                    
+                    found_heartbeat = False
+                    async for line in response.aiter_lines():
+                        if "heartbeat" in line:
+                            found_heartbeat = True
+                            break
+                    
+                    assert found_heartbeat, "Heartbeat not found in SSE stream"
+        except TimeoutError:
+            pytest.fail("SSE stream test timed out after 5 seconds")

@@ -2,9 +2,9 @@ from uuid import UUID, uuid4
 from enum import Enum
 from datetime import datetime
 from typing import Any, Optional, List, TYPE_CHECKING
-from sqlalchemy import String, ForeignKey, DateTime, UniqueConstraint, event
+from sqlalchemy import String, ForeignKey, DateTime, UniqueConstraint, event, Uuid as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.shared.db.base import Base
 from app.shared.core.security import generate_blind_index
 
@@ -34,7 +34,7 @@ class UserRole(str, Enum):
 class Tenant(Base):
     __tablename__ = "tenants"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(
         StringEncryptedType(String, _encryption_key, AesEngine, "pkcs5"),
         index=True
@@ -65,7 +65,7 @@ class User(Base):
     )
 
     # We use the Supabase User ID (which is a UUID) as our PK
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     email: Mapped[str] = mapped_column(
         StringEncryptedType(String, _encryption_key, AesEngine, "pkcs5"),

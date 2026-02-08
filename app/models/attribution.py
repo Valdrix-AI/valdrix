@@ -1,9 +1,10 @@
 from uuid import UUID, uuid4
 from decimal import Decimal
 from datetime import datetime, date
-from sqlalchemy import String, ForeignKey, JSON, Integer, Numeric, DateTime, Date, ForeignKeyConstraint
+from sqlalchemy import String, ForeignKey, JSON, Integer, Numeric, DateTime, Date, ForeignKeyConstraint, Uuid as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.shared.db.base import Base
 from typing import TYPE_CHECKING, List, Optional
 
@@ -18,7 +19,7 @@ class AttributionRule(Base):
     """
     __tablename__ = "attribution_rules"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     
     name: Mapped[str] = mapped_column(String, nullable=False)
@@ -47,8 +48,8 @@ class CostAllocation(Base):
     """
     __tablename__ = "cost_allocations"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    cost_record_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
+    cost_record_id: Mapped[UUID] = mapped_column(PG_UUID(), nullable=False, index=True)
     recorded_at: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     
     rule_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("attribution_rules.id"), nullable=True)

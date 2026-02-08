@@ -45,16 +45,29 @@ async def test_cors_allowed_origin():
         "Access-Control-Request-Method": "GET"
     }
     
-    # Mock settings to include our test origin
-    with patch("app.shared.core.config.get_settings") as mock_settings:
-        mock_settings.return_value.CORS_ORIGINS = [origin]
+    # Directly modify the CORSMiddleware in the app
+    # FastAPI CORSMiddleware is usually at the end of the middleware stack
+    from fastapi.middleware.cors import CORSMiddleware
+    
+    cors_middleware = next((m for m in app.user_middleware if m.cls == CORSMiddleware), None)
+    if cors_middleware:
+        original_origins = cors_middleware.kwargs.get("allow_origins", [])
+        cors_middleware.kwargs["allow_origins"] = [origin]
+        # Force rebuild of the middleware stack
+        app.middleware_stack = None
         
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            # Preflight check simulation or just a simple request with Origin
-            response = await ac.get("/health", headers=headers)
+        try:
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                response = await ac.get("/health", headers=headers)
             
-        assert response.status_code == 200
-        assert response.headers["access-control-allow-origin"] == origin
+            assert response.status_code == 200
+            assert response.headers.get("access-control-allow-origin") == origin
+        finally:
+            # Restore original origins and rebuild stack
+            cors_middleware.kwargs["allow_origins"] = original_origins
+            app.middleware_stack = None
+    else:
+        pytest.fail("CORSMiddleware not found in app")
 
 @pytest.mark.asyncio
 async def test_cors_blocked_origin():

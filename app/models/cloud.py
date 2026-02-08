@@ -1,9 +1,10 @@
 from uuid import UUID, uuid4
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import String, Boolean, ForeignKey, Numeric, Date, DateTime, UniqueConstraint, JSON
+from sqlalchemy import String, Boolean, ForeignKey, Numeric, Date, DateTime, UniqueConstraint, JSON, Uuid as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from typing import TYPE_CHECKING, List, Dict, Any, Optional
 from app.shared.db.base import Base, get_partition_args
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
 class CloudAccount(Base):
     __tablename__ = "cloud_accounts"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
 
     provider: Mapped[str] = mapped_column(String)  # 'aws', 'azure', 'gcp'
@@ -30,7 +31,7 @@ class CloudAccount(Base):
 class CostRecord(Base):
     __tablename__ = "cost_records"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)
     account_id: Mapped[UUID] = mapped_column(ForeignKey("cloud_accounts.id"), nullable=False)
 
@@ -49,7 +50,7 @@ class CostRecord(Base):
     # SEC: Cost Reconciliation (BE-COST-1)
     is_preliminary: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     cost_status: Mapped[str] = mapped_column(String, default="PRELIMINARY", index=True) # PRELIMINARY, FINAL
-    reconciliation_run_id: Mapped[Optional[UUID]] = mapped_column(PG_UUID(as_uuid=True), index=True, nullable=True)
+    reconciliation_run_id: Mapped[Optional[UUID]] = mapped_column(PG_UUID(), index=True, nullable=True)
     
     # Forensic Lineage (FinOps Audit Phase 1)
     ingestion_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=True)

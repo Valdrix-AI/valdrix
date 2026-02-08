@@ -90,14 +90,14 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True),
+        Uuid(),
         primary_key=True,
         default=uuid.uuid4
     )
 
     # Tenant isolation
     tenant_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True),
+        Uuid(),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True
@@ -114,7 +114,7 @@ class AuditLog(Base):
 
     # Actor information
     actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        Uuid(as_uuid=True),
+        Uuid(),
         ForeignKey("users.id"),
         nullable=True  # Null for system actions
     )

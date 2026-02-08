@@ -5,9 +5,9 @@ Stores per-tenant notification preferences.
 from typing import Optional, TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, ForeignKey, String, text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import Boolean, ForeignKey, String, text, Uuid as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 from app.shared.db.base import Base
 
@@ -22,7 +22,7 @@ class NotificationSettings(Base):
 
     # Primary key
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         primary_key=True,
         default=uuid4,
         server_default=text("gen_random_uuid()"),
@@ -30,7 +30,7 @@ class NotificationSettings(Base):
 
     # Foreign key to tenant
     tenant_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         unique=True,  # One settings record per tenant
         nullable=False,

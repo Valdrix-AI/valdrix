@@ -22,9 +22,9 @@ from uuid import UUID, uuid4
 import secrets
 from typing import TYPE_CHECKING
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, UniqueConstraint, Uuid as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 from app.shared.db.base import Base
 
@@ -56,11 +56,11 @@ class AWSConnection(Base):
     )
 
     # Primary key
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
 
     # Foreign key: Which tenant owns this connection
     tenant_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

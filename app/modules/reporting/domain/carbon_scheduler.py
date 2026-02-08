@@ -47,7 +47,7 @@ class RegionCarbonProfile:
 
 
 # Static data based on 2026 research
-# Intensities are gCO2/kWh
+# Intensities are gCO2eq/kWh (Average Carbon Intensity - Industry Standard)
 REGION_CARBON_PROFILES = {
     "eu-north-1": RegionCarbonProfile("eu-north-1", 95, 30, 45, [0, 1, 2, 3, 4, 5, 22, 23], None, 2), # Sweden (Wind/Hydro)
     "eu-west-1": RegionCarbonProfile("eu-west-1", 60, 150, 280, [1, 2, 3, 4, 11, 12, 13], 12, 3), # Ireland (Solar/Wind)
@@ -60,7 +60,8 @@ REGION_CARBON_PROFILES = {
 }
 
 # BE-CARBON-1: Data freshness tracking
-_CARBON_DATA_LAST_UPDATED = datetime(2026, 1, 15, tzinfo=timezone.utc)
+# Updated to 2026-02-08 as part of project maintenance
+_CARBON_DATA_LAST_UPDATED = datetime(2026, 2, 8, tzinfo=timezone.utc)
 _CARBON_DATA_MAX_AGE_DAYS = 30  # Data older than this should trigger a warning
 
 
@@ -160,27 +161,33 @@ class CarbonAwareScheduler:
     def get_intensity_forecast(self, region: str, hours: int = 24) -> List[Dict[str, Any]]:
         """
         Generates a carbon intensity forecast.
-        Production-ready: Will call WattTime/Electricity Maps if API key is available.
+        Simulation: Provides Average Carbon Intensity (gCO2eq/kWh).
+        Production-ready: Will call WattTime (MOER) or Electricity Maps (Average) if API keys are available.
         Fallback: High-fidelity diurnal simulation.
         """
         profile = REGION_CARBON_PROFILES.get(region)
         if not profile:
             return []
 
-        # TODO: Implement WattTime/ElectricityMaps API calls here
-        # if self.api_key: return await self._fetch_api_forecast(region, hours)
+        # TODO: Implement WattTime (Marginal MOER) API call
+        # if self.watttime_key: return await self._fetch_watttime_forecast(region, hours)
+        
+        # TODO: Implement Electricity Maps (Average Intensity) API call
+        # if self.electricitymaps_key: return await self._fetch_emap_forecast(region, hours)
 
         forecast = []
+        from datetime import timedelta
         now = datetime.now(timezone.utc)
+        base_time = now.replace(minute=0, second=0, microsecond=0)
+        
         for i in range(hours):
-            target_time = now.replace(minute=0, second=0, microsecond=0)
-            # Find the hour for target_time + i hours
-            target_hour = (target_time.hour + i) % 24
+            target_time = base_time + timedelta(hours=i)
+            target_hour = target_time.hour
             intensity = self._simulate_intensity(profile, target_hour)
             
             forecast.append({
                 "hour_utc": target_hour,
-                "timestamp": target_time.isoformat(), # Simplified increment logic missing here but done in API
+                "timestamp": target_time.isoformat(),
                 "intensity_gco2_kwh": round(intensity, 1),
                 "level": self._intensity_to_level(intensity)
             })

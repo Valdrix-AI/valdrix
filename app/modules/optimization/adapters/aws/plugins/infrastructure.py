@@ -58,6 +58,7 @@ class StoppedInstancesWithEbsPlugin(ZombiePlugin):
                             
                             # Parse date from state reason if available
                             # Format: "User initiated (YYYY-MM-DD HH:MM:SS GMT)"
+                            days_stopped = 30  # Default if unparseable or missing
                             if "(" in state_reason and ")" in state_reason:
                                 try:
                                     date_str = state_reason.split("(")[1].split(")")[0]
@@ -70,6 +71,8 @@ class StoppedInstancesWithEbsPlugin(ZombiePlugin):
                                             break
                                         except ValueError:
                                             continue
+                                    else:
+                                        days_stopped = 30
                                 except (IndexError, ValueError):
                                     days_stopped = 30  # Assume old if can't parse
                             

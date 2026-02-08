@@ -83,3 +83,36 @@ class TestFactoryExhaustive:
         """Test token estimation (lines 36-42)."""
         assert LLMFactory.estimate_tokens("1234") == 1
         assert LLMFactory.estimate_tokens("") == 0
+
+    def test_validate_api_key(self):
+        """Test API key validation logic."""
+        # Valid key
+        LLMFactory.validate_api_key("test", "sk-valid-key-length-check-passed-123")
+        
+        # Missing key
+        with pytest.raises(ValueError, match="is not configured"):
+            LLMFactory.validate_api_key("test", None)
+            
+        # Placeholder
+        with pytest.raises(ValueError, match="contains a placeholder"):
+            LLMFactory.validate_api_key("test", "sk-xxx-placeholder")
+            
+        # Too short
+        with pytest.raises(ValueError, match="is too short"):
+            LLMFactory.validate_api_key("test", "short")
+
+    def test_create_valid_provider(self):
+        """Test create with valid providers."""
+        with patch("app.shared.llm.factory.get_settings") as mock_settings, \
+             patch("app.shared.llm.providers.OpenAIProvider") as MockOpenAI, \
+             patch("app.shared.llm.providers.AnthropicProvider") as MockAnthropic:
+            
+            # OpenAI
+            mock_openai_instance = MockOpenAI.return_value
+            LLMFactory.create(provider="openai", api_key="sk-test", model="gpt-4")
+            mock_openai_instance.create_model.assert_called_with(model="gpt-4", api_key="sk-test")
+            
+            # Anthropic
+            mock_anthropic_instance = MockAnthropic.return_value
+            LLMFactory.create(provider="anthropic", api_key="sk-test")
+            mock_anthropic_instance.create_model.assert_called()

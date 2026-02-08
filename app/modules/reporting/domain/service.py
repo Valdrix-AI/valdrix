@@ -49,7 +49,6 @@ class ReportingService:
                 tenant_id=conn.tenant_id,
                 provider=conn.provider,
                 name=getattr(conn, "name", f"{conn.provider.upper()} Connection"),
-                credentials_encrypted="managed_by_connection_table",
                 is_active=True
             ).on_conflict_do_update(
                 index_elements=['id'],
@@ -59,7 +58,7 @@ class ReportingService:
                 }
             )
             await self.db.execute(stmt)
-        await self.db.commit()
+        # Redundant commit removed (BE-TRANS-1)
 
         # 2. Ingest per connection
         for conn in connections:
@@ -86,8 +85,8 @@ class ReportingService:
 
                 save_result = await persistence.save_records_stream(
                     records=tracking_wrapper(cost_stream),
-                    tenant_id=str(conn.tenant_id),
-                    account_id=str(conn.id)
+                    tenant_id=tenant_id, # Already a UUID or passed correctly
+                    account_id=conn.id  # Pass UUID object directly (BE-UUID-1)
                 )
                 
                 conn.last_ingested_at = datetime.now(timezone.utc)
@@ -104,7 +103,7 @@ class ReportingService:
                 logger.error("cost_ingestion_failed", connection_id=str(conn.id), error=str(e))
                 results.append({"connection_id": str(conn.id), "status": "failed", "error": str(e)})
 
-        await self.db.commit()
+        # Redundant commit removed (BE-TRANS-1)
 
         # 3. Trigger Attribution
         try:

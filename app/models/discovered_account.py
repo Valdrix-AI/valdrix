@@ -1,8 +1,8 @@
 from uuid import UUID, uuid4
 from datetime import datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import String, ForeignKey, DateTime
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import String, ForeignKey, DateTime, Uuid as PG_UUID
+# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from app.shared.db.base import Base
@@ -17,11 +17,11 @@ class DiscoveredAccount(Base):
     """
     __tablename__ = "discovered_accounts"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     
     # The management connection that discovered this account
     management_connection_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        PG_UUID(),
         ForeignKey("aws_connections.id", ondelete="CASCADE"),
         nullable=False,
         index=True

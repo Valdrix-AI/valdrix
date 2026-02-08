@@ -99,6 +99,27 @@ class TestDeltaAnalysisExhaustive:
         assert delta_service._aggregate_by_resource([], 3) == {}
         assert delta_service._aggregate_by_resource(None, 3) == {}
 
+    @pytest.mark.asyncio
+    async def test_compute_delta_significant_change(self, delta_service):
+        """Test significant per-resource changes (lines 237-252)."""
+        prev = [{"Groups": [{"Keys": ["S1", "r"], "Metrics": {"UnblendedCost": {"Amount": "10.0"}}}]}]
+        curr = [{"Groups": [{"Keys": ["S1", "r"], "Metrics": {"UnblendedCost": {"Amount": "15.0"}}}]}] # $5.00 increase
+        
+        res = await delta_service.compute_delta(uuid4(), curr, prev, 1)
+        assert len(res.top_increases) == 1
+        assert res.top_increases[0].change_amount == 5.0
+        assert res.significant_changes_count == 1
+
+    @pytest.mark.asyncio
+    async def test_compute_delta_significant_decrease(self, delta_service):
+        """Test significant per-resource decreases (lines 237-252)."""
+        prev = [{"Groups": [{"Keys": ["S1", "r"], "Metrics": {"UnblendedCost": {"Amount": "10.0"}}}]}]
+        curr = [{"Groups": [{"Keys": ["S1", "r"], "Metrics": {"UnblendedCost": {"Amount": "5.0"}}}]}] # $5.00 decrease
+        
+        res = await delta_service.compute_delta(uuid4(), curr, prev, 1)
+        assert len(res.top_decreases) == 1
+        assert res.top_decreases[0].change_amount == -5.0
+
     def test_aggregate_malformed_aws_data(self, delta_service):
         """Test aggregation with missing keys or metrics (lines 301-312)."""
         # Missing Metrics or UnblendedCost

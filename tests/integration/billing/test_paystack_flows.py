@@ -2,6 +2,7 @@ import pytest
 import jwt
 import json
 import hmac
+from unittest.mock import patch
 import hashlib
 from uuid import uuid4, UUID
 from datetime import datetime, timezone, timedelta
@@ -60,13 +61,17 @@ async def test_data(db):
 @pytest.mark.anyio
 async def test_create_checkout_success(ac: AsyncClient, test_data, db):
     """Verify checkout session creation with dynamic exchange rate conversion."""
-    # 1. Mock Exchange Rate API
+    # 0. Mock Paystack Secret Key
     respx.get(url__startswith="https://v6.exchangerate-api.com/v6").respond(
         json={
             "result": "success",
             "conversion_rates": {"NGN": 1500.0}
         }
     )
+    
+    with patch("app.modules.reporting.api.v1.billing.settings") as mock_settings:
+        mock_settings.PAYSTACK_SECRET_KEY = "test-secret-key"
+        mock_settings.FRONTEND_URL = "http://localhost:3000"
     
     # 2. Mock Paystack Initialize Transaction
     respx.post("https://api.paystack.co/transaction/initialize").respond(

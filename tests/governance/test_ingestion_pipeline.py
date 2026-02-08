@@ -12,7 +12,6 @@ from app.models.cloud import CostRecord as CostRecordModel
 from app.modules.governance.domain.jobs.processor import JobProcessor, enqueue_job
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Model schema mismatch with test fixture - needs AWSConnection.credentials_encrypted column")
 async def test_end_to_end_cost_ingestion_pipeline(db):
     # Set RLS context for the session
     tenant_id = uuid.uuid4()
