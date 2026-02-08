@@ -37,7 +37,7 @@ export function setup() {
   // Health check before starting
   const res = http.get(`${BASE_URL}/health`);
   check(res, { 'API is healthy': (r) => r.status === 200 });
-  return { token: 'test-bearer-token' };
+  return { token: __ENV.LOADTEST_TOKEN || 'test-bearer-token' };
 }
 
 export default function(data) {
@@ -62,7 +62,8 @@ export default function(data) {
   // 2. Get Savings Summary (30%)
   if (Math.random() < 0.3) {
     const start = Date.now();
-    const res = http.get(`${BASE_URL}/api/v1/savings/summary`, { headers });
+    // Fixed: /api/v1/savings/summary -> /api/v1/costs
+    const res = http.get(`${BASE_URL}/api/v1/costs`, { headers });
     apiLatency.add(Date.now() - start);
     
     const success = check(res, {
