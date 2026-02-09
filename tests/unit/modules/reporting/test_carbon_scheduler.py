@@ -1,6 +1,8 @@
+import pytest
 from app.modules.reporting.domain.carbon_scheduler import CarbonAwareScheduler
 
-def test_carbon_simulation_diurnal():
+@pytest.mark.asyncio
+async def test_carbon_simulation_diurnal():
     scheduler = CarbonAwareScheduler()
     # us-east-1 has peak solar at 13 UTC
     # Simulation should show lower intensity around 13 UTC
@@ -26,9 +28,10 @@ def test_carbon_simulation_diurnal():
     worst_hour = sorted_intensities[-1][0]
     assert worst_hour < 6 or worst_hour > 20
 
-def test_forecast_api_logic():
+@pytest.mark.asyncio
+async def test_forecast_api_logic():
     scheduler = CarbonAwareScheduler()
-    forecast = scheduler.get_intensity_forecast("us-east-1", hours=6)
+    forecast = await scheduler.get_intensity_forecast("us-east-1", hours=6)
     
     assert len(forecast) == 6
     assert "intensity_gco2_kwh" in forecast[0]

@@ -34,12 +34,14 @@ if db_url.startswith("postgresql://"):
 ssl_mode = settings.DB_SSL_MODE.lower()
 connect_args = {}
 
-# Determine if we're using sqlite (for pool and connection settings)
-is_sqlite = "sqlite" in db_url
 # Determine the actual URL to use. If testing, default to in-memory sqlite to avoid side-effects.
 effective_url = db_url
-if settings.TESTING and not is_sqlite:
+if settings.TESTING and "sqlite" not in db_url:
     effective_url = "sqlite+aiosqlite:///:memory:"
+
+# Determine if we're using sqlite (for pool and connection settings)
+# Derived from effective_url to ensure testing overrides are caught
+is_sqlite = "sqlite" in effective_url
 
 if "postgresql" in effective_url:
     connect_args["statement_cache_size"] = 0  # Required for Supavisor

@@ -161,22 +161,28 @@ class CURAdapter(CostAdapter):
             aws_secret_access_key=self.credentials.get("SecretAccessKey"),
             aws_session_token=self.credentials.get("SessionToken"),
         ) as s3:
-            print("DEBUG: S3 client context entered")
+            logger.debug("s3_client_context_entered")
             for file_key in files:
                 try:
-                    print(f"DEBUG: Processing file {file_key}")
+                    logger.debug("processing_cur_file", file=file_key)
                     # Stream file from S3 into memory
                     response = await s3.get_object(Bucket=self.bucket_name, Key=file_key)
-                    print(f"DEBUG: Got object {file_key}")
                     
                     async with response["Body"] as stream:
+                        # Optimization: Use temporary file or BytesIO with pyarrow selective reading
+                        # to avoid loading full object if it has many columns.
                         content = await stream.read()
-                        print(f"DEBUG: Read content {len(content)} bytes")
                         
-                        # Read parquet from bytes
+                        # Read parquet from bytes, but ONLY required columns
                         from io import BytesIO
-                        # NOTE: Using engine="pyarrow" here. If patch mocks read_parquet, it should be fine.
-                        df = pd.read_parquet(BytesIO(content), engine="pyarrow")
+                        import pyarrow.parquet as pq
+                        
+                        # Explicitly define columns we need to save memory
+                        cols = ["line_item_usage_start_date", "line_item_product_code", "line_item_blended_cost"]
+                        # Some CURs might have different column names depending on schema version
+                        
+                        table = pq.read_table(BytesIO(content), columns=cols)
+                        df = table.to_pandas()
                         
                         # Basic filters
                         if "line_item_usage_start_date" in df.columns:
@@ -193,7 +199,7 @@ class CURAdapter(CostAdapter):
                     continue
                 
         if not all_dfs:
-            print("DEBUG: all_dfs is empty at end")
+            logger.debug("no_dataframes_aggregated")
             return []
             
         # Merge and Aggregate

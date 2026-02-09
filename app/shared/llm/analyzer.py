@@ -365,10 +365,11 @@ class FinOpsAnalyzer:
             return response.content, getattr(response, "response_metadata", {})
 
         # BE-LLM-7: Fallback model selection on primary failure
+        # Aligned with DR_RUNBOOK.md: Groq -> Gemini -> OpenAI
         FALLBACK_PROVIDERS = [
-            ("groq", "llama-3.3-70b-versatile"),
-            ("openai", "gpt-4o-mini"),
-            ("anthropic", "claude-3-5-haiku"),
+            (LLMProvider.GROQ, "llama-3.3-70b-versatile"),
+            (LLMProvider.GOOGLE, "gemini-1.5-flash"),
+            (LLMProvider.OPENAI, "gpt-4o-mini"),
         ]
 
         with tracer.start_as_current_span("llm_invocation") as span:

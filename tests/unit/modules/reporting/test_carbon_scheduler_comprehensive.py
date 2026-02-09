@@ -23,15 +23,15 @@ class TestCarbonAwareSchedulerInitialization:
         """Test scheduler initializes with default static data mode."""
         scheduler = CarbonAwareScheduler()
         
-        assert scheduler.watttime_key is None
+        assert scheduler.wattime_key is None
         assert scheduler.electricitymaps_key is None
         assert scheduler._use_static_data is True
 
-    def test_scheduler_init_with_watttime_key(self):
+    def test_scheduler_init_with_wattime_key(self):
         """Test scheduler initializes with WattTime API key."""
-        scheduler = CarbonAwareScheduler(watttime_key="test-key-123")
+        scheduler = CarbonAwareScheduler(wattime_key="test-key-123")
         
-        assert scheduler.watttime_key == "test-key-123"
+        assert scheduler.wattime_key == "test-key-123"
         # If only one key is provided, static data is disabled
         assert scheduler._use_static_data is False
 
@@ -45,7 +45,7 @@ class TestCarbonAwareSchedulerInitialization:
     def test_scheduler_init_with_both_api_keys(self):
         """Test scheduler initializes with both API keys."""
         scheduler = CarbonAwareScheduler(
-            watttime_key="wt-key",
+            wattime_key="wt-key",
             electricitymaps_key="em-key"
         )
         
@@ -55,10 +55,11 @@ class TestCarbonAwareSchedulerInitialization:
 class TestCarbonRegionIntensity:
     """Test carbon intensity retrieval for regions."""
 
-    def test_get_region_intensity_known_region(self):
+    @pytest.mark.asyncio
+    async def test_get_region_intensity_known_region(self):
         """Test getting intensity for known region."""
         scheduler = CarbonAwareScheduler()
-        intensity = scheduler.get_region_intensity("eu-north-1")
+        intensity = await scheduler.get_region_intensity("eu-north-1")
         
         assert isinstance(intensity, CarbonIntensity)
         assert intensity in [
@@ -69,35 +70,39 @@ class TestCarbonRegionIntensity:
             CarbonIntensity.VERY_HIGH,
         ]
 
-    def test_get_region_intensity_unknown_region(self):
+    @pytest.mark.asyncio
+    async def test_get_region_intensity_unknown_region(self):
         """Test getting intensity for unknown region returns medium."""
         scheduler = CarbonAwareScheduler()
-        intensity = scheduler.get_region_intensity("unknown-region-xyz")
+        intensity = await scheduler.get_region_intensity("unknown-region-xyz")
         
         assert intensity == CarbonIntensity.MEDIUM
 
-    def test_get_region_intensity_all_known_regions(self):
+    @pytest.mark.asyncio
+    async def test_get_region_intensity_all_known_regions(self):
         """Test intensity retrieval for all configured regions."""
         scheduler = CarbonAwareScheduler()
         
         for region in REGION_CARBON_PROFILES.keys():
-            intensity = scheduler.get_region_intensity(region)
+            intensity = await scheduler.get_region_intensity(region)
             assert isinstance(intensity, CarbonIntensity)
 
-    def test_region_intensity_low_carbon_regions(self):
+    @pytest.mark.asyncio
+    async def test_region_intensity_low_carbon_regions(self):
         """Test that low-carbon regions are classified correctly."""
         scheduler = CarbonAwareScheduler()
         
         # eu-north-1 should be VERY_LOW or LOW
-        intensity = scheduler.get_region_intensity("eu-north-1")
+        intensity = await scheduler.get_region_intensity("eu-north-1")
         assert intensity in [CarbonIntensity.VERY_LOW, CarbonIntensity.LOW]
 
-    def test_region_intensity_high_carbon_regions(self):
+    @pytest.mark.asyncio
+    async def test_region_intensity_high_carbon_regions(self):
         """Test that high-carbon regions are classified correctly."""
         scheduler = CarbonAwareScheduler()
         
         # ap-south-1 should be HIGH or VERY_HIGH
-        intensity = scheduler.get_region_intensity("ap-south-1")
+        intensity = await scheduler.get_region_intensity("ap-south-1")
         assert intensity in [CarbonIntensity.HIGH, CarbonIntensity.VERY_HIGH]
 
 
@@ -163,10 +168,11 @@ class TestCarbonSimulation:
 class TestCarbonIntensityForecast:
     """Test carbon intensity forecasting."""
 
-    def test_get_intensity_forecast_24_hours(self):
+    @pytest.mark.asyncio
+    async def test_get_intensity_forecast_24_hours(self):
         """Test 24-hour forecast generation."""
         scheduler = CarbonAwareScheduler()
-        forecast = scheduler.get_intensity_forecast("eu-north-1", hours=24)
+        forecast = await scheduler.get_intensity_forecast("eu-north-1", hours=24)
         
         assert len(forecast) == 24
         
@@ -176,24 +182,27 @@ class TestCarbonIntensityForecast:
             assert "intensity_gco2_kwh" in item
             assert "level" in item
 
-    def test_get_intensity_forecast_custom_hours(self):
+    @pytest.mark.asyncio
+    async def test_get_intensity_forecast_custom_hours(self):
         """Test forecast with custom hour count."""
         scheduler = CarbonAwareScheduler()
-        forecast = scheduler.get_intensity_forecast("us-east-1", hours=72)
+        forecast = await scheduler.get_intensity_forecast("us-east-1", hours=72)
         
         assert len(forecast) == 72
 
-    def test_get_intensity_forecast_unknown_region(self):
+    @pytest.mark.asyncio
+    async def test_get_intensity_forecast_unknown_region(self):
         """Test forecast for unknown region returns empty."""
         scheduler = CarbonAwareScheduler()
-        forecast = scheduler.get_intensity_forecast("unknown-xyz", hours=24)
+        forecast = await scheduler.get_intensity_forecast("unknown-xyz", hours=24)
         
         assert forecast == []
 
-    def test_intensity_forecast_basic_structure(self):
+    @pytest.mark.asyncio
+    async def test_intensity_forecast_basic_structure(self):
         """Test forecast returns properly structured data."""
         scheduler = CarbonAwareScheduler()
-        forecast = scheduler.get_intensity_forecast("us-west-2", hours=6)
+        forecast = await scheduler.get_intensity_forecast("us-west-2", hours=6)
         
         assert len(forecast) == 6
         
@@ -274,18 +283,20 @@ class TestLowestCarbonRegionSelection:
 class TestOptimalExecutionTime:
     """Test optimal execution time identification."""
 
-    def test_get_optimal_execution_time_region_with_best_hours(self):
+    @pytest.mark.asyncio
+    async def test_get_optimal_execution_time_region_with_best_hours(self):
         """Test finding optimal time for region with defined best hours."""
         scheduler = CarbonAwareScheduler()
-        optimal_time = scheduler.get_optimal_execution_time("eu-north-1", max_delay_hours=24)
+        optimal_time = await scheduler.get_optimal_execution_time("eu-north-1", max_delay_hours=24)
         
         # Should return a datetime
         assert isinstance(optimal_time, datetime) or optimal_time is None
 
-    def test_get_optimal_execution_time_within_delay_window(self):
+    @pytest.mark.asyncio
+    async def test_get_optimal_execution_time_within_delay_window(self):
         """Test that optimal time is within delay window."""
         scheduler = CarbonAwareScheduler()
-        optimal_time = scheduler.get_optimal_execution_time("us-east-1", max_delay_hours=12)
+        optimal_time = await scheduler.get_optimal_execution_time("us-east-1", max_delay_hours=12)
         
         if optimal_time:
             now = datetime.now(timezone.utc)
@@ -293,14 +304,16 @@ class TestOptimalExecutionTime:
             # Allow delay to be slightly negative (up to -1 hour) if optimal time is start of current hour
             assert -1.0 <= delay <= 12
 
-    def test_get_optimal_execution_time_unknown_region_returns_none(self):
+    @pytest.mark.asyncio
+    async def test_get_optimal_execution_time_unknown_region_returns_none(self):
         """Test that unknown region returns None."""
         scheduler = CarbonAwareScheduler()
-        optimal_time = scheduler.get_optimal_execution_time("unknown-xyz", max_delay_hours=24)
+        optimal_time = await scheduler.get_optimal_execution_time("unknown-xyz", max_delay_hours=24)
         
         assert optimal_time is None
 
-    def test_get_optimal_execution_time_region_without_best_hours(self):
+    @pytest.mark.asyncio
+    async def test_get_optimal_execution_time_region_without_best_hours(self):
         """Test region without best_hours_utc returns None."""
         scheduler = CarbonAwareScheduler()
         
@@ -315,13 +328,14 @@ class TestOptimalExecutionTime:
         
         # Mock the profile lookup
         with patch.dict(REGION_CARBON_PROFILES, {"test-region": profile}):
-            result = scheduler.get_optimal_execution_time("test-region")
+            result = await scheduler.get_optimal_execution_time("test-region")
             assert result is None
 
-    def test_get_optimal_execution_time_returns_valid_hour(self):
+    @pytest.mark.asyncio
+    async def test_get_optimal_execution_time_returns_valid_hour(self):
         """Test that returned time has valid hour within best hours."""
         scheduler = CarbonAwareScheduler()
-        optimal_time = scheduler.get_optimal_execution_time("us-west-2", max_delay_hours=24)
+        optimal_time = await scheduler.get_optimal_execution_time("us-west-2", max_delay_hours=24)
         
         if optimal_time:
             profile = REGION_CARBON_PROFILES["us-west-2"]
@@ -331,39 +345,43 @@ class TestOptimalExecutionTime:
 class TestWorkloadDeferralLogic:
     """Test should_defer_workload decision making."""
 
-    def test_should_defer_critical_workload_never(self):
+    @pytest.mark.asyncio
+    async def test_should_defer_critical_workload_never(self):
         """Test that critical workloads are never deferred."""
         scheduler = CarbonAwareScheduler()
         
-        should_defer = scheduler.should_defer_workload("ap-south-1", workload_type="critical")
+        should_defer = await scheduler.should_defer_workload("ap-south-1", workload_type="critical")
         
         assert should_defer is False
 
-    def test_should_defer_batch_workload_high_intensity(self):
+    @pytest.mark.asyncio
+    async def test_should_defer_batch_workload_high_intensity(self):
         """Test that batch workloads are deferred in high-intensity regions."""
         scheduler = CarbonAwareScheduler()
         
         # ap-south-1 is high/very-high carbon
-        should_defer = scheduler.should_defer_workload("ap-south-1", workload_type="batch")
+        should_defer = await scheduler.should_defer_workload("ap-south-1", workload_type="batch")
         
         assert should_defer is True
 
-    def test_should_defer_batch_workload_low_intensity(self):
+    @pytest.mark.asyncio
+    async def test_should_defer_batch_workload_low_intensity(self):
         """Test that batch workloads are not deferred in low-intensity regions."""
         scheduler = CarbonAwareScheduler()
         
         # eu-north-1 is very low carbon
-        should_defer = scheduler.should_defer_workload("eu-north-1", workload_type="batch")
+        should_defer = await scheduler.should_defer_workload("eu-north-1", workload_type="batch")
         
         assert should_defer is False
 
-    def test_should_defer_standard_workload_very_high_only(self):
+    @pytest.mark.asyncio
+    async def test_should_defer_standard_workload_very_high_only(self):
         """Test standard workloads deferred only in very-high carbon."""
         scheduler = CarbonAwareScheduler()
         
         # Test various regions
-        low_carbon_defer = scheduler.should_defer_workload("eu-north-1", workload_type="standard")
-        high_carbon_defer = scheduler.should_defer_workload("ap-south-1", workload_type="standard")
+        low_carbon_defer = await scheduler.should_defer_workload("eu-north-1", workload_type="standard")
+        high_carbon_defer = await scheduler.should_defer_workload("ap-south-1", workload_type="standard")
         
         # Low-carbon should not defer
         assert low_carbon_defer is False

@@ -104,8 +104,8 @@ async def test_analyze_graviton_opportunities_success(mock_analyzer_class, mock_
 async def test_get_carbon_intensity_forecast(mock_scheduler_class):
     user = MagicMock()
     mock_scheduler = mock_scheduler_class.return_value
-    mock_scheduler.get_intensity_forecast.return_value = []
-    mock_scheduler.get_region_intensity.return_value = 0.5
+    mock_scheduler.get_intensity_forecast = AsyncMock(return_value=[])
+    mock_scheduler.get_region_intensity = AsyncMock(return_value=0.5)
     
     response = await get_carbon_intensity_forecast(user, "us-east-1", 24)
     assert response["current_intensity"] == 0.5

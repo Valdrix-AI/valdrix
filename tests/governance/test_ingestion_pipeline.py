@@ -24,7 +24,6 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
     db.add(tenant)
     await db.flush()
     await db.refresh(tenant)
-    print(f"DEBUG: Created Tenant ID: {tenant.id}")
     
     # Set context
     await set_session_tenant_id(db, tenant.id)
@@ -95,10 +94,9 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
             tenant_id=tenant.id
         )
         await db.refresh(job)
-        print(f"DEBUG: Enqueued Job ID: {job.id}, Tenant ID: {job.tenant_id}")
-        sys.stdout.flush()
             
         assert job.status == JobStatus.PENDING.value
+        assert job.tenant_id == tenant_id
             
         # 4. Process the job
         processor = JobProcessor(db)
@@ -106,14 +104,14 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
         await set_session_tenant_id(db, tenant.id)
         
         results = await processor.process_pending_jobs(limit=1)
-        print(f"DEBUG: Process results: {results}")
-        sys.stdout.flush()
+        assert results["processed"] == 1
+        assert results["succeeded"] == 1
+        assert results["failed"] == 0
         
         # 5. Verify Database State
         await db.refresh(job)
-        print(f"DEBUG: Job Final Status: {job.status}, Error: {job.error_message}")
-        
         assert job.status == JobStatus.COMPLETED.value
+        assert job.error_message is None
         
         # Check Cost Records
         result = await db.execute(
@@ -124,6 +122,7 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
         
         ec2_record = next(r for r in records if r.service == "AmazonEC2")
         assert ec2_record.cost_usd == Decimal("100.00")
+        assert ec2_record.tenant_id == tenant_id
 
     # 6. Verify Idempotency 
     await enqueue_job(
@@ -133,7 +132,8 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
     )
     
     with patch("app.shared.adapters.factory.AdapterFactory.get_adapter", return_value=mock_adapter):
-        await processor.process_pending_jobs(limit=1)
+        results = await processor.process_pending_jobs(limit=1)
+        assert results["processed"] == 1
         
         result = await db.execute(
             select(CostRecordModel).where(CostRecordModel.account_id == connection.id)

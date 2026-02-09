@@ -106,12 +106,12 @@ class CarbonAwareScheduler:
 
     def __init__(
         self, 
-        watttime_key: Optional[str] = None,
+        wattime_key: Optional[str] = None,
         electricitymaps_key: Optional[str] = None
     ):
-        self.watttime_key = watttime_key
+        self.wattime_key = wattime_key
         self.electricitymaps_key = electricitymaps_key
-        self._use_static_data = not (watttime_key or electricitymaps_key)
+        self._use_static_data = not (wattime_key or electricitymaps_key)
 
     async def get_region_intensity(self, region: str) -> CarbonIntensity:
         """Get current carbon intensity for a region."""
@@ -169,7 +169,7 @@ class CarbonAwareScheduler:
         if not profile:
             return []
 
-        if self.watttime_key:
+        if self.wattime_key:
             return await self._fetch_watttime_forecast(region, hours)
         
         if self.electricitymaps_key:
@@ -277,7 +277,7 @@ class CarbonAwareScheduler:
 
         return None  # No optimal time in window
 
-    def should_defer_workload(
+    async def should_defer_workload(
         self,
         region: str,
         workload_type: str = "batch"
@@ -293,7 +293,7 @@ class CarbonAwareScheduler:
         if workload_type == "critical":
             return False
 
-        intensity = self.get_region_intensity(region)
+        intensity = await self.get_region_intensity(region)
 
         if workload_type == "batch":
             return intensity not in [CarbonIntensity.VERY_LOW, CarbonIntensity.LOW]
@@ -345,7 +345,7 @@ class CarbonAwareScheduler:
                 response = await client.get(
                     "https://api2.watttime.org/v2/forecast",
                     params={"latitude": 0, "longitude": 0, "horizon": hours}, # In real app, map region to lat/long
-                    headers={"Authorization": f"Bearer {self.watttime_key}"}
+                    headers={"Authorization": f"Bearer {self.wattime_key}"}
                 )
                 response.raise_for_status()
                 data = response.json()

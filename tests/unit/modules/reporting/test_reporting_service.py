@@ -311,8 +311,7 @@ class TestCloudAccountRegistry:
             
             # Check that execute was called (for registry sync with upsert)
             assert mock_db.execute.called
-            # Commit should be called for syncing
-            assert mock_db.commit.called
+            # Commit is handled by caller (e.g. JobProcessor) - BE-TRANS-1
 
 
 class TestAttributionTriggering:

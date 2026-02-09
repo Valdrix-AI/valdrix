@@ -127,7 +127,7 @@ async def get_carbon_intensity_forecast(
     """Get current and forecasted carbon intensity for a region."""
     settings = get_settings()
     scheduler = CarbonAwareScheduler(
-        watttime_key=settings.WATT_TIME_API_KEY,
+        wattime_key=settings.WATT_TIME_API_KEY,
         electricitymaps_key=settings.ELECTRICITY_MAPS_API_KEY
     )
     
@@ -148,7 +148,7 @@ async def get_green_schedule(
     """Find the optimal execution time for a workload."""
     settings = get_settings()
     scheduler = CarbonAwareScheduler(
-        watttime_key=settings.WATT_TIME_API_KEY,
+        wattime_key=settings.WATT_TIME_API_KEY,
         electricitymaps_key=settings.ELECTRICITY_MAPS_API_KEY
     )
     
