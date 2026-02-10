@@ -267,7 +267,7 @@ async def request_data_erasure(
         from app.models.discovered_account import DiscoveredAccount
         from app.models.attribution import AttributionRule, CostAllocation
         from app.models.cost_audit import CostAuditLog
-        from app.models.optimization import OptimizationStrategy, StrategyRecommendation
+        from app.models.optimization import StrategyRecommendation
         from sqlalchemy import delete
         
         tenant_id = user.tenant_id
@@ -329,10 +329,9 @@ async def request_data_erasure(
         )
         deleted_counts["strategy_recommendations"] = result.rowcount
 
-        result = await db.execute(
-            delete(OptimizationStrategy).where(OptimizationStrategy.tenant_id == tenant_id)
-        )
-        deleted_counts["optimization_strategies"] = result.rowcount
+        # Optimization strategies are global catalog entries, not tenant-owned records.
+        # Tenant data erasure must only remove tenant-specific recommendations.
+        deleted_counts["optimization_strategies"] = 0
 
         await db.execute(
             delete(RemediationSettings).where(RemediationSettings.tenant_id == tenant_id)

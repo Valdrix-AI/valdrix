@@ -135,6 +135,9 @@ async def test_create_checkout_no_tenant(mock_user):
 async def test_create_checkout_error(mock_db):
     with patch("app.modules.reporting.api.v1.billing.settings") as mock_settings:
         mock_settings.PAYSTACK_SECRET_KEY = "sk_test"
+        mock_settings.FRONTEND_URL = "https://app.valdrix.test"
+        mock_settings.CORS_ORIGINS = ["https://app.valdrix.test"]
+        mock_settings.ENVIRONMENT = "development"
         with patch("app.modules.reporting.domain.billing.paystack_billing.BillingService") as mock_service_cls:
             mock_service = mock_service_cls.return_value
             mock_service.create_checkout_session.side_effect = Exception("Checkout Fail")

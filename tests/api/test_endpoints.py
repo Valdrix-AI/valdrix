@@ -437,7 +437,13 @@ class TestZombieAPIs:
         ac.app.dependency_overrides.pop(FeatureFlag.AUTO_REMEDIATION, None)
 
     @pytest.mark.asyncio
-    async def test_execute_remediation_no_aws_connection(self, ac: AsyncClient, mock_user, test_tenant):
+    async def test_execute_remediation_no_aws_connection(
+        self,
+        ac: AsyncClient,
+        mock_user,
+        test_tenant,
+        test_remediation_request,
+    ):
         """Test remediation execution fails without AWS connection."""
         # Mock authentication by overriding the app's dependency
         from app.shared.core.auth import get_current_user, require_tenant_access, requires_role
@@ -457,17 +463,11 @@ class TestZombieAPIs:
         ac.app.dependency_overrides[requires_role] = mock_requires_role
         ac.app.dependency_overrides[FeatureFlag.AUTO_REMEDIATION] = lambda: True
 
-        # Mock service to return None for AWS connection
-        with patch('app.modules.optimization.api.v1.zombies.RemediationService') as mock_service_cls:
-            mock_service = AsyncMock()
-            mock_service.get_by_id.return_value = None  # No AWS connection
-            mock_service_cls.return_value = mock_service
+        response = await ac.post(f"/api/v1/zombies/execute/{test_remediation_request.id}")
 
-            response = await ac.post(f"/api/v1/zombies/execute/{uuid4()}")
-
-            assert response.status_code == 400
-            data = response.json()
-            assert "aws_connection_missing" in data.get("code", "")
+        assert response.status_code == 400
+        data = response.json()
+        assert "aws_connection_missing" in data.get("code", "")
 
         # Clean up overrides
         ac.app.dependency_overrides.pop(get_current_user, None)
@@ -558,7 +558,7 @@ class TestSecurityHeadersAndErrors:
         assert "content-security-policy" in headers
         assert "referrer-policy" in headers
         assert "permissions-policy" in headers
-        assert "x-xss-protection" in headers
+        assert "x-xss-protection" not in headers
 
         # Check CSP includes required directives
         csp = headers["content-security-policy"]

@@ -207,7 +207,7 @@ class SymbolicForecaster:
             data.append({"ds": d, "y": float(r.amount)})
         
         df = pd.DataFrame(data)
-        df['ds'] = pd.to_datetime(df['ds'], errors='coerce')
+        df['ds'] = pd.to_datetime(df['ds'], format="mixed", errors='coerce')
         df = df.dropna(subset=['ds'])
         return df
 

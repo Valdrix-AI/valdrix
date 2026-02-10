@@ -204,7 +204,7 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
 
 @shared_task(name="scheduler.remediation_sweep")
 def run_remediation_sweep() -> None:
-    run_async(_remediation_sweep_logic())
+    run_async(_remediation_sweep_logic)
 
 async def _remediation_sweep_logic() -> None:
     from app.models.aws_connection import AWSConnection
@@ -274,7 +274,7 @@ async def _remediation_sweep_logic() -> None:
 
 @shared_task(name="scheduler.billing_sweep")
 def run_billing_sweep() -> None:
-    run_async(_billing_sweep_logic())
+    run_async(_billing_sweep_logic)
 
 async def _billing_sweep_logic() -> None:
     from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription, SubscriptionStatus
@@ -331,7 +331,7 @@ async def _billing_sweep_logic() -> None:
 
 @shared_task(name="scheduler.maintenance_sweep")
 def run_maintenance_sweep() -> None:
-    run_async(_maintenance_sweep_logic())
+    run_async(_maintenance_sweep_logic)
 
 async def _maintenance_sweep_logic() -> None:
     from sqlalchemy import text
@@ -360,10 +360,9 @@ def run_currency_sync() -> None:
     """
     Celery task to refresh currency exchange rates.
     """
-    from app.shared.core.currency import get_exchange_rate
     # Fetch common currencies to trigger refresh and Redis sync
     for curr in ["NGN", "EUR", "GBP"]:
-        run_async(get_exchange_rate(curr))
+        run_async(get_exchange_rate, curr)
     logger.info("currency_sync_completed")
 
 @shared_task(name="scheduler.daily_finops_scan")

@@ -21,6 +21,7 @@ from app.shared.core.cache import get_cache_service
 from app.shared.core.ops_metrics import LLM_PRE_AUTH_DENIALS, LLM_SPEND_USD
 from app.shared.core.pricing import get_tenant_tier
 from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
 
 logger = structlog.get_logger()
 
@@ -229,7 +230,7 @@ class LLMBudgetManager:
                 operation_id=operation_id,
                 request_type=request_type
             )
-            db.add(usage)
+            await maybe_await(db.add(usage))
             
             # Metrics
             try:

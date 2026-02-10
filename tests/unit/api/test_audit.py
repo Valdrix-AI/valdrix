@@ -150,48 +150,19 @@ async def test_request_data_erasure_confirmation_fail(owner_user, mock_db):
 
 @pytest.mark.asyncio
 async def test_request_data_erasure_success(mock_db, owner_user):
-    # Setup mock return values
-    mock_result = MagicMock()
-    mock_result.rowcount = 5
-    mock_db.execute.return_value = mock_result
-    
-    # Create simple mocks for all models with Column spec
-    from sqlalchemy import Column
-    MockColumn = MagicMock(spec=Column)
-    # Using a property to allow .in_ access
-    # type(MockColumn).in_ = PropertyMock(return_value=MagicMock())
-    
-    mock_modules = {
-        "app.models.zombies": MagicMock(),
-        "app.models.tenant": MagicMock(),
-        "app.models.cloud": MagicMock(),
-        "app.models.carbon_settings": MagicMock(),
-        "app.models.pricing": MagicMock(),
-        "app.models.remediation_settings": MagicMock(),
-        "app.models.discovered_account": MagicMock(),
-        "app.models.attribution": MagicMock(),
-        "app.models.cost_audit": MagicMock(),
-        "app.models.llm": MagicMock(),
-        "app.models.notification_settings": MagicMock(),
-        "app.models.background_job": MagicMock(), 
-    }
-    
-    # We need to make sure imported models return our MockColumn when accessed
-    for m in mock_modules.values():
-        m.CostRecord.id = MockColumn
-        m.CostRecord.tenant_id = MockColumn
-        
-    # Patch delete/select globally
-    mock_select_return = MagicMock()
-    
-    with patch.dict("sys.modules", mock_modules):
-        with patch("sqlalchemy.delete"), \
-             patch("sqlalchemy.select", return_value=mock_select_return):
-            
-            res = await request_data_erasure(owner_user, mock_db, confirmation="DELETE ALL MY DATA")
-            
-            assert res["status"] == "erasure_complete"
-            assert mock_db.commit.called
+    tenant_lookup = MagicMock()
+    tenant_lookup.scalar_one_or_none.return_value = MagicMock(id=owner_user.tenant_id)
+
+    delete_result = MagicMock()
+    delete_result.rowcount = 5
+
+    # 1 tenant existence check + 19 delete statements
+    mock_db.execute.side_effect = [tenant_lookup] + [delete_result] * 19
+
+    res = await request_data_erasure(owner_user, mock_db, confirmation="DELETE ALL MY DATA")
+
+    assert res["status"] == "erasure_complete"
+    assert mock_db.commit.called
 
 @pytest.mark.asyncio
 async def test_request_data_erasure_error(mock_db, owner_user):

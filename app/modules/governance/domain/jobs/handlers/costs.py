@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
+from app.shared.core.async_utils import maybe_await
 
 logger = structlog.get_logger()
 
@@ -105,7 +106,7 @@ class CostIngestionHandler(BaseJobHandler):
                 )
                 
                 conn.last_ingested_at = datetime.now(timezone.utc)
-                db.add(conn) 
+                await maybe_await(db.add(conn))
                 
                 results.append({
                     "connection_id": str(conn.id),
@@ -118,7 +119,7 @@ class CostIngestionHandler(BaseJobHandler):
                 logger.error("cost_ingestion_connection_failed", connection_id=str(conn.id), error=str(e))
                 if hasattr(conn, "error_message"):
                     conn.error_message = str(e)[:255]
-                    db.add(conn)
+                    await maybe_await(db.add(conn))
                 results.append({"connection_id": str(conn.id), "status": "failed", "error": str(e)})
             
             if "completed_connections" not in completed_conns:

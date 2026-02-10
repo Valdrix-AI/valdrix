@@ -43,10 +43,9 @@ class TestAnalysisProcessorExpanded:
                 mock_adapter_instance = AsyncMock()
                 mock_adapter_instance.get_daily_costs = AsyncMock(side_effect=asyncio.TimeoutError)
                 mock_adapter.return_value = mock_adapter_instance
-                
-                with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):
-                    await processor.process_tenant(mock_db, mock_tenant, date.today(), date.today())
-                    # Logged error and continued
+
+                await processor.process_tenant(mock_db, mock_tenant, date.today(), date.today())
+                # Logged error and continued
 
     @pytest.mark.asyncio
     async def test_process_tenant_exception(self, mock_db, mock_tenant):
@@ -90,9 +89,9 @@ class TestSavingsProcessorExpanded:
         mock_rec = MagicMock()
         mock_rec.autonomous_ready = True
         mock_rec.confidence = "high"
-        mock_rec.action = "delete volume vol-123"
-        mock_rec.resource = "vol-123"
-        mock_rec.resource_type = "EBS"
+        mock_rec.action = "stop instance i-123"
+        mock_rec.resource = "i-123"
+        mock_rec.resource_type = "EC2 Instance"
         mock_rec.estimated_savings = "$50"
         
         mock_result = MagicMock()

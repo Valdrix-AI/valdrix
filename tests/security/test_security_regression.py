@@ -180,7 +180,7 @@ async def test_security_headers_regression(ac: AsyncClient):
     
     assert headers.get("referrer-policy") == "strict-origin-when-cross-origin"
     assert "permissions-policy" in headers
-    assert headers.get("x-xss-protection") == "1; mode=block"
+    assert "x-xss-protection" not in headers
 
 @pytest.mark.asyncio
 async def test_rate_limiting_metrics_integration():

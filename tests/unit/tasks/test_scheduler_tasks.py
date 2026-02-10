@@ -550,7 +550,7 @@ class TestSchedulerTasksProductionQuality:
         """Test concurrent cohort analysis operations are safe."""
         # Use asyncio.gather instead of threading to avoid loop conflicts in tests
         with patch('app.tasks.scheduler_tasks._cohort_analysis_logic') as mock_logic:
-            mock_logic.return_value = asyncio.sleep(0) # Make it awaitable
+            mock_logic.return_value = None
             
             # Run multiple cohort analyses concurrently using gather
             tasks = []
@@ -566,7 +566,7 @@ class TestSchedulerTasksProductionQuality:
             
             # Reset for next part if needed
             mock_logic.reset_mock()
-            mock_logic.return_value = asyncio.sleep(0)
+            mock_logic.return_value = None
             
             # Test with real run_async if needed, but here we just test gather
 

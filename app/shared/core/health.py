@@ -18,6 +18,7 @@ from app.shared.core.system_resources import safe_cpu_percent, safe_virtual_memo
 from app.shared.core.circuit_breaker import get_all_circuit_breakers
 from app.shared.db.session import health_check as db_health_check
 from app.shared.core.cache import get_cache_service
+from app.shared.core.async_utils import maybe_await
 
 logger = structlog.get_logger()
 settings = get_settings()
@@ -310,7 +311,7 @@ class HealthCheckService:
                 )
             )
 
-            stuck_jobs = result.scalar()
+            stuck_jobs = await maybe_await(result.scalar())
 
             if stuck_jobs and stuck_jobs > 0:
                 return {
@@ -329,7 +330,7 @@ class HealthCheckService:
                 )
             )
 
-            stats = result.first()
+            stats = await maybe_await(result.first())
 
             return {
                 "status": "healthy",

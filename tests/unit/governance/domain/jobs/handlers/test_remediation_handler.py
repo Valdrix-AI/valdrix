@@ -42,7 +42,7 @@ async def test_execute_autonomous_no_connection(db):
     
     # Mock database returning no connection
     mock_res = MagicMock()
-    mock_res.scalar_one_or_none.return_value = None
+    mock_res.scalars.return_value.first.return_value = None
     db.execute = AsyncMock(return_value=mock_res)
     
     result = await handler.execute(job, db)
@@ -59,7 +59,7 @@ async def test_execute_autonomous_success(db):
     mock_conn.region = "us-east-1"
     
     mock_res = MagicMock()
-    mock_res.scalar_one_or_none.return_value = mock_conn
+    mock_res.scalars.return_value.first.return_value = mock_conn
     db.execute = AsyncMock(return_value=mock_res)
     
     with patch("app.shared.adapters.aws_multitenant.MultiTenantAWSAdapter") as MockAdapter, \
