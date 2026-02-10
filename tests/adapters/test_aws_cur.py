@@ -1,14 +1,15 @@
-import pytest
-import pandas as pd
 import io
+from datetime import datetime, timezone
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pandas as pd
+import pytest
 import uuid
 
 from app.shared.adapters.aws_cur import AWSCURAdapter
 from app.models.aws_connection import AWSConnection
-from app.schemas.costs import CloudUsageSummary
+from app.schemas.costs import CloudUsageSummary, CostRecord
 
 # Mock data
 MOCK_CUR_DATA = {
@@ -34,14 +35,29 @@ async def test_ingest_latest_parquet():
     )
 
     # 2. Mock S3 Client and Session
-    mock_s3 = AsyncMock()
+    mock_s3 = MagicMock()
     
-    # Mock list_objects_v2 response
-    mock_s3.list_objects_v2.return_value = {
+    # Mock paginator response
+    page = {
         "Contents": [
             {"Key": "cur/report-202310.parquet", "LastModified": datetime(2023, 10, 2)}
         ]
     }
+    class MockAsyncIterator:
+        def __init__(self, pages):
+            self.pages = pages
+            self.idx = 0
+        def __aiter__(self):
+            return self
+        async def __anext__(self):
+            if self.idx >= len(self.pages):
+                raise StopAsyncIteration
+            val = self.pages[self.idx]
+            self.idx += 1
+            return val
+    mock_paginator = MagicMock()
+    mock_paginator.paginate = lambda **kwargs: MockAsyncIterator([page])
+    mock_s3.get_paginator.return_value = mock_paginator
     
     # Mock/Simulate Parquet download
     df = pd.DataFrame(MOCK_CUR_DATA)
@@ -63,7 +79,7 @@ async def test_ingest_latest_parquet():
             self.offset += len(chunk)
             return chunk
 
-    mock_s3.get_object.return_value = {"Body": MockStream(parquet_bytes)}
+    mock_s3.get_object = AsyncMock(return_value={"Body": MockStream(parquet_bytes)})
 
     # 3. Patch aioboto3.Session
     with patch("aioboto3.Session") as MockSession:
@@ -105,3 +121,173 @@ async def test_ingest_latest_parquet():
             assert summary.by_region["us-east-1"] == Decimal("10.50")
             assert summary.by_region["eu-west-1"] == Decimal("20.00")
 
+
+@pytest.mark.asyncio
+async def test_verify_connection_success():
+    conn = AWSConnection(
+        tenant_id=uuid.uuid4(),
+        aws_account_id="123456789012",
+        role_arn="arn:aws:iam::123456789012:role/TestRole",
+        external_id="vx-test",
+        region="us-east-1"
+    )
+    mock_s3 = MagicMock()
+    mock_s3.head_bucket = AsyncMock(return_value={})
+
+    with patch("aioboto3.Session") as MockSession, \
+         patch.object(AWSCURAdapter, "_get_credentials", return_value={
+            "AccessKeyId": "fake", "SecretAccessKey": "fake", "SessionToken": "fake"
+         }):
+        session_instance = MockSession.return_value
+        session_instance.client.return_value.__aenter__.return_value = mock_s3
+
+        adapter = AWSCURAdapter(conn)
+        assert await adapter.verify_connection() is True
+
+
+@pytest.mark.asyncio
+async def test_verify_connection_failure():
+    conn = AWSConnection(
+        tenant_id=uuid.uuid4(),
+        aws_account_id="123456789012",
+        role_arn="arn:aws:iam::123456789012:role/TestRole",
+        external_id="vx-test",
+        region="us-east-1"
+    )
+    mock_s3 = MagicMock()
+    mock_s3.head_bucket = AsyncMock(side_effect=Exception("no access"))
+
+    with patch("aioboto3.Session") as MockSession, \
+         patch.object(AWSCURAdapter, "_get_credentials", return_value={
+            "AccessKeyId": "fake", "SecretAccessKey": "fake", "SessionToken": "fake"
+         }):
+        session_instance = MockSession.return_value
+        session_instance.client.return_value.__aenter__.return_value = mock_s3
+
+        adapter = AWSCURAdapter(conn)
+        assert await adapter.verify_connection() is False
+
+
+@pytest.mark.asyncio
+async def test_ingest_latest_parquet_no_files():
+    conn = AWSConnection(
+        tenant_id=uuid.uuid4(),
+        aws_account_id="123456789012",
+        role_arn="arn:aws:iam::123456789012:role/TestRole",
+        external_id="vx-test",
+        region="us-east-1"
+    )
+    mock_s3 = MagicMock()
+    page = {"Contents": [{"Key": "cur/manifest.json", "LastModified": datetime(2023, 10, 2)}]}
+    class MockAsyncIterator:
+        def __init__(self, pages):
+            self.pages = pages
+            self.idx = 0
+        def __aiter__(self):
+            return self
+        async def __anext__(self):
+            if self.idx >= len(self.pages):
+                raise StopAsyncIteration
+            val = self.pages[self.idx]
+            self.idx += 1
+            return val
+    mock_paginator = MagicMock()
+    mock_paginator.paginate = lambda **kwargs: MockAsyncIterator([page])
+    mock_s3.get_paginator.return_value = mock_paginator
+
+    with patch("aioboto3.Session") as MockSession, \
+         patch.object(AWSCURAdapter, "_get_credentials", return_value={
+            "AccessKeyId": "fake", "SecretAccessKey": "fake", "SessionToken": "fake"
+         }):
+        session_instance = MockSession.return_value
+        session_instance.client.return_value.__aenter__.return_value = mock_s3
+
+        adapter = AWSCURAdapter(conn)
+        summary = await adapter.ingest_latest_parquet()
+        assert isinstance(summary, CloudUsageSummary)
+        assert summary.total_cost == Decimal("0")
+
+
+def test_parse_row_handles_invalid_cost_and_date():
+    conn = AWSConnection(
+        tenant_id=uuid.uuid4(),
+        aws_account_id="123456789012",
+        role_arn="arn:aws:iam::123456789012:role/TestRole",
+        external_id="vx-test",
+        region="us-east-1"
+    )
+    adapter = AWSCURAdapter(conn)
+    row = pd.Series({
+        "lineItem/UsageStartDate": "not-a-date",
+        "lineItem/UnblendedCost": "nan",
+    })
+    col_map = {
+        "date": "lineItem/UsageStartDate",
+        "cost": "lineItem/UnblendedCost",
+        "currency": "currency",
+        "service": "service",
+        "region": "region",
+        "usage_type": "usage_type",
+    }
+
+    with pytest.raises(ValueError):
+        adapter._parse_row(row, col_map)
+
+
+def test_process_parquet_missing_required_columns():
+    conn = AWSConnection(
+        tenant_id=uuid.uuid4(),
+        aws_account_id="123456789012",
+        role_arn="arn:aws:iam::123456789012:role/TestRole",
+        external_id="vx-test",
+        region="us-east-1"
+    )
+    adapter = AWSCURAdapter(conn)
+
+    class FakeTable:
+        def to_pandas(self):
+            return pd.DataFrame({"foo": [1, 2, 3]})
+
+    class FakeParquet:
+        num_row_groups = 1
+        def read_row_group(self, _i):
+            return FakeTable()
+
+    with patch("app.shared.adapters.aws_cur.pq.ParquetFile", return_value=FakeParquet()):
+        summary = adapter._process_parquet_streamingly("dummy.parquet")
+        assert summary.total_cost == Decimal("0")
+        assert summary.records == []
+
+
+def test_process_parquet_partial_row_groups():
+    conn = AWSConnection(
+        tenant_id=uuid.uuid4(),
+        aws_account_id="123456789012",
+        role_arn="arn:aws:iam::123456789012:role/TestRole",
+        external_id="vx-test",
+        region="us-east-1"
+    )
+    adapter = AWSCURAdapter(conn)
+
+    class FakeTable:
+        def to_pandas(self):
+            return pd.DataFrame({
+                "lineItem/UsageStartDate": [datetime(2023, 10, 1, tzinfo=timezone.utc)],
+                "lineItem/UnblendedCost": [5.0],
+                "lineItem/CurrencyCode": ["USD"],
+                "lineItem/ProductCode": ["AmazonEC2"],
+                "product/region": ["us-east-1"],
+                "lineItem/UsageType": ["BoxUsage:t3.medium"],
+            })
+
+    class FakeParquet:
+        num_row_groups = 2
+        def read_row_group(self, i):
+            if i == 0:
+                raise ValueError("corrupt row group")
+            return FakeTable()
+
+    with patch("app.shared.adapters.aws_cur.pq.ParquetFile", return_value=FakeParquet()):
+        summary = adapter._process_parquet_streamingly("dummy.parquet")
+        assert len(summary.records) == 1
+        assert summary.total_cost == Decimal("5.0")

@@ -19,8 +19,6 @@ def mock_user():
 def override_auth(mock_user):
     app.dependency_overrides[get_current_user] = lambda: mock_user
     yield
-    yield
-    from app.shared.core.auth import get_current_user
     app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
@@ -55,8 +53,14 @@ async def test_process_jobs_manual(async_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_process_jobs_internal_unauthorized(async_client: AsyncClient):
     """Test internal pg_cron trigger fails with invalid secret."""
-    response = await async_client.post("/api/v1/jobs/internal/process", params={"secret": "wrong"})
-    assert response.status_code == 403
+    secret = "a" * 32
+    with patch("app.shared.core.config.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.INTERNAL_JOB_SECRET = secret
+        mock_get_settings.return_value = mock_settings
+
+        response = await async_client.post("/api/v1/jobs/internal/process", params={"secret": "wrong"})
+        assert response.status_code == 403
 
 @pytest.mark.asyncio
 async def test_process_jobs_internal_success(async_client: AsyncClient):
@@ -64,15 +68,28 @@ async def test_process_jobs_internal_success(async_client: AsyncClient):
     # Patch globally since it's a local import in jobs.py
     with patch("app.shared.core.config.get_settings") as mock_get_settings:
         mock_settings = MagicMock()
-        mock_settings.INTERNAL_JOB_SECRET = "super-secret"
+        mock_settings.INTERNAL_JOB_SECRET = "s" * 32
         mock_get_settings.return_value = mock_settings
         
         response = await async_client.post(
             "/api/v1/jobs/internal/process", 
-            params={"secret": "super-secret"}
+            params={"secret": "s" * 32}
         )
         assert response.status_code == 200
         assert response.json()["status"] == "accepted"
+
+@pytest.mark.asyncio
+async def test_process_jobs_internal_insecure_secret_rejected(async_client: AsyncClient):
+    with patch("app.shared.core.config.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.INTERNAL_JOB_SECRET = "short-secret"
+        mock_get_settings.return_value = mock_settings
+
+        response = await async_client.post(
+            "/api/v1/jobs/internal/process",
+            params={"secret": "short-secret"}
+        )
+        assert response.status_code == 503
 
 @pytest.mark.asyncio
 async def test_stream_jobs_sse(async_client: AsyncClient):
@@ -102,3 +119,22 @@ async def test_stream_jobs_sse(async_client: AsyncClient):
                     assert found_heartbeat, "Heartbeat not found in SSE stream"
         except TimeoutError:
             pytest.fail("SSE stream test timed out after 5 seconds")
+
+
+@pytest.mark.asyncio
+async def test_stream_jobs_sse_rejects_when_tenant_connection_limit_reached(async_client: AsyncClient, mock_user):
+    from app.modules.governance.api.v1 import jobs as jobs_api
+
+    tenant_key = str(mock_user.tenant_id)
+    jobs_api._active_sse_connections[tenant_key] = 1
+    try:
+        with patch("app.shared.core.config.get_settings") as mock_get_settings:
+            mock_settings = MagicMock()
+            mock_settings.SSE_MAX_CONNECTIONS_PER_TENANT = 1
+            mock_settings.SSE_POLL_INTERVAL_SECONDS = 3
+            mock_get_settings.return_value = mock_settings
+
+            response = await async_client.get("/api/v1/jobs/stream")
+            assert response.status_code == 429
+    finally:
+        jobs_api._active_sse_connections.clear()

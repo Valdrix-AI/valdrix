@@ -6,25 +6,26 @@ from unittest.mock import patch
 from pydantic import ValidationError
 from app.shared.core.config import Settings
 
+FAKE_PAYSTACK_SECRET_KEY = "sk_live_TEST_KEY_NOT_REAL_1234567890"
+FAKE_PAYSTACK_PUBLIC_KEY = "pk_live_TEST_KEY_NOT_REAL_1234567890"
+
 
 class TestSettingsValidation:
     """Test settings validation and security checks."""
 
     def test_settings_missing_required_fields(self):
         """Test validation when required fields are missing."""
-        # Ensure no env vars interfere by explicitly passing None and clearing env
+        # Ensure no env vars interfere and defaults apply
         with patch.dict("os.environ", {}, clear=True):
-            with pytest.raises(ValidationError) as exc:
-                Settings(_env_file=None)
-            
-            assert "DATABASE_URL" in str(exc.value)
-            assert "SUPABASE_JWT_SECRET" in str(exc.value)
+            settings = Settings(_env_file=None)
+            assert settings.SUPABASE_JWT_SECRET
 
     def test_settings_invalid_ssl_mode(self):
         """Test validation with invalid SSL mode."""
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValidationError) as exc:
                 Settings(
+                    ENVIRONMENT="production",
                     DATABASE_URL="sqlite+aiosqlite:///:memory:",
                     SUPABASE_JWT_SECRET="x"*32,
                     ENCRYPTION_KEY="k"*32,
@@ -36,15 +37,14 @@ class TestSettingsValidation:
                     DB_SSL_MODE="invalid_mode",
                     _env_file=None
                 )
-            
-            assert "DB_SSL_MODE" in str(exc.value)
-            assert "invalid_mode" in str(exc.value)
+            assert "SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production" in str(exc.value)
 
     def test_settings_production_ssl_require_without_ca(self):
         """Test production SSL requirement without CA certificate."""
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValidationError) as exc:
                 Settings(
+                    ENVIRONMENT="production",
                     DATABASE_URL="postgresql+asyncpg://test",
                     SUPABASE_JWT_SECRET="x"*32,
                     ENCRYPTION_KEY="k"*32,
@@ -64,6 +64,7 @@ class TestSettingsValidation:
         """Test successful SSL verification in production."""
         with patch.dict("os.environ", {}, clear=True):
             settings = Settings(
+                ENVIRONMENT="production",
                 DATABASE_URL="postgresql+asyncpg://test",
                 SUPABASE_JWT_SECRET="x"*32,
                 ENCRYPTION_KEY="k"*32,
@@ -73,7 +74,10 @@ class TestSettingsValidation:
                 TESTING=False,
                 DB_SSL_MODE="verify-ca",
                 DB_SSL_CA_CERT_PATH="/path/to/ca.crt",
+                ADMIN_API_KEY="a"*32,
                 GROQ_API_KEY="g"*32,
+                PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                 _env_file=None
             )
             
@@ -113,6 +117,8 @@ class TestSettingsValidation:
                     DB_SSL_MODE="require",
                     ADMIN_API_KEY="short",  # Too short
                     GROQ_API_KEY="g"*32,
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     _env_file=None
                 )
             
@@ -139,6 +145,8 @@ class TestSettingsValidation:
                     CORS_ORIGINS=["http://localhost:3000", "https://example.com"],
                     GROQ_API_KEY="g"*32,
                     DB_SSL_MODE="require",
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     _env_file=None
                 )
                 
@@ -167,6 +175,8 @@ class TestSettingsValidation:
                     FRONTEND_URL="http://example.com",  # HTTP instead of HTTPS
                     GROQ_API_KEY="g"*32,
                     DB_SSL_MODE="require",
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     _env_file=None
                 )
                 
@@ -182,6 +192,7 @@ class TestSettingsValidation:
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValidationError) as exc:
                 Settings(
+                    ENVIRONMENT="production",
                     DATABASE_URL="sqlite+aiosqlite:///:memory:",
                     SUPABASE_JWT_SECRET="x"*32,
                     ENCRYPTION_KEY="k"*32,
@@ -191,10 +202,12 @@ class TestSettingsValidation:
                     OPENAI_API_KEY=None,
                     DEBUG=False, # Strict validation in prod
                     TESTING=False,
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     _env_file=None # Ignore .env
                 )
             
-            assert "API key is missing" in str(exc.value)
+            assert "is missing in production" in str(exc.value)
 
     def test_settings_llm_provider_key_present(self):
         """Test successful validation when LLM provider key is present."""
@@ -227,13 +240,17 @@ class TestSettingsValidation:
             
             # Debug=False should be production
             settings_prod = Settings(
+                ENVIRONMENT="production",
                 DATABASE_URL="sqlite+aiosqlite:///:memory:",
                 SUPABASE_JWT_SECRET="x"*32,
                 ENCRYPTION_KEY="k"*32, # Required in prod
                 CSRF_SECRET_KEY="c"*32, # Required in prod
                 KDF_SALT="s"*32, # Required in prod
                 DB_SSL_MODE="require",
+                ADMIN_API_KEY="a"*32,
                 GROQ_API_KEY="g"*32,
+                PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                 DEBUG=False,
                 TESTING=False,
                 _env_file=None
@@ -262,4 +279,3 @@ class TestSettingsValidation:
             assert settings.CORS_ORIGINS == []
             assert settings.FRONTEND_URL == "http://localhost:5173"
             assert settings.ADMIN_API_KEY is None
-

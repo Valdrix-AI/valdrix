@@ -17,27 +17,31 @@ def service(mock_db):
 
 @pytest.mark.asyncio
 async def test_global_kill_switch_triggered(service, mock_db):
+    tenant_id = uuid4()
     # Mock settings threshold
     service._settings.REMEDIATION_KILL_SWITCH_THRESHOLD = 500.0
+    service._settings.REMEDIATION_KILL_SWITCH_SCOPE = "tenant"
     
     # Mock DB result: already $450 saved today, impact is $60
     mock_result = MagicMock()
     mock_result.scalar.return_value = Decimal("450.0")
     mock_db.execute.return_value = mock_result
     
-    with pytest.raises(KillSwitchTriggeredError, match="Global safety kill-switch triggered"):
-        await service._check_global_kill_switch(Decimal("60.0"))
+    with pytest.raises(KillSwitchTriggeredError, match="Safety kill-switch triggered"):
+        await service._check_global_kill_switch(tenant_id, Decimal("60.0"))
 
 @pytest.mark.asyncio
 async def test_global_kill_switch_allowed(service, mock_db):
+    tenant_id = uuid4()
     service._settings.REMEDIATION_KILL_SWITCH_THRESHOLD = 500.0
+    service._settings.REMEDIATION_KILL_SWITCH_SCOPE = "tenant"
     
     mock_result = MagicMock()
     mock_result.scalar.return_value = Decimal("400.0")
     mock_db.execute.return_value = mock_result
     
     # Impact $50, total $450 < $500
-    await service._check_global_kill_switch(Decimal("50.0"))
+    await service._check_global_kill_switch(tenant_id, Decimal("50.0"))
 
 @pytest.mark.asyncio
 async def test_monthly_hard_cap_triggered(service, mock_db):
@@ -89,6 +93,6 @@ async def test_check_all_guards_success(service):
     
     await service.check_all_guards(tenant_id, Decimal("10.0"))
     
-    service._check_global_kill_switch.assert_awaited_with(Decimal("10.0"))
+    service._check_global_kill_switch.assert_awaited_with(tenant_id, Decimal("10.0"))
     service._check_monthly_hard_cap.assert_awaited_with(tenant_id)
     service._check_circuit_breaker.assert_awaited_with(tenant_id)

@@ -14,6 +14,10 @@ async def test_remediation_kill_switch_triggered():
     # Arrange
     db = MagicMock()
     db.execute = AsyncMock()
+    db.flush = AsyncMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
     service = RemediationService(db)
     tenant_id = uuid4()
     request_id = uuid4()
@@ -51,11 +55,12 @@ async def test_remediation_kill_switch_triggered():
         mock_settings.REMEDIATION_KILL_SWITCH_THRESHOLD = 500.0
         mock_get_settings.return_value = mock_settings
         
-        # Act & Assert
-        with pytest.raises(KillSwitchTriggeredError) as exc:
-            await service.execute(request_id, tenant_id)
-        
-        assert "Global safety kill-switch triggered" in str(exc.value)
+        # Act
+        result = await service.execute(request_id, tenant_id)
+
+        # Assert: execution should fail and capture the kill-switch error
+        assert result.status == RemediationStatus.FAILED
+        assert "Safety kill-switch triggered" in (result.execution_error or "")
 
 @pytest.mark.asyncio
 async def test_remediation_kill_switch_not_triggered():

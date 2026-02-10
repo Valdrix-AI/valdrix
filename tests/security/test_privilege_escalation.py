@@ -61,7 +61,6 @@ async def test_member_cannot_process_jobs(ac: AsyncClient):
     response = await ac.post("/api/v1/jobs/process")
     
     assert response.status_code == 403
-    from app.shared.core.auth import get_current_user
     app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
@@ -78,7 +77,6 @@ async def test_admin_can_process_jobs(ac: AsyncClient):
     
     # Might be 200 or 500 depending on DB, but should NOT be 403
     assert response.status_code != 403
-    from app.shared.core.auth import get_current_user
     app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
@@ -94,7 +92,6 @@ async def test_owner_bypasses_role_check(ac: AsyncClient):
     response = await ac.get("/api/v1/jobs/status") # Status is admin-only (GET)
     
     assert response.status_code != 403
-    from app.shared.core.auth import get_current_user
     app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
@@ -135,7 +132,6 @@ async def test_cross_tenant_isolation(ac: AsyncClient, db: AsyncSession):
     # User A should NOT see Job B
     job_ids = [j["id"] for j in jobs]
     assert str(job_b.id) not in job_ids
-    from app.shared.core.auth import get_current_user
     app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
@@ -160,5 +156,4 @@ async def test_member_cannot_enqueue_restricted_jobs(ac: AsyncClient):
     assert resp.status_code == 403
     # In Pydantic 2, the error message for Forbidden job type (literal) might be more structured
     assert "Input should be" in resp.text or "Unauthorized job type" in resp.text
-    from app.shared.core.auth import get_current_user
     app.dependency_overrides.pop(get_current_user, None)

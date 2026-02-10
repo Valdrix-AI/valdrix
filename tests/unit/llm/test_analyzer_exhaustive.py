@@ -1,4 +1,5 @@
 import pytest
+from typing import Dict
 import json
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
@@ -7,6 +8,7 @@ from decimal import Decimal
 
 from langchain_core.runnables import RunnableLambda
 from app.shared.llm.analyzer import FinOpsAnalyzer
+from app.shared.core.constants import LLMProvider
 from app.shared.core.exceptions import AIAnalysisError, BudgetExceededError
 from app.schemas.costs import CloudUsageSummary, CostRecord
 
@@ -218,6 +220,11 @@ async def test_llm_invocation_primary_failure_fallback(mock_llm_factory, usage_s
          mock_settings.return_value.ENABLE_DELTA_ANALYSIS = False
          await analyzer.analyze(usage_summary, tenant_id=uuid4(), db=mock_db)
          assert mock_factory.call_count >= 1
+         assert any(
+             call.args[0] == LLMProvider.GROQ
+             and call.kwargs.get("model") == "llama-3.3-70b-versatile"
+             for call in mock_factory.call_args_list
+         )
 
 @pytest.mark.asyncio
 async def test_process_results_fallback(mock_llm, mock_db, mock_forecaster):
@@ -252,10 +259,15 @@ async def test_analyze_force_refresh(mock_llm, usage_summary, mock_db):
     with patch("app.shared.llm.analyzer.get_cache_service", return_value=mock_cache), \
          patch("app.shared.llm.analyzer.get_settings") as mock_settings, \
          patch("app.shared.llm.analyzer.LLMBudgetManager.check_and_reserve", new_callable=AsyncMock) as mock_reserve, \
+         patch("app.shared.llm.analyzer.LLMGuardrails.sanitize_input", new_callable=AsyncMock) as mock_sanitize, \
+         patch("app.shared.llm.analyzer.SymbolicForecaster.forecast", new_callable=AsyncMock) as mock_forecast, \
+         patch.object(analyzer, "_setup_client_and_usage", return_value=(None, "groq", "llama-3.3-70b-versatile", None)), \
          patch.object(analyzer, "_invoke_llm", new_callable=AsyncMock) as mock_invoke, \
          patch.object(analyzer, "_process_analysis_results", new_callable=AsyncMock) as mock_proc:
             mock_settings.return_value.ENABLE_DELTA_ANALYSIS = False
             mock_reserve.return_value = Decimal("0.01")
+            mock_sanitize.return_value = {}
+            mock_forecast.return_value = {}
             mock_invoke.return_value = ('{"fresh": True}', {"metadata": "test"})
             mock_proc.return_value = {"fresh": True}
             
@@ -279,11 +291,16 @@ async def test_analyze_with_delta_analysis_enabled(mock_llm, usage_summary_with_
     with patch("app.shared.llm.analyzer.get_cache_service", return_value=mock_cache), \
          patch("app.shared.llm.analyzer.get_settings") as mock_settings, \
          patch("app.shared.llm.analyzer.LLMBudgetManager.check_and_reserve", new_callable=AsyncMock) as mock_reserve, \
+         patch("app.shared.llm.analyzer.LLMGuardrails.sanitize_input", new_callable=AsyncMock) as mock_sanitize, \
+         patch("app.shared.llm.analyzer.SymbolicForecaster.forecast", new_callable=AsyncMock) as mock_forecast, \
+         patch.object(analyzer, "_setup_client_and_usage", return_value=(None, "groq", "llama-3.3-70b-versatile", None)), \
          patch.object(analyzer, "_invoke_llm", new_callable=AsyncMock) as mock_invoke, \
          patch.object(analyzer, "_process_analysis_results", new_callable=AsyncMock) as mock_proc:
             mock_settings.return_value.ENABLE_DELTA_ANALYSIS = True
             mock_settings.return_value.DELTA_ANALYSIS_DAYS = 7
             mock_reserve.return_value = Decimal("0.01")
+            mock_sanitize.return_value = {}
+            mock_forecast.return_value = {}
             mock_invoke.return_value = ('{"fresh": True}', {"metadata": "test"})
             mock_proc.return_value = {"fresh": True}
             
@@ -362,11 +379,18 @@ async def test_analyze_data_prep_failure(mock_llm, usage_summary, mock_db):
 @pytest.mark.asyncio
 async def test_analyze_usage_recording_failure(mock_llm, usage_summary_with_records, mock_db):
     analyzer = FinOpsAnalyzer(mock_llm, mock_db)
-    with patch("app.shared.llm.analyzer.LLMBudgetManager.check_and_reserve", return_value=Decimal("0.01")), \
-         patch("app.shared.llm.analyzer.LLMBudgetManager.record_usage", side_effect=Exception("Record fail")), \
+    with patch("app.shared.llm.analyzer.LLMBudgetManager.check_and_reserve", new_callable=AsyncMock) as mock_reserve, \
+         patch("app.shared.llm.analyzer.LLMBudgetManager.record_usage", new_callable=AsyncMock) as mock_record, \
+         patch("app.shared.llm.analyzer.LLMGuardrails.sanitize_input", new_callable=AsyncMock) as mock_sanitize, \
+         patch("app.shared.llm.analyzer.SymbolicForecaster.forecast", new_callable=AsyncMock) as mock_forecast, \
+         patch.object(analyzer, "_setup_client_and_usage", return_value=(None, "groq", "llama-3.3-70b-versatile", None)), \
          patch.object(analyzer, "_invoke_llm", return_value=("{}", {})), \
          patch.object(analyzer, "_process_analysis_results", return_value={}), \
          patch.object(analyzer, "_check_cache_and_delta", return_value=(None, False)):
+            mock_reserve.return_value = Decimal("0.01")
+            mock_record.side_effect = Exception("Record fail")
+            mock_sanitize.return_value = {}
+            mock_forecast.return_value = {}
             # Should NOT raise error, just log warning
             await analyzer.analyze(usage_summary_with_records, tenant_id=uuid4(), db=mock_db)
 

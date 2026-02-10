@@ -92,27 +92,37 @@ class TestCarbonBudgetService:
 
     @pytest.mark.asyncio
     async def test_should_send_alert_rate_limiting(self, alert_service, mock_db, tenant_id):
-        """Test alert rate limiting."""
+        """Test alert rate limiting with status awareness."""
         # Case 1: No settings -> True
         mock_result_none = MagicMock()
         mock_result_none.scalar_one_or_none.return_value = None
         
-        # Case 2: Settings exist, last alert today -> False
+        # Case 2: Settings exist, last alert today for SAME status -> False
         mock_settings_today = MagicMock()
         mock_settings_today.last_alert_sent = datetime.now(timezone.utc)
+        mock_settings_today.last_alert_status = "warning"
         mock_result_today = MagicMock()
         mock_result_today.scalar_one_or_none.return_value = mock_settings_today
 
         # Case 3: Settings exist, last alert yesterday -> True
         mock_settings_yesterday = MagicMock()
         mock_settings_yesterday.last_alert_sent = datetime.now(timezone.utc) - timedelta(days=1)
+        mock_settings_yesterday.last_alert_status = "warning"
         mock_result_yesterday = MagicMock()
         mock_result_yesterday.scalar_one_or_none.return_value = mock_settings_yesterday
+
+        # Case 4: Settings exist, last alert today for DIFFERENT status -> True
+        mock_settings_diff = MagicMock()
+        mock_settings_diff.last_alert_sent = datetime.now(timezone.utc)
+        mock_settings_diff.last_alert_status = "warning"
+        mock_result_diff = MagicMock()
+        mock_result_diff.scalar_one_or_none.return_value = mock_settings_diff
 
         mock_db.execute.side_effect = [
             mock_result_none,
             mock_result_today,
-            mock_result_yesterday
+            mock_result_yesterday,
+            mock_result_diff
         ]
 
         # 1
@@ -121,6 +131,8 @@ class TestCarbonBudgetService:
         assert await alert_service.should_send_alert(tenant_id, "warning") is False
         # 3
         assert await alert_service.should_send_alert(tenant_id, "warning") is True
+        # 4
+        assert await alert_service.should_send_alert(tenant_id, "exceeded") is True
 
     @pytest.mark.asyncio
     async def test_send_carbon_alert_flow(self, alert_service, mock_db, tenant_id):
@@ -153,20 +165,11 @@ class TestCarbonBudgetService:
             mock_app_settings.SMTP_HOST = "smtp"
             mock_get_settings.return_value = mock_app_settings
 
-            # Mock DB responses for should_send_alert and notification settings
-            mock_result = MagicMock()
-            mock_result.scalar_one_or_none.return_value = None # No prev settings = send allowed
-            # For notification settings query
-            mock_notif_result = MagicMock()
-            mock_notif_result.scalar_one_or_none.return_value = None # Default settings
-            # For email settings query
-            mock_carbon_result = MagicMock()
-            mock_carbon_result.scalar_one_or_none.return_value = MagicMock(email_enabled=True, email_recipients="test@example.com")
-
+            # Mock DB responses
             mock_db.execute.side_effect = [
-                mock_result, # should_send_alert (CarbonSettings query)
-                mock_notif_result, # NotificationSettings query
-                mock_carbon_result, # CarbonSettings query (for email)
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)), # should_send_alert (CarbonSettings)
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)), # notif_settings pre-fetch
+                MagicMock(scalar_one_or_none=MagicMock(return_value=MagicMock(email_enabled=True, email_recipients="test@example.com"))), # email settings (CarbonSettings)
                 MagicMock(), # mark_alert_sent
                 MagicMock()  # commit
             ]
@@ -175,3 +178,41 @@ class TestCarbonBudgetService:
             
             assert sent is True
             mock_audit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_send_carbon_alert_email_only(self, alert_service, mock_db, tenant_id):
+        """Test alert flow when Slack is disabled and Email is enabled (Fixes UnboundLocalError)."""
+        budget_status = {
+            "alert_status": "exceeded",
+            "current_usage_kg": 110.0,
+            "budget_kg": 100.0,
+            "usage_percent": 110.0,
+            "recommendations": ["Optimize immediately"]
+        }
+
+        with patch("app.shared.core.config.get_settings") as mock_get_settings, \
+             patch("app.shared.core.logging.audit_log"), \
+             patch("app.modules.notifications.domain.email_service.EmailService") as MockEmailService:
+            
+            # SLACK DISABLED
+            mock_app_settings = MagicMock()
+            mock_app_settings.SLACK_BOT_TOKEN = None 
+            mock_app_settings.SMTP_HOST = "smtp.valdrix.io"
+            mock_get_settings.return_value = mock_app_settings
+
+            mock_email_instance = MockEmailService.return_value
+            mock_email_instance.send_carbon_alert = AsyncMock(return_value=True)
+
+            # DB Mocks
+            mock_db.execute.side_effect = [
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)), # should_send_alert
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)), # notif_settings pre-fetch
+                MagicMock(scalar_one_or_none=MagicMock(return_value=MagicMock(email_enabled=True, email_recipients="dev@valdrix.io"))), # email settings check
+                MagicMock(), # mark_alert_sent
+                MagicMock()  # commit
+            ]
+
+            # This should NOT raise UnboundLocalError
+            sent = await alert_service.send_carbon_alert(tenant_id, budget_status)
+            assert sent is True
+            mock_email_instance.send_carbon_alert.assert_called_once()

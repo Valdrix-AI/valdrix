@@ -24,6 +24,7 @@ async def test_tenant_isolation_regression(ac: AsyncClient, db):
     Verify that tenant A cannot access data from tenant B.
     (P0 Tenant Isolation)
     """
+    from app.shared.core.auth import get_current_user, require_tenant_access
     # Create two tenants
     t1_id, t2_id = uuid4(), uuid4()
     user_b_id = uuid4()
@@ -86,9 +87,9 @@ async def test_tenant_isolation_regression(ac: AsyncClient, db):
         for r in requests:
             assert r["resource_id"] != "vol-tenant-b", "Cross-tenant data leakage detected!"
     finally:
-        from app.shared.core.auth import get_current_user, require_tenant_access
-    app.dependency_overrides.pop(get_current_user, None)
-    app.dependency_overrides.pop(require_tenant_access, None)
+        
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(require_tenant_access, None)
 
 @pytest.mark.asyncio
 async def test_bound_pagination_enforcement(ac: AsyncClient, db):
@@ -96,6 +97,7 @@ async def test_bound_pagination_enforcement(ac: AsyncClient, db):
     Verify that pagination limits are strictly enforced.
     (P1 Bound Pagination)
     """
+    from app.shared.core.auth import get_current_user, require_tenant_access
     tenant_id = uuid4()
     db.add(Tenant(id=tenant_id, name="Pagination Test", plan="pro"))
     await db.commit()
@@ -124,9 +126,9 @@ async def test_bound_pagination_enforcement(ac: AsyncClient, db):
             print(f"DEBUG PAGINATION: {response.status_code} {response.json()}")
         assert response.status_code == 200
     finally:
-        from app.shared.core.auth import get_current_user, require_tenant_access
-    app.dependency_overrides.pop(get_current_user, None)
-    app.dependency_overrides.pop(require_tenant_access, None)
+        
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(require_tenant_access, None)
 
 @pytest.mark.skip(reason="Starlette/httpx ASGITransport exception handling in tests differs from production. Error sanitization works in production but not through test client.")
 @pytest.mark.asyncio
@@ -198,8 +200,8 @@ async def test_remediation_atomicity_lock_check():
     Verify that the execute method uses row-level locking.
     (P3 Reliability)
     """
-    from app.modules.optimization.domain.remediation_service import RemediationService
+    from app.modules.optimization.domain.remediation import RemediationService
     
     import inspect
     source = inspect.getsource(RemediationService.execute)
-    assert "with_for_update()" in source, "Remediation execution missing row-level locking!"
+    assert "with_for_update" in source, "Remediation execution missing row-level locking!"

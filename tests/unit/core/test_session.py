@@ -1,4 +1,5 @@
 import pytest
+import os
 import uuid
 from unittest.mock import MagicMock
 from app.shared.db.session import set_session_tenant_id, get_db

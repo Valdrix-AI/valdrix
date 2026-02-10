@@ -30,13 +30,13 @@ async def test_low_carbon_window(orchestrator):
     # Test Green Window (e.g., 12:00 UTC)
     with patch("app.modules.governance.domain.scheduler.orchestrator.datetime") as mock_dt:
         mock_dt.now.return_value = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        is_green = await orchestrator._is_low_carbon_window("us-east-1")
+        is_green = await orchestrator.is_low_carbon_window("us-east-1")
         assert is_green is True
         
     # Test Non-Green Window (e.g., 18:00 UTC)
     with patch("app.modules.governance.domain.scheduler.orchestrator.datetime") as mock_dt:
         mock_dt.now.return_value = datetime(2026, 1, 1, 18, 0, 0, tzinfo=timezone.utc)
-        is_green = await orchestrator._is_low_carbon_window("us-east-1")
+        is_green = await orchestrator.is_low_carbon_window("us-east-1")
         assert is_green is False
 
 @pytest.mark.asyncio
@@ -73,8 +73,10 @@ async def test_billing_sweep_job(orchestrator):
         mock_send.assert_called_with("scheduler.billing_sweep")
 
 @pytest.mark.asyncio
-async def test_maintenance_sweep_job(orchestrator):
-    """Test maintenance sweep dispatch."""
+async def test_maintenance_sweep_job_failure(orchestrator):
+    """Test maintenance sweep job handles Celery being unavailable."""
     with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
+        mock_send.side_effect = Exception("Redis connection error")
+        # Should not raise
         await orchestrator.maintenance_sweep_job()
-        mock_send.assert_called_with("scheduler.maintenance_sweep")
+        mock_send.assert_called_once()

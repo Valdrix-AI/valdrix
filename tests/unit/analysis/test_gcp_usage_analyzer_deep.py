@@ -1,3 +1,5 @@
+from datetime import datetime, timezone, timedelta
+
 from app.shared.analysis.gcp_usage_analyzer import GCPUsageAnalyzer
 
 class TestGCPUsageAnalyzer:
@@ -130,13 +132,23 @@ class TestGCPUsageAnalyzer:
         assert results[0]["resource_id"] == "ip-orphan"
 
     def test_find_old_snapshots(self):
+        now = datetime.now(timezone.utc)
         records = [
             # Old snapshot
             {
                 "resource_id": "snap-old",
                 "service": "Compute Engine",
                 "sku_description": "Snapshot Storage",
-                "cost": 1.0
+                "cost": 1.0,
+                "usage_start_time": now - timedelta(days=120)
+            },
+            # Recent snapshot (should not match age_days=90)
+            {
+                "resource_id": "snap-new",
+                "service": "Compute Engine",
+                "sku_description": "Snapshot Storage",
+                "cost": 1.0,
+                "usage_start_time": now - timedelta(days=10)
             }
         ]
         analyzer = GCPUsageAnalyzer(records)

@@ -71,6 +71,13 @@ async def test_pagination_bounds_m4(ac: AsyncClient, mock_auth):
     response = await ac.get("/api/v1/audit/logs?limit=-1")
     assert response.status_code == 422
 
+
+@pytest.mark.asyncio
+async def test_audit_logs_reject_sort_by_actor_email(ac: AsyncClient, mock_auth):
+    response = await ac.get("/api/v1/audit/logs?sort_by=actor_email")
+    assert response.status_code == 400
+    assert "actor_email" in response.text.lower()
+
 @pytest.mark.asyncio
 async def test_job_type_hardening_m5(ac: AsyncClient, mock_auth):
     """Verify M5: EnqueueJobRequest uses Literal for job_type."""
@@ -93,12 +100,13 @@ async def test_startup_validation_q1():
     # Missing database URL in prod
     with pytest.raises(ValueError) as exc:
         # Provide valid CSRF to reach DATABASE_URL check
-        s = Settings(
+        # Instantiation triggers validate_security_config model_validator
+        Settings(
             DATABASE_URL="", 
+            ENVIRONMENT="production",
             DEBUG=False, 
             TESTING=False, 
             SUPABASE_JWT_SECRET="too-short-but-different",
             CSRF_SECRET_KEY="a-very-long-and-secure-csrf-secret-key-12345"
         )
-        s.validate_secure_keys()
     assert "DATABASE_URL" in str(exc.value) or "validation error" in str(exc.value).lower()

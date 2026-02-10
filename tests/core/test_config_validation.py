@@ -5,6 +5,7 @@ def test_config_production_validation():
     """Verify that production mode requires ENCRYPTION_KEY and API keys."""
     # Mocking production mode by setting DEBUG=False
     invalid_settings = {
+        "ENVIRONMENT": "production",
         "DEBUG": False,
         "TESTING": False,
         "CSRF_SECRET_KEY": "secure-csrf-key-for-test-validation",

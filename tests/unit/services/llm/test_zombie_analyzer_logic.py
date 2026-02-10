@@ -1,7 +1,8 @@
+import pytest
 """
 Tests for ZombieAnalyzer Logic - BYOK and Usage Tracking
 """
-import pytest
+from typing import Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 import json

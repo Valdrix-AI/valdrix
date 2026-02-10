@@ -68,6 +68,30 @@ async def test_approve_remediation(mock_db, tenant_id):
     assert approved.reviewed_by_user_id == reviewer_id
     assert approved.review_notes == "Approved"
     assert mock_db.commit.called
+    stmt = mock_db.execute.call_args[0][0]
+    assert stmt._for_update_arg is not None
+
+
+@pytest.mark.asyncio
+async def test_reject_remediation_uses_row_lock(mock_db, tenant_id):
+    service = RemediationService(mock_db)
+
+    req = RemediationRequest(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        status=RemediationStatus.PENDING
+    )
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = req
+    mock_db.execute.return_value = mock_res
+
+    reviewer_id = uuid4()
+    rejected = await service.reject(req.id, tenant_id, reviewer_id, notes="Rejected")
+
+    assert rejected.status == RemediationStatus.REJECTED
+    assert rejected.reviewed_by_user_id == reviewer_id
+    stmt = mock_db.execute.call_args[0][0]
+    assert stmt._for_update_arg is not None
 
 @pytest.mark.asyncio
 async def test_execute_approved_triggers_grace_period(mock_db, tenant_id):
@@ -203,6 +227,7 @@ async def test_enforce_hard_limit_triggers_remediation(mock_db, tenant_id):
     pending_req = RemediationRequest(
         id=uuid4(),
         tenant_id=tenant_id,
+        action=RemediationAction.STOP_INSTANCE,
         status=RemediationStatus.PENDING,
         confidence_score=Decimal("0.95"),
         estimated_monthly_savings=Decimal("100.00")
@@ -230,7 +255,7 @@ async def test_enforce_hard_limit_triggers_remediation(mock_db, tenant_id):
         assert pending_req.status == RemediationStatus.APPROVED
         assert pending_req.review_notes == "AUTO_APPROVED: Budget Hard Limit Exceeded"
         # Verify it called execute with bypass
-        service.execute.assert_called_with(pending_req.id, tenant_id, bypass_grace_period=True)
+        service.execute.assert_called_with(pending_req.id, tenant_id, bypass_grace_period=False)
 
 @pytest.mark.asyncio
 async def test_generate_iac_plan_pro_tier(mock_db, tenant_id):
@@ -263,5 +288,3 @@ async def test_generate_iac_plan_free_tier(mock_db, tenant_id):
          patch("app.shared.core.pricing.is_feature_enabled", return_value=False):
         plan = await service.generate_iac_plan(req, tenant_id)
         assert "upgrade" in plan
-
-

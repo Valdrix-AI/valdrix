@@ -1,7 +1,8 @@
+import pytest
 """
 Targeted tests for app/shared/db/session.py missing coverage line 21
 """
-import pytest
+import os
 from unittest.mock import MagicMock, AsyncMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Request

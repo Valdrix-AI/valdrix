@@ -177,17 +177,24 @@ async def async_client(app, db, async_engine) -> AsyncGenerator:
     # Patch all modules that use the global async_session_maker directly
     # to ensure they use our test session maker connected to the test DB.
     modules_to_patch = [
+        "app.shared.db.session.async_session_maker",
         "app.shared.connections.oidc.async_session_maker",
         "app.modules.governance.api.v1.jobs.async_session_maker",
         "app.modules.governance.domain.jobs.cur_ingestion.async_session_maker",
+        "app.modules.governance.domain.jobs.processor.async_session_maker",
         "app.tasks.scheduler_tasks.async_session_maker",
+        "app.shared.llm.pricing_data.async_session_maker",
         "app.main.async_session_maker"
     ]
     
     from contextlib import ExitStack
     with ExitStack() as stack:
         for target in modules_to_patch:
-            stack.enter_context(patch(target, test_session_maker))
+            try:
+                stack.enter_context(patch(target, test_session_maker))
+            except (ImportError, AttributeError):
+                # Some modules might not be loaded yet or don't have it
+                continue
             
         # Store old override if any
         old_override = app.dependency_overrides.get(get_db)
@@ -195,6 +202,7 @@ async def async_client(app, db, async_engine) -> AsyncGenerator:
         
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            ac.app = app  # SEC: Attach app for dependency overrides in tests
             yield ac
             
         # Restore or remove override
@@ -221,39 +229,78 @@ async def db(db_session):
 # ============================================================================
 
 @pytest.fixture
-def mock_tenant_id() -> str:
-    """Generate a mock tenant ID."""
-    return str(uuid4())
+def mock_tenant_id():
+    """Mock tenant ID for testing."""
+    return uuid4()
+
+@pytest.fixture
+def mock_user_id():
+    """Mock user ID for testing."""
+    return uuid4()
+
+@pytest.fixture
+def mock_user(mock_tenant_id, mock_user_id):
+    """Create mock CurrentUser for testing."""
+    from app.shared.core.auth import CurrentUser
+
+    return CurrentUser(
+        id=mock_user_id,
+        email="test@valdrix.io",
+        tenant_id=mock_tenant_id,
+        role="admin",
+        tier="pro"
+    )
 
 
 @pytest.fixture
-def mock_user_id() -> str:
-    """Generate a mock user ID."""
-    return str(uuid4())
+def member_user(mock_tenant_id, mock_user_id):
+    """Create mock member user for testing."""
+    from app.shared.core.auth import CurrentUser
+
+    return CurrentUser(
+        id=mock_user_id,
+        email="member@valdrix.io",
+        tenant_id=mock_tenant_id,
+        role="member",
+        tier="pro"
+    )
 
 
 @pytest.fixture
-def mock_auth_context(mock_tenant_id, mock_user_id):
-    """Create mock authentication context."""
-    return {
-        "tenant_id": mock_tenant_id,
-        "user_id": mock_user_id,
-        "role": "admin",
-        "email": "test@valdrix.io",
-    }
+async def test_tenant(db):
+    """Create a test tenant for API tests."""
+    from app.models.tenant import Tenant
+
+    tenant = Tenant(
+        id=uuid4(),
+        name="API Test Tenant",
+        plan="pro"
+    )
+    db.add(tenant)
+    await db.commit()
+    await db.refresh(tenant)
+    return tenant
 
 
 @pytest.fixture
-def mock_jwt_token(mock_auth_context) -> str:
-    """Create mock JWT token for testing."""
-    import jwt
-    
-    payload = {
-        **mock_auth_context,
-        "exp": datetime.now(timezone.utc).timestamp() + 3600,
-        "iat": datetime.now(timezone.utc).timestamp(),
-    }
-    return jwt.encode(payload, "test-jwt-secret-for-testing", algorithm="HS256")
+async def test_remediation_request(db, test_tenant):
+    """Create a test remediation request."""
+    from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
+
+    request = RemediationRequest(
+        id=uuid4(),
+        tenant_id=test_tenant.id,
+        resource_id="i-test123",
+        resource_type="ec2_instance",
+        action=RemediationAction.STOP_INSTANCE,
+        status=RemediationStatus.PENDING,
+        requested_by_user_id=uuid4(),
+        estimated_monthly_savings=Decimal("50.00")
+    )
+    db.add(request)
+    await db.commit()
+    await db.refresh(request)
+    return request
 
 
 # ============================================================================
@@ -354,6 +401,21 @@ def set_testing_env():
     """Ensure TESTING is set for all tests."""
     os.environ["TESTING"] = "true"
     yield
+
+
+@pytest.fixture(autouse=True)
+def reset_settings_cache():
+    """Prevent settings cache leakage across tests."""
+    from app.shared.core.config import get_settings
+    import sys
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+    # Reset app.main module-level settings if it was imported
+    if "app.main" in sys.modules:
+        import app.main as app_main
+        app_main.settings = get_settings()
 
 
 @pytest.fixture

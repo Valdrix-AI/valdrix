@@ -54,7 +54,7 @@ class TestOrganizationsDiscoveryDeep:
             {"Accounts": [{"Id": "098765432109", "Name": "Member1", "Email": "m1@test.ai"}]}
         ])
         mock_org.get_paginator.return_value = mock_paginator
-        mock_db.execute.return_value.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value.scalars.return_value.all.return_value = []
 
         with patch("aioboto3.Session") as mock_session_class:
             mock_session = mock_session_class.return_value
@@ -85,7 +85,7 @@ class TestOrganizationsDiscoveryDeep:
         mock_org.get_paginator.return_value = mock_paginator
         
         existing_acc = DiscoveredAccount(account_id="456", name="OldName")
-        mock_db.execute.return_value.scalar_one_or_none.return_value = existing_acc
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [existing_acc]
 
         with patch("aioboto3.Session") as mock_session_class:
             mock_session = mock_session_class.return_value

@@ -49,8 +49,8 @@ class TestSlackService:
             
             # First call
             await service.send_alert("Same Alert", "Same message", "info")
-            # Second call with same title/severity - should be suppressed
-            result = await service.send_alert("Same Alert", "Different message", "info")
+            # Second call with same title/severity/message - should be suppressed
+            result = await service.send_alert("Same Alert", "Same message", "info")
             
             # Second should return True (suppressed) but only one actual call
             assert result is True

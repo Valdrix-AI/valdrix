@@ -143,6 +143,7 @@ async def test_should_send_alert_recent_sent(carbon_service, mock_db):
     
     mock_settings = MagicMock()
     mock_settings.last_alert_sent = datetime.now(timezone.utc)  # Correct attribute
+    mock_settings.last_alert_status = "warning"
     
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = mock_settings
@@ -158,7 +159,7 @@ async def test_mark_alert_sent(carbon_service, mock_db):
     """Test mark_alert_sent calls db update."""
     tenant_id = uuid4()
     
-    await carbon_service.mark_alert_sent(tenant_id)
+    await carbon_service.mark_alert_sent(tenant_id, "warning")
     
     mock_db.execute.assert_called_once()
     mock_db.commit.assert_called_once()

@@ -16,9 +16,9 @@ async def test_enforce_hard_limit_auto_executes(db):
     request = RemediationRequest(
         id=uuid4(),
         tenant_id=tenant_id,
-        resource_id="vol-123",
-        resource_type="ebs",
-        action=RemediationAction.DELETE_VOLUME,
+        resource_id="i-123",
+        resource_type="ec2_instance",
+        action=RemediationAction.STOP_INSTANCE,
         status=RemediationStatus.PENDING,
         confidence_score=Decimal("0.95"),
         estimated_monthly_savings=Decimal("50.00"),
@@ -48,7 +48,7 @@ async def test_enforce_hard_limit_auto_executes(db):
         assert executed_ids[0] == request.id
         assert request.status == RemediationStatus.APPROVED
         assert "AUTO_APPROVED" in request.review_notes
-        service.execute.assert_called_once_with(request.id, tenant_id, bypass_grace_period=True)
+        service.execute.assert_called_once_with(request.id, tenant_id, bypass_grace_period=False)
 
 @pytest.mark.asyncio
 async def test_enforce_hard_limit_ignores_low_confidence(db):

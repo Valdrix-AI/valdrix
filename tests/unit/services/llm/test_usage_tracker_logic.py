@@ -1,10 +1,11 @@
+import pytest
 """
 Tests for LLM Usage Tracker Logic
 
 Aligned with LLMBudgetManager refactor - delegates all budget/recording 
 to LLMBudgetManager static methods instead of using deprecated class methods.
 """
-import pytest
+from typing import Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from decimal import Decimal

@@ -6,8 +6,8 @@ from app.shared.core.auth import CurrentUser, get_current_user, UserRole
 @pytest.mark.asyncio
 async def test_carbon_settings_lifecycle(async_client: AsyncClient, db, mock_user_id, mock_tenant_id, app):
     """Deep test for Carbon settings."""
-    user_id = uuid.UUID(mock_user_id)
-    tenant_id = uuid.UUID(mock_tenant_id)
+    user_id = uuid.UUID(str(mock_user_id))
+    tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(id=user_id, tenant_id=tenant_id, email="test@carbon.io", role=UserRole.ADMIN)
     app.dependency_overrides[get_current_user] = lambda: mock_user
     
@@ -29,8 +29,8 @@ async def test_carbon_settings_lifecycle(async_client: AsyncClient, db, mock_use
 @pytest.mark.asyncio
 async def test_notifications_settings_lifecycle(async_client: AsyncClient, db, mock_user_id, mock_tenant_id, app):
     """Deep test for Notification settings."""
-    user_id = uuid.UUID(mock_user_id)
-    tenant_id = uuid.UUID(mock_tenant_id)
+    user_id = uuid.UUID(str(mock_user_id))
+    tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(id=user_id, tenant_id=tenant_id, email="test@notify.io", role=UserRole.ADMIN)
     app.dependency_overrides[get_current_user] = lambda: mock_user
     
@@ -52,8 +52,8 @@ async def test_notifications_settings_lifecycle(async_client: AsyncClient, db, m
 @pytest.mark.asyncio
 async def test_connections_settings_lifecycle(async_client: AsyncClient, db, mock_user_id, mock_tenant_id, app):
     """Deep test for Connections settings (Setup templates)."""
-    user_id = uuid.UUID(mock_user_id)
-    tenant_id = uuid.UUID(mock_tenant_id)
+    user_id = uuid.UUID(str(mock_user_id))
+    tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(id=user_id, tenant_id=tenant_id, email="test@conns.io", role=UserRole.ADMIN)
     app.dependency_overrides[get_current_user] = lambda: mock_user
     
