@@ -2,96 +2,50 @@
 
 Generated: 2026-02-10
 Branch: `main`
-Working tree entries: `364`
 
-## 1) Snapshot Summary
+## 1) Current Snapshot
 
-- Modified tracked files: heavy concentration in `app/` and `tests/`
-- Untracked files: significant; includes new tests, terraform files, and many generated local artifacts
-- Deleted tracked files: at least `terraform/valdrix-role.tf`, `tests/analysis/test_greenops_2.py`
+Tracked changes currently present:
+- Deleted: `debug_llm_usage.py`
+- Deleted: `debug_llm_usage_fix.py`
+- Deleted: `verify_backend_e2e.py`
+- Deleted: `final_test_report.txt`
+- Deleted: `final_test_report_v2.txt`
 
-## 2) Counts By Top-Level Area
+Ignored local files intentionally kept:
+- `.env`
+- `.venv/`
+- `dashboard/.env`
 
-From tracked diffs (`git diff --name-only`):
-- `tests`: 127
-- `app`: 95
-- `scripts`: 6
-- `.github`: 3
-- `docs`: 2
-- `cloudformation`: 2
-- `dashboard`: 1
-- `docker-compose.yml`: 1
-- `docker-compose.observability.yml`: 1
-- `migrations`: 1
-- `prometheus`: 1
-- `pyproject.toml`: 1
-- `terraform`: 1
-- `uv.lock`: 1
+## 2) Cleanup Actions Completed
 
-From untracked files (`git ls-files --others --exclude-standard`):
-- `tests`: 56
-- `terraform`: 22
-- `app`: 6
-- Generated local test/db/log artifacts: many (`test_*.sqlite`, `tmp_*.sqlite`, `test_output*.txt`, etc.)
+Removed generated/transient artifacts:
+- Root and test sqlite artifacts: `test_*.sqlite*`, `tmp_*.sqlite*`
+- Temporary output logs: `test_output*.txt`, `test_results.txt`, `analyzer_error.txt`, `health_test_output.txt`, `test_analyzer_error.txt`
+- Coverage/caches: `.coverage`, `htmlcov/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, all `__pycache__/`
+- Frontend build caches: `dashboard/.svelte-kit/`, `dashboard/build/`, `dashboard/test-results/`, `dashboard/node_modules/`, `dashboard/.coverage`
+- Terraform local cache: `terraform/.terraform/`
+- Local editor/helper files: `.vscode/`, `list_routes.py`, `repro_404.py`
 
-## 3) Categorized Buckets
+## 3) Classification
 
-### A. Core Backend + Security/Architecture
+A. Production code: no active tracked code modifications in `app/` from this cleanup pass.
+
+B. Test suite: no active tracked test modifications in this cleanup pass.
+
+C. Repository hygiene: tracked deletions remove stale debug and report artifacts that should not be in source control.
+
+## 4) GitHub Issue / PR Mapping
+
+Recommended issue title:
+- `repo-hygiene/remove-stale-debug-and-test-report-artifacts`
+
 Scope:
-- `app/` (governance, optimization, reporting, shared core/db, schedulers, adapters)
+- Remove tracked one-off debug scripts and static test report dumps.
+- Confirm only environment-local files remain ignored.
 
-Risk:
-- High (behavioral and security-sensitive paths changed)
+## 5) Merge Gate for This Cleanup
 
-### B. Test Suite Expansion + Coverage Work
-Scope:
-- `tests/` modified and new files across unit/integration/security/governance/optimization/reporting
-
-Risk:
-- Medium/High (can destabilize CI signal if mixed with production changes)
-
-### C. Infra/Runtime/Platform
-Scope:
-- `.github/workflows/`, `docker-compose*`, `prometheus/`, `cloudformation/`, `terraform/`, `migrations/`
-
-Risk:
-- High (deployment, CI, observability, and IaC blast radius)
-
-### D. Tooling/Dependency/Docs/UI
-Scope:
-- `pyproject.toml`, `uv.lock`, `scripts/`, `docs/`, `dashboard/`
-
-Risk:
-- Medium
-
-### E. Generated/Transient Local Artifacts (should not ship)
-Scope:
-- `test_*.sqlite`, `tmp_*.sqlite`, `test_output*.txt`, `analyzer_error.txt`, etc.
-
-Risk:
-- High hygiene risk (pollutes PR and can hide real changes)
-
-## 4) Recommended GitHub Issue Breakdown
-
-1. `repo-stabilization/core-backend-security`
-- Track all production runtime/security/architecture changes under `app/`
-
-2. `repo-stabilization/test-suite-consolidation`
-- Track all added/modified tests, dedup, and coverage gate strategy
-
-3. `repo-stabilization/infra-ci-observability-iac`
-- Track workflows, compose, prometheus, cloudformation, terraform, migrations
-
-4. `repo-stabilization/tooling-deps-docs-ui`
-- Track scripts, dependencies, docs, dashboard
-
-5. `repo-stabilization/transient-artifact-cleanup`
-- Remove/ignore generated local artifacts and tighten `.gitignore`
-
-## 5) Release Hygiene Gate (required before merge)
-
-- Ensure GitHub auth is valid for `gh` commands
-- Remove transient artifacts from proposed PR scope
-- Split commits by category (A-E)
-- Run category-specific tests before merge
-- Require PR checks green before merge to `main`
+- Run targeted smoke checks after merge candidate is prepared.
+- Keep `.env` and `.venv` untracked.
+- Ensure no generated artifacts are reintroduced before PR merge.
