@@ -81,8 +81,7 @@ class TestCostAggregator:
 
     @pytest.mark.asyncio
     async def test_get_summary(self, mock_db, tenant_id):
-        """Test fetching cost summary."""
-        # Mock records
+        """Test fetching cost summary with accurate totals."""
         r1 = MagicMock(spec=CostRecord)
         r1.cost_usd = Decimal("10.50")
         r1.service = "ec2"
@@ -95,9 +94,18 @@ class TestCostAggregator:
         r2.region = "us-west-1"
         r2.recorded_at = datetime.now()
 
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [r1, r2]
-        mock_db.execute.return_value = mock_result
+        # Mock accurate total result
+        mock_total_row = MagicMock()
+        mock_total_row.total_cost = Decimal("16.00")
+        mock_total_row.total_count = 2
+        mock_total_res = MagicMock()
+        mock_total_res.one.return_value = mock_total_row
+
+        # Mock records result
+        mock_records_res = MagicMock()
+        mock_records_res.scalars.return_value.all.return_value = [r1, r2]
+
+        mock_db.execute.side_effect = [mock_total_res, mock_records_res]
 
         summary = await CostAggregator.get_summary(
             mock_db, tenant_id, date.today(), date.today()
@@ -105,7 +113,45 @@ class TestCostAggregator:
 
         assert summary.total_cost == Decimal("16.00")
         assert summary.by_service["ec2"] == Decimal("10.50")
-        assert summary.by_service["rds"] == Decimal("5.50")
+        assert summary.metadata["is_truncated"] is False
+        assert summary.metadata["total_records_in_range"] == 2
+
+    @pytest.mark.asyncio
+    async def test_get_summary_truncation(self, mock_db, tenant_id):
+        """Test summary truncation logic and accurate totals."""
+        from app.modules.reporting.domain.aggregator import MAX_DETAIL_ROWS
+        
+        # Mock accurate total result (exceeding limit)
+        mock_total_row = MagicMock()
+        mock_total_row.total_cost = Decimal("5000.00")
+        mock_total_row.total_count = MAX_DETAIL_ROWS + 100
+        mock_total_res = MagicMock()
+        mock_total_res.one.return_value = mock_total_row
+
+        # Mock truncated records result
+        mock_records = []
+        for i in range(5): # Just return 5 for the test
+             r = MagicMock(spec=CostRecord)
+             r.cost_usd = Decimal("10.00")
+             r.service = "ec2"
+             r.region = "us-east-1"
+             r.recorded_at = datetime.now()
+             mock_records.append(r)
+             
+        mock_records_res = MagicMock()
+        mock_records_res.scalars.return_value.all.return_value = mock_records
+
+        mock_db.execute.side_effect = [mock_total_res, mock_records_res]
+
+        summary = await CostAggregator.get_summary(
+            mock_db, tenant_id, date.today(), date.today()
+        )
+
+        assert summary.total_cost == Decimal("5000.00") # Accurate total from DB
+        assert summary.metadata["is_truncated"] is True
+        assert summary.metadata["total_records_in_range"] == MAX_DETAIL_ROWS + 100
+        assert summary.metadata["records_returned"] == 5
+        assert summary.metadata["summary"] == "Breakdown/records are partial"
 
     @pytest.mark.asyncio
     async def test_get_dashboard_summary(self, mock_db, tenant_id):

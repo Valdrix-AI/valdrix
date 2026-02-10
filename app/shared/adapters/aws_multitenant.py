@@ -47,33 +47,54 @@ def with_aws_retry(func):
     import inspect
     from functools import wraps
 
+    def _before_sleep(retry_state: tenacity.RetryCallState) -> None:
+        exc = retry_state.outcome.exception() if retry_state.outcome else None
+        wait = retry_state.next_action.sleep if retry_state.next_action else None
+        logger.debug(
+            "aws_retrying",
+            attempt=retry_state.attempt_number,
+            wait_seconds=wait,
+            error=str(exc) if exc else None,
+            function=getattr(retry_state.fn, "__name__", "unknown"),
+        )
+
     retry_config = {
         "retry": tenacity.retry_if_exception_type((ConnectTimeoutError, ReadTimeoutError, EndpointConnectionError)),
         "wait": tenacity.wait_exponential(multiplier=1, min=2, max=10),
         "stop": tenacity.stop_after_attempt(4),
-        "before_sleep": tenacity.before_sleep_log(logger, "debug")
+        "before_sleep": _before_sleep,
+        "reraise": True,
     }
+
+    def _build_retry_config() -> Dict[str, Any]:
+        config = dict(retry_config)
+        settings = get_settings()
+        if getattr(settings, "TESTING", False):
+            # Avoid real sleeps during tests while preserving retry semantics.
+            async def _no_sleep(_seconds: float) -> None:
+                return None
+
+            config["sleep"] = _no_sleep
+            config["wait"] = tenacity.wait_none()
+        return config
 
     if inspect.isasyncgenfunction(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # For async generators, we can't easily use the decorator pattern 
-            # with tenacity directly because it expects a single awaitable.
-            # Instead, we'll wrap the inner loop if needed, but for now 
-            # we'll just allow it to be retried via the standard mechanism 
-            # if the initial call fails.
-            # Better approach: tenacity.AsyncRetrying
-            retrying = tenacity.AsyncRetrying(**retry_config)
+            # Async generators need manual retry orchestration.
+            retrying = tenacity.AsyncRetrying(**_build_retry_config())
             async for attempt in retrying:
                 with attempt:
                     async for item in func(*args, **kwargs):
                         yield item
         return wrapper
     else:
-        @tenacity.retry(**retry_config)
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            return await func(*args, **kwargs)
+            retrying = tenacity.AsyncRetrying(**_build_retry_config())
+            async for attempt in retrying:
+                with attempt:
+                    return await func(*args, **kwargs)
         return wrapper
 
 class MultiTenantAWSAdapter(BaseAdapter):
@@ -162,9 +183,12 @@ class MultiTenantAWSAdapter(BaseAdapter):
         # But `AWSMultiTenantAdapter.get_daily_costs` returns `CloudUsageSummary`.
         # I should probably wrap `get_daily_costs` and return the records list.
         
+        s_date = start_date.date() if isinstance(start_date, datetime) else start_date
+        e_date = end_date.date() if isinstance(end_date, datetime) else end_date
+
         summary = await self.get_daily_costs(
-            start_date=start_date,
-            end_date=end_date,
+            start_date=s_date,
+            end_date=e_date,
             granularity=granularity,
             group_by_service=True # Default to detailed breakdown for ingestion
         )
@@ -288,6 +312,12 @@ class MultiTenantAWSAdapter(BaseAdapter):
                         request_params["NextPageToken"] = response["NextPageToken"]
                     else:
                         break
+                if pages_fetched >= MAX_COST_EXPLORER_PAGES and "NextPageToken" in response:
+                    logger.warning(
+                        "cost_explorer_page_limit_reached",
+                        aws_account=self.connection.aws_account_id,
+                        pages=pages_fetched
+                    )
             except ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "Unknown")
                 logger.error("multitenant_cost_fetch_failed", error=str(e))
@@ -299,11 +329,18 @@ class MultiTenantAWSAdapter(BaseAdapter):
 
     async def get_gross_usage(self, start_date: date, end_date: date) -> List[Dict[str, Any]]:
         # Helper that wraps get_daily_costs specifically for gross usage
-        await self.get_daily_costs(start_date, end_date, usage_only=True, group_by_service=True)
-        # Convert to list of dicts if needed or keep using CloudUsageSummary internally
-        # For now, this method signature in original code was somewhat loose or unused in BaseAdapter (not present there)
-        # We can keep it or deprecate it.
-        return []
+        summary = await self.get_daily_costs(start_date, end_date, usage_only=True, group_by_service=True)
+        return [
+            {
+                "date": r.date,
+                "service": r.service,
+                "region": r.region,
+                "cost_usd": r.amount,
+                "currency": r.currency,
+                "usage_type": r.usage_type,
+            }
+            for r in summary.records
+        ]
 
     async def get_amortized_costs(
         self,

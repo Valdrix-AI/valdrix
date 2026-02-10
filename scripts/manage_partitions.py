@@ -19,28 +19,44 @@ Usage:
 import argparse
 import asyncio
 from datetime import date
+from contextlib import asynccontextmanager
 from dateutil.relativedelta import relativedelta
 import structlog
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-import os
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.shared.db.session import async_session_maker
 
 logger = structlog.get_logger()
+PARTITION_MAINTENANCE_LOCK_ID = 87234091
 
-# ENV mandated for production safety to prevent accidental targeting of local DB
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    logger.error("missing_required_environment_variable", variable="DATABASE_URL")
-    print("CRITICAL: DATABASE_URL environment variable not set. Aborting for safety.")
-    import sys
-    sys.exit(1)
+# ENV check is delegated to async_session_maker and get_settings()
 
 async def get_db_session():
-    """Create an async database session."""
-    engine = create_async_engine(DATABASE_URL)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    return async_session()
+    """Create an async database session using the unified factory."""
+    return async_session_maker()
+
+
+@asynccontextmanager
+async def _partition_maintenance_lock(db: AsyncSession):
+    """
+    Acquire a global advisory lock to prevent concurrent partition maintenance runs.
+    """
+    result = await db.execute(
+        text("SELECT pg_try_advisory_lock(:lock_id)"),
+        {"lock_id": PARTITION_MAINTENANCE_LOCK_ID}
+    )
+    acquired = bool(result.scalar())
+    if not acquired:
+        raise RuntimeError("another partition maintenance process is already running")
+
+    try:
+        yield
+    finally:
+        await db.execute(
+            text("SELECT pg_advisory_unlock(:lock_id)"),
+            {"lock_id": PARTITION_MAINTENANCE_LOCK_ID}
+        )
+        await db.commit()
 
 
 async def create_partition(db: AsyncSession, year: int, month: int) -> bool:
@@ -166,10 +182,11 @@ async def create_future_partitions(months_ahead: int = 3):
     today = date.today()
     
     created = 0
-    for i in range(months_ahead + 1):
-        target_date = today + relativedelta(months=i)
-        if await create_partition(db, target_date.year, target_date.month):
-            created += 1
+    async with _partition_maintenance_lock(db):
+        for i in range(months_ahead + 1):
+            target_date = today + relativedelta(months=i)
+            if await create_partition(db, target_date.year, target_date.month):
+                created += 1
     
     await db.close()
     logger.info("future_partitions_created", count=created, months_ahead=months_ahead)
@@ -177,17 +194,36 @@ async def create_future_partitions(months_ahead: int = 3):
 
 
 async def archive_old_partitions(months_old: int = 13):
-    """Archive partitions older than N months."""
+    """Archive all partitions older than the specified cutoff (N months)."""
     db = await get_db_session()
     today = date.today()
     cutoff = today - relativedelta(months=months_old)
     
     archived = 0
-    # Archive from cutoff going back 12 months
-    for i in range(12):
-        target_date = cutoff - relativedelta(months=i)
-        if await archive_partition(db, target_date.year, target_date.month):
-            archived += 1
+    # Archive all partitions older than cutoff
+    # We query pg_tables to find all candidate partitions
+    async with _partition_maintenance_lock(db):
+        check_sql = text("""
+            SELECT tablename FROM pg_tables 
+            WHERE tablename LIKE 'cost_records_%' 
+            AND tablename NOT LIKE 'cost_records_archive_%'
+        """)
+        result = await db.execute(check_sql)
+        all_partitions = result.scalars().all()
+        
+        for table_name in all_partitions:
+            # Expected format: cost_records_YYYY_MM
+            try:
+                parts = table_name.split("_")
+                if len(parts) != 4: continue
+                y, m = int(parts[2]), int(parts[3])
+                table_date = date(y, m, 1)
+                
+                if table_date < cutoff:
+                    if await archive_partition(db, y, m):
+                        archived += 1
+            except (ValueError, IndexError):
+                continue
     
     await db.close()
     logger.info("old_partitions_archived", count=archived, months_old=months_old)
@@ -195,17 +231,34 @@ async def archive_old_partitions(months_old: int = 13):
 
 
 async def drop_old_archives(months_old: int = 25):
-    """Drop archived partitions older than N months."""
+    """Drop all archived partitions older than the specified cutoff (N months)."""
     db = await get_db_session()
     today = date.today()
     cutoff = today - relativedelta(months=months_old)
     
     dropped = 0
-    # Drop from cutoff going back 12 months
-    for i in range(12):
-        target_date = cutoff - relativedelta(months=i)
-        if await drop_archived_partition(db, target_date.year, target_date.month):
-            dropped += 1
+    # Drop all archives older than cutoff
+    async with _partition_maintenance_lock(db):
+        check_sql = text("""
+            SELECT tablename FROM pg_tables 
+            WHERE tablename LIKE 'cost_records_archive_%'
+        """)
+        result = await db.execute(check_sql)
+        all_archives = result.scalars().all()
+        
+        for table_name in all_archives:
+            # Expected format: cost_records_archive_YYYY_MM
+            try:
+                parts = table_name.split("_")
+                if len(parts) != 5: continue
+                y, m = int(parts[3]), int(parts[4])
+                table_date = date(y, m, 1)
+                
+                if table_date < cutoff:
+                    if await drop_archived_partition(db, y, m):
+                        dropped += 1
+            except (ValueError, IndexError):
+                continue
     
     await db.close()
     logger.info("old_archives_dropped", count=dropped, months_old=months_old)

@@ -15,7 +15,7 @@ class IdleRdsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_rds_databases"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
         dbs = []
         connection_threshold = 1
@@ -107,7 +107,7 @@ class ColdRedshiftPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "cold_redshift_clusters"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
         days = 7
 

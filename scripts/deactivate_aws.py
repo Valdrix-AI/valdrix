@@ -14,7 +14,7 @@ async def deactivate_all_connections():
             result = await session.execute(stmt)
             await session.commit()
             logger.info("emergency_deactivation_complete", connections_affected=result.rowcount)
-            print(f"Sucessfully deactivated {result.rowcount} AWS connections.")
+            print(f"Successfully deactivated {result.rowcount} AWS connections.")
         except Exception as e:
             logger.error("emergency_deactivation_failed", error=str(e))
             print(f"Error: {str(e)}")

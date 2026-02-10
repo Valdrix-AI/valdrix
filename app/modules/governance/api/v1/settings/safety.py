@@ -83,7 +83,7 @@ async def get_safety_status(
             daily_savings_used=0.0,
             daily_savings_limit=settings.CIRCUIT_BREAKER_MAX_DAILY_SAVINGS,
             last_failure_at=None,
-            can_execute=True
+            can_execute=False
         )
 
 

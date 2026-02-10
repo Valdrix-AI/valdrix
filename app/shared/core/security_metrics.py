@@ -11,7 +11,7 @@ from prometheus_client import Counter
 CSRF_ERRORS = Counter(
     "valdrix_security_csrf_errors_total",
     "Total number of CSRF validation failures",
-[    "path", "method"]
+    ["path", "method"]
 )
 
 RATE_LIMIT_EXCEEDED = Counter(

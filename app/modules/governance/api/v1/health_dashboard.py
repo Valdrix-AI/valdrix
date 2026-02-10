@@ -22,6 +22,7 @@ import structlog
 from app.shared.db.session import get_db
 from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.core.pricing import PricingTier
+from app.shared.core.ops_metrics import LLM_BUDGET_BURN_RATE
 from app.models.tenant import Tenant
 from app.models.background_job import BackgroundJob, JobStatus
 from app.models.aws_connection import AWSConnection
@@ -218,7 +219,7 @@ async def _get_job_queue_health(db: AsyncSession, now: datetime) -> JobQueueHeal
     
     # Determine if we are on Postgres for percentile support
     from app.shared.db.session import engine
-    is_postgres = "postgresql" in str(engine.url)
+    is_postgres = engine.url.get_backend_name().startswith("postgresql")
     
     if is_postgres:
         metrics = await db.execute(
@@ -287,12 +288,14 @@ async def _get_llm_usage_metrics(db: AsyncSession, now: datetime) -> LLMUsageMet
             .scalar_subquery() / LLMBudget.monthly_limit_usd
         ))
     )
+    utilization_pct = round(float(utilization or 0.0) * 100, 2)
+    LLM_BUDGET_BURN_RATE.set(utilization_pct)
     
     return LLMUsageMetrics(
         total_requests_24h=requests_24h or 0,
         cache_hit_rate=0.85, # Fixed target for now
         estimated_cost_24h=float(cost_24h or 0.0),
-        budget_utilization=round(float(utilization or 0.0) * 100, 2)
+        budget_utilization=utilization_pct
     )
 
 

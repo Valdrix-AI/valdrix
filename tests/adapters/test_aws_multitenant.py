@@ -3,12 +3,13 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+from app.schemas.costs import CloudUsageSummary, CostRecord
 import app.models.llm  # noqa: F401 - Required for SQLAlchemy registry
 import app.models.notification_settings  # noqa: F401
 import app.models.background_job  # noqa: F401
 from app.models.tenant import Tenant  # noqa: F401 - Required for AWSConnection relationship
 from app.models.aws_connection import AWSConnection
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ConnectTimeoutError
 
 # Sample Connection Data
 MOCK_CX = AWSConnection(
@@ -176,3 +177,159 @@ async def test_get_daily_costs_error_handling(adapter):
         assert "Permission denied" in str(excinfo.value)
         assert excinfo.value.code == "AccessDenied"
         assert excinfo.value.details["aws_account"] == MOCK_CX.aws_account_id
+
+
+@pytest.mark.asyncio
+async def test_get_credentials_access_denied_sanitized(adapter):
+    mock_sts = AsyncMock()
+    mock_sts.assume_role.side_effect = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "Nope"}},
+        "AssumeRole"
+    )
+
+    mock_session = MagicMock()
+    mock_session.client.return_value.__aenter__.return_value = mock_sts
+
+    with patch.object(adapter, 'session', mock_session):
+        with pytest.raises(Exception) as excinfo:
+            await adapter.get_credentials()
+        assert "Permission denied" in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_get_credentials_retries_transient_errors(adapter):
+    mock_sts = AsyncMock()
+    mock_sts.assume_role.side_effect = [
+        ConnectTimeoutError(endpoint_url="https://sts.amazonaws.com"),
+        ConnectTimeoutError(endpoint_url="https://sts.amazonaws.com"),
+        {
+            "Credentials": {
+                "AccessKeyId": "ASIA_RETRY",
+                "SecretAccessKey": "secret...",
+                "SessionToken": "token...",
+                "Expiration": datetime.now(timezone.utc) + timedelta(hours=1)
+            }
+        }
+    ]
+
+    mock_session = MagicMock()
+    mock_session.client.return_value.__aenter__.return_value = mock_sts
+
+    async def no_sleep(_seconds):
+        return None
+
+    from tenacity.asyncio import AsyncRetrying as TenacityAsyncRetrying
+    orig_init = TenacityAsyncRetrying.__init__
+
+    def patched_init(self, *args, **kwargs):
+        kwargs.setdefault("sleep", no_sleep)
+        return orig_init(self, *args, **kwargs)
+
+    with patch.object(adapter, 'session', mock_session), \
+         patch("tenacity.asyncio.AsyncRetrying.__init__", new=patched_init):
+        creds = await adapter.get_credentials()
+        assert creds["AccessKeyId"] == "ASIA_RETRY"
+        assert mock_sts.assume_role.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_get_cost_and_usage_normalizes_records(adapter):
+    records = [
+        CostRecord(
+            date=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            service="S3",
+            region="us-east-1",
+            amount=Decimal("1.5"),
+            currency="USD",
+            amount_raw=Decimal("1.5"),
+            usage_type="Usage",
+        )
+    ]
+    summary = CloudUsageSummary(
+        tenant_id="tenant",
+        provider="aws",
+        records=records,
+        total_cost=Decimal("1.5"),
+        currency="USD",
+        start_date=date(2024, 1, 1),
+        end_date=date(2024, 1, 2),
+    )
+
+    with patch.object(adapter, "get_daily_costs", new_callable=AsyncMock, return_value=summary) as mock_get:
+        result = await adapter.get_cost_and_usage(
+            datetime(2024, 1, 1, tzinfo=timezone.utc),
+            datetime(2024, 1, 2, tzinfo=timezone.utc),
+        )
+        mock_get.assert_awaited()
+        assert result[0]["service"] == "S3"
+        assert result[0]["cost_usd"] == Decimal("1.5")
+
+
+@pytest.mark.asyncio
+async def test_get_gross_usage_returns_dicts(adapter):
+    records = [
+        CostRecord(
+            date=datetime(2024, 2, 1, tzinfo=timezone.utc),
+            service="EC2",
+            region="us-east-1",
+            amount=Decimal("2.0"),
+            currency="USD",
+            amount_raw=Decimal("2.0"),
+            usage_type="Usage",
+        )
+    ]
+    summary = CloudUsageSummary(
+        tenant_id="tenant",
+        provider="aws",
+        records=records,
+        total_cost=Decimal("2.0"),
+        currency="USD",
+        start_date=date(2024, 2, 1),
+        end_date=date(2024, 2, 2),
+    )
+
+    with patch.object(adapter, "get_daily_costs", new_callable=AsyncMock, return_value=summary):
+        result = await adapter.get_gross_usage(date(2024, 2, 1), date(2024, 2, 2))
+        assert result[0]["service"] == "EC2"
+        assert result[0]["cost_usd"] == Decimal("2.0")
+
+
+@pytest.mark.asyncio
+async def test_verify_connection_invalid_region(adapter):
+    with patch("app.shared.adapters.aws_multitenant.get_settings") as mock_settings, \
+         patch.object(adapter, "get_credentials", new_callable=AsyncMock) as mock_creds:
+        mock_settings.return_value.AWS_SUPPORTED_REGIONS = ["us-west-2"]
+        assert await adapter.verify_connection() is False
+        mock_creds.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_stream_cost_and_usage_page_limit_warns(adapter):
+    adapter._credentials = {"AccessKeyId": "TEST", "SecretAccessKey": "SECRET", "SessionToken": "TOKEN"}
+    adapter._credentials_expire_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    mock_ce = AsyncMock()
+    mock_ce.get_cost_and_usage.return_value = {
+        "ResultsByTime": [
+            {
+                "TimePeriod": {"Start": "2024-01-01"},
+                "Groups": [{"Keys": ["S3"], "Metrics": {"AmortizedCost": {"Amount": "1.0"}}}],
+            }
+        ],
+        "NextPageToken": "more",
+    }
+    mock_session = MagicMock()
+    mock_session.client.return_value.__aenter__.return_value = mock_ce
+
+    with patch.object(adapter, "session", mock_session), \
+         patch("app.shared.adapters.aws_multitenant.MAX_COST_EXPLORER_PAGES", 1), \
+         patch("app.shared.adapters.aws_multitenant.logger") as mock_logger:
+        results = []
+        async for row in adapter.stream_cost_and_usage(
+            datetime(2024, 1, 1, tzinfo=timezone.utc),
+            datetime(2024, 1, 2, tzinfo=timezone.utc),
+        ):
+            results.append(row)
+
+        assert results
+        mock_logger.warning.assert_called_once()

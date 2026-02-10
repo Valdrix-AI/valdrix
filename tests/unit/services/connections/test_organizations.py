@@ -39,7 +39,7 @@ async def test_sync_accounts_non_management(mock_db):
         mock_session.assert_not_called()
 
 @pytest.mark.asyncio
-async def test_sync_accounts_sucess(mock_db, management_connection):
+async def test_sync_accounts_success(mock_db, management_connection):
     """Should fetch accounts from AWS and save to DB."""
     
     # STS Mock (Client + Context)
@@ -47,7 +47,7 @@ async def test_sync_accounts_sucess(mock_db, management_connection):
     mock_sts_client.assume_role = AsyncMock(return_value={
         'Credentials': {
             'AccessKeyId': 'ASIA...',
-            'SecretAccessKey': 'sectret...',
+            'SecretAccessKey': 'secret...',
             'SessionToken': 'token...'
         }
     })
@@ -88,14 +88,62 @@ async def test_sync_accounts_sucess(mock_db, management_connection):
         
         count = await OrganizationsDiscoveryService.sync_accounts(mock_db, management_connection)
         
-        assert count == 3 
+        assert count == 2 
         
         # Verify assume_role called
         mock_sts_client.assume_role.assert_awaited()
         
         # Verify DB interactions
         assert mock_db.add.call_count == 2
-        mock_db.commit.assert_awaited()
+    mock_db.commit.assert_awaited()
+
+@pytest.mark.asyncio
+async def test_sync_accounts_excludes_management_from_count(mock_db, management_connection):
+    """Management account should not be included in discovery count."""
+    # STS Mock (Client + Context)
+    mock_sts_client = MagicMock()
+    mock_sts_client.assume_role = AsyncMock(return_value={
+        'Credentials': {
+            'AccessKeyId': 'ASIA...',
+            'SecretAccessKey': 'secret...',
+            'SessionToken': 'token...'
+        }
+    })
+    
+    mock_sts_ctx = MagicMock()
+    mock_sts_ctx.__aenter__ = AsyncMock(return_value=mock_sts_client)
+    mock_sts_ctx.__aexit__ = AsyncMock(return_value=None)
+    
+    # Org Mock (Client + Context)
+    mock_org_client = MagicMock()
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = _async_iter([
+        {
+            'Accounts': [
+                {'Id': management_connection.aws_account_id, 'Name': 'Management', 'Email': 'mgmt@example.com'},
+                {'Id': '222222222222', 'Name': 'Member A', 'Email': 'a@example.com'},
+            ]
+        }
+    ])
+    mock_org_client.get_paginator.return_value = mock_paginator
+    
+    mock_org_ctx = MagicMock()
+    mock_org_ctx.__aenter__ = AsyncMock(return_value=mock_org_client)
+    mock_org_ctx.__aexit__ = AsyncMock(return_value=None)
+    
+    # Session Mock
+    mock_session = MagicMock()
+    mock_session.client.side_effect = [mock_sts_ctx, mock_org_ctx]
+    
+    with patch("app.shared.connections.organizations.aioboto3.Session", return_value=mock_session):
+        # Mock DB Query (No existing accounts)
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+        
+        count = await OrganizationsDiscoveryService.sync_accounts(mock_db, management_connection)
+        
+        assert count == 1
 
 @pytest.mark.asyncio
 async def test_sync_accounts_update_existing(mock_db, management_connection):
@@ -131,7 +179,7 @@ async def test_sync_accounts_update_existing(mock_db, management_connection):
     
     with patch("app.shared.connections.organizations.aioboto3.Session", return_value=mock_session):
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = existing_account
+        mock_result.scalars.return_value.all.return_value = [existing_account]
         mock_db.execute.return_value = mock_result
         
         await OrganizationsDiscoveryService.sync_accounts(mock_db, management_connection)

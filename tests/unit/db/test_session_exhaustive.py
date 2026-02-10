@@ -1,4 +1,5 @@
 import pytest
+import os
 import ssl
 import sys
 import time
@@ -28,8 +29,10 @@ class TestSessionExhaustive:
         """Test that missing DATABASE_URL triggers sys.exit."""
         mock_settings = MagicMock()
         mock_settings.DATABASE_URL = ""
-        mock_settings.DB_SSL_MODE = "disable" # Prevent ValueError before check
+        mock_settings.DB_SSL_MODE = "disable"
+        mock_settings.TESTING = False # MUST be False to trigger sys.exit
         mock_settings.is_production = False
+        mock_settings.DEBUG = True
         
         # Patch at source so reload imports the mock
         with patch("app.shared.core.config.get_settings", return_value=mock_settings), \
@@ -55,8 +58,11 @@ class TestSessionExhaustive:
             mock_settings.TESTING = False
             mock_settings.DB_POOL_SIZE = 10
             mock_settings.DB_MAX_OVERFLOW = 20
+            mock_settings.DB_ECHO = False
             # Ensure is_production doesn't default to True (MagicMock is truthy)
             mock_settings.is_production = False 
+            # Ensure DEBUG is available for engine creation
+            mock_settings.DEBUG = True
 
             with patch("app.shared.core.config.get_settings", return_value=mock_settings):
                 if "verify" in mode:
@@ -118,7 +124,8 @@ class TestSessionExhaustive:
              patch("sqlalchemy.event.listens_for"):
             importlib.reload(session_mod)
             _, kwargs = mock_create.call_args
-            assert kwargs["poolclass"].__name__ == "NullPool"
+            # Now correctly expects StaticPool because safety swap defaults to SQLite memory
+            assert kwargs["poolclass"].__name__ == "StaticPool"
 
     def test_verify_ca_mode_requirements(self, clean_session_module):
         """Test verify-ca requirement for CA cert path."""

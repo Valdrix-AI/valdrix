@@ -68,6 +68,7 @@ async def test_get_summary(mock_db, tenant_id):
     r1.region = "us-east-1"
     
     mock_result = MagicMock()
+    mock_result.one.return_value = MagicMock(total_cost=Decimal("10.50"), total_count=1)
     mock_result.scalars.return_value.all.return_value = [r1]
     mock_db.execute.return_value = mock_result
     

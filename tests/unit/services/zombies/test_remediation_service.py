@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.optimization.domain.remediation_service import RemediationService
 from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
 from app.models.aws_connection import AWSConnection
+from app.shared.core.exceptions import ResourceNotFoundError
 # Import all models to prevent mapper errors during Mock usage
 
 
@@ -102,7 +103,7 @@ async def test_approve_flow(remediation_service, db_session):
     mock_res = MagicMock()
     mock_res.scalar_one_or_none.return_value = None
     db_session.execute.return_value = mock_res
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(ResourceNotFoundError, match="not found"):
         await remediation_service.approve(request_id, tenant_id, reviewer_id)
         
     # 2. Not pending
@@ -133,17 +134,36 @@ async def test_reject_flow(remediation_service, db_session):
     mock_res = MagicMock()
     mock_res.scalar_one_or_none.return_value = None
     db_session.execute.return_value = mock_res
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(ResourceNotFoundError, match="not found"):
         await remediation_service.reject(request_id, tenant_id, reviewer_id)
 
     # 2. Success
     req = MagicMock(spec=RemediationRequest)
     req.id = request_id
     req.tenant_id = tenant_id
+    req.status = RemediationStatus.PENDING
     mock_res.scalar_one_or_none.return_value = req
     res = await remediation_service.reject(request_id, tenant_id, reviewer_id, notes="NO")
     assert res.status == RemediationStatus.REJECTED
     assert res.reviewed_by_user_id == reviewer_id
+
+@pytest.mark.asyncio
+async def test_reject_requires_pending_status(remediation_service, db_session):
+    request_id = uuid4()
+    tenant_id = uuid4()
+    reviewer_id = uuid4()
+
+    req = MagicMock(spec=RemediationRequest)
+    req.id = request_id
+    req.tenant_id = tenant_id
+    req.status = RemediationStatus.COMPLETED
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = req
+    db_session.execute.return_value = mock_res
+
+    with pytest.raises(ValueError, match="not pending"):
+        await remediation_service.reject(request_id, tenant_id, reviewer_id)
 
 @pytest.mark.asyncio
 async def test_execute_errors(remediation_service, db_session):
@@ -154,7 +174,8 @@ async def test_execute_errors(remediation_service, db_session):
     mock_res = MagicMock()
     mock_res.scalar_one_or_none.return_value = None
     db_session.execute.return_value = mock_res
-    with pytest.raises(ValueError, match="not found"):
+    
+    with pytest.raises(ResourceNotFoundError, match="not found"):
         await remediation_service.execute(request_id, tenant_id)
         
     # 2. Invalid status
@@ -168,8 +189,9 @@ async def test_execute_errors(remediation_service, db_session):
     
     with patch("app.modules.optimization.domain.remediation.SafetyGuardrailService") as mock_safety:
         mock_safety.return_value.check_all_guards = AsyncMock()
-        with pytest.raises(ValueError, match="must be approved or scheduled"):
-            await remediation_service.execute(request_id, tenant_id)
+        res = await remediation_service.execute(request_id, tenant_id)
+        assert res.status == RemediationStatus.FAILED
+        assert "must be approved or scheduled" in (res.execution_error or "")
 
 @pytest.mark.asyncio
 async def test_execute_scheduled_successfully(remediation_service, db_session):
@@ -392,6 +414,7 @@ async def test_enforce_hard_limit_success(remediation_service, db_session):
     req = MagicMock(spec=RemediationRequest)
     req.id = uuid4()
     req.tenant_id = tenant_id
+    req.action = RemediationAction.STOP_INSTANCE
     req.status = RemediationStatus.PENDING
     req.confidence_score = Decimal("0.99")
     req.estimated_monthly_savings = Decimal("10.0")
@@ -401,8 +424,9 @@ async def test_enforce_hard_limit_success(remediation_service, db_session):
         mock_res.scalars.return_value.all.return_value = [req]
         db_session.execute.return_value = mock_res
         
-        with patch.object(remediation_service, "execute", return_value=AsyncMock()):
+        with patch.object(remediation_service, "execute", return_value=AsyncMock()) as mock_execute:
             ids = await remediation_service.enforce_hard_limit(tenant_id)
             assert len(ids) == 1
             assert req.status == RemediationStatus.APPROVED
             assert req.reviewed_by_user_id == UUID("00000000-0000-0000-0000-000000000000")
+            mock_execute.assert_called_once_with(req.id, tenant_id, bypass_grace_period=False)

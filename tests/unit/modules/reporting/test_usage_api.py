@@ -1,7 +1,8 @@
+import pytest
 """
 Tests for Usage Metering API.
 """
-import pytest
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 

@@ -53,9 +53,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if "Permissions-Policy" not in response.headers:
             response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
             
-        if "X-XSS-Protection" not in response.headers:
-            response.headers["X-XSS-Protection"] = "1; mode=block"
-
         return response
 
 class RequestIDMiddleware(BaseHTTPMiddleware):

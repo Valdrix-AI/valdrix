@@ -2,7 +2,9 @@ import pytest
 import time
 import json
 from unittest.mock import AsyncMock
+from unittest.mock import patch
 from app.shared.remediation.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState, get_circuit_breaker
+from app.shared.remediation import circuit_breaker as cb_module
 
 class TestCircuitBreakerDeep:
     @pytest.fixture
@@ -105,3 +107,25 @@ class TestCircuitBreakerDeep:
         cb2 = await get_circuit_breaker("t1")
         assert cb1 is cb2
         assert cb1.tenant_id == "t1"
+
+    @pytest.mark.asyncio
+    async def test_daily_savings_resets_when_day_changes(self):
+        config = CircuitBreakerConfig(max_daily_savings_usd=50.0)
+        cb = CircuitBreaker("tenant-1", config=config)
+
+        await cb.state.set("daily_savings_usd", 40.0)
+        await cb.state.set("daily_savings_date", "2000-01-01")
+
+        # Should reset old day usage, otherwise this would exceed 50.0
+        assert await cb.can_execute(estimated_savings=20.0) is True
+
+    @pytest.mark.asyncio
+    async def test_get_circuit_breaker_eviction_bound(self):
+        cb_module._tenant_breakers.clear()
+        with patch.object(cb_module.settings, "CIRCUIT_BREAKER_CACHE_SIZE", 2):
+            await get_circuit_breaker("tenant-1")
+            await get_circuit_breaker("tenant-2")
+            await get_circuit_breaker("tenant-3")
+
+            assert len(cb_module._tenant_breakers) == 2
+            assert "tenant-1" not in cb_module._tenant_breakers

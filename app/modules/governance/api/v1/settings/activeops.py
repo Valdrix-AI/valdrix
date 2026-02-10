@@ -95,8 +95,9 @@ async def update_activeops_settings(
         )
         db.add(settings)
     else:
-        for key, value in data.model_dump().items():
-            setattr(settings, key, value)
+        updates = data.model_dump()
+        settings.auto_pilot_enabled = updates["auto_pilot_enabled"]
+        settings.min_confidence_threshold = updates["min_confidence_threshold"]
 
     await db.commit()
     await db.refresh(settings)

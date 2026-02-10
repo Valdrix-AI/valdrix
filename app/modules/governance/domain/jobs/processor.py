@@ -81,7 +81,14 @@ class JobProcessor:
                 for job in pending_jobs:
                     try:
                         await self._process_single_job(job)
-                        results["succeeded"] += 1
+                        if job.status == JobStatus.COMPLETED.value:
+                            results["succeeded"] += 1
+                        else:
+                            results["failed"] += 1
+                            if job.error_message:
+                                results["errors"].append(
+                                    {"job_id": str(job.id), "error": job.error_message, "type": "execution"}
+                                )
                     except (KeyError, ValueError) as e:
                         # Handler configuration/payload errors
                         logger.warning("job_handler_config_error", job_id=str(job.id), error=str(e))

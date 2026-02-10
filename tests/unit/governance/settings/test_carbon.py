@@ -5,7 +5,7 @@ from sqlalchemy import select
 from unittest.mock import MagicMock
 from app.main import app
 from app.models.carbon_settings import CarbonSettings
-from app.shared.core.auth import get_current_user
+from app.shared.core.auth import get_current_user, CurrentUser, UserRole
 
 @pytest.fixture
 async def mock_user():
@@ -20,7 +20,6 @@ async def mock_user():
 def override_auth(mock_user):
     app.dependency_overrides[get_current_user] = lambda: mock_user
     yield
-    from app.shared.core.auth import get_current_user
     app.dependency_overrides.pop(get_current_user, None)
 
 @pytest.mark.asyncio
@@ -87,3 +86,93 @@ async def test_update_carbon_settings_creates_if_missing(async_client: AsyncClie
     
     result = await db_session.execute(select(CarbonSettings))
     assert len(result.scalars().all()) == 1
+
+@pytest.mark.asyncio
+async def test_update_carbon_settings_requires_admin(async_client: AsyncClient, app):
+    """PUT /carbon should reject non-admin users."""
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        email="member@carbon.io",
+        role=UserRole.MEMBER,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/carbon",
+            json={"carbon_budget_kg": 50.0, "alert_threshold_percent": 50},
+        )
+        assert response.status_code == 403
+        assert "Insufficient permissions" in response.json()["error"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+@pytest.mark.asyncio
+async def test_update_carbon_settings_validation_failure(async_client: AsyncClient, app):
+    """Reject invalid thresholds."""
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        email="admin@carbon.io",
+        role=UserRole.ADMIN,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/carbon",
+            json={"carbon_budget_kg": -1.0, "alert_threshold_percent": 120},
+        )
+        assert response.status_code == 422
+        assert response.json()["code"] == "VALIDATION_ERROR"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_update_carbon_settings_invalid_email_recipients(async_client: AsyncClient, app):
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        email="admin@carbon.io",
+        role=UserRole.ADMIN,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/carbon",
+            json={
+                "carbon_budget_kg": 100.0,
+                "alert_threshold_percent": 80,
+                "default_region": "us-east-1",
+                "email_enabled": True,
+                "email_recipients": "not-an-email",
+            },
+        )
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_update_carbon_settings_requires_recipients_when_enabled(async_client: AsyncClient, app):
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        email="admin@carbon.io",
+        role=UserRole.ADMIN,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/carbon",
+            json={
+                "carbon_budget_kg": 100.0,
+                "alert_threshold_percent": 80,
+                "default_region": "us-east-1",
+                "email_enabled": True,
+                "email_recipients": None,
+            },
+        )
+        assert response.status_code == 422
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

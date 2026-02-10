@@ -6,6 +6,7 @@ Sends carbon budget alerts via email using SMTP.
 
 import smtplib
 import html
+import anyio
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -20,6 +21,14 @@ def escape_html(text: str) -> str:
     if not text:
         return ""
     return html.escape(str(text))
+
+
+def _sanitize_header_value(value: str) -> str:
+    """Prevent CRLF/header injection in email metadata fields."""
+    text = str(value or "")
+    if "\r" in text or "\n" in text:
+        raise ValueError("Invalid email header value")
+    return text.strip()
 
 
 class EmailService:
@@ -43,6 +52,15 @@ class EmailService:
         self.smtp_user = smtp_user
         self.smtp_password = smtp_password
         self.from_email = from_email
+
+    def _send_message_sync(self, message: MIMEMultipart, recipients: List[str]) -> None:
+        with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+            server.starttls()
+            server.login(self.smtp_user, self.smtp_password)
+            server.sendmail(self.from_email, recipients, message.as_string())
+
+    async def _send_message(self, message: MIMEMultipart, recipients: List[str]) -> None:
+        await anyio.to_thread.run_sync(self._send_message_sync, message, recipients)
 
     async def send_carbon_alert(
         self,
@@ -70,16 +88,13 @@ class EmailService:
             html_body = self._build_email_html(budget_status)
 
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = self.from_email
-            msg["To"] = ", ".join(recipients)
+            msg["Subject"] = _sanitize_header_value(subject)
+            msg["From"] = _sanitize_header_value(self.from_email)
+            msg["To"] = _sanitize_header_value(", ".join(recipients))
 
             msg.attach(MIMEText(html_body, "html"))
 
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
-                server.sendmail(self.from_email, recipients, msg.as_string())
+            await self._send_message(msg, recipients)
 
             logger.info(
                 "carbon_email_sent",
@@ -205,16 +220,13 @@ class EmailService:
 """
 
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = self.from_email
-            msg["To"] = to_email
+            msg["Subject"] = _sanitize_header_value(subject)
+            msg["From"] = _sanitize_header_value(self.from_email)
+            msg["To"] = _sanitize_header_value(to_email)
 
             msg.attach(MIMEText(html_body, "html"))
 
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
-                server.sendmail(self.from_email, [to_email], msg.as_string())
+            await self._send_message(msg, [to_email])
 
             logger.info("dunning_email_sent", to_email=to_email, attempt=attempt)
             return True
@@ -261,16 +273,13 @@ class EmailService:
 """
 
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = self.from_email
-            msg["To"] = to_email
+            msg["Subject"] = _sanitize_header_value(subject)
+            msg["From"] = _sanitize_header_value(self.from_email)
+            msg["To"] = _sanitize_header_value(to_email)
 
             msg.attach(MIMEText(html_body, "html"))
 
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
-                server.sendmail(self.from_email, [to_email], msg.as_string())
+            await self._send_message(msg, [to_email])
 
             logger.info("payment_recovered_email_sent", to_email=to_email)
             return True
@@ -322,16 +331,13 @@ class EmailService:
 """
 
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = self.from_email
-            msg["To"] = to_email
+            msg["Subject"] = _sanitize_header_value(subject)
+            msg["From"] = _sanitize_header_value(self.from_email)
+            msg["To"] = _sanitize_header_value(to_email)
 
             msg.attach(MIMEText(html_body, "html"))
 
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
-                server.sendmail(self.from_email, [to_email], msg.as_string())
+            await self._send_message(msg, [to_email])
 
             logger.info("account_downgraded_email_sent", to_email=to_email)
             return True

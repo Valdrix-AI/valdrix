@@ -34,6 +34,26 @@ class CURUsageAnalyzer:
                 - product_instance_type
         """
         self.records = cur_records
+
+    @staticmethod
+    def _safe_decimal(value: Any) -> Decimal:
+        """Convert values to Decimal safely, defaulting to 0 on invalid input."""
+        if value is None or value == "":
+            return Decimal("0")
+        try:
+            return Decimal(str(value))
+        except Exception:
+            return Decimal("0")
+
+    @staticmethod
+    def _safe_int(value: Any) -> int:
+        """Convert values to int safely, defaulting to 0 on invalid input."""
+        if value is None or value == "":
+            return 0
+        try:
+            return int(float(value))
+        except Exception:
+            return 0
     
     def find_low_usage_instances(self, days: int = 14) -> List[Dict[str, Any]]:
         """Identifies EC2 instances with low usage based on CUR data."""
@@ -53,15 +73,15 @@ class CURUsageAnalyzer:
                 instance_usage[resource_id] = {
                     "resource_id": resource_id,
                     "total_usage_hours": Decimal("0"),
-                    "instance_type": record.get("product_instance_type", "unknown"),
+                    "instance_type": record.get("product_instance_type") or "unknown",
                     "cost": Decimal("0"),
                 }
             
-            instance_usage[resource_id]["total_usage_hours"] += Decimal(
-                str(record.get("line_item_usage_amount", 0))
+            instance_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+                record.get("line_item_usage_amount")
             )
-            instance_usage[resource_id]["cost"] += Decimal(
-                str(record.get("line_item_unblended_cost", 0))
+            instance_usage[resource_id]["cost"] += self._safe_decimal(
+                record.get("line_item_unblended_cost")
             )
         
         expected_hours = days * 24
@@ -103,14 +123,14 @@ class CURUsageAnalyzer:
                 continue
             
             if "EBS:VolumeUsage" in usage_type and resource_id.startswith("vol-"):
-                volume_cost[resource_id] = volume_cost.get(resource_id, Decimal("0")) + Decimal(
-                    str(record.get("line_item_unblended_cost", 0))
+                volume_cost[resource_id] = volume_cost.get(resource_id, Decimal("0")) + self._safe_decimal(
+                    record.get("line_item_unblended_cost")
                 )
-                volume_size[resource_id] = int(record.get("line_item_usage_amount", 0))
+                volume_size[resource_id] = self._safe_int(record.get("line_item_usage_amount"))
             
             if "EBS:VolumeIOUsage" in usage_type and resource_id.startswith("vol-"):
-                volume_io[resource_id] = volume_io.get(resource_id, Decimal("0")) + Decimal(
-                    str(record.get("line_item_usage_amount", 0))
+                volume_io[resource_id] = volume_io.get(resource_id, Decimal("0")) + self._safe_decimal(
+                    record.get("line_item_usage_amount")
                 )
         
         unused_volumes = []
@@ -152,16 +172,16 @@ class CURUsageAnalyzer:
                 rds_usage[resource_id] = {
                     "resource_id": resource_id,
                     "total_usage_hours": Decimal("0"),
-                    "db_class": record.get("product_instance_type", "unknown"),
-                    "engine": record.get("product_database_engine", "unknown"),
+                    "db_class": record.get("product_instance_type") or "unknown",
+                    "engine": record.get("product_database_engine") or "unknown",
                     "cost": Decimal("0"),
                 }
             
-            rds_usage[resource_id]["total_usage_hours"] += Decimal(
-                str(record.get("line_item_usage_amount", 0))
+            rds_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+                record.get("line_item_usage_amount")
             )
-            rds_usage[resource_id]["cost"] += Decimal(
-                str(record.get("line_item_unblended_cost", 0))
+            rds_usage[resource_id]["cost"] += self._safe_decimal(
+                record.get("line_item_unblended_cost")
             )
         
         expected_hours = days * 24
@@ -207,15 +227,15 @@ class CURUsageAnalyzer:
                 redshift_usage[resource_id] = {
                     "resource_id": resource_id,
                     "total_usage_hours": Decimal("0"),
-                    "node_type": record.get("product_instance_type", "unknown"),
+                    "node_type": record.get("product_instance_type") or "unknown",
                     "cost": Decimal("0"),
                 }
             
-            redshift_usage[resource_id]["total_usage_hours"] += Decimal(
-                str(record.get("line_item_usage_amount", 0))
+            redshift_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+                record.get("line_item_usage_amount")
             )
-            redshift_usage[resource_id]["cost"] += Decimal(
-                str(record.get("line_item_unblended_cost", 0))
+            redshift_usage[resource_id]["cost"] += self._safe_decimal(
+                record.get("line_item_unblended_cost")
             )
         
         expected_hours = days * 24
@@ -263,15 +283,15 @@ class CURUsageAnalyzer:
                 }
             
             if "NatGateway-Hours" in usage_type:
-                nat_usage[resource_id]["hourly_cost"] += Decimal(
-                    str(record.get("line_item_unblended_cost", 0))
+                nat_usage[resource_id]["hourly_cost"] += self._safe_decimal(
+                    record.get("line_item_unblended_cost")
                 )
             elif "NatGateway-Bytes" in usage_type:
-                nat_usage[resource_id]["data_processed_gb"] += Decimal(
-                    str(record.get("line_item_usage_amount", 0))
+                nat_usage[resource_id]["data_processed_gb"] += self._safe_decimal(
+                    record.get("line_item_usage_amount")
                 )
-                nat_usage[resource_id]["data_cost"] += Decimal(
-                    str(record.get("line_item_unblended_cost", 0))
+                nat_usage[resource_id]["data_cost"] += self._safe_decimal(
+                    record.get("line_item_unblended_cost")
                 )
         
         idle_nats = []
@@ -314,15 +334,15 @@ class CURUsageAnalyzer:
                 sagemaker_usage[resource_id] = {
                     "resource_id": resource_id,
                     "total_usage_hours": Decimal("0"),
-                    "instance_type": record.get("product_instance_type", "unknown"),
+                    "instance_type": record.get("product_instance_type") or "unknown",
                     "cost": Decimal("0"),
                 }
             
-            sagemaker_usage[resource_id]["total_usage_hours"] += Decimal(
-                str(record.get("line_item_usage_amount", 0))
+            sagemaker_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+                record.get("line_item_usage_amount")
             )
-            sagemaker_usage[resource_id]["cost"] += Decimal(
-                str(record.get("line_item_unblended_cost", 0))
+            sagemaker_usage[resource_id]["cost"] += self._safe_decimal(
+                record.get("line_item_unblended_cost")
             )
         
         expected_hours = days * 24
@@ -366,16 +386,16 @@ class CURUsageAnalyzer:
                 cache_usage[resource_id] = {
                     "resource_id": resource_id,
                     "total_usage_hours": Decimal("0"),
-                    "node_type": record.get("product_instance_type", "unknown"),
-                    "engine": record.get("product_cache_engine", "redis"),
+                    "node_type": record.get("product_instance_type") or "unknown",
+                    "engine": record.get("product_cache_engine") or "redis",
                     "cost": Decimal("0"),
                 }
             
-            cache_usage[resource_id]["total_usage_hours"] += Decimal(
-                str(record.get("line_item_usage_amount", 0))
+            cache_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+                record.get("line_item_usage_amount")
             )
-            cache_usage[resource_id]["cost"] += Decimal(
-                str(record.get("line_item_unblended_cost", 0))
+            cache_usage[resource_id]["cost"] += self._safe_decimal(
+                record.get("line_item_unblended_cost")
             )
         
         expected_hours = days * 24
@@ -419,11 +439,11 @@ class CURUsageAnalyzer:
                     "cost": Decimal("0"),
                 }
             
-            eks_usage[resource_id]["total_usage_hours"] += Decimal(
-                str(record.get("line_item_usage_amount", 0))
+            eks_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+                record.get("line_item_usage_amount")
             )
-            eks_usage[resource_id]["cost"] += Decimal(
-                str(record.get("line_item_unblended_cost", 0))
+            eks_usage[resource_id]["cost"] += self._safe_decimal(
+                record.get("line_item_unblended_cost")
             )
         
         # EKS clusters are charged $0.10/hour for control plane
@@ -445,4 +465,3 @@ class CURUsageAnalyzer:
         
         logger.info("cur_eks_analysis_complete", analyzed=len(eks_usage), flagged=len(idle_clusters))
         return idle_clusters
-

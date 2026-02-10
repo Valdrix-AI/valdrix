@@ -1,4 +1,5 @@
 import pytest
+import os
 from unittest.mock import MagicMock, patch, AsyncMock
 import jwt
 from cryptography.hazmat.primitives import serialization
@@ -98,7 +99,29 @@ class TestOIDCDeep:
         assert len(jwks["keys"]) == 0
 
     @pytest.mark.asyncio
-    async def test_verify_gcp_access_placeholder(self):
-        success, err = await OIDCService.verify_gcp_access("p1", "t1")
-        assert success is True
-        assert err is None
+    async def test_verify_gcp_access_requires_audience(self):
+        with patch("app.shared.connections.oidc.get_settings") as mock_get_settings:
+            mock_get_settings.return_value = MagicMock(GCP_OIDC_AUDIENCE=None)
+            success, err = await OIDCService.verify_gcp_access("p1", "t1")
+            assert success is False
+            assert "GCP_OIDC_AUDIENCE" in err
+
+    @pytest.mark.asyncio
+    async def test_verify_gcp_access_success(self):
+        settings = MagicMock(
+            GCP_OIDC_AUDIENCE="//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/pool/providers/provider",
+            GCP_OIDC_SCOPE="https://www.googleapis.com/auth/cloud-platform",
+            GCP_OIDC_STS_URL="https://sts.googleapis.com/v1/token",
+            GCP_OIDC_VERIFY_TIMEOUT_SECONDS=10,
+        )
+        with patch("app.shared.connections.oidc.get_settings", return_value=settings), \
+             patch("app.shared.connections.oidc.OIDCService.create_token", new_callable=AsyncMock, return_value="id-token"), \
+             patch("httpx.AsyncClient") as MockClient:
+            mock_client = MockClient.return_value.__aenter__.return_value
+            mock_response = MagicMock(status_code=200)
+            mock_response.json.return_value = {"access_token": "access-token"}
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            success, err = await OIDCService.verify_gcp_access("p1", "t1")
+            assert success is True
+            assert err is None

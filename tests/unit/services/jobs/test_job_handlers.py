@@ -3,6 +3,7 @@ Tests for Job Handlers - Zombie Scan and Notifications
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
@@ -133,7 +134,15 @@ async def test_webhook_retry_handler_generic_http(mock_db, sample_job):
         "data": {"foo": "bar"}
     }
     
-    with patch("httpx.AsyncClient.post") as mock_post:
+    with patch("httpx.AsyncClient.post") as mock_post, \
+         patch(
+             "app.modules.governance.domain.jobs.handlers.notifications.get_settings",
+             return_value=SimpleNamespace(
+                 WEBHOOK_ALLOWED_DOMAINS=["example.com"],
+                 WEBHOOK_REQUIRE_HTTPS=True,
+                 WEBHOOK_BLOCK_PRIVATE_IPS=True,
+             ),
+         ):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.raise_for_status = MagicMock()
@@ -146,6 +155,28 @@ async def test_webhook_retry_handler_generic_http(mock_db, sample_job):
         args, kwargs = mock_post.call_args
         assert args[0] == "https://example.com/webhook"
         assert kwargs["json"] == {"foo": "bar"}
+        assert kwargs["headers"]["Content-Type"] == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_webhook_retry_handler_rejects_non_allowlisted_domain(mock_db, sample_job):
+    handler = WebhookRetryHandler()
+    sample_job.payload = {
+        "provider": "generic",
+        "url": "https://evil.example.net/webhook",
+        "data": {"foo": "bar"}
+    }
+
+    with patch(
+        "app.modules.governance.domain.jobs.handlers.notifications.get_settings",
+        return_value=SimpleNamespace(
+            WEBHOOK_ALLOWED_DOMAINS=["example.com"],
+            WEBHOOK_REQUIRE_HTTPS=True,
+            WEBHOOK_BLOCK_PRIVATE_IPS=True,
+        ),
+    ):
+        with pytest.raises(ValueError, match="allowlist"):
+            await handler.execute(sample_job, mock_db)
 
 @pytest.mark.asyncio
 async def test_remediation_handler_targeted(mock_db, sample_job):

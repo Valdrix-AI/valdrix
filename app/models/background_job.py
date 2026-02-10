@@ -6,7 +6,7 @@ Represents jobs in the background_jobs table for durable job processing.
 from __future__ import annotations
 
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING
 from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Boolean, event, JSON, Uuid as PG_UUID
@@ -62,10 +62,11 @@ class BackgroundJob(Base):
         primary_key=True, 
         default=uuid4
     )
-    job_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    job_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     tenant_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("tenants.id", ondelete="CASCADE"), 
-        nullable=True
+        nullable=True,
+        index=True
     )
     # BE-SCHED-6: Deduplication key for idempotent enqueuing (tenant_id:job_type:bucket)
     deduplication_key: Mapped[str | None] = mapped_column(
@@ -86,6 +87,12 @@ class BackgroundJob(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), 
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        index=True
+    )
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     
     # Relationships

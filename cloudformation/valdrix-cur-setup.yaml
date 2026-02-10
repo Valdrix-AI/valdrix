@@ -16,6 +16,11 @@ Parameters:
       The ARN of the Valdrix IAM role from the first CloudFormation stack.
       Example: arn:aws:iam::123456789012:role/ValdrixRole
     AllowedPattern: 'arn:aws:iam::\d{12}:role/.+'
+  CurRetentionDays:
+    Type: Number
+    Default: 365
+    MinValue: 90
+    Description: Number of days to retain CUR objects for compliance and backfills.
 
 Resources:
   # S3 Bucket for CUR data
@@ -32,7 +37,7 @@ Resources:
         Rules:
           - Id: DeleteOldReports
             Status: Enabled
-            ExpirationInDays: 90  # Keep 3 months of data
+            ExpirationInDays: !Ref CurRetentionDays
       Tags:
         - Key: Purpose
           Value: Valdrix-CostReports

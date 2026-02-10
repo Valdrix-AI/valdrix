@@ -45,7 +45,7 @@ async def test_is_low_carbon_window():
         mock_now = MagicMock()
         mock_now.hour = 12
         mock_dt.now.return_value = mock_now
-        result = await orchestrator._is_low_carbon_window("us-east-1")
+        result = await orchestrator.is_low_carbon_window("us-east-1")
         assert result is True
         
     # Test peak demand window (7PM UTC)
@@ -53,7 +53,7 @@ async def test_is_low_carbon_window():
         mock_now = MagicMock()
         mock_now.hour = 19
         mock_dt.now.return_value = mock_now
-        result = await orchestrator._is_low_carbon_window("us-east-1")
+        result = await orchestrator.is_low_carbon_window("us-east-1")
         assert result is False
 
 @pytest.mark.asyncio
@@ -67,7 +67,7 @@ async def test_green_scheduling_delays_in_non_green_window():
         mock_now = MagicMock()
         mock_now.hour = 20
         mock_dt.now.return_value = mock_now
-        result = await orchestrator._is_low_carbon_window("us-east-1")
+        result = await orchestrator.is_low_carbon_window("us-east-1")
         assert result is False
 
     # Test 3AM UTC - SHOULD be green (low demand)
@@ -75,5 +75,5 @@ async def test_green_scheduling_delays_in_non_green_window():
         mock_now = MagicMock()
         mock_now.hour = 3
         mock_dt.now.return_value = mock_now
-        result = await orchestrator._is_low_carbon_window("us-east-1")
+        result = await orchestrator.is_low_carbon_window("us-east-1")
         assert result is True

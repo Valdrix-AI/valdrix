@@ -9,10 +9,10 @@ Uses moto to mock AWS responses and verifies:
 """
 
 import pytest
+import boto3
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta, timezone
-from moto.server import ThreadedMotoServer
-import aioboto3
+from moto import mock_aws
 from botocore.config import Config
 
 # Test data representing mock AWS resources
@@ -157,69 +157,59 @@ class AsyncClientWrapper:
     async def __aexit__(self, *args):
         pass
 
-@pytest.fixture(scope="class")
-def moto_server():
-    """Start a ThreadedMotoServer for async integration testing."""
-    from app.shared.core.config import get_settings
-    server = ThreadedMotoServer(port=5001)
-    server.start()
-    settings = get_settings()
-    old_endpoint = settings.AWS_ENDPOINT_URL
-    settings.AWS_ENDPOINT_URL = "http://localhost:5001"
-    
-    # Set dummy env vars for botocore
-    import os
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    os.environ["AWS_SECURITY_TOKEN"] = "testing"
-    os.environ["AWS_SESSION_TOKEN"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-    
-    yield "http://localhost:5001"
-    
-    settings.AWS_ENDPOINT_URL = old_endpoint
-    server.stop()
-
-@pytest.mark.usefixtures("moto_server")
 class TestZombieScanWithMoto:
     """Integration tests using moto server to mock AWS services."""
 
     @pytest.mark.asyncio
     async def test_unattached_volume_detection_with_moto(self):
         """Test that unattached volumes are correctly identified using moto."""
-        # 1. Setup - Create a volume in moto
-        session = aioboto3.Session()
-        from app.shared.core.config import get_settings
-        endpoint_url = get_settings().AWS_ENDPOINT_URL
+        with mock_aws():
+            from app.shared.core.config import get_settings
+            settings = get_settings()
+            old_endpoint = settings.AWS_ENDPOINT_URL
+            settings.AWS_ENDPOINT_URL = None
+            try:
+                # 1. Setup - Create a volume in moto
+                ec2 = boto3.client(
+                    "ec2",
+                    region_name="us-east-1",
+                    aws_access_key_id="testing",
+                    aws_secret_access_key="testing",
+                    aws_session_token="testing",
+                )
+                vol_response = ec2.create_volume(
+                    AvailabilityZone="us-east-1a",
+                    Size=10,
+                    TagSpecifications=[{
+                        'ResourceType': 'volume',
+                        'Tags': [{'Key': 'Name', 'Value': 'orphaned-vol'}]
+                    }]
+                )
+                volume_id = vol_response["VolumeId"]
+            finally:
+                settings.AWS_ENDPOINT_URL = old_endpoint
         
-        async with session.client("ec2", region_name="us-east-1", endpoint_url=endpoint_url) as ec2:
-            vol_response = await ec2.create_volume(
-                AvailabilityZone="us-east-1a",
-                Size=10,
-                TagSpecifications=[{
-                    'ResourceType': 'volume',
-                    'Tags': [{'Key': 'Name', 'Value': 'orphaned-vol'}]
-                }]
-            )
-            volume_id = vol_response["VolumeId"]
+            # 2. Act - Run the storage plugin
+            from app.modules.optimization.adapters.aws.plugins.storage import UnattachedVolumesPlugin
+            plugin = UnattachedVolumesPlugin()
             
-        # 2. Act - Run the storage plugin
-        from app.modules.optimization.adapters.aws.plugins.storage import UnattachedVolumesPlugin
-        plugin = UnattachedVolumesPlugin()
-        
-        boto_config = Config(read_timeout=30, connect_timeout=10, retries={"max_attempts": 3})
-        
-        zombies = await plugin.scan(
-            session=session,
-            region="us-east-1",
-            credentials={
-                "AccessKeyId": "testing",
-                "SecretAccessKey": "testing",
-                "SessionToken": "testing",
-                "aws_account_id": "123456789012"
-            },
-            config=boto_config
-        )
+            boto_config = Config(read_timeout=30, connect_timeout=10, retries={"max_attempts": 3})
+            
+            session = MagicMock()
+            session.client = lambda service_name, **kwargs: AsyncClientWrapper(
+                boto3.client(service_name, **kwargs)
+            )
+            
+            zombies = await plugin.scan(
+                session=session,
+                region="us-east-1",
+                credentials={
+                    "AccessKeyId": "testing",
+                    "SecretAccessKey": "testing",
+                    "aws_account_id": "123456789012"
+                },
+                config=boto_config
+            )
         
         # 3. Assert - Should detect the unattached volume
         assert len(zombies) > 0
@@ -230,33 +220,47 @@ class TestZombieScanWithMoto:
     @pytest.mark.asyncio
     async def test_old_snapshot_detection_with_moto(self):
         """Test that old snapshots are correctly identified as zombies with moto."""
-        session = aioboto3.Session()
-        from app.shared.core.config import get_settings
-        endpoint_url = get_settings().AWS_ENDPOINT_URL
+        with mock_aws():
+            from app.shared.core.config import get_settings
+            settings = get_settings()
+            old_endpoint = settings.AWS_ENDPOINT_URL
+            settings.AWS_ENDPOINT_URL = None
+            try:
+                # 1. Setup - Create a volume and a snapshot
+                ec2 = boto3.client(
+                    "ec2",
+                    region_name="us-east-1",
+                    aws_access_key_id="testing",
+                    aws_secret_access_key="testing",
+                    aws_session_token="testing",
+                )
+                vol = ec2.create_volume(AvailabilityZone="us-east-1a", Size=10)
+                snap = ec2.create_snapshot(VolumeId=vol["VolumeId"])
+                snap["SnapshotId"]
+            finally:
+                settings.AWS_ENDPOINT_URL = old_endpoint
         
-        # 1. Setup - Create a volume and a snapshot
-        async with session.client("ec2", region_name="us-east-1", endpoint_url=endpoint_url) as ec2:
-            vol = await ec2.create_volume(AvailabilityZone="us-east-1a", Size=10)
-            snap = await ec2.create_snapshot(VolumeId=vol["VolumeId"])
-            snap["SnapshotId"]
+            # 2. Act - Run the storage plugin
+            from app.modules.optimization.adapters.aws.plugins.storage import OldSnapshotsPlugin
+            plugin = OldSnapshotsPlugin()
             
-        # 2. Act - Run the storage plugin
-        from app.modules.optimization.adapters.aws.plugins.storage import OldSnapshotsPlugin
-        plugin = OldSnapshotsPlugin()
-        
-        boto_config = Config(read_timeout=30, connect_timeout=10, retries={"max_attempts": 3})
-        
-        zombies = await plugin.scan(
-            session=session,
-            region="us-east-1",
-            credentials={
-                "AccessKeyId": "testing",
-                "SecretAccessKey": "testing",
-                "SessionToken": "testing",
-                "aws_account_id": "123456789012"
-            },
-            config=boto_config
-        )
+            boto_config = Config(read_timeout=30, connect_timeout=10, retries={"max_attempts": 3})
+            
+            session = MagicMock()
+            session.client = lambda service_name, **kwargs: AsyncClientWrapper(
+                boto3.client(service_name, **kwargs)
+            )
+            
+            zombies = await plugin.scan(
+                session=session,
+                region="us-east-1",
+                credentials={
+                    "AccessKeyId": "testing",
+                    "SecretAccessKey": "testing",
+                    "aws_account_id": "123456789012"
+                },
+                config=boto_config
+            )
         
         # In mock environment, all snapshots are "new", so we just verify it returned a list
         assert isinstance(zombies, list)

@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from fastapi import HTTPException
 from app.modules.reporting.api.v1.billing import (
     get_public_plans, 
     create_checkout, 
@@ -60,6 +61,9 @@ async def test_get_public_plans_fallback_on_error(mock_db):
 @patch("app.modules.reporting.api.v1.billing.settings")
 async def test_create_checkout_success(mock_settings, mock_billing_service_class, mock_db, mock_user):
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
+    mock_settings.FRONTEND_URL = "https://app.valdrix.io"
+    mock_settings.CORS_ORIGINS = ["https://app.valdrix.io"]
+    mock_settings.ENVIRONMENT = "development"
     
     checkout_req = MagicMock()
     checkout_req.tier = "starter"
@@ -74,6 +78,25 @@ async def test_create_checkout_success(mock_settings, mock_billing_service_class
     
     response = await create_checkout(MagicMock(), checkout_req, mock_user, mock_db)
     assert response["checkout_url"] == "http://checkout.url"
+
+@pytest.mark.asyncio
+@patch("app.modules.reporting.domain.billing.paystack_billing.BillingService")
+@patch("app.modules.reporting.api.v1.billing.settings")
+async def test_create_checkout_rejects_untrusted_callback(mock_settings, mock_billing_service_class, mock_db, mock_user):
+    mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
+    mock_settings.FRONTEND_URL = "https://app.valdrix.io"
+    mock_settings.CORS_ORIGINS = ["https://app.valdrix.io"]
+    mock_settings.ENVIRONMENT = "production"
+
+    checkout_req = MagicMock()
+    checkout_req.tier = "starter"
+    checkout_req.billing_cycle = "monthly"
+    checkout_req.callback_url = "https://evil.example.com/callback"
+
+    with pytest.raises(HTTPException) as exc:
+        await create_checkout(MagicMock(), checkout_req, mock_user, mock_db)
+
+    assert exc.value.status_code == 400
 
 @pytest.mark.asyncio
 @patch("app.modules.reporting.domain.billing.paystack_billing.WebhookHandler")

@@ -15,7 +15,7 @@ class IdleSageMakerPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_sagemaker_endpoints"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
         days = 7
 

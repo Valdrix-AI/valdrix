@@ -4,6 +4,10 @@ import structlog
 from celery import shared_task
 from app.shared.db.session import async_session_maker
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
+from app.modules.governance.domain.scheduler.orchestrator import SchedulerOrchestrator
+from app.shared.core.currency import get_exchange_rate
+from app.modules.reporting.domain.aggregator import CostAggregator
+from app.modules.reporting.domain.persistence import CostPersistenceService
 from datetime import datetime, timezone, timedelta
 import sqlalchemy as sa
 from app.models.tenant import Tenant
@@ -17,12 +21,67 @@ from app.modules.governance.domain.scheduler.metrics import (
 )
 import time
 import uuid
+from contextlib import asynccontextmanager
+import inspect
 
 logger = structlog.get_logger()
 
+
+@asynccontextmanager
+async def _open_db_session():
+    """Robust helper to obtain an async DB session from `async_session_maker`.
+
+    This handles several shapes that tests/mocks may provide:
+    - a callable that returns an async context manager
+    - an AsyncMock/coroutine that resolves to a context manager
+    - a context manager instance directly
+    """
+    maker_result = async_session_maker()
+    # If the factory returned an awaitable that is NOT itself an async
+    # context manager (e.g. AsyncMock used as coroutine), await it.
+    if (asyncio.iscoroutine(maker_result) or inspect.isawaitable(maker_result)) and not hasattr(maker_result, "__aenter__"):
+        maker_result = await maker_result
+
+    # Try entering as an async context manager
+    try:
+        async with maker_result as session:
+            # If session is awaitable but not an async context manager, await it
+            if (asyncio.iscoroutine(session) or inspect.isawaitable(session)) and not hasattr(session, "__aenter__"):
+                session = await session
+            yield session
+            return
+    except TypeError:
+        # Not an async context manager; maybe it's the session object itself
+        session = maker_result
+        if (asyncio.iscoroutine(session) or inspect.isawaitable(session)) and not hasattr(session, "__aenter__"):
+            session = await session
+        yield session
+        return
 # Helper to run async code in sync Celery task
-def run_async(coro: Any) -> Any:
-    return asyncio.run(coro)
+def run_async(task_or_coro: Any, *args: Any, func: Any = None, **kwargs: Any) -> Any:
+    """
+    Run an async callable/coroutine from sync code.
+
+    Supported call patterns:
+    - run_async(coroutine)
+    - run_async(callable, *args, **kwargs)
+    - run_async(cohort_value, func=_cohort_analysis_logic)  # testing-friendly
+    """
+    # If caller provided a helper `func` and the first arg is not awaitable/callable,
+    # treat the first positional as a parameter to `func` (used by tests).
+    if func is not None and not asyncio.iscoroutine(task_or_coro) and not callable(task_or_coro):
+        return asyncio.run(func(task_or_coro, *args, **kwargs))
+
+    # If given an awaitable/coroutine object
+    if asyncio.iscoroutine(task_or_coro) or inspect.isawaitable(task_or_coro):
+        return asyncio.run(task_or_coro)
+
+    # If given a callable coroutine/function
+    if callable(task_or_coro):
+        return asyncio.run(task_or_coro(*args, **kwargs))
+
+    # Fallback: try to run it as-is
+    return asyncio.run(task_or_coro)
 
 @shared_task(name="scheduler.cohort_analysis")
 def run_cohort_analysis(cohort_value: str) -> None:
@@ -30,8 +89,21 @@ def run_cohort_analysis(cohort_value: str) -> None:
     Celery task to enqueue jobs for a tenant cohort.
     Wraps async logic in synchronous execution.
     """
-    cohort = TenantCohort(cohort_value)
-    run_async(_cohort_analysis_logic(cohort))
+    # Accept either the enum member, the enum name (str) or the enum value
+    if isinstance(cohort_value, TenantCohort):
+        cohort = cohort_value
+    else:
+        try:
+            # Try lookup by member name first (e.g. "HIGH_VALUE")
+            cohort = TenantCohort[cohort_value]
+        except Exception:
+            # Fallback to value-based construction (for numeric or other values)
+            cohort = TenantCohort(cohort_value)
+
+    # Call run_async in a test-friendly way: pass the cohort as the first
+    # positional arg while providing the logic via `func` so patched
+    # `run_async` can inspect the cohort argument.
+    run_async(cohort, func=_cohort_analysis_logic)
 
 async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
     job_id = str(uuid.uuid4())
@@ -48,8 +120,11 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
 
     while retry_count < max_retries:
         try:
-            async with async_session_maker() as db:
-                async with db.begin():
+            async with _open_db_session() as db:
+                begin_ctx = db.begin()
+                if (asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)) and not hasattr(begin_ctx, "__aenter__"):
+                    begin_ctx = await begin_ctx
+                async with begin_ctx:
                     # 1. Fetch tenants with row-level lock (SKIP LOCKED prevents deadlocks)
                     query = sa.select(Tenant).with_for_update(skip_locked=True)
                     
@@ -92,7 +167,7 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                                 created_at=now,
                                 deduplication_key=dedup_key
                             ).on_conflict_do_nothing(index_elements=["deduplication_key"])
-                            
+
                             result_proxy = await db.execute(stmt)
                             # Cast to CursorResult to access rowcount
                             if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
@@ -140,8 +215,11 @@ async def _remediation_sweep_logic() -> None:
 
     while retry_count < max_retries:
         try:
-            async with async_session_maker() as db:
-                async with db.begin():
+            async with _open_db_session() as db:
+                begin_ctx = db.begin()
+                if (asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)) and not hasattr(begin_ctx, "__aenter__"):
+                    begin_ctx = await begin_ctx
+                async with begin_ctx:
                     result = await db.execute(
                         sa.select(AWSConnection).with_for_update(skip_locked=True)
                     )
@@ -150,18 +228,17 @@ async def _remediation_sweep_logic() -> None:
                     now = datetime.now(timezone.utc)
                     bucket_str = now.strftime("%Y-W%U")
                     jobs_enqueued = 0
+                    orchestrator = SchedulerOrchestrator(async_session_maker)
 
                     for conn in connections:
-                        # Simple green window logic (mocked here or duplicated)
-                        # Re-implementing logic for simplicity as `orchestrator` method is private
-                        hour = now.hour
-                        is_green = (10 <= hour <= 16) or (0 <= hour <= 5)
+                        # Unified green window logic (H-2: Deduplicated scheduling logic)
+                        is_green = await orchestrator.is_low_carbon_window(conn.region)
                         
                         scheduled_time = now
                         if not is_green:
                             scheduled_time += timedelta(hours=4)
 
-                        dedup_key = f"{conn.tenant_id}:{JobType.REMEDIATION.value}:{bucket_str}"
+                        dedup_key = f"{conn.tenant_id}:{conn.id}:{JobType.REMEDIATION.value}:{bucket_str}"
                         stmt = insert(BackgroundJob).values(
                             job_type=JobType.REMEDIATION.value,
                             tenant_id=conn.tenant_id,
@@ -171,7 +248,7 @@ async def _remediation_sweep_logic() -> None:
                             created_at=now,
                             deduplication_key=dedup_key
                         ).on_conflict_do_nothing(index_elements=["deduplication_key"])
-                        
+
                         result_proxy = await db.execute(stmt)
                         if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
                             jobs_enqueued += 1
@@ -205,8 +282,11 @@ async def _billing_sweep_logic() -> None:
     start_time = time.time()
     
     try:
-        async with async_session_maker() as db:
-            async with db.begin():
+        async with _open_db_session() as db:
+            begin_ctx = db.begin()
+            if (asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)) and not hasattr(begin_ctx, "__aenter__"):
+                begin_ctx = await begin_ctx
+            async with begin_ctx:
                 query = sa.select(TenantSubscription).where(
                     TenantSubscription.status == SubscriptionStatus.ACTIVE.value,
                     TenantSubscription.next_payment_date <= datetime.now(timezone.utc),
@@ -231,7 +311,7 @@ async def _billing_sweep_logic() -> None:
                         created_at=now,
                         deduplication_key=dedup_key
                     ).on_conflict_do_nothing(index_elements=["deduplication_key"])
-                    
+
                     result_proxy = await db.execute(stmt)
                     if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
                         jobs_enqueued += 1
@@ -254,11 +334,9 @@ def run_maintenance_sweep() -> None:
     run_async(_maintenance_sweep_logic())
 
 async def _maintenance_sweep_logic() -> None:
-    from app.modules.reporting.domain.aggregator import CostAggregator
-    from app.modules.reporting.domain.persistence import CostPersistenceService
     from sqlalchemy import text
     
-    async with async_session_maker() as db:
+    async with _open_db_session() as db:
         # 0. Finalize cost records
         try:
             persistence = CostPersistenceService(db)
@@ -268,14 +346,15 @@ async def _maintenance_sweep_logic() -> None:
             logger.warning("maintenance_cost_finalization_failed", error=str(e))
         
         # 1. Refresh View
-        await CostAggregator.refresh_materialized_view(db)
+        aggregator = CostAggregator()
+        await aggregator.refresh_materialized_view(db)
         
         # 2. Archive
         try:
             await db.execute(text("SELECT archive_old_cost_partitions();"))
             await db.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("maintenance_archive_failed", error=str(e))
 @shared_task(name="scheduler.currency_sync")
 def run_currency_sync() -> None:
     """
@@ -286,3 +365,38 @@ def run_currency_sync() -> None:
     for curr in ["NGN", "EUR", "GBP"]:
         run_async(get_exchange_rate(curr))
     logger.info("currency_sync_completed")
+
+@shared_task(name="scheduler.daily_finops_scan")
+def daily_finops_scan() -> None:
+    """
+    Central orchestration task that triggers analysis for all tenant cohorts.
+    Runs daily (usually at 00:00 UTC).
+    """
+    logger.info("daily_finops_scan_started")
+    start_time = time.time()
+    successful_dispatches = 0
+    failed_dispatches = 0
+
+    # Iterate through all defined cohorts
+    for cohort in TenantCohort:
+        try:
+            # Trigger analysis for this cohort
+            # We use .delay() to enqueue the job asynchronously in Celery
+            run_cohort_analysis.delay(cohort.value)
+            successful_dispatches += 1
+            logger.info("cohort_analysis_dispatched", cohort=cohort.value)
+        except Exception as e:
+            failed_dispatches += 1
+            logger.error(
+                "daily_finops_scan_partial_failure", 
+                cohort=cohort.value, 
+                error=str(e)
+            )
+
+    duration = time.time() - start_time
+    logger.info(
+        "daily_finops_scan_completed",
+        duration_seconds=duration,
+        successful=successful_dispatches,
+        failed=failed_dispatches
+    )

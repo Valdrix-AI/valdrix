@@ -9,6 +9,24 @@ API_URL="${API_URL:-https://api.valdrix.ai}"
 OPENAPI_URL="${API_URL}/openapi.json"
 OUTPUT_DIR="dashboard/src/lib/api"
 
+if [[ ! "${API_URL}" =~ ^https?:// ]]; then
+    echo "❌ API_URL must start with http:// or https://"
+    exit 1
+fi
+
+if [[ "${API_URL}" =~ ^http:// ]] && [[ ! "${API_URL}" =~ ^http://(localhost|127\.0\.0\.1)(:[0-9]+)?$ ]]; then
+    echo "❌ Non-local API_URL must use https://"
+    exit 1
+fi
+
+api_host="$(printf '%s' "${API_URL}" | sed -E 's#^https?://([^/:]+).*#\1#')"
+if [[ -n "${OPENAPI_ALLOWED_HOSTS:-}" ]]; then
+    if ! printf '%s' "${OPENAPI_ALLOWED_HOSTS}" | tr ',' '\n' | grep -Fxq "${api_host}"; then
+        echo "❌ API host '${api_host}' is not in OPENAPI_ALLOWED_HOSTS allowlist"
+        exit 1
+    fi
+fi
+
 echo "🔄 Generating TypeScript client from OpenAPI spec..."
 echo "   Source: ${OPENAPI_URL}"
 echo "   Output: ${OUTPUT_DIR}"

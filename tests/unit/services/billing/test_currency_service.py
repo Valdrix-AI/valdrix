@@ -104,6 +104,84 @@ async def test_get_ngn_rate_fallback(mock_db):
 
 
 @pytest.mark.asyncio
+async def test_get_ngn_rate_db_exception_uses_api(mock_db):
+    """DB lookup errors should not block API fetch."""
+    mock_db.execute = AsyncMock(side_effect=RuntimeError("db down"))
+
+    with patch("app.modules.reporting.domain.billing.currency.settings") as mock_settings:
+        mock_settings.EXCHANGERATE_API_KEY = "test-key"
+        service = ExchangeRateService(mock_db)
+        service.api_key = "test-key"
+
+        with patch.object(service, "_fetch_from_api", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = 1600.0
+            with patch.object(service, "_update_db_cache", new_callable=AsyncMock):
+                rate = await service.get_ngn_rate()
+                assert rate == 1600.0
+
+
+@pytest.mark.asyncio
+async def test_get_ngn_rate_api_failure_uses_stale(mock_db):
+    """API errors should fall back to stale DB rate when available."""
+    stale_rate = MagicMock()
+    stale_rate.rate = 1400.0
+    stale_rate.last_updated = datetime.now(timezone.utc) - timedelta(hours=48)
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = stale_rate
+    mock_db.execute.return_value = mock_result
+
+    with patch("app.modules.reporting.domain.billing.currency.settings") as mock_settings, \
+         patch("app.modules.reporting.domain.billing.currency.logger") as mock_logger:
+        mock_settings.EXCHANGERATE_API_KEY = "test-key"
+        service = ExchangeRateService(mock_db)
+        service.api_key = "test-key"
+
+        with patch.object(service, "_fetch_from_api", new_callable=AsyncMock, side_effect=RuntimeError("api down")):
+            rate = await service.get_ngn_rate()
+            assert rate == 1400.0
+            mock_logger.warning.assert_called_once()
+            args, kwargs = mock_logger.warning.call_args
+            assert args[0] == "currency_using_stale_db_rate"
+            assert isinstance(kwargs.get("age"), timedelta)
+
+
+@pytest.mark.asyncio
+async def test_fetch_from_api_error_result(mock_db):
+    """API failure response should raise ValueError."""
+    service = ExchangeRateService(mock_db)
+    service.api_key = "test-key"
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "result": "error",
+        "error-type": "invalid-key"
+    }
+    mock_response.raise_for_status = MagicMock()
+
+    with patch("httpx.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.get.return_value = mock_response
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+        with pytest.raises(ValueError):
+            await service._fetch_from_api()
+
+
+@pytest.mark.asyncio
+async def test_update_db_cache_rolls_back_on_failure(mock_db):
+    """DB failures during cache update should rollback."""
+    mock_db.commit = AsyncMock(side_effect=RuntimeError("commit failed"))
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_result
+
+    service = ExchangeRateService(mock_db)
+    await service._update_db_cache(1500.0)
+    mock_db.rollback.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_fetch_from_api(mock_db):
     """Test _fetch_from_api parses response correctly."""
     service = ExchangeRateService(mock_db)

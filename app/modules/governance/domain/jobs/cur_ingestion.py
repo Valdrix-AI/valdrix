@@ -14,7 +14,7 @@ class CURIngestionJob:
     def __init__(self, db: AsyncSession = None):
         self.db = db
 
-    async def run(self, connection_id: str = None):
+    async def run(self, connection_id: str = None, tenant_id: str = None):
         """
         Execute ingestion for a specific connection or all CUR-enabled connections.
         """
@@ -22,15 +22,19 @@ class CURIngestionJob:
         if not self.db:
             async with async_session_maker() as session:
                 self.db = session
-                await self._execute(connection_id)
+                await self._execute(connection_id, tenant_id)
         else:
-            await self._execute(connection_id)
+            await self._execute(connection_id, tenant_id)
 
-    async def _execute(self, connection_id: str = None):
+    async def _execute(self, connection_id: str = None, tenant_id: str = None):
         # 1. Fetch connection(s)
+        if not tenant_id:
+            raise ValueError("tenant_id is required for CUR ingestion scope")
+
         query = select(AWSConnection)
         if connection_id:
             query = query.where(AWSConnection.id == connection_id)
+        query = query.where(AWSConnection.tenant_id == tenant_id)
         
         # We only want connections where CUR is configured (e.g. has bucket info)
         # Note: CUR configuration status might be stored in metadata or a flag
@@ -49,7 +53,7 @@ class CURIngestionJob:
         """
         # 1. Discover latest files (simplified for now: looking in standard bucket)
         # In production, we'd read the manifest file.
-        bucket = f"valdrix-cur-{connection.aws_account_id}-{connection.region}"
+        bucket = connection.cur_bucket_name or f"valdrix-cur-{connection.aws_account_id}-{connection.region}"
         
         # For demonstration, we assume a path. Real discovery would use s3.list_objects_v2
         # logger.info("cur_ingestion_started", account=connection.aws_account_id, bucket=bucket)

@@ -1,4 +1,5 @@
 import pytest
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import Request, HTTPException
 from app.shared.core.auth import get_current_user, decode_jwt, CurrentUser, get_current_user_from_jwt, requires_role, require_tenant_access

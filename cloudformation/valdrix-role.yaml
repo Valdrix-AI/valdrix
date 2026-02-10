@@ -7,8 +7,10 @@ Description: |
   an External ID for security.
   
   Permissions granted:
-  - Cost Explorer read access (ce:GetCostAndUsage, ce:GetTags)
-  - No write access, no resource access
+  - Read-only inventory APIs (EC2, ELB, RDS, etc.)
+  - Read-only S3 access to CUR export buckets
+  - Cost Explorer access intentionally excluded to avoid API charges
+  - No write access
 
 Parameters:
   ExternalId:
@@ -141,7 +143,6 @@ Resources:
               - Sid: S3ReadOnly
                 Effect: Allow
                 Action:
-                  - s3:ListAllMyBuckets
                   - s3:GetBucketLocation
                   - s3:GetBucketTagging
                 Resource: '*'

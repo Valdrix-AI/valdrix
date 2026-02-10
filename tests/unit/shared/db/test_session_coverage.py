@@ -1,4 +1,5 @@
 import pytest
+import os
 import ssl
 import uuid
 from unittest.mock import MagicMock, AsyncMock, patch

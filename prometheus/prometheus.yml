@@ -21,21 +21,19 @@ scrape_configs:
   # Prometheus itself
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: ['prometheus:9090']
 
   # Valdrix API
   - job_name: 'valdrix-api'
     static_configs:
-      # Change localhost to host.docker.internal if running in Docker Desktop
-      - targets: ['localhost:8000']
+      - targets: ['api:8000']
     metrics_path: /metrics
     scrape_interval: 10s
 
   # Valdrix Worker (if running separately)
   - job_name: 'valdrix-worker'
     static_configs:
-      # Change localhost to host.docker.internal if running in Docker Desktop
-      - targets: ['localhost:8001']
+      - targets: ['worker:8001']
     metrics_path: /metrics
     scrape_interval: 30s
 

@@ -4,9 +4,8 @@ import os
 os.environ["KDF_SALT"] = EncryptionKeyManager.generate_salt()
 os.environ["ENVIRONMENT"] = "development"
 
-print(f"EncryptionKeyManager: {EncryptionKeyManager}")
-salt = EncryptionKeyManager.generate_salt()
-print(f"Generated Salt: {salt}")
-
 encrypted = encrypt_string("test")
-print(f"Encrypted: {encrypted}")
+if encrypted:
+    print("encryption_self_check_ok")
+else:
+    print("encryption_self_check_failed")

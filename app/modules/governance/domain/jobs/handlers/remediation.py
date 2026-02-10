@@ -42,13 +42,16 @@ class RemediationHandler(BaseJobHandler):
         # Get AWS connection
         if conn_id:
             db_res = await db.execute(
-                select(AWSConnection).where(AWSConnection.id == UUID(conn_id))
+                select(AWSConnection).where(
+                    AWSConnection.id == UUID(conn_id),
+                    AWSConnection.tenant_id == tenant_id
+                )
             )
         else:
             db_res = await db.execute(
                 select(AWSConnection).where(AWSConnection.tenant_id == tenant_id)
             )
-        connection = db_res.scalar_one_or_none()
+        connection = db_res.scalars().first()
         
         if not connection:
             return {"status": "skipped", "reason": "no_aws_connection"}

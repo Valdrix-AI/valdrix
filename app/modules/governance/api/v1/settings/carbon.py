@@ -5,7 +5,7 @@ Manages carbon budget and sustainability settings for tenants.
 """
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator, EmailStr, TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
@@ -41,6 +41,25 @@ class CarbonSettingsUpdate(BaseModel):
     default_region: str = Field("us-east-1", description="Default AWS region for carbon intensity")
     email_enabled: bool = Field(False, description="Enable email notifications for carbon alerts")
     email_recipients: str | None = Field(None, description="Comma-separated email addresses")
+
+    @field_validator("email_recipients")
+    @classmethod
+    def _validate_email_recipients(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        emails = [e.strip() for e in value.split(",") if e.strip()]
+        if not emails:
+            return None
+        adapter = TypeAdapter(EmailStr)
+        for email in emails:
+            adapter.validate_python(email)
+        return ", ".join(emails)
+
+    @model_validator(mode="after")
+    def _validate_email_settings(self):
+        if self.email_enabled and not self.email_recipients:
+            raise ValueError("email_recipients is required when email_enabled is true")
+        return self
 
 
 # ============================================================
@@ -110,9 +129,12 @@ async def update_carbon_settings(
         )
         db.add(settings)
     else:
-        # Update existing settings
-        for key, value in data.model_dump().items():
-            setattr(settings, key, value)
+        updates = data.model_dump()
+        settings.carbon_budget_kg = updates["carbon_budget_kg"]
+        settings.alert_threshold_percent = updates["alert_threshold_percent"]
+        settings.default_region = updates["default_region"]
+        settings.email_enabled = updates["email_enabled"]
+        settings.email_recipients = updates["email_recipients"]
 
     await db.commit()
     await db.refresh(settings)

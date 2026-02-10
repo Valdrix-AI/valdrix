@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from uuid import uuid4, UUID
+from decimal import Decimal
 
 from sqlalchemy import String, Numeric, Boolean, JSON, ForeignKey, DateTime, Uuid as PG_UUID
 from sqlalchemy.dialects.postgresql import JSONB
@@ -75,10 +76,10 @@ class StrategyRecommendation(Base):
     payment_option: Mapped[PaymentOption] = mapped_column(String(20))
     
     # Financial Impact
-    upfront_cost: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
-    monthly_recurring_cost: Mapped[float] = mapped_column(Numeric(12, 2), default=0.0)
-    estimated_monthly_savings: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    roi_percentage: Mapped[float] = mapped_column(Numeric(5, 2))  # e.g., 25.5 for 25.5%
+    upfront_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0.0)
+    monthly_recurring_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0.0)
+    estimated_monthly_savings: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    roi_percentage: Mapped[Decimal] = mapped_column(Numeric(5, 2))  # e.g., 25.5 for 25.5%
     
     # Status
     status: Mapped[str] = mapped_column(String(20), default="open") # open, applied, dismissed

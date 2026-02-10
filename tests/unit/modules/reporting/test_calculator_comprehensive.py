@@ -3,7 +3,7 @@ Comprehensive tests for CarbonCalculator module.
 Covers cost-based and record-based calculations, carbon efficiency metrics, and recommendations.
 """
 
-import pytest
+from typing import Dict
 from decimal import Decimal
 from typing import List, Dict, Any
 from dataclasses import dataclass

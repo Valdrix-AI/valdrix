@@ -1,7 +1,8 @@
+import pytest
 """
 Comprehensive tests for app.shared.core.auth module.
 """
-import pytest
+import os
 from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime, timedelta
 import jwt

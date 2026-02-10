@@ -62,10 +62,10 @@ class GCPUsageAnalyzer:
             if not compute_records:
                 continue
             
-            total_cost = sum(r.get("cost", 0) for r in compute_records)
-            total_cpu_hours = sum(r.get("usage_amount", 0) for r in compute_records
+            total_cost = sum(float(r.get("cost", 0) or 0) for r in compute_records)
+            total_cpu_hours = sum(float(r.get("usage_amount", 0) or 0) for r in compute_records
                                  if any(x in r.get("sku_description", "").lower() for x in ["cpu", "core", "vcpus"]))
-            total_network = sum(r.get("usage_amount", 0) for r in compute_records
+            total_network = sum(float(r.get("usage_amount", 0) or 0) for r in compute_records
                                if "egress" in r.get("sku_description", "").lower())
             
             # Heuristic: Low CPU hours relative to running time indicates idle
@@ -106,9 +106,9 @@ class GCPUsageAnalyzer:
             if not disk_records:
                 continue
             
-            storage_cost = sum(r.get("cost", 0) for r in disk_records
+            storage_cost = sum(float(r.get("cost", 0) or 0) for r in disk_records
                               if "capacity" in r.get("sku_description", "").lower())
-            io_operations = sum(r.get("usage_amount", 0) for r in disk_records
+            io_operations = sum(float(r.get("usage_amount", 0) or 0) for r in disk_records
                                if "read" in r.get("sku_description", "").lower() 
                                or "write" in r.get("sku_description", "").lower())
             
@@ -142,11 +142,11 @@ class GCPUsageAnalyzer:
             if not sql_records:
                 continue
             
-            instance_cost = sum(r.get("cost", 0) for r in sql_records)
-            network_bytes = sum(r.get("usage_amount", 0) for r in sql_records
+            instance_cost = sum(float(r.get("cost", 0) or 0) for r in sql_records)
+            network_bytes = sum(float(r.get("usage_amount", 0) or 0) for r in sql_records
                                if "network" in r.get("sku_description", "").lower())
             # Calculate storage usage for context
-            total_storage_gb = sum(r.get("usage_amount", 0) for r in sql_records
+            total_storage_gb = sum(float(r.get("usage_amount", 0) or 0) for r in sql_records
                                if "storage" in r.get("sku_description", "").lower())
             
             # Low network activity indicates no connections
@@ -178,9 +178,9 @@ class GCPUsageAnalyzer:
             if not gke_records:
                 continue
             
-            control_plane_cost = sum(r.get("cost", 0) for r in gke_records
+            control_plane_cost = sum(float(r.get("cost", 0) or 0) for r in gke_records
                                     if "cluster management" in r.get("sku_description", "").lower())
-            node_cost = sum(r.get("cost", 0) for r in gke_records
+            node_cost = sum(float(r.get("cost", 0) or 0) for r in gke_records
                           if "node" in r.get("sku_description", "").lower())
             
             # Cluster with control plane cost but no node costs
@@ -212,7 +212,7 @@ class GCPUsageAnalyzer:
             if not function_records:
                 continue
             
-            invocation_count = sum(r.get("usage_amount", 0) for r in function_records
+            invocation_count = sum(float(r.get("usage_amount", 0) or 0) for r in function_records
                                   if "invocation" in r.get("sku_description", "").lower())
             
             if invocation_count == 0:
@@ -244,9 +244,9 @@ class GCPUsageAnalyzer:
             if not run_records:
                 continue
             
-            request_count = sum(r.get("usage_amount", 0) for r in run_records
+            request_count = sum(float(r.get("usage_amount", 0) or 0) for r in run_records
                                if "request" in r.get("sku_description", "").lower())
-            cpu_time = sum(r.get("usage_amount", 0) for r in run_records
+            cpu_time = sum(float(r.get("usage_amount", 0) or 0) for r in run_records
                           if "cpu" in r.get("sku_description", "").lower())
             
             if request_count == 0 and cpu_time == 0:
@@ -278,7 +278,7 @@ class GCPUsageAnalyzer:
             if not ip_records:
                 continue
             
-            ip_cost = sum(r.get("cost", 0) for r in ip_records)
+            ip_cost = sum(float(r.get("cost", 0) or 0) for r in ip_records)
             
             # External IPs only cost money when NOT attached to a running VM
             if ip_cost > 0:
@@ -296,7 +296,7 @@ class GCPUsageAnalyzer:
         
         return zombies
     
-    def find_old_snapshots(self, age_days: int = 90) -> List[Dict[str, Any]]:  # noqa: ARG002
+    def find_old_snapshots(self, age_days: int = 90) -> List[Dict[str, Any]]:
         """
         Detect old disk snapshots with ongoing storage costs.
         """
@@ -310,14 +310,18 @@ class GCPUsageAnalyzer:
             if not snapshot_records:
                 continue
             
-            storage_cost = sum(r.get("cost", 0) for r in snapshot_records)
+            storage_cost = sum(float(r.get("cost", 0) or 0) for r in snapshot_records)
             
-            # Check creation date from labels or metadata if available
-            # Get oldest record for context
+            # GCP-DET-1: Use age_days parameter for snapshot detection
             oldest_record = min(snapshot_records, key=lambda x: x.get("usage_start_time", now))
             record_start = oldest_record.get("usage_start_time")
             
-            if storage_cost > 0:
+            is_old = False
+            if record_start:
+                age = (now - record_start).days
+                is_old = age >= age_days
+            
+            if storage_cost > 0 and is_old:
                 snapshot_name = resource_id.split("/")[-1] if "/" in resource_id else resource_id
                 zombies.append({
                     "resource_id": resource_id,

@@ -10,7 +10,8 @@ logger = structlog.get_logger()
 class S3ParquetAdapter:
     """
     Adapter for reading AWS Cost and Usage Reports (CUR) in Parquet format from S3.
-    Provides SKU-level precision and handles large datasets efficiently.
+    Provides SKU-level precision. Uses streaming row-group reads when pyarrow is available.
+    Falls back to in-memory reads when pyarrow is not installed.
     """
 
     def __init__(self, connection: AWSConnection):
@@ -31,6 +32,36 @@ class S3ParquetAdapter:
 
         creds = await self._get_credentials()
         
+        try:
+            import pyarrow.parquet as pq
+            import pyarrow.fs as pafs
+            use_pyarrow = True
+        except ImportError:
+            use_pyarrow = False
+
+        if use_pyarrow:
+            try:
+                s3fs = pafs.S3FileSystem(
+                    access_key=creds["AccessKeyId"],
+                    secret_key=creds["SecretAccessKey"],
+                    session_token=creds.get("SessionToken"),
+                    region=self.connection.region
+                )
+                path = f"{bucket}/{key}"
+                with s3fs.open_input_file(path) as f:
+                    parquet_file = pq.ParquetFile(f)
+                    batches = [batch.to_pandas() for batch in parquet_file.iter_batches()]
+                df = pd.concat(batches, ignore_index=True) if batches else pd.DataFrame()
+                logger.info("cur_parquet_read_success", bucket=bucket, key=key, rows=len(df))
+                return df
+            except Exception as e:
+                logger.warning(
+                    "cur_parquet_stream_read_failed_fallback",
+                    bucket=bucket,
+                    key=key,
+                    error=str(e)
+                )
+
         async with self.session.client(
             "s3",
             aws_access_key_id=creds["AccessKeyId"],
@@ -40,8 +71,8 @@ class S3ParquetAdapter:
             try:
                 response = await s3.get_object(Bucket=bucket, Key=key)
                 content = await response["Body"].read()
-                
-                # Use pandas to read parquet from memory buffer
+
+                # Use pandas to read parquet from memory buffer (fallback path)
                 df = pd.read_parquet(io.BytesIO(content))
                 logger.info("cur_parquet_read_success", bucket=bucket, key=key, rows=len(df))
                 return df

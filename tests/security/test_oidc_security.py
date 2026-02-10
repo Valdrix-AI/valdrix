@@ -109,9 +109,23 @@ async def test_oidc_get_jwks_exception_handling():
 
 @pytest.mark.asyncio
 async def test_oidc_verify_gcp():
-    success, error = await OIDCService.verify_gcp_access("proj", "tenant")
-    assert success is True
-    assert error is None
+    settings = MagicMock(
+        GCP_OIDC_AUDIENCE="//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/pool/providers/provider",
+        GCP_OIDC_SCOPE="https://www.googleapis.com/auth/cloud-platform",
+        GCP_OIDC_STS_URL="https://sts.googleapis.com/v1/token",
+        GCP_OIDC_VERIFY_TIMEOUT_SECONDS=10,
+    )
+    with patch("app.shared.connections.oidc.get_settings", return_value=settings), \
+         patch("app.shared.connections.oidc.OIDCService.create_token", new_callable=AsyncMock, return_value="id-token"), \
+         patch("httpx.AsyncClient") as MockClient:
+        mock_client = MockClient.return_value.__aenter__.return_value
+        mock_response = MagicMock(status_code=200)
+        mock_response.json.return_value = {"access_token": "access-token"}
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        success, error = await OIDCService.verify_gcp_access("proj", "tenant")
+        assert success is True
+        assert error is None
 
 @pytest.mark.asyncio
 async def test_oidc_token_expired(db):

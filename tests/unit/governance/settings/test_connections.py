@@ -2,11 +2,12 @@ import pytest
 import uuid
 from httpx import AsyncClient
 from sqlalchemy import select
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 from app.main import app
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.tenant import Tenant
+from app.models.tenant import UserRole
 from app.shared.core.auth import get_current_user
 from app.shared.core.pricing import PricingTier
 
@@ -15,8 +16,16 @@ def mock_user():
     user = MagicMock()
     user.id = uuid.uuid4()
     user.tenant_id = uuid.uuid4()
-    user.role = "member"
+    user.role = UserRole.MEMBER
     return user
+
+@pytest.fixture(autouse=True)
+def disable_cache():
+    cache = MagicMock()
+    cache.get = AsyncMock(return_value=None)
+    cache.set = AsyncMock(return_value=True)
+    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
+        yield
 
 @pytest.fixture(autouse=True)
 def override_auth(mock_user):

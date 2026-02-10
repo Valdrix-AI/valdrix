@@ -2,6 +2,7 @@ import structlog
 from typing import Any
 from uuid import UUID
 from app.modules.optimization.domain.remediation import RemediationService
+from app.shared.core.constants import SYSTEM_USER_ID
 
 logger = structlog.get_logger()
 
@@ -32,19 +33,19 @@ class AutonomousRemediationEngine:
         # 1. Create the request (Drafting)
         request = await service.create_request(
             tenant_id=self.tenant_id,
-            user_id=None, # System-generated
+            user_id=SYSTEM_USER_ID,
             resource_id=resource_id,
             resource_type=resource_type,
             action=action,
             estimated_savings=savings,
-            notes=f"Autonomous candidate: {reason} (Confidence: {confidence})"
+            explainability_notes=f"Autonomous candidate: {reason} (Confidence: {confidence})"
         )
         
         # 2. Auto-Pilot Logic
         if self.auto_pilot_enabled and confidence >= 0.95:
             logger.info("autonomous_auto_executing", tenant_id=str(self.tenant_id), resource_id=resource_id)
             # System takes control
-            await service.approve(request.id, self.tenant_id, user_id=None, notes="Auto-Pilot execution")
+            await service.approve(request.id, self.tenant_id, reviewer_id=SYSTEM_USER_ID, notes="Auto-Pilot execution")
             await service.execute(request.id, self.tenant_id)
             return True
             

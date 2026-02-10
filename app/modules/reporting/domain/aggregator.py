@@ -110,13 +110,27 @@ class CostAggregator:
         end_date: date,
         provider: Optional[str] = None
     ) -> CloudUsageSummary:
-        """Fetches and aggregates cost records for a tenant."""
-        from sqlalchemy import text
-        
-        # Phase 4.1: Enforce statement timeout (Postgres only)
-        if db.bind.dialect.name != "sqlite":
-            await db.execute(text(f"SET LOCAL statement_timeout TO {STATEMENT_TIMEOUT_MS}"))
-        
+        # Phase 5: Get accurate totals for the full range (for data integrity)
+        total_stmt = (
+            select(
+                func.sum(CostRecord.cost_usd).label("total_cost"),
+                func.count(CostRecord.id).label("total_count")
+            )
+            .where(
+                CostRecord.tenant_id == tenant_id,
+                CostRecord.recorded_at >= start_date,
+                CostRecord.recorded_at <= end_date
+            )
+        )
+        if provider:
+            total_stmt = total_stmt.join(CloudAccount).where(CloudAccount.provider == provider.lower())
+            
+        total_result = await db.execute(total_stmt)
+        total_row = total_result.one()
+        full_total_cost = total_row.total_cost or Decimal("0.00")
+        full_total_count = total_row.total_count or 0
+
+        # Fetch detailed records (limited)
         stmt = (
             select(CostRecord)
             .where(
@@ -125,29 +139,24 @@ class CostAggregator:
                 CostRecord.recorded_at <= end_date
             )
         )
-        
         if provider:
             stmt = stmt.join(CloudAccount).where(CloudAccount.provider == provider.lower())
         
-        # Limit rows (Phase 4 safety gate)
         stmt = stmt.limit(MAX_DETAIL_ROWS)
         
         result = await db.execute(stmt)
         records = result.scalars().all()
         
-        if len(records) >= MAX_DETAIL_ROWS:
-            logger.warning("query_hit_safety_limit", 
+        is_truncated = full_total_count > MAX_DETAIL_ROWS
+        if is_truncated:
+            logger.warning("query_truncated", 
                            tenant_id=str(tenant_id), 
+                           actual=full_total_count,
                            limit=MAX_DETAIL_ROWS)
         
-        # Aggregate logic (DRY)
-        total_cost = Decimal("0.00")
-        by_service = {}
+        # Build detailed records for the schema
         schema_records = []
-        
         for r in records:
-            total_cost += r.cost_usd
-            by_service[r.service] = by_service.get(r.service, Decimal(0)) + r.cost_usd
             schema_records.append(SchemaCostRecord(
                 date=r.recorded_at,
                 amount=r.cost_usd,
@@ -155,14 +164,26 @@ class CostAggregator:
                 region=r.region
             ))
             
+        # Group by service for the *full* set is better done in DB if truncated
+        # But for now, we'll indicate in metadata that the breakdown is partial
+        by_service = {}
+        for r in records:
+            by_service[r.service] = by_service.get(r.service, Decimal(0)) + r.cost_usd
+
         return CloudUsageSummary(
             tenant_id=str(tenant_id),
             provider=provider or "multi",
             start_date=start_date,
             end_date=end_date,
-            total_cost=total_cost,
+            total_cost=full_total_cost, # Accurate total
             records=schema_records,
-            by_service=by_service
+            by_service=by_service,
+            metadata={
+                "is_truncated": is_truncated,
+                "total_records_in_range": full_total_count,
+                "records_returned": len(records),
+                "summary": "Breakdown/records are partial" if is_truncated else "Full data"
+            }
         )
 
     @staticmethod

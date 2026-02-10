@@ -24,8 +24,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 import structlog
 
 from app.shared.db.base import Base, get_partition_args
+from sqlalchemy_utils import StringEncryptedType
+from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
+from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+
+settings = get_settings()
+_encryption_key = settings.ENCRYPTION_KEY
 
 
 class AuditEventType(str, Enum):
@@ -118,7 +124,10 @@ class AuditLog(Base):
         ForeignKey("users.id"),
         nullable=True  # Null for system actions
     )
-    actor_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    actor_email: Mapped[Optional[str]] = mapped_column(
+        StringEncryptedType(String(255), _encryption_key, AesEngine, "pkcs5"),
+        nullable=True
+    )
     actor_ip: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)  # IPv6 max
 
     # Request context
@@ -212,7 +221,8 @@ class AuditLogger:
             error_message=error_message
         )
 
-        self.db.add(entry)
+        from app.shared.core.async_utils import maybe_await
+        await maybe_await(self.db.add(entry))
         await self.db.flush()
 
         # Also log to structured logger for real-time monitoring

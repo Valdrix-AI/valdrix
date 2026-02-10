@@ -3,7 +3,7 @@ import pandas as pd
 import io
 import uuid
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 from app.shared.adapters.aws_cur import AWSCURAdapter
 from app.models.aws_connection import AWSConnection
@@ -33,6 +33,13 @@ class MockStream:
         self.offset += len(chunk)
         return chunk
 
+class MockPaginator:
+    def __init__(self, pages):
+        self._pages = pages
+    async def paginate(self, **_kwargs):
+        for page in self._pages:
+            yield page
+
 @pytest.mark.asyncio
 async def test_ingest_latest_parquet_streaming():
     # 1. Create a mock connection
@@ -52,12 +59,12 @@ async def test_ingest_latest_parquet_streaming():
     parquet_bytes = parquet_buffer.getvalue()
 
     # 3. Mock S3 Client
-    mock_s3 = AsyncMock()
-    mock_s3.list_objects_v2.return_value = {
+    mock_s3 = MagicMock()
+    page = {
         "Contents": [{"Key": "cur/test.parquet", "LastModified": datetime.now()}]
     }
-    
-    mock_s3.get_object.return_value = {"Body": MockStream(parquet_bytes)}
+    mock_s3.get_paginator.return_value = MockPaginator([page])
+    mock_s3.get_object = AsyncMock(return_value={"Body": MockStream(parquet_bytes)})
 
     # 4. Patch aioboto3.Session and _get_credentials
     with patch("aioboto3.Session") as MockSession:

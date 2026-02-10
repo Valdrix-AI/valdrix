@@ -112,27 +112,27 @@ async def run_async_migrations() -> None:
     """In this scenario we need to create an Engine
     and associate a connection with the context.
     """
-    # Create SSL context for Supabase connection (verified)
-    # Why: Supabase via pooler uses a specific CA certificate we must trust
-    import os
-    base_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    _ = os.path.join(base_path, "app", "core", "supabase.crt")
-    
-    ssl_context = ssl.create_default_context()
-    # ssl_context.set_ciphers('DEFAULT@SECLEVEL=0') # Unused as cert is invalid for OpenSSL 3
-    # ssl_context.load_verify_locations(cafile=ca_cert_path) # Kept for reference but verification disabled
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    # ssl_context.check_hostname = True # Default
-    # ssl_context.verify_mode = ssl.CERT_REQUIRED # Default
-    
+    ssl_mode = (settings.DB_SSL_MODE or "require").lower()
+    connect_args = {"statement_cache_size": 0}
+
+    if ssl_mode != "disable":
+        ssl_context = ssl.create_default_context()
+        if ssl_mode in {"verify-ca", "verify-full"}:
+            if not settings.DB_SSL_CA_CERT_PATH:
+                raise ValueError(f"DB_SSL_CA_CERT_PATH is required when DB_SSL_MODE={ssl_mode}")
+            ssl_context.load_verify_locations(cafile=settings.DB_SSL_CA_CERT_PATH)
+            ssl_context.check_hostname = ssl_mode == "verify-full"
+            ssl_context.verify_mode = ssl.CERT_REQUIRED
+        else:
+            # "require" validates certificates with system CAs and skips hostname pinning.
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_REQUIRED
+        connect_args["ssl"] = ssl_context
+
     connectable = create_async_engine(
         settings.DATABASE_URL,
         poolclass=pool.NullPool,
-        connect_args={
-            "ssl": ssl_context,
-            "statement_cache_size": 0,  # Required for Supabase transaction pooler
-        },
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

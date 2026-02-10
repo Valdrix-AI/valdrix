@@ -16,8 +16,9 @@ from tests.utils import create_test_token
 async def cleanup_overrides():
     """Cleanup dependency overrides after each test."""
     from app.main import app
+    app.dependency_overrides.clear()
     yield
-    app.dependency_overrides.pop(get_db, None)
+    app.dependency_overrides.clear()
 
 @pytest.fixture
 def aws_credentials():
@@ -144,16 +145,28 @@ async def test_remediation_lifecycle_full(ac: AsyncClient, setup_opt_data, db, a
                 "action": "terminate_instance",
                 "estimated_savings": 15.50
             }
+            print(f"DEBUG: Posting to /api/v1/zombies/request with payload {req_payload}")
             response = await ac.post("/api/v1/zombies/request", json=req_payload, headers=headers)
+            print(f"DEBUG: Response status: {response.status_code}")
+            if response.status_code == 404:
+                print(f"DEBUG: 404 Response Body: {response.text}")
             assert response.status_code == 200
             request_id = response.json()["request_id"]
             
             # 3. Approve
+            print(f"DEBUG: [Step 3] Posting to /api/v1/zombies/approve/{request_id}")
             response = await ac.post(f"/api/v1/zombies/approve/{request_id}", json={"notes": "test"}, headers=headers)
+            print(f"DEBUG: [Step 3] Response status: {response.status_code}")
+            if response.status_code != 200:
+                print(f"DEBUG: [Step 3] error: {response.text}")
             assert response.status_code == 200
             
             # 4. Execute
+            print(f"DEBUG: [Step 4] Posting to /api/v1/zombies/execute/{request_id}")
             response = await ac.post(f"/api/v1/zombies/execute/{request_id}?bypass_grace_period=true", headers=headers)
+            print(f"DEBUG: [Step 4] Response status: {response.status_code}")
+            if response.status_code != 200:
+                print(f"DEBUG: [Step 4] error: {response.text}")
             assert response.status_code == 200
             assert response.json()["status"] == "completed"
             

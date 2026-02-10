@@ -207,8 +207,9 @@ class AttributionEngine:
         allocations = await self.apply_rules(cost_record, rules)
 
         # Persist allocations
+        from app.shared.core.async_utils import maybe_await
         for allocation in allocations:
-            self.db.add(allocation)
+            await maybe_await(self.db.add(allocation))
 
         await self.db.commit()
 
@@ -256,8 +257,9 @@ class AttributionEngine:
             )
 
             allocations = await self.apply_rules(record, rules)
+            from app.shared.core.async_utils import maybe_await
             for allocation in allocations:
-                self.db.add(allocation)
+                await maybe_await(self.db.add(allocation))
 
         await self.db.commit()
         logger.info(

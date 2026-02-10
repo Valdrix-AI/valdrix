@@ -527,3 +527,54 @@ class TestCarbonIntensityEnum:
         """Test that CarbonIntensity values are strings."""
         for level in CarbonIntensity:
             assert isinstance(level.value, str)
+
+class TestCarbonSchedulerWrapAround:
+    """Test the wrap-around bug fix for optimal execution time."""
+
+    @pytest.mark.asyncio
+    async def test_get_optimal_execution_time_wrap_around_midnight(self):
+        """
+        Verify that when time is near midnight (23:30) and best hour is 0,
+        it returns 00:00 of the NEXT day, not the past.
+        """
+        scheduler = CarbonAwareScheduler()
+        
+        # eu-north-1 has 0 in its best_hours_utc
+        region = "eu-north-1"
+        assert 0 in REGION_CARBON_PROFILES[region].best_hours_utc
+        
+        # Freeze time at 2026-02-09 23:30:00 UTC
+        frozen_now = datetime(2026, 2, 9, 23, 30, 0, tzinfo=timezone.utc)
+        
+        with patch("app.modules.reporting.domain.carbon_scheduler.datetime") as mock_datetime:
+            mock_datetime.now.return_value = frozen_now
+            mock_datetime.side_effect = lambda *args, **kw: datetime(*args, **kw)
+            
+            optimal_time = await scheduler.get_optimal_execution_time(region)
+            
+            assert optimal_time is not None
+            assert optimal_time.hour == 0
+            assert optimal_time.day == 10  # Should be the next day
+            assert optimal_time > frozen_now
+
+
+class TestFreshnessEnforcement:
+    """Test that data freshness is enforced at runtime."""
+
+    @pytest.mark.asyncio
+    async def test_freshness_enforced_on_intensity_check(self):
+        """Verify that get_region_intensity calls validate_carbon_data_freshness."""
+        scheduler = CarbonAwareScheduler()
+        
+        with patch("app.modules.reporting.domain.carbon_scheduler.validate_carbon_data_freshness") as mock_val:
+            await scheduler.get_region_intensity("us-east-1")
+            mock_val.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_freshness_enforced_on_forecast(self):
+        """Verify that get_intensity_forecast calls validate_carbon_data_freshness."""
+        scheduler = CarbonAwareScheduler()
+        
+        with patch("app.modules.reporting.domain.carbon_scheduler.validate_carbon_data_freshness") as mock_val:
+            await scheduler.get_intensity_forecast("us-east-1")
+            mock_val.assert_called_once()

@@ -89,7 +89,7 @@ async def test_with_backoff_no_exception_state():
 
 def test_get_aws_rate_limiter_singleton():
     """Test get_aws_rate_limiter returns singleton."""
-    with patch("app.shared.adapters.rate_limiter._aws_rate_limiter", None):
+    with patch("app.shared.adapters.rate_limiter._limiters", {}):
         limiter1 = get_aws_rate_limiter()
         limiter2 = get_aws_rate_limiter()
         

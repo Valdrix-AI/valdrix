@@ -33,7 +33,7 @@ class SafetyGuardrailService:
         Raises KillSwitchTriggeredError if any check fails.
         """
         # 1. Global Kill Switch Check
-        await self._check_global_kill_switch(estimated_impact)
+        await self._check_global_kill_switch(tenant_id, estimated_impact)
         
         # 2. Monthly Budget Hard Cap Check
         await self._check_monthly_hard_cap(tenant_id)
@@ -41,27 +41,34 @@ class SafetyGuardrailService:
         # 3. Circuit Breaker / Failure Rate Check
         await self._check_circuit_breaker(tenant_id)
 
-    async def _check_global_kill_switch(self, estimated_impact: Decimal) -> None:
-        """Checks if the daily global savings limit has been reached."""
+    async def _check_global_kill_switch(self, tenant_id: UUID, estimated_impact: Decimal) -> None:
+        """Checks if the daily savings limit has been reached for the configured scope."""
         estimated_impact = estimated_impact or Decimal("0")
         today = datetime.now(timezone.utc).date()
 
-        
-        result = await self.db.execute(
+        query = (
             select(func.sum(RemediationRequest.estimated_monthly_savings))
             .where(RemediationRequest.status == RemediationStatus.COMPLETED)
             .where(func.date(RemediationRequest.executed_at) == today)
         )
+        if self._settings.REMEDIATION_KILL_SWITCH_SCOPE.lower() == "tenant":
+            query = query.where(RemediationRequest.tenant_id == tenant_id)
+
+        result = await self.db.execute(query)
         total_impact = result.scalar() or Decimal("0")
         
         threshold = Decimal(str(self._settings.REMEDIATION_KILL_SWITCH_THRESHOLD))
         
         if (total_impact + estimated_impact) >= threshold:
-            logger.error("global_kill_switch_triggered", 
-                         total_impact=float(total_impact), 
-                         threshold=float(threshold))
+            logger.error(
+                "global_kill_switch_triggered",
+                tenant_id=str(tenant_id),
+                scope=self._settings.REMEDIATION_KILL_SWITCH_SCOPE,
+                total_impact=float(total_impact),
+                threshold=float(threshold)
+            )
             raise KillSwitchTriggeredError(
-                f"Global safety kill-switch triggered. Daily cost impact limit (${threshold}) reached."
+                f"Safety kill-switch triggered. Daily cost impact limit (${threshold}) reached."
             )
 
     async def _check_monthly_hard_cap(self, tenant_id: UUID) -> None:

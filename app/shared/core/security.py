@@ -135,10 +135,10 @@ class EncryptionKeyManager:
 def _get_api_key_fernet() -> MultiFernet:
     settings = get_settings()
     legacy = tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
-    
-    return EncryptionKeyManager.create_multi_fernet(
-        primary_key=settings.API_KEY_ENCRYPTION_KEY or settings.ENCRYPTION_KEY,
-        legacy_keys=legacy
+
+    return _get_multi_fernet(
+        settings.API_KEY_ENCRYPTION_KEY or settings.ENCRYPTION_KEY,
+        legacy
     )
 
 def _get_pii_fernet() -> MultiFernet:
@@ -153,7 +153,17 @@ def _get_multi_fernet(primary_key: Optional[str], legacy_keys: Optional[Union[Li
     """Returns a MultiFernet instance for secret rotation."""
     if not primary_key:
         settings = get_settings()
-        primary_key = settings.ENCRYPTION_KEY or "dev_fallback_key_do_not_use_in_prod"
+        if settings.TESTING or settings.ENVIRONMENT in ["development", "local"]:
+            app_name = getattr(settings, "APP_NAME", "app")
+            fallback_material = f"{app_name}:{settings.ENVIRONMENT}:{os.environ.get('USER', 'dev')}"
+            primary_key = settings.ENCRYPTION_KEY or fallback_material
+            logger.warning(
+                "encryption_key_missing_using_fallback",
+                environment=settings.ENVIRONMENT,
+                fallback_type="derived_nonprod_key"
+            )
+        else:
+            raise ValueError("ENCRYPTION_KEY must be set for secure encryption.")
 
     # Ensure list is converted to tuple for lru_cache hashing
     legacy_tuple = tuple(legacy_keys) if legacy_keys and isinstance(legacy_keys, list) else legacy_keys
@@ -179,9 +189,9 @@ def encrypt_string(value: str, context: str = "generic") -> str:
     else:
         primary_key = settings.ENCRYPTION_KEY
         
-    fernet = EncryptionKeyManager.create_multi_fernet(
-        primary_key=primary_key,
-        legacy_keys=tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
+    fernet = _get_multi_fernet(
+        primary_key,
+        tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
     )
     
     return fernet.encrypt(value.encode()).decode()
@@ -203,14 +213,22 @@ def decrypt_string(value: str, context: str = "generic") -> str:
         else:
             primary_key = settings.ENCRYPTION_KEY
             
-        fernet = EncryptionKeyManager.create_multi_fernet(
-            primary_key=primary_key,
-            legacy_keys=tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
+        fernet = _get_multi_fernet(
+            primary_key,
+            tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
         )
             
         return fernet.decrypt(value.encode()).decode()
     except Exception as e:
         logger.error("decryption_failed", context=context, error=str(e), exc_info=True)
+        # Fail closed in staging/production to avoid silent data loss
+        settings = get_settings()
+        environment = getattr(settings, "ENVIRONMENT", "development")
+        if getattr(settings, "TESTING", False):
+            return None
+        if environment in ["production", "staging"]:
+            from app.shared.core.exceptions import DecryptionError
+            raise DecryptionError(details={"context": context}) from e
         return None
 
 

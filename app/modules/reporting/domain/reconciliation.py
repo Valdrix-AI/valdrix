@@ -55,8 +55,8 @@ class CostReconciliationService:
         summary = {
             "tenant_id": str(tenant_id),
             "period": f"{start_date} to {end_date}",
-            "total_records": sum(r.record_count for r in rows),
-            "total_cost": float(sum(r.total_cost for r in rows)),
+            "total_records": sum((r.record_count or 0) for r in rows),
+            "total_cost": float(sum((r.total_cost or 0) for r in rows)),
             "discrepancies": []
         }
         

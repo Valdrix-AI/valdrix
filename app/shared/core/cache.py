@@ -12,16 +12,17 @@ Uses Upstash free tier (10K commands/day) which is sufficient for:
 """
 
 import json
+import hashlib
 import structlog
-from typing import Optional, Any
+from typing import Optional, Any, Dict, Callable
 from uuid import UUID
 from datetime import timedelta
+from functools import wraps
 
 from upstash_redis import Redis
 from upstash_redis.asyncio import Redis as AsyncRedis
 
 from app.shared.core.config import get_settings
-
 logger = structlog.get_logger()
 
 # Cache TTLs
@@ -36,6 +37,15 @@ PREFIX_COSTS = "costs"
 # Singleton instances
 _sync_client: Optional[Redis] = None
 _async_client: Optional[AsyncRedis] = None
+
+
+def _safe_json_loads(payload: str, key: str) -> Optional[Any]:
+    """Strict JSON decode with bounded-failure behavior."""
+    try:
+        return json.loads(payload)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        logger.warning("cache_payload_invalid_json", key=key, error=str(exc))
+        return None
 
 
 def _get_sync_client() -> Optional[Redis]:
@@ -149,9 +159,22 @@ class CacheService:
             return None
         try:
             data = await self.client.get(key)
-            if data:
+            if data is not None:
                 logger.debug("cache_hit", key=key)
-                return json.loads(data) if isinstance(data, str) else data
+                if isinstance(data, bytes):
+                    try:
+                        data = data.decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        logger.warning("cache_payload_invalid_encoding", key=key, error=str(exc))
+                        return None
+                if isinstance(data, str):
+                    return _safe_json_loads(data, key=key)
+                if isinstance(data, (dict, list, int, float, bool)):
+                    return data
+                if data is None:
+                    return None
+                logger.warning("cache_payload_unexpected_type", key=key, payload_type=type(data).__name__)
+                return None
         except Exception as e:
             logger.warning("cache_get_error", key=key, error=str(e))
         return None
@@ -171,6 +194,138 @@ class CacheService:
         except Exception as e:
             logger.warning("cache_set_error", key=key, error=str(e))
             return False
+
+
+class QueryCache:
+    """Query result caching with automatic invalidation."""
+
+    def __init__(self, redis_client=None, default_ttl: int = 300):
+        self.redis = redis_client
+        self.default_ttl = default_ttl
+        self.enabled = redis_client is not None
+
+    def _make_cache_key(self, query: str, params: Dict[str, Any], tenant_id: Optional[str] = None) -> str:
+        """Generate deterministic cache key from query and parameters."""
+        key_data = {
+            "query": query,
+            "params": params,
+            "tenant_id": tenant_id
+        }
+        key_str = json.dumps(key_data, sort_keys=True, default=str)
+        digest = hashlib.sha256(key_str.encode()).hexdigest()
+        if tenant_id:
+            return f"query_cache:tenant:{tenant_id}:{digest}"
+        return f"query_cache:{digest}"
+
+    async def get_cached_result(self, cache_key: str) -> Optional[Any]:
+        """Retrieve cached query result."""
+        if not self.enabled:
+            return None
+
+        try:
+            cached_data = await self.redis.get(cache_key)
+            if cached_data is not None:
+                logger.debug("cache_hit", key=cache_key)
+                if isinstance(cached_data, bytes):
+                    try:
+                        cached_data = cached_data.decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        logger.warning(
+                            "cache_payload_invalid_encoding",
+                            key=cache_key,
+                            error=str(exc),
+                        )
+                        return None
+                if isinstance(cached_data, str):
+                    return _safe_json_loads(cached_data, key=cache_key)
+                if isinstance(cached_data, (dict, list, int, float, bool)):
+                    return cached_data
+                logger.warning(
+                    "cache_payload_unexpected_type",
+                    key=cache_key,
+                    payload_type=type(cached_data).__name__,
+                )
+                return None
+            logger.debug("cache_miss", key=cache_key)
+            return None
+        except Exception as e:
+            logger.warning("cache_get_error", error=str(e), key=cache_key)
+            return None
+
+    async def set_cached_result(self, cache_key: str, result: Any, ttl: Optional[int] = None) -> None:
+        """Cache query result with TTL."""
+        if not self.enabled:
+            return
+
+        try:
+            ttl = ttl or self.default_ttl
+            await self.redis.set(cache_key, json.dumps(result, default=str), ex=ttl)
+            logger.debug("cache_set", key=cache_key, ttl=ttl)
+        except Exception as e:
+            logger.warning("cache_set_error", error=str(e), key=cache_key)
+
+    async def invalidate_tenant_cache(self, tenant_id: str) -> None:
+        """Invalidate all cached queries for a tenant."""
+        if not self.enabled:
+            return
+
+        try:
+            # Use Redis SCAN to find tenant-related keys
+            pattern = f"query_cache:tenant:{tenant_id}:*"
+            cursor = 0
+            while True:
+                cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
+                if keys:
+                    await self.redis.delete(*keys)
+                    logger.info("cache_invalidated", tenant_id=tenant_id, keys_deleted=len(keys))
+                if cursor == 0:
+                    break
+        except Exception as e:
+            logger.warning("cache_invalidation_error", error=str(e), tenant_id=tenant_id)
+
+    def cached_query(self, ttl: Optional[int] = None, tenant_aware: bool = True):
+        """
+        Decorator for caching SQLAlchemy query results.
+
+        Usage:
+            @cache.cached_query(ttl=300, tenant_aware=True)
+            async def get_tenant_connections(db, tenant_id):
+                return await db.execute(select(AWSConnection).where(...))
+        """
+        def decorator(func: Callable) -> Callable:
+            @wraps(func)
+            async def wrapper(*args, **kwargs):
+                if not self.enabled:
+                    return await func(*args, **kwargs)
+
+                # Extract tenant_id for tenant-aware caching
+                tenant_id = None
+                if tenant_aware:
+                    # Look for tenant_id in kwargs or as second positional arg (after db)
+                    tenant_id = kwargs.get('tenant_id') or (args[1] if len(args) > 1 else None)
+
+                # Generate cache key from function name and arguments
+                cache_key = self._make_cache_key(
+                    query=func.__name__,
+                    params={"args": args[2:], "kwargs": {k: v for k, v in kwargs.items() if k != 'tenant_id'}},
+                    tenant_id=str(tenant_id) if tenant_id else None
+                )
+
+                # Try cache first
+                cached_result = await self.get_cached_result(cache_key)
+                if cached_result is not None:
+                    return cached_result
+
+                # Execute query
+                result = await func(*args, **kwargs)
+
+                # Cache result
+                await self.set_cached_result(cache_key, result, ttl)
+
+                return result
+
+            return wrapper
+        return decorator
 
 
 # Singleton cache service

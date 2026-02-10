@@ -8,6 +8,7 @@ Tests:
 4. Recommendation generation
 """
 
+from typing import Dict
 from unittest.mock import MagicMock
 
 from app.shared.llm.zombie_analyzer import ZombieAnalyzer

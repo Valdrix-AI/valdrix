@@ -1,4 +1,5 @@
 import jwt
+import hashlib
 from typing import Optional, Callable
 from uuid import UUID
 from fastapi import HTTPException, Depends, status, Request
@@ -16,6 +17,12 @@ from app.shared.core.pricing import PricingTier
 logger = structlog.get_logger()
 
 security = HTTPBearer(auto_error=False)
+
+def _hash_email(email: str | None) -> str | None:
+    if not email:
+        return None
+    normalized = email.strip().lower()
+    return hashlib.sha256(normalized.encode()).hexdigest()[:12]
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
     Generate a new JWT token signed with the application secret.
@@ -107,13 +114,13 @@ async def get_current_user_from_jwt(
     user_id = payload.get("sub")
     email = payload.get("email")
 
-    if not user_id:
+    if not user_id or not email:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
 
-    logger.info("user_authenticated", user_id=user_id, email=email)
+    logger.info("user_authenticated", user_id=user_id, email_hash=_hash_email(email))
     return CurrentUser(id=UUID(user_id), email=email)
 
 async def get_current_user(
@@ -164,7 +171,13 @@ async def get_current_user(
         # Propagate RLS context to the database session
         await set_session_tenant_id(db, user.tenant_id)
 
-        logger.info("user_authenticated", user_id=str(user.id), email=user.email, role=user.role, tier=plan)
+        logger.info(
+            "user_authenticated",
+            user_id=str(user.id),
+            email_hash=_hash_email(user.email),
+            role=user.role,
+            tier=plan
+        )
 
         return CurrentUser(
             id=user.id,
@@ -187,6 +200,9 @@ async def get_current_user(
 
 
 
+from functools import lru_cache
+
+@lru_cache()
 def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
     """
     FastAPI dependency for RBAC.
@@ -246,9 +262,6 @@ def require_tenant_access(user: CurrentUser = Depends(get_current_user)) -> UUID
             detail="Tenant context required. Please complete onboarding."
         )
     return user.tenant_id
-
-
-
 
 
 

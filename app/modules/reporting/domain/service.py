@@ -89,7 +89,8 @@ class ReportingService(BaseService):
                 )
                 
                 conn.last_ingested_at = datetime.now(timezone.utc)
-                self.db.add(conn) 
+                from app.shared.core.async_utils import maybe_await
+                await maybe_await(self.db.add(conn))
                 
                 results.append({
                     "connection_id": str(conn.id),

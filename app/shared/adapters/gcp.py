@@ -1,7 +1,7 @@
 import json
 import re
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, AsyncGenerator
 import structlog
 from google.cloud import bigquery
 from google.cloud import asset_v1
@@ -182,7 +182,7 @@ class GCPAdapter(BaseAdapter):
         start_date: datetime,
         end_date: datetime,
         granularity: str = "DAILY"
-    ) -> Any:
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Stream GCP costs from BigQuery.
         Yields records one-by-one from the BigQuery result set.
@@ -204,38 +204,38 @@ class GCPAdapter(BaseAdapter):
             
             client = self._get_asset_client()
             parent = f"projects/{self.connection.project_id}"
-        
-        # Map generic resource types to GCP content types
-        asset_types = []
-        if resource_type == "compute":
-            asset_types = ["compute.googleapis.com/Instance"]
-        elif resource_type == "storage":
-            asset_types = ["storage.googleapis.com/Bucket"]
-        
-        try:
-            response = client.list_assets(
-                request={
-                    "parent": parent,
-                    "asset_types": asset_types,
-                    "content_type": asset_v1.ContentType.RESOURCE,
-                }
-            )
+
+            # Map generic resource types to GCP content types
+            asset_types = []
+            if resource_type == "compute":
+                asset_types = ["compute.googleapis.com/Instance"]
+            elif resource_type == "storage":
+                asset_types = ["storage.googleapis.com/Bucket"]
             
-            resources = []
-            for asset in response:
-                res = asset.resource
-                resources.append({
-                    "id": asset.name,
-                    "name": asset.name.split("/")[-1],
-                    "type": asset.asset_type,
-                    "region": region or "global",
-                    "provider": "gcp",
-                    "metadata": {
-                        "project_id": self.connection.project_id,
-                        "data": str(res.data)
+            try:
+                response = client.list_assets(
+                    request={
+                        "parent": parent,
+                        "asset_types": asset_types,
+                        "content_type": asset_v1.ContentType.RESOURCE,
                     }
-                })
-            return resources
-        except Exception as e:
-            logger.error("gcp_discovery_failed", error=str(e))
-            return []
+                )
+                
+                resources = []
+                for asset in response:
+                    res = asset.resource
+                    resources.append({
+                        "id": asset.name,
+                        "name": asset.name.split("/")[-1],
+                        "type": asset.asset_type,
+                        "region": region or "global",
+                        "provider": "gcp",
+                        "metadata": {
+                            "project_id": self.connection.project_id,
+                            "data": str(res.data)
+                        }
+                    })
+                return resources
+            except Exception as e:
+                logger.error("gcp_discovery_failed", error=str(e))
+                return []

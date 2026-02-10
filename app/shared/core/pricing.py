@@ -281,7 +281,7 @@ def requires_tier(*allowed_tiers: PricingTier) -> Callable[[Callable[..., Awaita
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            user = kwargs.get("user")
+            user = kwargs.get("user") or kwargs.get("current_user")
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -314,7 +314,7 @@ def requires_feature(feature_name: Union[str, FeatureFlag]) -> Callable[[Callabl
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            user = kwargs.get("user")
+            user = kwargs.get("user") or kwargs.get("current_user")
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,

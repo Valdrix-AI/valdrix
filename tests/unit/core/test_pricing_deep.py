@@ -17,7 +17,7 @@ from app.shared.core.pricing import (
 @pytest.fixture
 def mock_db():
     db = MagicMock()
-    db.execute = AsyncMock()
+    db.execute = AsyncMock(return_value=MagicMock())
     return db
 
 @pytest.fixture
@@ -41,6 +41,10 @@ class TestPricingDeep:
         """Test is_feature_enabled maps string to FeatureFlag."""
         assert is_feature_enabled(PricingTier.STARTER, "dashboards") is True
         assert is_feature_enabled(PricingTier.STARTER, FeatureFlag.DASHBOARDS) is True
+
+    def test_is_feature_enabled_invalid_string(self):
+        """Invalid feature strings should return False."""
+        assert is_feature_enabled(PricingTier.STARTER, "not_a_feature") is False
 
     def test_get_tier_limit_unknown_limit(self):
         """Test limit check for unknown limit name."""
@@ -115,6 +119,20 @@ class TestPricingDeep:
         mock_db.execute.side_effect = Exception("DB Error")
         tier = await get_tenant_tier(uuid.uuid4(), mock_db)
         assert tier == PricingTier.FREE
+
+    @pytest.mark.asyncio
+    async def test_get_tenant_tier_invalid_plan_returns_free(self, mock_db):
+        """Invalid plan strings should fallback to FREE."""
+        mock_tenant = MagicMock()
+        mock_tenant.plan = "invalid-plan"
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_tenant
+        mock_db.execute.return_value = mock_result
+
+        with patch("app.shared.core.pricing.logger") as mock_logger:
+            tier = await get_tenant_tier(uuid.uuid4(), mock_db)
+            assert tier == PricingTier.FREE
+            mock_logger.error.assert_called()
 
     @pytest.mark.asyncio
     async def test_requires_feature_invalid_tier_string_deep(self):

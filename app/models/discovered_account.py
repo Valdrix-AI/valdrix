@@ -4,11 +4,17 @@ from typing import TYPE_CHECKING
 from sqlalchemy import String, ForeignKey, DateTime, Uuid as PG_UUID
 # from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy_utils import StringEncryptedType
+from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
 
 from app.shared.db.base import Base
+from app.shared.core.config import get_settings
 
 if TYPE_CHECKING:
     from app.models.aws_connection import AWSConnection
+
+settings = get_settings()
+_encryption_key = settings.ENCRYPTION_KEY
 
 class DiscoveredAccount(Base):
     """
@@ -29,7 +35,10 @@ class DiscoveredAccount(Base):
     
     account_id: Mapped[str] = mapped_column(String(12), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(
+        StringEncryptedType(String(255), _encryption_key, AesEngine, "pkcs5"),
+        nullable=True
+    )
     
     # status: "discovered", "linked", "ignored"
     status: Mapped[str] = mapped_column(String(20), default="discovered", server_default="discovered")

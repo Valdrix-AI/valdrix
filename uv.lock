@@ -2004,6 +2004,23 @@ wheels = [
 ]
 
 [[package]]
+name = "kubernetes-asyncio"
+version = "34.3.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "certifi" },
+    { name = "python-dateutil" },
+    { name = "pyyaml" },
+    { name = "six" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/1f/b4312300a1e38c5896b4f5476a546f4a7c86fdd2d53b404699c3dd578bb0/kubernetes_asyncio-34.3.3.tar.gz", hash = "sha256:9f6f30f9745371b26b0bc922be6a3f81c0d6b3400e9f63d0aa1b92aa49cfcc48", size = 1274583, upload-time = "2026-01-12T23:15:27.78Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/52/17b69f2212110e0be7a7edb9193e4d371465ed7db2ac3b1cfaa4e41d411f/kubernetes_asyncio-34.3.3-py3-none-any.whl", hash = "sha256:0701ec26da9c552c51db756653e3a408f4e9e34dc5873c4f0ed3a2942612cd90", size = 2664447, upload-time = "2026-01-12T23:15:25.721Z" },
+]
+
+[[package]]
 name = "langchain"
 version = "1.2.6"
 source = { registry = "https://pypi.org/simple" }
@@ -4887,6 +4904,7 @@ dependencies = [
     { name = "google-cloud-compute" },
     { name = "google-cloud-logging" },
     { name = "httpx" },
+    { name = "kubernetes-asyncio" },
     { name = "langchain" },
     { name = "langchain-anthropic" },
     { name = "langchain-google-genai" },
@@ -4921,7 +4939,6 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "aiosqlite" },
-    { name = "httpx" },
     { name = "moto", extra = ["server"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -4932,7 +4949,6 @@ dev = [
 dev = [
     { name = "aiosqlite" },
     { name = "bandit" },
-    { name = "httpx" },
     { name = "moto", extra = ["server"] },
     { name = "mypy" },
     { name = "pip-audit" },
@@ -4973,7 +4989,7 @@ requires-dist = [
     { name = "google-cloud-compute", specifier = ">=1.42.0" },
     { name = "google-cloud-logging", specifier = ">=3.11.0" },
     { name = "httpx", specifier = ">=0.28.0" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0" },
+    { name = "kubernetes-asyncio", specifier = ">=34.3.3" },
     { name = "langchain", specifier = ">=1.2.6" },
     { name = "langchain-anthropic", specifier = ">=0.3.0" },
     { name = "langchain-google-genai", specifier = ">=2.0.0" },
@@ -5014,7 +5030,6 @@ provides-extras = ["dev"]
 dev = [
     { name = "aiosqlite", specifier = ">=0.20.0" },
     { name = "bandit", specifier = ">=1.9.2" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "moto", extras = ["server"], specifier = ">=5.0.0" },
     { name = "mypy", specifier = ">=1.14.0" },
     { name = "pip-audit", specifier = ">=2.10.0" },

@@ -1,9 +1,11 @@
+import pytest
 """
 Comprehensive tests for WebhookRetryService module.
 Covers webhook storage, idempotency, retry logic, duplicate detection, and Paystack webhook processing.
 """
 
-import pytest
+import json
+from typing import Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone, timedelta
 import hashlib
@@ -478,6 +480,48 @@ class TestProcessPaystackWebhook:
         
         assert result["status"] == "error"
         assert result["reason"] == "Missing payload"
+
+    @pytest.mark.asyncio
+    async def test_process_paystack_webhook_verifies_signature_with_raw_payload(self, mock_db):
+        payload_dict = {"event": "charge.success", "data": {"reference": "txn_abc"}}
+        mock_job = MagicMock(spec=BackgroundJob)
+        mock_job.id = uuid.uuid4()
+        mock_job.payload = {
+            "event_type": "charge.success",
+            "payload": payload_dict,
+            "raw_payload": json.dumps(payload_dict),
+            "signature": "valid-signature",
+        }
+
+        with patch("app.modules.reporting.domain.billing.paystack_billing.WebhookHandler") as mock_handler_class:
+            mock_handler = MagicMock()
+            mock_handler_class.return_value = mock_handler
+            mock_handler.verify_signature.return_value = True
+            mock_handler._handle_charge_success = AsyncMock()
+
+            result = await process_paystack_webhook(mock_job, mock_db)
+
+        assert result["status"] == "processed"
+        mock_handler.verify_signature.assert_called_once()
+        mock_handler._handle_charge_success.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_process_paystack_webhook_missing_signature_material_fails_closed_in_production(self, mock_db):
+        mock_job = MagicMock(spec=BackgroundJob)
+        mock_job.id = uuid.uuid4()
+        mock_job.payload = {
+            "event_type": "charge.success",
+            "payload": {"event": "charge.success", "data": {}},
+        }
+
+        with patch("app.modules.reporting.domain.billing.paystack_billing.WebhookHandler") as mock_handler_class, \
+             patch("app.modules.reporting.domain.billing.webhook_retry.get_settings") as mock_get_settings:
+            mock_handler_class.return_value = AsyncMock()
+            mock_get_settings.return_value = MagicMock(ENVIRONMENT="production")
+            result = await process_paystack_webhook(mock_job, mock_db)
+
+        assert result["status"] == "error"
+        assert result["reason"] == "missing_signature_material"
 
 
 class TestWebhookConfiguration:

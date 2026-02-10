@@ -68,7 +68,7 @@ class AWSConnection(Base):
 
     # AWS Account Details
     # aws_account_id: 12-digit AWS account number
-    aws_account_id: Mapped[str] = mapped_column(String(12), nullable=False)
+    aws_account_id: Mapped[str] = mapped_column(String(12), nullable=False, index=True)
 
     # role_arn: Full ARN of the IAM role to assume
     # Format: arn:aws:iam::123456789012:role/ValdrixReadOnly
@@ -88,13 +88,13 @@ class AWSConnection(Base):
     )
 
     # region: Default AWS region for Cost Explorer queries
-    region: Mapped[str] = mapped_column(String(20), nullable=False, default="us-east-1")
+    region: Mapped[str] = mapped_column(String(20), nullable=False, default="us-east-1", index=True)
 
     # Connection Status
     # pending: User registered but not verified
     # active: Connection verified and working
     # error: Last verification failed
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
     
     # AWS Organizations Support
     is_management_account: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

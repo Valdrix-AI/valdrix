@@ -19,8 +19,7 @@ def mock_jwt_user():
 def override_auth(mock_jwt_user):
     app.dependency_overrides[get_current_user_from_jwt] = lambda: mock_jwt_user
     yield
-    from app.shared.core.auth import get_current_user
-    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_current_user_from_jwt, None)
 
 @pytest.mark.asyncio
 async def test_onboard_success(async_client: AsyncClient, db_session, mock_jwt_user):
@@ -106,3 +105,23 @@ async def test_onboard_with_cloud_verification_failure(async_client: AsyncClient
         assert response.status_code == 400
         assert "Cloud connection verification failed" in response.json()["error"]
 
+
+@pytest.mark.asyncio
+async def test_onboard_rejects_http_cloud_credentials_in_production(async_client: AsyncClient):
+    onboard_data = {
+        "tenant_name": "Secure Tenant",
+        "cloud_config": {
+            "platform": "aws",
+            "role_arn": "arn:aws:iam::123456789012:role/ValdrixRole",
+            "external_id": "ext-123"
+        }
+    }
+
+    with patch("app.modules.governance.api.v1.settings.onboard.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.ENVIRONMENT = "production"
+        mock_get_settings.return_value = mock_settings
+
+        response = await async_client.post("/api/v1/settings/onboard", json=onboard_data)
+        assert response.status_code == 400
+        assert "HTTPS is required" in response.json()["error"]

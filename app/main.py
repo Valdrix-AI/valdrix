@@ -1,4 +1,5 @@
 import structlog
+import json
 import asyncio
 import os
 from contextlib import asynccontextmanager
@@ -50,7 +51,6 @@ import app.models.optimization
 import app.modules.governance.domain.security.audit_log
 
 
-from codecarbon import EmissionsTracker
 from app.modules.governance.api.v1.settings.onboard import router as onboard_router
 from app.modules.governance.api.v1.settings.connections import router as connections_router
 from app.modules.governance.api.v1.settings import router as settings_router
@@ -85,24 +85,49 @@ def get_csrf_config() -> CsrfSettings:
 
 logger = structlog.get_logger()
 
+def _is_test_mode() -> bool:
+    return settings.TESTING or os.getenv("PYTEST_CURRENT_TEST") is not None
+
+def _load_emissions_tracker():
+    if _is_test_mode():
+        return None
+    try:
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="The pynvml package is deprecated.*",
+                category=FutureWarning
+            )
+            from codecarbon import EmissionsTracker as Tracker
+        return Tracker
+    except Exception as exc:
+        logger.warning("emissions_tracker_unavailable", error=str(exc))
+        return None
+
+EmissionsTracker = _load_emissions_tracker()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> Any:
     # Setup: Initialize scheduler and emissions tracker
-    logger.info(f"Starting {settings.APP_NAME}...")
+    logger.info("app_starting", app_name=settings.APP_NAME)
 
     # Ensure data directory exists
     os.makedirs("data", exist_ok=True)
 
     # Track app's own carbon footprint (GreenOps)
-    tracker = EmissionsTracker(
-        project_name=settings.APP_NAME,
-        measure_power_secs=300,
-        save_to_file=True,
-        output_dir="data",
-        allow_multiple_runs=True,
-    )
-    if not settings.TESTING:
+    tracker = None
+    if EmissionsTracker and not _is_test_mode():
+        tracker = EmissionsTracker(
+            project_name=settings.APP_NAME,
+            measure_power_secs=300,
+            save_to_file=True,
+            output_dir="data",
+            allow_multiple_runs=True,
+        )
         tracker.start()
+    else:
+        logger.info("emissions_tracker_skipped", reason="testing" if _is_test_mode() else "unavailable")
     app.state.emissions_tracker = tracker
 
     # Pass shared session factory to scheduler (DI pattern)
@@ -118,12 +143,24 @@ async def lifespan(app: FastAPI) -> Any:
         logger.warning("scheduler_skipped_no_redis", msg="Set REDIS_URL to enable background job")
     app.state.scheduler = scheduler
 
+    # Refresh LLM pricing from DB on startup (non-fatal)
+    try:
+        if not settings.TESTING:
+            from app.shared.llm.pricing_data import refresh_llm_pricing
+            await refresh_llm_pricing()
+            logger.info("llm_pricing_refreshed")
+        else:
+            logger.info("llm_pricing_refresh_skipped_testing")
+    except Exception as e:
+        logger.warning("llm_pricing_refresh_failed_startup", error=str(e))
+
     yield
 
     # Teardown: Stop scheduler and tracker
     logger.info("Shutting down...")
     scheduler.stop()
-    tracker.stop()
+    if tracker:
+        tracker.stop()
 
     # Item 18: Async Database Engine Cleanup
     await engine.dispose()
@@ -201,19 +238,49 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 @valdrix_app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Handle Pydantic validation errors."""
+    def _json_safe(value: Any) -> Any:
+        if isinstance(value, Exception):
+            return str(value)
+        try:
+            json.dumps(value)
+            return value
+        except Exception:
+            return str(value)
+
+    def _sanitize_errors(errors: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+        sanitized = []
+        for err in errors:
+            clean = dict(err)
+            if "ctx" in clean and isinstance(clean["ctx"], dict):
+                clean["ctx"] = {k: _json_safe(v) for k, v in clean["ctx"].items()}
+            if "input" in clean:
+                clean["input"] = _json_safe(clean["input"])
+            sanitized.append(clean)
+        return sanitized
+
+    API_ERRORS_TOTAL.labels(
+        path=request.url.path,
+        method=request.method,
+        status_code=422
+    ).inc()
     return JSONResponse(
         status_code=422,
         content={
             "error": "Unprocessable Entity",
             "code": "VALIDATION_ERROR",
             "message": "The request body or parameters are invalid.",
-            "details": exc.errors()
+            "details": _sanitize_errors(exc.errors())
         }
     )
 
 @valdrix_app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
     """Handle business logic ValueErrors."""
+    API_ERRORS_TOTAL.labels(
+        path=request.url.path,
+        method=request.method,
+        status_code=400
+    ).inc()
     return JSONResponse(
         status_code=400,
         content={
@@ -261,6 +328,11 @@ async def custom_rate_limit_handler(request: Request, exc: Exception) -> Respons
         method=request.method,
         tier=getattr(request.state, "tier", "unknown")
     ).inc()
+    API_ERRORS_TOTAL.labels(
+        path=request.url.path,
+        method=request.method,
+        status_code=getattr(exc, "status_code", 429)
+    ).inc()
     res = original_handler(request, exc)
     if asyncio.iscoroutine(res):
         return await res # type: ignore
@@ -283,6 +355,11 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
                      path=request.url.path, 
                      method=request.method,
                      error_id=error_id)
+    API_ERRORS_TOTAL.labels(
+        path=request.url.path,
+        method=request.method,
+        status_code=500
+    ).inc()
     
     # Standardized response for end users
     return JSONResponse(
@@ -357,7 +434,7 @@ valdrix_app.add_middleware(
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"],
 )
 
 # CSRF Protection Middleware - processes after CORS but before auth
@@ -366,6 +443,10 @@ async def csrf_protect_middleware(request: Request, call_next: Callable[[Request
     if request.method not in ("GET", "HEAD", "OPTIONS", "TRACE"):
         # Skip CSRF for health checks and in testing mode
         if settings.TESTING:
+            return await call_next(request)
+
+        # Public lead-gen endpoints are unauthenticated and intended for third-party forms.
+        if request.url.path.startswith("/api/v1/public"):
             return await call_next(request)
 
         if request.url.path.startswith("/api/v1"):

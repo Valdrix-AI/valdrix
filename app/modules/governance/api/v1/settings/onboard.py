@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import Dict, Any
 from uuid import UUID
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from app.shared.core.logging import audit_log
 from app.shared.core.auth import get_current_user_from_jwt, CurrentUser, UserRole
 from app.models.tenant import Tenant, User
 from app.shared.core.pricing import PricingTier
+from app.shared.core.config import get_settings
 from app.shared.core.rate_limit import auth_limit
 
 logger = structlog.get_logger()
@@ -52,6 +54,16 @@ async def onboard(
 
     # 3. Active Credential Validation (Hardening)
     if onboard_req.cloud_config:
+        settings = get_settings()
+        if settings.ENVIRONMENT in ["production", "staging"]:
+            forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+            forwarded_proto = forwarded_proto.split(",")[0].strip().lower() if forwarded_proto else request.url.scheme
+            if forwarded_proto != "https":
+                raise HTTPException(
+                    status_code=400,
+                    detail="HTTPS is required when submitting cloud credentials."
+                )
+
         platform = onboard_req.cloud_config.get("platform", "").lower()
         logger.info("verifying_initial_cloud_connection", platform=platform)
         
@@ -106,7 +118,12 @@ async def onboard(
     # 3. Create User linked to Tenant
     new_user = User(id=user.id, email=user.email, tenant_id=tenant.id, role=UserRole.OWNER)
     db.add(new_user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        logger.warning("onboarding_race_detected_user_already_exists", user_id=str(user.id))
+        raise HTTPException(400, "Already onboarded") from exc
 
     # 4. Audit Log
     audit_log(

@@ -126,3 +126,56 @@ async def test_idle_instances_scan_cloudwatch():
         assert len(zombies) == 1
         assert zombies[0]["resource_id"] == "i-idle"
         assert zombies[0]["avg_cpu_percent"] == 1.5
+
+@pytest.mark.asyncio
+async def test_idle_instances_inventory_dedup_and_filtering():
+    """Inventory path should dedupe instance IDs and respect batch tag filters."""
+    plugin = IdleInstancesPlugin()
+    mock_session = MagicMock()
+
+    inventory = MagicMock()
+    inventory.resources = [
+        MagicMock(id="i-batch", resource_type="EC2 Instance", arn=None),
+        MagicMock(id="i-batch", resource_type="instance", arn="arn:aws:ec2:..."),
+        MagicMock(id="i-good", resource_type="EC2 Instance", arn="arn:aws:ec2:..."),
+    ]
+
+    mock_ec2 = MagicMock()
+    mock_ec2.describe_instances = AsyncMock(return_value={
+        "Reservations": [{
+            "Instances": [
+                {
+                    "InstanceId": "i-batch",
+                    "InstanceType": "t3.micro",
+                    "State": {"Name": "running"},
+                    "Tags": [{"Key": "workload", "Value": "batch"}],
+                    "LaunchTime": datetime.now(timezone.utc)
+                },
+                {
+                    "InstanceId": "i-good",
+                    "InstanceType": "t3.micro",
+                    "State": {"Name": "running"},
+                    "Tags": [],
+                    "LaunchTime": datetime.now(timezone.utc)
+                }
+            ]
+        }]
+    })
+
+    mock_cw = MagicMock()
+    mock_cw.get_metric_data = AsyncMock(return_value={
+        "MetricDataResults": [{"Id": "m0", "Values": [1.0]}]
+    })
+
+    def side_effect(sess, service, *args, **kwargs):
+        cm = AsyncMock()
+        cm.__aenter__.return_value = mock_ec2 if service == "ec2" else mock_cw
+        return cm
+
+    with patch.object(plugin, "_get_client", side_effect=side_effect), \
+         patch.object(plugin, "_get_attribution", return_value="Unknown"), \
+         patch("app.modules.optimization.adapters.aws.plugins.compute.cloudwatch_limiter.acquire", new=AsyncMock()), \
+         patch("app.modules.reporting.domain.pricing.service.PricingService.estimate_monthly_waste", return_value=10.0):
+        zombies = await plugin.scan(mock_session, "us-east-1", inventory=inventory)
+        assert len(zombies) == 1
+        assert zombies[0]["resource_id"] == "i-good"

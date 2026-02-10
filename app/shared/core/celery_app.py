@@ -30,7 +30,7 @@ celery_app.conf.update(
     broker_connection_timeout=5,    # 5 second timeout for broker connection
     broker_connection_retry=True,   # Enable retries
     broker_connection_max_retries=3,  # Max 3 retries
-    broker_connection_retry_on_startup=False,  # Never block on startup
+    broker_connection_retry_on_startup=True,  # Retry briefly on startup instead of failing immediately
 )
 
 

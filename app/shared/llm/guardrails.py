@@ -168,8 +168,8 @@ class ZombieAnalysisResult(BaseModel):
 
 class AdversarialArbiter:
     """
-    High-fidelity secondary verification of prompts using heuristics 
-    and (if necessary) a small, specialized LLM model.
+    Secondary verification of prompts using deterministic heuristic checks.
+    This component does not invoke an external LLM.
     """
     async def is_adversarial(self, text: str) -> bool:
         if not text:

@@ -28,6 +28,8 @@ from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(tags=["Background Jobs"])
 logger = structlog.get_logger()
+_active_sse_connections: Dict[str, int] = {}
+_active_sse_lock = asyncio.Lock()
 
 
 class JobStatusResponse(BaseModel):
@@ -216,69 +218,91 @@ async def stream_job_updates(
     This uses Server-Sent Events (SSE) to push updates to the frontend
     whenever a job status changes or a new job is enqueued.
     """
+    from app.shared.core.config import get_settings
+    settings = get_settings()
+    tenant_key = str(user.tenant_id)
+    max_connections = max(1, int(settings.SSE_MAX_CONNECTIONS_PER_TENANT))
+    poll_interval = max(1, int(settings.SSE_POLL_INTERVAL_SECONDS))
+
+    async with _active_sse_lock:
+        current_connections = _active_sse_connections.get(tenant_key, 0)
+        if current_connections >= max_connections:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many active job streams for tenant. Max allowed: {max_connections}"
+            )
+        _active_sse_connections[tenant_key] = current_connections + 1
+
     async def event_generator():
         last_seen_job_states = {}
-        
-        while True:
-            try:
-                # We use a fresh session to avoid stale data
-                async with async_session_maker() as session:
-                    # Fetch active jobs (pending, running) and recently finished ones
-                    query = (
-                        select(BackgroundJob)
-                        .where(BackgroundJob.tenant_id == user.tenant_id)
-                        .where(sa.not_(BackgroundJob.is_deleted))
-                        .where(
-                            sa.or_(
-                                BackgroundJob.status.in_([JobStatus.PENDING, JobStatus.RUNNING]),
-                                sa.and_(
-                                    BackgroundJob.status.in_([JobStatus.COMPLETED, JobStatus.FAILED]),
-                                    BackgroundJob.updated_at >= datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        try:
+            while True:
+                try:
+                    # We use a fresh session to avoid stale data
+                    async with async_session_maker() as session:
+                        # Fetch active jobs (pending, running) and recently finished ones
+                        query = (
+                            select(BackgroundJob)
+                            .where(BackgroundJob.tenant_id == user.tenant_id)
+                            .where(sa.not_(BackgroundJob.is_deleted))
+                            .where(
+                                sa.or_(
+                                    BackgroundJob.status.in_([JobStatus.PENDING, JobStatus.RUNNING]),
+                                    sa.and_(
+                                        BackgroundJob.status.in_([JobStatus.COMPLETED, JobStatus.FAILED]),
+                                        BackgroundJob.updated_at >= datetime.now(timezone.utc).replace(second=0, microsecond=0)
+                                    )
                                 )
                             )
+                            .order_by(desc(BackgroundJob.updated_at))
+                            .limit(20)
                         )
-                        .order_by(desc(BackgroundJob.updated_at))
-                        .limit(20)
-                    )
-                    
-                    result = await session.execute(query)
-                    jobs = result.scalars().all()
-                    
-                    updates = []
-                    for job in jobs:
-                        job_id_str = str(job.id)
-                        current_state = f"{job.status}:{job.updated_at.isoformat()}"
                         
-                        if last_seen_job_states.get(job_id_str) != current_state:
-                            last_seen_job_states[job_id_str] = current_state
-                            updates.append({
-                                "id": job_id_str,
-                                "job_type": job.job_type,
-                                "status": job.status,
-                                "updated_at": job.updated_at.isoformat(),
-                                "error_message": job.error_message.split(":")[0] if job.error_message and ":" in job.error_message else job.error_message
-                            })
-                    
-                    if updates:
+                        result = await session.execute(query)
+                        jobs = result.scalars().all()
+                        
+                        updates = []
+                        for job in jobs:
+                            job_id_str = str(job.id)
+                            current_state = f"{job.status}:{job.updated_at.isoformat()}"
+                            
+                            if last_seen_job_states.get(job_id_str) != current_state:
+                                last_seen_job_states[job_id_str] = current_state
+                                updates.append({
+                                    "id": job_id_str,
+                                    "job_type": job.job_type,
+                                    "status": job.status,
+                                    "updated_at": job.updated_at.isoformat(),
+                                    "error_message": job.error_message.split(":")[0] if job.error_message and ":" in job.error_message else job.error_message
+                                })
+                        
+                        if updates:
+                            yield {
+                                "event": "job_update",
+                                "data": json.dumps(updates)
+                            }
+                        
+                        # Heartbeat to keep connection alive
                         yield {
-                            "event": "job_update",
-                            "data": json.dumps(updates)
+                            "event": "ping",
+                            "data": "heartbeat"
                         }
-                    
-                    # Heartbeat to keep connection alive
+                        
+                except Exception as e:
+                    logger.error("SSE Stream Error", error=str(e))
                     yield {
-                        "event": "ping",
-                        "data": "heartbeat"
+                        "event": "error",
+                        "data": json.dumps({"error": "Stream interrupted"})
                     }
-                    
-            except Exception as e:
-                logger.error("SSE Stream Error", error=str(e))
-                yield {
-                    "event": "error",
-                    "data": json.dumps({"error": "Stream interrupted"})
-                }
-            
-            await asyncio.sleep(3)  # Poll every 3 seconds
+                
+                await asyncio.sleep(poll_interval)
+        finally:
+            async with _active_sse_lock:
+                remaining = _active_sse_connections.get(tenant_key, 0) - 1
+                if remaining > 0:
+                    _active_sse_connections[tenant_key] = remaining
+                else:
+                    _active_sse_connections.pop(tenant_key, None)
 
     return EventSourceResponse(event_generator())
 
@@ -297,7 +321,13 @@ async def internal_process_jobs(
     settings = get_settings()
     
     # Validate internal secret using constant-time comparison (SEC: Issue D3)
-    expected_secret = getattr(settings, 'INTERNAL_JOB_SECRET', 'dev-secret')
+    expected_secret = settings.INTERNAL_JOB_SECRET
+    if not expected_secret or len(expected_secret) < 32:
+        raise HTTPException(
+            status_code=503,
+            detail="INTERNAL_JOB_SECRET is not configured securely. Set a 32+ character secret."
+        )
+
     if not secrets.compare_digest(secret, expected_secret):
         raise HTTPException(status_code=403, detail="Invalid secret")
     

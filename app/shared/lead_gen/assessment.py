@@ -9,7 +9,13 @@ class FreeAssessmentService:
         if not email:
             raise ValueError("Email is required for assessment.")
             
-        monthly_spend = data.get("monthly_spend", 0.0)
+        monthly_spend_raw = data.get("monthly_spend", 0.0)
+        try:
+            monthly_spend = float(monthly_spend_raw or 0.0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("monthly_spend must be a number.") from exc
+        if monthly_spend < 0:
+            raise ValueError("monthly_spend must be non-negative.")
         
         # Simplified rule-based logic for lead-gen visibility
         estimated_savings = monthly_spend * 0.18 # Default 18% heuristic

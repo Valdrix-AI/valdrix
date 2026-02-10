@@ -27,6 +27,11 @@ class RecommendationRead(BaseModel):
     roi_percentage: float
     status: str
 
+class OptimizationScanResponse(BaseModel):
+    status: str
+    recommendations_generated: int
+    message: str
+
 # --- Endpoints ---
 
 @router.get("/recommendations", response_model=List[RecommendationRead])
@@ -47,12 +52,12 @@ async def list_recommendations(
     result = await db.execute(q)
     return result.scalars().all()
 
-@router.post("/refresh")
+@router.post("/refresh", response_model=OptimizationScanResponse)
 async def trigger_optimization_scan(
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db)
-) -> Dict[str, str]:
+) -> OptimizationScanResponse:
     """
     Trigger a fresh analysis of cloud usage to generate RI/SP recommendations.
     """
@@ -88,8 +93,8 @@ async def apply_recommendation(
         raise ResourceNotFoundError("Recommendation not found")
 
     rec.status = "applied"
-    from datetime import datetime
-    rec.applied_at = datetime.now()
+    from datetime import datetime, timezone
+    rec.applied_at = datetime.now(timezone.utc)
     
     await db.commit()
     

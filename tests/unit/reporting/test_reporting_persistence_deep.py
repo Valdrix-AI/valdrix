@@ -215,7 +215,7 @@ async def test_check_for_significant_adjustments_significant(persistence_service
 
 @pytest.mark.asyncio
 async def test_clear_range_basic(persistence_service, mock_db):
-    await persistence_service.clear_range("acc-123", date(2026,1,1), date(2026,1,31))
+    await persistence_service.clear_range("tenant-1", "acc-123", date(2026,1,1), date(2026,1,31))
     assert mock_db.execute.called
 
 @pytest.mark.asyncio
@@ -238,3 +238,75 @@ async def test_finalize_batch_success(persistence_service, mock_db):
     result = await persistence_service.finalize_batch(days_ago=2)
     assert result["records_finalized"] == 10
     assert mock_db.flush.called
+
+@pytest.mark.asyncio
+async def test_save_records_stream_batch_flush(persistence_service):
+    tenant_id = str(uuid4())
+    account_id = str(uuid4())
+
+    async def record_stream():
+        for _ in range(501):
+            yield {
+                "service": "S3",
+                "region": "us-east-1",
+                "cost_usd": Decimal("1.00"),
+                "timestamp": datetime.now(timezone.utc),
+                "usage_type": "DataTransfer"
+            }
+
+    with patch.object(persistence_service, "_bulk_upsert", AsyncMock()) as mock_bulk:
+        result = await persistence_service.save_records_stream(record_stream(), tenant_id, account_id)
+
+    assert result["records_saved"] == 501
+    assert mock_bulk.call_count == 2
+
+@pytest.mark.asyncio
+async def test_bulk_upsert_no_values_noop(persistence_service, mock_db):
+    await persistence_service._bulk_upsert([])
+    assert not mock_db.execute.called
+
+@pytest.mark.asyncio
+async def test_bulk_upsert_sqlite_updates_existing_amount_raw(persistence_service, mock_db):
+    mock_db.bind.url = "sqlite+aiosqlite:///:memory:"
+    existing_record = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = existing_record
+    mock_db.execute.return_value = mock_result
+
+    now = datetime.now(timezone.utc)
+    values = [{
+        "account_id": "acc-123",
+        "recorded_at": now.date(),
+        "timestamp": now,
+        "service": "EC2",
+        "region": "us-east-1",
+        "usage_type": "Usage",
+        "cost_usd": Decimal("3.00"),
+        "amount_raw": Decimal("3.50")
+    }]
+
+    await persistence_service._bulk_upsert(values)
+    assert existing_record.cost_usd == Decimal("3.00")
+    assert existing_record.amount_raw == Decimal("3.50")
+
+@pytest.mark.asyncio
+async def test_check_for_significant_adjustments_zero_old_cost(persistence_service, mock_db):
+    tenant_id = str(uuid4())
+    account_id = str(uuid4())
+    now = datetime.now(timezone.utc)
+
+    new_records = [{
+        "timestamp": now,
+        "service": "EC2",
+        "region": "us-east-1",
+        "cost_usd": 5.0
+    }]
+
+    mock_res = MagicMock()
+    mock_res.all.return_value = [
+        MagicMock(timestamp=now, service="EC2", region="us-east-1", cost_usd=Decimal("0.00"), id=uuid4())
+    ]
+    mock_db.execute.return_value = mock_res
+
+    await persistence_service._check_for_significant_adjustments(tenant_id, account_id, new_records)
+    assert not mock_db.add_all.called

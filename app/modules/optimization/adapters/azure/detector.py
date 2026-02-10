@@ -1,9 +1,6 @@
 from typing import List, Dict, Any, Optional
 import structlog
 from azure.identity.aio import ClientSecretCredential
-from azure.mgmt.compute.aio import ComputeManagementClient
-from azure.mgmt.network.aio import NetworkManagementClient
-from azure.mgmt.monitor.aio import MonitorManagementClient
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
@@ -24,22 +21,47 @@ class AzureZombieDetector(BaseZombieDetector):
         # credentials dict expected to have: tenant_id, client_id, client_secret, subscription_id
         self.subscription_id = None
         self._credential = None
+        self._credential_error = None
+
+        def _build_credential(tenant_id: Optional[str], client_id: Optional[str], client_secret: Optional[str]):
+            if not tenant_id or not client_id or not client_secret:
+                self._credential_error = "missing_client_credentials"
+                logger.warning(
+                    "azure_detector_missing_auth_fields",
+                    has_tenant=bool(tenant_id),
+                    has_client_id=bool(client_id),
+                    has_client_secret=bool(client_secret)
+                )
+                return None
+            try:
+                return ClientSecretCredential(
+                    tenant_id=tenant_id,
+                    client_id=client_id,
+                    client_secret=client_secret
+                )
+            except Exception as exc:
+                self._credential_error = str(exc)
+                logger.error("azure_detector_credential_init_failed", error=str(exc))
+                return None
 
         if connection:
             # Use logic from connection or adapter to get creds
             self.subscription_id = connection.subscription_id
-            self._credential = ClientSecretCredential(
-                tenant_id=connection.azure_tenant_id,
-                client_id=connection.client_id,
-                client_secret=connection.client_secret
+            self._credential = _build_credential(
+                connection.azure_tenant_id,
+                connection.client_id,
+                connection.client_secret
             )
         elif credentials:
             self.subscription_id = credentials.get("subscription_id")
-            self._credential = ClientSecretCredential(
-                tenant_id=credentials.get("tenant_id"),
-                client_id=credentials.get("client_id"),
-                client_secret=credentials.get("client_secret")
+            self._credential = _build_credential(
+                credentials.get("tenant_id"),
+                credentials.get("client_id"),
+                credentials.get("client_secret")
             )
+        
+        if not self.subscription_id:
+            logger.warning("azure_detector_missing_subscription_id")
         
         # Clients are lazily initialized in scan method if needed, 
         # or we can init them here if we have sub ID.
@@ -60,31 +82,29 @@ class AzureZombieDetector(BaseZombieDetector):
         Execute Azure plugin scan, passing the appropriate client.
         """
         if not self._credential or not self.subscription_id:
-            logger.error("azure_detector_missing_credentials")
+            logger.error(
+                "azure_detector_missing_credentials",
+                subscription_id=bool(self.subscription_id),
+                credential_ready=bool(self._credential),
+                error=self._credential_error
+            )
             return []
-
-        # Route to appropriate client based on plugin type or key
-        client = None
-        if plugin.category_key in ["unattached_disks", "orphaned_images"]:
-            if not self._compute_client:
-                self._compute_client = ComputeManagementClient(self._credential, self.subscription_id)
-            client = self._compute_client
-            
-        elif plugin.category_key == "orphaned_ips":
-            if not self._network_client:
-                self._network_client = NetworkManagementClient(self._credential, self.subscription_id)
-            client = self._network_client
-            
-        elif plugin.category_key == "idle_vms":
-            if not self._compute_client:
-                self._compute_client = ComputeManagementClient(self._credential, self.subscription_id)
-            if not self._monitor_client:
-                self._monitor_client = MonitorManagementClient(self._credential, self.subscription_id)
-            client = self._compute_client
-            # Pass monitor client in registry or as extra kwarg
-            return await plugin.scan(client, region=self.region, monitor_client=self._monitor_client)
-            
-        return []
+        try:
+            results = await plugin.scan(
+                subscription_id=self.subscription_id,
+                credentials=self._credential,
+                region=self.region
+            )
+        except Exception as exc:
+            logger.error("azure_plugin_scan_failed", plugin=plugin.category_key, error=str(exc))
+            return []
+        if results is None:
+            logger.warning("azure_plugin_scan_returned_none", plugin=plugin.category_key)
+            return []
+        if not isinstance(results, list):
+            logger.warning("azure_plugin_scan_invalid_result", plugin=plugin.category_key, result_type=type(results).__name__)
+            return []
+        return results
 
     async def __aenter__(self):
         return self

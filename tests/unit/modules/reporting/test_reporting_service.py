@@ -1,9 +1,10 @@
+import pytest
 """
 Comprehensive tests for ReportingService module.
 Covers cost ingestion, connection handling, data aggregation, and error scenarios.
 """
 
-import pytest
+from typing import Dict
 from unittest.mock import AsyncMock, MagicMock, patch, call
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal

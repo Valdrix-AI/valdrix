@@ -136,9 +136,22 @@ async def update_llm_settings(
             logger.info("llm_alert_threshold_zero", tenant_id=str(current_user.tenant_id))
         elif update_data["alert_threshold_percent"] == 100:
             logger.info("llm_alert_threshold_max", tenant_id=str(current_user.tenant_id))
-            
-        for key, value in update_data.items():
-            setattr(settings, key, value)
+
+        allowed_fields = {
+            "monthly_limit_usd",
+            "alert_threshold_percent",
+            "hard_limit",
+            "preferred_provider",
+            "preferred_model",
+            "openai_api_key",
+            "claude_api_key",
+            "google_api_key",
+            "groq_api_key",
+        }
+
+        for key in allowed_fields:
+            if key in update_data:
+                setattr(settings, key, update_data[key])
 
     await db.commit()
     await db.refresh(settings)
