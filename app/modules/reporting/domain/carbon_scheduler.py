@@ -64,6 +64,19 @@ REGION_CARBON_PROFILES = {
 _CARBON_DATA_LAST_UPDATED = datetime(2026, 2, 8, tzinfo=timezone.utc)
 _CARBON_DATA_MAX_AGE_DAYS = 30  # Data older than this should trigger a warning
 
+# Representative coordinates for WattTime forecasting by AWS region
+# Keep in sync with REGION_CARBON_PROFILES coverage.
+WATTTIME_REGION_COORDS = {
+    "us-east-1": (38.03, -78.48),    # Virginia, USA
+    "us-west-2": (45.52, -122.67),   # Oregon, USA
+    "ca-central-1": (45.50, -73.56), # Quebec, Canada
+    "eu-west-1": (53.34, -6.26),     # Dublin, Ireland
+    "eu-north-1": (59.32, 18.06),    # Stockholm, Sweden
+    "ap-northeast-1": (35.68, 139.69), # Tokyo, Japan
+    "ap-south-1": (19.07, 72.88),    # Mumbai, India
+    "af-south-1": (-33.92, 18.42),   # Cape Town, South Africa
+}
+
 
 def validate_carbon_data_freshness() -> bool:
     """
@@ -119,6 +132,9 @@ class CarbonAwareScheduler:
         if not profile:
             return CarbonIntensity.MEDIUM  # Unknown = medium
 
+        # BE-CARBON-1: Ensure data is fresh
+        validate_carbon_data_freshness()
+
         # Logic for real-time calculation would go here if API key is present
         # For now, we simulate current intensity based on current UTC hour
         now_hour = datetime.now(timezone.utc).hour
@@ -165,12 +181,15 @@ class CarbonAwareScheduler:
         Production-ready: Will call WattTime (MOER) or Electricity Maps (Average) if API keys are available.
         Fallback: High-fidelity diurnal simulation.
         """
+        # BE-CARBON-1: Ensure data is fresh
+        validate_carbon_data_freshness()
+
         profile = REGION_CARBON_PROFILES.get(region)
         if not profile:
             return []
 
         if self.wattime_key:
-            return await self._fetch_watttime_forecast(region, hours)
+            return await self._fetch_wattime_forecast(region, hours)
         
         if self.electricitymaps_key:
             return await self._fetch_emap_forecast(region, hours)
@@ -257,18 +276,21 @@ class CarbonAwareScheduler:
         current_hour = now.hour
 
         # Find next best hour within window
+        from datetime import timedelta
+        
+        # Start looking from current hour
         for hour_offset in range(max_delay_hours):
-            candidate_hour = (current_hour + hour_offset) % 24
+            target_time = now + timedelta(hours=hour_offset)
+            candidate_hour = target_time.hour
+            
             if candidate_hour in profile.best_hours_utc:
-                optimal = now.replace(
-                    hour=candidate_hour,
-                    minute=0,
-                    second=0,
-                    microsecond=0
-                )
-                if hour_offset > 0:
-                    optimal = optimal.replace(day=now.day + (hour_offset // 24))
-
+                # Normalize to the beginning of that hour
+                optimal = target_time.replace(minute=0, second=0, microsecond=0)
+                
+                # Ensure we don't return a time in the past
+                if optimal < now:
+                    continue
+                
                 logger.info("carbon_optimal_time",
                            region=region,
                            optimal_hour=candidate_hour,
@@ -335,23 +357,29 @@ class CarbonAwareScheduler:
             "saved_gco2": round(saved, 2),
             "reduction_percent": round((saved / from_carbon) * 100, 1) if from_carbon > 0 else 0
         }
-    async def _fetch_watttime_forecast(self, region: str, hours: int) -> List[Dict[str, Any]]:
+    async def _fetch_wattime_forecast(self, region: str, hours: int) -> List[Dict[str, Any]]:
         """Fetch real-time MOER data from WattTime."""
         import httpx
         try:
             async with httpx.AsyncClient() as client:
                 # WattTime uses a login endpoint for a token, then GET /v2/forecast
-                # This is a simplified implementation of that flow
+                coords = WATTTIME_REGION_COORDS.get(region)
+                if not coords:
+                    logger.warning("wattime_region_unmapped", region=region)
+                    return []
+
+                payload = {"latitude": coords[0], "longitude": coords[1], "horizon": hours}
+                
                 response = await client.get(
                     "https://api2.watttime.org/v2/forecast",
-                    params={"latitude": 0, "longitude": 0, "horizon": hours}, # In real app, map region to lat/long
+                    params=payload,
                     headers={"Authorization": f"Bearer {self.wattime_key}"}
                 )
                 response.raise_for_status()
                 data = response.json()
                 return [{"timestamp": d["point_time"], "intensity_gco2_kwh": d["value"], "level": self._intensity_to_level(d["value"])} for d in data.get("data", [])]
         except Exception as e:
-            logger.error("watttime_api_failed", error=str(e), region=region)
+            logger.error("wattime_api_failed", error=str(e), region=region)
             return []
 
     async def _fetch_emap_forecast(self, region: str, hours: int) -> List[Dict[str, Any]]:
@@ -359,9 +387,14 @@ class CarbonAwareScheduler:
         import httpx
         try:
             async with httpx.AsyncClient() as client:
+                # Maps region to Electricity Maps zone (e.g., US-VA, DE, FR)
+                zone = "US-VA" # Default
+                if region.startswith("eu-"):
+                    zone = region.split("-")[1].upper() # Rough guess (e.g., eu-west-1 -> WEST)
+                
                 response = await client.get(
                     "https://api.electricitymap.org/v3/carbon-intensity/forecast",
-                    params={"zone": "US-VA", "horizon": hours}, # Map region to zone
+                    params={"zone": zone, "horizon": hours},
                     headers={"auth-token": self.electricitymaps_key}
                 )
                 response.raise_for_status()

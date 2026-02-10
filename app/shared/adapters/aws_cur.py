@@ -9,7 +9,7 @@ import os
 import json
 import tempfile
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Dict, Any, List
 import aioboto3
 import pandas as pd
@@ -34,7 +34,20 @@ class AWSCURAdapter(CostAdapter):
 
     async def verify_connection(self) -> bool:
         """Verify S3 access."""
-        return True
+        try:
+            creds = await self._get_credentials()
+            async with self.session.client(
+                "s3",
+                region_name=self.connection.region,
+                aws_access_key_id=creds["AccessKeyId"],
+                aws_secret_access_key=creds["SecretAccessKey"],
+                aws_session_token=creds["SessionToken"],
+            ) as s3:
+                await s3.head_bucket(Bucket=self.bucket_name)
+            return True
+        except Exception as e:
+            logger.error("cur_bucket_verify_failed", bucket=self.bucket_name, error=str(e))
+            return False
 
     async def setup_cur_automation(self) -> Dict[str, Any]:
         """
@@ -203,13 +216,20 @@ class AWSCURAdapter(CostAdapter):
         ) as s3:
             try:
                 # 1. List objects in the bucket to find the latest Parquet
-                response = await s3.list_objects_v2(Bucket=self.bucket_name, Prefix="cur/")
-                if "Contents" not in response:
+                paginator = s3.get_paginator("list_objects_v2")
+                parquet_objects: List[Dict[str, Any]] = []
+                async for page in paginator.paginate(Bucket=self.bucket_name, Prefix="cur/"):
+                    for obj in page.get("Contents", []):
+                        key = obj.get("Key", "")
+                        if key.lower().endswith(".parquet"):
+                            parquet_objects.append(obj)
+
+                if not parquet_objects:
                     logger.warning("no_cur_files_found", bucket=self.bucket_name)
                     return self._empty_summary()
 
                 # Sort by last modified
-                files = sorted(response["Contents"], key=lambda x: x["LastModified"], reverse=True)
+                files = sorted(parquet_objects, key=lambda x: x.get("LastModified") or datetime.min, reverse=True)
                 latest_file = files[0]["Key"]
 
                 logger.info("ingesting_cur_file", key=latest_file)
@@ -265,16 +285,24 @@ class AWSCURAdapter(CostAdapter):
         }
 
         # Iterate through row groups
+        parse_errors = 0
         for i in range(parquet_file.num_row_groups):
-            table = parquet_file.read_row_group(i)
-            df_chunk = table.to_pandas()
+            try:
+                table = parquet_file.read_row_group(i)
+                df_chunk = table.to_pandas()
+            except Exception as e:
+                logger.warning("cur_row_group_read_failed", error=str(e), row_group=i)
+                continue
+
+            if df_chunk.empty:
+                continue
             
             # Resolve columns for this chunk
             col_map = {k: next((c for c in v if c in df_chunk.columns), None) for k, v in CUR_COLUMNS.items()}
-            # Fallbacks for critical columns
-            col_map["date"] = col_map["date"] or df_chunk.columns[0]
-            col_map["cost"] = col_map["cost"] or "cost"
-            col_map["service"] = col_map["service"] or "service"
+            missing = [key for key in ("date", "cost") if not col_map.get(key)]
+            if missing:
+                logger.warning("cur_missing_required_columns", missing=missing, row_group=i)
+                continue
 
             # Update date range
             chunk_min = pd.to_datetime(df_chunk[col_map["date"]].min()).date()
@@ -284,7 +312,13 @@ class AWSCURAdapter(CostAdapter):
 
             # Process rows in chunk
             for _, row in df_chunk.iterrows():
-                record = self._parse_row(row, col_map)
+                try:
+                    record = self._parse_row(row, col_map)
+                except Exception as e:
+                    parse_errors += 1
+                    if parse_errors <= 3:
+                        logger.warning("cur_row_parse_failed", error=str(e))
+                    continue
                 
                 # Safety valve: For massive files, we limit the records list to prevent OOM
                 if len(all_records) < 100000:
@@ -314,17 +348,40 @@ class AWSCURAdapter(CostAdapter):
 
     def _parse_row(self, row: pd.Series, col_map: Dict[str, str]) -> CostRecord:
         """Parses a single CUR row into a CostRecord."""
-        raw_amount = Decimal(str(row.get(col_map["cost"], 0)))
-        currency = str(row.get(col_map["currency"], "USD"))
-        
-        service = str(row.get(col_map["service"], "Unknown"))
-        region = str(row.get(col_map["region"], "Global"))
-        usage_type = str(row.get(col_map["usage_type"], "Unknown"))
+        cost_key = col_map.get("cost")
+        raw_value = row.get(cost_key, 0) if cost_key else 0
+        if pd.isna(raw_value) or raw_value == "":
+            raw_amount = Decimal("0")
+        else:
+            try:
+                raw_amount = Decimal(str(raw_value))
+            except (InvalidOperation, ValueError, TypeError):
+                raw_amount = Decimal("0")
+        if raw_amount.is_nan() or raw_amount.is_infinite():
+            raw_amount = Decimal("0")
+
+        currency_key = col_map.get("currency")
+        currency_val = row.get(currency_key, "USD") if currency_key else "USD"
+        currency = "USD" if pd.isna(currency_val) or currency_val == "" else str(currency_val)
+
+        service_key = col_map.get("service")
+        service_val = row.get(service_key, "Unknown") if service_key else "Unknown"
+        service = "Unknown" if pd.isna(service_val) or service_val == "" else str(service_val)
+
+        region_key = col_map.get("region")
+        region_val = row.get(region_key, "Global") if region_key else "Global"
+        region = "Global" if pd.isna(region_val) or region_val == "" else str(region_val)
+
+        usage_key = col_map.get("usage_type")
+        usage_val = row.get(usage_key, "Unknown") if usage_key else "Unknown"
+        usage_type = "Unknown" if pd.isna(usage_val) or usage_val == "" else str(usage_val)
 
         tags = self._extract_tags(row)
 
         # Use raw datetime to preserve hourly granularity
         dt = pd.to_datetime(row[col_map["date"]])
+        if pd.isna(dt):
+            raise ValueError("Invalid usage start date")
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
 

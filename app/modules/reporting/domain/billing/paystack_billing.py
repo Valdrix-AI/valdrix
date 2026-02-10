@@ -36,6 +36,12 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 
+def _email_hash(email: Optional[str]) -> Optional[str]:
+    if not email:
+        return None
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()[:12]
+
+
 
 
 class SubscriptionStatus(str, Enum):
@@ -224,7 +230,8 @@ class BillingService:
             if not sub:
                 import uuid
                 sub = TenantSubscription(id=uuid.uuid4(), tenant_id=tenant_id, tier=tier.value)
-                self.db.add(sub)
+                from app.shared.core.async_utils import maybe_await
+                await maybe_await(self.db.add(sub))
             
             await self.db.commit()
 
@@ -469,7 +476,10 @@ class WebhookHandler:
             from app.models.tenant import User
             from app.shared.core.security import generate_blind_index
             
-            logger.info("webhook_metadata_missing_attempting_email_lookup", email=customer_email)
+            logger.info(
+                "webhook_metadata_missing_attempting_email_lookup",
+                email_hash=_email_hash(customer_email)
+            )
             email_bidx = generate_blind_index(customer_email)
             
             user_result = await self.db.execute(
@@ -478,9 +488,13 @@ class WebhookHandler:
             user = user_result.scalar_one_or_none()
             if user:
                 tenant_id = user.tenant_id
-                logger.info("webhook_email_lookup_success", tenant_id=str(tenant_id), email=customer_email)
+                logger.info(
+                    "webhook_email_lookup_success",
+                    tenant_id=str(tenant_id),
+                    email_hash=_email_hash(customer_email)
+                )
             else:
-                logger.error("webhook_email_lookup_failed", email=customer_email)
+                logger.error("webhook_email_lookup_failed", email_hash=_email_hash(customer_email))
 
         if not tenant_id:
             logger.error("webhook_tenant_lookup_failed_no_identifier", reference=data.get("reference"))
@@ -505,7 +519,8 @@ class WebhookHandler:
             if not sub:
                 import uuid
                 sub = TenantSubscription(id=uuid.uuid4(), tenant_id=tenant_id)
-                self.db.add(sub)
+                from app.shared.core.async_utils import maybe_await
+                await maybe_await(self.db.add(sub))
             
             sub.paystack_customer_code = customer_code
             

@@ -12,7 +12,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
-from typing import Dict, Any, cast
+from typing import Dict, Any, cast, Optional
 from app.shared.core.config import get_settings
 
 from app.modules.reporting.domain.billing.paystack_billing import (
@@ -46,6 +46,30 @@ class DunningService:
     
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _get_primary_tenant_email(self, tenant_id: UUID) -> Optional[str]:
+        from app.models.tenant import User
+        from app.shared.core.security import decrypt_string
+
+        result = await self.db.execute(
+            select(User).where(User.tenant_id == tenant_id).limit(1)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            return None
+        return decrypt_string(user.email, context="pii")
+
+    def _build_email_service(self):
+        from app.modules.notifications.domain.email_service import EmailService
+
+        settings = get_settings()
+        return EmailService(
+            smtp_host=str(settings.SMTP_HOST),
+            smtp_port=int(settings.SMTP_PORT),
+            smtp_user=str(settings.SMTP_USER),
+            smtp_password=str(settings.SMTP_PASSWORD),
+            from_email=str(getattr(settings, "SMTP_FROM", "billing@valdrix.io")),
+        )
     
     async def process_failed_payment(
         self, 
@@ -97,17 +121,31 @@ class DunningService:
         subscription.dunning_next_retry_at = next_retry
         
         # Enqueue retry job
-        await enqueue_job(
-            db=self.db,
-            job_type=JobType.DUNNING,
-            tenant_id=cast(UUID, subscription.tenant_id),
-            payload={
-                "subscription_id": str(subscription.id),
-                "attempt": attempt + 1
-            },
-            scheduled_for=next_retry
-        )
-        
+        try:
+            await enqueue_job(
+                db=self.db,
+                job_type=JobType.DUNNING,
+                tenant_id=cast(UUID, subscription.tenant_id),
+                payload={
+                    "subscription_id": str(subscription.id),
+                    "attempt": attempt + 1
+                },
+                scheduled_for=next_retry
+            )
+        except Exception as e:
+            logger.error(
+                "dunning_enqueue_failed",
+                subscription_id=str(subscription.id),
+                error=str(e)
+            )
+            await self.db.commit()
+            await self._send_payment_failed_email(subscription, attempt, next_retry)
+            return {
+                "status": "enqueue_failed",
+                "attempt": attempt,
+                "next_retry_at": next_retry.isoformat()
+            }
+
         await self.db.commit()
         
         # Send notification email
@@ -205,30 +243,12 @@ class DunningService:
     ) -> None:
         """Send payment failed notification email."""
         try:
-            from app.modules.notifications.domain.email_service import EmailService
-            from app.models.tenant import User
-            
-            # Get user email
-            user_result = await self.db.execute(
-                select(User).where(User.tenant_id == subscription.tenant_id).limit(1)
-            )
-            user = user_result.scalar_one_or_none()
-            
-            if not user:
+            email = await self._get_primary_tenant_email(subscription.tenant_id)
+            if not email:
                 logger.warning("dunning_email_no_user", tenant_id=str(subscription.tenant_id))
                 return
-            
-            from app.shared.core.security import decrypt_string
-            email = decrypt_string(user.email, context="pii")
-            
-            settings = get_settings()
-            email_service = EmailService(
-                smtp_host=str(settings.SMTP_HOST),
-                smtp_port=int(settings.SMTP_PORT),
-                smtp_user=str(settings.SMTP_USER),
-                smtp_password=str(settings.SMTP_PASSWORD),
-                from_email=str(settings.EMAILS_FROM_EMAIL or "billing@valdrix.io")
-            )
+
+            email_service = self._build_email_service()
             await email_service.send_dunning_notification(
                 to_email=email,
                 attempt=attempt,
@@ -244,28 +264,11 @@ class DunningService:
     async def _send_payment_recovered_email(self, subscription: TenantSubscription) -> None:
         """Send payment recovered confirmation email."""
         try:
-            from app.modules.notifications.domain.email_service import EmailService
-            from app.models.tenant import User
-            
-            user_result = await self.db.execute(
-                select(User).where(User.tenant_id == subscription.tenant_id).limit(1)
-            )
-            user = user_result.scalar_one_or_none()
-            
-            if not user:
+            email = await self._get_primary_tenant_email(subscription.tenant_id)
+            if not email:
                 return
-            
-            from app.shared.core.security import decrypt_string
-            email = decrypt_string(user.email, context="pii")
-            
-            settings = get_settings()
-            email_service = EmailService(
-                smtp_host=str(settings.SMTP_HOST),
-                smtp_port=int(settings.SMTP_PORT),
-                smtp_user=str(settings.SMTP_USER),
-                smtp_password=str(settings.SMTP_PASSWORD),
-                from_email=str(settings.EMAILS_FROM_EMAIL or "billing@valdrix.io")
-            )
+
+            email_service = self._build_email_service()
             await email_service.send_payment_recovered_notification(to_email=email)
             
         except Exception as e:
@@ -274,28 +277,11 @@ class DunningService:
     async def _send_account_downgraded_email(self, subscription: TenantSubscription) -> None:
         """Send account downgraded notice."""
         try:
-            from app.modules.notifications.domain.email_service import EmailService
-            from app.models.tenant import User
-            
-            user_result = await self.db.execute(
-                select(User).where(User.tenant_id == subscription.tenant_id).limit(1)
-            )
-            user = user_result.scalar_one_or_none()
-            
-            if not user:
+            email = await self._get_primary_tenant_email(subscription.tenant_id)
+            if not email:
                 return
-            
-            from app.shared.core.security import decrypt_string
-            email = decrypt_string(user.email, context="pii")
-            
-            settings = get_settings()
-            email_service = EmailService(
-                smtp_host=str(settings.SMTP_HOST),
-                smtp_port=int(settings.SMTP_PORT),
-                smtp_user=str(settings.SMTP_USER),
-                smtp_password=str(settings.SMTP_PASSWORD),
-                from_email=str(settings.EMAILS_FROM_EMAIL or "billing@valdrix.io")
-            )
+
+            email_service = self._build_email_service()
             await email_service.send_account_downgraded_notification(to_email=email)
             
         except Exception as e:

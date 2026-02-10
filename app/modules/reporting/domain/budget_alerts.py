@@ -4,7 +4,7 @@ Carbon Budget Alerts Service
 Allows users to set monthly carbon (CO2) limits and receive
 alerts when approaching or exceeding their budget.
 
-Valdrix Innovation: Bring carbon accountability to
+Valdrix Innovation: Brings carbon accountability to
 cloud teams with measurable targets and automated notifications.
 """
 
@@ -124,23 +124,31 @@ class CarbonBudgetService:
         if not settings:
             return True  # First time, allow alert
 
-        # Check if last_alert_sent exists and was today
+        # Check if last_alert_sent exists and was today for THIS status
+        # BE-CARBON-12: Status-aware rate limiting
         last_alert = getattr(settings, 'last_alert_sent', None)
-        if last_alert:
+        last_status = getattr(settings, 'last_alert_status', None)
+        
+        if last_alert and last_status == alert_status:
             if last_alert.date() == date.today():
-                logger.info("carbon_alert_rate_limited", tenant_id=str(tenant_id))
+                logger.info("carbon_alert_rate_limited", 
+                            tenant_id=str(tenant_id), 
+                            status=alert_status)
                 return False
 
         return True
 
-    async def mark_alert_sent(self, tenant_id: UUID) -> None:
+    async def mark_alert_sent(self, tenant_id: UUID, alert_status: str) -> None:
         """Mark that an alert was sent today."""
         from app.models.carbon_settings import CarbonSettings
 
         await self.db.execute(
             update(CarbonSettings)
             .where(CarbonSettings.tenant_id == tenant_id)
-            .values(last_alert_sent=datetime.now(timezone.utc))
+            .values(
+                last_alert_sent=datetime.now(timezone.utc),
+                last_alert_status=alert_status
+            )
         )
         await self.db.commit()
 
@@ -177,12 +185,14 @@ class CarbonBudgetService:
         app_settings = get_settings()
         sent_any = False
 
+        # Fetch notification settings once to avoid UnboundLocalError and redundant queries
+        from app.models.notification_settings import NotificationSettings
+        notif_result = await self.db.execute(
+            select(NotificationSettings).where(NotificationSettings.tenant_id == tenant_id)
+        )
+        notif_settings = notif_result.scalar_one_or_none()
+
         if app_settings.SLACK_BOT_TOKEN:
-            from app.models.notification_settings import NotificationSettings
-            notif_result = await self.db.execute(
-                select(NotificationSettings).where(NotificationSettings.tenant_id == tenant_id)
-            )
-            notif_settings = notif_result.scalar_one_or_none()
 
             # Check if this type of alert is enabled
             is_exceeded = budget_status["alert_status"] == "exceeded"
@@ -270,7 +280,7 @@ class CarbonBudgetService:
 
         # Mark alert as sent to prevent spam
         if sent_any:
-            await self.mark_alert_sent(tenant_id)
+            await self.mark_alert_sent(tenant_id, budget_status["alert_status"])
 
         return sent_any
 

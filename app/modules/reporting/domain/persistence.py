@@ -72,7 +72,7 @@ class CostPersistenceService:
             
             # BE-COST-2: Check for significant cost adjustments (>2%)
             if not is_preliminary:
-                await self._check_for_significant_adjustments(summary.tenant_id, account_id, batch)
+                await self._check_for_significant_adjustments(summary.tenant_id, account_id, values)
                 
             await self._bulk_upsert(values)
             records_saved += len(values)
@@ -156,7 +156,9 @@ class CostPersistenceService:
                 stmt = select(CostRecord).where(
                     CostRecord.account_id == val["account_id"],
                     CostRecord.recorded_at == val["recorded_at"],
+                    CostRecord.timestamp == val["timestamp"],
                     CostRecord.service == val["service"],
+                    CostRecord.region == val["region"],
                     CostRecord.usage_type == val["usage_type"]
                 )
                 # Use scalar() which is safer
@@ -169,7 +171,8 @@ class CostPersistenceService:
                     if val.get("amount_raw") is not None:
                         existing.amount_raw = Decimal(str(val["amount_raw"]))
                 else:
-                    self.db.add(CostRecord(**val))
+                    from app.shared.core.async_utils import maybe_await
+                    await maybe_await(self.db.add(CostRecord(**val)))
             
             await self.db.flush()
 
@@ -202,7 +205,7 @@ class CostPersistenceService:
         ).where(
             CostRecord.tenant_id == tenant_id,
             CostRecord.account_id == account_id,
-            CostRecord.timestamp.in_(dates),
+            CostRecord.recorded_at.in_(dates),
             CostRecord.service.in_(services)
         )
         
@@ -255,9 +258,10 @@ class CostPersistenceService:
             self.db.add_all(audit_logs)
             await self.db.flush() # Ensure logs are sent before main records are updated
 
-    async def clear_range(self, account_id: str, start_date: Any, end_date: Any):
-        """Clears existing records to allow re-ingestion."""
+    async def clear_range(self, tenant_id: str, account_id: str, start_date: Any, end_date: Any):
+        """Clears existing records for a tenant/account range to allow re-ingestion."""
         stmt = delete(CostRecord).where(
+            CostRecord.tenant_id == tenant_id,
             CostRecord.account_id == account_id,
             CostRecord.timestamp >= start_date,
             CostRecord.timestamp <= end_date
@@ -294,7 +298,7 @@ class CostPersistenceService:
         
         logger.info("cost_retention_cleanup_complete", cutoff_date=str(cutoff_date), total_deleted=total_deleted)
         return {"deleted_count": total_deleted}
-    async def finalize_batch(self, days_ago: int = 2) -> Dict[str, int]:
+    async def finalize_batch(self, days_ago: int = 2, tenant_id: str | None = None) -> Dict[str, int]:
         """
         Transition cost records from PRELIMINARY to FINAL after the restatement window.
         AWS typically finalizes costs within 24-48 hours.
@@ -312,13 +316,19 @@ class CostPersistenceService:
                 is_preliminary=False
             )
         )
+
+        if tenant_id:
+            stmt = stmt.where(CostRecord.tenant_id == tenant_id)
         
         result = await self.db.execute(stmt)
         await self.db.flush()
         
         count = result.rowcount
-        logger.info("cost_batch_finalization_complete", 
-                    cutoff_date=str(cutoff_date), 
-                    records_finalized=count)
+        logger.info(
+            "cost_batch_finalization_complete",
+            tenant_id=tenant_id,
+            cutoff_date=str(cutoff_date),
+            records_finalized=count
+        )
         
         return {"records_finalized": count}

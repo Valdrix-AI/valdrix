@@ -12,6 +12,9 @@ from datetime import datetime, timezone
 from uuid import UUID
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
+import asyncio
+import hashlib
+import re
 import aioboto3
 from botocore.exceptions import ClientError
 from sqlalchemy import select
@@ -28,6 +31,7 @@ from app.shared.core.constants import SYSTEM_USER_ID
 from app.shared.adapters.aws_utils import map_aws_credentials
 from app.shared.core.safety_service import SafetyGuardrailService
 from app.shared.core.config import get_settings
+from app.shared.core.exceptions import ResourceNotFoundError
 
 logger = structlog.get_logger()
 
@@ -107,7 +111,8 @@ class RemediationService(BaseService):
             connection_id=connection_id,
         )
 
-        self.db.add(request)
+        from app.shared.core.async_utils import maybe_await
+        await maybe_await(self.db.add(request))
         await self.db.commit()
         await self.db.refresh(request)
 
@@ -148,11 +153,12 @@ class RemediationService(BaseService):
             select(RemediationRequest)
             .where(RemediationRequest.id == request_id)
             .where(RemediationRequest.tenant_id == tenant_id)
+            .with_for_update()
         )
         request = result.scalar_one_or_none()
 
         if not request:
-            raise ValueError(f"Request {request_id} not found")
+            raise ResourceNotFoundError(f"Request {request_id} not found")
 
         if request.status != RemediationStatus.PENDING:
             raise ValueError(f"Request is {request.status.value}, not pending")
@@ -184,11 +190,15 @@ class RemediationService(BaseService):
             select(RemediationRequest)
             .where(RemediationRequest.id == request_id)
             .where(RemediationRequest.tenant_id == tenant_id)
+            .with_for_update()
         )
         request = result.scalar_one_or_none()
 
         if not request:
-            raise ValueError(f"Request {request_id} not found")
+            raise ResourceNotFoundError(f"Request {request_id} not found")
+
+        if request.status != RemediationStatus.PENDING:
+            raise ValueError(f"Request is {request.status.value}, not pending")
 
         request.status = RemediationStatus.REJECTED
         request.reviewed_by_user_id = reviewer_id
@@ -217,52 +227,90 @@ class RemediationService(BaseService):
         If create_backup is True, creates snapshot before deleting volume.
         If bypass_grace_period is True, executes immediately (emergency use).
         """
-        # 0. Global Safety Guardrail (Unified)
-        safety = SafetyGuardrailService(self.db)
-        # We fetch the request first to get estimated savings for the impact check
-        # Centralized scoping check with row locking (H-4: Atomic State Transitions)
-        request = await self.get_by_id(RemediationRequest, request_id, tenant_id, lock=True)
+        start_time = time.time()
+        
+        # Fetch the request first
+        result = await self.db.execute(
+            select(RemediationRequest)
+            .where(RemediationRequest.id == request_id)
+            .where(RemediationRequest.tenant_id == tenant_id)
+            .with_for_update()
+        )
+        request = result.scalar_one_or_none()
         
         if not request:
-            raise ValueError("Remediation request not found.")
+            raise ResourceNotFoundError(f"Request {request_id} not found")
 
-        # Check all safety guards (Kill Switch, Circuit Breaker, Hard Cap)
-        await safety.check_all_guards(tenant_id, request.estimated_monthly_savings or Decimal("0"))
+        try:
+            # Check all safety guards (Kill Switch, Circuit Breaker, Hard Cap)
+            safety = SafetyGuardrailService(self.db)
+            await safety.check_all_guards(tenant_id, request.estimated_monthly_savings or Decimal("0"))
 
 
-        # 1. Validation & Pre-execution State Check
-        if request.status != RemediationStatus.APPROVED:
-            # BE-SEC-3: If already scheduled, check if grace period has passed
-            if request.status == RemediationStatus.SCHEDULED:
-                now = datetime.now(timezone.utc)
-                if request.scheduled_execution_at and now < request.scheduled_execution_at:
-                    logger.info("remediation_execution_deferred_grace_period", 
-                                request_id=str(request_id), 
-                                remaining_minutes=(request.scheduled_execution_at - now).total_seconds() / 60)
-                    return request
-                # If grace period passed, proceed to EXECUTING below
-            else:
-                raise ValueError(f"Request must be approved or scheduled (current: {request.status.value})")
+            # 1. Validation & Pre-execution State Check
+            if request.status != RemediationStatus.APPROVED:
+                # BE-SEC-3: If already scheduled, check if grace period has passed
+                if request.status == RemediationStatus.SCHEDULED:
+                    now = datetime.now(timezone.utc)
+                    if request.scheduled_execution_at and now < request.scheduled_execution_at:
+                        logger.info("remediation_execution_deferred_grace_period", 
+                                    request_id=str(request_id), 
+                                    remaining_minutes=(request.scheduled_execution_at - now).total_seconds() / 60)
+                        return request
+                    # If grace period passed, proceed to EXECUTING below
+                else:
+                    raise ValueError(f"Request must be approved or scheduled (current: {request.status.value})")
 
-        # 1. Create immutable pre-execution audit log FIRST (SEC-03)
-        audit_logger = AuditLogger(db=self.db, tenant_id=str(tenant_id))
+            # 1. Create immutable pre-execution audit log FIRST (SEC-03)
+            audit_logger = AuditLogger(db=self.db, tenant_id=str(tenant_id))
 
-        # BE-SEC-3: Implement 24-hour Grace Period (Delayed Deletion)
-        if request.status == RemediationStatus.APPROVED and not bypass_grace_period:
-            # First time execution: Schedule for 24h later
-            from datetime import timedelta
-            grace_period = timedelta(hours=24)
-            scheduled_at = datetime.now(timezone.utc) + grace_period
-            
-            request.status = RemediationStatus.SCHEDULED
-            request.scheduled_execution_at = scheduled_at
+            # BE-SEC-3: Implement 24-hour Grace Period (Delayed Deletion)
+            if request.status == RemediationStatus.APPROVED and not bypass_grace_period:
+                # First time execution: Schedule for 24h later
+                from datetime import timedelta
+                grace_period = timedelta(hours=24)
+                scheduled_at = datetime.now(timezone.utc) + grace_period
+                
+                request.status = RemediationStatus.SCHEDULED
+                request.scheduled_execution_at = scheduled_at
+                await self.db.commit()
+                
+                logger.info("remediation_scheduled_grace_period", 
+                            request_id=str(request_id), 
+                            scheduled_at=scheduled_at.isoformat())
+                            
+                # Log scheduling in audit trail
+                await audit_logger.log(
+                    event_type=AuditEventType.REMEDIATION_EXECUTION_STARTED,
+                    actor_id=str(request.reviewed_by_user_id) if request.reviewed_by_user_id else str(SYSTEM_USER_ID),
+                    resource_id=request.resource_id,
+                    resource_type=request.resource_type,
+                    success=True,
+                    details={
+                        "request_id": str(request_id),
+                        "action": request.action.value,
+                        "scheduled_execution_at": scheduled_at.isoformat(),
+                        "note": "Resource scheduled for deletion after 24h grace period."
+                    }
+                )
+
+                # BE-SEC-3: Enqueue background job for automatic execution after grace period
+                from app.modules.governance.domain.jobs.processor import enqueue_job
+                from app.models.background_job import JobType
+                await enqueue_job(
+                    db=self.db,
+                    job_type=JobType.REMEDIATION,
+                    tenant_id=tenant_id,
+                    payload={"request_id": str(request_id)},
+                    scheduled_for=scheduled_at
+                )
+
+                return request
+
+            request.status = RemediationStatus.EXECUTING
             await self.db.commit()
-            
-            logger.info("remediation_scheduled_grace_period", 
-                        request_id=str(request_id), 
-                        scheduled_at=scheduled_at.isoformat())
-                        
-            # Log scheduling in audit trail
+
+            # SOC2: Log the actual start of execution (after grace period)
             await audit_logger.log(
                 event_type=AuditEventType.REMEDIATION_EXECUTION_STARTED,
                 actor_id=str(request.reviewed_by_user_id) if request.reviewed_by_user_id else str(SYSTEM_USER_ID),
@@ -272,43 +320,10 @@ class RemediationService(BaseService):
                 details={
                     "request_id": str(request_id),
                     "action": request.action.value,
-                    "scheduled_execution_at": scheduled_at.isoformat(),
-                    "note": "Resource scheduled for deletion after 24h grace period."
+                    "triggered_by": "background_worker"
                 }
             )
 
-            # BE-SEC-3: Enqueue background job for automatic execution after grace period
-            from app.modules.governance.domain.jobs.processor import enqueue_job
-            from app.models.background_job import JobType
-            await enqueue_job(
-                db=self.db,
-                job_type=JobType.REMEDIATION,
-                tenant_id=tenant_id,
-                payload={"request_id": str(request_id)},
-                scheduled_for=scheduled_at
-            )
-
-            return request
-
-        request.status = RemediationStatus.EXECUTING
-        await self.db.commit()
-
-        # SOC2: Log the actual start of execution (after grace period)
-        await audit_logger.log(
-            event_type=AuditEventType.REMEDIATION_EXECUTION_STARTED,
-            actor_id=str(request.reviewed_by_user_id) if request.reviewed_by_user_id else str(SYSTEM_USER_ID),
-            resource_id=request.resource_id,
-            resource_type=request.resource_type,
-            success=True,
-            details={
-                "request_id": str(request_id),
-                "action": request.action.value,
-                "triggered_by": "background_worker"
-            }
-        )
-
-        start_time = time.time()
-        try:
             # 2. Create backup BEFORE any deletion
 
 
@@ -525,6 +540,44 @@ class RemediationService(BaseService):
         try:
             if action == RemediationAction.DELETE_VOLUME:
                 async with await self._get_client("ec2") as ec2:
+                    attachments: list[dict[str, Any]] = []
+                    volume_info = await ec2.describe_volumes(VolumeIds=[resource_id])
+                    if isinstance(volume_info, dict):
+                        volumes_obj = volume_info.get("Volumes", [])
+                        if isinstance(volumes_obj, list) and volumes_obj:
+                            first = volumes_obj[0]
+                            if isinstance(first, dict):
+                                attachment_obj = first.get("Attachments", [])
+                                if isinstance(attachment_obj, list):
+                                    attachments = [a for a in attachment_obj if isinstance(a, dict)]
+                    for attachment in attachments:
+                        state = (attachment.get("State") or "").lower()
+                        if state in {"attached", "attaching", "busy"}:
+                            detach_kwargs = {"VolumeId": resource_id}
+                            instance_id = attachment.get("InstanceId")
+                            if instance_id:
+                                detach_kwargs["InstanceId"] = instance_id
+                            await ec2.detach_volume(**detach_kwargs)
+
+                    if attachments:
+                        deadline = time.monotonic() + 180
+                        while time.monotonic() < deadline:
+                            refreshed = await ec2.describe_volumes(VolumeIds=[resource_id])
+                            refreshed_attachments: list[Any] = []
+                            if isinstance(refreshed, dict):
+                                refreshed_volumes_obj = refreshed.get("Volumes", [])
+                                if isinstance(refreshed_volumes_obj, list) and refreshed_volumes_obj:
+                                    first = refreshed_volumes_obj[0]
+                                    if isinstance(first, dict):
+                                        attachment_obj = first.get("Attachments", [])
+                                        if isinstance(attachment_obj, list):
+                                            refreshed_attachments = attachment_obj
+                            if not refreshed_attachments:
+                                break
+                            await asyncio.sleep(5)
+                        else:
+                            raise ValueError(f"Volume {resource_id} did not detach before delete timeout")
+
                     await ec2.delete_volume(VolumeId=resource_id)
 
             elif action == RemediationAction.DELETE_SNAPSHOT:
@@ -598,8 +651,8 @@ class RemediationService(BaseService):
         Enforce hard limits for a tenant.
         1. Checks budget status via UsageTracker.
         2. If HARD_LIMIT is reached:
-           - Automatically executes high-confidence pending remediation requests.
-           - Bypasses grace period for emergency stabilization.
+           - Automatically executes only high-confidence, low-risk pending requests.
+           - Uses AUTOPILOT_BYPASS_GRACE_PERIOD setting (default fail-safe is no bypass).
         """
         from app.shared.llm.usage_tracker import UsageTracker, BudgetStatus
         
@@ -611,13 +664,21 @@ class RemediationService(BaseService):
             
         logger.warning("enforcing_hard_limit_for_tenant", tenant_id=str(tenant_id))
         
-        # 1. Fetch pending remediation requests for this tenant
-        # Priority: Highest savings first, then highest confidence
+        settings = get_settings()
+        safe_actions = {
+            RemediationAction.STOP_INSTANCE,
+            RemediationAction.RESIZE_INSTANCE,
+            RemediationAction.STOP_RDS_INSTANCE,
+        }
+
+        # 1. Fetch pending, high-confidence, low-risk remediation requests for this tenant.
+        # Priority: Highest savings first.
         result = await self.db.execute(
             select(RemediationRequest)
             .where(RemediationRequest.tenant_id == tenant_id)
             .where(RemediationRequest.status == RemediationStatus.PENDING)
-            .where(RemediationRequest.confidence_score >= Decimal("0.90")) # Only high confidence
+            .where(RemediationRequest.confidence_score >= Decimal("0.90"))  # Only high confidence
+            .where(RemediationRequest.action.in_(safe_actions))
             .order_by(RemediationRequest.estimated_monthly_savings.desc())
         )
         requests = result.scalars().all()
@@ -625,14 +686,26 @@ class RemediationService(BaseService):
         executed_ids = []
         for req in requests:
             try:
+                if req.action not in safe_actions:
+                    logger.warning(
+                        "hard_limit_request_requires_manual_review",
+                        request_id=str(req.id),
+                        tenant_id=str(tenant_id),
+                        action=req.action.value if req.action else None,
+                    )
+                    continue
+
                 # Auto-approve for hard limit emergency
                 req.status = RemediationStatus.APPROVED
                 req.reviewed_by_user_id = SYSTEM_USER_ID
                 req.review_notes = "AUTO_APPROVED: Budget Hard Limit Exceeded"
                 await self.db.commit()
                 
-                # Execute immediately (emergency use)
-                await self.execute(req.id, tenant_id, bypass_grace_period=True)
+                await self.execute(
+                    req.id,
+                    tenant_id,
+                    bypass_grace_period=settings.AUTOPILOT_BYPASS_GRACE_PERIOD,
+                )
                 executed_ids.append(req.id)
             except Exception as e:
                 logger.error("hard_limit_enforcement_failed", request_id=str(req.id), error=str(e))
@@ -674,8 +747,7 @@ class RemediationService(BaseService):
         }
         
         tf_type = tf_mapping.get(request.resource_type, "cloud_resource")
-        # Sanitize resource ID for TF identifier
-        tf_id = resource_id.replace('-', '_').replace('.', '_')
+        tf_id = self._sanitize_tf_identifier(provider, request.resource_type, resource_id)
         
         planlines = [
             "# Valdrix GitOps Remediation Plan",
@@ -723,6 +795,21 @@ class RemediationService(BaseService):
             planlines.append("}")
             
         return "\n".join(planlines)
+
+    @staticmethod
+    def _sanitize_tf_identifier(provider: str, resource_type: str, resource_id: str) -> str:
+        """
+        Produce a Terraform-safe identifier with deterministic collision resistance.
+        """
+        normalized = re.sub(r"[^a-zA-Z0-9_]", "_", resource_id).strip("_").lower()
+        if not normalized:
+            normalized = "resource"
+        if normalized[0].isdigit():
+            normalized = f"r_{normalized}"
+        stem = normalized[:48]
+        digest_input = f"{provider}:{resource_type}:{resource_id}".encode()
+        digest = hashlib.sha1(digest_input).hexdigest()[:10]
+        return f"{stem}_{digest}"
 
     async def bulk_generate_iac_plan(self, requests: List[RemediationRequest], tenant_id: UUID) -> str:
         """Generates a combined IaC plan for multiple resources."""

@@ -15,6 +15,7 @@ Cost Benefits:
 
 import json
 import hashlib
+import asyncio
 from abc import ABC, abstractmethod
 from datetime import date, timedelta, datetime, timezone
 from typing import List, Dict, Any, Optional
@@ -24,6 +25,33 @@ from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 settings = get_settings()
+
+
+def _safe_json_loads(raw_payload: Any, *, key: str) -> Optional[Any]:
+    """Decode cached JSON defensively to avoid malformed payload crashes."""
+    if raw_payload is None:
+        return None
+
+    if isinstance(raw_payload, bytes):
+        try:
+            raw_payload = raw_payload.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            logger.warning("cost_cache_payload_invalid_encoding", key=key, error=str(exc))
+            return None
+
+    if not isinstance(raw_payload, str):
+        logger.warning(
+            "cost_cache_payload_unexpected_type",
+            key=key,
+            payload_type=type(raw_payload).__name__,
+        )
+        return None
+
+    try:
+        return json.loads(raw_payload)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        logger.warning("cost_cache_payload_invalid_json", key=key, error=str(exc))
+        return None
 
 
 class CacheBackend(ABC):
@@ -219,11 +247,13 @@ class CostCache:
         key_parts = [prefix, tenant_id] + [str(a) for a in args]
         key_string = ":".join(key_parts)
         # Switch from MD5 to SHA256 for stronger collision resistance (SEC-05)
-        return f"valdrix:{hashlib.sha256(key_string.encode()).hexdigest()}"
+        digest = hashlib.sha256(key_string.encode()).hexdigest()
+        # Keep tenant and prefix in plaintext to allow precise invalidation patterns.
+        return f"valdrix:{tenant_id}:{prefix}:{digest}"
 
     def _tenant_pattern(self, tenant_id: str) -> str:
         """Generate pattern for all tenant keys."""
-        return f"valdrix:*{tenant_id}*"
+        return f"valdrix:{tenant_id}:*"
 
     # Daily Costs
     async def get_daily_costs(
@@ -236,9 +266,9 @@ class CostCache:
         key = self._generate_key("costs", tenant_id, start_date, end_date)
         cached = await self.backend.get(key)
 
-        if cached:
+        if cached is not None:
             logger.debug("cache_hit", type="daily_costs", tenant_id=tenant_id)
-            return json.loads(cached)
+            return _safe_json_loads(cached, key=key)
 
         logger.debug("cache_miss", type="daily_costs", tenant_id=tenant_id)
         return None
@@ -265,9 +295,9 @@ class CostCache:
         key = self._generate_key("zombies", tenant_id, region)
         cached = await self.backend.get(key)
 
-        if cached:
+        if cached is not None:
             logger.debug("cache_hit", type="zombie_scan", region=region)
-            return json.loads(cached)
+            return _safe_json_loads(cached, key=key)
         return None
 
     async def set_zombie_scan(
@@ -290,9 +320,9 @@ class CostCache:
         key = self._generate_key("analysis", tenant_id, analysis_hash)
         cached = await self.backend.get(key)
 
-        if cached:
+        if cached is not None:
             logger.debug("cache_hit", type="analysis")
-            return json.loads(cached)
+            return _safe_json_loads(cached, key=key)
         return None
 
     async def set_analysis(
@@ -322,7 +352,7 @@ class CostCache:
 
     async def invalidate_zombies(self, tenant_id: str) -> int:
         """Invalidate zombie scan cache for fresh scan."""
-        pattern = f"valdrix:*zombies*{tenant_id}*"
+        pattern = f"valdrix:{tenant_id}:zombies:*"
         deleted = await self.backend.delete_pattern(pattern)
         logger.debug("zombie_cache_invalidated", tenant_id=tenant_id, keys=deleted)
         return deleted
@@ -342,6 +372,7 @@ class CostCache:
 
 # Factory
 _cache_instance: Optional[CostCache] = None
+_cache_instance_lock = asyncio.Lock()
 
 
 async def get_cost_cache() -> CostCache:
@@ -354,17 +385,19 @@ async def get_cost_cache() -> CostCache:
     global _cache_instance
 
     if _cache_instance is None:
-        if settings.REDIS_URL:
-            backend = RedisCache(settings.REDIS_URL)
-            if await backend.health_check():
-                logger.info("cost_cache_initialized", backend="redis")
-            else:
-                logger.warning("redis_unhealthy_using_memory")
-                backend = InMemoryCache()
-        else:
-            backend = InMemoryCache()
-            logger.info("cost_cache_initialized", backend="memory")
+        async with _cache_instance_lock:
+            if _cache_instance is None:
+                if settings.REDIS_URL:
+                    backend = RedisCache(settings.REDIS_URL)
+                    if await backend.health_check():
+                        logger.info("cost_cache_initialized", backend="redis")
+                    else:
+                        logger.warning("redis_unhealthy_using_memory")
+                        backend = InMemoryCache()
+                else:
+                    backend = InMemoryCache()
+                    logger.info("cost_cache_initialized", backend="memory")
 
-        _cache_instance = CostCache(backend)
+                _cache_instance = CostCache(backend)
 
     return _cache_instance

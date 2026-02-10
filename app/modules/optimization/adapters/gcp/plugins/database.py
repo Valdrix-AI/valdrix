@@ -37,16 +37,17 @@ class IdleCloudSqlPlugin(ZombiePlugin):
             
             request = sqladmin_v1.SqlInstancesListRequest(project=project_id)
             response = client.list(request=request)
-            
-            for instance in response.items:
-                if instance.state == "RUNNABLE":
+
+            for instance in (getattr(response, "items", None) or []):
+                if getattr(instance, "state", None) == "RUNNABLE":
+                    settings = getattr(instance, "settings", None)
                     # Flag running instances for review since we don't have connection metrics
                     zombies.append({
-                        "resource_id": f"projects/{project_id}/instances/{instance.name}",
-                        "resource_name": instance.name,
+                        "resource_id": f"projects/{project_id}/instances/{getattr(instance, 'name', None)}",
+                        "resource_name": getattr(instance, "name", None),
                         "resource_type": "Cloud SQL",
-                        "tier": instance.settings.tier,
-                        "database_version": instance.database_version,
+                        "tier": getattr(settings, "tier", None),
+                        "database_version": getattr(instance, "database_version", None),
                         "recommendation": "Enable billing export for idle detection",
                         "action": "review_sql",
                         "confidence_score": 0.40,

@@ -22,6 +22,17 @@ logger = structlog.get_logger()
 router = APIRouter(tags=["Audit"])
 
 
+def _sanitize_csv_cell(value: str) -> str:
+    """
+    Prevent CSV formula injection when exported files are opened in spreadsheet tools.
+    """
+    if not value:
+        return ""
+    if value[0] in ("=", "+", "-", "@"):
+        return f"'{value}"
+    return value
+
+
 class AuditLogResponse(BaseModel):
     id: UUID
     event_type: str
@@ -51,6 +62,12 @@ async def get_audit_logs(
     Admin-only. Sensitive details are masked by default.
     """
     try:
+        if sort_by == "actor_email":
+            raise HTTPException(
+                status_code=400,
+                detail="Sorting by actor_email is not supported for encrypted audit data."
+            )
+
         sort_column = getattr(AuditLog, sort_by)
         order_func = desc if order == "desc" else asc
 
@@ -80,6 +97,8 @@ async def get_audit_logs(
             for log in logs
         ]
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("audit_logs_fetch_failed", error=str(e))
         raise HTTPException(500, "Failed to fetch audit logs") from e
@@ -185,13 +204,13 @@ async def export_audit_logs(
         for log in logs:
             writer.writerow([
                 str(log.id),
-                log.event_type,
-                log.event_timestamp.isoformat(),
-                log.actor_email or "",
-                log.resource_type or "",
-                str(log.resource_id) if log.resource_id else "",
-                str(log.success),
-                log.correlation_id or ""
+                _sanitize_csv_cell(log.event_type),
+                _sanitize_csv_cell(log.event_timestamp.isoformat()),
+                _sanitize_csv_cell(log.actor_email or ""),
+                _sanitize_csv_cell(log.resource_type or ""),
+                _sanitize_csv_cell(str(log.resource_id) if log.resource_id else ""),
+                _sanitize_csv_cell(str(log.success)),
+                _sanitize_csv_cell(log.correlation_id or "")
             ])
         
         output.seek(0)
@@ -233,6 +252,7 @@ async def request_data_erasure(
     
     try:
         from app.models.tenant import User
+        from app.models.tenant import Tenant
         from app.models.cloud import CostRecord, CloudAccount
         from app.models.remediation import RemediationRequest
         from app.models.anomaly_marker import AnomalyMarker
@@ -247,9 +267,16 @@ async def request_data_erasure(
         from app.models.discovered_account import DiscoveredAccount
         from app.models.attribution import AttributionRule, CostAllocation
         from app.models.cost_audit import CostAuditLog
+        from app.models.optimization import OptimizationStrategy, StrategyRecommendation
         from sqlalchemy import delete
         
         tenant_id = user.tenant_id
+
+        tenant_row = await db.execute(
+            select(Tenant).where(Tenant.id == tenant_id).with_for_update()
+        )
+        if tenant_row.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Tenant not found")
         
         # Log the request before execution
         logger.critical(
@@ -270,24 +297,43 @@ async def request_data_erasure(
             )
         )
         
-        # 2. Delete cost records (largest table)
+        # 2. Delete attribution allocations before cost records (FK dependency)
+        await db.execute(
+            delete(CostAllocation).where(
+                CostAllocation.cost_record_id.in_(
+                    select(CostRecord.id).where(CostRecord.tenant_id == tenant_id)
+                )
+            )
+        )
+
+        # 3. Delete cost records (largest table)
         result = await db.execute(
             delete(CostRecord).where(CostRecord.tenant_id == tenant_id)
         )
         deleted_counts["cost_records"] = result.rowcount
         
-        # 3. Delete anomaly markers
+        # 4. Delete anomaly markers
         result = await db.execute(
             delete(AnomalyMarker).where(AnomalyMarker.tenant_id == tenant_id)
         )
         deleted_counts["anomaly_markers"] = result.rowcount
 
-        # 4. Delete remediation and discovery data
+        # 5. Delete remediation and discovery data
         result = await db.execute(
             delete(RemediationRequest).where(RemediationRequest.tenant_id == tenant_id)
         )
         deleted_counts["remediation_requests"] = result.rowcount
-        
+
+        result = await db.execute(
+            delete(StrategyRecommendation).where(StrategyRecommendation.tenant_id == tenant_id)
+        )
+        deleted_counts["strategy_recommendations"] = result.rowcount
+
+        result = await db.execute(
+            delete(OptimizationStrategy).where(OptimizationStrategy.tenant_id == tenant_id)
+        )
+        deleted_counts["optimization_strategies"] = result.rowcount
+
         await db.execute(
             delete(RemediationSettings).where(RemediationSettings.tenant_id == tenant_id)
         )
@@ -301,7 +347,7 @@ async def request_data_erasure(
         )
         deleted_counts["discovered_accounts"] = result.rowcount
 
-        # 5. Delete Cloud Connections and Attribution
+        # 6. Delete Cloud Connections and Attribution
         await db.execute(
             delete(AWSConnection).where(AWSConnection.tenant_id == tenant_id)
         )
@@ -313,17 +359,10 @@ async def request_data_erasure(
         )
         
         await db.execute(
-            delete(CostAllocation).where(
-                CostAllocation.cost_record_id.in_(
-                    select(CostRecord.id).where(CostRecord.tenant_id == tenant_id)
-                )
-            )
-        )
-        await db.execute(
             delete(AttributionRule).where(AttributionRule.tenant_id == tenant_id)
         )
         
-        # 6. Delete LLM Usage and Budgets
+        # 7. Delete LLM Usage and Budgets
         result = await db.execute(
             delete(LLMUsage).where(LLMUsage.tenant_id == tenant_id)
         )
@@ -333,7 +372,7 @@ async def request_data_erasure(
             delete(LLMBudget).where(LLMBudget.tenant_id == tenant_id)
         )
         
-        # 7. Delete Notification and Carbon settings
+        # 8. Delete Notification and Carbon settings
         await db.execute(
             delete(NotificationSettings).where(NotificationSettings.tenant_id == tenant_id)
         )
@@ -341,19 +380,19 @@ async def request_data_erasure(
             delete(CarbonSettings).where(CarbonSettings.tenant_id == tenant_id)
         )
         
-        # 8. Delete Background Jobs
+        # 9. Delete Background Jobs
         result = await db.execute(
             delete(BackgroundJob).where(BackgroundJob.tenant_id == tenant_id)
         )
         deleted_counts["background_jobs"] = result.rowcount
 
-        # 9. Delete Cloud accounts (Meta)
+        # 10. Delete Cloud accounts (Meta)
         result = await db.execute(
             delete(CloudAccount).where(CloudAccount.tenant_id == tenant_id)
         )
         deleted_counts["cloud_accounts"] = result.rowcount
         
-        # 10. Delete users (except the requesting user - they delete last)
+        # 11. Delete users (except the requesting user - they delete last)
         result = await db.execute(
             delete(User).where(
                 User.tenant_id == tenant_id,

@@ -91,18 +91,20 @@ class IdleInstancesPlugin(ZombiePlugin):
             # Phase 1: Use pre-fetched inventory if available (Hybrid Model)
             if inventory and inventory.resources:
                 logger.info("idle_instance_scan_using_inventory", count=len(inventory.resources))
+                instance_ids: List[str] = []
+                seen_ids = set()
                 for res in inventory.resources:
-                    if res.resource_type == "EC2 Instance" or res.resource_type == "instance" or "instance" in res.arn:
-                        # Note: inventory only contains basic info, we still need 
-                        # LaunchTime and Tags for idle detection logic
-                        # But we can at least limit our describe_instances to these IDs 
-                        # OR if inventory is rich enough, skip it.
-                        # For now, we'll use IDs to target the describe call.
-                        instances.append({"id": res.id})
-                
+                    res_type = getattr(res, "resource_type", "") or ""
+                    res_arn = getattr(res, "arn", "") or ""
+                    if res_type in ("EC2 Instance", "instance") or "instance" in res_arn:
+                        res_id = getattr(res, "id", None)
+                        if res_id and res_id not in seen_ids:
+                            seen_ids.add(res_id)
+                            instance_ids.append(res_id)
+
                 # If we found instances in inventory, we fetch their full details in one batch
-                if instances:
-                    instance_ids = [inst["id"] for inst in instances]
+                if instance_ids:
+                    detailed_instances: List[Dict[str, Any]] = []
                     async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
                         # Batch by 50 to avoid URI length issues
                         for i in range(0, len(instance_ids), 50):
@@ -110,16 +112,25 @@ class IdleInstancesPlugin(ZombiePlugin):
                             response = await ec2.describe_instances(InstanceIds=batch_ids)
                             for reservation in response.get("Reservations", []):
                                 for instance in reservation.get("Instances", []):
-                                    if instance["State"]["Name"] == "running":
-                                        tags = {t['Key'].lower(): t['Value'].lower() for t in instance.get("Tags", [])}
-                                        instance_type = instance.get("InstanceType", "unknown")
-                                        instances.append({
-                                            "id": instance["InstanceId"],
-                                            "type": instance_type,
-                                            "is_gpu": any(fam in instance_type for fam in gpu_families),
-                                            "launch_time": instance.get("LaunchTime"),
-                                            "tags": tags
-                                        })
+                                    if instance["State"]["Name"] != "running":
+                                        continue
+
+                                    tags = {t['Key'].lower(): t['Value'].lower() for t in instance.get("Tags", [])}
+                                    if any(k in ["workload", "type"] and any(v in tags[k] for v in ["batch", "scheduled", "cron"]) for k in tags):
+                                        continue
+                                    if any("batch" in k or "batch" in tags[k] for k in tags):
+                                        continue
+
+                                    instance_type = instance.get("InstanceType", "unknown")
+                                    detailed_instances.append({
+                                        "id": instance["InstanceId"],
+                                        "type": instance_type,
+                                        "is_gpu": any(fam in instance_type for fam in gpu_families),
+                                        "launch_time": instance.get("LaunchTime"),
+                                        "tags": tags
+                                    })
+
+                    instances = detailed_instances
             else:
                 # Fallback to standard broad scan
                 async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:

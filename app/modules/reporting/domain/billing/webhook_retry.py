@@ -24,12 +24,14 @@ Usage:
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 import hashlib
+import json
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.background_job import BackgroundJob, JobStatus, JobType
 from app.modules.governance.domain.jobs.processor import enqueue_job
+from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 
@@ -80,7 +82,9 @@ class WebhookRetryService:
         provider: str,
         event_type: str,
         payload: Dict[str, Any],
-        reference: Optional[str] = None
+        reference: Optional[str] = None,
+        signature: Optional[str] = None,
+        raw_payload: Optional[str] = None,
     ) -> Optional[BackgroundJob]:
         """
         Store webhook for durable processing.
@@ -133,7 +137,9 @@ class WebhookRetryService:
             "event_type": event_type,
             "payload": payload,
             "idempotency_key": idempotency_key,
-            "reference": ref
+            "reference": ref,
+            "signature": signature,
+            "raw_payload": raw_payload,
         }
         
         job = await enqueue_job(
@@ -186,6 +192,8 @@ async def process_paystack_webhook(job: BackgroundJob, db: AsyncSession) -> Dict
 
     payload = job.payload
     webhook_data = payload.get("payload", {})
+    raw_payload = payload.get("raw_payload")
+    signature = payload.get("signature")
     
     logger.info(
         "processing_paystack_webhook",
@@ -193,16 +201,43 @@ async def process_paystack_webhook(job: BackgroundJob, db: AsyncSession) -> Dict
         event_type=payload.get("event_type")
     )
     
-    # Recreate original request for handler
     handler = WebhookHandler(db)
-    
-    # The handle method expects bytes and signature
-    # For retry, we skip signature verification (already verified on first attempt)
-    
-    # Use internal processing - bypass signature check for retries
-    event = webhook_data.get("event", payload.get("event_type"))
-    data = webhook_data.get("data", {})
-    
+
+    event: str | None = None
+    data: Dict[str, Any] = {}
+    if raw_payload and signature:
+        try:
+            payload_bytes = raw_payload.encode("utf-8")
+            if not handler.verify_signature(payload_bytes, signature):
+                logger.critical(
+                    "paystack_retry_signature_invalid",
+                    job_id=str(job.id),
+                    event_type=payload.get("event_type")
+                )
+                return {"status": "error", "reason": "invalid_stored_signature"}
+            parsed = json.loads(raw_payload)
+            if not isinstance(parsed, dict):
+                return {"status": "error", "reason": "invalid_raw_payload"}
+            event = parsed.get("event", payload.get("event_type"))
+            data = parsed.get("data", {})
+        except Exception as exc:
+            logger.error("paystack_retry_payload_parse_failed", job_id=str(job.id), error=str(exc))
+            return {"status": "error", "reason": "invalid_raw_payload"}
+    else:
+        # Backward compatibility path for already-queued jobs without raw payload/signature.
+        # Fail closed in production/staging environments.
+        settings = get_settings()
+        if settings.ENVIRONMENT in {"production", "staging"}:
+            logger.critical(
+                "paystack_retry_missing_signature_material",
+                job_id=str(job.id),
+                event_type=payload.get("event_type")
+            )
+            return {"status": "error", "reason": "missing_signature_material"}
+
+        event = webhook_data.get("event", payload.get("event_type"))
+        data = webhook_data.get("data", {})
+
     result = {"status": "processed", "event": event}
     
     # Route to appropriate handler based on event type
@@ -219,4 +254,3 @@ async def process_paystack_webhook(job: BackgroundJob, db: AsyncSession) -> Dict
         result["reason"] = f"Unknown event type: {event}"
     
     return result
-

@@ -43,25 +43,26 @@ class OrganizationsDiscoveryService:
                 paginator = org.get_paginator("list_accounts")
                 count = 0
                 
+                # BE-ORG-OP: Fetch all existing accounts for this management connection upfront to avoid N+1 lookups
+                result = await db.execute(
+                    select(DiscoveredAccount).where(
+                        DiscoveredAccount.management_connection_id == connection.id
+                    )
+                )
+                existing_map = {acc.account_id: acc for acc in result.scalars().all()}
+                
                 async for page in paginator.paginate():
                     for acc in page.get("Accounts", []):
-                        count += 1
-                        # Skip if it's the management account itself
+                        # Step 3: Skip if it's the management account itself
                         if acc["Id"] == connection.aws_account_id:
                             continue
-                            
-                        # Check existance
-                        result = await db.execute(
-                            select(DiscoveredAccount).where(
-                                DiscoveredAccount.account_id == acc["Id"]
-                            )
-                        )
-                        discovered = result.scalar_one_or_none()
+                        
+                        discovered = existing_map.get(acc["Id"])
                         
                         if discovered:
                             discovered.name = acc["Name"]
                             discovered.email = acc["Email"]
-                            # discovered.last_discovered_at is updated via default/auto
+                            # Update existing
                         else:
                             discovered = DiscoveredAccount(
                                 management_connection_id=connection.id,
@@ -71,6 +72,11 @@ class OrganizationsDiscoveryService:
                                 status="discovered"
                             )
                             db.add(discovered)
+                            # Add to map so we don't duplicate if AWS returns same ID twice in pagination
+                            existing_map[acc["Id"]] = discovered
+                        
+                        # BE-ORG-4: Increment only for discovered member accounts
+                        count += 1
                 
                 await db.commit()
                 logger.info("aws_org_sync_complete", discovered_count=count)

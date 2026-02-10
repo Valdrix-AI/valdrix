@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, AsyncGenerator
 
 class BaseAdapter(ABC):
     """
@@ -33,9 +33,7 @@ class BaseAdapter(ABC):
         start_date: datetime,
         end_date: datetime,
         granularity: str = "DAILY"
-    ) -> Any:
-        # Use Any for now as a workaround for AsyncGenerator type hint in abstractmethod
-        # Real implementations will return AsyncGenerator[Dict[str, Any], None]
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Stream cost data normalized to the standard Valdrix format.
         Used for memory-efficient ingestion.

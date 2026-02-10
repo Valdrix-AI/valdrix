@@ -25,13 +25,22 @@ class Settings(BaseSettings):
     APP_NAME: str = "Valdrix"
     VERSION: str = "0.1.0"
     DEBUG: bool = False
-    ENVIRONMENT: str = "development"  # local, development, staging, production
+    # ENVIRONMENT options: local, development, staging, production
+    # is_production property ensures strict security for 'production'
+    ENVIRONMENT: str = "development"
     API_URL: str = "http://localhost:8000"  # Base URL for OIDC and Magic Links
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None # Added for D5: Telemetry Sink
     OTEL_EXPORTER_OTLP_INSECURE: bool = False # SEC-07: Secure Tracing
     CSRF_SECRET_KEY: str = "dev_secret_key_change_me_in_prod" # SEC-01: CSRF
     TESTING: bool = False
     RATELIMIT_ENABLED: bool = True
+    AUTOPILOT_BYPASS_GRACE_PERIOD: bool = False
+    INTERNAL_JOB_SECRET: Optional[str] = None
+    WEBHOOK_ALLOWED_DOMAINS: list[str] = []  # Allowlist for generic webhook retries
+    WEBHOOK_REQUIRE_HTTPS: bool = True
+    WEBHOOK_BLOCK_PRIVATE_IPS: bool = True
+    SSE_MAX_CONNECTIONS_PER_TENANT: int = 5
+    SSE_POLL_INTERVAL_SECONDS: int = 3
 
     @model_validator(mode='after')
     def validate_security_config(self) -> 'Settings':
@@ -77,7 +86,7 @@ class Settings(BaseSettings):
                     raise ValueError("SECURITY ERROR: PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production.")
             
             if not self.PAYSTACK_PUBLIC_KEY and self.ENVIRONMENT == "production":
-                 raise ValueError("SECURITY ERROR: PAYSTACK_PUBLIC_KEY is missing in production.")
+                raise ValueError("SECURITY ERROR: PAYSTACK_PUBLIC_KEY is missing in production.")
 
             # SEC-P1: LLM Key Hardening
             # If a provider is set, its key MUST be present in production
@@ -190,10 +199,13 @@ class Settings(BaseSettings):
     DB_SSL_CA_CERT_PATH: Optional[str] = None  # Path to CA cert for verify-ca/verify-full modes
     DB_POOL_SIZE: int = 20  # Standard for Supabase/Neon free tiers
     DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 3600
+    DB_ECHO: bool = False
 
     # Supabase Auth
     SUPABASE_URL: Optional[str] = None
-    SUPABASE_JWT_SECRET: str # Required for auth middleware
+    SUPABASE_JWT_SECRET: str = "dev_supabase_secret_change_me_in_prod" # Required for auth middleware
 
     # Notifications
     SLACK_BOT_TOKEN: Optional[str] = None
@@ -209,6 +221,14 @@ class Settings(BaseSettings):
     # GreenOps & Carbon APIs
     WATT_TIME_API_KEY: Optional[str] = None
     ELECTRICITY_MAPS_API_KEY: Optional[str] = None
+    CARBON_LOW_INTENSITY_THRESHOLD: float = 250.0
+    CARBON_INTENSITY_API_TIMEOUT_SECONDS: float = 5.0
+
+    # OIDC / GCP Workload Identity
+    GCP_OIDC_AUDIENCE: Optional[str] = None
+    GCP_OIDC_STS_URL: str = "https://sts.googleapis.com/v1/token"
+    GCP_OIDC_SCOPE: str = "https://www.googleapis.com/auth/cloud-platform"
+    GCP_OIDC_VERIFY_TIMEOUT_SECONDS: int = 10
 
 
     # Encryption & Secret Rotation
@@ -222,7 +242,7 @@ class Settings(BaseSettings):
     # PRODUCTION FIX #6: Per-environment encryption salt (not hardcoded)
     # Set via environment variable: export KDF_SALT="<base64-encoded-random-32-bytes>"
     # Generate: python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
-    KDF_SALT: str = ""
+    KDF_SALT: Optional[str] = None
     KDF_ITERATIONS: int = 100000
 
 
@@ -255,9 +275,11 @@ class Settings(BaseSettings):
     CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 3
     CIRCUIT_BREAKER_RECOVERY_SECONDS: int = 300
     CIRCUIT_BREAKER_MAX_DAILY_SAVINGS: float = 1000.0
+    CIRCUIT_BREAKER_CACHE_SIZE: int = 1000
     
     # REMEDIATION KILL SWITCH: Stop all deletions if daily cost impact hits $500
     REMEDIATION_KILL_SWITCH_THRESHOLD: float = 500.0
+    REMEDIATION_KILL_SWITCH_SCOPE: str = "tenant"  # tenant or global
     ENFORCE_REMEDIATION_DRY_RUN: bool = False
     
     # Multi-Currency & Localization (Phase 12)
@@ -279,6 +301,9 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        return not self.DEBUG
-
-
+        """
+        True only when ENVIRONMENT is explicitly set to 'production'.
+        This is used for high-security gates and billing enforcement.
+        Note: Staging/Development use DEBUG=False but are NOT 'production'.
+        """
+        return self.ENVIRONMENT == "production"

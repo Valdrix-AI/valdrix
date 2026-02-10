@@ -61,13 +61,13 @@ class SlackService:
                 error_code = e.response.get('error', '')
                 if error_code == 'ratelimited' and attempt < max_retries:
                     retry_after = int(e.response.headers.get('Retry-After', 2 ** attempt))
-                    logger.warning(f"Slack rate limited, retrying in {retry_after}s", attempt=attempt)
+                    logger.warning("slack_rate_limited_retrying", retry_after=retry_after, attempt=attempt)
                     await asyncio.sleep(retry_after)
                     continue
-                logger.error(f"Slack API error in {method}: {error_code}")
+                logger.error("slack_api_error", method=method, error_code=error_code)
                 return False
             except Exception as e:
-                logger.error(f"Slack {method} fail: {e}")
+                logger.error("slack_method_failed", method=method, error=str(e))
                 return False
         return False
 
@@ -80,14 +80,16 @@ class SlackService:
         """Send an alert message to Slack with retry logic and deduplication."""
         
         # BE-NOTIF-4: Check for duplicate alerts within dedup window
-        alert_hash = hashlib.sha256(f"{title}:{severity}".encode()).hexdigest()
+        # Include message hash to avoid suppressing distinct alerts with same title
+        msg_hash = hashlib.sha256(message.encode()).hexdigest()[:12]
+        alert_hash = hashlib.sha256(f"{title}:{severity}:{msg_hash}".encode()).hexdigest()
         current_time = time.time()
 
         
         if alert_hash in self._sent_alerts:
             last_sent = self._sent_alerts[alert_hash]
             if current_time - last_sent < self._dedup_window_seconds:
-                logger.info(f"Duplicate alert suppressed: {title}")
+                logger.info("duplicate_alert_suppressed", title=title)
                 return True  # Suppress duplicate
         
         # Record this alert

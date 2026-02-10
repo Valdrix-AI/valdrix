@@ -134,13 +134,32 @@ class SavingsProcessor:
         """Filters for 'autonomous_ready' items and executes them."""
         from uuid import UUID as PyUUID
         from app.modules.optimization.domain.remediation import RemediationService
+        from app.shared.core.config import get_settings
+        from app.models.remediation import RemediationAction
         
         remediation = RemediationService(db)
+        settings = get_settings()
         # System User ID for autonomous actions
         system_user_id = PyUUID("00000000-0000-0000-0000-000000000000")
+
+        # Allow only low-risk actions for autopilot execution
+        safe_actions = {
+            RemediationAction.STOP_INSTANCE,
+            RemediationAction.RESIZE_INSTANCE,
+            RemediationAction.STOP_RDS_INSTANCE,
+        }
         
         for rec in analysis_result.recommendations:
-            if rec.autonomous_ready and rec.confidence.lower() == "high":
+            confidence_raw = (rec.confidence or "").strip().lower()
+            confidence_score = None
+            try:
+                confidence_score = float(confidence_raw)
+            except ValueError:
+                pass
+
+            is_high_confidence = confidence_raw == "high" or (confidence_score is not None and confidence_score >= 0.9)
+
+            if rec.autonomous_ready and is_high_confidence:
                 logger.info("executing_autonomous_savings", 
                             tenant_id=str(tenant_id), 
                             resource=rec.resource, 
@@ -171,9 +190,22 @@ class SavingsProcessor:
                         explainability_notes=f"Savings Autopilot: {rec.action}. High confidence, low risk."
                     )
                     
-                    # Auto-approve & Execute immediately
-                    await remediation.approve(request.id, tenant_id, system_user_id, notes="AUTO_APPROVED: Savings Autopilot")
-                    await remediation.execute(request.id, tenant_id, bypass_grace_period=True)
+                    if action_enum in safe_actions:
+                        # Auto-approve & Execute for safe actions only
+                        await remediation.approve(request.id, tenant_id, system_user_id, notes="AUTO_APPROVED: Savings Autopilot")
+                        await remediation.execute(
+                            request.id,
+                            tenant_id,
+                            bypass_grace_period=settings.AUTOPILOT_BYPASS_GRACE_PERIOD
+                        )
+                    else:
+                        # Never auto-execute destructive actions; leave for human review
+                        logger.warning(
+                            "autonomous_action_requires_review",
+                            tenant_id=str(tenant_id),
+                            request_id=str(request.id),
+                            action=action_enum.value
+                        )
                     
                     logger.info("autonomous_savings_completed", 
                                 tenant_id=str(tenant_id), 

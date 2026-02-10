@@ -98,7 +98,8 @@ class ExchangeRateService:
                     rate=rate,
                     last_updated=datetime.now(timezone.utc)
                 )
-                self.db.add(new_rate)
+                from app.shared.core.async_utils import maybe_await
+                await maybe_await(self.db.add(new_rate))
             
             await self.db.commit()
             logger.info("currency_db_cache_updated", rate=rate)
@@ -112,5 +113,5 @@ class ExchangeRateService:
         Paystack expects amounts in subunits.
         """
         ngn_amount = usd_amount * rate
-        # Round to nearest Naira and convert to Kobo
-        return int(round(ngn_amount)) * 100
+        # Round to nearest Kobo to avoid unnecessary precision loss.
+        return int(round(ngn_amount * 100))

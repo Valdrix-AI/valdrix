@@ -86,7 +86,7 @@ class FinOpsAnalyzer:
         LLMs often ignore 'no markdown' instructions.
         """
         # Pattern matches ```json ... ``` or just ``` ... ```
-        pattern = r'^```(?:json)?\s*\n?(.*?)\n?```$'
+        pattern = r'^```(?:\w+)?\s*\n?(.*?)\n?```$'
         match = re.match(pattern, text.strip(), re.DOTALL)
         if match:
             return match.group(1).strip()
@@ -126,9 +126,18 @@ class FinOpsAnalyzer:
                 logger.info("analysis_cache_hit", tenant_id=str(tenant_id), operation_id=operation_id)
                 return cached_analysis
 
+            records_for_analysis = getattr(usage_summary, "_analysis_records_override", usage_summary.records)
+            if records_for_analysis is usage_summary.records:
+                usage_summary_to_analyze = usage_summary
+            else:
+                usage_summary_to_analyze = copy.copy(usage_summary)
+                usage_summary_to_analyze.records = records_for_analysis
+                if hasattr(usage_summary, "_analysis_records_override"):
+                    delattr(usage_summary, "_analysis_records_override")
+
             logger.info("starting_analysis", 
                         tenant_id=str(tenant_id), 
-                        data_points=len(usage_summary.records),
+                        data_points=len(usage_summary_to_analyze.records),
                         mode="delta" if is_delta else "full",
                         operation_id=operation_id)
 
@@ -142,7 +151,7 @@ class FinOpsAnalyzer:
             try:
                 if tenant_id and effective_db:
                     # Estimate tokens: 1 record ≈ 20 tokens, min 500
-                    prompt_tokens = max(500, len(usage_summary.records) * 20)
+                    prompt_tokens = max(500, len(usage_summary_to_analyze.records) * 20)
                     completion_tokens = 500
                     
                     reserved_amount = await LLMBudgetManager.check_and_reserve(
@@ -168,9 +177,9 @@ class FinOpsAnalyzer:
 
             # 3. Prepare Data
             try:
-                sanitized_data = await LLMGuardrails.sanitize_input(usage_summary.model_dump())
+                sanitized_data = await LLMGuardrails.sanitize_input(usage_summary_to_analyze.model_dump())
                 sanitized_data["symbolic_forecast"] = await SymbolicForecaster.forecast(
-                    usage_summary.records,
+                    usage_summary_to_analyze.records,
                     db=effective_db,
                     tenant_id=tenant_id
                 )
@@ -212,7 +221,7 @@ class FinOpsAnalyzer:
 
             # 6. Post-Process
             return await self._process_analysis_results(
-                response_content, tenant_id, usage_summary
+                response_content, tenant_id, usage_summary_to_analyze
             )
 
 
@@ -260,10 +269,8 @@ class FinOpsAnalyzer:
                 logger.info("analysis_delta_no_new_data", tenant_id=str(tenant_id))
                 return cached_analysis, False
 
-            # Create a shallow copy of summary but with filtered records
-            usage_summary_copy = copy.copy(usage_summary)
-            usage_summary_copy.records = records_to_analyze
-            return cached_analysis, True # We don't return the copy here, handle in analyze()
+            # Store filtered records for analysis without mutating the original records list
+            usage_summary._analysis_records_override = records_to_analyze
 
         return cached_analysis, is_delta
 
@@ -298,7 +305,7 @@ class FinOpsAnalyzer:
                     LLMProvider.ANTHROPIC: budget.claude_api_key, # unified
                     LLMProvider.GOOGLE: budget.google_api_key,
                     LLMProvider.GROQ: budget.groq_api_key,
-                    LLMProvider.AZURE: budget.azure_api_key
+                    LLMProvider.AZURE: getattr(budget, "azure_api_key", None)
                 }
                 byok_key = keys.get(provider or budget.preferred_provider)
 
@@ -385,7 +392,7 @@ class FinOpsAnalyzer:
                     if fallback_provider == provider:
                         continue  # Skip the one that just failed
                     try:
-                        fallback_llm = LLMFactory.create(fallback_provider)
+                        fallback_llm = LLMFactory.create(fallback_provider, model=fallback_model)
                         fallback_chain = self.prompt | fallback_llm
                         logger.info("trying_fallback_llm", provider=fallback_provider, model=fallback_model)
                         response = await fallback_chain.ainvoke({"cost_data": formatted_data})

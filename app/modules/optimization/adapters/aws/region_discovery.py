@@ -14,6 +14,7 @@ from datetime import date, timedelta
 from typing import List, Dict
 import structlog
 from botocore.exceptions import ClientError
+from botocore.session import get_session
 
 logger = structlog.get_logger()
 
@@ -32,6 +33,32 @@ class RegionDiscovery:
         self._cached_enabled_regions: List[str] = []
         self._cached_hot_regions: List[str] = []
 
+    def _build_client_kwargs(self, context: str) -> Dict[str, str] | None:
+        if not self.credentials:
+            return {}
+        if not isinstance(self.credentials, dict):
+            logger.warning("aws_credentials_invalid_type", context=context, type=type(self.credentials).__name__)
+            return None
+
+        ak = self.credentials.get("AccessKeyId")
+        sk = self.credentials.get("SecretAccessKey")
+        st = self.credentials.get("SessionToken")
+
+        if not ak or not sk:
+            logger.warning(
+                "invalid_aws_credentials_keys",
+                context=context,
+                has_ak=bool(ak),
+                has_sk=bool(sk)
+            )
+            return None
+
+        return {
+            "aws_access_key_id": ak,
+            "aws_secret_access_key": sk,
+            "aws_session_token": st,
+        }
+
     async def get_enabled_regions(self) -> List[str]:
         """
         Get all regions enabled for this account.
@@ -43,27 +70,21 @@ class RegionDiscovery:
             return self._cached_enabled_regions
 
         try:
-            client_kwargs = {}
-            if self.credentials:
-                # SEC-06: Defensive extraction with validation
-                ak = self.credentials.get("AccessKeyId")
-                sk = self.credentials.get("SecretAccessKey")
-                st = self.credentials.get("SessionToken")
-                
-                if not ak or not sk:
-                    logger.warning("invalid_aws_credentials_keys", 
-                                   has_ak=bool(ak), has_sk=bool(sk))
-                    return self._get_fallback_regions()
-                    
-                client_kwargs = {
-                    "aws_access_key_id": ak,
-                    "aws_secret_access_key": sk,
-                    "aws_session_token": st,
-                }
+            client_kwargs = self._build_client_kwargs("enabled_regions")
+            if client_kwargs is None:
+                return self._get_fallback_regions()
 
             async with self.session.client("ec2", region_name="us-east-1", **client_kwargs) as ec2:
                 response = await ec2.describe_regions(AllRegions=False)
-                regions = [r["RegionName"] for r in response.get("Regions", [])]
+                regions = [
+                    r.get("RegionName")
+                    for r in response.get("Regions", [])
+                    if r.get("RegionName")
+                ]
+
+                if not regions:
+                    logger.warning("regions_discovered_empty", source="ec2_describe_regions")
+                    return self._get_fallback_regions()
 
                 logger.info("regions_discovered", count=len(regions), source="ec2_describe_regions")
                 self._cached_enabled_regions = regions
@@ -72,6 +93,9 @@ class RegionDiscovery:
         except ClientError as e:
             logger.error("region_discovery_failed", error=str(e))
             # Fallback to common regions if discovery fails
+            return self._get_fallback_regions()
+        except Exception as e:
+            logger.error("region_discovery_unexpected_error", error=str(e))
             return self._get_fallback_regions()
 
     async def get_hot_regions(self, days: int = 30) -> List[str]:
@@ -85,23 +109,13 @@ class RegionDiscovery:
             return self._cached_hot_regions
 
         try:
-            client_kwargs = {}
-            if self.credentials:
-                # SEC-06: Defensive extraction with validation
-                ak = self.credentials.get("AccessKeyId")
-                sk = self.credentials.get("SecretAccessKey")
-                st = self.credentials.get("SessionToken")
-                
-                if not ak or not sk:
-                    logger.warning("invalid_aws_credentials_keys_hot", 
-                                   has_ak=bool(ak), has_sk=bool(sk))
-                    return await self.get_enabled_regions()
-                    
-                client_kwargs = {
-                    "aws_access_key_id": ak,
-                    "aws_secret_access_key": sk,
-                    "aws_session_token": st,
-                }
+            if days <= 0:
+                logger.warning("hot_region_invalid_days", days=days)
+                return await self.get_enabled_regions()
+
+            client_kwargs = self._build_client_kwargs("hot_regions")
+            if client_kwargs is None:
+                return await self.get_enabled_regions()
 
             end_date = date.today()
             start_date = end_date - timedelta(days=days)
@@ -116,12 +130,20 @@ class RegionDiscovery:
                     Context="COST_AND_USAGE"
                 )
 
-                regions = [dv["Value"] for dv in response.get("DimensionValues", [])]
+                regions = [
+                    dv.get("Value")
+                    for dv in response.get("DimensionValues", [])
+                    if dv.get("Value")
+                ]
 
                 logger.info("hot_regions_discovered",
                            count=len(regions),
                            days=days,
                            source="cost_explorer")
+
+                if not regions:
+                    logger.warning("hot_regions_discovered_empty", days=days)
+                    return await self.get_enabled_regions()
 
                 self._cached_hot_regions = regions
                 return regions
@@ -130,16 +152,27 @@ class RegionDiscovery:
             logger.warning("hot_region_discovery_failed", error=str(e))
             # Fall back to enabled regions
             return await self.get_enabled_regions()
+        except Exception as e:
+            logger.warning("hot_region_discovery_unexpected_error", error=str(e))
+            return await self.get_enabled_regions()
 
     def _get_fallback_regions(self) -> List[str]:
-        """Fallback region list when discovery fails."""
+        """Fallback region list when API-based discovery fails."""
+        try:
+            regions = get_session().get_available_regions("ec2")
+            if regions:
+                return sorted(set(regions))
+        except Exception as exc:
+            logger.warning("region_fallback_from_botocore_failed", error=str(exc))
+
+        # Last-resort static baseline
         return [
             "us-east-1",
             "us-west-2",
             "eu-west-1",
             "eu-central-1",
             "ap-southeast-1",
-            "ap-northeast-1"
+            "ap-northeast-1",
         ]
 
     def clear_cache(self) -> None:

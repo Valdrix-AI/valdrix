@@ -126,7 +126,51 @@ class OIDCService:
     @staticmethod
     async def verify_gcp_access(project_id: str, tenant_id: str) -> tuple[bool, str | None]:
         """Verify that GCP can exchange our OIDC token for access."""
-        # This is a placeholder for development; real implementation would call GCP STS
-        logger.info("oidc_verify_gcp_access", project_id=project_id, tenant_id=tenant_id)
-        return True, None
+        import httpx
 
+        settings = get_settings()
+        audience = settings.GCP_OIDC_AUDIENCE
+        if not audience:
+            return False, "GCP_OIDC_AUDIENCE is not configured"
+
+        try:
+            subject_token = await OIDCService.create_token(tenant_id=tenant_id, audience=audience)
+            payload = {
+                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+                "audience": audience,
+                "scope": settings.GCP_OIDC_SCOPE,
+                "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
+                "subject_token_type": "urn:ietf:params:oauth:token-type:id_token",
+                "subject_token": subject_token,
+            }
+
+            async with httpx.AsyncClient(timeout=settings.GCP_OIDC_VERIFY_TIMEOUT_SECONDS) as client:
+                response = await client.post(
+                    settings.GCP_OIDC_STS_URL,
+                    data=payload,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+
+            if response.status_code >= 400:
+                logger.warning(
+                    "oidc_verify_gcp_access_failed",
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    status_code=response.status_code,
+                )
+                try:
+                    body = response.json()
+                    error_msg = str(body.get("error_description") or body.get("error") or "STS exchange failed")
+                except Exception:
+                    error_msg = "STS exchange failed"
+                return False, error_msg
+
+            data = response.json()
+            if not data.get("access_token"):
+                return False, "STS exchange succeeded but no access token returned"
+
+            logger.info("oidc_verify_gcp_access_success", project_id=project_id, tenant_id=tenant_id)
+            return True, None
+        except Exception as exc:
+            logger.error("oidc_verify_gcp_access_error", project_id=project_id, tenant_id=tenant_id, error=str(exc))
+            return False, "Failed to verify GCP access via STS"

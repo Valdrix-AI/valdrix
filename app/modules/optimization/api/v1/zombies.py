@@ -168,9 +168,26 @@ async def execute_remediation(
 
     from app.models.aws_connection import AWSConnection
     from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
-    
-    service = RemediationService(db=db, region=region)
-    connection = await service.get_by_id(AWSConnection, tenant_id, tenant_id) # Using tenant_id as placeholder ID if it's 1:1, wait.
+
+    remediation_res = await db.execute(
+        select(RemediationRequest).where(
+            RemediationRequest.id == request_id,
+            RemediationRequest.tenant_id == tenant_id
+        )
+    )
+    remediation_request = remediation_res.scalar_one_or_none()
+    if not remediation_request:
+        from app.shared.core.exceptions import ResourceNotFoundError
+        raise ResourceNotFoundError(f"Remediation request {request_id} not found")
+
+    query = select(AWSConnection).where(AWSConnection.tenant_id == tenant_id)
+    if remediation_request.connection_id:
+        query = query.where(AWSConnection.id == remediation_request.connection_id)
+    # Prefer the most recently verified connection; fall back to deterministic PK order.
+    query = query.order_by(AWSConnection.last_verified_at.desc(), AWSConnection.id.desc())
+
+    result = await db.execute(query)
+    connection = result.scalars().first()
     if not connection:
         from app.shared.core.exceptions import ValdrixException
         raise ValdrixException(

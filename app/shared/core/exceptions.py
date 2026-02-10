@@ -51,6 +51,11 @@ class ConfigurationError(ValdrixException):
     def __init__(self, message: str, code: str = "config_error", details: Optional[Dict[str, Any]] = None):
         super().__init__(message, code=code, status_code=500, details=details)
 
+class DecryptionError(ValdrixException):
+    """Raised when encrypted data cannot be decrypted."""
+    def __init__(self, message: str = "Failed to decrypt value", details: Optional[Dict[str, Any]] = None):
+        super().__init__(message, code="decryption_failed", status_code=500, details=details)
+
 class ResourceNotFoundError(ValdrixException):
     """Raised when a requested resource is not found."""
     def __init__(self, message: str, code: str = "not_found", details: Optional[Dict[str, Any]] = None):
@@ -75,3 +80,8 @@ class KillSwitchTriggeredError(ValdrixException):
     """Raised when a remediation action is blocked by the safety kill switch."""
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message, code="kill_switch_triggered", status_code=403, details=details)
+
+class ExternalAPIError(ValdrixException):
+    """Raised when an external API (LLM, Cloud Provider, etc.) fails."""
+    def __init__(self, message: str, code: str = "external_api_error", details: Optional[Dict[str, Any]] = None):
+        super().__init__(message, code=code, status_code=502, details=details)

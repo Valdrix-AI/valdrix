@@ -37,19 +37,21 @@ class EmptyGkeClusterPlugin(ZombiePlugin):
             
             parent = f"projects/{project_id}/locations/-"
             response = client.list_clusters(parent=parent)
-            
-            for cluster in response.clusters:
-                total_nodes = sum(np.initial_node_count for np in cluster.node_pools)
+
+            for cluster in (getattr(response, "clusters", None) or []):
+                node_pools = getattr(cluster, "node_pools", None) or []
+                total_nodes = sum((getattr(np, "initial_node_count", 0) or 0) for np in node_pools)
                 
                 if total_nodes == 0:
                     # GKE control plane: ~$73/month for Autopilot or first zonal cluster
                     estimated_cost = 73.0
-                    
+                    resource_id = getattr(cluster, "self_link", None) or getattr(cluster, "name", None)
+
                     zombies.append({
-                        "resource_id": cluster.self_link,
-                        "resource_name": cluster.name,
+                        "resource_id": resource_id,
+                        "resource_name": getattr(cluster, "name", None),
                         "resource_type": "GKE Cluster",
-                        "location": cluster.location,
+                        "location": getattr(cluster, "location", None),
                         "node_count": 0,
                         "monthly_cost": round(estimated_cost, 2),
                         "recommendation": "Delete empty cluster",

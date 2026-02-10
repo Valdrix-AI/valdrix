@@ -8,6 +8,7 @@ Provides:
 """
 
 from typing import Annotated, Optional, Dict, Any, List
+from urllib.parse import urlparse, urljoin, urlunparse
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -21,6 +22,51 @@ from app.shared.core.rate_limit import auth_limit
 logger = structlog.get_logger()
 router = APIRouter(tags=["Billing"])
 settings = get_settings()
+
+
+def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
+    """
+    Validate and normalize user-provided checkout callback URLs.
+
+    Security controls:
+    - only allow same-site callback hosts (frontend + configured CORS origins)
+    - enforce HTTPS in staging/production
+    - block credentialed URLs
+    """
+    default_callback = f"{settings.FRONTEND_URL.rstrip('/')}/billing?success=true"
+    candidate = (raw_callback_url or "").strip()
+    callback = candidate or default_callback
+
+    # Treat relative callback paths as frontend-local redirects.
+    if callback.startswith("/"):
+        callback = urljoin(settings.FRONTEND_URL.rstrip("/") + "/", callback.lstrip("/"))
+
+    parsed = urlparse(callback)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(400, "Invalid callback_url")
+    if parsed.username or parsed.password:
+        raise HTTPException(400, "callback_url must not include credentials")
+
+    if settings.ENVIRONMENT in {"production", "staging"} and parsed.scheme != "https":
+        raise HTTPException(400, "callback_url must use HTTPS in production environments")
+
+    allowed_hosts: set[str] = set()
+    if settings.FRONTEND_URL:
+        frontend_host = (urlparse(settings.FRONTEND_URL).hostname or "").lower()
+        if frontend_host:
+            allowed_hosts.add(frontend_host)
+    for origin in settings.CORS_ORIGINS:
+        origin_host = (urlparse(origin).hostname or "").lower()
+        if origin_host:
+            allowed_hosts.add(origin_host)
+
+    callback_host = (parsed.hostname or "").lower()
+    if callback_host not in allowed_hosts:
+        raise HTTPException(400, "callback_url host is not allowed")
+
+    # Strip fragment to avoid client-side script injection vectors through URL anchors.
+    sanitized = parsed._replace(fragment="")
+    return urlunparse(sanitized)
 
 class ExchangeRateUpdate(BaseModel):
     rate: float
@@ -180,8 +226,7 @@ async def create_checkout(
 
         billing = BillingService(db)
         
-        # Default callback URL
-        callback = checkout_req.callback_url or f"{settings.FRONTEND_URL}/billing?success=true"
+        callback = _build_checkout_callback_url(checkout_req.callback_url)
         
         if not user.tenant_id:
             raise HTTPException(400, "User has no tenant")
@@ -271,11 +316,19 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
 
         # Store webhook for durable processing
         retry_service = WebhookRetryService(db)
+        try:
+            raw_payload = payload.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            logger.warning("webhook_payload_not_utf8")
+            raise HTTPException(400, "Invalid webhook payload encoding") from exc
+
         job = await retry_service.store_webhook(
             provider="paystack",
             event_type=event_type,
             payload=data,
-            reference=reference
+            reference=reference,
+            signature=signature,
+            raw_payload=raw_payload
         )
 
         if job is None:
@@ -330,12 +383,13 @@ async def update_exchange_rate(
         rate_obj.provider = request.provider
         rate_obj.last_updated = datetime.now(timezone.utc)
     else:
-        db.add(ExchangeRate(
+        from app.shared.core.async_utils import maybe_await
+        await maybe_await(db.add(ExchangeRate(
             from_currency="USD",
             to_currency="NGN",
             rate=request.rate,
             provider=request.provider
-        ))
+        )))
     
     await db.commit()
     return {"status": "success", "rate": request.rate}

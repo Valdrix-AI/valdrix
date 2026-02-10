@@ -120,9 +120,15 @@ async def update_notification_settings(
         )
         db.add(settings)
     else:
-        # Update existing settings
-        for key, value in data.model_dump().items():
-            setattr(settings, key, value)
+        updates = data.model_dump()
+        settings.slack_enabled = updates["slack_enabled"]
+        settings.slack_channel_override = updates["slack_channel_override"]
+        settings.digest_schedule = updates["digest_schedule"]
+        settings.digest_hour = updates["digest_hour"]
+        settings.digest_minute = updates["digest_minute"]
+        settings.alert_on_budget_warning = updates["alert_on_budget_warning"]
+        settings.alert_on_budget_exceeded = updates["alert_on_budget_exceeded"]
+        settings.alert_on_zombie_detected = updates["alert_on_zombie_detected"]
 
     await db.commit()
     await db.refresh(settings)

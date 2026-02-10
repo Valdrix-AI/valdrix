@@ -1,8 +1,11 @@
 import time
 import json
+import asyncio
+from collections import OrderedDict
 from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
+from datetime import datetime, timezone
 import structlog
 
 from app.shared.core.config import get_settings
@@ -84,6 +87,14 @@ class CircuitBreaker:
         self.config = config or CircuitBreakerConfig.from_settings()
         self.state = CircuitBreakerState(tenant_id, redis_client)
 
+    async def _reset_daily_budget_if_needed(self) -> None:
+        """Reset daily savings counter when UTC date changes."""
+        today = datetime.now(timezone.utc).date().isoformat()
+        last_reset_day = await self.state.get("daily_savings_date")
+        if last_reset_day != today:
+            await self.state.set("daily_savings_usd", 0.0)
+            await self.state.set("daily_savings_date", today)
+
     async def get_state(self) -> CircuitState:
         s = await self.state.get("state", CircuitState.CLOSED.value)
         return CircuitState(s)
@@ -101,6 +112,7 @@ class CircuitBreaker:
             return False
             
         # Check daily budget
+        await self._reset_daily_budget_if_needed()
         daily_savings = await self.state.get("daily_savings_usd", 0.0)
         if (daily_savings + estimated_savings) > self.config.max_daily_savings_usd:
             logger.warning("circuit_breaker_budget_exceeded", 
@@ -121,6 +133,7 @@ class CircuitBreaker:
         await self.state.set("failure_count", 0)
         
         # Track savings (daily budget)
+        await self._reset_daily_budget_if_needed()
         current_savings = await self.state.get("daily_savings_usd", 0.0)
         await self.state.set("daily_savings_usd", current_savings + savings)
 
@@ -154,11 +167,22 @@ class CircuitBreaker:
         }
 
 # Multi-tenant cache
-_tenant_breakers: Dict[str, CircuitBreaker] = {}
+_tenant_breakers: "OrderedDict[str, CircuitBreaker]" = OrderedDict()
+_tenant_breakers_lock = asyncio.Lock()
 
 async def get_circuit_breaker(tenant_id: str) -> CircuitBreaker:
     """ Get or create a circuit breaker for a tenant. """
-    if tenant_id not in _tenant_breakers:
-        # In a real production environment, we would also inject the Redis client here
+    async with _tenant_breakers_lock:
+        if tenant_id in _tenant_breakers:
+            _tenant_breakers.move_to_end(tenant_id)
+            return _tenant_breakers[tenant_id]
+
+        # In a real production environment, we would also inject the Redis client here.
         _tenant_breakers[tenant_id] = CircuitBreaker(tenant_id)
-    return _tenant_breakers[tenant_id]
+
+        max_cache_size = max(1, int(settings.CIRCUIT_BREAKER_CACHE_SIZE))
+        while len(_tenant_breakers) > max_cache_size:
+            evicted_tenant_id, _ = _tenant_breakers.popitem(last=False)
+            logger.info("circuit_breaker_cache_evicted", tenant_id=evicted_tenant_id)
+
+        return _tenant_breakers[tenant_id]

@@ -15,6 +15,9 @@ def get_analyzer(provider: str = Depends(get_llm_provider)) -> FinOpsAnalyzer:
     llm = LLMFactory.create(provider)
     return FinOpsAnalyzer(llm)
 
+from functools import lru_cache
+
+@lru_cache()
 def requires_feature(feature_name: str | FeatureFlag):
     """Dependency to check if a feature is enabled for the user's tier."""
     async def feature_checker(user: Annotated[CurrentUser, Depends(requires_role("member"))]):

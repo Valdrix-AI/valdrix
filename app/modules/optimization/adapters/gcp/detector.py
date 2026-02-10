@@ -1,8 +1,5 @@
 from typing import List, Dict, Any, Optional
 import structlog
-from google.cloud import compute_v1
-from google.cloud import logging as gcp_logging
-# Note: google.oauth2.service_account is needed for custom creds if not using default
 from google.oauth2 import service_account
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -24,23 +21,32 @@ class GCPZombieDetector(BaseZombieDetector):
         super().__init__(region, credentials, db, connection)
         self.project_id = None
         self._credentials_obj = None
+        self._credentials_error = None
 
         if connection:
             self.project_id = connection.project_id
             # Fetch credentials using logic from connection or adapter
             if connection.service_account_json:
                 import json
-                info = json.loads(connection.service_account_json)
-                self._credentials_obj = service_account.Credentials.from_service_account_info(info)
+                try:
+                    info = json.loads(connection.service_account_json)
+                    self._credentials_obj = service_account.Credentials.from_service_account_info(info)
+                except Exception as exc:
+                    self._credentials_error = str(exc)
+                    logger.error("gcp_detector_invalid_service_account_json", error=str(exc))
 
         elif credentials:
             self.project_id = credentials.get("project_id")
             if credentials.get("service_account_json"):
                 import json
-                info = json.loads(credentials["service_account_json"])
-                self._credentials_obj = service_account.Credentials.from_service_account_info(info)
-                if not self.project_id:
-                    self.project_id = info.get("project_id")
+                try:
+                    info = json.loads(credentials["service_account_json"])
+                    self._credentials_obj = service_account.Credentials.from_service_account_info(info)
+                    if not self.project_id:
+                        self.project_id = info.get("project_id")
+                except Exception as exc:
+                    self._credentials_error = str(exc)
+                    logger.error("gcp_detector_invalid_service_account_json", error=str(exc))
 
         self._disks_client = None
         self._address_client = None
@@ -62,37 +68,23 @@ class GCPZombieDetector(BaseZombieDetector):
         if not self.project_id:
             logger.error("gcp_detector_missing_project_id")
             return []
+        if self._credentials_error:
+            logger.error("gcp_detector_credentials_unavailable", error=self._credentials_error)
+            return []
 
-        client = None
-        kwargs = {"project_id": self.project_id}
-
-        if plugin.category_key == "unattached_disks":
-            if not self._disks_client:
-                self._disks_client = compute_v1.DisksClient(credentials=self._credentials_obj) if self._credentials_obj else compute_v1.DisksClient()
-            client = self._disks_client
-            kwargs["zone"] = self.region
-            
-        elif plugin.category_key == "orphaned_ips":
-            if not self._address_client:
-                self._address_client = compute_v1.AddressesClient(credentials=self._credentials_obj) if self._credentials_obj else compute_v1.AddressesClient()
-            client = self._address_client
-            kwargs["region"] = "-".join(self.region.split("-")[:2])
-            
-        elif plugin.category_key == "orphaned_images":
-            if not self._images_client:
-                self._images_client = compute_v1.MachineImagesClient(credentials=self._credentials_obj) if self._credentials_obj else compute_v1.MachineImagesClient()
-            client = self._images_client
-
-        elif plugin.category_key == "idle_instances":
-            if not self._disks_client: # Just a placeholder, we use compute clients
-                self._disks_client = compute_v1.InstancesClient(credentials=self._credentials_obj) if self._credentials_obj else compute_v1.InstancesClient()
-            if not self._logging_client:
-                self._logging_client = gcp_logging.Client(credentials=self._credentials_obj, project=self.project_id) if self._credentials_obj else gcp_logging.Client(project=self.project_id)
-            client = self._disks_client
-            kwargs["zone"] = self.region
-            return await plugin.scan(client, logging_client=self._logging_client, **kwargs)
-
-        if client:
-            return await plugin.scan(client, **kwargs)
-
-        return []
+        try:
+            results = await plugin.scan(
+                project_id=self.project_id,
+                credentials=self._credentials_obj,
+                region=self.region
+            )
+        except Exception as exc:
+            logger.error("gcp_plugin_scan_failed", plugin=plugin.category_key, error=str(exc))
+            return []
+        if results is None:
+            logger.warning("gcp_plugin_scan_returned_none", plugin=plugin.category_key)
+            return []
+        if not isinstance(results, list):
+            logger.warning("gcp_plugin_scan_invalid_result", plugin=plugin.category_key, result_type=type(results).__name__)
+            return []
+        return results

@@ -1,26 +1,30 @@
 import ssl
 import uuid
+import os
 from typing import Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import event, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.pool import StaticPool, NullPool, QueuePool
 from app.shared.core.config import get_settings
 import structlog
 import sys
 import time
 from fastapi import Request
-from sqlalchemy.pool import StaticPool, NullPool
 from app.shared.core.exceptions import ValdrixException
-from app.shared.core.ops_metrics import RLS_CONTEXT_MISSING
+from app.shared.core.ops_metrics import RLS_CONTEXT_MISSING, RLS_ENFORCEMENT_LATENCY
 
 logger = structlog.get_logger()
 settings = get_settings()
 
 # Item 6: Critical Startup Error Handling
-if not settings.DATABASE_URL:
+if not settings.DATABASE_URL and not settings.TESTING:
     logger.critical("startup_failed_missing_db_url", 
                    msg="DATABASE_URL is not set. The application cannot start.")
     sys.exit(1)
+elif not settings.DATABASE_URL:
+    # During testing, we can lazily allow missing URL if it's swapped later
+    logger.debug("missing_db_url_in_testing_ignoring")
 
 # Ensure DATABASE_URL is a string before string comparison
 db_url = settings.DATABASE_URL or ""
@@ -35,8 +39,16 @@ ssl_mode = settings.DB_SSL_MODE.lower()
 connect_args = {}
 
 # Determine the actual URL to use. If testing, default to in-memory sqlite to avoid side-effects.
+# Determine the actual URL to use. 
+# Default to in-memory sqlite in testing ONLY IF no explicit DATABASE_URL is provided,
+# OR if the provided URL is not sqlite and we want to prevent side-effects on real DBs 
+# (unless explicitly allowed via a flag if we had one, but let's keep it safe for now).
 effective_url = db_url
-if settings.TESTING and "sqlite" not in db_url:
+if settings.TESTING and not db_url:
+    effective_url = "sqlite+aiosqlite:///:memory:"
+elif settings.TESTING and "sqlite" not in db_url:
+    # Safety feature: swap non-sqlite to memory in testing to prevent accidental wipes.
+    # To test against real Postgres, you must use a sqlite URL or handle it elsewhere.
     effective_url = "sqlite+aiosqlite:///:memory:"
 
 # Determine if we're using sqlite (for pool and connection settings)
@@ -97,23 +109,30 @@ else:
 # - pool_pre_ping: Checks if connection is alive before using (prevents stale connections)
 # - pool_recycle: Recycle connections after 5 min (Supavisor/Neon compatibility)
 # Pool Configuration: Use NullPool for testing to avoid connection leaks across loops
-pool_args: Dict[str, Any] = {}
+POOL_CONFIG = {
+    "pool_recycle": settings.DB_POOL_RECYCLE,
+    "pool_pre_ping": True,  # Health check connections before use
+    "echo": settings.DB_ECHO,
+}
+
 if is_sqlite:
-    pool_args["poolclass"] = StaticPool
-    connect_args["check_same_thread"] = False
-elif settings.TESTING:
-    pool_args["poolclass"] = NullPool
+    POOL_CONFIG["poolclass"] = StaticPool
 else:
-    pool_args["pool_size"] = settings.DB_POOL_SIZE
-    pool_args["max_overflow"] = settings.DB_MAX_OVERFLOW
+    POOL_CONFIG["poolclass"] = NullPool
+
+# Test-specific configuration
+if settings.TESTING:
+    if not is_sqlite:
+        POOL_CONFIG.update({
+            "pool_size": 2,
+            "max_overflow": 2,
+        })
+    POOL_CONFIG["pool_recycle"] = 60  # Shorter recycle for tests
 
 engine = create_async_engine(
     effective_url,
-    echo=settings.DEBUG,
-    pool_pre_ping=True,
-    pool_recycle=300,   # Recycle every 5 min for Supavisor
+    **POOL_CONFIG,
     connect_args=connect_args,
-    **pool_args
 )
 
 SLOW_QUERY_THRESHOLD_SECONDS = 0.2
@@ -157,10 +176,12 @@ async def get_db(request: Request = None) -> AsyncSession:
                 try:
                     # RLS: Only execute on PostgreSQL
                     if "postgresql" in str(session.bind.url if session.bind else ""):
+                        rls_start = time.perf_counter()
                         await session.execute(
                             text("SELECT set_config('app.current_tenant_id', :tid, true)"),
                             {"tid": str(tenant_id)}
                         )
+                        RLS_ENFORCEMENT_LATENCY.observe(time.perf_counter() - rls_start)
                     rls_context_set = True
 
                 except Exception as e:
@@ -198,10 +219,12 @@ async def set_session_tenant_id(session: AsyncSession, tenant_id: uuid.UUID) -> 
     # For Postgres, execute the actual set_config for RLS
     if "postgresql" in str(session.bind.url if session.bind else ""):
         try:
+            rls_start = time.perf_counter()
             await session.execute(
                 text("SELECT set_config('app.current_tenant_id', :tid, true)"),
                 {"tid": str(tenant_id)}
             )
+            RLS_ENFORCEMENT_LATENCY.observe(time.perf_counter() - rls_start)
         except Exception as e:
             logger.warning("failed_to_set_rls_config_in_session", error=str(e))
 
@@ -261,3 +284,25 @@ def check_rls_policy(conn, _cursor, statement, parameters, _context, _executeman
     
     return statement, parameters
 
+
+async def health_check() -> Dict[str, Any]:
+    """Database health check for monitoring."""
+    start_time = time.perf_counter()
+    try:
+        async with async_session_maker() as session:
+            # Item 4: Fast Health Check (No heavy joins/locks)
+            await session.execute(text("SELECT 1"))
+        
+        latency = (time.perf_counter() - start_time) * 1000
+        return {
+            "status": "up",
+            "latency_ms": round(latency, 2),
+            "engine": engine.dialect.name if hasattr(engine, 'dialect') else "unknown"
+        }
+    except Exception as e:
+        logger.error("database_health_check_failed", error=str(e))
+        return {
+            "status": "down",
+            "error": str(e),
+            "latency_ms": (time.perf_counter() - start_time) * 1000
+        }

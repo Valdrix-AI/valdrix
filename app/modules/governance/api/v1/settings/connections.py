@@ -46,31 +46,58 @@ router = APIRouter(tags=["connections"])
 async def check_growth_tier(user: CurrentUser, db: AsyncSession):
     """
     Ensure tenant is on 'growth', 'pro', or 'enterprise' plan.
-    'trial' is also allowed per business rules (Trial = Full Growth).
+    Uses cached tenant lookup for performance.
     """
-    # Fetch tenant plan from DB
+    from app.shared.core.cache import get_cache_service
+
+    cache = get_cache_service()
+    cache_key = f"tenant_plan:{user.tenant_id}"
+
+    cached_plan = None
+    try:
+        cached_plan = await cache.get(cache_key)
+    except Exception as e:
+        logger.warning("tenant_plan_cache_get_failed", tenant_id=str(user.tenant_id), error=str(e))
+
+    if cached_plan is not None:
+        try:
+            current_plan = PricingTier(cached_plan)
+            return _enforce_growth_tier(current_plan, user)
+        except ValueError:
+            logger.warning(
+                "tenant_plan_cache_invalid",
+                tenant_id=str(user.tenant_id),
+                cached_plan=cached_plan
+            )
+
+    # Fetch from DB and cache
     result = await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))
     tenant = result.scalar_one_or_none()
-    
+
     if not tenant:
         raise HTTPException(404, "Tenant context lost")
 
-    allowed_plans = [
-        PricingTier.TRIAL,
-        PricingTier.GROWTH,
-        PricingTier.PRO,
-        PricingTier.ENTERPRISE
-    ]
-    
-    # Normalize plan string to enum if needed, though DB should store valid strings
     try:
         current_plan = PricingTier(tenant.plan)
     except ValueError:
-        # Fallback for legacy data
         current_plan = PricingTier.FREE
+    
+    # Cache for 1 hour
+    try:
+        await cache.set(cache_key, tenant.plan, ttl=3600)
+    except Exception as e:
+        logger.warning("tenant_plan_cache_set_failed", tenant_id=str(user.tenant_id), error=str(e))
+
+    return _enforce_growth_tier(current_plan, user)
+def _enforce_growth_tier(current_plan: PricingTier, user: CurrentUser) -> None:
+    allowed_plans = {
+        PricingTier.GROWTH,
+        PricingTier.PRO,
+        PricingTier.ENTERPRISE
+    }
 
     if current_plan not in allowed_plans:
-        logger.warning("tier_gate_denied", tenant_id=str(tenant.id), plan=current_plan.value, required="growth")
+        logger.warning("tier_gate_denied", tenant_id=str(user.tenant_id), plan=current_plan.value, required="growth")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Multi-cloud support requires 'Growth' plan or higher. Current plan: {current_plan.value}"
@@ -113,14 +140,14 @@ async def create_aws_connection(
     db: AsyncSession = Depends(get_db),
 ):
     """Register a new AWS connection (Available on all tiers)."""
-    # Check duplicate
-    existing = await db.execute(
-        select(AWSConnection).where(
+    # Check duplicate in single optimized query
+    existing = await db.scalar(
+        select(AWSConnection.id).where(
             AWSConnection.tenant_id == current_user.tenant_id,
             AWSConnection.aws_account_id == data.aws_account_id,
         )
     )
-    if existing.scalar_one_or_none():
+    if existing:
         raise HTTPException(409, f"AWS account {data.aws_account_id} already connected")
 
     connection = AWSConnection(
@@ -138,7 +165,7 @@ async def create_aws_connection(
     await db.commit()
     await db.refresh(connection)
 
-    audit_log("aws_connection_created", str(current_user.id), str(current_user.tenant_id), 
+    audit_log("aws_connection_created", str(current_user.id), str(current_user.tenant_id),
              {"aws_account_id": data.aws_account_id})
 
     return connection
@@ -393,6 +420,19 @@ async def create_gcp_connection(
     )
     if connection:
         raise HTTPException(409, f"GCP project {data.project_id} already connected")
+
+    if data.auth_method == "workload_identity":
+        from app.shared.connections.oidc import OIDCService
+
+        success, error = await OIDCService.verify_gcp_access(
+            project_id=data.project_id,
+            tenant_id=str(current_user.tenant_id)
+        )
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail=f"GCP Workload Identity verification failed: {error}"
+            )
 
     connection = GCPConnection(
         tenant_id=current_user.tenant_id,

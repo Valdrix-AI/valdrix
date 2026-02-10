@@ -16,6 +16,7 @@ Architecture:
 """
 
 import aioboto3
+import json
 from datetime import date, datetime
 from typing import List, Dict, Any
 import structlog
@@ -64,10 +65,8 @@ class CURAdapter(CostAdapter):
         """
         Fetch daily costs from CUR files in S3.
 
-        Note: This is a scaffold implementation. Full implementation requires:
-        1. CUR manifest discovery
-        2. Parquet file parsing (pyarrow)
-        3. Date filtering and aggregation
+        Note: This implementation supports Parquet parsing and date filtering.
+        If a CUR manifest is present, it will be used to enumerate report keys.
         """
         try:
             # Step 1: List CUR files for the date range
@@ -83,7 +82,6 @@ class CURAdapter(CostAdapter):
 
             # Step 2: Parse and aggregate
             # NOTE: Full Parquet parsing requires pyarrow dependency.
-            # Current: Returns parsed results from S3 files.
             logger.info("cur_files_found",
                        count=len(cur_files),
                        bucket=self.bucket_name)
@@ -101,7 +99,18 @@ class CURAdapter(CostAdapter):
         end_date: date
     ) -> List[str]:
         """List CUR Parquet files in S3 for the date range."""
-        files = []
+        if start_date > end_date:
+            logger.warning("cur_invalid_date_range", start=start_date.isoformat(), end=end_date.isoformat())
+            return []
+
+        files: List[str] = []
+        seen: set[str] = set()
+
+        def add_keys(keys: List[str]) -> None:
+            for key in keys:
+                if key not in seen:
+                    seen.add(key)
+                    files.append(key)
 
         async with self.session.client(
             "s3",
@@ -118,11 +127,30 @@ class CURAdapter(CostAdapter):
                     prefix = f"{self.report_prefix}/{current.year}/{current.month:02d}/"
 
                     paginator = s3.get_paginator("list_objects_v2")
+                    manifest_candidates = []
+                    parquet_keys = []
                     async for page in paginator.paginate(Bucket=self.bucket_name, Prefix=prefix):
                         for obj in page.get("Contents", []):
                             key = obj["Key"]
-                            if key.endswith(".parquet"):
-                                files.append(key)
+                            if key.lower().endswith("manifest.json"):
+                                manifest_candidates.append((obj.get("LastModified"), key))
+                            elif key.endswith(".parquet"):
+                                parquet_keys.append(key)
+
+                    if manifest_candidates:
+                        manifest_candidates.sort(key=lambda x: x[0] or datetime.min)
+                        _, manifest_key = manifest_candidates[-1]
+                        try:
+                            response = await s3.get_object(Bucket=self.bucket_name, Key=manifest_key)
+                            manifest_body = await response["Body"].read()
+                            manifest = json.loads(manifest_body)
+                            report_keys = manifest.get("reportKeys", [])
+                            add_keys([k for k in report_keys if k.endswith(".parquet")])
+                        except Exception as e:
+                            logger.warning("cur_manifest_parse_failed", manifest=manifest_key, error=str(e))
+                            add_keys(parquet_keys)
+                    else:
+                        add_keys(parquet_keys)
 
                     # Move to next month
                     if current.month == 12:
@@ -144,13 +172,16 @@ class CURAdapter(CostAdapter):
         group_by_service: bool
     ) -> List[Dict[str, Any]]:
         """
-        Parse CUR Parquet files and aggregate costs.
+        Parses Parquet CUR files from S3 and aggregates costs.
+        
+        Requires pandas and pyarrow.
         """
-        all_dfs = []
+        combined_grouped = None # Initialize as None, will create from first chunk
         
         try:
             import pandas as pd
-        except ImportError as e:
+            import pyarrow.parquet as pq
+        except ImportError:
             logger.error("cur_parsing_missing_dependency", msg="pandas/pyarrow not installed")
             return []
 
@@ -161,71 +192,63 @@ class CURAdapter(CostAdapter):
             aws_secret_access_key=self.credentials.get("SecretAccessKey"),
             aws_session_token=self.credentials.get("SessionToken"),
         ) as s3:
-            logger.debug("s3_client_context_entered")
             for file_key in files:
                 try:
                     logger.debug("processing_cur_file", file=file_key)
-                    # Stream file from S3 into memory
                     response = await s3.get_object(Bucket=self.bucket_name, Key=file_key)
                     
                     async with response["Body"] as stream:
-                        # Optimization: Use temporary file or BytesIO with pyarrow selective reading
-                        # to avoid loading full object if it has many columns.
                         content = await stream.read()
                         
-                        # Read parquet from bytes, but ONLY required columns
                         from io import BytesIO
-                        import pyarrow.parquet as pq
                         
-                        # Explicitly define columns we need to save memory
                         cols = ["line_item_usage_start_date", "line_item_product_code", "line_item_blended_cost"]
-                        # Some CURs might have different column names depending on schema version
-                        
                         table = pq.read_table(BytesIO(content), columns=cols)
                         df = table.to_pandas()
                         
-                        # Basic filters
                         if "line_item_usage_start_date" in df.columns:
                             df["date"] = pd.to_datetime(df["line_item_usage_start_date"]).dt.date
-                            df = df[
-                                (df["date"] >= start_date) & 
-                                (df["date"] <= end_date)
-                            ]
+                            df = df[(df["date"] >= start_date) & (df["date"] <= end_date)]
                         
-                        all_dfs.append(df)
+                        if df.empty:
+                            continue
+
+                        # Aggregate this chunk immediately
+                        if group_by_service:
+                            chunk_grouped = df.groupby(["date", "line_item_product_code"])["line_item_blended_cost"].sum().reset_index()
+                        else:
+                            chunk_grouped = df.groupby("date")["line_item_blended_cost"].sum().reset_index()
                         
+                        # Merge with combined results
+                        if combined_grouped is None:
+                            combined_grouped = chunk_grouped
+                        else:
+                            combined_grouped = pd.concat([combined_grouped, chunk_grouped], ignore_index=True)
+                            
+                            # Re-aggregate to keep memory footprint low
+                            if group_by_service:
+                                combined_grouped = combined_grouped.groupby(["date", "line_item_product_code"])["line_item_blended_cost"].sum().reset_index()
+                            else:
+                                combined_grouped = combined_grouped.groupby("date")["line_item_blended_cost"].sum().reset_index()
+                                
                 except Exception as e:
                     logger.error("cur_file_parse_error", file=file_key, error=str(e))
                     continue
                 
-        if not all_dfs:
-            logger.debug("no_dataframes_aggregated")
+        if combined_grouped is None or combined_grouped.empty:
             return []
             
-        # Merge and Aggregate
-        combined = pd.concat(all_dfs, ignore_index=True)
-        
-        if group_by_service and "line_item_product_code" in combined.columns:
-            # Group by Service
-            grouped = combined.groupby(["date", "line_item_product_code"])["line_item_blended_cost"].sum().reset_index()
-            results = []
-            for _, row in grouped.iterrows():
-                results.append({
-                    "date": row["date"].isoformat(),
-                    "service": row["line_item_product_code"],
-                    "cost": float(row["line_item_blended_cost"])
-                })
-            return results
-        else:
-            # Group by Date only
-            grouped = combined.groupby("date")["line_item_blended_cost"].sum().reset_index()
-            results = []
-            for _, row in grouped.iterrows():
-                results.append({
-                    "date": row["date"].isoformat(),
-                    "cost": float(row["line_item_blended_cost"])
-                })
-            return results
+        results = []
+        for _, row in combined_grouped.iterrows():
+            item = {
+                "date": row["date"].isoformat(),
+                "cost": float(row["line_item_blended_cost"])
+            }
+            if group_by_service and "line_item_product_code" in row:
+                item["service"] = row["line_item_product_code"]
+            results.append(item)
+            
+        return results
 
     async def get_gross_usage(
         self,

@@ -14,6 +14,7 @@ Why this matters:
 from uuid import uuid4, UUID
 from datetime import datetime
 from typing import TYPE_CHECKING
+from decimal import Decimal
 from sqlalchemy import String, Integer, Numeric, ForeignKey, Boolean, DateTime, func, Uuid as PG_UUID
 # from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -70,7 +71,7 @@ class LLMUsage(Base):
     total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # Cost in USD: Calculated at time of call
-    cost_usd: Mapped[float] = mapped_column(Numeric(18, 8), nullable=False, default=0)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False, default=0)
 
     # Request Type: What was this LLM call for?
     request_type: Mapped[str | None] = mapped_column(String(50), nullable=True)

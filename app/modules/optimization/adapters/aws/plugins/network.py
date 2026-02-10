@@ -14,7 +14,7 @@ class OrphanLoadBalancersPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "orphan_load_balancers"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
         try:
             async with self._get_client(session, "elbv2", region, credentials, config=config) as elb:
@@ -76,7 +76,7 @@ class UnderusedNatGatewaysPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "underused_nat_gateways"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []
         days = 7
 

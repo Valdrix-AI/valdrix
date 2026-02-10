@@ -7,6 +7,27 @@ class TenantCohort(str, Enum):
     ACTIVE = "active"          # Growth
     DORMANT = "dormant"        # Starter, or any tier inactive 7+ days
 
+    @classmethod
+    def _missing_(cls, value: object):
+        """
+        Allow construction from enum member name (e.g. "HIGH_VALUE") or
+        case-insensitive variants so tests that call TenantCohort("HIGH_VALUE")
+        succeed.
+        """
+        if isinstance(value, str):
+            # Try name lookup (case-insensitive)
+            name = value.upper()
+            if name in cls.__members__:
+                return cls.__members__[name]
+
+            # Try value-based (case-insensitive)
+            low = value.lower()
+            for member in cls:
+                if member.value == low:
+                    return member
+
+        return super()._missing_(value)
+
 def get_tenant_cohort(tenant: Tenant, last_active: datetime | None = None) -> TenantCohort:
     """
     Classify tenant into a cohort for tiered scheduling.

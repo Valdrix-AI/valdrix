@@ -115,7 +115,7 @@ class CloudConnectionService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"{provider}_verification_failed", error=str(e), connection_id=str(connection_id))
+            logger.error("provider_verification_failed", provider=provider, error=str(e), connection_id=str(connection_id))
             if hasattr(connection, "status"):
                 connection.status = "error"
                 connection.error_message = str(e)
