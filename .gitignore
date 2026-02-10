@@ -207,3 +207,20 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Terraform local cache/state
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+
+# Local transient diagnostics and test artifacts
+test_*.sqlite
+test_*.sqlite-journal
+tmp_*.sqlite
+tmp_test_*.sqlite
+tmp_aiosqlite_*.sqlite
+tmp_sqlite3_*.sqlite
+test_output*.txt
+test_results.txt
+analyzer_error.txt
+health_test_output.txt

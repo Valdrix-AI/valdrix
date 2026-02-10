@@ -52,14 +52,14 @@ Use this as the foundation for SOC 2 Type 1 audit preparation.
 | Control ID | Description | Implementation | Evidence |
 |------------|-------------|----------------|----------|
 | CC5.1 | Risk mitigation | Circuit breakers, rate limiting | `circuit_breaker.py`, `rate_limiter.py` |
-| CC5.2 | Technology controls | JWT auth, RLS, encryption | `app/core/auth.py` |
+| CC5.2 | Technology controls | JWT auth, RLS, encryption | `app/shared/core/auth.py` |
 | CC5.3 | Policy deployment | CI/CD automation | `.github/workflows/ci.yml` |
 
 ### CC6: Logical and Physical Access
 
 | Control ID | Description | Implementation | Evidence |
 |------------|-------------|----------------|----------|
-| CC6.1 | Access architecture | Supabase Auth, JWT tokens | `app/core/auth.py` |
+| CC6.1 | Access architecture | Supabase Auth, JWT tokens | `app/shared/core/auth.py` |
 | CC6.2 | Access restrictions | RBAC (admin, member roles) | `requires_role()` decorator |
 | CC6.3 | Registration/authorization | Supabase user management | Supabase dashboard |
 | CC6.4 | Access removal | Manual process via Supabase | Runbook needed |

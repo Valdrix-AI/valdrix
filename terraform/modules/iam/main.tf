@@ -12,28 +12,12 @@
 #
 # After apply, copy the role_arn output to Valdrix dashboard.
 
-variable "external_id" {
-  description = "The External ID provided by Valdrix. Required for security."
-  type        = string
-
-  validation {
-    condition     = can(regex("^vx-[a-f0-9]{32}$", var.external_id))
-    error_message = "External ID must be in format 'vx-' followed by 32 hex characters."
-  }
-}
-
-variable "valdrix_account_id" {
-  description = "Valdrix's AWS Account ID (provided by Valdrix)"
-  type        = string
-  # No default - must be provided explicitly for security
-}
-
 # Tag name used for resources (can be Valdrix or Valtric)
-variable "resource_tag_name" {
-  description = "Application name used for tagging and resource naming"
-  type        = string
-  default     = "Valdrix"
-}
+# variable "resource_tag_name" {
+#   description = "Application name used for tagging and resource naming"
+#   type        = string
+#   default     = "Valdrix"
+# }
 
 # IAM Role for Valdrix
 resource "aws_iam_role" "valdrix" {
@@ -65,34 +49,13 @@ resource "aws_iam_role" "valdrix" {
   }
 }
 
-# Cost Explorer Read-Only Policy (Removed for security/cost to avoid customer charges)
-/*
-resource "aws_iam_role_policy" "cost_explorer" {
-  name = "${var.resource_tag_name}CostExplorerReadOnly"
+resource "aws_iam_role_policy" "read_only" {
+  name = "${var.resource_tag_name}ReadOnlyPolicy"
   role = aws_iam_role.valdrix.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      {
-        Sid    = "CostExplorerRead"
-        Effect = "Allow"
-        Action = [
-          "ce:GetCostAndUsage",
-          "ce:GetCostForecast",
-          "ce:GetDimensionValues",
-          "ce:GetTags",
-          "ce:GetReservationCoverage",
-          "ce:GetReservationUtilization",
-          "ce:GetSavingsPlansUtilization",
-          "ce:GetSavingsPlansCoverage"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-*/
       {
         Sid    = "EC2ReadOnly"
         Effect = "Allow"

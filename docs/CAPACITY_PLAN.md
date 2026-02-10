@@ -17,7 +17,7 @@ This plan outlines the infrastructure targets for scaling the platform.
 - **10k Users**: Enable Read Replicas for cost explorer queries. Implement partition pruning on `audit_logs` by `created_at`.
 - **100k Users**: Shard by `tenant_id` or migrate to Citus for horizontal scale.
 
-### Computed Workloads (Analyzers)
+### Compute Workloads (Analyzers)
 - **Current**: APScheduler on single backend instance.
 - **1k+ Users**: Migrate background jobs to a distributed queue (Celery/Temporal).
 - **Auto-Scaling**: Horizontal Pod Autoscaling (HPA) based on CPU and job queue depth.

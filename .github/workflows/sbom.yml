@@ -81,23 +81,13 @@ jobs:
           path: ./sbom/
           retention-days: 90
       
-      # Commit to repo (on release only)
-      - name: Commit SBOM to Repository
-        if: github.event_name == 'release'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout main
-          git add sbom/
-          git diff --staged --quiet || git commit -m "chore: update SBOM for release ${{ github.ref_name }}"
-          git push origin main
+      # Intentionally do not push directly to main from CI.
+      # SBOM artifacts are published through workflow artifacts/releases.
       
       # Upload to GitHub Security
       - name: Upload to GitHub Dependency Graph
         uses: actions/dependency-review-action@v4
         if: github.event_name == 'pull_request'
-        continue-on-error: true
 
   compliance-report:
     name: Generate Compliance Report

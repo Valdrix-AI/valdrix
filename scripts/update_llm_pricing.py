@@ -3,8 +3,7 @@ import asyncio
 import argparse
 import structlog
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from app.shared.db.session import async_session_maker
 from app.models.pricing import PricingPlan, ExchangeRate, TenantSubscription, LLMProviderPricing
 from app.models.llm import LLMUsage, LLMBudget
 from app.models.tenant import User, Tenant
@@ -28,21 +27,11 @@ import os
 
 logger = structlog.get_logger()
 
-# Use the same fail-fast logic as manage_partitions.py
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    print("CRITICAL: DATABASE_URL environment variable not set. Aborting for safety.")
-    import sys
-    sys.exit(1)
+# ENV check is handled by the unified factory
 
 async def get_db_session_factory():
-    """Create an async database session factory."""
-    # Required for Supabase transaction pooler
-    engine = create_async_engine(
-        DATABASE_URL,
-        connect_args={"statement_cache_size": 0}
-    )
-    return sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    """Returns the unified database session factory."""
+    return async_session_maker
 
 async def seed_from_static_data():
     """Seed the database with the initial '2026 pricing' from our static dictionary."""
@@ -60,19 +49,33 @@ async def seed_from_static_data():
                 )
                 result = await db.execute(stmt)
                 existing = result.scalar_one_or_none()
+                input_cost = cost["input"] if isinstance(cost, dict) else cost.input
+                output_cost = cost["output"] if isinstance(cost, dict) else cost.output
+                free_tokens = cost.get("free_tier_tokens", 0) if isinstance(cost, dict) else cost.free_tier_tokens
                 
                 if not existing:
                     new_pricing = LLMProviderPricing(
                         provider=provider,
                         model=model_name,
-                        input_cost_per_million=cost["input"] if isinstance(cost, dict) else cost.input,
-                        output_cost_per_million=cost["output"] if isinstance(cost, dict) else cost.output,
-                        free_tier_tokens=cost.get("free_tier_tokens", 0) if isinstance(cost, dict) else cost.free_tier_tokens
+                        input_cost_per_million=input_cost,
+                        output_cost_per_million=output_cost,
+                        free_tier_tokens=free_tokens
                     )
                     db.add(new_pricing)
                     print(f"✅ Seeded {provider}/{model_name}")
                 else:
-                    print(f"ℹ️ Skipping {provider}/{model_name} (already exists)")
+                    changed = (
+                        float(existing.input_cost_per_million) != float(input_cost)
+                        or float(existing.output_cost_per_million) != float(output_cost)
+                        or int(existing.free_tier_tokens or 0) != int(free_tokens)
+                    )
+                    if changed:
+                        existing.input_cost_per_million = input_cost
+                        existing.output_cost_per_million = output_cost
+                        existing.free_tier_tokens = free_tokens
+                        print(f"✅ Updated {provider}/{model_name} from static source")
+                    else:
+                        print(f"ℹ️ Unchanged {provider}/{model_name}")
         
         await db.commit()
 

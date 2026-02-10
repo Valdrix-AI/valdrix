@@ -138,7 +138,6 @@ jobs:
 
       - name: Run Safety (Dependencies)
         run: safety check
-        continue-on-error: true  # Safety API rate limits can fail CI
 
       - name: TruffleHog Secret Scan
         uses: trufflesecurity/trufflehog@v3.93.0
@@ -168,7 +167,6 @@ jobs:
       - name: Frontend Security Audit
         working-directory: ./dashboard
         run: pnpm install --frozen-lockfile && pnpm audit --audit-level=high
-        continue-on-error: true  # Audit warnings shouldn't block CI
 
   # JOB 4: BUILD INTEGRITY
   build-and-scan:

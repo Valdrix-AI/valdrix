@@ -98,8 +98,3 @@ export const onboardingStore = createPersistentState(
 	{ step: 1 } as Record<string, unknown>,
 	24
 );
-export const remediationStore = createPersistentState(
-	'remediation',
-	{} as Record<string, unknown>,
-	1
-);
