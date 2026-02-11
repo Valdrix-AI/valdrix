@@ -6,8 +6,7 @@ Tests cover fault isolation, recovery logic, monitoring, and resilience patterns
 import os
 import time
 from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock, patch
-from contextlib import contextmanager
+from unittest.mock import patch
 
 from app.shared.llm.circuit_breaker import (
     LLMCircuitBreaker,
@@ -543,7 +542,6 @@ class TestCircuitBreakerProductionQuality:
     def test_memory_usage_efficiency(self):
         """Test memory efficiency with many providers."""
         import psutil
-        import os
 
         breaker = LLMCircuitBreaker()
 

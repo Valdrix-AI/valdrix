@@ -26,9 +26,6 @@ from app.tasks.scheduler_tasks import (
     _maintenance_sweep_logic
 )
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
-from app.models.tenant import Tenant
-from app.models.background_job import BackgroundJob, JobStatus, JobType
-from app.models.aws_connection import AWSConnection
 
 
 class TestCohortAnalysis:
@@ -573,7 +570,6 @@ class TestSchedulerTasksProductionQuality:
     def test_scheduler_task_memory_efficiency(self):
         """Test scheduler tasks don't have memory leaks."""
         import psutil
-        import os
 
         # Get initial memory
         process = psutil.Process(os.getpid())

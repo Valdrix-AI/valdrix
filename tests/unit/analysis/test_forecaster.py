@@ -4,7 +4,6 @@ Tests cover forecasting accuracy, outlier detection, model selection, and carbon
 """
 import pytest
 import pandas as pd
-import numpy as np
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, patch, AsyncMock

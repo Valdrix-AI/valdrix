@@ -1,6 +1,5 @@
 import pytest
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.modules.optimization.adapters.aws.plugins.compute import (

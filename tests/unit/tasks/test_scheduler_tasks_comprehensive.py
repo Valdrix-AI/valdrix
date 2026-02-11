@@ -1,5 +1,4 @@
 import pytest
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.tasks.scheduler_tasks import (
     _cohort_analysis_logic,

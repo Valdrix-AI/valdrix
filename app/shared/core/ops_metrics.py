@@ -6,9 +6,8 @@ financial guards, and operational resilience.
 Used for investor-grade "Customer Health" dashboards.
 """
 
-from prometheus_client import Counter, Histogram, Gauge, Summary
+from prometheus_client import Counter, Histogram, Gauge
 import time
-from typing import Optional
 
 # --- Roadmap Compatibility Metrics ---
 STUCK_JOB_COUNT = Gauge(
@@ -286,7 +285,7 @@ def time_operation(operation_name: str):
                     pass
 
                 return result
-            except Exception as e:
+            except Exception:
                 duration = time.time() - start_time
 
                 # Record error metrics

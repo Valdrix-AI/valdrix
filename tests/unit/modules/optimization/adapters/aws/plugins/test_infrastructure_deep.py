@@ -1,7 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-import uuid
-from datetime import datetime, timezone
+from unittest.mock import MagicMock, AsyncMock
 import aioboto3
 from botocore.exceptions import ClientError
 from app.modules.optimization.adapters.aws.plugins.infrastructure import (

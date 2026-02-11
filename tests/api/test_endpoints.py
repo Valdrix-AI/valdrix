@@ -3,16 +3,11 @@ Comprehensive API endpoint tests for all REST APIs in CloudSentinel-AI.
 Tests cover authentication, authorization, rate limiting, error handling, and business logic.
 """
 import pytest
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal
 from uuid import uuid4
 from unittest.mock import MagicMock, patch, AsyncMock
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant import Tenant
-from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
-from app.models.background_job import JobType, JobStatus
 from app.shared.core.auth import CurrentUser
 
 
@@ -628,7 +623,7 @@ class TestAuthorizationAndAuthentication:
         )
 
         # Mock user A
-        from app.shared.core.auth import get_current_user, require_tenant_access
+        from app.shared.core.auth import get_current_user
 
         async def mock_get_current_user():
             return user_a

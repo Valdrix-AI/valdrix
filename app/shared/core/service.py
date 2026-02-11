@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import Type, TypeVar, Any
+from typing import Type, TypeVar
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.core.exceptions import ResourceNotFoundError

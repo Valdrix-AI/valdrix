@@ -2,7 +2,6 @@ import pytest
 """
 Tests for LLM Guardrails - Security and Validation
 """
-from typing import Dict
 from app.shared.llm.guardrails import LLMGuardrails, ZombieAnalysisResult
 
 

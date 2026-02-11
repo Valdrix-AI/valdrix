@@ -2,28 +2,10 @@
 import asyncio
 import argparse
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import select
 from app.shared.db.session import async_session_maker
-from app.models.pricing import PricingPlan, ExchangeRate, TenantSubscription, LLMProviderPricing
-from app.models.llm import LLMUsage, LLMBudget
-from app.models.tenant import User, Tenant
-from app.models.aws_connection import AWSConnection
-from app.models.cloud import CostRecord
-from app.models.notification_settings import NotificationSettings
-from app.models.remediation import RemediationRequest
-from app.models.remediation_settings import RemediationSettings
-from app.models.azure_connection import AzureConnection
-from app.models.gcp_connection import GCPConnection
-from app.models.background_job import BackgroundJob
-from app.models.attribution import AttributionRule, CostAllocation
-from app.models.anomaly_marker import AnomalyMarker
-from app.models.optimization import OptimizationStrategy, StrategyRecommendation
-from app.models.carbon_settings import CarbonSettings
-from app.models.discovered_account import DiscoveredAccount
-from app.modules.governance.domain.security.audit_log import AuditLog
+from app.models.pricing import LLMProviderPricing
 from app.shared.llm.pricing_data import LLM_PRICING
-from app.shared.core.config import get_settings
-import os
 
 logger = structlog.get_logger()
 

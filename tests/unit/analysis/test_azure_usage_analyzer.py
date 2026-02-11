@@ -2,9 +2,6 @@
 Production-quality tests for Azure Usage Analyzer.
 Tests cover security, performance, edge cases, and real-world scenarios.
 """
-import pytest
-from decimal import Decimal
-from unittest.mock import MagicMock, patch
 from app.shared.analysis.azure_usage_analyzer import AzureUsageAnalyzer
 
 

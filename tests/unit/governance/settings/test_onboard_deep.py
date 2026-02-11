@@ -1,10 +1,9 @@
 import pytest
 import uuid
-from httpx import AsyncClient, ASGITransport
-from unittest.mock import MagicMock, AsyncMock, patch
+from httpx import AsyncClient
+from unittest.mock import AsyncMock, patch
 from sqlalchemy import select
 from app.shared.core.auth import CurrentUser, get_current_user_from_jwt, UserRole
-from app.shared.db.session import get_db
 from app.models.tenant import User
 
 @pytest.fixture

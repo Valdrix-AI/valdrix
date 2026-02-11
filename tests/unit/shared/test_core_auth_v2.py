@@ -2,10 +2,8 @@ import pytest
 """
 Comprehensive tests for app.shared.core.auth module.
 """
-import os
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime, timedelta
-import jwt
+from unittest.mock import MagicMock, patch
+from datetime import timedelta
 from uuid import uuid4
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
@@ -13,7 +11,6 @@ from fastapi.security import HTTPAuthorizationCredentials
 from app.shared.core.auth import (
     create_access_token,
     decode_jwt,
-    get_current_user,
     get_current_user_from_jwt,
     requires_role,
     CurrentUser,

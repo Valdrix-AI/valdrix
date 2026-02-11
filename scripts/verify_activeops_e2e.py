@@ -62,7 +62,6 @@ async def verify_active_ops():
             print(f"✨ Created mock AWS connection: {connection.id}")
         
         # Mock credentials for the service
-        from unittest.mock import MagicMock
         mock_creds = {
             "AccessKeyId": "ASIA_MOCK_ID",
             "SecretAccessKey": "MOCK_SECRET",

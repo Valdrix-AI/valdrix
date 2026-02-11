@@ -1,5 +1,5 @@
 import pytest
-from uuid import UUID, uuid4
+from uuid import uuid4
 from fastapi import HTTPException
 from app.shared.core.auth import (
     CurrentUser,

@@ -5,7 +5,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from app.shared.connections.oidc import OIDCService
 from app.models.security import OIDCKey
-from sqlalchemy import select
 
 @pytest.fixture
 def rsa_keys():

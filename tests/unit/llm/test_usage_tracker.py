@@ -2,7 +2,6 @@ import pytest
 """
 Tests for usage_tracker.py - LLM usage tracking and cost calculation.
 """
-from typing import Dict
 from decimal import Decimal
 import builtins
 from unittest.mock import patch, MagicMock, AsyncMock

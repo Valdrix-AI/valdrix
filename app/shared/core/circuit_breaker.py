@@ -7,8 +7,8 @@ Implements the Circuit Breaker pattern to prevent cascade failures.
 import asyncio
 import time
 from enum import Enum
-from typing import Any, Callable, Optional, Dict, Union
-from dataclasses import dataclass, field
+from typing import Any, Callable, Optional, Dict
+from dataclasses import dataclass
 import structlog
 
 from app.shared.core.exceptions import ExternalAPIError

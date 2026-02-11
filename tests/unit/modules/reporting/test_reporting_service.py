@@ -4,21 +4,15 @@ Comprehensive tests for ReportingService module.
 Covers cost ingestion, connection handling, data aggregation, and error scenarios.
 """
 
-from typing import Dict
-from unittest.mock import AsyncMock, MagicMock, patch, call
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal
-from typing import List, Dict, Any
+from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.modules.reporting.domain.service import ReportingService
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
-from app.models.cloud import CloudAccount
 
 
 # Fixtures for mock connections

@@ -1,8 +1,7 @@
 import pytest
 import uuid
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
-from app.shared.core.exceptions import ValdrixException
+from unittest.mock import MagicMock, AsyncMock
 from app.modules.optimization.domain.remediation import RemediationService, RemediationAction
 from app.models.remediation import RemediationStatus
 

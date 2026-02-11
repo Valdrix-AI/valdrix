@@ -1,5 +1,5 @@
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import structlog
 from kubernetes_asyncio import client, config as k8s_config
 from app.modules.optimization.domain.plugin import ZombiePlugin

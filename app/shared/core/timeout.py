@@ -8,7 +8,7 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 from functools import wraps
-from typing import Any, Callable, TypeVar, Optional, Dict, Union
+from typing import Callable, TypeVar, Optional, Dict, Union
 
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -161,7 +161,7 @@ async def timeout_context(operation_type: str = "default", custom_timeout: Optio
 
     try:
         yield timeout_manager
-    except Exception as e:
+    except Exception:
         if task and not task.done():
             task.cancel()
             try:

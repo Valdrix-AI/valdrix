@@ -5,12 +5,12 @@ Covers aggregation summaries, dashboard data, and governance reports.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone, timedelta, date
+from datetime import datetime, date
 from decimal import Decimal
 import uuid
 
 from app.modules.reporting.domain.aggregator import CostAggregator
-from app.models.cloud import CostRecord, CloudAccount
+from app.models.cloud import CostRecord
 
 @pytest.fixture
 def mock_db():

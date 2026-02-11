@@ -2,7 +2,6 @@ import pytest
 """
 Tests for Usage Metering API Endpoints
 """
-import os
 from uuid import uuid4
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock

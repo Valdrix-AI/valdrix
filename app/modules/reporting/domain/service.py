@@ -5,8 +5,6 @@ Orchestrates cost ingestion, aggregation, and attribution.
 import structlog
 from typing import Dict, Any, List
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.shared.adapters.factory import AdapterFactory

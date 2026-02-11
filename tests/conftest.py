@@ -11,7 +11,6 @@ Provides:
 import os
 import sys
 from unittest.mock import MagicMock, AsyncMock, patch
-import sys
 
 # Mock heavy dependencies only if they cause issues in specific environments
 # sys.modules["codecarbon"] = MagicMock()

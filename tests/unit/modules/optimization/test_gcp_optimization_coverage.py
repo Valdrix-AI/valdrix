@@ -1,6 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
-from decimal import Decimal
+from unittest.mock import MagicMock, patch
 from app.modules.optimization.adapters.gcp.plugins.compute import IdleVmsPlugin, IdleGpuInstancesPlugin
 
 @pytest.mark.asyncio

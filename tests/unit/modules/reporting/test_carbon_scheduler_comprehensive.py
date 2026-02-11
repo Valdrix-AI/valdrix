@@ -4,15 +4,14 @@ Covers scheduling decisions, region ranking, carbon intensity forecast, and work
 """
 
 import pytest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 from app.modules.reporting.domain.carbon_scheduler import (
     CarbonAwareScheduler,
     CarbonIntensity,
     RegionCarbonProfile,
     REGION_CARBON_PROFILES,
-    validate_carbon_data_freshness,
 )
 
 

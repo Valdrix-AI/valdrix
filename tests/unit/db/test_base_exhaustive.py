@@ -1,5 +1,3 @@
-import os
-import os
 from app.shared.db.base import get_partition_args
 
 def test_get_partition_args_sqlite():

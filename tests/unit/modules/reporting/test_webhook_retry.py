@@ -5,15 +5,10 @@ Covers webhook storage, idempotency, retry logic, duplicate detection, and Payst
 """
 
 import json
-from typing import Dict
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone, timedelta
-import hashlib
 import uuid
-from typing import Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.modules.reporting.domain.billing.webhook_retry import (
     WebhookRetryService,
@@ -21,7 +16,7 @@ from app.modules.reporting.domain.billing.webhook_retry import (
     WEBHOOK_MAX_ATTEMPTS,
     WEBHOOK_IDEMPOTENCY_TTL_HOURS,
 )
-from app.models.background_job import BackgroundJob, JobStatus, JobType
+from app.models.background_job import BackgroundJob
 
 
 @pytest.fixture

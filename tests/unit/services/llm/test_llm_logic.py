@@ -2,7 +2,6 @@ import pytest
 """
 Tests for LLM Logic - Provider Selection and Smart Factory
 """
-from typing import Dict
 from unittest.mock import MagicMock, patch
 from app.shared.llm.factory import LLMFactory, LLMProviderSelector, AnalysisComplexity
 

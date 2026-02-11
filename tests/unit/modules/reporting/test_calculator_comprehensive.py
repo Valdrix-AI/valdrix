@@ -3,17 +3,13 @@ Comprehensive tests for CarbonCalculator module.
 Covers cost-based and record-based calculations, carbon efficiency metrics, and recommendations.
 """
 
-from typing import Dict
 from decimal import Decimal
-from typing import List, Dict, Any
 from dataclasses import dataclass
 
 from app.modules.reporting.domain.calculator import (
     CarbonCalculator,
     REGION_CARBON_INTENSITY,
-    SERVICE_ENERGY_FACTORS,
     AWS_PUE,
-    EMBODIED_EMISSIONS_FACTOR,
 )
 
 

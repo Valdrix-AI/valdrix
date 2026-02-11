@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Request
 import uuid
-import os
 
 # Set test environment before importing app modules
 os.environ["TESTING"] = "true"

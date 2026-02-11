@@ -1,7 +1,7 @@
 import pytest
 from typing import Dict
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Any
 from app.modules.optimization.domain.base import BaseZombieDetector
 from app.modules.optimization.domain.zombie_plugin import ZombiePlugin
 

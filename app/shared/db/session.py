@@ -1,11 +1,10 @@
 import ssl
 import uuid
-import os
 from typing import Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import event, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.pool import StaticPool, NullPool, QueuePool
+from sqlalchemy.pool import StaticPool, NullPool
 from app.shared.core.config import get_settings
 import structlog
 import sys

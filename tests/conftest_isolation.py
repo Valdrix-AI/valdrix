@@ -5,7 +5,6 @@ Test isolation utilities to prevent test interference
 import asyncio
 from typing import Any, Dict
 from unittest.mock import patch
-from typing import Dict
 
 class TestIsolationManager:
     """Manages test isolation to prevent interference between tests."""

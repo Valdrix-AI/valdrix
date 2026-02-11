@@ -3,9 +3,7 @@ import pytest
 Production-quality tests for LLM Analyzer.
 Tests cover AI analysis, budget management, caching, error handling, and integration.
 """
-from typing import Dict
-import json
-from datetime import datetime, date, timedelta
+from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 from unittest.mock import MagicMock, patch, AsyncMock

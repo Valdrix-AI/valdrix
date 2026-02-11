@@ -1,6 +1,5 @@
-import pytest
 import importlib
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from app.shared.core import celery_app
 from app.shared.core.config import get_settings
 

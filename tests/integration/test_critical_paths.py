@@ -3,11 +3,10 @@ Integration tests for critical paths in CloudSentinel-AI.
 Tests end-to-end workflows for zombie detection and remediation.
 """
 import pytest
-from datetime import datetime, timezone, date, timedelta
+from datetime import datetime, timezone, date
 from decimal import Decimal
 from uuid import uuid4
 from unittest.mock import MagicMock, patch, AsyncMock
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.costs import CloudUsageSummary, CostRecord
 from app.shared.llm.analyzer import FinOpsAnalyzer
@@ -15,7 +14,6 @@ from app.models.tenant import Tenant
 from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
 from app.modules.optimization.domain.remediation import RemediationService
 from app.shared.core.exceptions import BudgetExceededError, KillSwitchTriggeredError
-from app.shared.llm.usage_tracker import UsageTracker
 
 
 @pytest.fixture

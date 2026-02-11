@@ -6,8 +6,7 @@ external API calls, and other unreliable operations.
 """
 import asyncio
 import random
-import time
-from typing import Any, Callable, TypeVar, Optional, Union, List
+from typing import Callable, TypeVar
 from functools import wraps
 import structlog
 from tenacity import (
@@ -16,8 +15,7 @@ from tenacity import (
     wait_exponential,
     retry_if_exception_type,
     before_sleep_log,
-    after_log,
-    RetryError
+    after_log
 )
 
 from app.shared.core.exceptions import ExternalAPIError

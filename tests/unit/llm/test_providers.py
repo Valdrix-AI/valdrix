@@ -365,7 +365,6 @@ class TestLLMProvidersProductionQuality:
     def test_memory_usage_efficiency(self):
         """Test memory efficiency of provider operations."""
         import psutil
-        import os
 
         # Get initial memory
         process = psutil.Process(os.getpid())

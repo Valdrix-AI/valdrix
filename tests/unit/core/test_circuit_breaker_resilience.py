@@ -1,5 +1,4 @@
 import pytest
-from typing import Dict
 from app.shared.llm.circuit_breaker import LLMCircuitBreaker, CircuitState, CircuitOpenError
 
 def test_circuit_breaker_state_transitions():
