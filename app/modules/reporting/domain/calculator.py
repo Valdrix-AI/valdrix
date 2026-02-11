@@ -90,7 +90,7 @@ class CarbonCalculator:
         region: str = "us-east-1",
     ) -> Dict[str, Any]:
         """
-        Legacy cost-proxy calculation. Still used for manual uploads or quick views.
+        Cost-proxy calculation for manual uploads and quick views.
         """
         total_cost_usd = Decimal("0")
         total_energy_kwh = Decimal("0")

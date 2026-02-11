@@ -746,7 +746,7 @@
 										>
 									</tr>
 								{/each}
-								{#each zombies?.legacy_ecr_images ?? [] as ecr (ecr.resource_id)}
+								{#each zombies?.stale_ecr_images ?? [] as ecr (ecr.resource_id)}
 									<tr>
 										<td class="flex items-center gap-1.5">
 											<CloudLogo provider={ecr.provider} size={12} />

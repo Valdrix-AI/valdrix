@@ -15,12 +15,11 @@ logger = structlog.get_logger()
 
 class PricingTier(str, Enum):
     """Available subscription tiers."""
-    FREE = "free"  # Legacy/Test compatibility
+    FREE = "free"
     TRIAL = "trial"
     STARTER = "starter"
     GROWTH = "growth"
     PRO = "pro"
-    PROFESSIONAL = "pro" # Alias for test compatibility
     ENTERPRISE = "enterprise"
 
 
@@ -241,7 +240,6 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
 
 # Alias for test compatibility
 TIER_LIMITS = TIER_CONFIG
-PROFESSIONAL = PricingTier.PRO # Alias for test compatibility
 
 
 def get_tier_config(tier: PricingTier) -> dict:

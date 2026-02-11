@@ -71,7 +71,7 @@ COMPATIBLE_WORKLOADS = [
 REQUIRES_VALIDATION = [
     "Windows workloads (not supported by Graviton)",
     "x86-specific compiled binaries (requires re-compilation)",
-    "legacy .NET framework (requires .NET Core/5+)",
+    "older .NET framework workloads (requires .NET Core/5+)",
     "kernel-level drivers/software (requires ARM port)",
     "proprietary third-party agents without ARM support",
     "SIMD-accelerated code (AVX/AVX2 - requires Neon port)",

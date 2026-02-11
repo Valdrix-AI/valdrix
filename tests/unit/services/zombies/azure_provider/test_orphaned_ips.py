@@ -1,40 +1,27 @@
 import pytest
-from unittest.mock import MagicMock
-from app.modules.optimization.domain.azure_provider.plugins.orphaned_ips import AzureOrphanedIpsPlugin
+from unittest.mock import patch
+
+from app.modules.optimization.adapters.azure.plugins.network import OrphanPublicIpsPlugin
+
 
 @pytest.fixture
 def plugin():
-    return AzureOrphanedIpsPlugin()
+    return OrphanPublicIpsPlugin()
+
 
 @pytest.mark.asyncio
-async def test_azure_orphaned_ips_scan(plugin):
-    mock_ip = MagicMock()
-    mock_ip.id = "/subscriptions/123/ips/my-ip"
-    mock_ip.name = "my-ip"
-    mock_ip.location = "eastus"
-    mock_ip.ip_address = "1.2.3.4"
-    mock_ip.ip_configuration = None # Orphaned
-    mock_ip.sku.name = "Standard"
-    mock_ip.tags = {}
-    
-    mock_used_ip = MagicMock()
-    mock_used_ip.ip_configuration = MagicMock()
-    
-    class AsyncIter:
-        def __init__(self, items):
-            self.items = items
-        def __aiter__(self):
-            return self
-        async def __anext__(self):
-            if not self.items:
-                raise StopAsyncIteration
-            return self.items.pop(0)
+async def test_azure_orphan_public_ips_scan_uses_cost_records(plugin):
+    expected = [{"resource_id": "ip-1", "monthly_cost": 3.65}]
 
-    mock_client = MagicMock()
-    mock_client.public_ip_addresses.list_all.return_value = AsyncIter([mock_ip, mock_used_ip])
-    
-    results = await plugin.scan(mock_client)
-    
-    assert len(results) == 1
-    assert results[0]["name"] == "my-ip"
-    assert results[0]["monthly_waste"] == 3.65
+    with patch("app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer") as analyzer_cls:
+        analyzer = analyzer_cls.return_value
+        analyzer.find_orphan_public_ips.return_value = expected
+
+        results = await plugin.scan(
+            "sub-123",
+            credentials=object(),
+            cost_records=[{"ResourceId": "/subscriptions/sub-123/publicIPAddresses/ip-1"}],
+        )
+
+    assert results == expected
+    analyzer.find_orphan_public_ips.assert_called_once_with()

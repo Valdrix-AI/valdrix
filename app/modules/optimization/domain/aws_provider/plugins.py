@@ -3,7 +3,7 @@ from app.modules.optimization.adapters.aws.plugins import (
     UnusedElasticIpsPlugin, IdleInstancesPlugin,
     OrphanLoadBalancersPlugin, UnderusedNatGatewaysPlugin,
     IdleRdsPlugin, ColdRedshiftPlugin,
-    IdleSageMakerPlugin, LegacyEcrImagesPlugin
+    IdleSageMakerPlugin, StaleEcrImagesPlugin
 )
 
 __all__ = [
@@ -11,5 +11,5 @@ __all__ = [
     "UnusedElasticIpsPlugin", "IdleInstancesPlugin",
     "OrphanLoadBalancersPlugin", "UnderusedNatGatewaysPlugin",
     "IdleRdsPlugin", "ColdRedshiftPlugin",
-    "IdleSageMakerPlugin", "LegacyEcrImagesPlugin"
+    "IdleSageMakerPlugin", "StaleEcrImagesPlugin"
 ]

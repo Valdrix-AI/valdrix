@@ -99,7 +99,7 @@ async def test_check_growth_tier_invalid_plan(db, auth_user):
     
     # Set invalid plan in DB
     tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = "super_legacy_plan"
+    tenant.plan = "super_unknown_plan"
     await db.commit()
     
     # Should fall back to FREE and raise 403
@@ -129,7 +129,7 @@ async def test_check_growth_tier_cache_invalid(auth_user):
     tenant.plan = PricingTier.GROWTH.value
     db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=tenant)))
     cache = MagicMock()
-    cache.get = AsyncMock(return_value="legacy-plan")
+    cache.get = AsyncMock(return_value="unknown-plan")
     cache.set = AsyncMock()
 
     with patch("app.shared.core.cache.get_cache_service", return_value=cache):

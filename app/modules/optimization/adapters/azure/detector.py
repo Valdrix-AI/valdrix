@@ -15,6 +15,18 @@ class AzureZombieDetector(BaseZombieDetector):
     Concrete implementation of ZombieDetector for Azure.
     Manages Azure SDK clients and plugin execution.
     """
+    ALLOWED_PLUGIN_CATEGORIES = {
+        "idle_azure_vms",
+        "idle_azure_gpu_vms",
+        "unattached_azure_disks",
+        "old_azure_snapshots",
+        "orphan_azure_ips",
+        "orphan_azure_nics",
+        "orphan_azure_nsgs",
+        "idle_azure_sql",
+        "idle_azure_aks",
+        "unused_azure_app_service_plans",
+    }
 
     def __init__(self, region: str = "global", credentials: Optional[Dict[str, Any]] = None, db: Optional[Any] = None, connection: Any = None):
         super().__init__(region, credentials, db, connection)
@@ -75,7 +87,11 @@ class AzureZombieDetector(BaseZombieDetector):
 
     def _initialize_plugins(self):
         """Register the standard suite of Azure detections."""
-        self.plugins = registry.get_plugins_for_provider("azure")
+        plugins = registry.get_plugins_for_provider("azure")
+        self.plugins = [p for p in plugins if p.category_key in self.ALLOWED_PLUGIN_CATEGORIES]
+        skipped = sorted({p.category_key for p in plugins if p.category_key not in self.ALLOWED_PLUGIN_CATEGORIES})
+        if skipped:
+            logger.warning("azure_detector_skipping_noncanonical_plugins", categories=skipped)
 
     async def _execute_plugin_scan(self, plugin: ZombiePlugin) -> List[Dict[str, Any]]:
         """

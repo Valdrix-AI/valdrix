@@ -14,7 +14,7 @@ def mock_settings():
         mock.return_value.ENCRYPTION_KEY = Fernet.generate_key().decode()
         mock.return_value.API_KEY_ENCRYPTION_KEY = Fernet.generate_key().decode()
         mock.return_value.PII_ENCRYPTION_KEY = Fernet.generate_key().decode()
-        mock.return_value.LEGACY_ENCRYPTION_KEYS = []
+        mock.return_value.ENCRYPTION_FALLBACK_KEYS = []
         mock.return_value.BLIND_INDEX_KEY = "blind-index-secret"
         yield mock.return_value
 
@@ -112,23 +112,23 @@ def test_decrypt_invalid_input():
     assert decrypt_string("") is None
     assert decrypt_string("invalid-base64-or-fernet") is None
 
-def test_legacy_keys_support(mock_settings):
-    legacy_key = Fernet.generate_key().decode()
-    mock_settings.LEGACY_ENCRYPTION_KEYS = [legacy_key]
+def test_fallback_keys_support(mock_settings):
+    fallback_key = Fernet.generate_key().decode()
+    mock_settings.ENCRYPTION_FALLBACK_KEYS = [fallback_key]
     
-    original = "legacy-secret"
+    original = "fallback-secret"
     # Encrypt with primary
     token = encrypt_string(original)
     
     # Decrypt should work
     assert decrypt_string(token) == original
     
-    # Encrypt with legacy (simulating old data)
-    fer_legacy = EncryptionKeyManager.create_fernet_for_key(legacy_key, EncryptionKeyManager.get_or_create_salt())
-    legacy_token = fer_legacy.encrypt(original.encode()).decode()
+    # Encrypt with fallback key (simulating previously encrypted data)
+    fer_fallback = EncryptionKeyManager.create_fernet_for_key(fallback_key, EncryptionKeyManager.get_or_create_salt())
+    fallback_token = fer_fallback.encrypt(original.encode()).decode()
     
-    # Decrypt with MultiFernet (which has legacy key) should work
-    assert decrypt_string(legacy_token) == original
+    # Decrypt with MultiFernet (which includes fallback key) should work
+    assert decrypt_string(fallback_token) == original
 
 def test_internal_fernet_helpers(mock_settings):
     from app.shared.core.security import _get_api_key_fernet, _get_pii_fernet, _get_multi_fernet
@@ -150,5 +150,5 @@ def test_kdf_invalid_salt():
 
 def test_create_multi_fernet_invalid_key():
     # If a key is invalid, it should be skipped but not crash the whole thing
-    mf = EncryptionKeyManager.create_multi_fernet("invalid-key", legacy_keys=("valid-but-not-really",))
+    mf = EncryptionKeyManager.create_multi_fernet("invalid-key", fallback_keys=("valid-but-not-really",))
     assert isinstance(mf, MultiFernet)

@@ -72,6 +72,46 @@ async def test_scan_for_tenant_success(mock_db, tenant_id):
                         mock_notify.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_scan_for_tenant_preserves_custom_categories_and_maps_provider_keys(mock_db, tenant_id):
+    service = ZombieService(mock_db)
+
+    conn = MagicMock(spec=AWSConnection)
+    conn.id = uuid4()
+    conn.tenant_id = tenant_id
+    conn.name = "Prod-AWS"
+
+    mock_res_aws = MagicMock()
+    mock_res_aws.scalars.return_value.all.return_value = [conn]
+    mock_res_empty = MagicMock()
+    mock_res_empty.scalars.return_value.all.return_value = []
+    mock_db.execute.side_effect = [mock_res_aws, mock_res_empty, mock_res_empty]
+
+    mock_detector = AsyncMock()
+    mock_detector.provider_name = "aws"
+    mock_detector.scan_all.return_value = {
+        "orphan_load_balancers": [{"id": "lb-1", "monthly_waste": 12.0}],
+        "orphan_azure_ips": [{"id": "pip-1", "monthly_waste": 3.0}],
+        "custom_category": [{"id": "x-1", "monthly_waste": 4.0}],
+    }
+
+    mock_rd = MagicMock()
+    mock_rd.get_enabled_regions = AsyncMock(return_value=["us-east-1"])
+
+    with patch("app.modules.optimization.domain.service.ZombieDetectorFactory.get_detector", return_value=mock_detector):
+        with patch("app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery", return_value=mock_rd):
+            with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE):
+                with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
+                    with patch("app.shared.core.notifications.NotificationDispatcher.notify_zombies"):
+                        result = await service.scan_for_tenant(tenant_id)
+
+    assert result["total_monthly_waste"] == 19.0
+    assert len(result["orphan_load_balancers"]) == 1
+    assert len(result["unused_elastic_ips"]) == 1
+    assert len(result["custom_category"]) == 1
+    assert result["orphan_load_balancers"][0]["resource_id"] == "lb-1"
+
+
 
 
 @pytest.mark.asyncio

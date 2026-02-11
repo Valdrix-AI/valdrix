@@ -157,8 +157,8 @@ def test_anthropic_provider_defaults():
                 temperature=0
             )
 
-def test_anthropic_provider_legacy_key():
-    """Test AnthropicProvider with legacy CLAUDE_API_KEY."""
+def test_anthropic_provider_claude_api_key_fallback():
+    """Test AnthropicProvider fallback to CLAUDE_API_KEY when ANTHROPIC_API_KEY is unset."""
     with patch("app.shared.llm.providers.anthropic.get_settings") as mock_settings:
         mock_settings.return_value.ANTHROPIC_API_KEY = None
         mock_settings.return_value.CLAUDE_API_KEY = VALID_KEY_ANTHROPIC

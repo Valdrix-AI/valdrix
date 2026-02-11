@@ -10,10 +10,10 @@ from app.modules.reporting.domain.pricing.service import PricingService
 logger = structlog.get_logger()
 
 @registry.register("aws")
-class LegacyEcrImagesPlugin(ZombiePlugin):
+class StaleEcrImagesPlugin(ZombiePlugin):
     @property
     def category_key(self) -> str:
-        return "legacy_ecr_images"
+        return "stale_ecr_images"
 
     async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
         zombies = []

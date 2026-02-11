@@ -108,7 +108,7 @@ class SlackService:
             text=f"Alert: {title}", # BE-NOTIF-5: Fallback text for notifications
             attachments=[
                 {
-                    "fallback": message, # BE-NOTIF-5: Legacy fallback for mobile
+                    "fallback": message, # BE-NOTIF-5: Slack fallback text for older clients
                     "color": color,
 
                     "blocks": [

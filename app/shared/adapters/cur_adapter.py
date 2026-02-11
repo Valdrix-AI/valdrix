@@ -270,7 +270,7 @@ class CURAdapter(CostAdapter):
         granularity: str = "DAILY"
     ) -> List[Dict[str, Any]]:
         """Standard interface for cost data."""
-        # Convert datetime to date for legacy get_daily_costs
+        # Convert datetime to date for get_daily_costs.
         s_date = start_date.date() if isinstance(start_date, datetime) else start_date
         e_date = end_date.date() if isinstance(end_date, datetime) else end_date
         return await self.get_daily_costs(s_date, e_date)
@@ -284,7 +284,7 @@ class CURAdapter(CostAdapter):
         """
         Stream cost data from CUR files.
         """
-        # Convert datetime to date for legacy _list_cur_files
+        # Convert datetime to date for _list_cur_files.
         s_date = start_date.date() if isinstance(start_date, datetime) else start_date
         e_date = end_date.date() if isinstance(end_date, datetime) else end_date
         

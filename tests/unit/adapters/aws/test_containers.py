@@ -1,25 +1,25 @@
 """
 Tests for AWS Containers Plugin (ECR)
 
-Tests the LegacyEcrImagesPlugin for detecting untagged ECR images.
+Tests the StaleEcrImagesPlugin for detecting untagged ECR images.
 """
 
 import pytest
 
-from app.modules.optimization.adapters.aws.plugins.containers import LegacyEcrImagesPlugin
+from app.modules.optimization.adapters.aws.plugins.containers import StaleEcrImagesPlugin
 
 
-class TestLegacyEcrImagesPlugin:
-    """Test LegacyEcrImagesPlugin functionality."""
+class TestStaleEcrImagesPlugin:
+    """Test StaleEcrImagesPlugin functionality."""
     
     @pytest.fixture
     def plugin(self):
-        """Create a LegacyEcrImagesPlugin instance."""
-        return LegacyEcrImagesPlugin()
+        """Create a StaleEcrImagesPlugin instance."""
+        return StaleEcrImagesPlugin()
     
     def test_category_key(self, plugin):
         """Test that category_key returns correct value."""
-        assert plugin.category_key == "legacy_ecr_images"
+        assert plugin.category_key == "stale_ecr_images"
     
     def test_plugin_inherits_from_zombie_plugin(self, plugin):
         """Test that plugin inherits from ZombiePlugin."""

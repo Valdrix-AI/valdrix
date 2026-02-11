@@ -75,9 +75,8 @@ def test_select_provider_waterfall_complex(mock_settings):
 
 def test_estimate_cost():
     # OpenAI default: input $0.15, output $0.60 per 1M (example)
-    # Price is 0 if not in PROVIDER_COSTS or default missing
-    # PROVIDER_COSTS is in pricing_data.py
-    with patch("app.shared.llm.factory.PROVIDER_COSTS", {"openai": {"default": MagicMock(input=0.15, output=0.60)}}):
+    # Price is 0 if provider or default pricing is missing.
+    with patch("app.shared.llm.factory.LLM_PRICING", {"openai": {"default": MagicMock(input=0.15, output=0.60)}}):
         cost = LLMFactory.estimate_cost("openai", 1_000_000, 1_000_000)
         assert cost == 0.75
     

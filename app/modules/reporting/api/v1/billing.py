@@ -126,9 +126,16 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)) -> List[Dict[str,
         config = TIER_CONFIG.get(tier)
         if config:
             price_cfg = config["price_usd"]
-            # Handle both legacy int and new dict formats
-            monthly = price_cfg["monthly"] if isinstance(price_cfg, dict) else price_cfg
-            annual = price_cfg["annual"] if isinstance(price_cfg, dict) else (price_cfg * 10) # Fallback 2 months free
+            if not isinstance(price_cfg, dict):
+                logger.error(
+                    "invalid_tier_price_config",
+                    tier=tier.value,
+                    expected_type="dict",
+                    actual_type=type(price_cfg).__name__,
+                )
+                continue
+            monthly = price_cfg["monthly"]
+            annual = price_cfg["annual"]
             
             public_plans.append({
                 "id": tier.value,

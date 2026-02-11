@@ -19,7 +19,7 @@ from app.modules.optimization.domain.aws_provider.plugins import (
     UnusedElasticIpsPlugin, IdleInstancesPlugin,
     OrphanLoadBalancersPlugin, UnderusedNatGatewaysPlugin,
     IdleRdsPlugin, ColdRedshiftPlugin,
-    IdleSageMakerPlugin, LegacyEcrImagesPlugin,
+    IdleSageMakerPlugin, StaleEcrImagesPlugin,
     IdleEksPlugin, IdleElastiCachePlugin, IdleSageMakerNotebooksPlugin,
     StoppedInstancesWithEbsPlugin, UnusedLambdaPlugin, OrphanVpcEndpointsPlugin
 )
@@ -69,7 +69,7 @@ class TestZombieDetectorInstantiation:
             UnusedElasticIpsPlugin, IdleInstancesPlugin,
             OrphanLoadBalancersPlugin, UnderusedNatGatewaysPlugin,
             IdleRdsPlugin, ColdRedshiftPlugin,
-            IdleSageMakerPlugin, LegacyEcrImagesPlugin,
+            IdleSageMakerPlugin, StaleEcrImagesPlugin,
             IdleEksPlugin, IdleElastiCachePlugin, IdleSageMakerNotebooksPlugin,
             StoppedInstancesWithEbsPlugin, UnusedLambdaPlugin, OrphanVpcEndpointsPlugin
         ]

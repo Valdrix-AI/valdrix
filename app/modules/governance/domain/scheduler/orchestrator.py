@@ -201,7 +201,7 @@ class SchedulerOrchestrator:
                     job_ids=[str(j.id) for j in stuck_jobs[:10]]
                 )
                 
-                # Update status to avoid re-detection (or could retry, but legacy review says alert & fail)
+                # Update status to avoid re-detection (policy decision: alert and fail instead of retry).
                 for job in stuck_jobs:
                     job.status = JobStatus.FAILED
                     job.error_message = "Stuck in PENDING for > 1 hour. Terminated by StuckJobDetector."
@@ -292,8 +292,8 @@ class SchedulerOrchestrator:
 
 class SchedulerService(SchedulerOrchestrator):
     """
-    Proxy class for backward compatibility. 
-    Inherits from refactored Orchestrator to maintain existing API.
+    Proxy class that exposes the scheduler API used by the app and admin routes.
+    Inherits orchestration logic from SchedulerOrchestrator.
     """
     
     def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
@@ -301,7 +301,7 @@ class SchedulerService(SchedulerOrchestrator):
         logger.info("scheduler_proxy_initialized", refactor_version="1.0-modular")
 
     async def daily_analysis_job(self) -> None:
-        """Legacy entry point, proxies to a full scan."""
+        """Run the daily full cohort scan sequence."""
         from .cohorts import TenantCohort
         # High value → Active → Dormant
         await self.cohort_analysis_job(TenantCohort.HIGH_VALUE)

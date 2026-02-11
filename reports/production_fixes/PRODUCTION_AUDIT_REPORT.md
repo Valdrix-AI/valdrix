@@ -233,13 +233,13 @@ CloudSentinel-AI exhibits **intelligent architecture patterns** with thoughtful 
 
 #### **🟠 HIGH: Key Rotation Not Tested**
 
-1. **Encryption Key Derivation Has Legacy Path**
+1. **Encryption Key Derivation Has Previous Path**
    - **Location:** [app/core/security.py](app/core/security.py#L15-L50)
-   - **Issue:** Code supports both PBKDF2 and legacy SHA256 derivation
-   - **Risk:** If legacy key is accidentally used for new encryptions, decryption fails for old data
+   - **Issue:** Code supports both PBKDF2 and fallback SHA256 derivation
+   - **Risk:** If fallback key is accidentally used for new encryptions, decryption fails for old data
    - **Recommended:**
-     - Test legacy key decryption explicitly in CI
-     - Never use legacy key for new encryptions
+     - Test fallback key decryption explicitly in CI
+     - Never use fallback key for new encryptions
      - Rotate all data to new key within 6 months
 
 2. **API Key Encryption Uses Same Master Key as PII**
@@ -919,7 +919,7 @@ async def cohort_analysis_job(self, target_cohort: TenantCohort):
 |---|---|---|---|
 | Over-engineered error sanitization | `app/core/exceptions.py` | MEDIUM | Regex is incomplete; real sanitization is harder |
 | Placeholder LLM prompt logic | `app/services/llm/analyzer.py` | HIGH | Fallback prompt is generic; production prompt might be missing |
-| Untested encryption paths | `app/core/security.py` | CRITICAL | Legacy PBKDF2 + SHA256 dual-path; no tests for both |
+| Untested encryption paths | `app/core/security.py` | CRITICAL | Fallback-key PBKDF2 + SHA256 dual-path; no tests for both |
 | Decorator stacking without validation | `app/api/v1/**/*.py` | MEDIUM | `@router.get()` + `@rate_limit()` + `@requires_role()` combination not tested |
 | Assumptions about async context | `app/services/scheduler/` | HIGH | Code assumes asyncio context without explicit checks |
 | Comment-to-code drift | Throughout | MEDIUM | Comments reference "Phase X" without corresponding code |

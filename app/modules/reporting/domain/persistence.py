@@ -22,6 +22,26 @@ class CostPersistenceService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _coerce_uuid(value: str | uuid.UUID, field_name: str) -> uuid.UUID:
+        """Normalize UUID inputs from API/schema layers into DB-safe UUID objects."""
+        if isinstance(value, uuid.UUID):
+            return value
+        try:
+            return uuid.UUID(str(value))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid UUID for {field_name}: {value}") from exc
+
+    @staticmethod
+    def _coerce_uuid_if_valid(value: str | uuid.UUID) -> str | uuid.UUID:
+        """Best-effort UUID coercion for mixed UUID/non-UUID call sites."""
+        if isinstance(value, uuid.UUID):
+            return value
+        try:
+            return uuid.UUID(str(value))
+        except (TypeError, ValueError):
+            return value
+
     async def save_summary(
         self, 
         summary: CloudUsageSummary, 
@@ -35,6 +55,8 @@ class CostPersistenceService:
         """
         records_saved = 0
         total_processed = len(summary.records)
+        tenant_uuid = self._coerce_uuid(summary.tenant_id, "tenant_id")
+        account_uuid = self._coerce_uuid(account_id, "account_id")
         
         # Batch size for database performance
         BATCH_SIZE = 500
@@ -54,14 +76,14 @@ class CostPersistenceService:
                 }
                 
                 values.append({
-                    "tenant_id": summary.tenant_id,
-                    "account_id": account_id,
+                    "tenant_id": tenant_uuid,
+                    "account_id": account_uuid,
                     "service": r.service or "Unknown",
                     "region": r.region or "Global",
                     "cost_usd": r.amount,
                     "amount_raw": r.amount_raw,
                     "currency": r.currency,
-                    "recorded_at": r.date.date(), # Legacy date column
+                    "recorded_at": r.date.date(), # Partition-aligned date column
                     "timestamp": r.date,           # New hourly/timestamp column
                     "usage_type": r.usage_type,
                     "is_preliminary": is_preliminary,
@@ -72,7 +94,7 @@ class CostPersistenceService:
             
             # BE-COST-2: Check for significant cost adjustments (>2%)
             if not is_preliminary:
-                await self._check_for_significant_adjustments(summary.tenant_id, account_id, values)
+                await self._check_for_significant_adjustments(tenant_uuid, account_uuid, values)
                 
             await self._bulk_upsert(values)
             records_saved += len(values)
@@ -81,8 +103,8 @@ class CostPersistenceService:
         await self.db.flush()
         
         logger.info("cost_persistence_success", 
-                    tenant_id=summary.tenant_id, 
-                    account_id=account_id, 
+                    tenant_id=str(tenant_uuid), 
+                    account_id=str(account_uuid), 
                     records=records_saved)
         
         return {"records_saved": records_saved}
@@ -100,11 +122,13 @@ class CostPersistenceService:
         records_saved = 0
         batch = []
         BATCH_SIZE = 500
+        tenant_uuid = self._coerce_uuid(tenant_id, "tenant_id")
+        account_uuid = self._coerce_uuid(account_id, "account_id")
 
         async for r in records:
             batch.append({
-                "tenant_id": tenant_id,
-                "account_id": account_id,
+                "tenant_id": tenant_uuid,
+                "account_id": account_uuid,
                 "service": r.get("service") or "Unknown",
                 "region": r.get("region") or "Global",
                 "cost_usd": r.get("cost_usd"),
@@ -125,8 +149,8 @@ class CostPersistenceService:
             records_saved += len(batch)
 
         logger.info("cost_stream_persistence_success", 
-                    tenant_id=tenant_id, 
-                    account_id=account_id, 
+                    tenant_id=str(tenant_uuid), 
+                    account_id=str(account_uuid), 
                     records=records_saved)
         
         return {"records_saved": records_saved}
@@ -144,7 +168,11 @@ class CostPersistenceService:
                     "cost_usd": stmt.excluded.cost_usd,
                     "amount_raw": stmt.excluded.amount_raw,
                     "currency": stmt.excluded.currency,
-                    "usage_type": stmt.excluded.usage_type
+                    "usage_type": stmt.excluded.usage_type,
+                    "is_preliminary": stmt.excluded.is_preliminary,
+                    "cost_status": stmt.excluded.cost_status,
+                    "reconciliation_run_id": stmt.excluded.reconciliation_run_id,
+                    "ingestion_metadata": stmt.excluded.ingestion_metadata,
                 }
             )
             await self.db.execute(stmt)
@@ -170,6 +198,14 @@ class CostPersistenceService:
                         existing.cost_usd = Decimal(str(val["cost_usd"]))
                     if val.get("amount_raw") is not None:
                         existing.amount_raw = Decimal(str(val["amount_raw"]))
+                    if val.get("currency") is not None:
+                        existing.currency = str(val["currency"])
+                    if val.get("usage_type") is not None:
+                        existing.usage_type = val["usage_type"]
+                    existing.is_preliminary = bool(val.get("is_preliminary", existing.is_preliminary))
+                    existing.cost_status = str(val.get("cost_status") or existing.cost_status)
+                    existing.reconciliation_run_id = val.get("reconciliation_run_id")
+                    existing.ingestion_metadata = val.get("ingestion_metadata")
                 else:
                     from app.shared.core.async_utils import maybe_await
                     await maybe_await(self.db.add(CostRecord(**val)))
@@ -178,8 +214,8 @@ class CostPersistenceService:
 
     async def _check_for_significant_adjustments(
         self, 
-        tenant_id: str, 
-        account_id: str, 
+        tenant_id: uuid.UUID, 
+        account_id: uuid.UUID, 
         new_records: List[Dict[str, Any]]
     ):
         """
@@ -260,9 +296,11 @@ class CostPersistenceService:
 
     async def clear_range(self, tenant_id: str, account_id: str, start_date: Any, end_date: Any):
         """Clears existing records for a tenant/account range to allow re-ingestion."""
+        tenant_scoped = self._coerce_uuid_if_valid(tenant_id)
+        account_scoped = self._coerce_uuid_if_valid(account_id)
         stmt = delete(CostRecord).where(
-            CostRecord.tenant_id == tenant_id,
-            CostRecord.account_id == account_id,
+            CostRecord.tenant_id == tenant_scoped,
+            CostRecord.account_id == account_scoped,
             CostRecord.timestamp >= start_date,
             CostRecord.timestamp <= end_date
         )
@@ -318,7 +356,7 @@ class CostPersistenceService:
         )
 
         if tenant_id:
-            stmt = stmt.where(CostRecord.tenant_id == tenant_id)
+            stmt = stmt.where(CostRecord.tenant_id == self._coerce_uuid_if_valid(tenant_id))
         
         result = await self.db.execute(stmt)
         await self.db.flush()

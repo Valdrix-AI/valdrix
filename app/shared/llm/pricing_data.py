@@ -7,7 +7,7 @@ logger = structlog.get_logger()
 class ProviderCost(dict):
     """
     Provider cost metadata. 
-    Inherits from dict for backward compatibility with legacy tests 
+    Inherits from dict for direct mapping-style access
     and dictionary-style access pricing["input"].
     """
     def __init__(self, input: float, output: float, free_tier_tokens: int = 0):
@@ -41,9 +41,6 @@ LLM_PRICING: Dict[str, Dict[str, Any]] = {
         "default": ProviderCost(input=3.0, output=15.0)
     }
 }
-
-# Alias for backward compatibility
-PROVIDER_COSTS = LLM_PRICING
 
 def _normalize_key(value: Optional[str]) -> Optional[str]:
     if value is None:

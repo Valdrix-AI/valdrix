@@ -16,7 +16,7 @@ def mock_settings():
         mock.return_value.API_KEY_ENCRYPTION_KEY = None
         mock.return_value.PII_ENCRYPTION_KEY = None
         mock.return_value.BLIND_INDEX_KEY = "blind-index-key-for-testing"
-        mock.return_value.LEGACY_ENCRYPTION_KEYS = []
+        mock.return_value.ENCRYPTION_FALLBACK_KEYS = []
         yield mock
 
 @pytest.fixture

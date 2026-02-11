@@ -9,7 +9,7 @@ class DummySettings:
     ENCRYPTION_KEY = None
     API_KEY_ENCRYPTION_KEY = None
     PII_ENCRYPTION_KEY = None
-    LEGACY_ENCRYPTION_KEYS = []
+    ENCRYPTION_FALLBACK_KEYS = []
     BLIND_INDEX_KEY = None
     TESTING = True
     ENVIRONMENT = "development"
@@ -19,7 +19,7 @@ class DummyProdSettings:
     ENCRYPTION_KEY = "prod-encryption-key-32-bytes-minimum"
     API_KEY_ENCRYPTION_KEY = None
     PII_ENCRYPTION_KEY = None
-    LEGACY_ENCRYPTION_KEYS = []
+    ENCRYPTION_FALLBACK_KEYS = []
     BLIND_INDEX_KEY = None
     TESTING = False
     ENVIRONMENT = "production"

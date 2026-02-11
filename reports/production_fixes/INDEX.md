@@ -385,7 +385,7 @@ Issue: Scheduler still has deadlocks
 
 Issue: Old encrypted data won't decrypt
   See: PRODUCTION_FIXES_SUMMARY.md Troubleshooting Section
-  Solution: Verify KDF_SALT, check legacy keys
+  Solution: Verify KDF_SALT, check fallback keys
 
 Reference: PRODUCTION_FIXES_SUMMARY.md Section 10 (Troubleshooting)
 """
@@ -464,7 +464,7 @@ Fix #5 (Job Isolation):
 
 Fix #6 (Encryption Salt):
   ✓ No hardcoded salt in source code
-  ✓ Old data still decrypts with legacy keys
+  ✓ Old data still decrypts with fallback keys
   ✓ KDF_SALT loaded from environment
   ✓ All encryptions use random salt
 

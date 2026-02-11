@@ -16,21 +16,19 @@ Requirements:
 
 import hashlib
 import hmac
-import httpx
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, Any
 from enum import Enum
+from typing import Any, Dict, Optional
 from uuid import UUID
-from sqlalchemy import select, String, DateTime, ForeignKey, Integer, Uuid
-# from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+import httpx
 import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.pricing import TenantSubscription
+from app.shared.core.config import get_settings
 from app.shared.core.pricing import PricingTier
 from app.shared.core.security import encrypt_string, decrypt_string
-
-from app.shared.db.base import Base
-from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 settings = get_settings()
@@ -51,10 +49,6 @@ class SubscriptionStatus(str, Enum):
     ATTENTION = "attention"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
-
-
-from app.models.pricing import TenantSubscription
-
 
 class PaystackClient:
     """Async wrapper for Paystack operations."""
@@ -155,13 +149,34 @@ class BillingService:
         
         for tier, config in TIER_CONFIG.items():
             kobo_config = config.get("paystack_amount_kobo")
-            if isinstance(kobo_config, dict):
-                self.plan_amounts[tier] = kobo_config.get("monthly", 0)
-                self.annual_plan_amounts[tier] = kobo_config.get("annual", 0)
-            elif kobo_config:
-                # Legacy fallback
-                self.plan_amounts[tier] = kobo_config
-                self.annual_plan_amounts[tier] = kobo_config * 10
+            if tier in {PricingTier.FREE, PricingTier.TRIAL} and kobo_config is None:
+                continue
+            # Enterprise/custom tiers may not have fixed Paystack amounts.
+            if kobo_config is None:
+                logger.warning(
+                    "paystack_amount_kobo_missing_for_tier",
+                    tier=tier.value,
+                )
+                continue
+            if not isinstance(kobo_config, dict):
+                logger.warning(
+                    "paystack_amount_kobo_invalid_for_tier",
+                    tier=tier.value,
+                    value_type=type(kobo_config).__name__,
+                )
+                continue
+            monthly = kobo_config.get("monthly")
+            annual = kobo_config.get("annual")
+            if not isinstance(monthly, (int, float)) or not isinstance(annual, (int, float)):
+                logger.warning(
+                    "paystack_amount_kobo_values_invalid_for_tier",
+                    tier=tier.value,
+                    monthly=monthly,
+                    annual=annual,
+                )
+                continue
+            self.plan_amounts[tier] = int(monthly)
+            self.annual_plan_amounts[tier] = int(annual)
 
     async def create_checkout_session(
         self,

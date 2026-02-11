@@ -3,7 +3,7 @@ from .compute import UnusedElasticIpsPlugin, IdleInstancesPlugin
 from .network import OrphanLoadBalancersPlugin, UnderusedNatGatewaysPlugin
 from .database import IdleRdsPlugin, ColdRedshiftPlugin
 from .analytics import IdleSageMakerPlugin
-from .containers import LegacyEcrImagesPlugin
+from .containers import StaleEcrImagesPlugin
 # New high-value and infrastructure plugins
 from .high_value import IdleEksPlugin, IdleElastiCachePlugin, IdleSageMakerNotebooksPlugin
 from .infrastructure import StoppedInstancesWithEbsPlugin, UnusedLambdaPlugin, OrphanVpcEndpointsPlugin
@@ -20,7 +20,7 @@ __all__ = [
     # Analytics
     "IdleSageMakerPlugin",
     # Containers
-    "LegacyEcrImagesPlugin",
+    "StaleEcrImagesPlugin",
     # High-Value (NEW)
     "IdleEksPlugin", "IdleElastiCachePlugin", "IdleSageMakerNotebooksPlugin",
     # Infrastructure (NEW)

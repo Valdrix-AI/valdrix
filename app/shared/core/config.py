@@ -235,7 +235,7 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: Optional[str] = None
     PII_ENCRYPTION_KEY: Optional[str] = None
     API_KEY_ENCRYPTION_KEY: Optional[str] = None
-    LEGACY_ENCRYPTION_KEYS: list[str] = []
+    ENCRYPTION_FALLBACK_KEYS: list[str] = []
     BLIND_INDEX_KEY: Optional[str] = None # SEC-06: Separation of keys
     
     # KDF Settings for password-to-key derivation (SEC-06)

@@ -64,27 +64,70 @@ class ZombieService(BaseService):
             "old_snapshots": [],
             "unused_elastic_ips": [],
             "idle_instances": [],
-            "load_balancer": [],
-            "rds": [],
-            "nat_gateway": [],
+            "orphan_load_balancers": [],
+            "idle_rds_databases": [],
+            "underused_nat_gateways": [],
             "idle_s3_buckets": [],
-            "legacy_ecr_images": [],
+            "stale_ecr_images": [],
             "idle_sagemaker_endpoints": [],
             "cold_redshift_clusters": [],
         }
         all_zombies["scanned_connections"] = len(all_connections)
         total_waste = 0.0
 
-        # Mapping cloud-specific keys to frontend category keys
+        # Mapping provider/plugin category keys to canonical frontend keys.
         category_mapping = {
-            "unattached_disks": "unattached_volumes",  # Azure/GCP Disk -> Volume
-            "orphaned_ips": "unused_elastic_ips",     # Azure/GCP IP -> EIP
+            "unattached_azure_disks": "unattached_volumes",
+            "unattached_gcp_disks": "unattached_volumes",
+            "unattached_disks": "unattached_volumes",
+            "orphan_azure_ips": "unused_elastic_ips",
+            "orphan_gcp_ips": "unused_elastic_ips",
+            "orphaned_ips": "unused_elastic_ips",
+            "idle_azure_vms": "idle_instances",
+            "idle_gcp_vms": "idle_instances",
+            "old_azure_snapshots": "old_snapshots",
+            "old_gcp_snapshots": "old_snapshots",
+            "idle_azure_sql": "idle_rds_databases",
+            "idle_gcp_cloud_sql": "idle_rds_databases",
         }
 
         from app.shared.core.pricing import get_tenant_tier
         tier = await get_tenant_tier(tenant_id, self.db)
         has_precision = is_feature_enabled(tier, FeatureFlag.PRECISION_DISCOVERY)
         has_attribution = is_feature_enabled(tier, FeatureFlag.OWNER_ATTRIBUTION)
+
+        def merge_scan_results(
+            provider_name: str,
+            connection_id: str,
+            connection_name: str,
+            scan_results: Dict[str, Any],
+            region_override: Optional[str] = None,
+        ) -> None:
+            nonlocal total_waste
+            for category, items in scan_results.items():
+                if not isinstance(items, list):
+                    continue
+                ui_key = category_mapping.get(category, category)
+                bucket = all_zombies.setdefault(ui_key, [])
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    res_id = item.get("resource_id") or item.get("id")
+                    cost = float(item.get("monthly_cost") or item.get("monthly_waste") or 0)
+                    normalized_region = region_override or item.get("region") or item.get("zone")
+                    item.update({
+                        "provider": provider_name,
+                        "connection_id": connection_id,
+                        "connection_name": connection_name,
+                        "resource_id": res_id,
+                        "monthly_cost": cost,
+                        "is_gpu": bool(item.get("is_gpu", False)) if has_precision else "Upgrade to Growth",
+                        "owner": item.get("owner", "unknown") if has_attribution else "Upgrade to Growth",
+                    })
+                    if normalized_region:
+                        item["region"] = normalized_region
+                    bucket.append(item)
+                    total_waste += cost
 
         async def run_scan(conn: Union[AWSConnection, AzureConnection, GCPConnection]) -> None:
             nonlocal total_waste
@@ -104,26 +147,13 @@ class ZombieService(BaseService):
                         try:
                             regional_detector = ZombieDetectorFactory.get_detector(conn, region=reg, db=self.db)
                             reg_results = await regional_detector.scan_all(on_category_complete=on_category_complete)
-                            
-                            for category, items in reg_results.items():
-                                ui_key = category_mapping.get(category, category)
-                                if ui_key in all_zombies:
-                                    for item in items:
-                                        res_id = item.get("resource_id") or item.get("id")
-                                        cost = float(item.get("monthly_cost") or item.get("monthly_waste") or 0)
-                                        
-                                        item.update({
-                                            "provider": regional_detector.provider_name,
-                                            "region": reg,
-                                            "connection_id": str(conn.id),
-                                            "connection_name": getattr(conn, "name", "Other"),
-                                            "resource_id": res_id,
-                                            "monthly_cost": cost,
-                                            "is_gpu": bool(item.get("is_gpu", False)) if has_precision else "Upgrade to Growth",
-                                            "owner": item.get("owner", "unknown") if has_attribution else "Upgrade to Growth"
-                                        })
-                                        all_zombies[ui_key].append(item)
-                                        total_waste += cost
+                            merge_scan_results(
+                                provider_name=regional_detector.provider_name,
+                                connection_id=str(conn.id),
+                                connection_name=getattr(conn, "name", "Other"),
+                                scan_results=reg_results,
+                                region_override=reg,
+                            )
                         except Exception as e:
                             logger.error("regional_scan_failed", region=reg, error=str(e))
 
@@ -132,25 +162,12 @@ class ZombieService(BaseService):
                     # Generic logic for Azure/GCP (global for now)
                     detector = ZombieDetectorFactory.get_detector(conn, region="global", db=self.db)
                     results = await detector.scan_all(on_category_complete=on_category_complete)
-                    
-                    for category, items in results.items():
-                        ui_key = category_mapping.get(category, category)
-                        if ui_key in all_zombies:
-                            for item in items:
-                                res_id = item.get("resource_id") or item.get("id")
-                                cost = float(item.get("monthly_cost") or item.get("monthly_waste") or 0)
-                                
-                                item.update({
-                                    "provider": detector.provider_name,
-                                    "connection_id": str(conn.id),
-                                    "connection_name": getattr(conn, "name", "Other"),
-                                    "resource_id": res_id,
-                                    "monthly_cost": cost,
-                                    "is_gpu": bool(item.get("is_gpu", False)) if has_precision else "Upgrade to Growth",
-                                    "owner": item.get("owner", "unknown") if has_attribution else "Upgrade to Growth"
-                                })
-                                all_zombies[ui_key].append(item)
-                                total_waste += cost
+                    merge_scan_results(
+                        provider_name=detector.provider_name,
+                        connection_id=str(conn.id),
+                        connection_name=getattr(conn, "name", "Other"),
+                        scan_results=results,
+                    )
             except Exception as e:
                 logger.error("scan_provider_failed", error=str(e), provider=type(conn).__name__)
 

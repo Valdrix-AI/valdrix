@@ -58,7 +58,7 @@ class UnifiedDiscoveryService:
                 discovered_at=datetime.now().isoformat()
             )
 
-        # Phase 2: Fallback to Service-Specific Scans (Legacy/Safety)
+        # Phase 2: Fallback to service-specific scans when global search is unavailable.
         logger.warning("aws_discovery_global_search_unavailable_fallback", 
                        account=connection.aws_account_id)
         

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.shared.llm.pricing_data import ProviderCost, LLM_PRICING, PROVIDER_COSTS, refresh_llm_pricing
+from app.shared.llm.pricing_data import ProviderCost, LLM_PRICING, refresh_llm_pricing
 
 class TestProviderCost:
     def test_provider_cost_initialization(self):
@@ -37,9 +37,10 @@ class TestLLMPricing:
             assert isinstance(LLM_PRICING[provider], dict)
             assert "default" in LLM_PRICING[provider]
 
-    def test_provider_costs_alias(self):
-        """Test PROVIDER_COSTS is an alias for LLM_PRICING."""
-        assert PROVIDER_COSTS is LLM_PRICING
+    def test_openai_default_pricing_exists(self):
+        """Canonical pricing table should include default provider costs."""
+        assert "openai" in LLM_PRICING
+        assert "default" in LLM_PRICING["openai"]
 
     def test_pricing_values_are_provider_cost(self):
         """Test that pricing entries are instances of ProviderCost (or at least dicts)."""

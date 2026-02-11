@@ -287,9 +287,9 @@ class TestPluginRegistry:
         from app.modules.optimization.domain.registry import registry
         
         # Import plugins to trigger registration
-        import app.modules.optimization.adapters.azure.plugins.unattached_disks  # noqa
-        import app.modules.optimization.adapters.azure.plugins.orphaned_ips  # noqa
-        import app.modules.optimization.adapters.azure.plugins.orphaned_images  # noqa
+        import app.modules.optimization.adapters.azure.plugins.storage  # noqa
+        import app.modules.optimization.adapters.azure.plugins.network  # noqa
+        import app.modules.optimization.adapters.azure.plugins.compute  # noqa
         
         azure_plugins = registry.get_plugins_for_provider("azure")
         assert len(azure_plugins) >= 3
@@ -299,9 +299,9 @@ class TestPluginRegistry:
         from app.modules.optimization.domain.registry import registry
         
         # Import plugins to trigger registration
-        import app.modules.optimization.adapters.gcp.plugins.unattached_disks  # noqa
-        import app.modules.optimization.adapters.gcp.plugins.unused_ips  # noqa
-        import app.modules.optimization.adapters.gcp.plugins.machine_images  # noqa
+        import app.modules.optimization.adapters.gcp.plugins.storage  # noqa
+        import app.modules.optimization.adapters.gcp.plugins.network  # noqa
+        import app.modules.optimization.adapters.gcp.plugins.compute  # noqa
         
         gcp_plugins = registry.get_plugins_for_provider("gcp")
         assert len(gcp_plugins) >= 3
