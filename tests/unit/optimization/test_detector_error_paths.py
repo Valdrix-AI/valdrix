@@ -19,6 +19,24 @@ async def test_azure_detector_missing_credentials_returns_empty():
     plugin.scan.assert_not_called()
 
 
+def test_azure_detector_initialization_skips_noncanonical_plugins():
+    class Plugin:
+        def __init__(self, category_key: str):
+            self._category_key = category_key
+
+        @property
+        def category_key(self) -> str:
+            return self._category_key
+
+    with patch(
+        "app.modules.optimization.adapters.azure.detector.registry.get_plugins_for_provider",
+        return_value=[Plugin("idle_vms"), Plugin("idle_azure_vms")],
+    ):
+        detector = AzureZombieDetector(region="eastus", credentials={})
+        detector._initialize_plugins()
+    assert [p.category_key for p in detector.plugins] == ["idle_azure_vms"]
+
+
 @pytest.mark.asyncio
 async def test_azure_detector_handles_none_results():
     creds = {
@@ -127,6 +145,23 @@ async def test_gcp_detector_invalid_service_account_json_blocks_scan():
     results = await detector._execute_plugin_scan(plugin)
     assert results == []
     plugin.scan.assert_not_called()
+
+def test_gcp_detector_initialization_skips_noncanonical_plugins():
+    class Plugin:
+        def __init__(self, category_key: str):
+            self._category_key = category_key
+
+        @property
+        def category_key(self) -> str:
+            return self._category_key
+
+    with patch(
+        "app.modules.optimization.adapters.gcp.detector.registry.get_plugins_for_provider",
+        return_value=[Plugin("idle_instances"), Plugin("idle_gcp_vms")],
+    ):
+        detector = GCPZombieDetector(region="us-central1-a", credentials={"project_id": "proj"})
+        detector._initialize_plugins()
+    assert [p.category_key for p in detector.plugins] == ["idle_gcp_vms"]
 
 
 @pytest.mark.asyncio

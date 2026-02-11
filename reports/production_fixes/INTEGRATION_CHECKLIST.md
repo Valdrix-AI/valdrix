@@ -427,7 +427,7 @@ RUN ALL TESTS TO VALIDATE FIXES:
         [ ] test_salt_generation_is_random
         [ ] test_salt_is_never_hardcoded
         [ ] test_encrypt_decrypt_roundtrip
-        [ ] test_decrypt_with_legacy_key
+        [ ] test_decrypt_with_fallback_key
         [ ] test_different_salt_produces_different_key
         [ ] test_kdf_iterations_exceeds_minimum
 
@@ -550,7 +550,7 @@ DATABASE:
   [ ] Encryption key version columns added
   [ ] All indexes created
   [ ] Migration tested (up and down)
-  [ ] Old data still decrypts with legacy keys
+  [ ] Old data still decrypts with fallback keys
 
 CONFIGURATION:
   [ ] KDF_SALT environment variable set
@@ -650,7 +650,7 @@ RISK ASSESSMENT:
   
   Fix #6 (Encryption Salt): MEDIUM
     - Security-critical
-    - Old data must decrypt with legacy key
+    - Old data must decrypt with fallback key
     - Requires secure storage of salt
 
 DEPLOYMENT READINESS:

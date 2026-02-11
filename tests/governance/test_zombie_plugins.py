@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import aioboto3
 
 from app.modules.optimization.adapters.aws.plugins.network import UnderusedNatGatewaysPlugin
-from app.modules.optimization.adapters.aws.plugins.containers import LegacyEcrImagesPlugin
+from app.modules.optimization.adapters.aws.plugins.containers import StaleEcrImagesPlugin
 
 @pytest.mark.asyncio
 async def test_nat_gateway_plugin_idle():
@@ -57,8 +57,8 @@ async def test_nat_gateway_plugin_idle():
         assert results[0]["resource_id"] == "nat-123"
 
 @pytest.mark.asyncio
-async def test_ecr_legacy_images_plugin():
-    plugin = LegacyEcrImagesPlugin()
+async def test_stale_ecr_images_plugin():
+    plugin = StaleEcrImagesPlugin()
     session = MagicMock(spec=aioboto3.Session())
     
     # Mock ECR client

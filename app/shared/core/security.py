@@ -26,7 +26,7 @@ class EncryptionKeyManager:
     Features:
     - Random salt per environment (not hardcoded)
     - Key versioning for rotation
-    - Backward compatibility with legacy data
+    - Decryption support with fallback keys during rotation
     - Secure KDF with PBKDF2-SHA256
     """
     
@@ -99,7 +99,7 @@ class EncryptionKeyManager:
     @lru_cache(maxsize=16)
     def create_multi_fernet(
         primary_key: str,
-        legacy_keys: Optional[tuple] = None, # Changed list to tuple for hashing
+        fallback_keys: Optional[tuple] = None,
         salt: str = None
     ) -> MultiFernet:
         """Create MultiFernet for key rotation support."""
@@ -107,8 +107,8 @@ class EncryptionKeyManager:
             salt = EncryptionKeyManager.get_or_create_salt()
         
         all_keys = [primary_key]
-        if legacy_keys:
-            all_keys.extend(legacy_keys)
+        if fallback_keys:
+            all_keys.extend(fallback_keys)
         
         fernet_instances = []
         
@@ -134,22 +134,22 @@ class EncryptionKeyManager:
 
 def _get_api_key_fernet() -> MultiFernet:
     settings = get_settings()
-    legacy = tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
+    fallback_keys = tuple(settings.ENCRYPTION_FALLBACK_KEYS) if settings.ENCRYPTION_FALLBACK_KEYS else None
 
     return _get_multi_fernet(
         settings.API_KEY_ENCRYPTION_KEY or settings.ENCRYPTION_KEY,
-        legacy
+        fallback_keys
     )
 
 def _get_pii_fernet() -> MultiFernet:
     settings = get_settings()
-    legacy = tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
+    fallback_keys = tuple(settings.ENCRYPTION_FALLBACK_KEYS) if settings.ENCRYPTION_FALLBACK_KEYS else None
     return _get_multi_fernet(
         settings.PII_ENCRYPTION_KEY or settings.ENCRYPTION_KEY,
-        legacy
+        fallback_keys
     )
 
-def _get_multi_fernet(primary_key: Optional[str], legacy_keys: Optional[Union[List[str], tuple]] = None) -> MultiFernet:
+def _get_multi_fernet(primary_key: Optional[str], fallback_keys: Optional[Union[List[str], tuple]] = None) -> MultiFernet:
     """Returns a MultiFernet instance for secret rotation."""
     if not primary_key:
         settings = get_settings()
@@ -166,11 +166,11 @@ def _get_multi_fernet(primary_key: Optional[str], legacy_keys: Optional[Union[Li
             raise ValueError("ENCRYPTION_KEY must be set for secure encryption.")
 
     # Ensure list is converted to tuple for lru_cache hashing
-    legacy_tuple = tuple(legacy_keys) if legacy_keys and isinstance(legacy_keys, list) else legacy_keys
+    fallback_tuple = tuple(fallback_keys) if fallback_keys and isinstance(fallback_keys, list) else fallback_keys
 
     return EncryptionKeyManager.create_multi_fernet(
         primary_key=primary_key,
-        legacy_keys=legacy_tuple
+        fallback_keys=fallback_tuple
     )
 
 def encrypt_string(value: str, context: str = "generic") -> str:
@@ -191,7 +191,7 @@ def encrypt_string(value: str, context: str = "generic") -> str:
         
     fernet = _get_multi_fernet(
         primary_key,
-        tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
+        tuple(settings.ENCRYPTION_FALLBACK_KEYS) if settings.ENCRYPTION_FALLBACK_KEYS else None
     )
     
     return fernet.encrypt(value.encode()).decode()
@@ -215,7 +215,7 @@ def decrypt_string(value: str, context: str = "generic") -> str:
             
         fernet = _get_multi_fernet(
             primary_key,
-            tuple(settings.LEGACY_ENCRYPTION_KEYS) if settings.LEGACY_ENCRYPTION_KEYS else None
+            tuple(settings.ENCRYPTION_FALLBACK_KEYS) if settings.ENCRYPTION_FALLBACK_KEYS else None
         )
             
         return fernet.decrypt(value.encode()).decode()

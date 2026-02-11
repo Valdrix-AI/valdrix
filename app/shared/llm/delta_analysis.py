@@ -16,11 +16,13 @@ Usage:
 import json
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from datetime import date
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from uuid import UUID
 import structlog
 
 from app.shared.core.cache import CacheService, get_cache_service
+from app.schemas.costs import CloudUsageSummary, CostRecord as UsageCostRecord
 
 logger = structlog.get_logger()
 
@@ -343,7 +345,7 @@ async def analyze_with_delta(
     previous_costs: Optional[List[Dict[str, Any]]] = None,
     db = None,
     force_refresh: bool = False
-) -> str:
+) -> Dict[str, Any]:
     """
     Convenience function to perform delta-optimized analysis.
     
@@ -353,7 +355,7 @@ async def analyze_with_delta(
     4. Falls back to full analysis if no previous data
     
     Returns:
-        JSON string with analysis results
+        Parsed analysis result dictionary.
     """
     cache = get_cache_service()
     delta_service = DeltaAnalysisService(cache)
@@ -363,7 +365,16 @@ async def analyze_with_delta(
         cached = await cache.get_analysis(tenant_id)
         if cached:
             logger.info("delta_analysis_cache_hit", tenant_id=str(tenant_id))
-            return json.dumps(cached)
+            if isinstance(cached, dict):
+                return cached
+            if isinstance(cached, str):
+                try:
+                    parsed_cached = json.loads(cached)
+                    if isinstance(parsed_cached, dict):
+                        return parsed_cached
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return {"raw_analysis": str(cached)}
     
     # Compute delta
     delta = await delta_service.compute_delta(
@@ -390,7 +401,7 @@ async def analyze_with_delta(
             "recommendations": []
         }
         await cache.set_analysis(tenant_id, result)
-        return json.dumps(result)
+        return result
     
     # Run LLM analysis on delta data only
     logger.info(
@@ -399,15 +410,54 @@ async def analyze_with_delta(
         significant_changes=delta.significant_changes_count
     )
     
-    # Pass the optimized delta data to analyzer
     delta_prompt_data = delta.as_llm_prompt_data()
-    
-    # Use the analyzer with delta data
+    delta_summary = _build_delta_usage_summary(tenant_id, delta, delta_prompt_data)
+
     result = await analyzer.analyze(
-        cost_data=[delta_prompt_data],  # Much smaller than 30-day data
+        usage_summary=delta_summary,
         tenant_id=tenant_id,
         db=db,
         force_refresh=True  # We're passing processed delta, not raw data
     )
-    
-    return result
+    if isinstance(result, dict):
+        return result
+    if isinstance(result, str):
+        try:
+            parsed = json.loads(result)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {"raw_analysis": str(result)}
+
+
+def _build_delta_usage_summary(
+    tenant_id: UUID,
+    delta: DeltaAnalysisResult,
+    delta_prompt_data: Dict[str, Any],
+) -> CloudUsageSummary:
+    now = datetime.now(timezone.utc)
+    raw_total_current = getattr(delta, "total_current", 0.0)
+    try:
+        total_current_value = float(raw_total_current)
+    except (TypeError, ValueError):
+        total_current_value = 0.0
+    total_current = Decimal(str(max(total_current_value, 0.0)))
+    records = [
+        UsageCostRecord(
+            date=now,
+            amount=total_current,
+            service="DeltaAggregate",
+            region="global",
+            usage_type="delta",
+        )
+    ]
+    return CloudUsageSummary(
+        tenant_id=str(tenant_id),
+        provider="multi",
+        start_date=now.date(),
+        end_date=now.date(),
+        total_cost=total_current,
+        records=records,
+        metadata={"delta_payload": delta_prompt_data},
+    )

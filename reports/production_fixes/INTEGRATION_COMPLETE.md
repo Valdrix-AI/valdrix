@@ -68,7 +68,7 @@ All 6 critical production fixes have been **integrated into existing files** and
   1. **config.py**: 
      - KDF_SALT: Empty by default (requires environment variable)
      - Added validation in production (line 41-43)
-     - LEGACY_ENCRYPTION_KEYS for key rotation
+     - ENCRYPTION_FALLBACK_KEYS for key rotation
   
   2. **security.py**: 
      - Imports from `security_production` module (lines 8-15)
@@ -97,7 +97,7 @@ All 6 critical production fixes have been **integrated into existing files** and
 ```
 ✅ app/core/config.py
    - Added KDF_SALT validation (empty, requires env var in production)
-   - Added LEGACY_ENCRYPTION_KEYS support
+   - Added ENCRYPTION_FALLBACK_KEYS support
    
 ✅ app/core/security.py
    - Added imports from security_production module

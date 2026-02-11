@@ -10,11 +10,24 @@ from app.modules.optimization.domain.registry import registry
 import app.modules.optimization.adapters.gcp.plugins  # noqa
 
 logger = structlog.get_logger()
+
+
 class GCPZombieDetector(BaseZombieDetector):
     """
     Concrete implementation of ZombieDetector for GCP.
     Manages GCP SDK clients and plugin execution.
     """
+    ALLOWED_PLUGIN_CATEGORIES = {
+        "idle_gcp_vms",
+        "idle_gcp_gpu_instances",
+        "unattached_gcp_disks",
+        "old_gcp_snapshots",
+        "orphan_gcp_ips",
+        "idle_gcp_cloud_sql",
+        "empty_gke_clusters",
+        "idle_cloud_run",
+        "idle_cloud_functions",
+    }
 
     def __init__(self, region: str = "us-central1-a", credentials: Optional[Dict[str, Any]] = None, db: Optional[Any] = None, connection: Any = None):
         # region for GCP is usually a zone like 'us-central1-a'
@@ -59,7 +72,11 @@ class GCPZombieDetector(BaseZombieDetector):
 
     def _initialize_plugins(self):
         """Register the standard suite of GCP detections."""
-        self.plugins = registry.get_plugins_for_provider("gcp")
+        plugins = registry.get_plugins_for_provider("gcp")
+        self.plugins = [p for p in plugins if p.category_key in self.ALLOWED_PLUGIN_CATEGORIES]
+        skipped = sorted({p.category_key for p in plugins if p.category_key not in self.ALLOWED_PLUGIN_CATEGORIES})
+        if skipped:
+            logger.warning("gcp_detector_skipping_noncanonical_plugins", categories=skipped)
 
     async def _execute_plugin_scan(self, plugin: ZombiePlugin) -> List[Dict[str, Any]]:
         """

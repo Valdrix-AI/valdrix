@@ -1,6 +1,4 @@
 import pytest
-from typing import Dict
-import json
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 from datetime import date
@@ -143,8 +141,7 @@ class TestDeltaAnalysisExhaustive:
         mock_cache.get_analysis = AsyncMock(return_value={"status": "cached"})
         
         with patch("app.shared.llm.delta_analysis.get_cache_service", return_value=mock_cache):
-            result_str = await analyze_with_delta(MagicMock(), uuid4(), [])
-            result = json.loads(result_str)
+            result = await analyze_with_delta(MagicMock(), uuid4(), [])
             assert result["status"] == "cached"
 
     @pytest.mark.asyncio
@@ -163,8 +160,7 @@ class TestDeltaAnalysisExhaustive:
         with patch("app.shared.llm.delta_analysis.get_cache_service", return_value=mock_cache), \
              patch.object(DeltaAnalysisService, "compute_delta", AsyncMock(return_value=mock_res)):
             
-            result_str = await analyze_with_delta(MagicMock(), uuid4(), [])
-            result = json.loads(result_str)
+            result = await analyze_with_delta(MagicMock(), uuid4(), [])
             
             assert result["status"] == "no_significant_changes"
             mock_cache.set_analysis.assert_called()
@@ -175,7 +171,7 @@ class TestDeltaAnalysisExhaustive:
         mock_cache = AsyncMock()
         mock_cache.get_analysis = AsyncMock(return_value=None)
         mock_analyzer = AsyncMock()
-        mock_analyzer.analyze = AsyncMock(return_value='{"summary": "llm result"}')
+        mock_analyzer.analyze = AsyncMock(return_value={"summary": "llm result"})
         
         # Mock compute_delta to return significant changes
         mock_res = MagicMock(spec=DeltaAnalysisResult)
@@ -186,6 +182,6 @@ class TestDeltaAnalysisExhaustive:
         with patch("app.shared.llm.delta_analysis.get_cache_service", return_value=mock_cache), \
              patch.object(DeltaAnalysisService, "compute_delta", AsyncMock(return_value=mock_res)):
             
-            result_str = await analyze_with_delta(mock_analyzer, uuid4(), [])
-            assert "llm result" in result_str
+            result = await analyze_with_delta(mock_analyzer, uuid4(), [])
+            assert result["summary"] == "llm result"
             mock_analyzer.analyze.assert_called()

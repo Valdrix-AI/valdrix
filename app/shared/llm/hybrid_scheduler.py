@@ -8,10 +8,12 @@ Combines:
 This provides 95% quality at 20% of the cost of always doing full analysis.
 """
 
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
+from decimal import Decimal
 from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.schemas.costs import CloudUsageSummary, CostRecord as UsageCostRecord
 
 from app.shared.llm.delta_analysis import DeltaAnalysisService, analyze_with_delta
 from app.shared.llm.analyzer import FinOpsAnalyzer
@@ -137,7 +139,7 @@ class HybridAnalysisScheduler:
             
             # Cache the full analysis for a week
             cache_key = f"full_analysis:{tenant_id}"
-            await self.cache.set(cache_key, result, ttl_hours=168)  # 7 days
+            await self.cache.set(cache_key, result, ttl=timedelta(days=7))
             
         else:
             # Delta analysis (daily)
@@ -167,18 +169,24 @@ class HybridAnalysisScheduler:
     ) -> dict:
         """Run comprehensive 30-day analysis."""
         import json
+
+        usage_summary = self._coerce_usage_summary(tenant_id=tenant_id, costs=costs)
         
         result = await self.analyzer.analyze(
-            cost_data=costs,
+            usage_summary=usage_summary,
             tenant_id=tenant_id,
             db=self.db,
             force_refresh=True
         )
         
-        # Parse result and add metadata
-        try:
-            parsed = json.loads(result)
-        except json.JSONDecodeError:
+        if isinstance(result, dict):
+            parsed = result
+        elif isinstance(result, str):
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError):
+                parsed = {"raw_analysis": result}
+        else:
             parsed = {"raw_analysis": result}
         
         parsed["analysis_type"] = "full_30_day"
@@ -227,15 +235,75 @@ class HybridAnalysisScheduler:
         )
         
         import json
-        try:
-            parsed = json.loads(result)
-        except json.JSONDecodeError:
+        if isinstance(result, dict):
+            parsed = result
+        elif isinstance(result, str):
+            try:
+                parsed = json.loads(result)
+            except (json.JSONDecodeError, TypeError):
+                parsed = {"raw_analysis": result}
+        else:
             parsed = {"raw_analysis": result}
         
         parsed["analysis_type"] = "delta_3_day"
         parsed["has_significant_changes"] = True
         
         return parsed
+
+    @staticmethod
+    def _coerce_usage_summary(tenant_id: UUID, costs: list) -> CloudUsageSummary:
+        """
+        Convert scheduler input costs into a valid CloudUsageSummary object.
+        """
+        now = datetime.now(timezone.utc)
+        records: list[UsageCostRecord] = []
+        total_cost = Decimal("0")
+
+        for entry in costs:
+            if not isinstance(entry, dict):
+                continue
+            raw_amount = entry.get("amount", entry.get("cost", 0))
+            try:
+                amount = Decimal(str(raw_amount or 0))
+            except Exception:
+                amount = Decimal("0")
+
+            raw_dt = entry.get("date", now)
+            if isinstance(raw_dt, datetime):
+                record_dt = raw_dt
+            else:
+                record_dt = now
+
+            records.append(
+                UsageCostRecord(
+                    date=record_dt,
+                    amount=amount,
+                    service=str(entry.get("service", "Unknown")),
+                    region=str(entry.get("region", "Global")),
+                    usage_type=entry.get("usage_type"),
+                )
+            )
+            total_cost += amount
+
+        if not records:
+            records = [
+                UsageCostRecord(
+                    date=now,
+                    amount=Decimal("0"),
+                    service="Unknown",
+                    region="Global",
+                    usage_type="Unknown",
+                )
+            ]
+
+        return CloudUsageSummary(
+            tenant_id=str(tenant_id),
+            provider="multi",
+            start_date=records[0].date.date(),
+            end_date=records[-1].date.date(),
+            total_cost=total_cost,
+            records=records,
+        )
     
     def _merge_with_full(self, delta_result: dict, full_result: dict) -> dict:
         """

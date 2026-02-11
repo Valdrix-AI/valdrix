@@ -808,7 +808,7 @@ class RemediationService(BaseService):
             normalized = f"r_{normalized}"
         stem = normalized[:48]
         digest_input = f"{provider}:{resource_type}:{resource_id}".encode()
-        digest = hashlib.sha1(digest_input).hexdigest()[:10]
+        digest = hashlib.sha256(digest_input).hexdigest()[:10]
         return f"{stem}_{digest}"
 
     async def bulk_generate_iac_plan(self, requests: List[RemediationRequest], tenant_id: UUID) -> str:

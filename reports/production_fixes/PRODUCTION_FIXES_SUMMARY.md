@@ -64,7 +64,7 @@ NEXT STEPS:
    - PBKDF2-SHA256 key derivation (100K iterations)
    - MultiFernet for key rotation
    - encrypt_string() / decrypt_string() functions
-   - Legacy key support for backward compatibility
+   - Fallback key support for backward compatibility
 
 2. /app/services/llm/budget_manager.py (240+ lines)
    - LLMBudgetManager service
@@ -122,7 +122,7 @@ NEXT STEPS:
 2. /app/core/config.py
    - ADD: KDF_SALT configuration (per-environment)
    - REMOVE: Hardcoded "valdrix-default-salt-2026"
-   - ADD: LEGACY_ENCRYPTION_KEYS for key rotation
+   - ADD: ENCRYPTION_FALLBACK_KEYS for key rotation
 
 3. /app/core/security.py
    - REPLACE: All encryption/decryption with security_production.py imports
@@ -162,7 +162,7 @@ NEXT STEPS:
 💾 NO BREAKING CHANGES
    - All modifications are additive or backward-compatible
    - Existing APIs unchanged
-   - Existing data can still be decrypted with legacy keys
+   - Existing data can still be decrypted with fallback keys
    - Gradual rollout strategy (canary → 100%)
 """
 
@@ -245,7 +245,7 @@ Key Changes:
   - Per-environment salt (not hardcoded)
   - PBKDF2-SHA256 with 100K iterations
   - MultiFernet for key rotation
-  - Legacy key support
+  - Fallback key support
 Testing: ✅ Tests in test_all_fixes.py lines 410-465
 Deployment: 1 hour (config + environment variable)
 Risk: MEDIUM (encryption is security-critical)
@@ -301,7 +301,7 @@ TestEncryptionSaltManagement (6 tests):
   ✓ test_salt_generation_is_random
   ✓ test_salt_is_never_hardcoded
   ✓ test_encrypt_decrypt_roundtrip
-  ✓ test_decrypt_with_legacy_key
+  ✓ test_decrypt_with_fallback_key
   ✓ test_different_salt_produces_different_key
   ✓ test_kdf_iterations_exceeds_minimum
   └→ Verifies secure key management, no hardcoded secrets
@@ -525,7 +525,7 @@ ROLLBACK #3 - LLM Budget:
 ROLLBACK #2 - Encryption Salt:
   $ kubectl set env deployment/valdrix-api KDF_SALT=<old-value>
   Restart pods
-  (No data loss - old salt in legacy keys)
+  (No data loss - old salt in fallback keys)
 
 ROLLBACK #1 - RLS Enforcement:
   $ kubectl rollout undo deployment/valdrix-api
@@ -625,7 +625,7 @@ DEPLOYMENT IS SUCCESSFUL IF:
 
 ✅ Encryption Salt Management
    - No hardcoded salt in source code
-   - All old data still decrypts with legacy keys
+   - All old data still decrypts with fallback keys
    - KDF_SALT loaded from environment
    - Test: Decrypt old API key, verify it matches
 
@@ -673,7 +673,7 @@ Solution:
 Issue: Old encrypted data won't decrypt
 Solution:
   - Verify KDF_SALT matches old deployment
-  - Check LEGACY_ENCRYPTION_KEYS includes old key
+  - Check ENCRYPTION_FALLBACK_KEYS includes old key
   - Verify salt format is base64-encoded (not raw bytes)
   - Check database for corrupted data
 

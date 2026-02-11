@@ -73,7 +73,7 @@ def test_estimate_cost_groq():
 
 def test_estimate_cost_paid_provider():
     """Test cost estimation for paid providers."""
-    # OpenAI costs from PROVIDER_COSTS: 0.00015 input, 0.0006 output per 1K
+    # OpenAI costs from canonical LLM_PRICING defaults: 0.00015 input, 0.0006 output per 1K
     cost = LLMProviderSelector.estimate_cost("openai", 1000, 1000)
     expected = 0.00015 + 0.0006
     assert abs(cost - expected) < 1e-6

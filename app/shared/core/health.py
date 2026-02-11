@@ -5,11 +5,10 @@ Provides comprehensive health monitoring for all system components,
 including databases, caches, external services, and circuit breakers.
 """
 import asyncio
-import psutil
+import psutil  # noqa: F401 - retained for tests that monkeypatch psutil symbols
 import structlog
 from typing import Dict, Any, List
-from datetime import datetime, timezone
-from sqlalchemy import text
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
 
@@ -164,7 +163,7 @@ class HealthCheckService:
             test_value = "ok"
 
             # Test set and get
-            set_success = await cache.set(test_key, test_value, ttl=10)
+            set_success = await cache.set(test_key, test_value, ttl=timedelta(seconds=10))
             get_value = await cache.get(test_key)
 
             if set_success and get_value == test_value:

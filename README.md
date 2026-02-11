@@ -111,7 +111,7 @@ Not just "idle EC2." We find *everything*:
 | **Storage** | Orphan EBS, Managed Disks, Snapshots | **Creator Attribution**, Age-based decay |
 | **Network** | Unallocated IPs, Orphan LBs, NAT GWs | **Association Tracking** |
 | **Data** | Idle RDS, Redshift, GCP SQL | **Connection Activity** |
-| **Registry** | Legacy ECR, ACR, GCR Images | **Pull Frequency** |
+| **Registry** | Stale ECR, ACR, GCR Images | **Pull Frequency** |
 
 **11 detection plugins + Multi-Cloud Parity (AWS, Azure, GCP).**
 

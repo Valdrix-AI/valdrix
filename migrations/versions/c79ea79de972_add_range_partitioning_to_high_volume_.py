@@ -81,7 +81,7 @@ def upgrade() -> None:
         op.execute(f"CREATE TABLE {table}_2026_02 PARTITION OF {table} FOR VALUES FROM ('2026-02-01') TO ('2026-03-01')")
         op.execute(f"CREATE TABLE {table}_2026_03 PARTITION OF {table} FOR VALUES FROM ('2026-03-01') TO ('2026-04-01')")
         
-        # Add catch-all partition for legacy/future data to avoid insert errors
+        # Add catch-all partition for out-of-range/future data to avoid insert errors
         op.execute(f"CREATE TABLE {table}_default PARTITION OF {table} DEFAULT")
 
     # 4. Migrate Data for Cost Records

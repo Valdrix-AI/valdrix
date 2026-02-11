@@ -24,7 +24,7 @@ class BaseAdapter(ABC):
         end_date: datetime,
         granularity: str = "DAILY"
     ) -> List[Dict[str, Any]]:
-        """Fetch cost data as a list (legacy)."""
+        """Fetch normalized cost data as a materialized list."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -45,7 +45,7 @@ class BaseAdapter(ABC):
         """Discover active resources of a specific type (for Zombie detection)."""
         raise NotImplementedError()
 
-    # Deprecated methods compatible for now
+    # Compatibility method for adapters that do not expose resource-level usage yet.
     async def get_resource_usage(self, service_name: str, resource_id: Optional[str] = None) -> List[Dict[str, Any]]:
         return []
 

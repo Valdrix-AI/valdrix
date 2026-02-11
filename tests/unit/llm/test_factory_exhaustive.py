@@ -47,12 +47,12 @@ class TestFactoryExhaustive:
 
     def test_estimate_cost(self):
         """Test cost estimation logic (lines 120-139)."""
-        # Testing with a known provider 'openai' from PROVIDER_COSTS
+        # Testing with a known provider pricing map
         # Assuming pricing_data.py has 'openai': {'default': {'input': 0.15, 'output': 0.60}} 
         # (Actually I should check pricing_data.py or just trust the logic)
         
         # Test with a provider that exists
-        with patch("app.shared.llm.factory.PROVIDER_COSTS", {
+        with patch("app.shared.llm.factory.LLM_PRICING", {
             "test_prov": {"default": MagicMock(input=0.15, output=0.60)}
         }):
             # 1M input, 1M output -> 0.15 + 0.60 = 0.75

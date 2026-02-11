@@ -28,7 +28,7 @@ async def test_slack_rate_limit_retry():
     """Test retry logic on rate limit."""
     service = SlackService("token", "channel")
     
-    # Mock legacy slack_sdk.errors.SlackApiError (needs response attribute)
+    # Mock slack_sdk.errors.SlackApiError (needs response attribute)
     from slack_sdk.errors import SlackApiError
     
     rate_limit_err = SlackApiError("ratelimited", {"error": "ratelimited"})

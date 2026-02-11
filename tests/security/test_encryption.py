@@ -28,7 +28,7 @@ def test_encryption_with_different_keys():
     # Encrypt with k1
     with patch('app.shared.core.security.get_settings') as mock_get:
         mock_get.return_value.ENCRYPTION_KEY = k1
-        mock_get.return_value.LEGACY_ENCRYPTION_KEYS = []
+        mock_get.return_value.ENCRYPTION_FALLBACK_KEYS = []
         mock_get.return_value.KDF_SALT = "test-salt"
         mock_get.return_value.KDF_ITERATIONS = 1000
         enc1 = encrypt_string(plain)
@@ -37,7 +37,7 @@ def test_encryption_with_different_keys():
     # Try to decrypt with k2
     with patch('app.shared.core.security.get_settings') as mock_get:
         mock_get.return_value.ENCRYPTION_KEY = k2
-        mock_get.return_value.LEGACY_ENCRYPTION_KEYS = []
+        mock_get.return_value.ENCRYPTION_FALLBACK_KEYS = []
         mock_get.return_value.KDF_SALT = "test-salt"
         mock_get.return_value.KDF_ITERATIONS = 1000
         # Decrypt should fail because of different keys and return None

@@ -160,7 +160,7 @@ SECURITY:
   ✅ Budget checks BEFORE LLM API calls
   ✅ RLS enforced by exception (not just logging)
   ✅ Atomic operations prevent race conditions
-  ✅ Backward compatibility with legacy encrypted data
+  ✅ Backward compatibility with previously encrypted data
 
 ═══════════════════════════════════════════════════════════════════════════════
 THE 6 CRITICAL FIXES
@@ -217,7 +217,7 @@ FIX #6: ENCRYPTION SALT MANAGEMENT
   File: security_production.py (new encryption module)
   Code Pattern: Per-environment random salt generation
   Deployment Time: 1 hour (configuration + environment variable)
-  Risk Level: MEDIUM (security-critical, requires legacy key support)
+  Risk Level: MEDIUM (security-critical, requires fallback key support)
   Testing: 6 dedicated tests
 
 ═══════════════════════════════════════════════════════════════════════════════

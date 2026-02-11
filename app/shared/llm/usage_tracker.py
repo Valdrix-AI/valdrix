@@ -156,7 +156,7 @@ class UsageTracker:
         return await LLMBudgetManager.check_budget(tenant_id, self.db)
 
     async def _check_budget_and_alert(self, tenant_id: UUID, last_cost: Decimal = Decimal("0")):
-        """LEGACY: Bridging to LLMBudgetManager for existing tests."""
+        """Bridge method for delegating budget alerts to LLMBudgetManager."""
         return await LLMBudgetManager._check_budget_and_alert(tenant_id, self.db, last_cost)
 
     async def _perform_check_v2(self, tenant_id: UUID):

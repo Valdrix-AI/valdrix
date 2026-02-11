@@ -21,7 +21,7 @@ class AsyncIterator:
         return self.items.pop(0)
 
 # NOTE: The following tests were removed because they reference methods
-# (_find_underused_nat_gateways, _find_legacy_ecr_images) that were
+# (_find_underused_nat_gateways, _find_stale_ecr_images) that were
 # refactored into the plugin architecture (see app/services/zombies/plugins/).
 # New tests should target the plugin classes directly or the scan_all() method.
 

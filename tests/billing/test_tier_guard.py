@@ -48,10 +48,10 @@ class TestFeatureAccess:
     
     def test_professional_tier_full_features(self):
         """Professional tier should have Slack, hourly scans, audit logs."""
-        assert has_feature(PricingTier.PROFESSIONAL, FeatureFlag.SLACK_INTEGRATION)
-        assert has_feature(PricingTier.PROFESSIONAL, FeatureFlag.HOURLY_SCANS)
-        assert has_feature(PricingTier.PROFESSIONAL, FeatureFlag.AUDIT_LOGS)
-        assert has_feature(PricingTier.PROFESSIONAL, FeatureFlag.AI_ANALYSIS_DETAILED)
+        assert has_feature(PricingTier.PRO, FeatureFlag.SLACK_INTEGRATION)
+        assert has_feature(PricingTier.PRO, FeatureFlag.HOURLY_SCANS)
+        assert has_feature(PricingTier.PRO, FeatureFlag.AUDIT_LOGS)
+        assert has_feature(PricingTier.PRO, FeatureFlag.AI_ANALYSIS_DETAILED)
     
     def test_enterprise_tier_all_features(self):
         """Enterprise tier should have all features."""
@@ -75,9 +75,9 @@ class TestTierLimits:
     
     def test_professional_tier_limits(self):
         """Professional tier should have generous limits."""
-        assert get_limit(PricingTier.PROFESSIONAL, "max_aws_accounts") == 25
-        assert get_limit(PricingTier.PROFESSIONAL, "ai_insights_per_month") == 100
-        assert get_limit(PricingTier.PROFESSIONAL, "scan_frequency_hours") == 1
+        assert get_limit(PricingTier.PRO, "max_aws_accounts") == 25
+        assert get_limit(PricingTier.PRO, "ai_insights_per_month") == 100
+        assert get_limit(PricingTier.PRO, "scan_frequency_hours") == 1
     
     def test_enterprise_tier_unlimited(self):
         """Enterprise tier should have unlimited (999) limits."""
@@ -196,7 +196,7 @@ class TestTierFeatureMatrix:
     
     def test_higher_tier_superset(self):
         """Higher tiers should have all features of lower tiers."""
-        tier_order = [PricingTier.FREE, PricingTier.STARTER, PricingTier.PROFESSIONAL, PricingTier.ENTERPRISE]
+        tier_order = [PricingTier.FREE, PricingTier.STARTER, PricingTier.PRO, PricingTier.ENTERPRISE]
         
         for i, lower_tier in enumerate(tier_order[:-1]):
             higher_tier = tier_order[i + 1]

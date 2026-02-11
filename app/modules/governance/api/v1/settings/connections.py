@@ -6,6 +6,7 @@ Enforces "Growth Tier" (or higher) requirement for Azure/GCP.
 """
 
 from uuid import UUID
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -84,7 +85,7 @@ async def check_growth_tier(user: CurrentUser, db: AsyncSession):
     
     # Cache for 1 hour
     try:
-        await cache.set(cache_key, tenant.plan, ttl=3600)
+        await cache.set(cache_key, tenant.plan, ttl=timedelta(hours=1))
     except Exception as e:
         logger.warning("tenant_plan_cache_set_failed", tenant_id=str(user.tenant_id), error=str(e))
 

@@ -252,9 +252,7 @@ class TestAnalyzeWithDelta:
                 current_costs=[]
             )
         
-        import json
-        parsed = json.loads(result)
-        assert parsed["status"] == "cached"
+        assert result["status"] == "cached"
     
     @pytest.mark.asyncio
     async def test_returns_no_changes_when_stable(self):
@@ -276,8 +274,6 @@ class TestAnalyzeWithDelta:
                 previous_costs=[]
             )
         
-        import json
-        parsed = json.loads(result)
-        assert parsed["status"] == "no_significant_changes"
+        assert result["status"] == "no_significant_changes"
         # LLM should NOT be called
         mock_analyzer.analyze.assert_not_called()

@@ -1,6 +1,6 @@
 import pytest
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.shared.remediation.autonomous import AutonomousRemediationEngine
 from app.models.remediation import RemediationAction
 
@@ -97,3 +97,54 @@ async def test_autonomous_low_confidence_safety():
     # Should create request but NOT execute
     mock_service.create_request.assert_awaited_once()
     mock_service.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_autonomous_sweep_returns_scan_failure_payload():
+    db = AsyncMock()
+    tenant_id = uuid.uuid4()
+    engine = AutonomousRemediationEngine(db, tenant_id)
+
+    with patch("app.shared.remediation.autonomous.AWSZombieDetector") as detector_cls:
+        detector = detector_cls.return_value
+        detector.scan_all = AsyncMock(side_effect=RuntimeError("scan failed"))
+
+        result = await engine.run_autonomous_sweep(
+            region="us-east-1",
+            credentials={"access_key_id": "x"},
+        )
+
+    assert result["mode"] == "dry_run"
+    assert result["scanned"] == 0
+    assert result["auto_executed"] == 0
+    assert result["error"] == "scan_failed"
+
+
+@pytest.mark.asyncio
+async def test_run_autonomous_sweep_processes_actionable_categories_only():
+    db = AsyncMock()
+    tenant_id = uuid.uuid4()
+    engine = AutonomousRemediationEngine(db, tenant_id)
+    engine._process_candidate = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    scan_payload = {
+        "unattached_volumes": [
+            {"resource_id": "vol-1", "monthly_waste": 12.5, "confidence_score": 0.9},
+            {"resource_id": "vol-2", "monthly_waste": 2.0, "confidence_score": 0.5},
+        ],
+        "non_actionable_category": [{"resource_id": "x-1"}],
+    }
+
+    with patch("app.shared.remediation.autonomous.AWSZombieDetector") as detector_cls:
+        detector = detector_cls.return_value
+        detector.scan_all = AsyncMock(return_value=scan_payload)
+
+        result = await engine.run_autonomous_sweep(
+            region="us-east-1",
+            credentials={"access_key_id": "x"},
+        )
+
+    assert result["mode"] == "dry_run"
+    assert result["scanned"] == 2
+    assert result["auto_executed"] == 0
+    assert engine._process_candidate.await_count == 2  # type: ignore[attr-defined]

@@ -626,16 +626,16 @@ STEP 7: Test encryption/decryption:
         assert decrypted == original
     
     @pytest.mark.asyncio
-    async def test_decrypt_with_legacy_key():
-        # Old data encrypted with legacy key
-        legacy_key = "old-master-key"
-        old_encrypted = "...encrypted with legacy key..."
+    async def test_decrypt_with_fallback_key():
+        # Old data encrypted with fallback key
+        fallback_key = "old-master-key"
+        old_encrypted = "...encrypted with fallback key..."
         
-        # Should still decrypt with legacy key in rotation
+        # Should still decrypt with fallback key in rotation
         manager = EncryptionKeyManager()
         fernet = manager.create_multi_fernet(
             primary_key="new-master-key",
-            legacy_keys=[legacy_key]
+            fallback_keys=[fallback_key]
         )
         
         decrypted = fernet.decrypt(old_encrypted.encode()).decode()
@@ -646,8 +646,8 @@ STEP 8: Key rotation procedure (future):
     When you need to rotate the master key:
     
     1. Generate new KDF_SALT
-    2. Update LEGACY_ENCRYPTION_KEYS setting:
-        LEGACY_ENCRYPTION_KEYS = ["old-key-1", "old-key-2"]
+    2. Update ENCRYPTION_FALLBACK_KEYS setting:
+        ENCRYPTION_FALLBACK_KEYS = ["old-key-1", "old-key-2"]
     3. Deploy new code with both keys
     4. Schedule batch job to re-encrypt all data:
         
@@ -658,11 +658,11 @@ STEP 8: Key rotation procedure (future):
             db.add(row)
         db.commit()
     
-    5. Once all data migrated, remove old keys from LEGACY_ENCRYPTION_KEYS
+    5. Once all data migrated, remove old keys from ENCRYPTION_FALLBACK_KEYS
     6. Deploy final version
 
 ROLLBACK:
-    - If new KDF_SALT is wrong, old salt is in LEGACY_ENCRYPTION_KEYS
+    - If new KDF_SALT is wrong, old salt is in ENCRYPTION_FALLBACK_KEYS
     - Revert environment variable: KDF_SALT=<old-salt>
     - Restart pods
     - No data loss
@@ -672,7 +672,7 @@ SECURITY CHECKLIST:
     [ ] KDF_SALT is stored in secure secret store (AWS Secrets Manager / Vault)
     [ ] KDF_SALT has minimum 256 bits of entropy (32 bytes base64-encoded)
     [ ] PBKDF2 uses 100,000+ iterations
-    [ ] Legacy keys are not logged or exposed
+    [ ] Fallback keys are not logged or exposed
     [ ] Encryption context is used ("api_key", "pii", etc.)
     [ ] All decryption errors are logged (potential tampering)
     [ ] Key rotation procedure is documented

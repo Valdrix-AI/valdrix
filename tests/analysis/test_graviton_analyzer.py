@@ -25,7 +25,7 @@ async def test_analyze_instances_finds_candidates():
                         {
                             "InstanceId": "i-123",
                             "InstanceType": "m5.large", # Candidate
-                            "Tags": [{"Key": "Name", "Value": "legacy-app"}]
+                            "Tags": [{"Key": "Name", "Value": "older-app"}]
                         },
                         {
                             "InstanceId": "i-456",

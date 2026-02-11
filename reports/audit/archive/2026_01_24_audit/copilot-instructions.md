@@ -26,7 +26,7 @@ ZombiePlugin (ABC base class)
 ├── Storage: UnattachedVolumesPlugin, OldSnapshotsPlugin, IdleS3BucketsPlugin
 ├── Database: IdleRdsPlugin, ColdRedshiftPlugin
 ├── Network: UnusedElasticIpsPlugin, UnderusedNatGatewaysPlugin
-├── Containers: LegacyEcrImagesPlugin
+├── Containers: StaleEcrImagesPlugin
 └── Analytics: IdleSageMakerPlugin
 ```
 

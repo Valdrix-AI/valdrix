@@ -17,8 +17,7 @@ async def test_key_rotation_compatibility():
     # 2. Create a mock settings object
     mock_settings = MagicMock()
     mock_settings.ENCRYPTION_KEY = key_alpha
-    mock_settings.ENCRYPTION_KEY_FALLBACKS = []
-    mock_settings.LEGACY_ENCRYPTION_KEYS = []
+    mock_settings.ENCRYPTION_FALLBACK_KEYS = []
     mock_settings.API_KEY_ENCRYPTION_KEY = None
     mock_settings.PII_ENCRYPTION_KEY = None
     mock_settings.KDF_SALT = "test-salt"
@@ -29,11 +28,11 @@ async def test_key_rotation_compatibility():
         # Initial encryption with key_alpha
         encrypted_alpha = encrypt_string(original_text)
         
-        # 4. Rotate: Beta as primary, Alpha as fallback (LEGACY_ENCRYPTION_KEYS)
+        # 4. Rotate: Beta as primary, Alpha as fallback (ENCRYPTION_FALLBACK_KEYS)
         mock_settings.ENCRYPTION_KEY = key_beta
-        mock_settings.LEGACY_ENCRYPTION_KEYS = [key_alpha]
+        mock_settings.ENCRYPTION_FALLBACK_KEYS = [key_alpha]
         
-        # 5. Attempt decryption (should succeed because Alpha is in LEGACY_ENCRYPTION_KEYS)
+        # 5. Attempt decryption (should succeed because Alpha is in ENCRYPTION_FALLBACK_KEYS)
         decrypted = decrypt_string(encrypted_alpha)
         assert decrypted == original_text
         
@@ -44,7 +43,7 @@ async def test_key_rotation_compatibility():
         assert decrypt_string(encrypted_beta) == "New Secret"
         
         # 8. Remove Alpha from fallbacks
-        mock_settings.LEGACY_ENCRYPTION_KEYS = []
+        mock_settings.ENCRYPTION_FALLBACK_KEYS = []
         
         # 9. Decryption of Alpha data should now fail (return None)
         assert decrypt_string(encrypted_alpha) is None

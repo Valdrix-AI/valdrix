@@ -9,7 +9,7 @@ def _mock_settings(**overrides):
         TESTING = False
         ENVIRONMENT = "production"
         ENCRYPTION_KEY = None
-        LEGACY_ENCRYPTION_KEYS = []
+        ENCRYPTION_FALLBACK_KEYS = []
 
     for k, v in overrides.items():
         setattr(DummySettings, k, v)

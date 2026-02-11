@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.modules.optimization.adapters.aws.plugins.analytics import IdleSageMakerPlugin
-from app.modules.optimization.adapters.aws.plugins.containers import LegacyEcrImagesPlugin
+from app.modules.optimization.adapters.aws.plugins.containers import StaleEcrImagesPlugin
 from app.modules.optimization.adapters.aws.plugins.database import IdleRdsPlugin, ColdRedshiftPlugin
 
 
@@ -72,8 +72,8 @@ async def test_idle_sagemaker_cloudwatch(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_legacy_ecr_images_detected(monkeypatch):
-    plugin = LegacyEcrImagesPlugin()
+async def test_stale_ecr_images_detected(monkeypatch):
+    plugin = StaleEcrImagesPlugin()
 
     ecr = MagicMock()
     ecr.get_paginator.side_effect = [
