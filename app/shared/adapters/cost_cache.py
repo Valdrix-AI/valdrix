@@ -18,7 +18,7 @@ import hashlib
 import asyncio
 from abc import ABC, abstractmethod
 from datetime import date, timedelta, datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import Any, Optional, cast
 import structlog
 
 from app.shared.core.config import get_settings
@@ -27,7 +27,7 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 
-def _safe_json_loads(raw_payload: Any, *, key: str) -> Optional[Any]:
+def _safe_json_loads(raw_payload: Any, *, key: str) -> Any | None:
     """Decode cached JSON defensively to avoid malformed payload crashes."""
     if raw_payload is None:
         return None
@@ -90,8 +90,8 @@ class InMemoryCache(CacheBackend):
     Note: Not suitable for production multi-instance deployments.
     """
 
-    def __init__(self):
-        self._store: Dict[str, tuple[str, Optional[datetime]]] = {}
+    def __init__(self) -> None:
+        self._store: dict[str, tuple[str, datetime | None]] = {}
 
     async def get(self, key: str) -> Optional[str]:
         if key not in self._store:
@@ -133,16 +133,16 @@ class RedisCache(CacheBackend):
     - Pattern-based deletion for invalidation
     """
 
-    def __init__(self, redis_url: str = None):
+    def __init__(self, redis_url: str | None = None) -> None:
         self.redis_url = redis_url or settings.REDIS_URL
-        self._client = None
+        self._client: Any | None = None
         self._connected = False
 
-    async def _get_client(self):
+    async def _get_client(self) -> Any | None:
         if self._client is None and self.redis_url:
             try:
                 import redis.asyncio as aioredis
-                self._client = await aioredis.from_url(
+                self._client = aioredis.from_url(  # type: ignore[no-untyped-call]
                     self.redis_url,
                     encoding="utf-8",
                     decode_responses=True,
@@ -162,7 +162,7 @@ class RedisCache(CacheBackend):
         if client is None:
             return None
         try:
-            return await client.get(key)
+            return cast(Optional[str], await client.get(key))
         except Exception as e:
             logger.warning("redis_get_failed", key=key, error=str(e))
             return None
@@ -242,7 +242,7 @@ class CostCache:
     def __init__(self, backend: CacheBackend):
         self.backend = backend
 
-    def _generate_key(self, prefix: str, tenant_id: str, *args) -> str:
+    def _generate_key(self, prefix: str, tenant_id: str, *args: object) -> str:
         """Generate a unique cache key."""
         key_parts = [prefix, tenant_id] + [str(a) for a in args]
         key_string = ":".join(key_parts)
@@ -261,7 +261,7 @@ class CostCache:
         tenant_id: str,
         start_date: date,
         end_date: date
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> Optional[list[dict[str, Any]]]:
         """Get cached daily costs if available."""
         key = self._generate_key("costs", tenant_id, start_date, end_date)
         cached = await self.backend.get(key)
@@ -278,7 +278,7 @@ class CostCache:
         tenant_id: str,
         start_date: date,
         end_date: date,
-        costs: List[Dict[str, Any]]
+        costs: list[dict[str, Any]]
     ) -> None:
         """Cache daily costs."""
         key = self._generate_key("costs", tenant_id, start_date, end_date)
@@ -290,7 +290,7 @@ class CostCache:
         self,
         tenant_id: str,
         region: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Get cached zombie scan if available."""
         key = self._generate_key("zombies", tenant_id, region)
         cached = await self.backend.get(key)
@@ -304,7 +304,7 @@ class CostCache:
         self,
         tenant_id: str,
         region: str,
-        zombies: Dict[str, Any]
+        zombies: dict[str, Any]
     ) -> None:
         """Cache zombie scan results."""
         key = self._generate_key("zombies", tenant_id, region)
@@ -315,7 +315,7 @@ class CostCache:
         self,
         tenant_id: str,
         analysis_hash: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Get cached LLM analysis if available."""
         key = self._generate_key("analysis", tenant_id, analysis_hash)
         cached = await self.backend.get(key)
@@ -329,7 +329,7 @@ class CostCache:
         self,
         tenant_id: str,
         analysis_hash: str,
-        result: Dict[str, Any]
+        result: dict[str, Any]
     ) -> None:
         """Cache LLM analysis results."""
         key = self._generate_key("analysis", tenant_id, analysis_hash)
@@ -358,7 +358,7 @@ class CostCache:
         return deleted
 
     # Health
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """Check cache health for monitoring."""
         healthy = await self.backend.health_check()
         backend_type = "redis" if isinstance(self.backend, RedisCache) else "memory"
@@ -387,6 +387,7 @@ async def get_cost_cache() -> CostCache:
     if _cache_instance is None:
         async with _cache_instance_lock:
             if _cache_instance is None:
+                backend: CacheBackend
                 if settings.REDIS_URL:
                     backend = RedisCache(settings.REDIS_URL)
                     if await backend.health_check():

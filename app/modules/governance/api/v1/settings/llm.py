@@ -64,7 +64,7 @@ class LLMSettingsUpdate(BaseModel):
 async def get_llm_settings(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> LLMSettingsResponse:
     """
     Get LLM budget and selection settings for the current tenant.
     """
@@ -81,6 +81,7 @@ async def get_llm_settings(
             tenant_id=current_user.tenant_id,
             monthly_limit_usd=10.0,
             alert_threshold_percent=80,
+            hard_limit=False,
             preferred_provider="groq",
             preferred_model="llama-3.3-70b-versatile",
         )
@@ -94,17 +95,17 @@ async def get_llm_settings(
         )
 
     # Map model flags for response
-    return {
-        "monthly_limit_usd": float(settings.monthly_limit_usd),
-        "alert_threshold_percent": settings.alert_threshold_percent,
-        "hard_limit": settings.hard_limit,
-        "preferred_provider": settings.preferred_provider,
-        "preferred_model": settings.preferred_model,
-        "has_openai_key": bool(settings.openai_api_key),
-        "has_claude_key": bool(settings.claude_api_key),
-        "has_google_key": bool(settings.google_api_key),
-        "has_groq_key": bool(settings.groq_api_key),
-    }
+    return LLMSettingsResponse(
+        monthly_limit_usd=float(settings.monthly_limit_usd),
+        alert_threshold_percent=settings.alert_threshold_percent,
+        hard_limit=bool(settings.hard_limit),
+        preferred_provider=settings.preferred_provider,
+        preferred_model=settings.preferred_model,
+        has_openai_key=bool(settings.openai_api_key),
+        has_claude_key=bool(settings.claude_api_key),
+        has_google_key=bool(settings.google_api_key),
+        has_groq_key=bool(settings.groq_api_key),
+    )
 
 
 @router.put("/llm", response_model=LLMSettingsResponse)
@@ -112,7 +113,7 @@ async def update_llm_settings(
     data: LLMSettingsUpdate,
     current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
-):
+) -> LLMSettingsResponse:
     """
     Update LLM budget and selection settings for the current tenant.
     """
@@ -177,21 +178,21 @@ async def update_llm_settings(
     )
 
     # Map model flags for response
-    return {
-        "monthly_limit_usd": float(settings.monthly_limit_usd),
-        "alert_threshold_percent": settings.alert_threshold_percent,
-        "hard_limit": settings.hard_limit,
-        "preferred_provider": settings.preferred_provider,
-        "preferred_model": settings.preferred_model,
-        "has_openai_key": bool(settings.openai_api_key),
-        "has_claude_key": bool(settings.claude_api_key),
-        "has_google_key": bool(settings.google_api_key),
-        "has_groq_key": bool(settings.groq_api_key),
-    }
+    return LLMSettingsResponse(
+        monthly_limit_usd=float(settings.monthly_limit_usd),
+        alert_threshold_percent=settings.alert_threshold_percent,
+        hard_limit=bool(settings.hard_limit),
+        preferred_provider=settings.preferred_provider,
+        preferred_model=settings.preferred_model,
+        has_openai_key=bool(settings.openai_api_key),
+        has_claude_key=bool(settings.claude_api_key),
+        has_google_key=bool(settings.google_api_key),
+        has_groq_key=bool(settings.groq_api_key),
+    )
 
 
 @router.get("/llm/models")
-async def get_llm_models():
+async def get_llm_models() -> dict[str, list[str]]:
     """Returns available LLM providers and models."""
     from app.shared.llm.pricing_data import LLM_PRICING
 

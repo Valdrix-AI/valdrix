@@ -41,10 +41,10 @@ class JobStore {
 
 		const url = new URL(`${PUBLIC_API_URL}/jobs/stream`);
 		// Since SSE doesn't support Authorization headers easily without polyfills,
-		// we rely on the session cookie if available, or we could pass tokens in query params 
+		// we rely on the session cookie if available, or we could pass tokens in query params
 		// (though cookies are preferred for security if the API is same-origin/configured).
 		// For this implementation, we'll try standard EventSource which sends cookies.
-		
+
 		this.#eventSource = new EventSource(url, { withCredentials: true });
 
 		this.#eventSource.onopen = () => {
@@ -56,12 +56,16 @@ class JobStore {
 			const updates = JSON.parse(event.data) as JobUpdate[];
 			updates.forEach((update) => {
 				this.#jobs[update.id] = update;
-				
+
 				// Optional: Show toast for important state changes
 				if (update.status === 'completed') {
 					uiState.addToast(`Job ${update.job_type} completed successfully`, 'success');
 				} else if (update.status === 'failed') {
-					uiState.addToast(`Job ${update.job_type} failed: ${update.error_message}`, 'error', 10000);
+					uiState.addToast(
+						`Job ${update.job_type} failed: ${update.error_message}`,
+						'error',
+						10000
+					);
 				}
 			});
 		});
@@ -71,7 +75,7 @@ class JobStore {
 			this.#isConnected = false;
 			this.#eventSource?.close();
 			this.#eventSource = null;
-			
+
 			// Retry after delay
 			setTimeout(() => this.init(), 5000);
 		};

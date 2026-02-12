@@ -1,5 +1,6 @@
 import asyncio
 from logging.config import fileConfig
+from typing import Any
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -19,6 +20,8 @@ from app.models.remediation import RemediationRequest  # noqa: F401 # pylint: di
 from app.models.remediation_settings import RemediationSettings  # noqa: F401 # pylint: disable=unused-import
 from app.models.azure_connection import AzureConnection  # noqa: F401 # pylint: disable=unused-import
 from app.models.gcp_connection import GCPConnection  # noqa: F401 # pylint: disable=unused-import
+from app.models.saas_connection import SaaSConnection  # noqa: F401 # pylint: disable=unused-import
+from app.models.license_connection import LicenseConnection  # noqa: F401 # pylint: disable=unused-import
 from app.models.tenant import User, Tenant  # noqa: F401 # pylint: disable=unused-import
 from app.models.pricing import PricingPlan, ExchangeRate, TenantSubscription, LLMProviderPricing  # noqa: F401
 from app.models.background_job import BackgroundJob  # noqa: F401 # pylint: disable=unused-import
@@ -113,21 +116,25 @@ async def run_async_migrations() -> None:
     and associate a connection with the context.
     """
     ssl_mode = (settings.DB_SSL_MODE or "require").lower()
-    connect_args = {"statement_cache_size": 0}
+    connect_args: dict[str, Any] = {"statement_cache_size": 0}
 
-    if ssl_mode != "disable":
-        ssl_context = ssl.create_default_context()
-        if ssl_mode in {"verify-ca", "verify-full"}:
-            if not settings.DB_SSL_CA_CERT_PATH:
-                raise ValueError(f"DB_SSL_CA_CERT_PATH is required when DB_SSL_MODE={ssl_mode}")
-            ssl_context.load_verify_locations(cafile=settings.DB_SSL_CA_CERT_PATH)
-            ssl_context.check_hostname = ssl_mode == "verify-full"
-            ssl_context.verify_mode = ssl.CERT_REQUIRED
-        else:
-            # "require" validates certificates with system CAs and skips hostname pinning.
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_REQUIRED
+    if ssl_mode == "disable":
+        connect_args["ssl"] = False
+    elif ssl_mode == "require":
+        # Supabase/Supavisor pooler often works best with "require" semantics:
+        # encrypted transport without enforcing certificate-chain validation.
+        connect_args["ssl"] = "require"
+    elif ssl_mode in {"verify-ca", "verify-full"}:
+        if not settings.DB_SSL_CA_CERT_PATH:
+            raise ValueError(f"DB_SSL_CA_CERT_PATH is required when DB_SSL_MODE={ssl_mode}")
+        ssl_context = ssl.create_default_context(cafile=settings.DB_SSL_CA_CERT_PATH)
+        ssl_context.check_hostname = ssl_mode == "verify-full"
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
         connect_args["ssl"] = ssl_context
+    else:
+        raise ValueError(
+            f"Invalid DB_SSL_MODE: {ssl_mode}. Use: disable, require, verify-ca, verify-full"
+        )
 
     connectable = create_async_engine(
         settings.DATABASE_URL,

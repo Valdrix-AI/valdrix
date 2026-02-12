@@ -18,7 +18,7 @@ import hashlib
 import hmac
 from datetime import datetime, timezone, timedelta
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from uuid import UUID
 import httpx
 import structlog
@@ -32,6 +32,14 @@ from app.shared.core.security import encrypt_string, decrypt_string
 
 logger = structlog.get_logger()
 settings = get_settings()
+
+__all__ = [
+    "TenantSubscription",
+    "SubscriptionStatus",
+    "BillingService",
+    "WebhookHandler",
+    "PaystackClient",
+]
 
 
 def _email_hash(email: Optional[str]) -> Optional[str]:
@@ -55,16 +63,21 @@ class PaystackClient:
     
     BASE_URL = "https://api.paystack.co"
 
-    def __init__(self):
+    def __init__(self) -> None:
         if not settings.PAYSTACK_SECRET_KEY:
             raise ValueError("PAYSTACK_SECRET_KEY not configured")
         
-        self.headers = {
+        self.headers: dict[str, str] = {
             "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
             "Content-Type": "application/json"
         }
 
-    async def _request(self, method: str, endpoint: str, data: Dict = None) -> Dict:
+    async def _request(
+        self,
+        method: str,
+        endpoint: str,
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.request(
@@ -75,12 +88,22 @@ class PaystackClient:
                     timeout=30.0
                 )
                 response.raise_for_status()
-                return response.json()
+                payload = response.json()
+                if not isinstance(payload, dict):
+                    raise ValueError("Invalid Paystack response payload type")
+                return payload
             except httpx.HTTPError as e:
                 logger.error("paystack_api_error", endpoint=endpoint, error=str(e))
                 raise
 
-    async def initialize_transaction(self, email: str, amount_kobo: int, plan_code: Optional[str], callback_url: str, metadata: Dict) -> Dict:
+    async def initialize_transaction(
+        self,
+        email: str,
+        amount_kobo: int,
+        plan_code: Optional[str],
+        callback_url: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         """Initialize a transaction to start a subscription."""
         data = {
             "email": email,
@@ -93,7 +116,13 @@ class PaystackClient:
             
         return await self._request("POST", "transaction/initialize", data)
 
-    async def charge_authorization(self, email: str, amount_kobo: int, authorization_code: str, metadata: Dict) -> Dict:
+    async def charge_authorization(
+        self,
+        email: str,
+        amount_kobo: int,
+        authorization_code: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         """Charge a stored authorization code (recurring billing)."""
         data = {
             "email": email,
@@ -103,15 +132,15 @@ class PaystackClient:
         }
         return await self._request("POST", "transaction/charge_authorization", data)
 
-    async def verify_transaction(self, reference: str) -> Dict:
+    async def verify_transaction(self, reference: str) -> dict[str, Any]:
         """Verify transaction status."""
         return await self._request("GET", f"transaction/verify/{reference}")
 
-    async def fetch_subscription(self, code_or_token: str) -> Dict:
+    async def fetch_subscription(self, code_or_token: str) -> dict[str, Any]:
         """Fetch subscription details."""
         return await self._request("GET", f"subscription/{code_or_token}")
 
-    async def disable_subscription(self, code: str, token: str) -> Dict:
+    async def disable_subscription(self, code: str, token: str) -> dict[str, Any]:
         """Cancel a subscription."""
         data = {"code": code, "token": token}
         return await self._request("POST", "subscription/disable", data)
@@ -149,7 +178,7 @@ class BillingService:
         
         for tier, config in TIER_CONFIG.items():
             kobo_config = config.get("paystack_amount_kobo")
-            if tier in {PricingTier.FREE, PricingTier.TRIAL} and kobo_config is None:
+            if tier == PricingTier.FREE_TRIAL and kobo_config is None:
                 continue
             # Enterprise/custom tiers may not have fixed Paystack amounts.
             if kobo_config is None:
@@ -185,13 +214,13 @@ class BillingService:
         email: str,
         callback_url: str,
         billing_cycle: str = "monthly"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Initialize Paystack transaction for subscription using dynamic currency.
         We no longer use fixed Paystack Plans to support fluctuating exchange rates.
         """
-        if tier == PricingTier.TRIAL:
-            raise ValueError("Cannot checkout trial tier")
+        if tier == PricingTier.FREE_TRIAL:
+            raise ValueError("Cannot checkout free_trial tier")
 
         is_annual = billing_cycle.lower() == "annual"
         
@@ -204,7 +233,7 @@ class BillingService:
         usd_price = config["price_usd"]["annual"] if is_annual else config["price_usd"]["monthly"]
 
         # 2. Convert to NGN using Exchange Rate Service
-        from app.modules.reporting.domain.billing.currency import ExchangeRateService
+        from app.modules.billing.domain.billing.currency import ExchangeRateService
         currency_service = ExchangeRateService(self.db)
         ngn_rate = await currency_service.get_ngn_rate()
         amount_kobo = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
@@ -245,8 +274,7 @@ class BillingService:
             if not sub:
                 import uuid
                 sub = TenantSubscription(id=uuid.uuid4(), tenant_id=tenant_id, tier=tier.value)
-                from app.shared.core.async_utils import maybe_await
-                await maybe_await(self.db.add(sub))
+                self.db.add(sub)
             
             await self.db.commit()
 
@@ -284,7 +312,17 @@ class BillingService:
         else:
             # Fallback to TIER_CONFIG
             from app.shared.core.pricing import TIER_CONFIG
-            config = TIER_CONFIG.get(subscription.tier)
+            try:
+                subscription_tier = PricingTier(subscription.tier)
+            except ValueError:
+                logger.error(
+                    "renewal_failed_invalid_tier",
+                    tenant_id=str(subscription.tenant_id),
+                    tier=subscription.tier,
+                )
+                return False
+
+            config = TIER_CONFIG.get(subscription_tier)
             if not config:
                 return False
             # Handle both int and dict cases for safety
@@ -292,7 +330,7 @@ class BillingService:
             usd_price = price_cfg["monthly"] if isinstance(price_cfg, dict) else float(price_cfg)
 
         # 2. Get latest exchange rate
-        from app.modules.reporting.domain.billing.currency import ExchangeRateService
+        from app.modules.billing.domain.billing.currency import ExchangeRateService
         currency_service = ExchangeRateService(self.db)
         ngn_rate = await currency_service.get_ngn_rate()
         amount_kobo = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
@@ -307,6 +345,12 @@ class BillingService:
             
         from app.shared.core.security import decrypt_string as sec_decrypt # Avoid naming collision
         user_email = sec_decrypt(user_obj.email, context="pii")
+        if not user_email:
+            logger.error(
+                "renewal_failed_email_decryption_error",
+                tenant_id=str(subscription.tenant_id),
+            )
+            return False
 
         try:
             # Paystack Charge Authorization API
@@ -363,7 +407,7 @@ class WebhookHandler:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def handle(self, payload: bytes, signature: str) -> Dict[str, str]:
+    async def handle(self, payload: bytes, signature: str) -> dict[str, str]:
         """Verify and process webhook."""
         from fastapi import HTTPException
         if not self.verify_signature(payload, signature):
@@ -411,7 +455,7 @@ class WebhookHandler:
             
         return is_valid
 
-    async def _handle_subscription_create(self, data: Dict) -> None:
+    async def _handle_subscription_create(self, data: dict[str, Any]) -> None:
         """Handle new subscription - update subscription codes and next payment date."""
         customer_code = data.get("customer", {}).get("customer_code")
         subscription_code = data.get("subscription_code")
@@ -460,7 +504,7 @@ class WebhookHandler:
             customer_code=customer_code
         )
 
-    async def _handle_charge_success(self, data: Dict) -> None:
+    async def _handle_charge_success(self, data: dict[str, Any]) -> None:
         """Handle successful charge - primary activation point."""
         metadata = data.get("metadata", {})
         if isinstance(metadata, str):
@@ -534,8 +578,7 @@ class WebhookHandler:
             if not sub:
                 import uuid
                 sub = TenantSubscription(id=uuid.uuid4(), tenant_id=tenant_id)
-                from app.shared.core.async_utils import maybe_await
-                await maybe_await(self.db.add(sub))
+                self.db.add(sub)
             
             sub.paystack_customer_code = customer_code
             
@@ -553,7 +596,7 @@ class WebhookHandler:
             logger.info("paystack_subscription_activated", tenant_id=str(tenant_id))
 
 
-    async def _handle_subscription_disable(self, data: Dict) -> None:
+    async def _handle_subscription_disable(self, data: dict[str, Any]) -> None:
         code = data.get("subscription_code")
         if code:
             result = await self.db.execute(
@@ -567,7 +610,7 @@ class WebhookHandler:
                 sub.canceled_at = datetime.now(timezone.utc)
                 await self.db.commit()
 
-    async def _handle_invoice_failed(self, data: Dict) -> None:
+    async def _handle_invoice_failed(self, data: dict[str, Any]) -> None:
         """Handle failed payment - trigger dunning workflow."""
         invoice_code = data.get("invoice_code")
         subscription_code = data.get("subscription_code")
@@ -592,7 +635,7 @@ class WebhookHandler:
             
             if sub:
                 # Delegate to DunningService for complete workflow
-                from app.modules.reporting.domain.billing.dunning_service import DunningService
+                from app.modules.billing.domain.billing.dunning_service import DunningService
                 dunning = DunningService(self.db)
                 await dunning.process_failed_payment(sub.id, is_webhook=True)
                 

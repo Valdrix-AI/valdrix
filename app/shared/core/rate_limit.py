@@ -5,7 +5,7 @@ Provides API rate limiting using slowapi (built on limits library).
 Configurable via environment variables.
 """
 
-from typing import Optional, Any, Callable, Awaitable
+from typing import Any, Callable, Optional, cast
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -27,6 +27,9 @@ __all__ = [
 ]
 
 logger = structlog.get_logger()
+
+_limiter: Limiter | None = None
+_redis_client: Redis | None = None
 
 def context_aware_key(request: Request) -> str:
     """
@@ -69,13 +72,14 @@ def get_limiter() -> Limiter:
         )
     return _limiter
 
-_limiter = None
-_redis_client: Optional[Redis] = None
-
-def get_redis_client() -> Optional[Redis]:
+def get_redis_client() -> Redis | None:
     """Lazy initialization of the Redis client for rate limiting and health checks."""
     global _redis_client
     settings = get_settings()
+    # Tests should use in-memory fallback by default to avoid external network coupling
+    # and unclosed transport warnings from ephemeral event loops.
+    if getattr(settings, "TESTING", False) is True and not getattr(settings, "ALLOW_REDIS_IN_TESTS", False):
+        return None
     if not settings.REDIS_URL:
         return None
     
@@ -91,7 +95,8 @@ def get_redis_client() -> Optional[Redis]:
             _redis_client = None
 
     if _redis_client is None:
-        _redis_client = from_url(settings.REDIS_URL, decode_responses=True)
+        redis_from_url = cast(Callable[..., Redis], from_url)
+        _redis_client = redis_from_url(settings.REDIS_URL, decode_responses=True)
     return _redis_client
 
 def setup_rate_limiting(app: FastAPI) -> None:
@@ -101,15 +106,20 @@ def setup_rate_limiting(app: FastAPI) -> None:
     limiter = get_limiter()
     # Add rate limit exceeded handler
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    def _rate_limit_handler(request: Request, exc: Exception) -> Any:
+        return _rate_limit_exceeded_handler(request, cast(RateLimitExceeded, exc))
+
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
     logger.info("rate_limiting_configured")
 
 # Rate limit decorators for use in routes
-def rate_limit(limit: str = "100/minute"):
+def rate_limit(
+    limit: str | Callable[[Request], str] = "100/minute",
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator to apply rate limiting to an endpoint."""
     if get_settings().TESTING:
-        return lambda x: x
-    return get_limiter().limit(limit)
+        return lambda func: func
+    return cast(Callable[[Callable[..., Any]], Callable[..., Any]], get_limiter().limit(limit))
 
 # Pre-configured rate limits (now using strings for delay)
 # Route handlers can use @rate_limit("100/minute") or these helpers
@@ -125,16 +135,21 @@ def get_analysis_limit(request: Optional[Request] = None) -> str:
         return "1/hour"
         
     try:
-        tier = getattr(request.state, "tier", "starter")
-        # Ensure we don't return None or a Mock object as the tier string
-        if not tier or not isinstance(tier, str):
+        raw_tier = getattr(request.state, "tier", "starter")
+        if hasattr(raw_tier, "value"):
+            tier = str(getattr(raw_tier, "value")).strip().lower()
+        elif isinstance(raw_tier, str):
+            tier = raw_tier.strip().lower()
+        else:
+            tier = "starter"
+        if not tier:
             tier = "starter"
     except (AttributeError, Exception):
         tier = "starter"
             
     # Mapping of tier to rate limit (per hour to prevent burst costs)
     limits = {
-        "trial": "1/hour",
+        "free_trial": "1/hour",
         "starter": "2/hour",
         "growth": "10/hour",
         "pro": "50/hour",
@@ -145,9 +160,9 @@ def get_analysis_limit(request: Optional[Request] = None) -> str:
 
 # Backward-compatible decorators for imports expecting callable
 # Usage: @auth_limit (as decorator, no parentheses)
-def _make_limit_decorator(limit_str: str):
+def _make_limit_decorator(limit_str: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Creates a decorator that applies the given rate limit."""
-    def decorator(func):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         # Apply the rate limit at decoration time
         return rate_limit(limit_str)(func)
     return decorator
@@ -157,21 +172,22 @@ standard_limit = _make_limit_decorator(STANDARD_LIMIT)
 auth_limit = _make_limit_decorator(AUTH_LIMIT)
 
 # Dynamic analysis limit decorator
-def analysis_limit(func: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+def analysis_limit(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator that applies a dynamic analysis limit based on tenant tier."""
     if get_settings().TESTING:
         return func
-    return get_limiter().limit(get_analysis_limit)(func)
+    decorated = get_limiter().limit(get_analysis_limit)(func)
+    return cast(Callable[..., Any], decorated)
 
 
 
 # Remediation-specific rate limiting (BE-SEC-3)
 REMEDIATION_LIMIT_PER_HOUR = 50  # Max remediations per tenant per hour
 
-_remediation_counts: dict = {}  # In-memory fallback when Redis unavailable
+_remediation_counts: dict[str, dict[str, float | int]] = {}  # In-memory fallback when Redis unavailable
 
 async def check_remediation_rate_limit(
-    tenant_id,
+    tenant_id: Any,
     action: str,
     limit: int = REMEDIATION_LIMIT_PER_HOUR
 ) -> bool:

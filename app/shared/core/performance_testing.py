@@ -100,7 +100,7 @@ class LoadTester:
 
         return self.results
 
-    async def _simulate_user(self, user_id: int, test_start_time: float):
+    async def _simulate_user(self, user_id: int, test_start_time: float) -> None:
         """Simulate a single user making requests."""
         async with httpx.AsyncClient(
             timeout=self.config.request_timeout,
@@ -112,7 +112,7 @@ class LoadTester:
                 delay = (user_id / self.config.concurrent_users) * self.config.ramp_up_seconds
                 await asyncio.sleep(delay)
 
-            user_start_time = time.time()
+            time.time()
 
             while self._running and (time.time() - test_start_time) < self.config.duration_seconds:
                 for endpoint in self.config.endpoints:
@@ -180,7 +180,7 @@ class LoadTester:
                     # Small delay between requests to avoid overwhelming
                     await asyncio.sleep(0.1)
 
-    def _calculate_metrics(self, total_duration: float):
+    def _calculate_metrics(self, total_duration: float) -> None:
         """Calculate final performance metrics."""
         if self.results.total_requests == 0:
             return
@@ -199,7 +199,7 @@ class LoadTester:
             else:
                 self.results.p99_response_time = self.results.p95_response_time
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the load test."""
         self._running = False
 
@@ -227,10 +227,10 @@ class PerformanceBenchmark:
     async def benchmark_async(
         self,
         func: Callable[..., Awaitable[Any]],
-        *args,
+        *args: Any,
         iterations: int = 100,
         warmup_iterations: int = 10,
-        **kwargs
+        **kwargs: Any
     ) -> BenchmarkResult:
         """Benchmark an async function."""
         # Warmup
@@ -277,17 +277,17 @@ class PerformanceBenchmark:
     def benchmark_sync(
         self,
         func: Callable[..., Any],
-        *args,
+        *args: Any,
         iterations: int = 100,
         warmup_iterations: int = 10,
-        **kwargs
+        **kwargs: Any
     ) -> BenchmarkResult:
         """Benchmark a sync function using a thread pool."""
-        def run_warmup():
+        def run_warmup() -> None:
             for _ in range(warmup_iterations):
                 func(*args, **kwargs)
 
-        def run_benchmark():
+        def run_benchmark() -> list[float]:
             times = []
             for _ in range(iterations):
                 iteration_start = time.perf_counter()
@@ -349,11 +349,11 @@ async def benchmark_health_endpoint(base_url: str = "http://localhost:8000") -> 
     benchmark = PerformanceBenchmark("health_endpoint")
 
     async with httpx.AsyncClient() as client:
-        async def health_check():
+        async def health_check() -> None:
             response = await client.get(f"{base_url}/health")
             response.raise_for_status()
 
-        return await benchmark.benchmark_async(health_check, iterations=50)
+    return await benchmark.benchmark_async(health_check, iterations=50)
 
 
 async def benchmark_cache_operations() -> BenchmarkResult:
@@ -363,7 +363,7 @@ async def benchmark_cache_operations() -> BenchmarkResult:
     benchmark = PerformanceBenchmark("cache_operations")
     cache = get_cache_service()
 
-    async def cache_set_get():
+    async def cache_set_get() -> None:
         key = f"benchmark_{time.time()}"
         await cache.set(key, "test_value", ttl=timedelta(seconds=60))
         await cache.get(key)
@@ -379,7 +379,7 @@ class PerformanceRegressionDetector:
         self.baseline_file = baseline_file
         self.baselines: Dict[str, BenchmarkResult] = {}
 
-    def load_baselines(self):
+    def load_baselines(self) -> None:
         """Load baseline performance data."""
         try:
             import json
@@ -393,7 +393,7 @@ class PerformanceRegressionDetector:
         except Exception as e:
             logger.error("failed_to_load_baselines", error=str(e))
 
-    def save_baselines(self, benchmark_summary: Dict[str, Any]):
+    def save_baselines(self, benchmark_summary: Dict[str, Any]) -> None:
         """Save current results as new baselines."""
         try:
             import json

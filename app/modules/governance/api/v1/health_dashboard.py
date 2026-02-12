@@ -93,7 +93,7 @@ _startup_time = datetime.now(timezone.utc)
 async def get_investor_health_dashboard(
     _user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db)
-):
+) -> InvestorHealthDashboard:
     """
     Get comprehensive health dashboard for investor due diligence.
     
@@ -159,7 +159,7 @@ async def _get_tenant_metrics(db: AsyncSession, now: datetime) -> TenantMetrics:
     # Trial vs paid
     trial = await db.scalar(
         select(func.count(Tenant.id))
-        .where(Tenant.plan == PricingTier.TRIAL.value)
+        .where(Tenant.plan == PricingTier.FREE_TRIAL.value)
     )
     
     paid = (total or 0) - (trial or 0)
@@ -168,7 +168,7 @@ async def _get_tenant_metrics(db: AsyncSession, now: datetime) -> TenantMetrics:
     churn_risk = await db.scalar(
         select(func.count(Tenant.id))
         .where(
-            Tenant.plan != PricingTier.TRIAL.value,
+            Tenant.plan != PricingTier.FREE_TRIAL.value,
             (Tenant.last_accessed_at < week_ago) | (Tenant.last_accessed_at.is_(None))
         )
     )

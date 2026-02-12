@@ -18,7 +18,7 @@
 	import ToastComponent from '$lib/components/Toast.svelte';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
 	import { base } from '$app/paths';
-	import { fly, fade } from 'svelte/transition';
+	import { fly } from 'svelte/transition';
 	import { browser } from '$app/environment';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import { jobStore } from '$lib/stores/jobs.svelte';
@@ -43,6 +43,8 @@
 	// Navigation items
 	const navItems = [
 		{ href: '/', label: 'Dashboard', icon: '📊' },
+		{ href: '/ops', label: 'Ops Center', icon: '🛠️' },
+		{ href: '/audit', label: 'Audit Logs', icon: '🧾' },
 		{ href: '/connections', label: 'Cloud Accounts', icon: '☁️' },
 		{ href: '/greenops', label: 'GreenOps', icon: '🌱' },
 		{ href: '/llm', label: 'LLM Usage', icon: '🤖' },
@@ -161,13 +163,19 @@
 							<kbd class="px-1.5 py-0.5 rounded border border-ink-700 bg-ink-800">K</kbd>
 						</button>
 						{#if jobStore.activeJobsCount > 0}
-							<div class="flex items-center gap-2 px-3 py-1 rounded-full bg-accent-500/10 border border-accent-500/20 mr-2">
+							<div
+								class="flex items-center gap-2 px-3 py-1 rounded-full bg-accent-500/10 border border-accent-500/20 mr-2"
+							>
 								<span class="relative flex h-2 w-2">
-									<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-400 opacity-75"></span>
+									<span
+										class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-400 opacity-75"
+									></span>
 									<span class="relative inline-flex rounded-full h-2 w-2 bg-accent-500"></span>
 								</span>
 								<span class="text-[10px] font-bold uppercase tracking-wider text-accent-400">
-									{jobStore.activeJobsCount} Active {jobStore.activeJobsCount === 1 ? 'Job' : 'Jobs'}
+									{jobStore.activeJobsCount} Active {jobStore.activeJobsCount === 1
+										? 'Job'
+										: 'Jobs'}
 								</span>
 							</div>
 						{/if}

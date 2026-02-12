@@ -48,5 +48,5 @@ class DiscoveredAccount(Base):
     # Relationship to the management connection
     management_connection: Mapped["AWSConnection"] = relationship("AWSConnection", foreign_keys=[management_connection_id])
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<DiscoveredAccount {self.account_id} ({self.status})>"

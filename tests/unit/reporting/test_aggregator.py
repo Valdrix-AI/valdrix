@@ -91,11 +91,90 @@ async def test_get_dashboard_summary(mock_db, tenant_id):
         "breakdown": [{"service": "EC2", "cost": 100.0, "carbon_kg": 5.0}]
     }
     
-    with patch.object(CostAggregator, "get_basic_breakdown", return_value=breakdown_data):
+    with (
+        patch.object(CostAggregator, "get_basic_breakdown", return_value=breakdown_data),
+        patch.object(CostAggregator, "get_data_freshness", return_value={"status": "final"}),
+        patch.object(
+            CostAggregator,
+            "get_canonical_data_quality",
+            return_value={"mapped_percentage": 100.0, "meets_target": True},
+        ),
+    ):
         res = await CostAggregator.get_dashboard_summary(
             mock_db, tenant_id, date(2026, 1, 1), date(2026, 1, 31)
         )
     assert res["total_cost"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_get_dashboard_summary_includes_data_quality(mock_db, tenant_id):
+    row = MagicMock()
+    row.total_cost = Decimal("100.00")
+    row.total_carbon = Decimal("5.00")
+
+    mock_result = MagicMock()
+    mock_result.one_or_none.return_value = row
+    mock_db.execute.return_value = mock_result
+
+    with (
+        patch.object(CostAggregator, "get_basic_breakdown", return_value={"breakdown": []}),
+        patch.object(
+            CostAggregator,
+            "get_data_freshness",
+            return_value={"status": "mixed", "freshness_percentage": 80.0},
+        ),
+        patch.object(
+            CostAggregator,
+            "get_canonical_data_quality",
+            return_value={"mapped_percentage": 99.2, "meets_target": True},
+        ),
+    ):
+        res = await CostAggregator.get_dashboard_summary(
+            mock_db, tenant_id, date(2026, 1, 1), date(2026, 1, 31)
+        )
+
+    assert "data_quality" in res
+    assert res["data_quality"]["freshness"]["status"] == "mixed"
+    assert res["data_quality"]["canonical_mapping"]["mapped_percentage"] == 99.2
+
+
+@pytest.mark.asyncio
+async def test_get_canonical_data_quality_no_data(mock_db, tenant_id):
+    mock_row = MagicMock()
+    mock_row.total_records = 0
+    mock_row.mapped_records = 0
+
+    mock_result = MagicMock()
+    mock_result.one_or_none.return_value = mock_row
+    mock_db.execute.return_value = mock_result
+
+    result = await CostAggregator.get_canonical_data_quality(
+        mock_db, tenant_id, date(2026, 1, 1), date(2026, 1, 31)
+    )
+
+    assert result["status"] == "no_data"
+    assert result["mapped_percentage"] == 0.0
+    assert result["meets_target"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_canonical_data_quality_below_target(mock_db, tenant_id):
+    mock_row = MagicMock()
+    mock_row.total_records = 100
+    mock_row.mapped_records = 97
+
+    mock_result = MagicMock()
+    mock_result.one_or_none.return_value = mock_row
+    mock_db.execute.return_value = mock_result
+
+    result = await CostAggregator.get_canonical_data_quality(
+        mock_db, tenant_id, date(2026, 1, 1), date(2026, 1, 31)
+    )
+
+    assert result["status"] == "ok"
+    assert result["mapped_percentage"] == 97.0
+    assert result["unmapped_records"] == 3
+    assert result["meets_target"] is False
 
 @pytest.mark.asyncio
 async def test_get_basic_breakdown(mock_db, tenant_id):

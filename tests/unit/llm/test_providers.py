@@ -245,7 +245,7 @@ class TestAnthropicProvider:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
-            result = provider.create_model()
+            provider.create_model()
 
             # Should use ANTHROPIC_API_KEY, not CLAUDE_API_KEY
             mock_chat.assert_called_once_with(
@@ -450,7 +450,7 @@ class TestLLMProvidersProductionQuality:
             mock_chat.return_value = mock_instance
 
             # Test with None model (should use default)
-            result = provider.create_model(
+            provider.create_model(
                 model=None,
                 api_key="sk-valid123456789012345678901234567890"
             )

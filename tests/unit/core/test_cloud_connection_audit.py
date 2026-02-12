@@ -6,6 +6,8 @@ from app.shared.core.cloud_connection import CloudConnectionService
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
+from app.models.saas_connection import SaaSConnection
+from app.models.license_connection import LicenseConnection
 
 @pytest.fixture
 def mock_db():
@@ -22,10 +24,30 @@ def service(mock_db):
 async def test_list_all_connections(service, mock_db):
     tenant_id = uuid4()
     
-    # Mock results for AWS, Azure, GCP queries
+    # Mock results for AWS, Azure, GCP, SaaS, License queries
     mock_aws = [AWSConnection(id=uuid4(), tenant_id=tenant_id, aws_account_id="123")]
     mock_azure = [AzureConnection(id=uuid4(), tenant_id=tenant_id, subscription_id="sub-1")]
     mock_gcp = [GCPConnection(id=uuid4(), tenant_id=tenant_id, project_id="proj-1")]
+    mock_saas = [
+        SaaSConnection(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            name="Salesforce",
+            vendor="salesforce",
+            auth_method="manual",
+            spend_feed=[],
+        )
+    ]
+    mock_license = [
+        LicenseConnection(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            name="M365",
+            vendor="microsoft",
+            auth_method="manual",
+            license_feed=[],
+        )
+    ]
     
     # Map side effects to consecutive execute calls
     mock_res_aws = MagicMock()
@@ -36,14 +58,22 @@ async def test_list_all_connections(service, mock_db):
     
     mock_res_gcp = MagicMock()
     mock_res_gcp.scalars.return_value.all.return_value = mock_gcp
+
+    mock_res_saas = MagicMock()
+    mock_res_saas.scalars.return_value.all.return_value = mock_saas
+
+    mock_res_license = MagicMock()
+    mock_res_license.scalars.return_value.all.return_value = mock_license
     
-    mock_db.execute.side_effect = [mock_res_aws, mock_res_azure, mock_res_gcp]
+    mock_db.execute.side_effect = [mock_res_aws, mock_res_azure, mock_res_gcp, mock_res_saas, mock_res_license]
     
     connections = await service.list_all_connections(tenant_id)
     
     assert len(connections["aws"]) == 1
     assert len(connections["azure"]) == 1
     assert len(connections["gcp"]) == 1
+    assert len(connections["saas"]) == 1
+    assert len(connections["license"]) == 1
     assert connections["aws"][0].aws_account_id == "123"
 
 @pytest.mark.asyncio

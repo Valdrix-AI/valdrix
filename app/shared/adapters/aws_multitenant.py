@@ -6,7 +6,7 @@ Leverages aioboto3 for non-blocking I/O.
 
 """
 
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import aioboto3
@@ -38,7 +38,7 @@ BOTO_CONFIG = BotoConfig(
 MAX_COST_EXPLORER_PAGES = 300
 
 # BE-ADAPT-2: Global retry decorator for transient AWS connection issues
-def with_aws_retry(func):
+def with_aws_retry(func: Any) -> Any:
     """
     Exponential backoff retry decorator for AWS API calls.
     Targets transient network failures (ConnectTimeout, EndpointConnectionError).
@@ -80,7 +80,7 @@ def with_aws_retry(func):
 
     if inspect.isasyncgenfunction(func):
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Async generators need manual retry orchestration.
             retrying = tenacity.AsyncRetrying(**_build_retry_config())
             async for attempt in retrying:
@@ -90,7 +90,7 @@ def with_aws_retry(func):
         return wrapper
     else:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             retrying = tenacity.AsyncRetrying(**_build_retry_config())
             async for attempt in retrying:
                 with attempt:
@@ -104,7 +104,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
 
     def __init__(self, connection: AWSConnection):
         self.connection = connection
-        self._credentials: Optional[Dict] = None
+        self._credentials: Optional[dict[str, Any]] = None
         self._credentials_expire_at: Optional[datetime] = None
         self.session = aioboto3.Session()
 
@@ -127,7 +127,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
             return False
 
     @with_aws_retry
-    async def get_credentials(self) -> Dict:
+    async def get_credentials(self) -> dict[str, Any]:
         """Get temporary credentials via STS AssumeRole (Native Async)."""
         if self._credentials and self._credentials_expire_at:
             if datetime.now(timezone.utc) < self._credentials_expire_at:
@@ -249,7 +249,6 @@ class MultiTenantAWSAdapter(BaseAdapter):
                 provider="aws",
                 records=records,
                 total_cost=total_cost,
-                currency="USD",
                 start_date=start_date,
                 end_date=end_date
             )
@@ -304,7 +303,8 @@ class MultiTenantAWSAdapter(BaseAdapter):
                                     "cost_usd": amount,
                                     "currency": "USD",
                                     "amount_raw": amount,
-                                    "usage_type": "Usage"
+                                    "usage_type": "Usage",
+                                    "source_adapter": "cost_explorer_api",
                                 }
                     
                     pages_fetched += 1
@@ -356,7 +356,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
         return await self.get_cost_and_usage(start_date, end_date, granularity)
 
     @with_aws_retry
-    async def discover_resources(self, resource_type: str, region: str = None) -> List[Dict[str, Any]]:
+    async def discover_resources(self, resource_type: str, region: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Discover zombie resources with OTel tracing.
         """

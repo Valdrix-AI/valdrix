@@ -1,8 +1,10 @@
 import json
+import logging
 import re
 from datetime import datetime
-from typing import List, Dict, Any, AsyncGenerator
+from typing import Any, AsyncGenerator, cast
 import structlog
+from google.auth.credentials import Credentials as GoogleCredentials
 from google.cloud import bigquery
 from google.cloud import asset_v1
 from google.oauth2 import service_account
@@ -19,7 +21,7 @@ gcp_retry = tenacity.retry(
     retry=tenacity.retry_if_exception_type((ServiceUnavailable, DeadlineExceeded)),
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
     stop=tenacity.stop_after_attempt(3),
-    before_sleep=tenacity.before_sleep_log(logger, "warning")
+    before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
 )
 
 # BE-ADAPT-8: Project ID format validation
@@ -46,25 +48,28 @@ class GCPAdapter(BaseAdapter):
             logger.error("gcp_invalid_project_id", project_id=connection.project_id)
             raise ValueError(error_msg)
         
-        self._credentials = self._get_credentials()
+        self._credentials: GoogleCredentials | None = self._get_credentials()
 
-    def _get_credentials(self):
+    def _get_credentials(self) -> GoogleCredentials | None:
         """Initialize GCP credentials from service account JSON or environment."""
         if self.connection.service_account_json:
             try:
                 info = json.loads(self.connection.service_account_json)
-                return service_account.Credentials.from_service_account_info(info)
+                return cast(
+                    GoogleCredentials,
+                    service_account.Credentials.from_service_account_info(info),  # type: ignore[no-untyped-call]
+                )
             except Exception as e:
                 logger.error("gcp_credentials_load_error", error=str(e))
         return None  # Fallback to default credentials
 
-    def _get_bq_client(self):
+    def _get_bq_client(self) -> bigquery.Client:
         return bigquery.Client(
             project=self.connection.project_id,
             credentials=self._credentials
         )
 
-    def _get_asset_client(self):
+    def _get_asset_client(self) -> asset_v1.AssetServiceClient:
         return asset_v1.AssetServiceClient(credentials=self._credentials)
 
     async def verify_connection(self) -> bool:
@@ -85,7 +90,7 @@ class GCPAdapter(BaseAdapter):
         end_date: datetime,
         granularity: str = "DAILY",
         include_credits: bool = True  # Phase 5: CUD amortization
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Fetch GCP costs from BigQuery billing export.
         Phase 5: Includes CUD credit extraction for amortized cost calculation.
@@ -148,7 +153,7 @@ class GCPAdapter(BaseAdapter):
             ORDER BY timestamp DESC
         """ # nosec: B608
 
-    def _parse_row(self, row: Any) -> Dict[str, Any]:
+    def _parse_row(self, row: Any) -> dict[str, Any]:
         """Normalizes a single GCP BigQuery result row."""
         return {
             "timestamp": row.timestamp,
@@ -157,7 +162,8 @@ class GCPAdapter(BaseAdapter):
             "credits": float(row.total_credits) if row.total_credits else 0.0,
             "amortized_cost": float(row.cost_usd) + float(row.total_credits or 0),
             "currency": row.currency,
-            "region": "global" 
+            "region": "global",
+            "source_adapter": "cur_billing_export",
         }
 
     async def get_amortized_costs(
@@ -165,7 +171,7 @@ class GCPAdapter(BaseAdapter):
         start_date: datetime,
         end_date: datetime,
         granularity: str = "DAILY"
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get GCP costs with CUD amortization applied.
         Phase 5: Cloud Parity - Returns amortized_cost which reflects CUD discounts.
@@ -182,16 +188,18 @@ class GCPAdapter(BaseAdapter):
         start_date: datetime,
         end_date: datetime,
         granularity: str = "DAILY"
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """
         Stream GCP costs from BigQuery.
         Yields records one-by-one from the BigQuery result set.
         """
         records = await self.get_cost_and_usage(start_date, end_date, granularity)
-        for r in records:
-            yield r
+        for record in records:
+            yield record
 
-    async def discover_resources(self, resource_type: str, region: str = None) -> List[Dict[str, Any]]:
+    async def discover_resources(
+        self, resource_type: str, region: str | None = None
+    ) -> list[dict[str, Any]]:
         """
         Discover GCP resources with OTel tracing.
         """

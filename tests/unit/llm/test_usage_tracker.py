@@ -1,7 +1,7 @@
-import pytest
 """
 Tests for usage_tracker.py - LLM usage tracking and cost calculation.
 """
+import pytest
 from decimal import Decimal
 import builtins
 from unittest.mock import patch, MagicMock, AsyncMock
@@ -104,7 +104,7 @@ class TestUsageTracker:
 
         with patch('app.shared.llm.usage_tracker.LLMBudgetManager.record_usage', new_callable=AsyncMock) as mock_record:
 
-            result = await tracker.record(
+            await tracker.record(
                 tenant_id="test-tenant-id",
                 provider="groq",
                 model="llama-3.3-70b-versatile",
@@ -140,7 +140,7 @@ class TestUsageTracker:
                     max_output_tokens=500
                 )
 
-                assert result == True
+                assert result
                 mock_check.assert_called_once_with(
                     tenant_id="test-tenant-id",
                     db=mock_db,
@@ -272,7 +272,7 @@ class TestUsageTrackerProductionQuality:
             "<img src=x onerror=alert('xss')>",
         ]
 
-        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.record_usage', new_callable=AsyncMock) as mock_record:
+        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.record_usage', new_callable=AsyncMock):
             for malicious_input in malicious_inputs:
                 # Should not crash or expose vulnerabilities
                 try:
@@ -402,7 +402,7 @@ class TestUsageTrackerProductionQuality:
         import time
 
         start_time = time.time()
-        result = await tracker.get_monthly_usage("test-tenant")
+        await tracker.get_monthly_usage("test-tenant")
         end_time = time.time()
 
         # Should complete within reasonable time

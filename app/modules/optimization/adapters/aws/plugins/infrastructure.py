@@ -33,9 +33,10 @@ class StoppedInstancesWithEbsPlugin(ZombiePlugin):
         self, 
         session: aioboto3.Session, 
         region: str, 
-        credentials: Dict[str, str] = None, 
+        credentials: Dict[str, str] | None = None, 
         config: Any = None,
-        **kwargs
+        inventory: Any = None,
+        **kwargs: Any
     ) -> List[Dict[str, Any]]:
         zombies = []
         days_stopped_threshold = 7
@@ -142,9 +143,10 @@ class UnusedLambdaPlugin(ZombiePlugin):
         self, 
         session: aioboto3.Session, 
         region: str, 
-        credentials: Dict[str, str] = None, 
+        credentials: Dict[str, str] | None = None, 
         config: Any = None,
-        **kwargs
+        inventory: Any = None,
+        **kwargs: Any
     ) -> List[Dict[str, Any]]:
         zombies = []
         days_threshold = 30  # Functions not invoked in 30 days
@@ -215,9 +217,10 @@ class OrphanVpcEndpointsPlugin(ZombiePlugin):
         self, 
         session: aioboto3.Session, 
         region: str, 
-        credentials: Dict[str, str] = None, 
+        credentials: Dict[str, str] | None = None, 
         config: Any = None,
-        **kwargs
+        inventory: Any = None,
+        **kwargs: Any
     ) -> List[Dict[str, Any]]:
         zombies = []
         days = 7

@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 import structlog
 from azure.identity.aio import ClientSecretCredential
 from app.modules.optimization.domain.ports import BaseZombieDetector
@@ -35,7 +35,9 @@ class AzureZombieDetector(BaseZombieDetector):
         self._credential = None
         self._credential_error = None
 
-        def _build_credential(tenant_id: Optional[str], client_id: Optional[str], client_secret: Optional[str]):
+        def _build_credential(
+            tenant_id: Optional[str], client_id: Optional[str], client_secret: Optional[str]
+        ) -> Optional[ClientSecretCredential]:
             if not tenant_id or not client_id or not client_secret:
                 self._credential_error = "missing_client_credentials"
                 logger.warning(
@@ -85,7 +87,7 @@ class AzureZombieDetector(BaseZombieDetector):
     def provider_name(self) -> str:
         return "azure"
 
-    def _initialize_plugins(self):
+    def _initialize_plugins(self) -> None:
         """Register the standard suite of Azure detections."""
         plugins = registry.get_plugins_for_provider("azure")
         self.plugins = [p for p in plugins if p.category_key in self.ALLOWED_PLUGIN_CATEGORIES]
@@ -107,8 +109,9 @@ class AzureZombieDetector(BaseZombieDetector):
             return []
         try:
             results = await plugin.scan(
+                session=None,
                 subscription_id=self.subscription_id,
-                credentials=self._credential,
+                credentials=cast(Any, self._credential),
                 region=self.region
             )
         except Exception as exc:
@@ -122,10 +125,10 @@ class AzureZombieDetector(BaseZombieDetector):
             return []
         return results
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "AzureZombieDetector":
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self._compute_client:
             await self._compute_client.close()
         if self._network_client:

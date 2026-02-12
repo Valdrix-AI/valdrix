@@ -260,6 +260,36 @@ async def test_save_records_stream_batch_flush(persistence_service):
     assert result["records_saved"] == 501
     assert mock_bulk.call_count == 2
 
+
+@pytest.mark.asyncio
+async def test_save_records_stream_includes_source_metadata(persistence_service):
+    tenant_id = str(uuid4())
+    account_id = str(uuid4())
+
+    async def record_stream():
+        yield {
+            "service": "EC2",
+            "region": "us-east-1",
+            "cost_usd": Decimal("2.00"),
+            "currency": "USD",
+            "amount_raw": Decimal("2.00"),
+            "timestamp": datetime.now(timezone.utc),
+            "usage_type": "Usage",
+            "source_adapter": "cost_explorer_api",
+            "tags": {"env": "prod"},
+        }
+
+    with patch.object(persistence_service, "_bulk_upsert", AsyncMock()) as mock_bulk:
+        result = await persistence_service.save_records_stream(record_stream(), tenant_id, account_id)
+
+    assert result["records_saved"] == 1
+    assert mock_bulk.await_count == 1
+    values = mock_bulk.await_args.args[0]
+    assert len(values) == 1
+    ingestion_meta = values[0]["ingestion_metadata"]
+    assert ingestion_meta["source_adapter"] == "cost_explorer_api"
+    assert ingestion_meta["tags"] == {"env": "prod"}
+
 @pytest.mark.asyncio
 async def test_bulk_upsert_no_values_noop(persistence_service, mock_db):
     await persistence_service._bulk_upsert([])

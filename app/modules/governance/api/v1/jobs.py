@@ -8,6 +8,7 @@ Provides endpoints for:
 """
 
 import uuid
+from collections.abc import AsyncIterator
 from typing import Annotated, Literal, Dict, Any, List
 from datetime import datetime, timezone
 import sqlalchemy as sa
@@ -99,7 +100,7 @@ async def get_job_queue_status(
 
 
 @router.post("/process", response_model=ProcessJobsResponse)
-@standard_limit # type: ignore[untyped-decorator]
+@standard_limit
 async def process_pending_jobs(
     request: Request,
     _user: Annotated[CurrentUser, Depends(requires_role("admin"))],
@@ -158,7 +159,7 @@ async def enqueue_new_job(
     
     return JobResponse(
         id=job.id,
-        job_type=job.job_type,
+        job_type=JobType(job.job_type),
         status=job.status,
         attempts=job.attempts,
         scheduled_for=job.scheduled_for,
@@ -233,8 +234,8 @@ async def stream_job_updates(
             )
         _active_sse_connections[tenant_key] = current_connections + 1
 
-    async def event_generator():
-        last_seen_job_states = {}
+    async def event_generator() -> AsyncIterator[Dict[str, str]]:
+        last_seen_job_states: Dict[str, str] = {}
         try:
             while True:
                 try:

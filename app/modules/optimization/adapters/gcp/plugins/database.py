@@ -3,6 +3,7 @@ GCP Database Plugins - Zero-Cost Zombie Detection.
 
 Detects idle Cloud SQL instances using billing export data.
 """
+import importlib
 from typing import List, Dict, Any
 import structlog
 
@@ -20,8 +21,21 @@ class IdleCloudSqlPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_gcp_cloud_sql"
     
-    async def scan(self, project_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for idle Cloud SQL instances via billing data."""
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            logger.warning("gcp_scan_missing_project_id", plugin=self.category_key)
+            return []
+
         billing_records = kwargs.get("billing_records")
         
         if billing_records:
@@ -32,7 +46,7 @@ class IdleCloudSqlPlugin(ZombiePlugin):
         # Fallback: List instances and flag for review
         zombies = []
         try:
-            from google.cloud import sqladmin_v1
+            sqladmin_v1 = importlib.import_module("google.cloud.sqladmin_v1")
             client = sqladmin_v1.SqlInstancesServiceClient(credentials=credentials)
             
             request = sqladmin_v1.SqlInstancesListRequest(project=project_id)

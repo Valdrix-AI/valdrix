@@ -614,7 +614,7 @@ class TestAuthorizationAndAuthentication:
             role="member",
             tier="pro"
         )
-        user_b = CurrentUser(
+        CurrentUser(
             id=uuid4(),
             email="user@tenantB.com",
             tenant_id=tenant_b.id,

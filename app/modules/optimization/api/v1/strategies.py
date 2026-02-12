@@ -23,8 +23,12 @@ class RecommendationRead(BaseModel):
     payment_option: PaymentOption
     upfront_cost: float
     monthly_recurring_cost: float
+    estimated_monthly_savings_low: float | None = None
     estimated_monthly_savings: float
+    estimated_monthly_savings_high: float | None = None
     roi_percentage: float
+    break_even_months: float | None = None
+    confidence_score: float | None = None
     status: str
 
 class OptimizationScanResponse(BaseModel):
@@ -64,11 +68,11 @@ async def trigger_optimization_scan(
     service = OptimizationService(db=db)
     recs = await service.generate_recommendations(tenant_id)
     
-    return {
-        "status": "success",
-        "recommendations_generated": len(recs),
-        "message": f"Generated {len(recs)} new optimization opportunities."
-    }
+    return OptimizationScanResponse(
+        status="success",
+        recommendations_generated=len(recs),
+        message=f"Generated {len(recs)} new optimization opportunities."
+    )
 
 @router.post("/apply/{recommendation_id}")
 async def apply_recommendation(

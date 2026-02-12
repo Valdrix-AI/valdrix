@@ -1,9 +1,10 @@
 import ssl
 import uuid
-from typing import Dict, Any
+from collections.abc import AsyncGenerator
+from typing import Any, Dict, cast
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import event, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.pool import StaticPool, NullPool
 from app.shared.core.config import get_settings
 import structlog
@@ -35,7 +36,7 @@ if db_url.startswith("postgresql://"):
 # SSL Context: Configurable SSL modes for different environments
 # Options: disable, require, verify-ca, verify-full
 ssl_mode = settings.DB_SSL_MODE.lower()
-connect_args = {}
+connect_args: dict[str, Any] = {}
 
 # Determine the actual URL to use. If testing, default to in-memory sqlite to avoid side-effects.
 # Determine the actual URL to use. 
@@ -108,7 +109,7 @@ else:
 # - pool_pre_ping: Checks if connection is alive before using (prevents stale connections)
 # - pool_recycle: Recycle connections after 5 min (Supavisor/Neon compatibility)
 # Pool Configuration: Use NullPool for testing to avoid connection leaks across loops
-POOL_CONFIG = {
+POOL_CONFIG: dict[str, Any] = {
     "pool_recycle": settings.DB_POOL_RECYCLE,
     "pool_pre_ping": True,  # Health check connections before use
     "echo": settings.DB_ECHO,
@@ -137,12 +138,26 @@ engine = create_async_engine(
 SLOW_QUERY_THRESHOLD_SECONDS = 0.2
 
 @event.listens_for(engine.sync_engine, "before_cursor_execute")
-def before_cursor_execute(conn, _cursor, _statement, _parameters, _context, _executemany):
+def before_cursor_execute(
+    conn: Connection,
+    _cursor: Any,
+    _statement: str,
+    _parameters: Any,
+    _context: Any,
+    _executemany: bool,
+) -> None:
     """Record query start time."""
     conn.info.setdefault("query_start_time", []).append(time.perf_counter())
 
 @event.listens_for(engine.sync_engine, "after_cursor_execute")
-def after_cursor_execute(conn, _cursor, statement, parameters, _context, _executemany):
+def after_cursor_execute(
+    conn: Connection,
+    _cursor: Any,
+    statement: str,
+    parameters: Any,
+    _context: Any,
+    _executemany: bool,
+) -> None:
     """Log slow queries."""
     total = time.perf_counter() - conn.info["query_start_time"].pop(-1)
     if total > SLOW_QUERY_THRESHOLD_SECONDS:
@@ -162,7 +177,22 @@ async_session_maker = async_sessionmaker(
     expire_on_commit=False,
 )
 
-async def get_db(request: Request = None) -> AsyncSession:
+
+def _session_uses_postgresql(session: AsyncSession) -> bool:
+    """Best-effort dialect detection that works for real sessions and test doubles."""
+    try:
+        bind = getattr(session, "bind", None)
+        bind_url = str(getattr(bind, "url", "")) if bind is not None else ""
+        if bind_url:
+            return "postgresql" in bind_url
+    except Exception:
+        pass
+    return "postgresql" in effective_url
+
+
+async def get_db(
+    request: Request = cast(Request, None),
+) -> AsyncGenerator[AsyncSession, None]:
     """
     FastAPI dependency that provides a database session with RLS context.
     """
@@ -174,7 +204,7 @@ async def get_db(request: Request = None) -> AsyncSession:
             if tenant_id:
                 try:
                     # RLS: Only execute on PostgreSQL
-                    if "postgresql" in str(session.bind.url if session.bind else ""):
+                    if _session_uses_postgresql(session):
                         rls_start = time.perf_counter()
                         await session.execute(
                             text("SELECT set_config('app.current_tenant_id', :tid, true)"),
@@ -216,7 +246,7 @@ async def set_session_tenant_id(session: AsyncSession, tenant_id: uuid.UUID) -> 
     conn.info["rls_context_set"] = True
     
     # For Postgres, execute the actual set_config for RLS
-    if "postgresql" in str(session.bind.url if session.bind else ""):
+    if _session_uses_postgresql(session):
         try:
             rls_start = time.perf_counter()
             await session.execute(
@@ -228,7 +258,14 @@ async def set_session_tenant_id(session: AsyncSession, tenant_id: uuid.UUID) -> 
             logger.warning("failed_to_set_rls_config_in_session", error=str(e))
 
 @event.listens_for(Engine, "before_cursor_execute", retval=True)
-def check_rls_policy(conn, _cursor, statement, parameters, _context, _executemany):
+def check_rls_policy(
+    conn: Connection,
+    _cursor: Any,
+    statement: str,
+    parameters: Any,
+    _context: Any,
+    _executemany: bool,
+) -> tuple[str, Any]:
     """
     PRODUCTION: Hardened Multi-Tenancy RLS Enforcement
     

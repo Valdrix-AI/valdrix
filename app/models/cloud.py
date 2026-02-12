@@ -38,6 +38,9 @@ class CostRecord(Base):
     service: Mapped[str] = mapped_column(String, index=True) # e.g., "AmazonEC2"
     region: Mapped[str] = mapped_column(String, nullable=True)
     usage_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    canonical_charge_category: Mapped[str] = mapped_column(String, default="unmapped", nullable=False, index=True)
+    canonical_charge_subcategory: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    canonical_mapping_version: Mapped[str] = mapped_column(String, default="focus-1.3-v1", nullable=False)
 
     # Financials (DECIMAL for money!)
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(18, 8))
@@ -73,4 +76,3 @@ class CostRecord(Base):
         UniqueConstraint('account_id', 'timestamp', 'service', 'region', 'usage_type', 'recorded_at', name='uix_account_cost_granularity'),
         get_partition_args('RANGE (recorded_at)'),
     )
-

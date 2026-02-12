@@ -17,7 +17,15 @@ class UnusedElasticIpsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "unused_elastic_ips"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: aioboto3.Session,
+        region: str,
+        credentials: Dict[str, str] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
 
         zombies = []
         try:
@@ -57,7 +65,7 @@ class IdleInstancesPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_instances"
 
-    async def _get_attribution(self, session: aioboto3.Session, region: str, instance_id: str, credentials: Dict[str, str] = None, config: Any = None) -> str:
+    async def _get_attribution(self, session: aioboto3.Session, region: str, instance_id: str, credentials: Dict[str, str] | None = None, config: Any = None) -> str:
         """
         Governance Layer: Uses CloudTrail to find who launched the instance.
         """
@@ -73,12 +81,20 @@ class IdleInstancesPlugin(ZombiePlugin):
                 for event in response.get("Events", []):
                     # We look for the RunInstances event to find the original launcher
                     if event.get("EventName") == "RunInstances":
-                        return event.get("Username", "Unknown")
+                        return str(event.get("Username", "Unknown"))
         except Exception as e:
             logger.warning("cloudtrail_lookup_failed", instance_id=instance_id, error=str(e))
         return "Unknown"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: aioboto3.Session,
+        region: str,
+        credentials: Dict[str, str] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         zombies = []
         instances = []
         cpu_threshold = 2.0  # Tightened from 5% (BE-ZD-3)

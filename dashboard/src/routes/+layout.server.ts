@@ -11,7 +11,7 @@ import type { LayoutServerLoad } from './$types';
 export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 	const { session, user } = await locals.safeGetSession();
 
-	let subscription = { tier: 'free', status: 'active' };
+	let subscription = { tier: 'free_trial', status: 'active' };
 
 	// Fetch subscription tier if user is authenticated
 	if (session?.access_token) {

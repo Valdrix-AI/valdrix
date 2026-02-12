@@ -7,9 +7,9 @@ from decimal import Decimal
 from dataclasses import dataclass
 
 from app.modules.reporting.domain.calculator import (
+    CLOUD_PUE,
     CarbonCalculator,
     REGION_CARBON_INTENSITY,
-    AWS_PUE,
 )
 
 
@@ -194,6 +194,23 @@ class TestCarbonCalculatorFromCosts:
         
         assert result["total_cost_usd"] == 100.0
         # Should use default energy factor (0.03)
+        assert result["total_co2_kg"] > 0
+
+    def test_calculate_from_normalized_adapter_rows(self):
+        """Test calculation with normalized adapter rows (`cost_usd` shape)."""
+        calculator = CarbonCalculator()
+        cost_data = [
+            {
+                "service": "Compute Engine",
+                "cost_usd": 120.0,
+                "provider": "gcp",
+            }
+        ]
+
+        result = calculator.calculate_from_costs(cost_data, region="us-west-1", provider="gcp")
+
+        assert result["total_cost_usd"] == 120.0
+        assert result["provider"] == "gcp"
         assert result["total_co2_kg"] > 0
 
     def test_calculate_region_carbon_intensity_variations(self):
@@ -602,7 +619,7 @@ class TestCarbonCalculatorEdgeCases:
         
         # Energy should be multiplied by PUE (1.2)
         # 100 kWh * 1.2 = 120 kWh effective
-        assert result["estimated_energy_kwh"] == round(100 * AWS_PUE, 3)
+        assert result["estimated_energy_kwh"] == round(100 * CLOUD_PUE, 3)
 
     def test_embodied_emissions_included(self):
         """Test that embodied emissions (Scope 3) are included."""
@@ -615,4 +632,4 @@ class TestCarbonCalculatorEdgeCases:
         
         assert result["scope3_co2_kg"] > 0
         assert result["includes_embodied_emissions"] is True
-        assert result["methodology"] == "Valdrix 2026 (CCF + AWS CCFT v3.0.0)"
+        assert result["methodology"] == "Valdrix 2026 (CCF + multi-cloud provider factors v2.0)"

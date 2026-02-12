@@ -21,13 +21,26 @@ class IdleVmsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_gcp_vms"
     
-    async def scan(self, project_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """
         Scan for idle GCP VMs.
         
         Uses billing_records from BigQuery export for zero-cost detection.
         Falls back to Cloud Asset Inventory if billing data unavailable.
         """
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            logger.warning("gcp_scan_missing_project_id", plugin=self.category_key)
+            return []
+
         billing_records = kwargs.get("billing_records")
         
         # CUR-First: Use billing export data
@@ -81,8 +94,21 @@ class IdleGpuInstancesPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_gcp_gpu_instances"
     
-    async def scan(self, project_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for idle GPU instances."""
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            logger.warning("gcp_scan_missing_project_id", plugin=self.category_key)
+            return []
+
         billing_records = kwargs.get("billing_records")
         
         if billing_records:

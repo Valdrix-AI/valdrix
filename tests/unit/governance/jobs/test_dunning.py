@@ -39,7 +39,7 @@ class TestDunningHandler:
         """Test successful payment retry."""
         # Patch at the module where it's imported (lazy import inside function)
         with patch(
-            "app.modules.reporting.domain.billing.dunning_service.DunningService"
+            "app.modules.billing.domain.billing.dunning_service.DunningService"
         ) as MockDunning:
             mock_service = AsyncMock()
             mock_service.retry_payment.return_value = {
@@ -58,7 +58,7 @@ class TestDunningHandler:
     async def test_execute_failed_retry(self, handler, mock_job, mock_db):
         """Test failed payment retry."""
         with patch(
-            "app.modules.reporting.domain.billing.dunning_service.DunningService"
+            "app.modules.billing.domain.billing.dunning_service.DunningService"
         ) as MockDunning:
             mock_service = AsyncMock()
             mock_service.retry_payment.return_value = {
@@ -109,7 +109,7 @@ class TestDunningHandler:
         }
         
         with patch(
-            "app.modules.reporting.domain.billing.dunning_service.DunningService"
+            "app.modules.billing.domain.billing.dunning_service.DunningService"
         ) as MockDunning:
             mock_service = AsyncMock()
             mock_service.retry_payment.return_value = {"status": "success"}
@@ -129,7 +129,7 @@ class TestDunningHandler:
         }
         
         with patch(
-            "app.modules.reporting.domain.billing.dunning_service.DunningService"
+            "app.modules.billing.domain.billing.dunning_service.DunningService"
         ) as MockDunning:
             mock_service = AsyncMock()
             mock_service.retry_payment.return_value = {"status": "success"}

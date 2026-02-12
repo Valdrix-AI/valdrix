@@ -1,8 +1,8 @@
-import pytest
 """
 Comprehensive tests for ReportingService module.
 Covers cost ingestion, connection handling, data aggregation, and error scenarios.
 """
+import pytest
 
 from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
@@ -302,7 +302,7 @@ class TestCloudAccountRegistry:
             )
             mock_persistence.return_value = mock_persistence_instance
             
-            result = await service.ingest_costs_for_tenant(tenant_id)
+            await service.ingest_costs_for_tenant(tenant_id)
             
             # Check that execute was called (for registry sync with upsert)
             assert mock_db.execute.called
@@ -492,7 +492,6 @@ class TestConnectionMetadataUpdate:
     ):
         """Test that connection's last_ingested_at timestamp is updated."""
         tenant_id = mock_aws_connection.tenant_id
-        original_timestamp = mock_aws_connection.last_ingested_at
         
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]

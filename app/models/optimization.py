@@ -78,8 +78,12 @@ class StrategyRecommendation(Base):
     # Financial Impact
     upfront_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0.0)
     monthly_recurring_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0.0)
+    estimated_monthly_savings_low: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     estimated_monthly_savings: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    estimated_monthly_savings_high: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     roi_percentage: Mapped[Decimal] = mapped_column(Numeric(5, 2))  # e.g., 25.5 for 25.5%
+    break_even_months: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2), nullable=True)
+    confidence_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(4, 3), nullable=True)
     
     # Status
     status: Mapped[str] = mapped_column(String(20), default="open") # open, applied, dismissed

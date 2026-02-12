@@ -15,7 +15,7 @@ class BudgetHardCapService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def enforce_hard_cap(self, tenant_id: UUID):
+    async def enforce_hard_cap(self, tenant_id: UUID) -> None:
         """
         Example action: Detach all roles or deactivate connections.
         In a production FinOps tool, this might revoke STS role trust.

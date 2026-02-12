@@ -15,6 +15,8 @@ from app.shared.core.config import get_settings
 if TYPE_CHECKING:
     from app.models.llm import LLMUsage, LLMBudget
     from app.models.aws_connection import AWSConnection
+    from app.models.saas_connection import SaaSConnection
+    from app.models.license_connection import LicenseConnection
     from app.models.notification_settings import NotificationSettings
     from app.models.background_job import BackgroundJob
 
@@ -40,7 +42,7 @@ class Tenant(Base):
         index=True
     )
     name_bidx: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
-    plan: Mapped[str] = mapped_column(String, default="trial")  # Updated to use PricingTier in logic
+    plan: Mapped[str] = mapped_column(String, default="free_trial")  # Updated to use PricingTier in logic
     stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True)
     
     # Trial tracking
@@ -55,6 +57,8 @@ class Tenant(Base):
     llm_usage: Mapped[List["LLMUsage"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     llm_budget: Mapped[Optional["LLMBudget"]] = relationship(back_populates="tenant", uselist=False, cascade="all, delete-orphan")
     aws_connections: Mapped[List["AWSConnection"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    saas_connections: Mapped[List["SaaSConnection"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    license_connections: Mapped[List["LicenseConnection"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
     notification_settings: Mapped[Optional["NotificationSettings"]] = relationship(back_populates="tenant", uselist=False, cascade="all, delete-orphan")
     background_jobs: Mapped[List["BackgroundJob"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
 

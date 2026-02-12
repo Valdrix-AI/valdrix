@@ -1,7 +1,7 @@
 import uuid
 from enum import Enum
 from functools import wraps
-from typing import Optional, Callable, Dict, TYPE_CHECKING, Union, Any, Awaitable
+from typing import TYPE_CHECKING, Any, Callable, Union, cast
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
     from app.modules.governance.domain.security.auth import CurrentUser
@@ -15,8 +15,7 @@ logger = structlog.get_logger()
 
 class PricingTier(str, Enum):
     """Available subscription tiers."""
-    FREE = "free"
-    TRIAL = "trial"
+    FREE_TRIAL = "free_trial"
     STARTER = "starter"
     GROWTH = "growth"
     PRO = "pro"
@@ -47,49 +46,51 @@ class FeatureFlag(str, Enum):
     PRECISION_DISCOVERY = "precision_discovery"
     OWNER_ATTRIBUTION = "owner_attribution"
     GITOPS_REMEDIATION = "gitops_remediation"
+    UNIT_ECONOMICS = "unit_economics"
+    INGESTION_SLA = "ingestion_sla"
+    INGESTION_BACKFILL = "ingestion_backfill"
+    CHARGEBACK = "chargeback"
+    RECONCILIATION = "reconciliation"
+    CLOSE_WORKFLOW = "close_workflow"
+    CARBON_ASSURANCE = "carbon_assurance"
+    CLOUD_PLUS_CONNECTORS = "cloud_plus_connectors"
+    COMPLIANCE_EXPORTS = "compliance_exports"
+    SAVINGS_PROOF = "savings_proof"
 
 
 # Tier configuration - USD pricing
-TIER_CONFIG: Dict[PricingTier, Dict] = {
-    PricingTier.FREE: {
-        "name": "Free",
+TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
+    PricingTier.FREE_TRIAL: {
+        "name": "Free Trial",
         "price_usd": 0,
         "features": {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
+            FeatureFlag.ALERTS,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.GREENOPS,
             FeatureFlag.CARBON_TRACKING,
+            FeatureFlag.UNIT_ECONOMICS,
+            FeatureFlag.INGESTION_SLA,
         },
         "limits": {
             "max_aws_accounts": 1,
             "ai_insights_per_month": 0,
             "scan_frequency_hours": 24,
-            "zombie_scans_per_day": 1,
+            "zombie_scans_per_day": 5,
             "llm_analyses_per_day": 0,
+            "max_backfill_days": 0,
+            "retention_days": 14,
         },
-        "description": "Basic cloud cost visibility for individuals.",
-        "cta": "Get Started",
+        "description": "Entry plan with core FinOps visibility and guided onboarding.",
+        "cta": "Start Free Trial",
         "display_features": [
             "Single cloud provider (AWS)",
-            "Basic cost dashboards",
-            "Daily zombie scanning",
-            "GreenOps (Carbon tracking)",
+            "Core cost + carbon dashboards",
+            "Daily zombie scanning + basic alerts",
+            "Unit economics monitor + ingestion SLA",
+            "Entry-tier limits",
         ]
-    },
-    PricingTier.TRIAL: {
-        "name": "Trial",
-        "price_usd": 0,
-        "features": {
-            FeatureFlag.DASHBOARDS,
-            FeatureFlag.ALERTS,
-            FeatureFlag.ZOMBIE_SCAN,
-        },
-        "limits": {
-            "zombie_scans_per_day": 5,
-            "llm_analyses_per_day": 1,
-            "retention_days": 14,
-        }
     },
     PricingTier.STARTER: {
         "name": "Starter",
@@ -107,24 +108,30 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             FeatureFlag.ALERTS,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
+            FeatureFlag.MULTI_CLOUD,
             FeatureFlag.MULTI_REGION,
             FeatureFlag.CARBON_TRACKING,
             FeatureFlag.GREENOPS,
+            FeatureFlag.UNIT_ECONOMICS,
+            FeatureFlag.INGESTION_SLA,
         },
         "limits": {
             "max_aws_accounts": 5,
             "max_azure_tenants": 2,
             "max_gcp_projects": 3,
             "ai_insights_per_month": 10,
+            "llm_analyses_per_day": 0,
+            "max_backfill_days": 0,
             "scan_frequency_hours": 24,
             "retention_days": 90,
         },
         "description": "For small teams getting started with cloud cost visibility.",
         "cta": "Start with Starter",
         "display_features": [
-            "Includes all Free features",
+            "Includes all Free Trial features",
             "Multi-account support",
             "Advanced budget alerts",
+            "Unit economics KPIs + ingestion SLA monitor",
             "Multi-region analysis",
             "90-day data retention",
         ]
@@ -145,17 +152,25 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             FeatureFlag.ALERTS,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
+            FeatureFlag.LLM_ANALYSIS,
+            FeatureFlag.MULTI_CLOUD,
             FeatureFlag.MULTI_REGION,
             FeatureFlag.CARBON_TRACKING,
             FeatureFlag.GREENOPS,
             FeatureFlag.AUTO_REMEDIATION,
             FeatureFlag.PRECISION_DISCOVERY,
             FeatureFlag.OWNER_ATTRIBUTION,
+            FeatureFlag.CHARGEBACK,
+            FeatureFlag.INGESTION_SLA,
+            FeatureFlag.INGESTION_BACKFILL,
+            FeatureFlag.UNIT_ECONOMICS,
         },
         "limits": {
             "max_aws_accounts": 20,
             "max_azure_tenants": 10,
             "max_gcp_projects": 15,
+            "llm_analyses_per_day": 20,
+            "max_backfill_days": 180,
             "retention_days": 365,
         },
         "description": "For growing teams who need AI-powered cost intelligence.",
@@ -163,6 +178,8 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
         "display_features": [
             "Includes all Starter features",
             "AI-driven savings insights",
+            "Chargeback/showback workflows",
+            "Historical ingestion backfill",
             "Custom remediation guides",
             "Full multi-cloud support",
             "1-year data retention",
@@ -184,6 +201,8 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             FeatureFlag.ALERTS,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
+            FeatureFlag.LLM_ANALYSIS,
+            FeatureFlag.MULTI_CLOUD,
             FeatureFlag.MULTI_REGION,
             FeatureFlag.CARBON_TRACKING,
             FeatureFlag.GREENOPS,
@@ -198,10 +217,22 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             FeatureFlag.GITOPS_REMEDIATION,
             FeatureFlag.PRECISION_DISCOVERY,
             FeatureFlag.OWNER_ATTRIBUTION,
+            FeatureFlag.CHARGEBACK,
+            FeatureFlag.INGESTION_SLA,
+            FeatureFlag.INGESTION_BACKFILL,
+            FeatureFlag.UNIT_ECONOMICS,
+            FeatureFlag.RECONCILIATION,
+            FeatureFlag.CLOSE_WORKFLOW,
+            FeatureFlag.CARBON_ASSURANCE,
+            FeatureFlag.CLOUD_PLUS_CONNECTORS,
+            FeatureFlag.COMPLIANCE_EXPORTS,
+            FeatureFlag.SAVINGS_PROOF,
         },
         "limits": {
             "max_aws_accounts": 25,
             "ai_insights_per_month": 100,
+            "llm_analyses_per_day": 100,
+            "max_backfill_days": 730,
             "scan_frequency_hours": 1,
             "retention_days": 730,
         },
@@ -211,8 +242,9 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
             "Includes all Growth features",
             "SSO / SAML integration",
             "Hourly zombie scanning",
+            "Finance-grade reconciliation + close workflow",
             "Dedicated support engineer",
-            "Audit logs & compliance reporting",
+            "Compliance exports and audit evidence",
             "Custom GitOps remediation",
         ]
     },
@@ -230,6 +262,8 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
         "cta": "Talk to Expert",
         "display_features": [
             "Unlimited accounts & users",
+            "Cloud+ connectors (SaaS/license/custom sources)",
+            "Savings-proof exports for procurement cycles",
             "Custom feature development",
             "On-premise deployment options",
             "White-labeling support",
@@ -242,12 +276,27 @@ TIER_CONFIG: Dict[PricingTier, Dict] = {
 TIER_LIMITS = TIER_CONFIG
 
 
-def get_tier_config(tier: PricingTier) -> dict:
+def normalize_tier(tier: PricingTier | str | None) -> PricingTier:
+    """Map arbitrary tier values to a supported PricingTier."""
+    if isinstance(tier, PricingTier):
+        return tier
+    if isinstance(tier, str):
+        candidate = tier.strip().lower()
+        try:
+            return PricingTier(candidate)
+        except ValueError:
+            return PricingTier.FREE_TRIAL
+    return PricingTier.FREE_TRIAL
+
+
+def get_tier_config(tier: PricingTier | str) -> dict[str, Any]:
     """Get configuration for a tier."""
-    return TIER_CONFIG.get(tier, TIER_CONFIG[PricingTier.STARTER])
+    resolved = normalize_tier(tier)
+    fallback = TIER_CONFIG.get(PricingTier.FREE_TRIAL) or TIER_CONFIG.get(PricingTier.STARTER) or {}
+    return TIER_CONFIG.get(resolved, fallback)
 
 
-def is_feature_enabled(tier: PricingTier, feature: str | FeatureFlag) -> bool:
+def is_feature_enabled(tier: PricingTier | str, feature: str | FeatureFlag) -> bool:
     """Check if a feature is enabled for a tier."""
     if isinstance(feature, str):
         try:
@@ -262,23 +311,33 @@ def is_feature_enabled(tier: PricingTier, feature: str | FeatureFlag) -> bool:
 # Aliases for test compatibility
 has_feature = is_feature_enabled
 
-def get_tier_limit(tier: PricingTier, limit_name: str) -> Optional[int]:
+def get_tier_limit(tier: PricingTier | str, limit_name: str) -> Any:
     """Get a limit value for a tier (None = unlimited)."""
     config = get_tier_config(tier)
     # Default to 0 for unknown limits to satisfy TestTierLimits.test_unknown_limit_returns_zero
-    return config.get("limits", {}).get(limit_name, 0)
+    limits = cast(dict[str, Any], config.get("limits", {}))
+    raw_limit = limits.get(limit_name, 0)
+    if raw_limit is None:
+        return None
+    if isinstance(raw_limit, bool):
+        return int(raw_limit)
+    if isinstance(raw_limit, float):
+        return int(raw_limit)
+    return raw_limit
 
 # Aliases for test compatibility
 get_limit = get_tier_limit
 
 
-def requires_tier(*allowed_tiers: PricingTier) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
+def requires_tier(
+    *allowed_tiers: PricingTier,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to require specific tiers for an endpoint.
     """
-    def decorator(func: Callable):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             user = kwargs.get("user") or kwargs.get("current_user")
             if not user:
                 raise HTTPException(
@@ -286,12 +345,7 @@ def requires_tier(*allowed_tiers: PricingTier) -> Callable[[Callable[..., Awaita
                     detail="Authentication required"
                 )
             
-            user_tier = getattr(user, "tier", PricingTier.STARTER)
-            if isinstance(user_tier, str):
-                try:
-                    user_tier = PricingTier(user_tier)
-                except ValueError:
-                    user_tier = PricingTier.STARTER
+            user_tier = normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
             
             if user_tier not in allowed_tiers:
                 tier_names = [t.value for t in allowed_tiers]
@@ -305,13 +359,15 @@ def requires_tier(*allowed_tiers: PricingTier) -> Callable[[Callable[..., Awaita
     return decorator
 
 
-def requires_feature(feature_name: Union[str, FeatureFlag]) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
+def requires_feature(
+    feature_name: Union[str, FeatureFlag],
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to require a specific feature for an endpoint.
     """
-    def decorator(func: Callable):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             user = kwargs.get("user") or kwargs.get("current_user")
             if not user:
                 raise HTTPException(
@@ -319,12 +375,7 @@ def requires_feature(feature_name: Union[str, FeatureFlag]) -> Callable[[Callabl
                     detail="Authentication required"
                 )
             
-            user_tier = getattr(user, "tier", PricingTier.STARTER)
-            if isinstance(user_tier, str):
-                try:
-                    user_tier = PricingTier(user_tier)
-                except ValueError:
-                    user_tier = PricingTier.STARTER
+            user_tier = normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
             
             if not is_feature_enabled(user_tier, feature_name):
                 fn = feature_name.value if isinstance(feature_name, FeatureFlag) else feature_name
@@ -347,20 +398,23 @@ async def get_tenant_tier(tenant_id: Union[str, uuid.UUID], db: "AsyncSession") 
         try:
             tenant_id = uuid.UUID(tenant_id)
         except (ValueError, AttributeError):
-            # If not a valid UUID string, we can't look it up, so return Free/Trial
-            return PricingTier.FREE
+            # If not a valid UUID string, we can't look it up.
+            return PricingTier.FREE_TRIAL
     
     try:
         result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = result.scalar_one_or_none()
         
         if not tenant:
-            return PricingTier.FREE
-        
-        return PricingTier(tenant.plan)
+            return PricingTier.FREE_TRIAL
+        try:
+            return PricingTier(tenant.plan)
+        except ValueError:
+            logger.error("invalid_tenant_plan", tenant_id=str(tenant_id), plan=tenant.plan)
+            return PricingTier.FREE_TRIAL
     except Exception as e:
         logger.error("get_tenant_tier_failed", tenant_id=str(tenant_id), error=str(e))
-        return PricingTier.FREE
+        return PricingTier.FREE_TRIAL
 
 
 class TierGuard:
@@ -375,7 +429,7 @@ class TierGuard:
     def __init__(self, user: "CurrentUser", db: "AsyncSession"):
         self.user = user
         self.db = db
-        self.tier = PricingTier.FREE
+        self.tier = PricingTier.FREE_TRIAL
 
     async def __aenter__(self) -> "TierGuard":
         if self.user and self.user.tenant_id:
@@ -388,10 +442,10 @@ class TierGuard:
     def has(self, feature: FeatureFlag) -> bool:
         return is_feature_enabled(self.tier, feature)
 
-    def limit(self, limit_name: str) -> Optional[int]:
+    def limit(self, limit_name: str) -> Any:
         return get_tier_limit(self.tier, limit_name)
 
-    def require(self, feature: FeatureFlag):
+    def require(self, feature: FeatureFlag) -> None:
         if not self.has(feature):
             raise HTTPException(
                 status_code=403,

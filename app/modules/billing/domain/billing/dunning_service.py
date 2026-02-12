@@ -12,10 +12,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
-from typing import Dict, Any, cast, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 from app.shared.core.config import get_settings
 
-from app.modules.reporting.domain.billing.paystack_billing import (
+from app.modules.billing.domain.billing.paystack_billing import (
     TenantSubscription, 
     SubscriptionStatus,
     BillingService
@@ -25,6 +25,9 @@ from app.models.background_job import JobType
 from app.modules.governance.domain.jobs.processor import enqueue_job
 
 logger = structlog.get_logger()
+
+if TYPE_CHECKING:
+    from app.modules.notifications.domain.email_service import EmailService
 
 
 # Dunning Configuration
@@ -59,7 +62,7 @@ class DunningService:
             return None
         return decrypt_string(user.email, context="pii")
 
-    def _build_email_service(self):
+    def _build_email_service(self) -> "EmailService":
         from app.modules.notifications.domain.email_service import EmailService
 
         settings = get_settings()
@@ -125,9 +128,9 @@ class DunningService:
             await enqueue_job(
                 db=self.db,
                 job_type=JobType.DUNNING,
-                tenant_id=cast(UUID, subscription.tenant_id),
+                tenant_id=subscription.tenant_id,
                 payload={
-                    "subscription_id": str(subscription.id),
+                    "subscription_id": subscription.id,
                     "attempt": attempt + 1
                 },
                 scheduled_for=next_retry
@@ -181,7 +184,7 @@ class DunningService:
             if success:
                 return await self._handle_retry_success(subscription)
             else:
-                return await self.process_failed_payment(cast(UUID, subscription.id), is_webhook=False)
+                return await self.process_failed_payment(subscription.id, is_webhook=False)
                 
         except Exception as e:
             logger.error(
@@ -214,7 +217,7 @@ class DunningService:
     async def _handle_final_failure(self, subscription: TenantSubscription) -> Dict[str, Any]:
         """Handle max retries exhausted - downgrade to TRIAL."""
         subscription.status = SubscriptionStatus.CANCELLED.value
-        subscription.tier = PricingTier.TRIAL.value
+        subscription.tier = PricingTier.FREE_TRIAL.value
         subscription.canceled_at = datetime.now(timezone.utc)
         subscription.dunning_next_retry_at = None
         

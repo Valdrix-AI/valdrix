@@ -1,10 +1,10 @@
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 import structlog
 import math
 
 logger = structlog.get_logger()
 
-class ProviderCost(dict):
+class ProviderCost(dict[str, float | int]):
     """
     Provider cost metadata. 
     Inherits from dict for direct mapping-style access
@@ -18,7 +18,7 @@ class ProviderCost(dict):
 
 # LLM Provider costs (static fallback; prefer DB-driven pricing refresh)
 # Structured as: { provider: { model: ProviderCost } }
-LLM_PRICING: Dict[str, Dict[str, Any]] = {
+LLM_PRICING: dict[str, dict[str, ProviderCost]] = {
     "groq": {
         "llama-3.3-70b-versatile": ProviderCost(input=0.59, output=0.79, free_tier_tokens=14000),
         "mixtral-8x7b-32768": ProviderCost(input=0.27, output=0.27, free_tier_tokens=14000),
@@ -64,7 +64,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
     return parsed
 
-async def refresh_llm_pricing(db_session=None):
+async def refresh_llm_pricing(db_session: Any = None) -> None:
     """
     Refresh the global LLM_PRICING dictionary from the database.
     Falls back to static defaults if DB is empty or unavailable.
@@ -77,11 +77,11 @@ async def refresh_llm_pricing(db_session=None):
             # Avoid top-level import to prevent circularity
             from app.shared.db.session import async_session_maker
             async with async_session_maker() as session:
-                stmt = select(LLMProviderPricing).where(LLMProviderPricing.is_active == True)
+                stmt = select(LLMProviderPricing).where(LLMProviderPricing.is_active)
                 result = await session.execute(stmt)
                 pricing_records = result.scalars().all()
         else:
-            stmt = select(LLMProviderPricing).where(LLMProviderPricing.is_active == True)
+            stmt = select(LLMProviderPricing).where(LLMProviderPricing.is_active)
             result = await db_session.execute(stmt)
             pricing_records = result.scalars().all()
 

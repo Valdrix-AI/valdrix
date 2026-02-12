@@ -18,11 +18,9 @@
 			{ label: 'AWS', value: 4200, color: '#f97316' },
 			{ label: 'Azure', value: 2800, color: '#3b82f6' },
 			{ label: 'GCP', value: 1500, color: '#facc15' }
-		],
-		loading = false
+		]
 	}: {
 		data?: WasteData[];
-		loading?: boolean;
 	} = $props();
 
 	let totalWaste = $derived(data.reduce((sum, item) => sum + item.value, 0));
@@ -40,7 +38,7 @@
 	<div class="header">
 		<div class="title-area">
 			<div class="icon-wrap">
-				<Globe class="icon-globe" />
+				<Globe size={18} color="#60a5fa" />
 			</div>
 			<div>
 				<h3>Cloud Waste Distribution</h3>
@@ -58,7 +56,7 @@
 	</div>
 
 	<div class="legend-grid">
-		{#each data as item}
+		{#each data as item (item.label)}
 			<div class="legend-item">
 				<div class="item-header">
 					<span class="dot" style="background: {item.color}"></span>
@@ -102,12 +100,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-	}
-
-	.icon-globe {
-		color: #60a5fa;
-		width: 18px;
-		height: 18px;
 	}
 
 	h3 {

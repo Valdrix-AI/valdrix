@@ -130,7 +130,13 @@ class CarbonBudgetService:
         last_status = getattr(settings, 'last_alert_status', None)
         
         if last_alert and last_status == alert_status:
-            if last_alert.date() == date.today():
+            # Normalize to UTC date to avoid local-time boundary drift.
+            if getattr(last_alert, "tzinfo", None) is not None:
+                last_alert_date = last_alert.astimezone(timezone.utc).date()
+            else:
+                last_alert_date = last_alert.date()
+            today_utc = datetime.now(timezone.utc).date()
+            if last_alert_date == today_utc:
                 logger.info("carbon_alert_rate_limited", 
                             tenant_id=str(tenant_id), 
                             status=alert_status)
@@ -213,6 +219,8 @@ class CarbonBudgetService:
                     from app.modules.notifications.domain import SlackService
                     channel = (notif_settings.slack_channel_override if notif_settings and notif_settings.slack_channel_override
                               else app_settings.SLACK_CHANNEL_ID)
+                    if channel is None:
+                        raise ValueError("Slack channel is not configured")
     
                     slack = SlackService(app_settings.SLACK_BOT_TOKEN, channel)
     
@@ -283,4 +291,3 @@ class CarbonBudgetService:
             await self.mark_alert_sent(tenant_id, budget_status["alert_status"])
 
         return sent_any
-

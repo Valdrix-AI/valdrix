@@ -10,7 +10,11 @@ from app.shared.core.pricing import PricingTier
 
 @pytest.fixture
 def mock_db():
-    return AsyncMock()
+    db = AsyncMock()
+    # SQLAlchemy AsyncSession has synchronous mutators.
+    db.add = MagicMock()
+    db.add_all = MagicMock()
+    return db
 
 @pytest.mark.asyncio
 async def test_zombie_service_scan_for_tenant_no_connections(mock_db):
@@ -132,7 +136,7 @@ async def test_zombie_service_enrich_with_ai_tier_restriction(mock_db):
     zombies = {"total_monthly_waste": 100.0}
     
     mock_user = MagicMock()
-    mock_user.tier = PricingTier.TRIAL
+    mock_user.tier = PricingTier.FREE_TRIAL
     
     await service._enrich_with_ai(zombies, uuid.uuid4(), mock_user.tier)
     

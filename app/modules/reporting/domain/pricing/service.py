@@ -6,6 +6,8 @@ Addresses Audit Issue: Hardcoded Regional Pricing.
 """
 
 import structlog
+from typing import Any
+
 from app.shared.core.pricing_defaults import DEFAULT_RATES, REGION_MULTIPLIERS
 
 logger = structlog.get_logger()
@@ -19,7 +21,7 @@ class PricingService:
     def get_hourly_rate(
         provider: str, 
         resource_type: str, 
-        resource_size: str = None, 
+        resource_size: str | None = None,
         region: str = "us-east-1"
     ) -> float:
         """
@@ -49,7 +51,7 @@ class PricingService:
         return final_rate
 
     @staticmethod
-    def sync_with_aws():
+    def sync_with_aws() -> None:
         """
         Synchronizes the DEFAULT_RATES with live AWS Price List API.
         In a Series-A production environment, this would run as a daily 
@@ -61,7 +63,7 @@ class PricingService:
             client = boto3.client('pricing', region_name='us-east-1')
             
             # Example: Fetch NAT Gateway hourly rates
-            response = client.get_products(
+            response: dict[str, Any] = client.get_products(
                 ServiceCode='AmazonEC2',
                 Filters=[
                     {'Type': 'TERM_MATCH', 'Field': 'usageType', 'Value': 'NatGateway-Hours'},
@@ -82,7 +84,7 @@ class PricingService:
     def estimate_monthly_waste(
         provider: str,
         resource_type: str,
-        resource_size: str = None,
+        resource_size: str | None = None,
         region: str = "us-east-1",
         quantity: float = 1.0
     ) -> float:

@@ -1,8 +1,9 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import aioboto3
 import structlog
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.optimization.domain.registry import registry
 # Import plugins to trigger registration
@@ -16,8 +17,7 @@ class AWSZombieDetector(BaseZombieDetector):
     Manages aioboto3 session and AWS-specific plugin execution.
     """
 
-    from sqlalchemy.ext.asyncio import AsyncSession
-    def __init__(self, region: str = "us-east-1", credentials: Dict[str, str] = None, db: AsyncSession = None, connection: Any = None):
+    def __init__(self, region: str = "us-east-1", credentials: Optional[Dict[str, str]] = None, db: Optional[AsyncSession] = None, connection: Any = None) -> None:
         super().__init__(region, credentials, db, connection)
         self.session = aioboto3.Session()
         self._adapter = None
@@ -31,11 +31,11 @@ class AWSZombieDetector(BaseZombieDetector):
     def provider_name(self) -> str:
         return "aws"
 
-    def _initialize_plugins(self):
+    def _initialize_plugins(self) -> None:
         """Register the standard suite of AWS detections."""
         self.plugins = registry.get_plugins_for_provider("aws")
 
-    async def scan_all(self, on_category_complete=None) -> Dict[str, Any]:
+    async def scan_all(self, on_category_complete: Optional[Any] = None) -> Dict[str, Any]:
         """
         Overrides the base scan_all to include global discovery via Resource Explorer 2.
         """

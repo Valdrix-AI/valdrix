@@ -23,7 +23,7 @@ class ZombieScanHandler(BaseJobHandler):
         payload = job.payload or {}
         regions = payload.get("regions", "us-east-1")
         
-        async def checkpoint_result(category_key, items):
+        async def checkpoint_result(category_key: str, items: list[dict[str, Any]]) -> None:
             """Durable checkpoint: save partial results to DB."""
             if not job.payload:
                 job.payload = {}

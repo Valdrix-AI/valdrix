@@ -10,6 +10,16 @@ from app.models.pricing import PricingPlan, ExchangeRate
 from app.shared.core.pricing import PricingTier, TIER_CONFIG
 from sqlalchemy import select
 
+
+def _resolve_monthly_price_usd(raw_price: object) -> float:
+    """Normalize tier price config into the DB's numeric monthly USD column."""
+    if isinstance(raw_price, dict):
+        monthly = raw_price.get("monthly")
+        return float(monthly) if monthly is not None else 0.0
+    if raw_price is None:
+        return 0.0
+    return float(raw_price)
+
 async def seed_data():
     """Seed initial plans and exchange rates."""
     print("🌱 Seeding pricing plans...")
@@ -18,9 +28,6 @@ async def seed_data():
         async with db.begin():
             # 1. Seed Pricing Plans from TIER_CONFIG
             for tier, config in TIER_CONFIG.items():
-                if tier == PricingTier.TRIAL:
-                    continue  # Trial is usually implicit or handled separately
-                
                 # Check if exists
                 res = await db.execute(select(PricingPlan).where(PricingPlan.id == tier.value))
                 existing = res.scalar_one_or_none()
@@ -33,7 +40,7 @@ async def seed_data():
                         id=tier.value,
                         name=config.get("name", tier.value.capitalize()),
                         description=config.get("description", ""),
-                        price_usd=config.get("price_usd") or 0.0,
+                        price_usd=_resolve_monthly_price_usd(config.get("price_usd")),
                         features=features,
                         limits=config.get("limits", {}),
                         display_features=config.get("display_features", []),

@@ -4,7 +4,7 @@ import asyncio
 from collections import OrderedDict
 from enum import Enum
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional, cast
 from datetime import datetime, timezone
 import structlog
 
@@ -28,7 +28,7 @@ class CircuitBreakerConfig:
     max_daily_savings_usd: float = 1000.0
 
     @classmethod
-    def from_settings(cls):
+    def from_settings(cls) -> "CircuitBreakerConfig":
         s = get_settings()
         return cls(
             failure_threshold=s.CIRCUIT_BREAKER_FAILURE_THRESHOLD,
@@ -38,7 +38,7 @@ class CircuitBreakerConfig:
 
 class CircuitBreakerState:
     """ Handles state persistence for Circuit Breaker, with Redis fallback to Memory. """
-    def __init__(self, tenant_id: str, redis_client=None):
+    def __init__(self, tenant_id: str, redis_client: Any = None) -> None:
         self.tenant_id = tenant_id
         self.redis = redis_client
         self._memory_state: Dict[str, Any] = {}
@@ -55,7 +55,7 @@ class CircuitBreakerState:
             return default
         return self._memory_state.get(key, default)
 
-    async def set(self, key: str, value: Any, expire: int = None):
+    async def set(self, key: str, value: Any, expire: int | None = None) -> None:
         if self.redis:
             val = json.dumps(value) if not isinstance(value, (str, bytes)) else value
             await self.redis.set(self.prefix + key, val, ex=expire)
@@ -64,14 +64,14 @@ class CircuitBreakerState:
 
     async def incr(self, key: str) -> int:
         if self.redis:
-            return await self.redis.incr(self.prefix + key)
+            return cast(int, await self.redis.incr(self.prefix + key))
         
-        current = self._memory_state.get(key, 0)
+        current = cast(int, self._memory_state.get(key, 0))
         new_val = current + 1
         self._memory_state[key] = new_val
         return new_val
 
-    async def delete(self, key: str):
+    async def delete(self, key: str) -> None:
         if self.redis:
             await self.redis.delete(self.prefix + key)
         else:
@@ -82,7 +82,12 @@ class CircuitBreaker:
     Advanced Circuit Breaker with tenant isolation and optional Redis persistence.
     Protects remediation actions from cascading failures.
     """
-    def __init__(self, tenant_id: str, config: Optional[CircuitBreakerConfig] = None, redis_client=None):
+    def __init__(
+        self,
+        tenant_id: str,
+        config: Optional[CircuitBreakerConfig] = None,
+        redis_client: Any = None,
+    ) -> None:
         self.tenant_id = tenant_id
         self.config = config or CircuitBreakerConfig.from_settings()
         self.state = CircuitBreakerState(tenant_id, redis_client)
@@ -123,7 +128,7 @@ class CircuitBreaker:
             
         return True
 
-    async def record_success(self, savings: float = 0.0):
+    async def record_success(self, savings: float = 0.0) -> None:
         state = await self.get_state()
         if state == CircuitState.HALF_OPEN:
             await self.reset()
@@ -137,7 +142,7 @@ class CircuitBreaker:
         current_savings = await self.state.get("daily_savings_usd", 0.0)
         await self.state.set("daily_savings_usd", current_savings + savings)
 
-    async def record_failure(self, error: str):
+    async def record_failure(self, error: str) -> None:
         count = await self.state.incr("failure_count")
         await self.state.set("last_failure_at", time.time())
         await self.state.set("last_error", error)
@@ -149,7 +154,7 @@ class CircuitBreaker:
                          failure_count=count, 
                          error=error)
 
-    async def reset(self):
+    async def reset(self) -> None:
         """ Manually reset the circuit breaker. """
         await self.state.set("state", CircuitState.CLOSED.value)
         await self.state.set("failure_count", 0)

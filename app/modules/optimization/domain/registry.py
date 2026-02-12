@@ -1,4 +1,4 @@
-from typing import List, Type, DefaultDict
+from typing import Callable, DefaultDict, List, Type
 from collections import defaultdict
 from app.modules.optimization.domain.plugin import ZombiePlugin
 
@@ -11,9 +11,9 @@ class ZombiePluginRegistry:
     _plugins: DefaultDict[str, List[Type[ZombiePlugin]]] = defaultdict(list)
 
     @classmethod
-    def register(cls, provider: str):
+    def register(cls, provider: str) -> Callable[[Type[ZombiePlugin]], Type[ZombiePlugin]]:
         """Decorator to register a plugin for a specific provider."""
-        def wrapper(plugin_cls: Type[ZombiePlugin]):
+        def wrapper(plugin_cls: Type[ZombiePlugin]) -> Type[ZombiePlugin]:
             cls._plugins[provider].append(plugin_cls)
             return plugin_cls
         return wrapper

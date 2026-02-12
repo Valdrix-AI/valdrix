@@ -1,4 +1,5 @@
 from uuid import UUID
+from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.gcp_connection import GCPConnection
@@ -9,7 +10,7 @@ class GCPConnectionService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict:
+    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict[str, Any]:
         result = await self.db.execute(
             select(GCPConnection).where(
                 GCPConnection.id == connection_id,

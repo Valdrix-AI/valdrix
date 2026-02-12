@@ -4,7 +4,7 @@ GCP Usage Analyzer - Zero-API-Cost Zombie Detection via BigQuery Billing Export.
 This module analyzes GCP billing export data from BigQuery to detect idle and
 underutilized resources without making expensive monitoring API calls.
 """
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 from datetime import datetime, timezone
 from collections import defaultdict
 import structlog
@@ -22,7 +22,7 @@ class GCPUsageAnalyzer:
     - Detection based on usage patterns in billing data
     """
     
-    def __init__(self, billing_records: List[Dict[str, Any]]):
+    def __init__(self, billing_records: list[dict[str, Any]]):
         """
         Initialize with billing records from BigQuery export.
         
@@ -34,7 +34,7 @@ class GCPUsageAnalyzer:
         self.records = billing_records
         self._resource_costs = self._group_by_resource()
     
-    def _group_by_resource(self) -> Dict[str, List[Dict]]:
+    def _group_by_resource(self) -> dict[str, list[dict[str, Any]]]:
         """Group billing records by resource_id for analysis."""
         grouped = defaultdict(list)
         for record in self.records:

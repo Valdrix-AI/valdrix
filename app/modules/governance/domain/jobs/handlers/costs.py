@@ -2,8 +2,9 @@
 Cost Management Job Handlers
 """
 import structlog
-from typing import Dict, Any
-from datetime import datetime, timezone, timedelta, date
+from typing import Any, AsyncGenerator, AsyncIterator, Dict
+from datetime import datetime, timezone, timedelta, date, time
+from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
@@ -11,6 +12,19 @@ from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
 from app.shared.core.async_utils import maybe_await
 
 logger = structlog.get_logger()
+
+
+def _require_tenant_id(job: BackgroundJob) -> UUID:
+    if job.tenant_id is None:
+        raise ValueError("tenant_id required")
+    return job.tenant_id
+
+
+def _require_iso_date(payload: dict[str, Any], key: str) -> date:
+    raw_value = payload.get(key)
+    if not isinstance(raw_value, str):
+        raise ValueError(f"{key} must be an ISO date string")
+    return date.fromisoformat(raw_value)
 
 
 class CostIngestionHandler(BaseJobHandler):
@@ -22,15 +36,31 @@ class CostIngestionHandler(BaseJobHandler):
         from app.models.aws_connection import AWSConnection
         from app.models.azure_connection import AzureConnection
         from app.models.gcp_connection import GCPConnection
+        from app.models.saas_connection import SaaSConnection
+        from app.models.license_connection import LicenseConnection
         from app.models.cloud import CloudAccount
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         
-        tenant_id = job.tenant_id
-        if not tenant_id:
-            raise ValueError("tenant_id required for cost_ingestion")
+        tenant_id = _require_tenant_id(job)
+        payload = job.payload or {}
+        payload_start = payload.get("start_date")
+        payload_end = payload.get("end_date")
+        if (payload_start is None) ^ (payload_end is None):
+            raise ValueError("Both start_date and end_date must be provided for backfill windows")
+        custom_window = payload_start is not None and payload_end is not None
+        if custom_window:
+            range_start = _require_iso_date(payload, "start_date")
+            range_end = _require_iso_date(payload, "end_date")
+            start_date = datetime.combine(range_start, time.min, tzinfo=timezone.utc)
+            end_date = datetime.combine(range_end, time.max, tzinfo=timezone.utc)
+        else:
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=7)
+        if start_date > end_date:
+            raise ValueError("start_date must be <= end_date")
             
         # 1. Get Connections from all providers
-        connections = []
+        connections: list[Any] = []
         
         # AWS
         aws_result = await db.execute(select(AWSConnection).where(AWSConnection.tenant_id == tenant_id))
@@ -41,6 +71,12 @@ class CostIngestionHandler(BaseJobHandler):
         # GCP
         gcp_result = await db.execute(select(GCPConnection).where(GCPConnection.tenant_id == tenant_id))
         connections.extend(gcp_result.scalars().all())
+        # SaaS
+        saas_result = await db.execute(select(SaaSConnection).where(SaaSConnection.tenant_id == tenant_id))
+        connections.extend(saas_result.scalars().all())
+        # License
+        license_result = await db.execute(select(LicenseConnection).where(LicenseConnection.tenant_id == tenant_id))
+        connections.extend(license_result.scalars().all())
         
         if not connections:
             return {"status": "skipped", "reason": "no_active_connections"}
@@ -78,21 +114,20 @@ class CostIngestionHandler(BaseJobHandler):
             try:
                 adapter = AdapterFactory.get_adapter(conn)
                 
-                # Default range: Last 7 days
-                end_date = datetime.now(timezone.utc)
-                start_date = end_date - timedelta(days=7)
-                
                 # Stream costs using normalized interface
-                cost_stream = adapter.stream_cost_and_usage(
+                cost_stream_or_awaitable = adapter.stream_cost_and_usage(
                     start_date=start_date,
                     end_date=end_date,
                     granularity="HOURLY"
                 )
+                cost_stream = await maybe_await(cost_stream_or_awaitable)
                 
                 records_ingested = 0
                 total_cost_acc = 0.0
                 
-                async def tracking_wrapper(stream):
+                async def tracking_wrapper(
+                    stream: AsyncIterator[dict[str, Any]]
+                ) -> AsyncGenerator[dict[str, Any], None]:
                     nonlocal records_ingested, total_cost_acc
                     async for r in stream:
                         records_ingested += 1
@@ -101,12 +136,12 @@ class CostIngestionHandler(BaseJobHandler):
 
                 save_result = await persistence.save_records_stream(
                     records=tracking_wrapper(cost_stream),
-                    tenant_id=tenant_id,  # Use UUID object
+                    tenant_id=str(tenant_id),
                     account_id=conn.id  # Use UUID object (BE-UUID-1)
                 )
                 
                 conn.last_ingested_at = datetime.now(timezone.utc)
-                await maybe_await(db.add(conn))
+                db.add(conn)
                 
                 results.append({
                     "connection_id": str(conn.id),
@@ -119,10 +154,17 @@ class CostIngestionHandler(BaseJobHandler):
                 logger.error("cost_ingestion_connection_failed", connection_id=str(conn.id), error=str(e))
                 if hasattr(conn, "error_message"):
                     conn.error_message = str(e)[:255]
-                    await maybe_await(db.add(conn))
-                results.append({"connection_id": str(conn.id), "status": "failed", "error": str(e)})
+                    db.add(conn)
+                results.append(
+                    {
+                        "connection_id": str(conn.id),
+                        "status": "failed",
+                        "error": str(e),
+                        "total_cost": 0.0,
+                    }
+                )
             
-            if "completed_connections" not in completed_conns:
+            if conn_id_str not in completed_conns:
                 completed_conns.append(conn_id_str)
                 job.payload = {**checkpoint, "completed_connections": completed_conns}
                 # Redundant commit removed (BE-TRANS-1)
@@ -131,10 +173,14 @@ class CostIngestionHandler(BaseJobHandler):
         try:
             from app.modules.reporting.domain.attribution_engine import AttributionEngine
             engine = AttributionEngine(db)
-            # Use last 30 days for attribution context (FinOps Audit 2)
-            now = datetime.now(timezone.utc).date()
-            thirty_days_ago = now - timedelta(days=30)
-            await engine.apply_rules_to_tenant(tenant_id, start_date=thirty_days_ago, end_date=now)
+            if custom_window:
+                attr_start = start_date.date()
+                attr_end = end_date.date()
+            else:
+                # Use last 30 days for non-backfill ingestion.
+                attr_end = datetime.now(timezone.utc).date()
+                attr_start = attr_end - timedelta(days=30)
+            await engine.apply_rules_to_tenant(tenant_id, start_date=attr_start, end_date=attr_end)
             logger.info("attribution_applied_post_ingestion", tenant_id=str(tenant_id))
         except Exception as e:
             logger.error("attribution_trigger_failed", tenant_id=str(tenant_id), error=str(e))
@@ -142,7 +188,12 @@ class CostIngestionHandler(BaseJobHandler):
         return {
             "status": "completed",
             "connections_processed": len(connections),
-            "details": results
+            "details": results,
+            "window": {
+                "start_date": start_date.date().isoformat(),
+                "end_date": end_date.date().isoformat(),
+                "backfill": custom_window,
+            },
         }
 
 
@@ -154,9 +205,9 @@ class CostForecastHandler(BaseJobHandler):
         from app.shared.analysis.forecaster import SymbolicForecaster
         
         payload = job.payload or {}
-        tenant_id = job.tenant_id
-        start_date = date.fromisoformat(payload.get("start_date"))
-        end_date = date.fromisoformat(payload.get("end_date"))
+        tenant_id = _require_tenant_id(job)
+        start_date = _require_iso_date(payload, "start_date")
+        end_date = _require_iso_date(payload, "end_date")
         days = payload.get("days", 30)
         provider = payload.get("provider")
         
@@ -191,9 +242,9 @@ class CostExportHandler(BaseJobHandler):
         from app.modules.reporting.domain.aggregator import CostAggregator
         
         payload = job.payload or {}
-        tenant_id = job.tenant_id
-        start_date = date.fromisoformat(payload.get("start_date"))
-        end_date = date.fromisoformat(payload.get("end_date"))
+        tenant_id = _require_tenant_id(job)
+        start_date = _require_iso_date(payload, "start_date")
+        end_date = _require_iso_date(payload, "end_date")
         export_format = payload.get("format", "json")
         
         logger.info("cost_export_started", 
@@ -241,9 +292,9 @@ class CostAggregationHandler(BaseJobHandler):
         from app.modules.reporting.domain.aggregator import CostAggregator
         
         payload = job.payload or {}
-        tenant_id = job.tenant_id
-        start_date = date.fromisoformat(payload.get("start_date"))
-        end_date = date.fromisoformat(payload.get("end_date"))
+        tenant_id = _require_tenant_id(job)
+        start_date = _require_iso_date(payload, "start_date")
+        end_date = _require_iso_date(payload, "end_date")
         provider = payload.get("provider")
         
         logger.info("cost_aggregation_job_started", 

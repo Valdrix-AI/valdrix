@@ -21,8 +21,21 @@ class OrphanExternalIpsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "orphan_gcp_ips"
     
-    async def scan(self, project_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for orphan external IPs using Compute API (free)."""
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            logger.warning("gcp_scan_missing_project_id", plugin=self.category_key)
+            return []
+
         zombies = []
         
         billing_records = kwargs.get("billing_records")

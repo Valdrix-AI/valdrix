@@ -93,7 +93,7 @@ class LLMUsage(Base):
     # Relationship: Access the tenant object
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="llm_usage")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation for debugging."""
         return f"<LLMUsage {self.model} ${self.cost_usd:.6f}>"
 
@@ -145,35 +145,35 @@ class LLMBudget(Base):
 
     # Hybrid properties for transparent encryption/decryption
     @hybrid_property
-    def openai_api_key(self):
+    def openai_api_key(self) -> str | None:
         return decrypt_string(self._openai_api_key)
 
-    @openai_api_key.setter
-    def openai_api_key(self, value):
+    @openai_api_key.setter  # type: ignore[no-redef]
+    def openai_api_key(self, value: str | None) -> None:
         self._openai_api_key = encrypt_string(value) if value else None
 
     @hybrid_property
-    def claude_api_key(self):
+    def claude_api_key(self) -> str | None:
         return decrypt_string(self._claude_api_key)
 
-    @claude_api_key.setter
-    def claude_api_key(self, value):
+    @claude_api_key.setter  # type: ignore[no-redef]
+    def claude_api_key(self, value: str | None) -> None:
         self._claude_api_key = encrypt_string(value) if value else None
 
     @hybrid_property
-    def google_api_key(self):
+    def google_api_key(self) -> str | None:
         return decrypt_string(self._google_api_key)
 
-    @google_api_key.setter
-    def google_api_key(self, value):
+    @google_api_key.setter  # type: ignore[no-redef]
+    def google_api_key(self, value: str | None) -> None:
         self._google_api_key = encrypt_string(value) if value else None
 
     @hybrid_property
-    def groq_api_key(self):
+    def groq_api_key(self) -> str | None:
         return decrypt_string(self._groq_api_key)
 
-    @groq_api_key.setter
-    def groq_api_key(self, value):
+    @groq_api_key.setter  # type: ignore[no-redef]
+    def groq_api_key(self, value: str | None) -> None:
         self._groq_api_key = encrypt_string(value) if value else None
 
     # Track when alert was sent (avoid spam)
@@ -182,5 +182,5 @@ class LLMBudget(Base):
     # Relationship
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="llm_budget")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<LLMBudget ${self.monthly_limit_usd}/month>"

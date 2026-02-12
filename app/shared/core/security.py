@@ -5,7 +5,6 @@ import os
 import secrets
 import structlog
 from functools import lru_cache
-from typing import Optional, List, Union
 from cryptography.fernet import Fernet, MultiFernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -99,8 +98,8 @@ class EncryptionKeyManager:
     @lru_cache(maxsize=16)
     def create_multi_fernet(
         primary_key: str,
-        fallback_keys: Optional[tuple] = None,
-        salt: str = None
+        fallback_keys: tuple[str, ...] | None = None,
+        salt: str | None = None,
     ) -> MultiFernet:
         """Create MultiFernet for key rotation support."""
         if salt is None:
@@ -149,7 +148,10 @@ def _get_pii_fernet() -> MultiFernet:
         fallback_keys
     )
 
-def _get_multi_fernet(primary_key: Optional[str], fallback_keys: Optional[Union[List[str], tuple]] = None) -> MultiFernet:
+def _get_multi_fernet(
+    primary_key: str | None,
+    fallback_keys: list[str] | tuple[str, ...] | None = None,
+) -> MultiFernet:
     """Returns a MultiFernet instance for secret rotation."""
     if not primary_key:
         settings = get_settings()
@@ -166,14 +168,16 @@ def _get_multi_fernet(primary_key: Optional[str], fallback_keys: Optional[Union[
             raise ValueError("ENCRYPTION_KEY must be set for secure encryption.")
 
     # Ensure list is converted to tuple for lru_cache hashing
-    fallback_tuple = tuple(fallback_keys) if fallback_keys and isinstance(fallback_keys, list) else fallback_keys
+    fallback_tuple: tuple[str, ...] | None = (
+        tuple(fallback_keys) if isinstance(fallback_keys, list) else fallback_keys
+    )
 
     return EncryptionKeyManager.create_multi_fernet(
         primary_key=primary_key,
         fallback_keys=fallback_tuple
     )
 
-def encrypt_string(value: str, context: str = "generic") -> str:
+def encrypt_string(value: str, context: str = "generic") -> str | None:
     """
     Symmetrically encrypt a string with hardened salt management.
     """
@@ -196,7 +200,7 @@ def encrypt_string(value: str, context: str = "generic") -> str:
     
     return fernet.encrypt(value.encode()).decode()
 
-def decrypt_string(value: str, context: str = "generic") -> str:
+def decrypt_string(value: str, context: str = "generic") -> str | None:
     """
     Symmetrically decrypt a string with hardened salt management.
     """
@@ -232,7 +236,7 @@ def decrypt_string(value: str, context: str = "generic") -> str:
         return None
 
 
-def generate_blind_index(value: str) -> str:
+def generate_blind_index(value: str) -> str | None:
     """
     Generates a deterministic hash for searchable encryption.
     """

@@ -39,8 +39,6 @@
 		}
 	}
 
-
-
 	function handleRegionChange(e: Event) {
 		const target = e.target as HTMLSelectElement;
 		goto(`${base}/greenops?region=${target.value}`, { keepFocus: true, noScroll: true });
@@ -83,7 +81,7 @@
 		<div class="flex items-center justify-center py-20">
 			<div class="animate-spin rounded-full h-8 w-8 border-t-2 border-accent-500"></div>
 		</div>
-	{:else if !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+	{:else if !['growth', 'pro', 'enterprise', 'free_trial'].includes(data.subscription?.tier)}
 		<!-- Tier Gating: Show blurred preview with upgrade overlay -->
 		<div class="relative">
 			<!-- Upgrade Overlay -->
@@ -403,17 +401,19 @@
 					<h3 class="text-xl font-bold text-white flex items-center gap-2">
 						🕒 Carbon-Aware Scheduling
 					</h3>
-					<p class="text-ink-400 text-sm">
-						Optimize non-urgent workloads for low-carbon windows
-					</p>
+					<p class="text-ink-400 text-sm">Optimize non-urgent workloads for low-carbon windows</p>
 				</div>
 				<div class="flex items-center gap-2 text-xs">
 					{#if intensityData?.source === 'simulation'}
-						<span class="px-2 py-0.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-full">
+						<span
+							class="px-2 py-0.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-full"
+						>
 							Simulated Curves (No API Key)
 						</span>
 					{:else}
-						<span class="px-2 py-0.5 bg-green-500/10 text-green-500 border border-green-500/20 rounded-full">
+						<span
+							class="px-2 py-0.5 bg-green-500/10 text-green-500 border border-green-500/20 rounded-full"
+						>
 							Live Grid Data
 						</span>
 					{/if}
@@ -428,17 +428,19 @@
 					</h4>
 					<div class="flex items-end gap-1 h-32 w-full pt-4">
 						{#if intensityData?.forecast}
-							{#each intensityData.forecast as hour}
+							{#each intensityData.forecast as hour (hour.hour_utc)}
 								<div class="group relative flex-1 flex flex-col items-center justify-end h-full">
-									<div 
+									<div
 										class="w-full rounded-t-sm transition-all hover:opacity-100 opacity-70"
 										class:bg-green-500={hour.level === 'very_low' || hour.level === 'low'}
 										class:bg-yellow-500={hour.level === 'medium'}
 										class:bg-red-500={hour.level === 'high' || hour.level === 'very_high'}
 										style="height: {(hour.intensity_gco2_kwh / 800) * 100}%"
 									></div>
-									<div class="absolute bottom-full mb-2 hidden group-hover:block bg-ink-900 border border-ink-700 p-2 rounded text-[10px] z-50 whitespace-nowrap">
-										{hour.hour_utc}:00 UTC <br/>
+									<div
+										class="absolute bottom-full mb-2 hidden group-hover:block bg-ink-900 border border-ink-700 p-2 rounded text-[10px] z-50 whitespace-nowrap"
+									>
+										{hour.hour_utc}:00 UTC <br />
 										<span class="font-bold">{hour.intensity_gco2_kwh} g/kWh</span>
 									</div>
 								</div>
@@ -459,19 +461,21 @@
 					</h4>
 					<div class="space-y-4">
 						<div>
-							<label for="duration" class="block text-xs text-ink-400 mb-2">Workload Duration (Hours)</label>
-							<input 
-								type="range" 
+							<label for="duration" class="block text-xs text-ink-400 mb-2"
+								>Workload Duration (Hours)</label
+							>
+							<input
+								type="range"
 								id="duration"
-								min="1" 
-								max="24" 
-								bind:value={workloadDuration} 
+								min="1"
+								max="24"
+								bind:value={workloadDuration}
 								class="w-full h-1.5 bg-ink-800 rounded-lg appearance-none cursor-pointer accent-accent-500"
 							/>
 							<div class="text-right text-xs font-mono text-ink-300 mt-1">{workloadDuration}h</div>
 						</div>
 
-						<button 
+						<button
 							onclick={getOptimalSchedule}
 							class="w-full py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-semibold transition-colors shadow-lg shadow-accent-600/20"
 						>
@@ -479,8 +483,12 @@
 						</button>
 
 						{#if scheduleResult}
-							<div class="mt-4 p-4 bg-accent-950/30 border border-accent-500/20 rounded-lg animate-in fade-in slide-in-from-bottom-2">
-								<div class="text-[10px] uppercase font-bold text-accent-400 mb-1">Recommendation</div>
+							<div
+								class="mt-4 p-4 bg-accent-950/30 border border-accent-500/20 rounded-lg animate-in fade-in slide-in-from-bottom-2"
+							>
+								<div class="text-[10px] uppercase font-bold text-accent-400 mb-1">
+									Recommendation
+								</div>
 								<div class="text-sm text-white font-medium">{scheduleResult.recommendation}</div>
 							</div>
 						{/if}

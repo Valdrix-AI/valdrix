@@ -11,7 +11,7 @@ scanning regions with actual resources/costs.
 
 import aioboto3
 from datetime import date, timedelta
-from typing import List, Dict
+from typing import Dict, List
 import structlog
 from botocore.exceptions import ClientError
 from botocore.session import get_session
@@ -27,7 +27,7 @@ class RegionDiscovery:
     Use `get_enabled_regions()` for weekly scans (catch new deployments).
     """
 
-    def __init__(self, credentials: Dict[str, str] = None):
+    def __init__(self, credentials: Dict[str, str] | None = None):
         self.credentials = credentials
         self.session = aioboto3.Session()
         self._cached_enabled_regions: List[str] = []
@@ -53,11 +53,13 @@ class RegionDiscovery:
             )
             return None
 
-        return {
+        kwargs: Dict[str, str] = {
             "aws_access_key_id": ak,
             "aws_secret_access_key": sk,
-            "aws_session_token": st,
         }
+        if st:
+            kwargs["aws_session_token"] = st
+        return kwargs
 
     async def get_enabled_regions(self) -> List[str]:
         """

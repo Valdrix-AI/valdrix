@@ -80,4 +80,4 @@ class TestAuthLogic:
         user = CurrentUser(id=uid, email="test@example.com")
         assert user.id == uid
         assert user.role == UserRole.MEMBER
-        assert user.tier == PricingTier.STARTER
+        assert user.tier == PricingTier.FREE_TRIAL

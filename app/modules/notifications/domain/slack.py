@@ -48,7 +48,7 @@ class SlackService:
         self._sent_alerts: dict[str, float] = {}
         self._dedup_window_seconds = 3600  # 1 hour deduplication window
 
-    async def _send_with_retry(self, method: str, **kwargs) -> bool:
+    async def _send_with_retry(self, method: str, **kwargs: Any) -> bool:
         """Generic Slack API call with exponential backoff for rate limiting."""
         max_retries = 3
         for attempt in range(max_retries + 1):
@@ -215,7 +215,7 @@ class SlackService:
         )
 
 
-def get_slack_service():
+def get_slack_service() -> SlackService | None:
     """
     Factory function to get a configured SlackService instance.
     Returns None if Slack is not configured.

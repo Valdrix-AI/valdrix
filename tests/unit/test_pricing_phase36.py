@@ -24,6 +24,6 @@ def test_pricing_period_consistency():
     # This is more of a placeholder as period strings are often dynamic in frontend, 
     # but we check backend sanity.
     for tier, config in TIER_CONFIG.items():
-        if tier == PricingTier.FREE:
+        if tier == PricingTier.FREE_TRIAL:
             continue
         assert "price_usd" in config

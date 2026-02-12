@@ -34,7 +34,7 @@ class TestSymbolicForecaster:
 
         assert len(result) == 100
         assert result['is_outlier'].sum() == 1  # One outlier detected
-        assert result.iloc[-1]['is_outlier'] == True  # The 500 value
+        assert result.iloc[-1]['is_outlier']  # The 500 value
 
     def test_detect_outliers_small_dataset(self):
         """Test outlier detection with small dataset (< 5 points)."""
@@ -234,7 +234,7 @@ class TestSymbolicForecasterForecasting:
                 mock_instance.make_future_dataframe.return_value = pd.DataFrame()
                 mock_instance.predict.return_value = mock_forecast_df
 
-                result = await SymbolicForecaster.forecast(history, days=5, db=mock_db, tenant_id="test-tenant")
+                await SymbolicForecaster.forecast(history, days=5, db=mock_db, tenant_id="test-tenant")
 
                 # Verify holidays were built and passed to Prophet
                 mock_prophet.assert_called_once()
@@ -378,7 +378,7 @@ class TestSymbolicForecasterProductionQuality:
         result = SymbolicForecaster._detect_outliers(df)
 
         assert result['is_outlier'].sum() == 1
-        assert result.iloc[-1]['is_outlier'] == True
+        assert result.iloc[-1]['is_outlier']
 
     def test_dataframe_preparation_robustness(self):
         """Test dataframe preparation with various data types."""
@@ -563,7 +563,7 @@ class TestSymbolicForecasterProductionQuality:
         # Forecast 365 days (large forecast)
         with patch('app.shared.analysis.forecaster.PROPHET_AVAILABLE', True):
             with patch('app.shared.analysis.forecaster.Prophet', create=True) as mock_prophet:
-                with patch('app.shared.analysis.forecaster.logger') as mock_logger:
+                with patch('app.shared.analysis.forecaster.logger'):
                     mock_instance = MagicMock()
                     mock_prophet.return_value = mock_instance
 

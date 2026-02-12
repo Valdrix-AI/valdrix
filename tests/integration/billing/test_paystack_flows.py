@@ -12,7 +12,7 @@ from sqlalchemy import select
 from app.shared.core.config import get_settings
 from app.models.tenant import Tenant, User, UserRole
 from app.shared.core.pricing import PricingTier
-from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription, SubscriptionStatus
+from app.modules.billing.domain.billing.paystack_billing import TenantSubscription, SubscriptionStatus
 
 settings = get_settings()
 
@@ -69,7 +69,7 @@ async def test_create_checkout_success(ac: AsyncClient, test_data, db):
         }
     )
     
-    with patch("app.modules.reporting.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
         mock_settings.PAYSTACK_SECRET_KEY = "test-secret-key"
         mock_settings.FRONTEND_URL = "http://localhost:3000"
     
@@ -133,7 +133,7 @@ async def test_webhook_charge_success_activates_subscription(ac: AsyncClient, te
     
     # Temporarily ensure secret key is set for test
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("app.modules.reporting.domain.billing.paystack_billing.settings.PAYSTACK_SECRET_KEY", SECRET)
+        mp.setattr("app.modules.billing.domain.billing.paystack_billing.settings.PAYSTACK_SECRET_KEY", SECRET)
         
         headers = {"x-paystack-signature": signature}
         response = await ac.post("/api/v1/billing/webhook", content=payload_bytes, headers=headers)

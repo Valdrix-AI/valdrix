@@ -16,12 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.llm import LLMBudget, LLMUsage
 from app.shared.core.exceptions import BudgetExceededError, ResourceNotFoundError
 from app.shared.llm.pricing_data import LLM_PRICING
+from app.shared.llm.pricing_data import ProviderCost
 from app.shared.core.cache import get_cache_service
 # Moved BudgetStatus here
 from app.shared.core.ops_metrics import LLM_PRE_AUTH_DENIALS, LLM_SPEND_USD
 from app.shared.core.pricing import get_tenant_tier
 from app.shared.core.logging import audit_log
-from app.shared.core.async_utils import maybe_await
+from app.shared.core.async_utils import maybe_call
 
 logger = structlog.get_logger()
 
@@ -75,7 +76,7 @@ class LLMBudgetManager:
         # PRODUCTION: Global Fallback ($10 per 1M tokens) if still not found
         if not pricing:
             logger.warning("llm_pricing_using_global_fallback", provider=provider, model=model)
-            pricing = {"input": 10.0, "output": 10.0}
+            pricing = ProviderCost(input=10.0, output=10.0, free_tier_tokens=0)
         
         # Calculate cost
         input_cost = (Decimal(str(prompt_tokens)) * Decimal(str(pricing["input"]))) / Decimal("1000000")
@@ -92,7 +93,7 @@ class LLMBudgetManager:
         model: str = "gpt-4o",
         prompt_tokens: int = AVG_PROMPT_TOKENS,
         completion_tokens: int = AVG_RESPONSE_TOKENS,
-        operation_id: str = None,
+        operation_id: str | None = None,
     ) -> Decimal:
         """
         PRODUCTION: Check budget and atomically reserve funds.
@@ -198,9 +199,9 @@ class LLMBudgetManager:
         prompt_tokens: int,
         completion_tokens: int,
         provider: str = "openai",
-        actual_cost_usd: Decimal = None,
+        actual_cost_usd: Decimal | None = None,
         is_byok: bool = False,
-        operation_id: str = None,
+        operation_id: str | None = None,
         request_type: str = "unknown"
     ) -> None:
         """
@@ -230,7 +231,7 @@ class LLMBudgetManager:
                 operation_id=operation_id,
                 request_type=request_type
             )
-            await maybe_await(db.add(usage))
+            await maybe_call(db.add, usage)
             
             # Metrics
             try:
@@ -270,7 +271,7 @@ class LLMBudgetManager:
             # (the usage is what matters, not the audit log)
 
     @classmethod
-    async def check_budget(cls, tenant_id: UUID, db: AsyncSession):
+    async def check_budget(cls, tenant_id: UUID, db: AsyncSession) -> BudgetStatus:
         """
         Unified budget check for tenants.
         Returns: OK, SOFT_LIMIT, or HARD_LIMIT (via exception).
@@ -278,7 +279,7 @@ class LLMBudgetManager:
         
         # 1. Cache Check
         cache = get_cache_service()
-        if cache.enabled:
+        if cache.enabled and cache.client is not None:
             try:
                 if await cache.client.get(f"budget_blocked:{tenant_id}"):
                     return BudgetStatus.HARD_LIMIT
@@ -316,7 +317,7 @@ class LLMBudgetManager:
 
         if current_usage >= limit:
             if budget.hard_limit:
-                if cache.enabled:
+                if cache.enabled and cache.client is not None:
                     await cache.client.set(f"budget_blocked:{tenant_id}", "1", ex=600)
                 raise BudgetExceededError(
                     f"LLM budget of ${limit:.2f} exceeded.",
@@ -325,7 +326,7 @@ class LLMBudgetManager:
             return BudgetStatus.SOFT_LIMIT
 
         if current_usage >= (limit * threshold):
-            if cache.enabled:
+            if cache.enabled and cache.client is not None:
                 await cache.client.set(f"budget_soft:{tenant_id}", "1", ex=300)
             return BudgetStatus.SOFT_LIMIT
 

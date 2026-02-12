@@ -17,9 +17,10 @@ Key Features:
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Any, Optional, Union
+from typing import Any, Optional, Union
 from sqlalchemy import String, ForeignKey, Text, Index, JSON, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import structlog
 
@@ -140,7 +141,9 @@ class AuditLog(Base):
     resource_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Event details (JSONB for flexibility)
-    details: Mapped[Optional[Dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
+    details: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
 
     # Outcome
     success: Mapped[bool] = mapped_column(default=True, nullable=False)
@@ -180,7 +183,12 @@ class AuditLogger:
         "external_id", "session_token", "credit_card"
     }
 
-    def __init__(self, db, tenant_id: Union[str, uuid.UUID], correlation_id: str = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        tenant_id: Union[str, uuid.UUID],
+        correlation_id: str | None = None,
+    ) -> None:
         self.db = db
         # Ensure tenant_id is a UUID object for SQLAlchemy
         self.tenant_id = uuid.UUID(str(tenant_id)) if isinstance(tenant_id, (str, bytes)) else tenant_id
@@ -189,26 +197,36 @@ class AuditLogger:
     async def log(
         self,
         event_type: AuditEventType,
-        actor_id: str = None,
-        actor_email: str = None,
-        actor_ip: str = None,
-        resource_type: str = None,
-        resource_id: str = None,
-        details: Dict[str, Any] = None,
+        actor_id: uuid.UUID | str | None = None,
+        actor_email: str | None = None,
+        actor_ip: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        details: dict[str, Any] | None = None,
         success: bool = True,
-        error_message: str = None,
-        request_method: str = None,
-        request_path: str = None
+        error_message: str | None = None,
+        request_method: str | None = None,
+        request_path: str | None = None,
     ) -> AuditLog:
         """Create an immutable audit log entry."""
 
         # Mask sensitive data
         masked_details = self._mask_sensitive(details) if details else None
+        parsed_actor_id: uuid.UUID | None
+        if isinstance(actor_id, uuid.UUID):
+            parsed_actor_id = actor_id
+        elif isinstance(actor_id, (str, bytes)):
+            try:
+                parsed_actor_id = uuid.UUID(str(actor_id))
+            except ValueError:
+                parsed_actor_id = None
+        else:
+            parsed_actor_id = None
 
         entry = AuditLog(
             tenant_id=self.tenant_id,
             event_type=event_type.value,
-            actor_id=uuid.UUID(str(actor_id)) if actor_id and isinstance(actor_id, (str, bytes)) else actor_id,
+            actor_id=parsed_actor_id,
             actor_email=actor_email,
             actor_ip=actor_ip,
             correlation_id=self.correlation_id,
@@ -221,8 +239,7 @@ class AuditLogger:
             error_message=error_message
         )
 
-        from app.shared.core.async_utils import maybe_await
-        await maybe_await(self.db.add(entry))
+        self.db.add(entry)
         await self.db.flush()
 
         # Also log to structured logger for real-time monitoring

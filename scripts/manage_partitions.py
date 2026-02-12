@@ -215,7 +215,8 @@ async def archive_old_partitions(months_old: int = 13):
             # Expected format: cost_records_YYYY_MM
             try:
                 parts = table_name.split("_")
-                if len(parts) != 4: continue
+                if len(parts) != 4:
+                    continue
                 y, m = int(parts[2]), int(parts[3])
                 table_date = date(y, m, 1)
                 
@@ -250,7 +251,8 @@ async def drop_old_archives(months_old: int = 25):
             # Expected format: cost_records_archive_YYYY_MM
             try:
                 parts = table_name.split("_")
-                if len(parts) != 5: continue
+                if len(parts) != 5:
+                    continue
                 y, m = int(parts[3]), int(parts[4])
                 table_date = date(y, m, 1)
                 

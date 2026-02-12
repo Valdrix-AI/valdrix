@@ -1,5 +1,6 @@
 
 import pytest
+import httpx
 from httpx import AsyncClient
 from uuid import uuid4
 from app.models.tenant import Tenant, User
@@ -128,7 +129,6 @@ async def test_bound_pagination_enforcement(ac: AsyncClient, db):
         app.dependency_overrides.pop(get_current_user, None)
         app.dependency_overrides.pop(require_tenant_access, None)
 
-@pytest.mark.skip(reason="Starlette/httpx ASGITransport exception handling in tests differs from production. Error sanitization works in production but not through test client.")
 @pytest.mark.asyncio
 async def test_error_sanitization_middleware(ac: AsyncClient):
     """
@@ -146,7 +146,9 @@ async def test_error_sanitization_middleware(ac: AsyncClient):
             # Raise a RuntimeError which is less likely to be caught by test infrastructure
             raise RuntimeError("SECRET_VALUE_SHOULD_NOT_LEAK_12345")
 
-    response = await ac.get("/test-crash-safe")
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as safe_client:
+        response = await safe_client.get("/test-crash-safe")
     
     # The handler should return 500 with sanitized content
     assert response.status_code == 500

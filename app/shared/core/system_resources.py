@@ -1,10 +1,10 @@
 import psutil
-from typing import Any
+from typing import Any, cast
 
 
 def safe_cpu_percent() -> float:
     """Non-blocking CPU percent sample for async-safe health checks."""
-    return psutil.cpu_percent(interval=None)
+    return cast(float, psutil.cpu_percent(interval=None))
 
 
 def safe_virtual_memory() -> Any:

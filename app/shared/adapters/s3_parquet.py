@@ -2,7 +2,7 @@ import io
 import pandas as pd
 import aioboto3
 import structlog
-from typing import List, Dict, Any
+from typing import Any, cast
 from app.models.aws_connection import AWSConnection
 
 logger = structlog.get_logger()
@@ -80,12 +80,13 @@ class S3ParquetAdapter:
                 logger.error("cur_parquet_read_failed", bucket=bucket, key=key, error=str(e))
                 raise
 
-    async def _get_credentials(self) -> dict:
+    async def _get_credentials(self) -> dict[str, str]:
         from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
         adapter = MultiTenantAWSAdapter(self.connection)
-        return await adapter.get_credentials()
+        credentials = await adapter.get_credentials()
+        return cast(dict[str, str], credentials)
 
-    def process_dataframe(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+    def process_dataframe(self, df: pd.DataFrame) -> list[dict[str, Any]]:
         """
         Map CUR 2.0 / Data Export columns to Valdrix CostRecord format.
         """
@@ -111,4 +112,5 @@ class S3ParquetAdapter:
             df_subset["recorded_at"] = df_subset["timestamp"].dt.date
         
         # Convert to list of dicts for bulk insert
-        return df_subset.to_dict("records")
+        records = df_subset.to_dict("records")
+        return cast(list[dict[str, Any]], records)

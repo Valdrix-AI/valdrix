@@ -63,7 +63,7 @@ async def test_create_aws_connection(async_client: AsyncClient, db_session, mock
 async def test_create_azure_connection_denied_on_free_tier(async_client: AsyncClient, db_session, mock_user):
     """Test Azure connection denied for Free tier."""
     # Ensure tenant is on FREE plan
-    tenant = Tenant(id=mock_user.tenant_id, name="Free Tenant", plan=PricingTier.FREE.value)
+    tenant = Tenant(id=mock_user.tenant_id, name="Free Tenant", plan=PricingTier.FREE_TRIAL.value)
     db_session.add(tenant)
     await db_session.commit()
     

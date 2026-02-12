@@ -188,9 +188,17 @@ class TestCostAggregator:
              mock_breakdown_result # Breakdown query
         ]
 
-        summary = await CostAggregator.get_dashboard_summary(
-            mock_db, tenant_id, date.today(), date.today()
-        )
+        with (
+            patch.object(CostAggregator, "get_data_freshness", return_value={"status": "final"}),
+            patch.object(
+                CostAggregator,
+                "get_canonical_data_quality",
+                return_value={"mapped_percentage": 100.0, "meets_target": True},
+            ),
+        ):
+            summary = await CostAggregator.get_dashboard_summary(
+                mock_db, tenant_id, date.today(), date.today()
+            )
 
         assert summary["total_cost"] == 100.0
         assert summary["total_carbon_kg"] == 50.0

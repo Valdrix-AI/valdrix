@@ -10,8 +10,8 @@ import structlog
 
 from app.shared.db.session import get_db
 from app.shared.core.logging import audit_log
-from app.shared.core.auth import get_current_user_from_jwt, CurrentUser, UserRole
-from app.models.tenant import Tenant, User
+from app.shared.core.auth import get_current_user_from_jwt, CurrentUser
+from app.models.tenant import Tenant, User, UserRole
 from app.shared.core.pricing import PricingTier
 from app.shared.core.config import get_settings
 from app.shared.core.rate_limit import auth_limit
@@ -36,7 +36,7 @@ async def onboard(
     onboard_req: OnboardRequest,
     user: CurrentUser = Depends(get_current_user_from_jwt),  # No DB check
     db: AsyncSession = Depends(get_db),
-):
+) -> OnboardResponse:
     # 1. Check if user already exists
     existing = await db.execute(select(User).where(User.id == user.id))
     if existing.scalar_one_or_none():
@@ -48,7 +48,7 @@ async def onboard(
 
     tenant = Tenant(
         name=onboard_req.tenant_name,
-        plan=PricingTier.TRIAL.value,
+        plan=PricingTier.FREE_TRIAL.value,
         trial_started_at=datetime.now(timezone.utc)
     )
 
@@ -74,7 +74,7 @@ async def onboard(
             from app.models.gcp_connection import GCPConnection
             
             # Create a mock/temporary connection object for verification
-            conn = None
+            conn: Any = None
             if platform == "aws":
                 conn = AWSConnection(
                     role_arn=onboard_req.cloud_config.get("role_arn"),

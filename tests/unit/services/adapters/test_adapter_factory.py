@@ -8,6 +8,8 @@ from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.adapters.aws_cur import AWSCURAdapter
 from app.shared.adapters.azure import AzureAdapter
 from app.shared.adapters.gcp import GCPAdapter
+from app.shared.adapters.saas import SaaSAdapter
+from app.shared.adapters.license import LicenseAdapter
 
 
 def test_get_adapter_aws_multitenant():
@@ -84,3 +86,19 @@ def test_get_adapter_unsupported():
     
     with pytest.raises(ValueError, match="Unsupported connection type"):
         AdapterFactory.get_adapter(mock_conn)
+
+
+def test_get_adapter_saas_provider():
+    """Factory should route SaaS providers to Cloud+ SaaS adapter."""
+    mock_conn = MagicMock()
+    mock_conn.provider = "saas"
+    adapter = AdapterFactory.get_adapter(mock_conn)
+    assert isinstance(adapter, SaaSAdapter)
+
+
+def test_get_adapter_license_provider():
+    """Factory should route license providers to Cloud+ license adapter."""
+    mock_conn = MagicMock()
+    mock_conn.provider = "license"
+    adapter = AdapterFactory.get_adapter(mock_conn)
+    assert isinstance(adapter, LicenseAdapter)

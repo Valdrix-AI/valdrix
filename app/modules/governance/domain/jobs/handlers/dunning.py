@@ -18,7 +18,7 @@ class DunningHandler(BaseJobHandler):
     """
     
     async def execute(self, job: BackgroundJob, db: AsyncSession) -> Dict[str, Any]:
-        from app.modules.reporting.domain.billing.dunning_service import DunningService
+        from app.modules.billing.domain.billing.dunning_service import DunningService
         
         payload = job.payload or {}
         sub_id = payload.get("subscription_id")

@@ -25,7 +25,7 @@ Usage:
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 import structlog
 from contextlib import contextmanager
 
@@ -173,7 +173,7 @@ class LLMCircuitBreaker:
                 )
     
     @contextmanager
-    def protect(self, provider: str):
+    def protect(self, provider: str) -> Any:
         """
         Context manager for protected provider calls.
         
@@ -190,7 +190,7 @@ class LLMCircuitBreaker:
             self.record_failure(provider, str(e))
             raise
     
-    def get_status(self) -> Dict[str, dict]:
+    def get_status(self) -> Dict[str, dict[str, Any]]:
         """Get status of all circuits for monitoring."""
         return {
             name: {

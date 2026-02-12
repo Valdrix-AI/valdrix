@@ -19,6 +19,7 @@ async def test_reconciliation_empty_results():
     summary = await service.compare_explorer_vs_cur(tenant_id, date(2026, 1, 1), date(2026, 1, 2))
 
     assert summary["tenant_id"] == str(tenant_id)
+    assert summary["status"] == "no_comparable_data"
     assert summary["total_records"] == 0
     assert summary["total_cost"] == 0.0
     assert summary["discrepancies"] == []
@@ -38,5 +39,6 @@ async def test_reconciliation_totals_with_none_values():
     tenant_id = uuid4()
     summary = await service.compare_explorer_vs_cur(tenant_id, date(2026, 1, 1), date(2026, 1, 2))
 
+    assert summary["status"] == "no_comparable_data"
     assert summary["total_records"] == 2
     assert summary["total_cost"] == 10.5

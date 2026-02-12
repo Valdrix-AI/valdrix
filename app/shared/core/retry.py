@@ -5,8 +5,9 @@ Provides robust retry mechanisms for transient failures in database operations,
 external API calls, and other unreliable operations.
 """
 import asyncio
+import logging
 import random
-from typing import Callable, TypeVar
+from typing import Any, Awaitable, Callable, TypeVar, TypedDict, cast
 from functools import wraps
 import structlog
 from tenacity import (
@@ -23,8 +24,16 @@ from app.shared.core.exceptions import ExternalAPIError
 logger = structlog.get_logger()
 T = TypeVar('T')
 
+
+class RetryConfig(TypedDict):
+    max_attempts: int
+    min_wait: float
+    max_wait: float
+    multiplier: float
+    exceptions: tuple[type[BaseException], ...]
+
 # Default retry configurations
-RETRY_CONFIGS = {
+RETRY_CONFIGS: dict[str, RetryConfig] = {
     "database": {
         "max_attempts": 3,
         "min_wait": 0.1,
@@ -59,9 +68,9 @@ RETRY_CONFIGS = {
 class RetryManager:
     """Manages retry logic with configurable backoff strategies."""
 
-    def __init__(self, operation_type: str = "default"):
+    def __init__(self, operation_type: str = "default") -> None:
         self.operation_type = operation_type
-        self.config = RETRY_CONFIGS.get(operation_type, {
+        self.config: RetryConfig = RETRY_CONFIGS.get(operation_type, {
             "max_attempts": 3,
             "min_wait": 0.1,
             "max_wait": 2.0,
@@ -84,9 +93,14 @@ class RetryManager:
 
         return max(0.001, final_delay)  # Minimum 1ms delay
 
-    async def execute_with_retry(self, coro: Callable[..., T], *args, **kwargs) -> T:
+    async def execute_with_retry(
+        self,
+        coro: Callable[..., Awaitable[T]],
+        *args: Any,
+        **kwargs: Any,
+    ) -> T:
         """Execute a coroutine with retry logic."""
-        last_exception = None
+        last_exception: BaseException | None = None
 
         for attempt in range(self.config["max_attempts"]):
             try:
@@ -128,10 +142,14 @@ class RetryManager:
                     )
 
         # All retries exhausted
+        if last_exception is None:
+            raise RuntimeError("Retry execution failed without captured exception")
         raise last_exception
 
 
-def retry_operation(operation_type: str = "default"):
+def retry_operation(
+    operation_type: str = "default",
+) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     """
     Decorator for operations that need retry logic.
 
@@ -141,9 +159,9 @@ def retry_operation(operation_type: str = "default"):
             # Database operation here
             pass
     """
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> T:
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
             retry_manager = RetryManager(operation_type)
             return await retry_manager.execute_with_retry(func, *args, **kwargs)
         return wrapper
@@ -158,7 +176,9 @@ retry_webhook = retry_operation("webhook")
 
 
 # Tenacity-based retry decorators for more complex scenarios
-def tenacity_retry(operation_type: str = "default"):
+def tenacity_retry(
+    operation_type: str = "default",
+) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     """
     Decorator using tenacity library for advanced retry patterns.
 
@@ -166,7 +186,7 @@ def tenacity_retry(operation_type: str = "default"):
     """
     config = RETRY_CONFIGS.get(operation_type, RETRY_CONFIGS["database"])
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @retry(
             stop=stop_after_attempt(config["max_attempts"]),
             wait=wait_exponential(
@@ -175,17 +195,21 @@ def tenacity_retry(operation_type: str = "default"):
                 max=config["max_wait"]
             ),
             retry=retry_if_exception_type(config["exceptions"]),
-            before_sleep=before_sleep_log(logger, "warning"),
-            after=after_log(logger, "info")
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            after=after_log(logger, logging.INFO)
         )
-        async def wrapper(*args, **kwargs) -> T:
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
             return await func(*args, **kwargs)
-        return wrapper
+        return cast(Callable[..., Awaitable[T]], wrapper)
     return decorator
 
 
 # Database-specific retry with deadlock detection
-async def execute_with_deadlock_retry(coro: Callable[..., T], *args, **kwargs) -> T:
+async def execute_with_deadlock_retry(
+    coro: Callable[..., Awaitable[T]],
+    *args: Any,
+    **kwargs: Any,
+) -> T:
     """
     Execute database operations with deadlock-specific retry logic.
 
@@ -232,17 +256,37 @@ async def execute_with_deadlock_retry(coro: Callable[..., T], *args, **kwargs) -
     raise RuntimeError("Unexpected retry exhaustion")
 
 
-def get_retry_config(operation_type: str) -> dict:
+def get_retry_config(operation_type: str) -> RetryConfig:
     """Get retry configuration for an operation type."""
     return RETRY_CONFIGS.get(operation_type, RETRY_CONFIGS["database"]).copy()
 
 
-def set_retry_config(operation_type: str, config: dict) -> None:
+def set_retry_config(operation_type: str, config: dict[str, Any]) -> None:
     """Set custom retry configuration for an operation type."""
     required_keys = {"max_attempts", "min_wait", "max_wait", "multiplier", "exceptions"}
 
     if not all(key in config for key in required_keys):
         raise ValueError(f"Invalid retry configuration for {operation_type}")
 
-    RETRY_CONFIGS[operation_type] = config.copy()
+    exceptions_raw = config["exceptions"]
+    if isinstance(exceptions_raw, tuple):
+        exceptions = tuple(
+            exc
+            for exc in exceptions_raw
+            if isinstance(exc, type) and issubclass(exc, BaseException)
+        )
+    else:
+        exceptions = ()
+    if not exceptions:
+        exceptions = (Exception,)
+
+    typed_config: RetryConfig = {
+        "max_attempts": int(config["max_attempts"]),
+        "min_wait": float(config["min_wait"]),
+        "max_wait": float(config["max_wait"]),
+        "multiplier": float(config["multiplier"]),
+        "exceptions": exceptions,
+    }
+
+    RETRY_CONFIGS[operation_type] = typed_config
     logger.info("retry_config_updated", operation_type=operation_type, config=config)

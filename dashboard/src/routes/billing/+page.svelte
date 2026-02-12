@@ -11,6 +11,7 @@
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { base } from '$app/paths';
+	import { api } from '$lib/api';
 
 	let { data } = $props();
 
@@ -54,12 +55,12 @@
 			if (res.ok) {
 				subscription = await res.json();
 			} else {
-				subscription = { tier: 'free', status: 'active' };
+				subscription = { tier: 'free_trial', status: 'active' };
 			}
 		} catch (e) {
 			const err = e as Error;
 			error = err.message;
-			subscription = { tier: 'free', status: 'active' };
+			subscription = { tier: 'free_trial', status: 'active' };
 		} finally {
 			loading = false;
 		}
@@ -84,17 +85,18 @@
 			const session = data.session;
 			if (!session) throw new Error('Not authenticated');
 
-			const res = await fetch(`${PUBLIC_API_URL}/billing/checkout`, {
-				method: 'POST',
-				headers: {
-					Authorization: `Bearer ${session.access_token}`,
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
+			const res = await api.post(
+				`${PUBLIC_API_URL}/billing/checkout`,
+				{
 					tier,
 					billing_cycle: billingCycle
-				})
-			});
+				},
+				{
+					headers: {
+						Authorization: `Bearer ${session.access_token}`
+					}
+				}
+			);
 
 			if (!res.ok) {
 				const err = await res.json();

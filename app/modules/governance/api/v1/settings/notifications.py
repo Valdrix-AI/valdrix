@@ -57,7 +57,7 @@ class NotificationSettingsUpdate(BaseModel):
 async def get_notification_settings(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> NotificationSettingsResponse:
     """
     Get notification settings for the current tenant.
 
@@ -91,7 +91,7 @@ async def get_notification_settings(
             tenant_id=str(current_user.tenant_id),
         )
 
-    return settings
+    return NotificationSettingsResponse.model_validate(settings)
 
 
 @router.put("/notifications", response_model=NotificationSettingsResponse)
@@ -99,7 +99,7 @@ async def update_notification_settings(
     data: NotificationSettingsUpdate,
     current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
-):
+) -> NotificationSettingsResponse:
     """
     Update notification settings for the current tenant.
 
@@ -150,14 +150,14 @@ async def update_notification_settings(
         }
     )
 
-    return settings
+    return NotificationSettingsResponse.model_validate(settings)
 
 
 @router.post("/notifications/test-slack")
 async def test_slack_notification(
     current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     """
     Send a test notification to Slack.
 

@@ -11,7 +11,9 @@ from app.models.tenant import Tenant
 
 @pytest.fixture
 def mock_db():
-    db = AsyncMock()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.commit = AsyncMock()
     # AsyncSession.begin() is a synchronous method returning an async context manager
     db.begin = MagicMock()
     db_ctx = AsyncMock() 
@@ -20,12 +22,17 @@ def mock_db():
     db_ctx.__aexit__.return_value = None
     return db
 
+def _configure_session_maker(mock_maker, mock_db):
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = mock_db
+    session_ctx.__aexit__.return_value = None
+    mock_maker.return_value = session_ctx
+
 @pytest.fixture
 def mock_session_maker(mock_db):
     # Mock the context manager for async_session_maker
     maker = MagicMock()
-    maker.return_value.__aenter__.return_value = mock_db
-    maker.return_value.__aexit__.return_value = None
+    _configure_session_maker(maker, mock_db)
     return maker
 
 @pytest.mark.asyncio
@@ -33,7 +40,7 @@ async def test_cohort_analysis_high_value_success(mock_db):
     """Test successful cohort analysis for high value tenants."""
     # Setup mocks
     with patch("app.tasks.scheduler_tasks.async_session_maker") as mock_maker:
-        mock_maker.return_value.__aenter__.return_value = mock_db
+        _configure_session_maker(mock_maker, mock_db)
         
         # Mock Tenant query result
         mock_tenant = MagicMock(spec=Tenant)
@@ -60,7 +67,7 @@ async def test_cohort_analysis_high_value_success(mock_db):
 async def test_cohort_analysis_deadlock_retry(mock_db):
     """Test deadlock retry logic."""
     with patch("app.tasks.scheduler_tasks.async_session_maker") as mock_maker:
-        mock_maker.return_value.__aenter__.return_value = mock_db
+        _configure_session_maker(mock_maker, mock_db)
         
         mock_tenant = MagicMock(spec=Tenant)
         mock_tenant.id = "uuid-1"
@@ -85,7 +92,7 @@ async def test_cohort_analysis_deadlock_retry(mock_db):
 async def test_remediation_sweep_success(mock_db):
     """Test remediation sweep enqueues jobs."""
     with patch("app.tasks.scheduler_tasks.async_session_maker") as mock_maker:
-        mock_maker.return_value.__aenter__.return_value = mock_db
+        _configure_session_maker(mock_maker, mock_db)
         
         mock_conn = MagicMock()
         mock_conn.id = "conn-1"
@@ -107,7 +114,7 @@ async def test_remediation_sweep_success(mock_db):
 async def test_billing_sweep_success(mock_db):
     """Test billing sweep success."""
     with patch("app.tasks.scheduler_tasks.async_session_maker") as mock_maker:
-        mock_maker.return_value.__aenter__.return_value = mock_db
+        _configure_session_maker(mock_maker, mock_db)
         
         mock_sub = MagicMock()
         mock_sub.id = "sub-1"
@@ -126,7 +133,7 @@ async def test_billing_sweep_success(mock_db):
 async def test_maintenance_sweep_success(mock_db):
     """Test maintenance sweep success path."""
     with patch("app.tasks.scheduler_tasks.async_session_maker") as mock_maker:
-        mock_maker.return_value.__aenter__.return_value = mock_db
+        _configure_session_maker(mock_maker, mock_db)
         
         with patch("app.tasks.scheduler_tasks.CostPersistenceService") as mock_persist_cls, \
              patch("app.tasks.scheduler_tasks.CostAggregator") as mock_agg_cls:
@@ -146,7 +153,7 @@ async def test_maintenance_sweep_success(mock_db):
 async def test_maintenance_archive_logging(mock_db):
     """Test that maintenance archive failures are logged correctly."""
     with patch("app.tasks.scheduler_tasks.async_session_maker") as mock_maker:
-        mock_maker.return_value.__aenter__.return_value = mock_db
+        _configure_session_maker(mock_maker, mock_db)
         
         # Precise mock to only fail the archive statement
         def execute_side_effect(stmt, *args, **kwargs):
@@ -156,9 +163,15 @@ async def test_maintenance_archive_logging(mock_db):
 
         mock_db.execute.side_effect = execute_side_effect
         
+        async def _fake_finalize_batch(self, days_ago):
+            return {"records_finalized": 0}
+
+        async def _fake_refresh_materialized_view(self, db):
+            return None
+
         with patch("app.tasks.scheduler_tasks.logger") as mock_logger:
-            # We also need to mock or suppress finalize_batch and refresh_view if they call execute
-            with patch("app.tasks.scheduler_tasks.CostPersistenceService.finalize_batch", new_callable=AsyncMock), \
-                 patch("app.tasks.scheduler_tasks.CostAggregator.refresh_materialized_view", new_callable=AsyncMock):
+            # Use explicit async stubs instead of AsyncMock to avoid coroutine leak warnings
+            with patch("app.tasks.scheduler_tasks.CostPersistenceService.finalize_batch", new=_fake_finalize_batch), \
+                 patch("app.tasks.scheduler_tasks.CostAggregator.refresh_materialized_view", new=_fake_refresh_materialized_view):
                 await _maintenance_sweep_logic()
                 mock_logger.error.assert_called_with("maintenance_archive_failed", error="Archive Failure")

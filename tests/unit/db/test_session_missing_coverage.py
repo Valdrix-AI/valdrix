@@ -1,12 +1,12 @@
-import pytest
 """
 Targeted tests for app/shared/db/session.py missing coverage line 21
 """
+import pytest
 import os
+import uuid
 from unittest.mock import MagicMock, AsyncMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Request
-import uuid
 
 # Set test environment before importing app modules
 os.environ["TESTING"] = "true"

@@ -51,11 +51,11 @@ test.describe('Onboarding Flow', () => {
 	});
 
 	test('signup page loads', async ({ page }) => {
-		await page.goto(`${BASE_URL}/auth/signup`);
+		await page.goto(`${BASE_URL}/auth/login`);
 		await waitForPageLoad(page);
 
-		// Check for signup form
-		await expect(page.locator('input[type="email"]')).toBeVisible();
+		await page.click('button:has-text("Sign up")');
+		await expect(page.locator('h1:has-text("Create your account")')).toBeVisible();
 	});
 });
 
@@ -70,7 +70,7 @@ test.describe('Dashboard Flow (Authenticated)', () => {
 
 	test.beforeEach(async ({ page }) => {
 		// Login before each test
-		await page.goto(`${BASE_URL}/login`);
+		await page.goto(`${BASE_URL}/auth/login`);
 		await page.fill('input[type="email"]', process.env.TEST_EMAIL!);
 		await page.fill('input[type="password"]', process.env.TEST_PASSWORD!);
 		await page.click('button:has-text("Sign")');
@@ -78,18 +78,18 @@ test.describe('Dashboard Flow (Authenticated)', () => {
 	});
 
 	test('dashboard loads with key metrics', async ({ page }) => {
-		await page.goto(`${BASE_URL}/dashboard`);
+		await page.goto(`${BASE_URL}/`);
 		await waitForPageLoad(page);
 
 		// Dashboard should have these sections
-		await expect(page.locator('text=Overview')).toBeVisible();
+		await expect(page.locator('h1:has-text("Dashboard")')).toBeVisible();
 	});
 
 	test('settings page loads', async ({ page }) => {
 		await page.goto(`${BASE_URL}/settings`);
 		await waitForPageLoad(page);
 
-		await expect(page.locator('h1:has-text("Settings")')).toBeVisible();
+		await expect(page.locator('h1:has-text("Preferences")')).toBeVisible();
 	});
 });
 
@@ -112,9 +112,7 @@ test.describe('Billing Flow', () => {
 		await waitForPageLoad(page);
 
 		// Find a CTA button
-		const ctaButton = page
-			.locator('button:has-text("Get Started"), a:has-text("Get Started")')
-			.first();
+		const ctaButton = page.locator('.cta-button').first();
 		await expect(ctaButton).toBeVisible();
 
 		// Check it's clickable (not disabled)
@@ -122,15 +120,14 @@ test.describe('Billing Flow', () => {
 	});
 });
 
-// ==================== Zombie Resources Flow ====================
+// ==================== Connections Flow ====================
 
-test.describe('Zombie Resources Flow', () => {
-	test('zombies page loads', async ({ page }) => {
-		await page.goto(`${BASE_URL}/zombies`);
+test.describe('Connections Flow', () => {
+	test('connections page loads', async ({ page }) => {
+		await page.goto(`${BASE_URL}/connections`);
 		await waitForPageLoad(page);
 
-		// Should show zombie resources section
-		await expect(page.locator('h1, h2').filter({ hasText: /zombie|resource/i })).toBeVisible();
+		await expect(page.locator('h1:has-text("Cloud Accounts")')).toBeVisible();
 	});
 });
 

@@ -45,7 +45,7 @@ class ActiveOpsSettingsUpdate(BaseModel):
 async def get_activeops_settings(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> ActiveOpsSettingsResponse:
     """
     Get ActiveOps (Autonomous Remediation) settings for the current tenant.
     """
@@ -69,7 +69,7 @@ async def get_activeops_settings(
 
         logger.info("activeops_settings_created", tenant_id=str(current_user.tenant_id))
 
-    return settings
+    return ActiveOpsSettingsResponse.model_validate(settings)
 
 
 @router.put("/activeops", response_model=ActiveOpsSettingsResponse)
@@ -77,7 +77,7 @@ async def update_activeops_settings(
     data: ActiveOpsSettingsUpdate,
     current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
-):
+) -> ActiveOpsSettingsResponse:
     """
     Update ActiveOps settings for the current tenant.
     """
@@ -116,4 +116,4 @@ async def update_activeops_settings(
         {"auto_pilot_enabled": settings.auto_pilot_enabled, "threshold": float(settings.min_confidence_threshold)}
     )
 
-    return settings
+    return ActiveOpsSettingsResponse.model_validate(settings)

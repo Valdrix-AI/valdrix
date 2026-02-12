@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Any
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 
 from app.models.optimization import StrategyRecommendation, OptimizationStrategy, CommitmentTerm, PaymentOption
 
@@ -53,7 +54,11 @@ class BaseOptimizationStrategy(ABC):
         monthly_savings: float,
         roi: float,
         upfront_cost: float = 0.0,
-        monthly_cost: float = 0.0
+        monthly_cost: float = 0.0,
+        monthly_savings_low: Optional[float] = None,
+        monthly_savings_high: Optional[float] = None,
+        break_even_months: Optional[float] = None,
+        confidence_score: Optional[float] = None,
     ) -> StrategyRecommendation:
         """Helper to instantiate a StrategyRecommendation model."""
         return StrategyRecommendation(
@@ -64,9 +69,13 @@ class BaseOptimizationStrategy(ABC):
             term=term,
             payment_option=payment_option,
             estimated_monthly_savings=monthly_savings,
+            estimated_monthly_savings_low=monthly_savings_low,
+            estimated_monthly_savings_high=monthly_savings_high,
             roi_percentage=roi,
+            break_even_months=break_even_months,
+            confidence_score=confidence_score,
             upfront_cost=upfront_cost,
             monthly_recurring_cost=monthly_cost,
             status="open",
-            created_at=datetime.now()
+            created_at=datetime.now(timezone.utc),
         )

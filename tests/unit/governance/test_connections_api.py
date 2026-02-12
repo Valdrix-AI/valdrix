@@ -9,6 +9,8 @@ from app.models.tenant import Tenant, User, UserRole
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
+from app.models.saas_connection import SaaSConnection
+from app.models.license_connection import LicenseConnection
 from app.models.discovered_account import DiscoveredAccount
 from sqlalchemy import select
 
@@ -19,7 +21,7 @@ async def test_tenant(db):
     tenant = Tenant(
         id=uuid4(),
         name="Test Tenant",
-        plan=PricingTier.FREE.value
+        plan=PricingTier.FREE_TRIAL.value
     )
     db.add(tenant)
     await db.commit()
@@ -77,9 +79,9 @@ async def test_check_growth_tier_logic(db, auth_user):
 
     # 1b. Trial should also be denied for multi-cloud operations
     tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.TRIAL.value
+    tenant.plan = PricingTier.FREE_TRIAL.value
     await db.commit()
-    auth_user.tier = PricingTier.TRIAL
+    auth_user.tier = PricingTier.FREE_TRIAL
     with pytest.raises(HTTPException) as trial_exc:
         await check_growth_tier(auth_user, db)
     assert trial_exc.value.status_code == 403
@@ -444,7 +446,7 @@ async def test_verify_azure_connection_tenant_isolation(ac, db, override_auth, a
 @pytest.mark.asyncio
 async def test_verify_azure_connection_denied_on_free(ac, db, override_auth, auth_user):
     tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.FREE.value
+    tenant.plan = PricingTier.FREE_TRIAL.value
     await db.commit()
 
     conn = AzureConnection(tenant_id=auth_user.tenant_id, name="Az", azure_tenant_id="t", client_id="c", subscription_id="s")
@@ -563,7 +565,7 @@ async def test_create_gcp_connection_workload_identity_verification_failure(ac, 
 @pytest.mark.asyncio
 async def test_verify_gcp_connection_denied_on_free(ac, db, override_auth, auth_user):
     tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.FREE.value
+    tenant.plan = PricingTier.FREE_TRIAL.value
     await db.commit()
 
     conn = GCPConnection(tenant_id=auth_user.tenant_id, name="g", project_id="p")
@@ -616,6 +618,121 @@ async def test_delete_gcp_connection_tenant_isolation(ac, db, override_auth, aut
 
     resp = await ac.delete(f"/api/v1/settings/connections/gcp/{conn.id}")
     assert resp.status_code == 404
+
+
+# ==================== Cloud+ API Tests ====================
+
+@pytest.mark.asyncio
+async def test_create_saas_connection_denied_on_growth(ac, db, override_auth, auth_user):
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.GROWTH.value
+    await db.commit()
+    auth_user.tier = PricingTier.GROWTH
+
+    payload = {
+        "name": "Salesforce Feed",
+        "vendor": "salesforce",
+        "auth_method": "manual",
+        "spend_feed": [],
+    }
+    resp = await ac.post("/api/v1/settings/connections/saas", json=payload)
+    assert resp.status_code == 403
+    assert "Cloud+ connectors require 'Pro' plan or higher" in resp.json().get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_create_saas_connection_success_on_pro(ac, db, override_auth, auth_user):
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.PRO.value
+    await db.commit()
+    auth_user.tier = PricingTier.PRO
+
+    payload = {
+        "name": "Salesforce Feed",
+        "vendor": "salesforce",
+        "auth_method": "manual",
+        "spend_feed": [{"service": "Sales Cloud", "cost_usd": 12.5, "timestamp": "2026-02-11"}],
+    }
+    resp = await ac.post("/api/v1/settings/connections/saas", json=payload)
+    assert resp.status_code == 201
+    assert resp.json()["vendor"] == "salesforce"
+
+
+@pytest.mark.asyncio
+async def test_verify_saas_connection(ac, db, override_auth, auth_user):
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.PRO.value
+    await db.commit()
+    auth_user.tier = PricingTier.PRO
+
+    conn = SaaSConnection(
+        tenant_id=auth_user.tenant_id,
+        name="Salesforce Feed",
+        vendor="salesforce",
+        spend_feed=[],
+        auth_method="manual",
+    )
+    db.add(conn)
+    await db.commit()
+
+    with patch("app.shared.connections.saas.SaaSConnectionService.verify_connection") as mock_verify:
+        mock_verify.return_value = {"status": "verified"}
+        resp = await ac.post(f"/api/v1/settings/connections/saas/{conn.id}/verify")
+        assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_create_license_connection_success_on_pro(ac, db, override_auth, auth_user):
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.PRO.value
+    await db.commit()
+    auth_user.tier = PricingTier.PRO
+
+    payload = {
+        "name": "MS365 Seats",
+        "vendor": "microsoft",
+        "auth_method": "manual",
+        "license_feed": [{"service": "M365 E5", "cost_usd": 100.0, "timestamp": "2026-02-11"}],
+    }
+    resp = await ac.post("/api/v1/settings/connections/license", json=payload)
+    assert resp.status_code == 201
+    assert resp.json()["vendor"] == "microsoft"
+
+
+@pytest.mark.asyncio
+async def test_list_license_connections_tenant_isolation(ac, db, override_auth, auth_user):
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.PRO.value
+    await db.commit()
+    auth_user.tier = PricingTier.PRO
+
+    other_tenant = Tenant(id=uuid4(), name="Other", plan=PricingTier.PRO.value)
+    db.add(other_tenant)
+    await db.commit()
+
+    db.add_all([
+        LicenseConnection(
+            tenant_id=auth_user.tenant_id,
+            name="Mine",
+            vendor="microsoft",
+            auth_method="manual",
+            license_feed=[],
+        ),
+        LicenseConnection(
+            tenant_id=other_tenant.id,
+            name="Other",
+            vendor="google",
+            auth_method="manual",
+            license_feed=[],
+        ),
+    ])
+    await db.commit()
+
+    resp = await ac.get("/api/v1/settings/connections/license")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["name"] == "Mine"
 
 # ==================== Link Discovered Account Tests ====================
 

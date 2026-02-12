@@ -43,7 +43,7 @@ class AzureUsageAnalyzer:
         self.records = cost_records
         self._resource_costs = self._group_by_resource()
     
-    def _group_by_resource(self) -> Dict[str, List[Dict]]:
+    def _group_by_resource(self) -> Dict[str, List[Dict[str, Any]]]:
         """Group cost records by ResourceId for analysis."""
         grouped = defaultdict(list)
         for record in self.records:
@@ -326,7 +326,7 @@ class AzureUsageAnalyzer:
         line items in costExports. Orphan NICs should be identified via Azure 
         Resource Graph or Network APIs.
         """
-        zombies = []
+        zombies: List[Dict[str, Any]] = []
         
         for resource_id, records in self._resource_costs.items():
             if "microsoft.network/networkinterfaces" not in resource_id.lower():

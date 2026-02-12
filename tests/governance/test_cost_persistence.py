@@ -7,7 +7,6 @@ from app.schemas.costs import CloudUsageSummary, CostRecord as CostRecordSchema
 from app.modules.reporting.domain.persistence import CostPersistenceService
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="CloudAccount model not found in test context - needs fixture update")
 async def test_cost_persistence_idempotency(db):
     # 1. Setup - Create a tenant and account
     from app.models.tenant import Tenant
@@ -63,6 +62,27 @@ async def test_cost_persistence_idempotency(db):
     )
     count = result.scalar()
     assert count == 2
+
+    # Verify canonical categories are populated during persistence
+    result = await db.execute(
+        select(CostRecord)
+        .where(
+            CostRecord.account_id == account.id,
+            CostRecord.service == "AmazonEC2",
+        )
+    )
+    ec2_record = result.scalar_one()
+    assert ec2_record.canonical_charge_category == "compute"
+
+    result = await db.execute(
+        select(CostRecord)
+        .where(
+            CostRecord.account_id == account.id,
+            CostRecord.service == "AmazonS3",
+        )
+    )
+    s3_record = result.scalar_one()
+    assert s3_record.canonical_charge_category == "storage"
 
     # 4. Second Ingestion (Same Data)
     await service.save_summary(summary, str(account.id))

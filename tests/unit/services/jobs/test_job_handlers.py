@@ -116,7 +116,7 @@ async def test_webhook_retry_handler_paystack(mock_db, sample_job):
     handler = WebhookRetryHandler()
     sample_job.payload = {"provider": "paystack"}
     
-    with patch("app.modules.reporting.domain.billing.webhook_retry.process_paystack_webhook") as mock_process:
+    with patch("app.modules.billing.domain.billing.webhook_retry.process_paystack_webhook") as mock_process:
         mock_process.return_value = {"status": "completed"}
         
         result = await handler.execute(sample_job, mock_db)
@@ -242,28 +242,32 @@ async def test_remediation_handler_autonomous_sweep(mock_db, sample_job):
 async def test_finops_analysis_handler_success(mock_db, sample_job):
     """Test FinOpsAnalysisHandler successful execution."""
     handler = FinOpsAnalysisHandler()
-    
-    # Mock AWS connection
-    mock_conn = MagicMock()
-    mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = mock_conn
-    mock_db.execute.return_value = mock_result
-    
-    with patch("app.shared.adapters.aws_multitenant.MultiTenantAWSAdapter") as mock_adapter_cls:
-        mock_adapter = AsyncMock()
-        mock_adapter.get_daily_costs.return_value = MagicMock()
-        mock_adapter_cls.return_value = mock_adapter
-        
-        with patch("app.shared.llm.analyzer.FinOpsAnalyzer") as mock_analyzer_cls:
+
+    mock_conn = MagicMock(provider="aws")
+    aws_result = MagicMock()
+    aws_result.scalars.return_value.all.return_value = [mock_conn]
+    empty_result = MagicMock()
+    empty_result.scalars.return_value.all.return_value = []
+    mock_db.execute = AsyncMock(side_effect=[aws_result, empty_result, empty_result, empty_result, empty_result])
+
+    with patch("app.modules.governance.domain.jobs.handlers.finops.AdapterFactory") as mock_factory:
+        mock_adapter = MagicMock()
+        usage_summary = MagicMock()
+        usage_summary.records = [MagicMock()]
+        mock_adapter.get_daily_costs = AsyncMock(return_value=usage_summary)
+        mock_factory.get_adapter.return_value = mock_adapter
+
+        with patch("app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer") as mock_analyzer_cls:
             mock_analyzer = AsyncMock()
-            mock_analyzer.analyze.return_value = "Long analysis text"
+            mock_analyzer.analyze.return_value = {"insights": ["ok"], "recommendations": []}
             mock_analyzer_cls.return_value = mock_analyzer
-            
-            with patch("app.shared.llm.factory.LLMFactory.create") as mock_create:
+
+            with patch("app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create") as mock_create:
                 mock_create.return_value = MagicMock()
-                
+
                 result = await handler.execute(sample_job, mock_db)
-                
+
                 assert result["status"] == "completed"
-                assert result["analysis_length"] == len("Long analysis text")
+                assert result["analysis_runs"] == 1
+                assert result["analysis_length"] > 0
                 mock_analyzer.analyze.assert_called_once()

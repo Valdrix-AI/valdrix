@@ -41,14 +41,14 @@ class ZombieService(BaseService):
         on_category_complete: Optional[Callable[[str, List[Dict[str, Any]]], Awaitable[None]]] = None
     ) -> Dict[str, Any]:
         """
-        Scan all cloud accounts (AWS, Azure, GCP) for a tenant and return aggregated results.
+        Scan all cloud accounts (IaaS + Cloud+) for a tenant and return aggregated results.
         """
         # 1. Fetch all cloud connections generically
         # Phase 21: Decoupling from concrete models
         all_connections: List[Union[AWSConnection, AzureConnection, GCPConnection]] = []
         for model in [AWSConnection, AzureConnection, GCPConnection]:
             # Use centralized scoping
-            q = await self.db.execute(self._scoped_query(model, tenant_id)) # type: ignore
+            q = await self.db.execute(self._scoped_query(model, tenant_id)) 
             all_connections.extend(q.scalars().all())
 
         if not all_connections:
@@ -71,6 +71,8 @@ class ZombieService(BaseService):
             "stale_ecr_images": [],
             "idle_sagemaker_endpoints": [],
             "cold_redshift_clusters": [],
+            "idle_saas_subscriptions": [],
+            "unused_license_seats": [],
         }
         all_zombies["scanned_connections"] = len(all_connections)
         total_waste = 0.0
@@ -137,12 +139,26 @@ class ZombieService(BaseService):
                     from app.modules.optimization.adapters.aws.region_discovery import RegionDiscovery
                     # Fix: Use detector factory to get a temporary detector for credentials
                     temp_detector = ZombieDetectorFactory.get_detector(conn, region="us-east-1", db=self.db)
-                    rd = RegionDiscovery(credentials=await temp_detector.get_credentials() if hasattr(temp_detector, "get_credentials") else None)
+                    raw_credentials = (
+                        await temp_detector.get_credentials()
+                        if hasattr(temp_detector, "get_credentials")
+                        else None
+                    )
+                    credentials: dict[str, str] | None
+                    if isinstance(raw_credentials, dict):
+                        credentials = {
+                            str(k): str(v)
+                            for k, v in raw_credentials.items()
+                            if v is not None
+                        }
+                    else:
+                        credentials = None
+                    rd = RegionDiscovery(credentials=credentials)
                     enabled_regions = await rd.get_enabled_regions()
                     
                     logger.info("aws_parallel_scan_starting", tenant_id=str(tenant_id), region_count=len(enabled_regions))
                     
-                    async def scan_single_region(reg: str):
+                    async def scan_single_region(reg: str) -> None:
                         nonlocal total_waste
                         try:
                             regional_detector = ZombieDetectorFactory.get_detector(conn, region=reg, db=self.db)
@@ -243,10 +259,17 @@ class ZombieService(BaseService):
 
         return all_zombies
 
-    async def _enrich_with_ai(self, zombies: Dict[str, Any], tenant_id: Any, tier: PricingTier):
+    async def _enrich_with_ai(self, zombies: Dict[str, Any], tenant_id: Any, tier: PricingTier) -> None:
         """Enrich results with AI insights if tier allows."""
         try:
-            if not is_feature_enabled(tier, FeatureFlag.LLM_ANALYSIS):
+            tier_value = str(getattr(tier, "value", tier)).strip().lower()
+            tier_allows_ai = tier_value in {
+                PricingTier.GROWTH.value,
+                PricingTier.PRO.value,
+                PricingTier.ENTERPRISE.value,
+            }
+
+            if (not tier_allows_ai) or (not is_feature_enabled(tier, FeatureFlag.LLM_ANALYSIS)):
                 zombies["ai_analysis"] = {
                     "error": "AI Insights requires Growth tier or higher.",
                     "summary": "Upgrade to unlock AI-powered analysis.",
@@ -274,7 +297,7 @@ class ZombieService(BaseService):
                 "summary": "AI analysis unavailable. Rule-based detection completed."
             }
 
-    async def _send_notifications(self, zombies: Dict[str, Any]):
+    async def _send_notifications(self, zombies: Dict[str, Any]) -> None:
         """Send notifications about detected zombies."""
         try:
             from app.shared.core.notifications import NotificationDispatcher
@@ -348,35 +371,98 @@ class OptimizationService(BaseService):
 
     async def _aggregate_usage(self, tenant_id: UUID) -> Dict[str, Any]:
         """
-        Aggregates last 30 days of CostRecords to find baselines.
+        Aggregates last 30 days of CostRecords to compute hourly baseline and confidence.
         """
         from app.models.cloud import CostRecord
-        from sqlalchemy import func
-        from datetime import datetime, timedelta
-        
-        thirty_days_ago = datetime.now() - timedelta(days=30)
-        
-        # Calculate Total Cost in last 30 days
-        # Using centralized scoping
+        from datetime import datetime, time as dt_time, timedelta, timezone
+        from statistics import fmean, pstdev
+
+        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
         q = self._scoped_query(CostRecord, tenant_id).where(
             CostRecord.recorded_at >= thirty_days_ago.date()
-        ).with_only_columns(func.sum(CostRecord.cost_usd))
-        
+        ).with_only_columns(
+            CostRecord.timestamp,
+            CostRecord.recorded_at,
+            CostRecord.cost_usd,
+        )
+
         result = await self.db.execute(q)
-        total_spend = result.scalar() or 0.0
-        
-        average_hourly_spend = float(total_spend) / (30 * 24)
-        
-        # For "Min Hourly Spend" (Baseline), we need granular hourly data.
-        # Since CostRecord might be daily or hourly depending on ingestion,
-        # we'll approximate Min Hourly as 40% of Average for this MVP 
-        # (Assuming variable workload).
-        # In strict production, we'd query the granular `cost_records` partition.
-        min_hourly_spend = average_hourly_spend * 0.4
-        
+        rows = result.all()
+
+        hourly_totals: Dict[datetime, float] = {}
+        total_spend = 0.0
+        for row in rows:
+            timestamp_value = row[0]
+            recorded_at = row[1]
+            cost_raw = row[2]
+            if cost_raw is None:
+                continue
+
+            cost = float(cost_raw)
+            total_spend += cost
+            if timestamp_value is not None:
+                hour_key = timestamp_value
+                if hour_key.tzinfo is None:
+                    hour_key = hour_key.replace(tzinfo=timezone.utc)
+                hour_key = hour_key.astimezone(timezone.utc).replace(
+                    minute=0,
+                    second=0,
+                    microsecond=0,
+                )
+            else:
+                hour_key = datetime.combine(recorded_at, dt_time.min, tzinfo=timezone.utc)
+
+            hourly_totals[hour_key] = hourly_totals.get(hour_key, 0.0) + cost
+
+        hourly_values = list(hourly_totals.values())
+        non_zero_hourly = [value for value in hourly_values if value > 0]
+        observed_hours = len(hourly_values)
+        expected_hours = 30 * 24
+        coverage_ratio = min(1.0, (observed_hours / expected_hours)) if expected_hours else 0.0
+
+        average_hourly_spend = float(fmean(hourly_values)) if hourly_values else 0.0
+        baseline_hourly_spend = self._percentile(non_zero_hourly, 0.25) if non_zero_hourly else 0.0
+
+        volatility = 0.0
+        if len(hourly_values) > 1 and average_hourly_spend > 0:
+            volatility = float(pstdev(hourly_values) / average_hourly_spend)
+
+        confidence_score = round(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    (coverage_ratio * 0.6)
+                    + ((1.0 - min(volatility, 1.0)) * 0.4),
+                ),
+            ),
+            3,
+        )
+
         return {
             "total_monthly_spend": float(total_spend),
             "average_hourly_spend": average_hourly_spend,
-            "min_hourly_spend": min_hourly_spend,
-            "region": "global" 
+            "baseline_hourly_spend": baseline_hourly_spend,
+            # Backward-compatible alias for older strategy code paths.
+            "min_hourly_spend": baseline_hourly_spend,
+            "observed_hours": observed_hours,
+            "coverage_ratio": coverage_ratio,
+            "volatility": volatility,
+            "confidence_score": confidence_score,
+            "region": "global",
         }
+
+    def _percentile(self, values: List[float], percentile: float) -> float:
+        """Return linear interpolation percentile for deterministic baseline computation."""
+        if not values:
+            return 0.0
+        ordered = sorted(float(v) for v in values)
+        if len(ordered) == 1:
+            return ordered[0]
+
+        pct = max(0.0, min(percentile, 1.0))
+        rank = pct * (len(ordered) - 1)
+        lower_idx = int(rank)
+        upper_idx = min(lower_idx + 1, len(ordered) - 1)
+        frac = rank - lower_idx
+        return ordered[lower_idx] + ((ordered[upper_idx] - ordered[lower_idx]) * frac)

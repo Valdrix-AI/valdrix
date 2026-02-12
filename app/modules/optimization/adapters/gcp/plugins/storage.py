@@ -22,8 +22,21 @@ class UnattachedDisksPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "unattached_gcp_disks"
     
-    async def scan(self, project_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for unattached disks using Compute API (free)."""
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            logger.warning("gcp_scan_missing_project_id", plugin=self.category_key)
+            return []
+
         zombies = []
         
         billing_records = kwargs.get("billing_records")
@@ -76,8 +89,21 @@ class OldSnapshotsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "old_gcp_snapshots"
     
-    async def scan(self, project_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for snapshots older than retention period."""
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            logger.warning("gcp_scan_missing_project_id", plugin=self.category_key)
+            return []
+
         zombies = []
         age_days = kwargs.get("age_days", 90)
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=age_days)

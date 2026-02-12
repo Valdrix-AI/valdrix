@@ -1,7 +1,11 @@
 """
 Tests for app/shared/core/exceptions.py - Custom exception classes
 """
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import (
+    ValdrixException,
+    AdapterError, AuthError, ConfigurationError, ResourceNotFoundError,
+    BillingError, AIAnalysisError, BudgetExceededError, KillSwitchTriggeredError
+)
 
 
 class TestValdrixException:
@@ -101,10 +105,8 @@ class TestValdrixException:
             assert exc.code == (code or "internal_error")
             assert exc.status_code == expected_status
 
-from app.shared.core.exceptions import (
-    AdapterError, AuthError, ConfigurationError, ResourceNotFoundError,
-    BillingError, AIAnalysisError, BudgetExceededError, KillSwitchTriggeredError
-)
+# Additional exception tests
+
 
 class TestCustomExceptions:
     """Test specific ValdrixException subclasses."""

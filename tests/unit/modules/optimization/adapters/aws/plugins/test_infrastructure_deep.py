@@ -91,8 +91,10 @@ async def test_unused_lambda_scan_none(mock_session):
     mock_cw.get_metric_statistics = AsyncMock(return_value={"Datapoints": [{"Sum": 5.0}]})
     
     def side_effect(service, *args, **kwargs):
-        if service == 'lambda': return mock_lambda
-        if service == 'cloudwatch': return mock_cw
+        if service == 'lambda':
+            return mock_lambda
+        if service == 'cloudwatch':
+            return mock_cw
         return MagicMock()
 
     mock_session.client.side_effect = lambda s, **kw: MagicMock(__aenter__=AsyncMock(return_value=side_effect(s)))
@@ -117,8 +119,10 @@ async def test_orphan_vpc_endpoints_scan_none(mock_session):
     mock_cw.get_metric_statistics = AsyncMock(return_value={"Datapoints": [{"Sum": 100.0}]})
     
     def side_effect(service, *args, **kwargs):
-        if service == 'ec2': return mock_ec2
-        if service == 'cloudwatch': return mock_cw
+        if service == 'ec2':
+            return mock_ec2
+        if service == 'cloudwatch':
+            return mock_cw
         return MagicMock()
 
     mock_session.client.side_effect = lambda s, **kw: MagicMock(__aenter__=AsyncMock(return_value=side_effect(s)))

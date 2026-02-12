@@ -1,8 +1,8 @@
-import pytest
 """
 Production-quality tests for LLM Circuit Breaker.
 Tests cover fault isolation, recovery logic, monitoring, and resilience patterns.
 """
+import pytest
 import os
 import time
 from datetime import datetime, timezone, timedelta
@@ -98,7 +98,7 @@ class TestLLMCircuitBreaker:
 
     def test_is_available_closed_circuit(self, breaker):
         """Test is_available returns True for closed circuit."""
-        assert breaker.is_available("provider") == True
+        assert breaker.is_available("provider")
 
     def test_is_available_open_circuit_recent_failure(self, breaker):
         """Test is_available returns False for open circuit with recent failure."""
@@ -107,7 +107,7 @@ class TestLLMCircuitBreaker:
             breaker.record_failure("provider")
 
         # Should be open and unavailable
-        assert breaker.is_available("provider") == False
+        assert not breaker.is_available("provider")
 
     def test_is_available_open_circuit_recovery_timeout(self, breaker):
         """Test is_available transitions to half-open after recovery timeout."""
@@ -120,7 +120,7 @@ class TestLLMCircuitBreaker:
         circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(seconds=61)  # Past recovery timeout
 
         # Should transition to half-open and be available
-        assert breaker.is_available("provider") == True
+        assert breaker.is_available("provider")
         assert circuit.state == CircuitState.HALF_OPEN
 
     def test_is_available_half_open_circuit(self, breaker):
@@ -133,7 +133,7 @@ class TestLLMCircuitBreaker:
         circuit = breaker._get_circuit("provider")
         circuit.state = CircuitState.HALF_OPEN
 
-        assert breaker.is_available("provider") == True
+        assert breaker.is_available("provider")
 
     def test_record_success_closed_circuit(self, breaker):
         """Test record_success resets failure count in closed circuit."""
@@ -311,7 +311,7 @@ class TestCircuitBreakerIntegration:
         provider = "test-provider"
 
         # Start closed
-        assert breaker.is_available(provider) == True
+        assert breaker.is_available(provider)
 
         # Record failures to open circuit
         for _ in range(3):
@@ -319,20 +319,20 @@ class TestCircuitBreakerIntegration:
 
         circuit = breaker._get_circuit(provider)
         assert circuit.state == CircuitState.OPEN
-        assert breaker.is_available(provider) == False
+        assert not breaker.is_available(provider)
 
         # Wait for recovery timeout
         time.sleep(1.1)
 
         # Should transition to half-open and be available
-        assert breaker.is_available(provider) == True
+        assert breaker.is_available(provider)
         assert circuit.state == CircuitState.HALF_OPEN
 
         # Record success to close circuit
         breaker.record_success(provider)
         breaker.record_success(provider)
         assert circuit.state == CircuitState.CLOSED
-        assert breaker.is_available(provider) == True
+        assert breaker.is_available(provider)
 
     def test_multiple_providers_isolation(self, breaker):
         """Test that provider failures are isolated."""
@@ -341,8 +341,8 @@ class TestCircuitBreakerIntegration:
             breaker.record_failure("provider-a")
 
         # Provider B should still be available
-        assert breaker.is_available("provider-a") == False
-        assert breaker.is_available("provider-b") == True
+        assert not breaker.is_available("provider-a")
+        assert breaker.is_available("provider-b")
 
         # Provider B succeeds
         breaker.record_success("provider-b")
@@ -432,11 +432,11 @@ class TestCircuitBreakerIntegration:
 
         # Just before timeout - should still be unavailable
         circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(seconds=breaker.recovery_timeout - 0.1)
-        assert breaker.is_available(provider) == False
+        assert not breaker.is_available(provider)
 
         # At timeout - should become available
         circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(seconds=breaker.recovery_timeout)
-        assert breaker.is_available(provider) == True
+        assert breaker.is_available(provider)
         assert circuit.state == CircuitState.HALF_OPEN
 
     def test_logging_integration(self, breaker):
@@ -519,7 +519,7 @@ class TestCircuitBreakerProductionQuality:
         ]
 
         for provider in test_providers:
-            assert breaker.is_available(provider) == True
+            assert breaker.is_available(provider)
 
             # Should create circuit
             assert provider in breaker._circuits

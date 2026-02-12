@@ -380,7 +380,7 @@ class TestWorkloadDeferralLogic:
         
         # Test various regions
         low_carbon_defer = await scheduler.should_defer_workload("eu-north-1", workload_type="standard")
-        high_carbon_defer = await scheduler.should_defer_workload("ap-south-1", workload_type="standard")
+        await scheduler.should_defer_workload("ap-south-1", workload_type="standard")
         
         # Low-carbon should not defer
         assert low_carbon_defer is False

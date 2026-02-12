@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 from app.shared.adapters.aws_utils import map_aws_credentials
 
 
@@ -34,19 +34,34 @@ class ZombiePlugin(ABC):
         The dictionary key for results (e.g., 'unattached_volumes').
         Used to aggregate results in the final report.
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
-    async def scan(self, session: Any, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any,
+        region: str,
+        credentials: Dict[str, str] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
 
         """
         Scan for zombie resources.
         
         Subclasses should document their expected arguments (e.g., session, client, region).
         """
-        pass
+        raise NotImplementedError
 
-    def _get_client(self, session: Any, service_name: str, region: str, credentials: Dict[str, str] = None, config: Any = None):
+    def _get_client(
+        self,
+        session: Any,
+        service_name: str,
+        region: str,
+        credentials: Dict[str, str] | None = None,
+        config: Any = None,
+    ) -> Any:
         """Helper to get AWS client with optional credentials and config."""
         from app.shared.core.config import get_settings
         settings = get_settings()

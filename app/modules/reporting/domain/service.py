@@ -2,8 +2,10 @@
 Reporting Domain Service
 Orchestrates cost ingestion, aggregation, and attribution.
 """
+import inspect
 import structlog
-from typing import Dict, Any, List
+from collections.abc import AsyncIterator
+from typing import Dict, Any, List, Awaitable, cast
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -15,13 +17,14 @@ from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
 from app.models.cloud import CloudAccount
 from app.shared.core.service import BaseService
+from app.shared.core.async_utils import maybe_call
 
 logger = structlog.get_logger()
 
 class ReportingService(BaseService):
     async def _get_all_connections(self, tenant_id: Any) -> List[Any]:
         """Fetch all cloud connections for a tenant."""
-        connections = []
+        connections: List[AWSConnection | AzureConnection | GCPConnection] = []
         for model in [AWSConnection, AzureConnection, GCPConnection]:
             stmt = self._scoped_query(model, tenant_id)
             result = await self.db.execute(stmt)
@@ -64,16 +67,23 @@ class ReportingService(BaseService):
                 end_date = datetime.now(timezone.utc)
                 start_date = end_date - timedelta(days=days)
                 
-                cost_stream = adapter.stream_cost_and_usage(
+                cost_stream_or_awaitable = adapter.stream_cost_and_usage(
                     start_date=start_date,
                     end_date=end_date,
                     granularity="HOURLY"
                 )
+                if inspect.isawaitable(cost_stream_or_awaitable):
+                    cost_stream = cast(
+                        AsyncIterator[Dict[str, Any]],
+                        await cast(Awaitable[Any], cost_stream_or_awaitable),
+                    )
+                else:
+                    cost_stream = cast(AsyncIterator[Dict[str, Any]], cost_stream_or_awaitable)
                 
                 records_ingested = 0
                 total_cost_acc = 0.0
                 
-                async def tracking_wrapper(stream):
+                async def tracking_wrapper(stream: AsyncIterator[Dict[str, Any]]) -> AsyncIterator[Dict[str, Any]]:
                     nonlocal records_ingested, total_cost_acc
                     async for r in stream:
                         records_ingested += 1
@@ -87,8 +97,7 @@ class ReportingService(BaseService):
                 )
                 
                 conn.last_ingested_at = datetime.now(timezone.utc)
-                from app.shared.core.async_utils import maybe_await
-                await maybe_await(self.db.add(conn))
+                await maybe_call(self.db.add, conn)
                 
                 results.append({
                     "connection_id": str(conn.id),

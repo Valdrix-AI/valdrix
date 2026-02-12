@@ -1,13 +1,12 @@
-import pytest
-import asyncio
 """
 Tests for scheduler_tasks.py - Background job scheduling and processing.
-"""
-"""
+
 Production-quality tests for Scheduler Tasks.
 Tests cover job scheduling, cohort analysis, remediation, billing, maintenance, and error handling.
 """
+import asyncio
 import os
+import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
@@ -53,9 +52,9 @@ class TestCohortAnalysis:
         mock_tenant3.plan = "starter"  # Should be excluded
 
         with patch('app.tasks.scheduler_tasks.async_session_maker') as mock_session_maker, \
-             patch('app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED') as mock_metric, \
-             patch('app.tasks.scheduler_tasks.SCHEDULER_JOB_RUNS') as mock_job_runs, \
-             patch('app.tasks.scheduler_tasks.SCHEDULER_JOB_DURATION') as mock_duration:
+             patch('app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED'), \
+             patch('app.tasks.scheduler_tasks.SCHEDULER_JOB_RUNS'), \
+             patch('app.tasks.scheduler_tasks.SCHEDULER_JOB_DURATION'):
 
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
@@ -106,7 +105,7 @@ class TestCohortAnalysis:
 
             # Should filter for growth plan
             call_args = mock_session.execute.call_args_list[0]
-            query = call_args[0][0]
+            _query = call_args[0][0]  # noqa: F841
             # The query should include growth plan filter
 
     @pytest.mark.asyncio
@@ -137,7 +136,7 @@ class TestCohortAnalysis:
         mock_tenant.plan = "enterprise"
 
         with patch('app.tasks.scheduler_tasks.async_session_maker') as mock_session_maker, \
-             patch('app.tasks.scheduler_tasks.BackgroundJob') as mock_bg_job:
+             patch('app.tasks.scheduler_tasks.BackgroundJob'):
 
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
@@ -163,7 +162,7 @@ class TestCohortAnalysis:
     def test_run_cohort_analysis_task(self):
         """Test the Celery task wrapper."""
         with patch('app.tasks.scheduler_tasks.run_async') as mock_run_async, \
-             patch('app.tasks.scheduler_tasks._cohort_analysis_logic') as mock_logic:
+             patch('app.tasks.scheduler_tasks._cohort_analysis_logic'):
 
             run_cohort_analysis("HIGH_VALUE")
 
@@ -186,9 +185,9 @@ class TestRemediationSweep:
         mock_connection.region = "us-east-1"
 
         with patch('app.tasks.scheduler_tasks.async_session_maker') as mock_session_maker, \
-             patch('app.tasks.scheduler_tasks.BackgroundJob') as mock_bg_job, \
+             patch('app.tasks.scheduler_tasks.BackgroundJob'), \
              patch('app.tasks.scheduler_tasks.SchedulerOrchestrator') as mock_orchestrator_cls, \
-             patch('app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED') as mock_metric:
+             patch('app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED'):
 
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
@@ -255,7 +254,7 @@ class TestRemediationSweep:
     def test_run_remediation_sweep_task(self):
         """Test the Celery task wrapper for remediation sweep."""
         with patch('app.tasks.scheduler_tasks.run_async') as mock_run_async, \
-             patch('app.tasks.scheduler_tasks._remediation_sweep_logic') as mock_logic:
+             patch('app.tasks.scheduler_tasks._remediation_sweep_logic'):
 
             run_remediation_sweep()
 
@@ -278,8 +277,8 @@ class TestBillingSweep:
         mock_subscription.paystack_auth_code = "auth_123"
 
         with patch('app.tasks.scheduler_tasks.async_session_maker') as mock_session_maker, \
-             patch('app.tasks.scheduler_tasks.BackgroundJob') as mock_bg_job, \
-             patch('app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED') as mock_metric:
+             patch('app.tasks.scheduler_tasks.BackgroundJob'), \
+             patch('app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED'):
 
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
@@ -328,7 +327,7 @@ class TestBillingSweep:
     def test_run_billing_sweep_task(self):
         """Test the Celery task wrapper for billing sweep."""
         with patch('app.tasks.scheduler_tasks.run_async') as mock_run_async, \
-             patch('app.tasks.scheduler_tasks._billing_sweep_logic') as mock_logic:
+             patch('app.tasks.scheduler_tasks._billing_sweep_logic'):
 
             run_billing_sweep()
 
@@ -393,7 +392,7 @@ class TestMaintenanceSweep:
     def test_run_maintenance_sweep_task(self):
         """Test the Celery task wrapper for maintenance sweep."""
         with patch('app.tasks.scheduler_tasks.run_async') as mock_run_async, \
-             patch('app.tasks.scheduler_tasks._maintenance_sweep_logic') as mock_logic:
+             patch('app.tasks.scheduler_tasks._maintenance_sweep_logic'):
 
             run_maintenance_sweep()
 
@@ -480,7 +479,7 @@ class TestSchedulerTasksMetrics:
         with patch('app.tasks.scheduler_tasks.async_session_maker') as mock_session_maker, \
              patch('app.tasks.scheduler_tasks.SCHEDULER_JOB_RUNS') as mock_job_runs, \
              patch('app.tasks.scheduler_tasks.SCHEDULER_JOB_DURATION') as mock_duration, \
-             patch('app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED') as mock_bg_jobs:
+             patch('app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED'):
 
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
@@ -504,6 +503,7 @@ class TestSchedulerTasksMetrics:
             await _cohort_analysis_logic(TenantCohort.ACTIVE)
 
             # Should record success metric
+            # Note: mock_job_runs and mock_duration are patched in the test context above
             mock_job_runs.labels.assert_called_with(job_name="cohort_active_enqueue", status="success")
             # Should observe duration
             mock_duration.labels.assert_called_with(job_name="cohort_active_enqueue")

@@ -1,10 +1,10 @@
 import sys
 import structlog
 import logging
-from typing import Any
+from typing import Any, cast
 from app.shared.core.config import get_settings
 
-def pii_redactor(_logger, _method_name, event_dict):
+def pii_redactor(_logger: Any, _method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """
     Recursively redact common PII and sensitive fields from logs.
     Ensures GDPR/SOC2 compliance by preventing leakage into telemetry.
@@ -44,7 +44,7 @@ def pii_redactor(_logger, _method_name, event_dict):
             return True
         return any(fragment in key_norm for fragment in pii_contains)
 
-    def redact_text(text):
+    def redact_text(text: Any) -> Any:
         if not isinstance(text, str):
             return text
         text = email_regex.sub("[EMAIL_REDACTED]", text)
@@ -61,7 +61,7 @@ def pii_redactor(_logger, _method_name, event_dict):
         text = phone_regex.sub(_replace_phone, text)
         return text
 
-    def redact_recursive(data):
+    def redact_recursive(data: Any) -> Any:
         if isinstance(data, dict):
             return {
                 k: ("[REDACTED]" if is_sensitive_key(k) else redact_recursive(v))
@@ -73,10 +73,13 @@ def pii_redactor(_logger, _method_name, event_dict):
             return redact_text(data)
         return data
 
-    return redact_recursive(event_dict)
+    redacted = redact_recursive(event_dict)
+    if isinstance(redacted, dict):
+        return cast(dict[str, Any], redacted)
+    return {}
 
 
-def add_otel_trace_id(_logger, _method_name, event_dict):
+def add_otel_trace_id(_logger: Any, _method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """Integrate OTel Trace IDs into structured logs."""
     from app.shared.core.tracing import get_current_trace_id
     trace_id = get_current_trace_id()
@@ -84,7 +87,7 @@ def add_otel_trace_id(_logger, _method_name, event_dict):
         event_dict["trace_id"] = trace_id
     return event_dict
 
-def setup_logging():
+def setup_logging() -> None:
     settings = get_settings()
 
     # 1. Configure the common processors (Middleware Pipeline for Logs)
@@ -99,7 +102,7 @@ def setup_logging():
 
     # 2. Choose the renderer based on environment
     if settings.DEBUG:
-        renderer = structlog.dev.ConsoleRenderer()
+        renderer: Any = structlog.dev.ConsoleRenderer()
         processors = base_processors + [renderer]
         min_level = logging.DEBUG
     else:
@@ -110,7 +113,7 @@ def setup_logging():
 
     # 3. Configure the logger or apply the configuration
     structlog.configure(
-        processors=processors,
+        processors=cast(Any, processors),
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
@@ -125,7 +128,12 @@ def setup_logging():
     )
 
 
-def audit_log(event: str, user_id: str, tenant_id: str, details: dict = None):
+def audit_log(
+    event: str,
+    user_id: str,
+    tenant_id: str,
+    details: dict[str, Any] | None = None,
+) -> None:
     """
     Standardized helper for security-critical audit events.
     Enforces a consistent schema for SIEM ingestion.

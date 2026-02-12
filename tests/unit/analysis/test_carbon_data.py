@@ -168,19 +168,19 @@ def test_calculate_carbon_footprint_precision():
 def test_validate_region_data_comprehensive():
     """Test comprehensive region data validation."""
     # Valid data should pass
-    assert validate_region_data() == True
+    assert validate_region_data()
 
     # Test with missing global average
     with patch.dict(REGION_CARBON_INTENSITY, {}, clear=True):
-        assert validate_region_data() == False
+        assert not validate_region_data()
 
     # Test with invalid intensity values
     with patch.dict(REGION_CARBON_INTENSITY, {"test": -10}, clear=True):
-        assert validate_region_data() == False
+        assert not validate_region_data()
 
     # Test with unrealistic values
     with patch.dict(REGION_CARBON_INTENSITY, {"test": 10000}, clear=True):
-        assert validate_region_data() == False
+        assert not validate_region_data()
 
 
 def test_carbon_data_thread_safety():

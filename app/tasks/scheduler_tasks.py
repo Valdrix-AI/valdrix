@@ -1,8 +1,9 @@
 import asyncio
-from typing import Any
+from typing import Any, AsyncGenerator, Coroutine, cast
 import structlog
 from celery import shared_task
 from app.shared.db.session import async_session_maker
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.orchestrator import SchedulerOrchestrator
 from app.shared.core.currency import get_exchange_rate
@@ -28,7 +29,7 @@ logger = structlog.get_logger()
 
 
 @asynccontextmanager
-async def _open_db_session():
+async def _open_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Robust helper to obtain an async DB session from `async_session_maker`.
 
     This handles several shapes that tests/mocks may provide:
@@ -74,7 +75,7 @@ def run_async(task_or_coro: Any, *args: Any, func: Any = None, **kwargs: Any) ->
 
     # If given an awaitable/coroutine object
     if asyncio.iscoroutine(task_or_coro) or inspect.isawaitable(task_or_coro):
-        return asyncio.run(task_or_coro)
+        return asyncio.run(cast(Coroutine[Any, Any, Any], task_or_coro))
 
     # If given a callable coroutine/function
     if callable(task_or_coro):
@@ -83,7 +84,7 @@ def run_async(task_or_coro: Any, *args: Any, func: Any = None, **kwargs: Any) ->
     # Fallback: try to run it as-is
     return asyncio.run(task_or_coro)
 
-@shared_task(name="scheduler.cohort_analysis")
+@shared_task(name="scheduler.cohort_analysis") # type: ignore[untyped-decorator]
 def run_cohort_analysis(cohort_value: str) -> None:
     """
     Celery task to enqueue jobs for a tenant cohort.
@@ -133,7 +134,7 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                     elif target_cohort == TenantCohort.ACTIVE:
                         query = query.where(Tenant.plan == "growth")
                     else: # DORMANT
-                        query = query.where(Tenant.plan.in_(["starter", "trial"]))
+                        query = query.where(Tenant.plan.in_(["starter", "free_trial"]))
 
                     result = await db.execute(query)
                     cohort_tenants = result.scalars().all()
@@ -202,7 +203,7 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
     duration = time.time() - start_time
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
-@shared_task(name="scheduler.remediation_sweep")
+@shared_task(name="scheduler.remediation_sweep") # type: ignore[untyped-decorator]
 def run_remediation_sweep() -> None:
     run_async(_remediation_sweep_logic)
 
@@ -272,12 +273,12 @@ async def _remediation_sweep_logic() -> None:
     duration = time.time() - start_time
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
-@shared_task(name="scheduler.billing_sweep")
+@shared_task(name="scheduler.billing_sweep") # type: ignore[untyped-decorator]
 def run_billing_sweep() -> None:
     run_async(_billing_sweep_logic)
 
 async def _billing_sweep_logic() -> None:
-    from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription, SubscriptionStatus
+    from app.modules.billing.domain.billing.paystack_billing import TenantSubscription, SubscriptionStatus
     job_name = "daily_billing_sweep"
     start_time = time.time()
     
@@ -329,7 +330,7 @@ async def _billing_sweep_logic() -> None:
     duration = time.time() - start_time
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
-@shared_task(name="scheduler.maintenance_sweep")
+@shared_task(name="scheduler.maintenance_sweep") # type: ignore[untyped-decorator]
 def run_maintenance_sweep() -> None:
     run_async(_maintenance_sweep_logic)
 
@@ -355,7 +356,7 @@ async def _maintenance_sweep_logic() -> None:
             await db.commit()
         except Exception as e:
             logger.error("maintenance_archive_failed", error=str(e))
-@shared_task(name="scheduler.currency_sync")
+@shared_task(name="scheduler.currency_sync") # type: ignore[untyped-decorator]
 def run_currency_sync() -> None:
     """
     Celery task to refresh currency exchange rates.
@@ -365,7 +366,7 @@ def run_currency_sync() -> None:
         run_async(get_exchange_rate, curr)
     logger.info("currency_sync_completed")
 
-@shared_task(name="scheduler.daily_finops_scan")
+@shared_task(name="scheduler.daily_scan") # type: ignore[untyped-decorator]
 def daily_finops_scan() -> None:
     """
     Central orchestration task that triggers analysis for all tenant cohorts.

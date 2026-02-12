@@ -125,7 +125,7 @@ class AWSConnection(Base):
     def provider(self) -> str:
         return "aws"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<AWSConnection {self.aws_account_id} ({self.status})>"
 
     @classmethod

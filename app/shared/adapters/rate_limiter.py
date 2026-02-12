@@ -11,7 +11,8 @@ This prevents rate limit errors at scale (10K tenants = 10K API calls).
 
 import asyncio
 import random
-from typing import TypeVar, Callable, Any
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 from functools import wraps
 import structlog
 
@@ -94,7 +95,12 @@ def get_aws_rate_limiter(service: str = "ce") -> RateLimiter:
     return _limiters[service]
 
 
-async def with_rate_limit(coro: Callable[..., Any], *args, service: str = "ce", **kwargs) -> Any:
+async def with_rate_limit(
+    coro: Callable[..., Awaitable[T]],
+    *args: Any,
+    service: str = "ce",
+    **kwargs: Any,
+) -> T:
     """
     Execute a coroutine with service-specific rate limiting.
     
@@ -107,11 +113,11 @@ async def with_rate_limit(coro: Callable[..., Any], *args, service: str = "ce", 
 
 
 async def with_backoff(
-    coro: Callable[..., T],
-    *args,
-    throttle_exceptions: tuple = (),
+    coro: Callable[..., Awaitable[T]],
+    *args: Any,
+    throttle_exceptions: tuple[type[BaseException], ...] = (),
     max_retries: int = MAX_RETRIES,
-    **kwargs
+    **kwargs: Any,
 ) -> T:
     """
     Execute a coroutine with exponential backoff on throttling.
@@ -132,7 +138,7 @@ async def with_backoff(
     from botocore.exceptions import ClientError
     
     backoff = INITIAL_BACKOFF_SECONDS
-    last_exception = None
+    last_exception: BaseException | None = None
     
     for attempt in range(max_retries + 1):
         try:
@@ -195,7 +201,9 @@ async def with_backoff(
     raise RuntimeError("Unexpected state in with_backoff")
 
 
-def rate_limited(func: Callable) -> Callable:
+def rate_limited(
+    func: Callable[..., Awaitable[T]],
+) -> Callable[..., Awaitable[T]]:
     """
     Decorator to apply rate limiting to an async function.
     
@@ -205,7 +213,7 @@ def rate_limited(func: Callable) -> Callable:
             ...
     """
     @wraps(func)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: Any, **kwargs: Any) -> T:
         limiter = get_aws_rate_limiter()
         await limiter.acquire()
         return await func(*args, **kwargs)

@@ -140,7 +140,11 @@ class LLMFactory:
 
 
     @staticmethod
-    def create(provider: str = None, model: str = None, api_key: str = None) -> BaseChatModel:
+    def create(
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> BaseChatModel:
         """
         Create an LLM client for the specified provider and model.
         DELEGATION: Now uses modular provider classes for model creation.

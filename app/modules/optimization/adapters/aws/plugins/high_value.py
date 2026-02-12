@@ -34,9 +34,10 @@ class IdleEksPlugin(ZombiePlugin):
         self, 
         session: aioboto3.Session, 
         region: str, 
-        credentials: Dict[str, str] = None, 
+        credentials: Dict[str, str] | None = None, 
         config: Any = None,
-        **kwargs
+        inventory: Any = None,
+        **kwargs: Any
     ) -> List[Dict[str, Any]]:
         zombies = []
         
@@ -108,9 +109,10 @@ class IdleElastiCachePlugin(ZombiePlugin):
         self, 
         session: aioboto3.Session, 
         region: str, 
-        credentials: Dict[str, str] = None, 
+        credentials: Dict[str, str] | None = None, 
         config: Any = None,
-        **kwargs
+        inventory: Any = None,
+        **kwargs: Any
     ) -> List[Dict[str, Any]]:
         zombies = []
         days = 7
@@ -195,9 +197,10 @@ class IdleSageMakerNotebooksPlugin(ZombiePlugin):
         self, 
         session: aioboto3.Session, 
         region: str, 
-        credentials: Dict[str, str] = None, 
+        credentials: Dict[str, str] | None = None, 
         config: Any = None,
-        **kwargs
+        inventory: Any = None,
+        **kwargs: Any
     ) -> List[Dict[str, Any]]:
         zombies = []
         days_idle_threshold = 7

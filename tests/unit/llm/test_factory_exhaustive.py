@@ -103,7 +103,7 @@ class TestFactoryExhaustive:
 
     def test_create_valid_provider(self):
         """Test create with valid providers."""
-        with patch("app.shared.llm.factory.get_settings") as mock_settings, \
+        with patch("app.shared.llm.factory.get_settings"), \
              patch("app.shared.llm.providers.OpenAIProvider") as MockOpenAI, \
              patch("app.shared.llm.providers.AnthropicProvider") as MockAnthropic:
             

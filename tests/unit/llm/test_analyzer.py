@@ -1,8 +1,8 @@
-import pytest
 """
 Production-quality tests for LLM Analyzer.
 Tests cover AI analysis, budget management, caching, error handling, and integration.
 """
+import pytest
 from datetime import date
 from decimal import Decimal
 from uuid import uuid4
@@ -62,7 +62,7 @@ class TestFinOpsAnalyzer:
     def test_load_system_prompt_from_yaml(self, mock_llm):
         """Test loading system prompt from YAML file."""
         with patch('os.path.exists', return_value=True), \
-             patch('builtins.open', create=True) as mock_open, \
+             patch('builtins.open', create=True), \
              patch('yaml.safe_load') as mock_yaml:
 
             mock_yaml.return_value = {
@@ -314,7 +314,7 @@ class TestFinOpsAnalyzerClientSetup:
         mock_budget.openai_api_key = "sk-test123"
 
         with patch('app.shared.llm.analyzer.UsageTracker') as mock_usage_tracker, \
-             patch('app.shared.llm.analyzer.get_settings') as mock_settings:
+             patch('app.shared.llm.analyzer.get_settings'):
 
             mock_tracker_instance = MagicMock()
             # Make check_budget awaitable
@@ -397,7 +397,7 @@ class TestFinOpsAnalyzerLLMInvocation:
     @pytest.mark.asyncio
     async def test_invoke_llm_success(self, analyzer):
         """Test successful LLM invocation."""
-        with patch('app.shared.llm.analyzer.LLMFactory.create') as mock_factory, \
+        with patch('app.shared.llm.analyzer.LLMFactory.create'), \
              patch('app.shared.llm.analyzer.get_settings') as mock_settings:
 
             # Mock the prompt and chain logic to avoid LangChain complexity
@@ -424,7 +424,7 @@ class TestFinOpsAnalyzerLLMInvocation:
     @pytest.mark.asyncio
     async def test_invoke_llm_fallback_on_failure(self, analyzer):
         """Test LLM fallback when primary provider fails."""
-        with patch('app.shared.llm.analyzer.LLMFactory.create') as mock_factory, \
+        with patch('app.shared.llm.analyzer.LLMFactory.create'), \
              patch('app.shared.llm.analyzer.get_settings') as mock_settings:
 
             # Mock the prompt and chain logic
@@ -455,7 +455,7 @@ class TestFinOpsAnalyzerLLMInvocation:
     @pytest.mark.asyncio
     async def test_invoke_llm_all_failures(self, analyzer):
         """Test LLM invocation when all providers fail."""
-        with patch('app.shared.llm.analyzer.LLMFactory.create') as mock_factory, \
+        with patch('app.shared.llm.analyzer.LLMFactory.create'), \
              patch('app.shared.llm.analyzer.get_settings') as mock_settings:
 
             # Mock the prompt and chain logic
@@ -489,7 +489,7 @@ class TestFinOpsAnalyzerResultProcessing:
         tenant_id = uuid4()
 
         with patch('app.shared.llm.analyzer.LLMGuardrails.validate_output') as mock_validate, \
-             patch.object(analyzer, '_check_and_alert_anomalies', new_callable=AsyncMock) as mock_alert, \
+             patch.object(analyzer, '_check_and_alert_anomalies', new_callable=AsyncMock), \
              patch('app.shared.llm.analyzer.SymbolicForecaster.forecast', new_callable=AsyncMock) as mock_forecast, \
              patch('app.shared.llm.analyzer.get_cache_service') as mock_cache_service:
 

@@ -1,4 +1,8 @@
-from app.modules.reporting.domain.calculator import CarbonCalculator, EMBODIED_EMISSIONS_FACTOR, AWS_PUE
+from app.modules.reporting.domain.calculator import (
+    CLOUD_PUE,
+    EMBODIED_EMISSIONS_FACTOR,
+    CarbonCalculator,
+)
 
 def test_scope3_calculation():
     """Verify Scope 3 (Embodied) emissions are correctly added."""
@@ -8,7 +12,7 @@ def test_scope3_calculation():
     # From calculator.py: EC2 factor is 0.05 kWh/$
     cost = 100.0
     expected_energy_direct = 100.0 * 0.05 # 5 kWh
-    expected_energy_pue = expected_energy_direct * AWS_PUE # 5 * 1.2 = 6 kWh
+    expected_energy_pue = expected_energy_direct * CLOUD_PUE # 5 * 1.2 = 6 kWh
     
     # Scope 3 = 6 kWh * 0.025 = 0.15 kgCO2e
     expected_scope3 = expected_energy_pue * EMBODIED_EMISSIONS_FACTOR

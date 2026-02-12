@@ -5,9 +5,10 @@ Provides comprehensive health monitoring for all system components,
 including databases, caches, external services, and circuit breakers.
 """
 import asyncio
+from collections.abc import Awaitable
 import psutil  # noqa: F401 - retained for tests that monkeypatch psutil symbols
 import structlog
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
@@ -26,7 +27,7 @@ settings = get_settings()
 class HealthCheckService:
     """Comprehensive health check service for all system components."""
 
-    def __init__(self, db: AsyncSession = None):
+    def __init__(self, db: AsyncSession | None = None):
         self.db = db
 
     async def check_all(self) -> Dict[str, Any]:
@@ -63,7 +64,7 @@ class HealthCheckService:
             if not client:
                 return False, {"error": "Redis client not available"}
             
-            await client.ping()
+            await maybe_await(client.ping())
             return True, {"latency_ms": 0}  # Could measure actual latency
             
         except Exception as e:
@@ -361,10 +362,11 @@ class HealthCheckService:
 
         return "unknown"
 
-    async def _handle_check_errors(self, coro) -> Dict[str, Any]:
+    async def _handle_check_errors(self, coro: Awaitable[Dict[str, Any]]) -> Dict[str, Any]:
         """Handle errors in individual health checks."""
         try:
-            return await coro
+            result = await coro
+            return result
         except Exception as e:
             logger.error("health_check_error", error=str(e))
             return {
@@ -377,7 +379,7 @@ class HealthCheckService:
 HealthService = HealthCheckService
 
 
-async def get_health_status(db: AsyncSession = None) -> Dict[str, Any]:
+async def get_health_status(db: AsyncSession | None = None) -> Dict[str, Any]:
     """Get comprehensive health status for monitoring."""
     service = HealthCheckService(db)
     return await service.comprehensive_health_check()

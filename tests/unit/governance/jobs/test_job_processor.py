@@ -8,7 +8,11 @@ from app.models.background_job import BackgroundJob
 
 @pytest.fixture
 def mock_db_session():
-    session = AsyncMock()
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+    session.close = AsyncMock()
     # Mock begin_nested to return an async context manager that yields the session
     nested_ctx = AsyncMock()
     nested_ctx.__aenter__.return_value = session

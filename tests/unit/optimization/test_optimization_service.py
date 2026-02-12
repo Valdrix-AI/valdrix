@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+from datetime import date, datetime, timezone
 
 from app.modules.optimization.domain.service import OptimizationService
 
@@ -68,13 +69,20 @@ async def test_generate_recommendations_handles_strategy_error():
 async def test_aggregate_usage_computes_spend_metrics():
     db = AsyncMock()
     result = MagicMock()
-    result.scalar.return_value = 720.0
+    result.all.return_value = [
+        (datetime(2026, 2, 10, 10, 0, tzinfo=timezone.utc), date(2026, 2, 10), 1.0),
+        (datetime(2026, 2, 10, 11, 0, tzinfo=timezone.utc), date(2026, 2, 10), 2.0),
+        (datetime(2026, 2, 10, 12, 0, tzinfo=timezone.utc), date(2026, 2, 10), 3.0),
+    ]
     db.execute = AsyncMock(return_value=result)
 
     service = OptimizationService(db)
     out = await service._aggregate_usage(uuid4())
 
-    assert out["total_monthly_spend"] == 720.0
-    assert out["average_hourly_spend"] == pytest.approx(1.0, rel=1e-6)
-    assert out["min_hourly_spend"] == pytest.approx(0.4, rel=1e-6)
+    assert out["total_monthly_spend"] == 6.0
+    assert out["average_hourly_spend"] == pytest.approx(2.0, rel=1e-6)
+    assert out["baseline_hourly_spend"] == pytest.approx(1.5, rel=1e-6)
+    assert out["min_hourly_spend"] == pytest.approx(1.5, rel=1e-6)
+    assert 0.0 <= out["confidence_score"] <= 1.0
+    assert out["observed_hours"] == 3
     assert out["region"] == "global"

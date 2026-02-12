@@ -185,7 +185,7 @@ async def process_paystack_webhook(job: BackgroundJob, db: AsyncSession) -> Dict
     
     Called by JobProcessor._handle_webhook_retry()
     """
-    from app.modules.reporting.domain.billing.paystack_billing import WebhookHandler
+    from app.modules.billing.domain.billing.paystack_billing import WebhookHandler
     
     if not job.payload:
         return {"status": "error", "reason": "Missing payload"}

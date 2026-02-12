@@ -17,8 +17,8 @@ Architecture:
 
 import aioboto3
 import json
-from datetime import date, datetime
-from typing import List, Dict, Any
+from datetime import date, datetime, timezone
+from typing import List, Dict, Any, AsyncGenerator
 import structlog
 from botocore.exceptions import ClientError
 
@@ -280,28 +280,50 @@ class CURAdapter(CostAdapter):
         start_date: datetime,
         end_date: datetime,
         granularity: str = "DAILY"
-    ) -> Any:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """
-        Stream cost data from CUR files.
+        Stream normalized cost data from CUR files.
         """
-        # Convert datetime to date for _list_cur_files.
-        s_date = start_date.date() if isinstance(start_date, datetime) else start_date
-        e_date = end_date.date() if isinstance(end_date, datetime) else end_date
-        
-        cur_files = await self._list_cur_files(s_date, e_date)
-        if not cur_files:
-            return
+        records = await self.get_cost_and_usage(start_date, end_date, granularity)
+        for record in records:
+            raw_date = record.get("date")
+            if isinstance(raw_date, str):
+                try:
+                    parsed = datetime.fromisoformat(raw_date)
+                except ValueError:
+                    parsed = datetime.now(timezone.utc)
+            elif isinstance(raw_date, datetime):
+                parsed = raw_date
+            else:
+                parsed = datetime.now(timezone.utc)
 
-        # Scaffold implementation - just logs and returns nothing for now
-        # until full parquet parsing is added via pyarrow (Phase 26)
-        logger.info("cur_streaming_not_implemented", count=len(cur_files))
-        return
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            else:
+                parsed = parsed.astimezone(timezone.utc)
 
-    async def discover_resources(self, resource_type: str = None, region: str = None) -> List[Dict[str, Any]]:
+            raw_cost = record.get("cost", 0)
+            cost_value = float(raw_cost) if raw_cost is not None else 0.0
+
+            yield {
+                "timestamp": parsed,
+                "service": record.get("service", "Unknown"),
+                "region": "Global",
+                "cost_usd": cost_value,
+                "currency": "USD",
+                "amount_raw": cost_value,
+                "usage_type": "Usage",
+            }
+
+    async def discover_resources(
+        self, resource_type: str, region: str | None = None
+    ) -> List[Dict[str, Any]]:
         """CUR-based resource discovery."""
         return []
 
-    async def get_resource_usage(self, service_name: str, resource_id: str = None) -> List[Dict[str, Any]]:
+    async def get_resource_usage(
+        self, service_name: str, resource_id: str | None = None
+    ) -> List[Dict[str, Any]]:
         """Detailed resource usage from CUR."""
         return []
 

@@ -1,5 +1,6 @@
+import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any
+from typing import Any, AsyncGenerator
 import structlog
 from azure.identity.aio import ClientSecretCredential
 from azure.mgmt.costmanagement.aio import CostManagementClient
@@ -18,7 +19,7 @@ azure_retry = tenacity.retry(
     retry=tenacity.retry_if_exception_type((ServiceRequestError, ServiceResponseError)),
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
     stop=tenacity.stop_after_attempt(3),
-    before_sleep=tenacity.before_sleep_log(logger, "warning")
+    before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
 )
 
 class AzureAdapter(BaseAdapter):
@@ -28,12 +29,14 @@ class AzureAdapter(BaseAdapter):
     
     def __init__(self, connection: AzureConnection):
         self.connection = connection
-        self._credential = None
-        self._cost_client = None
-        self._resource_client = None
+        self._credential: ClientSecretCredential | None = None
+        self._cost_client: CostManagementClient | None = None
+        self._resource_client: ResourceManagementClient | None = None
 
-    async def _get_credentials(self):
+    async def _get_credentials(self) -> ClientSecretCredential:
         if not self._credential:
+            if not self.connection.client_secret:
+                raise ValueError("Azure client_secret is required for client secret auth")
             self._credential = ClientSecretCredential(
                 tenant_id=self.connection.azure_tenant_id,
                 client_id=self.connection.client_id,
@@ -41,13 +44,13 @@ class AzureAdapter(BaseAdapter):
             )
         return self._credential
 
-    async def _get_cost_client(self):
+    async def _get_cost_client(self) -> CostManagementClient:
         if not self._cost_client:
             creds = await self._get_credentials()
             self._cost_client = CostManagementClient(credential=creds)
         return self._cost_client
 
-    async def _get_resource_client(self):
+    async def _get_resource_client(self) -> ResourceManagementClient:
         if not self._resource_client:
             creds = await self._get_credentials()
             self._resource_client = ResourceManagementClient(
@@ -75,7 +78,7 @@ class AzureAdapter(BaseAdapter):
         end_date: datetime,
         granularity: str = "DAILY",
         cost_type: str = "ActualCost"
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Fetch costs using Azure Query API."""
         try:
             client = await self._get_cost_client()
@@ -117,7 +120,7 @@ class AzureAdapter(BaseAdapter):
             )
         )
 
-    def _parse_row(self, row: List[Any], cost_type: str) -> Dict[str, Any]:
+    def _parse_row(self, row: list[Any], cost_type: str) -> dict[str, Any]:
         """Normalizes a single Azure result row."""
         # Indices: PreTaxCost (0), ServiceName (1), ResourceLocation (2), ChargeType (3), UsageDate (4)
         raw_date = str(row[4]).strip()
@@ -134,9 +137,13 @@ class AzureAdapter(BaseAdapter):
         if not dt:
             # Fallback for ISO date if simple strptime fails
             try:
-                from dateutil import parser
-                dt = parser.parse(raw_date).replace(tzinfo=timezone.utc)
-            except (ValueError, ImportError):
+                normalized = raw_date.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(normalized)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                else:
+                    dt = dt.astimezone(timezone.utc)
+            except ValueError:
                 logger.error("azure_date_parse_failed", raw_val=raw_date)
                 # Fallback to now but log error
                 dt = datetime.now(timezone.utc)
@@ -152,14 +159,15 @@ class AzureAdapter(BaseAdapter):
             "amount_raw": float(row[0]),
             "usage_type": row[3],
             "cost_type": cost_type,
-            "is_finalized": (now - dt).days > 3
+            "is_finalized": (now - dt).days > 3,
+            "source_adapter": "explorer_api",
         }
     async def get_amortized_costs(
         self,
         start_date: datetime,
         end_date: datetime,
         granularity: str = "DAILY"
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Fetch amortized costs (RI/Savings Plans spread across usage).
         Phase 5: Cloud Parity - Azure finalized cost support.
@@ -173,16 +181,18 @@ class AzureAdapter(BaseAdapter):
         start_date: datetime,
         end_date: datetime,
         granularity: str = "DAILY"
-    ) -> Any:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """
         Stream Azure costs.
         Currently wraps the Query API (which is list-based) but yields individually to match interface.
         """
         records = await self.get_cost_and_usage(start_date, end_date, granularity)
-        for r in records:
-            yield r
+        for record in records:
+            yield record
 
-    async def discover_resources(self, resource_type: str, region: str = None) -> List[Dict[str, Any]]:
+    async def discover_resources(
+        self, resource_type: str, region: str | None = None
+    ) -> list[dict[str, Any]]:
         """
         Discover Azure resources with OTel tracing.
         """

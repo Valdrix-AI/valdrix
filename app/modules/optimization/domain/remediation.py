@@ -111,8 +111,7 @@ class RemediationService(BaseService):
             connection_id=connection_id,
         )
 
-        from app.shared.core.async_utils import maybe_await
-        await maybe_await(self.db.add(request))
+        self.db.add(request)
         await self.db.commit()
         await self.db.refresh(request)
 
@@ -359,7 +358,7 @@ class RemediationService(BaseService):
                     
                     await audit_logger.log(
                         event_type=AuditEventType.REMEDIATION_FAILED,
-                        actor_id=request.reviewed_by_user_id,
+                        actor_id=str(request.reviewed_by_user_id) if request.reviewed_by_user_id else str(SYSTEM_USER_ID),
                         resource_id=request.resource_id,
                         resource_type=request.resource_type, # Added missing resource_type
                         success=False,
@@ -409,7 +408,7 @@ class RemediationService(BaseService):
             audit_logger = AuditLogger(db=self.db, tenant_id=tenant_id)
             await audit_logger.log(
                 event_type=AuditEventType.REMEDIATION_FAILED,
-                actor_id=request.reviewed_by_user_id,
+                actor_id=str(request.reviewed_by_user_id) if request.reviewed_by_user_id else str(SYSTEM_USER_ID),
                 resource_id=request.resource_id,
                 resource_type=request.resource_type,
                 success=False,
@@ -471,7 +470,7 @@ class RemediationService(BaseService):
                     ],
                 )
 
-                backup_id = response["SnapshotId"]
+                backup_id = str(response["SnapshotId"])
                 logger.info(
                     "backup_created",
                     volume_id=volume_id,
