@@ -60,6 +60,28 @@ jobs:
           CODECARBON_LOG_LEVEL: "info"
         run: |
           uv run pytest -v --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: Run Focused Coverage Gate (Optimization/Reporting/LLM Scheduler)
+        env:
+          AWS_ACCESS_KEY_ID: "testing"
+          AWS_SECRET_ACCESS_KEY: "testing"
+          AWS_DEFAULT_REGION: "us-east-1"
+          GROQ_API_KEY: "testing"
+          DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
+          SUPABASE_JWT_SECRET: "test-jwt-secret-for-ci"
+          CODECARBON_LOG_LEVEL: "info"
+        run: |
+          uv run pytest -q -o addopts= \
+            tests/unit/optimization \
+            tests/unit/modules/reporting \
+            tests/unit/llm/test_hybrid_scheduler.py \
+            --cov=app/modules/optimization \
+            --cov=app/modules/reporting \
+            --cov=app/shared/llm/hybrid_scheduler.py \
+            --cov-report=term-missing
+          uv run coverage report --include="app/modules/optimization/*" --fail-under=85
+          uv run coverage report --include="app/modules/reporting/*" --fail-under=85
+          uv run coverage report --include="app/shared/llm/hybrid_scheduler.py" --fail-under=90
           
       - name: Upload Coverage Report
         uses: codecov/codecov-action@v4

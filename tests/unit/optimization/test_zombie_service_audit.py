@@ -140,3 +140,38 @@ async def test_scan_for_tenant_timeout(mock_db, tenant_id):
                     result = await service.scan_for_tenant(tenant_id)
                     assert result["scan_timeout"] is True
                     assert result["partial_results"] is True
+
+
+@pytest.mark.asyncio
+async def test_scan_for_tenant_invalid_tenant_config_in_detector(mock_db, tenant_id):
+    """Invalid tenant configuration from provider detector should fail safely."""
+    service = ZombieService(mock_db)
+
+    conn = MagicMock(spec=AWSConnection)
+    conn.id = uuid4()
+    conn.tenant_id = tenant_id
+    conn.name = "Prod-AWS"
+
+    mock_res_aws = MagicMock()
+    mock_res_aws.scalars.return_value.all.return_value = [conn]
+    mock_res_empty = MagicMock()
+    mock_res_empty.scalars.return_value.all.return_value = []
+    mock_db.execute.side_effect = [mock_res_aws, mock_res_empty, mock_res_empty]
+
+    mock_detector = AsyncMock()
+    mock_detector.provider_name = "aws"
+    mock_detector.scan_all.side_effect = ValueError("Invalid tenant config for scan")
+
+    mock_rd = MagicMock()
+    mock_rd.get_enabled_regions = AsyncMock(return_value=["us-east-1"])
+
+    with patch("app.modules.optimization.domain.service.ZombieDetectorFactory.get_detector", return_value=mock_detector):
+        with patch("app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery", return_value=mock_rd):
+            with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE_TRIAL):
+                with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
+                    with patch("app.shared.core.notifications.NotificationDispatcher.notify_zombies"):
+                        result = await service.scan_for_tenant(tenant_id)
+
+    assert result["scanned_connections"] == 1
+    assert result["total_monthly_waste"] == 0.0
+    assert result["unattached_volumes"] == []

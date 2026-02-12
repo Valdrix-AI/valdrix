@@ -59,3 +59,57 @@ async def test_run_analysis_hybrid_flow():
             with patch.object(scheduler, "should_run_full_analysis", AsyncMock(return_value=False)):
                 res = await scheduler.run_analysis(uuid4(), [])
                 assert res["type"] == "merged"
+
+
+@pytest.mark.asyncio
+async def test_run_delta_analysis_happy_path_with_mocked_provider():
+    """Delta analysis should include orchestration metadata on successful provider analysis."""
+    with patch("app.shared.llm.hybrid_scheduler.get_cache_service") as mock_get_cache:
+        mock_cache = AsyncMock()
+        mock_get_cache.return_value = mock_cache
+
+        scheduler = HybridAnalysisScheduler(AsyncMock())
+        scheduler.analyzer = MagicMock()
+
+        delta = MagicMock()
+        delta.has_significant_changes = True
+        delta.days_compared = 3
+        delta.total_change = 12.5
+        delta.total_change_percent = 8.4
+        scheduler.delta_service.compute_delta = AsyncMock(return_value=delta)
+
+        with patch("app.shared.llm.hybrid_scheduler.analyze_with_delta", new=AsyncMock(return_value={"summary": "ok"})):
+            result = await scheduler._run_delta_analysis(uuid4(), current_costs=[{"cost": 10}], previous_costs=[{"cost": 5}])
+
+        assert result["analysis_type"] == "delta_3_day"
+        assert result["has_significant_changes"] is True
+        assert result["summary"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_run_delta_analysis_provider_timeout_failure():
+    """Provider timeout/failure path should propagate to caller for job retry handling."""
+    with patch("app.shared.llm.hybrid_scheduler.get_cache_service") as mock_get_cache:
+        mock_cache = AsyncMock()
+        mock_get_cache.return_value = mock_cache
+
+        scheduler = HybridAnalysisScheduler(AsyncMock())
+        scheduler.analyzer = MagicMock()
+
+        delta = MagicMock()
+        delta.has_significant_changes = True
+        delta.days_compared = 3
+        delta.total_change = 99.0
+        delta.total_change_percent = 45.0
+        scheduler.delta_service.compute_delta = AsyncMock(return_value=delta)
+
+        with patch(
+            "app.shared.llm.hybrid_scheduler.analyze_with_delta",
+            new=AsyncMock(side_effect=TimeoutError("provider timeout")),
+        ):
+            with pytest.raises(TimeoutError, match="provider timeout"):
+                await scheduler._run_delta_analysis(
+                    uuid4(),
+                    current_costs=[{"cost": 100}],
+                    previous_costs=[{"cost": 1}],
+                )

@@ -344,6 +344,64 @@ class TestCostIngestionWithConnections:
             assert result["status"] == "completed"
             assert any(d.get("status") == "failed" for d in result["details"])
 
+    @pytest.mark.asyncio
+    async def test_ingest_costs_missing_cur_data_yields_zero_records(self, mock_db, mock_aws_connection):
+        """Missing CUR data (empty stream) should not break ingestion."""
+        tenant_id = mock_aws_connection.tenant_id
+
+        query_result = MagicMock()
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
+        mock_db.execute = AsyncMock(return_value=query_result)
+        mock_db.commit = AsyncMock()
+        mock_db.add = MagicMock()
+
+        service = ReportingService(mock_db)
+
+        with patch('app.modules.reporting.domain.service.AdapterFactory') as mock_factory, \
+             patch('app.modules.reporting.domain.service.CostPersistenceService') as mock_persistence, \
+             patch('app.modules.reporting.domain.service.AttributionEngine'):
+
+            mock_adapter = AsyncMock()
+            mock_factory.get_adapter.return_value = mock_adapter
+
+            async def empty_stream():
+                if False:  # pragma: no cover
+                    yield {}
+
+            mock_adapter.stream_cost_and_usage = MagicMock(side_effect=lambda *args, **kwargs: empty_stream())
+
+            mock_persistence_instance = AsyncMock()
+            mock_persistence_instance.save_records_stream = AsyncMock(return_value={"records_saved": 0})
+            mock_persistence.return_value = mock_persistence_instance
+
+            result = await service.ingest_costs_for_tenant(tenant_id)
+
+            assert result["status"] == "completed"
+            assert result["details"][0]["records_ingested"] == 0
+            assert result["details"][0]["total_cost"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_ingest_costs_invalid_tenant_config_marks_connection_failed(self, mock_db, mock_aws_connection):
+        """Invalid tenant connection config should fail safely per connection."""
+        tenant_id = mock_aws_connection.tenant_id
+
+        query_result = MagicMock()
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
+        mock_db.execute = AsyncMock(return_value=query_result)
+        mock_db.commit = AsyncMock()
+        mock_db.add = MagicMock()
+
+        service = ReportingService(mock_db)
+
+        with patch('app.modules.reporting.domain.service.AdapterFactory') as mock_factory:
+            mock_factory.get_adapter.side_effect = ValueError("Invalid tenant config: missing CUR bucket")
+
+            result = await service.ingest_costs_for_tenant(tenant_id)
+
+            assert result["status"] == "completed"
+            assert result["details"][0]["status"] == "failed"
+            assert "Invalid tenant config" in result["details"][0]["error"]
+
 
 class TestCloudAccountRegistry:
     """Test CloudAccount registry synchronization."""
