@@ -1,7 +1,7 @@
 import pytest
 import uuid
 from httpx import AsyncClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.main import app
 from app.models.background_job import BackgroundJob, JobStatus, JobType
 from app.shared.core.auth import get_current_user
@@ -138,3 +138,75 @@ async def test_stream_jobs_sse_rejects_when_tenant_connection_limit_reached(asyn
             assert response.status_code == 429
     finally:
         jobs_api._active_sse_connections.clear()
+
+
+@pytest.mark.asyncio
+async def test_enqueue_new_job_rejects_internal_job_type(async_client: AsyncClient):
+    response = await async_client.post(
+        "/api/v1/jobs/enqueue",
+        json={"job_type": JobType.COST_INGESTION.value, "payload": {"k": "v"}},
+    )
+    assert response.status_code == 403
+    assert "Unauthorized job type" in response.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_new_job_success(async_client: AsyncClient):
+    now = datetime.now(timezone.utc)
+    mock_job = MagicMock()
+    mock_job.id = uuid.uuid4()
+    mock_job.job_type = JobType.NOTIFICATION.value
+    mock_job.status = JobStatus.PENDING.value
+    mock_job.attempts = 0
+    mock_job.scheduled_for = now
+    mock_job.created_at = now
+    with patch("app.modules.governance.api.v1.jobs.enqueue_job", new=AsyncMock(return_value=mock_job)):
+        response = await async_client.post(
+            "/api/v1/jobs/enqueue",
+            json={"job_type": JobType.NOTIFICATION.value, "payload": {"msg": "hello"}},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(mock_job.id)
+    assert body["job_type"] == JobType.NOTIFICATION.value
+    assert body["status"] == JobStatus.PENDING.value
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_filters_status_and_sanitizes_error(async_client: AsyncClient, db_session, mock_user):
+    now = datetime.now(timezone.utc)
+    pending_job = BackgroundJob(
+        id=uuid.uuid4(),
+        tenant_id=mock_user.tenant_id,
+        job_type=JobType.ZOMBIE_SCAN.value,
+        status=JobStatus.PENDING.value,
+        attempts=0,
+        scheduled_for=now,
+        created_at=now,
+        updated_at=now,
+        is_deleted=False,
+    )
+    failed_job = BackgroundJob(
+        id=uuid.uuid4(),
+        tenant_id=mock_user.tenant_id,
+        job_type=JobType.NOTIFICATION.value,
+        status=JobStatus.FAILED.value,
+        attempts=1,
+        scheduled_for=now,
+        created_at=now,
+        updated_at=now,
+        error_message="traceback:secret-details",
+        is_deleted=False,
+    )
+    db_session.add_all([pending_job, failed_job])
+    await db_session.commit()
+
+    response = await async_client.get(
+        "/api/v1/jobs/list",
+        params={"status": JobStatus.FAILED.value, "sort_by": "created_at", "order": "asc", "limit": 20},
+    )
+    assert response.status_code == 200
+    jobs = response.json()
+    assert len(jobs) == 1
+    assert jobs[0]["id"] == str(failed_job.id)
+    assert jobs[0]["error_message"] == "traceback"

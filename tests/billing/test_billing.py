@@ -30,7 +30,7 @@ class TestSubscriptionResponse:
     def test_subscription_response_optional_date(self):
         """next_payment_date should be optional."""
         response = SubscriptionResponse(
-            tier="free",
+            tier="free_trial",
             status="active"
         )
         assert response.next_payment_date is None
@@ -63,14 +63,14 @@ class TestBillingService:
     
     def test_billing_service_exists(self):
         """BillingService class should exist and be importable."""
-        from app.modules.reporting.domain.billing.paystack_billing import BillingService
+        from app.modules.billing.domain.billing.paystack_billing import BillingService
         assert BillingService is not None
     
     def test_billing_service_has_required_methods(self):
         """BillingService should have expected methods."""
-        from app.modules.reporting.domain.billing.paystack_billing import BillingService
+        from app.modules.billing.domain.billing.paystack_billing import BillingService
         
-        with patch("app.modules.reporting.domain.billing.paystack_billing.settings") as mock_settings:
+        with patch("app.modules.billing.domain.billing.paystack_billing.settings") as mock_settings:
             # Mock settings to avoid Paystack key validation
             mock_settings.PAYSTACK_SECRET_KEY = "test-secret-key"
             
@@ -86,7 +86,7 @@ class TestWebhookHandler:
     
     def test_webhook_signature_verification_invalid(self):
         """Invalid signature should be rejected."""
-        from app.modules.reporting.domain.billing.paystack_billing import WebhookHandler
+        from app.modules.billing.domain.billing.paystack_billing import WebhookHandler
         
         mock_db = AsyncMock()
         _ = WebhookHandler(mock_db)
@@ -97,7 +97,7 @@ class TestWebhookHandler:
     @pytest.mark.asyncio
     async def test_webhook_subscription_create(self):
         """subscription.create event should update database."""
-        from app.modules.reporting.domain.billing.paystack_billing import WebhookHandler
+        from app.modules.billing.domain.billing.paystack_billing import WebhookHandler
         
         mock_db = AsyncMock()
         handler = WebhookHandler(mock_db)
@@ -111,16 +111,16 @@ class TestPricingTier:
     
     def test_pricing_tier_values(self):
         """PricingTier should have expected values."""
-        from app.modules.reporting.domain.billing.paystack_billing import PricingTier
+        from app.modules.billing.domain.billing.paystack_billing import PricingTier
         
-        assert PricingTier.TRIAL.value == "trial"
+        assert PricingTier.FREE_TRIAL.value == "free_trial"
         assert PricingTier.STARTER.value == "starter"
         assert PricingTier.PRO.value == "pro"
         assert PricingTier.ENTERPRISE.value == "enterprise"
     
     def test_pricing_tier_from_string(self):
         """PricingTier should be creatable from string."""
-        from app.modules.reporting.domain.billing.paystack_billing import PricingTier
+        from app.modules.billing.domain.billing.paystack_billing import PricingTier
         
         tier = PricingTier("pro")
         assert tier == PricingTier.PRO
@@ -131,7 +131,7 @@ class TestTenantSubscriptionModel:
     
     def test_tenant_subscription_fields(self):
         """TenantSubscription should have correct fields."""
-        from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription
+        from app.modules.billing.domain.billing.paystack_billing import TenantSubscription
         
         # Verify model has expected columns
         assert hasattr(TenantSubscription, 'tenant_id')

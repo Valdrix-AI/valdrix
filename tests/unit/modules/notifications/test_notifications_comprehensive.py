@@ -5,8 +5,7 @@ Covers actual service methods: send_carbon_alert, send_alert, etc.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
-import uuid
+from datetime import datetime
 
 from app.modules.notifications.domain.email_service import EmailService
 from app.modules.notifications.domain.slack import SlackService

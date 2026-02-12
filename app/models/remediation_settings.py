@@ -1,5 +1,5 @@
-from uuid import uuid4
-from sqlalchemy import Boolean, Numeric, Integer, ForeignKey, Uuid as UUID
+from uuid import UUID, uuid4
+from sqlalchemy import Boolean, Numeric, Integer, ForeignKey, Uuid as SAUuid
 # from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,13 +16,13 @@ class RemediationSettings(Base):
     __tablename__ = "remediation_settings"
 
     id: Mapped[UUID] = mapped_column(
-        UUID(),
+        SAUuid(),
         primary_key=True,
         default=uuid4
     )
 
     tenant_id: Mapped[UUID] = mapped_column(
-        UUID(),
+        SAUuid(),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         unique=True,
         nullable=False
@@ -47,5 +47,5 @@ class RemediationSettings(Base):
     # Relationship
     tenant: Mapped["Tenant"] = relationship("Tenant")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<RemediationSettings tenant={self.tenant_id} auto_pilot={self.auto_pilot_enabled}>"

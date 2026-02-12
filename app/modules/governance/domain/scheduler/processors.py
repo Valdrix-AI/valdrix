@@ -1,9 +1,9 @@
 import structlog
-from datetime import date
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
 from uuid import UUID
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import TYPE_CHECKING, Optional, List, Dict, Any
+from typing import TYPE_CHECKING, Optional, Dict, Any
 import asyncio
 if TYPE_CHECKING:
     from app.shared.llm.guardrails import FinOpsAnalysisResult
@@ -12,8 +12,9 @@ from app.models.tenant import Tenant
 from app.shared.llm.factory import LLMFactory
 from app.shared.llm.analyzer import FinOpsAnalyzer
 from app.modules.reporting.domain.calculator import CarbonCalculator
-from app.modules.optimization.domain.detector import ZombieDetector
-from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+from app.modules.optimization.domain.factory import ZombieDetectorFactory
+from app.shared.adapters.factory import AdapterFactory
+from app.schemas.costs import CloudUsageSummary, CostRecord
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
@@ -24,6 +25,75 @@ class AnalysisProcessor:
     def __init__(self) -> None:
         self.settings = get_settings()
 
+    @staticmethod
+    def _collect_connections(tenant: Tenant) -> list[Any]:
+        aws_connections = list(getattr(tenant, "aws_connections", []) or [])
+        azure_connections = list(getattr(tenant, "azure_connections", []) or [])
+        gcp_connections = list(getattr(tenant, "gcp_connections", []) or [])
+        saas_connections = list(getattr(tenant, "saas_connections", []) or [])
+        license_connections = list(getattr(tenant, "license_connections", []) or [])
+        return [
+            *aws_connections,
+            *azure_connections,
+            *gcp_connections,
+            *saas_connections,
+            *license_connections,
+        ]
+
+    @staticmethod
+    def _as_datetime(value: Any) -> datetime:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value
+        if isinstance(value, date):
+            return datetime.combine(value, time.min, tzinfo=timezone.utc)
+        return datetime.now(timezone.utc)
+
+    def _build_usage_summary_from_rows(
+        self,
+        rows: list[dict[str, Any]],
+        tenant_id: str,
+        provider: str,
+        start_date: date,
+        end_date: date,
+    ) -> CloudUsageSummary | None:
+        records: list[CostRecord] = []
+        for row in rows:
+            raw_amount = row.get("cost_usd", 0) or 0
+            amount = Decimal(str(raw_amount))
+            if amount <= 0:
+                continue
+
+            amount_raw = row.get("amount_raw")
+            amount_raw_decimal = Decimal(str(amount_raw)) if amount_raw is not None else None
+            tags = row.get("tags")
+            records.append(
+                CostRecord(
+                    date=self._as_datetime(row.get("timestamp")),
+                    amount=amount,
+                    amount_raw=amount_raw_decimal,
+                    currency=str(row.get("currency") or "USD"),
+                    service=str(row.get("service") or "unknown"),
+                    region=row.get("region"),
+                    usage_type=row.get("usage_type"),
+                    tags=tags if isinstance(tags, dict) else {},
+                )
+            )
+
+        if not records:
+            return None
+
+        total_cost = sum((record.amount for record in records), Decimal("0"))
+        return CloudUsageSummary(
+            tenant_id=tenant_id,
+            provider=provider,
+            start_date=start_date,
+            end_date=end_date,
+            total_cost=total_cost,
+            records=records,
+        )
+
     async def process_tenant(self, db: AsyncSession, tenant: Tenant, start_date: date, end_date: date) -> None:
         """Process a single tenant's analysis."""
         try:
@@ -32,8 +102,8 @@ class AnalysisProcessor:
             # 1. Use pre-loaded Notification Settings (Avoids N+1 query)
             notif_settings = tenant.notification_settings
 
-            # 2. Use pre-loaded AWS connections (Avoids N+1 query)
-            connections = tenant.aws_connections
+            # 2. Use pre-loaded cloud connections across providers.
+            connections = self._collect_connections(tenant)
 
             if not connections:
                 logger.info("tenant_no_connections", tenant_id=str(tenant.id))
@@ -42,52 +112,113 @@ class AnalysisProcessor:
             llm = LLMFactory.create(self.settings.LLM_PROVIDER)
             analyzer = FinOpsAnalyzer(llm)
             carbon_calc = CarbonCalculator()
+            latest_analysis_result: dict[str, Any] | None = None
+            start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+            end_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
 
             for conn in connections:
                 try:
                     # BE-SCHED-2: Analysis Timeout Protection (SEC-05)
-                    # Use a generous 5-minute timeout per connection to prevent job hangs
-                    # Use a generous 5-minute timeout per connection to prevent job hangs
+                    # Use a generous 5-minute timeout per connection to prevent job hangs.
                     async def _run_analysis() -> None:
-                        # Use MultiTenant adapter
-                        adapter = MultiTenantAWSAdapter(conn)
-                        costs: List[Dict[str, Any]] = await adapter.get_daily_costs(start_date, end_date) # type: ignore[assignment]
+                        nonlocal latest_analysis_result
+                        provider = str(getattr(conn, "provider", "aws")).lower()
+                        adapter = AdapterFactory.get_adapter(conn)
 
-                        if not costs:
+                        if provider == "aws" and hasattr(adapter, "get_daily_costs"):
+                            usage_summary = await adapter.get_daily_costs(
+                                start_date,
+                                end_date,
+                                group_by_service=True,
+                            )
+                        else:
+                            rows = await adapter.get_cost_and_usage(
+                                start_dt,
+                                end_dt,
+                                granularity="DAILY",
+                            )
+                            usage_summary = self._build_usage_summary_from_rows(
+                                rows=rows,
+                                tenant_id=str(tenant.id),
+                                provider=provider,
+                                start_date=start_date,
+                                end_date=end_date,
+                            )
+
+                        if not usage_summary or not usage_summary.records:
                             return
 
                         # 1. LLM Analysis
-                        from app.models.analysis import CloudUsageSummary
-                        summary_obj = CloudUsageSummary(
-                            total_cost=0.0, # calculated inside
-                            currency="USD",
-                            records=costs
+                        analysis_result = await analyzer.analyze(
+                            usage_summary,
+                            tenant_id=tenant.id,
+                            db=db,
+                            provider=provider,
                         )
-                        await analyzer.analyze(summary_obj, tenant_id=tenant.id, db=db)
+                        if isinstance(analysis_result, dict):
+                            latest_analysis_result = analysis_result
 
                         # 2. Carbon Calculation
-                        carbon_result = carbon_calc.calculate_from_costs(costs, region=conn.region)
+                        calc_region = str(getattr(conn, "region", "") or "global")
+                        normalized_rows = [
+                            {
+                                "cost_usd": float(record.amount),
+                                "service": record.service,
+                                "provider": provider,
+                            }
+                            for record in usage_summary.records
+                        ]
+                        carbon_result = carbon_calc.calculate_from_costs(
+                            normalized_rows,
+                            region=calc_region,
+                            provider=provider,
+                        )
 
-                        # 3. Zombie Detection
-                        creds = await adapter.get_credentials()
-                        detector = ZombieDetector(region=conn.region, credentials=creds)
-                        zombie_result = await detector.scan_all()
+                        # 3. Zombie Detection for supported providers.
+                        zombie_result: Dict[str, Any] = {}
+                        if provider in {
+                            "aws",
+                            "azure",
+                            "gcp",
+                            "saas",
+                            "cloud_plus_saas",
+                            "license",
+                            "itam",
+                            "cloud_plus_license",
+                        }:
+                            detector_region = calc_region if provider == "aws" else "global"
+                            try:
+                                detector = ZombieDetectorFactory.get_detector(
+                                    conn,
+                                    region=detector_region,
+                                    db=db,
+                                )
+                                zombie_result = await detector.scan_all()
+                            except Exception as zombie_exc:
+                                logger.warning(
+                                    "tenant_zombie_scan_skipped",
+                                    tenant_id=str(tenant.id),
+                                    provider=provider,
+                                    connection_id=str(getattr(conn, "id", "unknown")),
+                                    error=str(zombie_exc),
+                                )
+                        else:
+                            logger.info("tenant_zombie_scan_not_supported", tenant_id=str(tenant.id), provider=provider)
 
                         # 4. Notify if enabled in settings
                         if notif_settings and notif_settings.slack_enabled:
                             if notif_settings.digest_schedule in ["daily", "weekly"]:
-                                settings = get_settings()
-                                if settings.SLACK_BOT_TOKEN and settings.SLACK_CHANNEL_ID:
-                                    channel = notif_settings.slack_channel_override or settings.SLACK_CHANNEL_ID
+                                if self.settings.SLACK_BOT_TOKEN and self.settings.SLACK_CHANNEL_ID:
+                                    channel = (
+                                        notif_settings.slack_channel_override
+                                        or self.settings.SLACK_CHANNEL_ID
+                                    )
 
                                     from app.modules.notifications.domain import SlackService
-                                    slack = SlackService(settings.SLACK_BOT_TOKEN, channel)
+                                    slack = SlackService(self.settings.SLACK_BOT_TOKEN, channel)
 
                                     zombie_count = sum(len(items) for items in zombie_result.values() if isinstance(items, list))
-                                    total_cost = sum(
-                                        float(day.get("Total", {}).get("UnblendedCost", {}).get("Amount", 0))
-                                        for day in costs
-                                    )
+                                    total_cost = float(usage_summary.total_cost)
 
                                     await slack.send_digest({
                                         "tenant_name": tenant.name,
@@ -104,25 +235,15 @@ class AnalysisProcessor:
                 except Exception as e:
                     logger.error("tenant_connection_failed", tenant_id=str(tenant.id), connection_id=str(conn.id), error=str(e))
 
-            # 3. New: Savings Autopilot (Phase 42)
-            # Fetch latest analysis result and execute autonomous savings
-            try:
-                from app.models.analysis import AnalysisResult
-                res_obj = await db.execute(
-                    select(AnalysisResult)
-                    .where(AnalysisResult.tenant_id == tenant.id)
-                    .order_by(AnalysisResult.created_at.desc())
-                    .limit(1)
-                )
-                latest_analysis = res_obj.scalar_one_or_none()
-                if latest_analysis and latest_analysis.raw_result:
+            # 3. Savings Autopilot using latest in-memory analysis result.
+            if latest_analysis_result:
+                try:
                     from app.shared.llm.guardrails import FinOpsAnalysisResult
-                    parsed_result = FinOpsAnalysisResult(**latest_analysis.raw_result)
-                    
+                    parsed_result = FinOpsAnalysisResult(**latest_analysis_result)
                     savings_processor = SavingsProcessor()
                     await savings_processor.process_recommendations(db, tenant.id, parsed_result)
-            except Exception as e:
-                logger.error("savings_autopilot_failed", tenant_id=str(tenant.id), error=str(e))
+                except Exception as e:
+                    logger.error("savings_autopilot_failed", tenant_id=str(tenant.id), error=str(e))
 
         except Exception as e:
             logger.error("tenant_processing_failed", tenant_id=str(tenant.id), error=str(e))

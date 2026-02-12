@@ -15,7 +15,13 @@ from app.models.cloud import CostRecord
 
 @pytest.fixture
 def mock_db():
-    return AsyncMock()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.add = MagicMock()
+    db.add_all = MagicMock()
+    return db
 
 @pytest.fixture
 def attribution_engine(mock_db):

@@ -1,25 +1,30 @@
 import pytest
-import os
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client():
     from app.main import app
-    return TestClient(app, raise_server_exceptions=False)
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        yield test_client
 
 @pytest.fixture
 def mock_lifespan_deps():
+    mock_dispose = AsyncMock()
+
+    class _EngineStub:
+        async def dispose(self):
+            await mock_dispose()
+
     with patch("os.makedirs") as mock_makedirs, \
          patch("app.main.EmissionsTracker") as mock_tracker, \
          patch("app.modules.governance.domain.scheduler.SchedulerService") as mock_scheduler, \
-         patch("app.main.engine") as mock_engine:
-        mock_engine.dispose = AsyncMock()
+         patch("app.main.engine", new=_EngineStub()):
         yield {
             "makedirs": mock_makedirs,
             "tracker": mock_tracker.return_value,
             "scheduler": mock_scheduler.return_value,
-            "dispose": mock_engine.dispose
+            "dispose": mock_dispose
         }
 
 @pytest.mark.asyncio

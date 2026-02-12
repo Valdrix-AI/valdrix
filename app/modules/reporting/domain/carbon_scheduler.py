@@ -159,13 +159,13 @@ class CarbonAwareScheduler:
         amplitude = (profile.carbon_intensity_high - profile.carbon_intensity_low) / 2
         
         # Solar effect (lowest at peak solar hour)
-        solar_factor = 0
+        solar_factor = 0.0
         if profile.peak_solar_hour_utc is not None:
             # Lowest intensity at peak solar
             solar_factor = math.cos(math.pi * (hour_utc - profile.peak_solar_hour_utc) / 12)
         
         # Wind effect (simulated as another wave if applicable)
-        wind_factor = 0
+        wind_factor = 0.0
         if profile.peak_wind_hour_utc is not None:
             wind_factor = math.cos(math.pi * (hour_utc - profile.peak_wind_hour_utc) / 6)
              
@@ -273,7 +273,6 @@ class CarbonAwareScheduler:
             return None  # Execute now
 
         now = datetime.now(timezone.utc)
-        current_hour = now.hour
 
         # Find next best hour within window
         from datetime import timedelta
@@ -392,10 +391,11 @@ class CarbonAwareScheduler:
                 if region.startswith("eu-"):
                     zone = region.split("-")[1].upper() # Rough guess (e.g., eu-west-1 -> WEST)
                 
+                headers = {"auth-token": self.electricitymaps_key} if self.electricitymaps_key else {}
                 response = await client.get(
                     "https://api.electricitymap.org/v3/carbon-intensity/forecast",
                     params={"zone": zone, "horizon": hours},
-                    headers={"auth-token": self.electricitymaps_key}
+                    headers=headers
                 )
                 response.raise_for_status()
                 data = response.json()

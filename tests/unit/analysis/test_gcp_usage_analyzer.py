@@ -1,8 +1,6 @@
 """
 Tests for gcp_usage_analyzer.py - GCP BigQuery billing export analysis for resource utilization.
 """
-import pytest
-from decimal import Decimal
 from app.shared.analysis.gcp_usage_analyzer import GCPUsageAnalyzer
 
 

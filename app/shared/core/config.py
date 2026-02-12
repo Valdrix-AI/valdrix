@@ -1,14 +1,15 @@
 from functools import lru_cache
+from typing import Optional
+
+import secrets
+import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
-from typing import Optional
 from app.shared.core.constants import AWS_SUPPORTED_REGIONS, LLMProvider
-import structlog
-import secrets
 
 
 @lru_cache
-def get_settings():
+def get_settings() -> "Settings":
     """Returns a singleton instance of the application settings."""
     settings = Settings()
     if not settings.CSRF_SECRET_KEY and not settings.is_production:
@@ -136,7 +137,12 @@ class Settings(BaseSettings):
             LLMProvider.GROQ: self.GROQ_API_KEY
         }
         
-        if self.LLM_PROVIDER in provider_keys and not provider_keys[self.LLM_PROVIDER]:
+        provider_enum: LLMProvider | None = None
+        try:
+            provider_enum = LLMProvider(self.LLM_PROVIDER)
+        except ValueError:
+            provider_enum = None
+        if provider_enum and not provider_keys[provider_enum]:
             if self.is_production:
                 raise ValueError(f"LLM_PROVIDER is set to '{self.LLM_PROVIDER}' but corresponding API key is missing.")
         

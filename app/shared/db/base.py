@@ -6,7 +6,7 @@ import os
 class Base(DeclarativeBase):
     pass
 
-def get_partition_args(strategy: str) -> dict:
+def get_partition_args(strategy: str) -> dict[str, str]:
     """
     Returns partitioning arguments for Postgres, or empty dict for SQLite/Testing.
     Avoids CompileError on SQLite.

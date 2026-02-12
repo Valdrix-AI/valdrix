@@ -1,5 +1,6 @@
 from uuid import UUID
 from datetime import datetime
+from typing import Any, Self
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 class AWSConnectionCreate(BaseModel):
@@ -72,7 +73,7 @@ class AzureConnectionCreate(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def _validate_credentials(self):
+    def _validate_credentials(self) -> Self:
         if self.auth_method == "secret" and not self.client_secret:
             raise ValueError("client_secret is required when auth_method is 'secret'")
         return self
@@ -108,7 +109,7 @@ class GCPConnectionCreate(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def _validate_credentials(self):
+    def _validate_credentials(self) -> Self:
         import json
         if self.auth_method == "secret" and not self.service_account_json:
             raise ValueError("service_account_json is required when auth_method is 'secret'")
@@ -127,6 +128,74 @@ class GCPConnectionResponse(BaseModel):
     billing_project_id: str | None
     billing_dataset: str | None
     billing_table: str | None
+    is_active: bool
+    last_synced_at: datetime | None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SaaSConnectionCreate(BaseModel):
+    """SaaS Cloud+ connection request."""
+    name: str = Field(..., min_length=3, max_length=100, description="Friendly name")
+    vendor: str = Field(..., min_length=2, max_length=100, description="SaaS vendor name")
+    auth_method: str = Field(default="manual", max_length=20, description="manual, api_key, oauth, csv")
+    api_key: str | None = Field(default=None, max_length=1024, description="Optional API key for vendor access")
+    spend_feed: list[dict[str, Any]] = Field(default_factory=list, description="Normalized SaaS spend records")
+
+    @field_validator("auth_method")
+    @classmethod
+    def _validate_auth_method(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"manual", "api_key", "oauth", "csv"}:
+            raise ValueError("auth_method must be one of: manual, api_key, oauth, csv")
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_credentials(self) -> Self:
+        if self.auth_method == "api_key" and not self.api_key:
+            raise ValueError("api_key is required when auth_method is 'api_key'")
+        return self
+
+
+class SaaSConnectionResponse(BaseModel):
+    id: UUID
+    name: str
+    vendor: str
+    auth_method: str
+    is_active: bool
+    last_synced_at: datetime | None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LicenseConnectionCreate(BaseModel):
+    """License/ITAM Cloud+ connection request."""
+    name: str = Field(..., min_length=3, max_length=100, description="Friendly name")
+    vendor: str = Field(..., min_length=2, max_length=100, description="License vendor name")
+    auth_method: str = Field(default="manual", max_length=20, description="manual, api_key, oauth, csv")
+    api_key: str | None = Field(default=None, max_length=1024, description="Optional API key for vendor access")
+    license_feed: list[dict[str, Any]] = Field(default_factory=list, description="Normalized license spend records")
+
+    @field_validator("auth_method")
+    @classmethod
+    def _validate_auth_method(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"manual", "api_key", "oauth", "csv"}:
+            raise ValueError("auth_method must be one of: manual, api_key, oauth, csv")
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_credentials(self) -> Self:
+        if self.auth_method == "api_key" and not self.api_key:
+            raise ValueError("api_key is required when auth_method is 'api_key'")
+        return self
+
+
+class LicenseConnectionResponse(BaseModel):
+    id: UUID
+    name: str
+    vendor: str
+    auth_method: str
     is_active: bool
     last_synced_at: datetime | None
     created_at: datetime

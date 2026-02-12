@@ -4,7 +4,7 @@ import hashlib
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from app.modules.reporting.domain.billing.paystack_billing import (
+from app.modules.billing.domain.billing.paystack_billing import (
     PaystackClient, BillingService, WebhookHandler, 
     SubscriptionStatus
 )
@@ -22,7 +22,7 @@ def mock_db():
 
 @pytest.fixture
 def mock_settings():
-    with patch("app.modules.reporting.domain.billing.paystack_billing.settings") as m:
+    with patch("app.modules.billing.domain.billing.paystack_billing.settings") as m:
         m.PAYSTACK_SECRET_KEY = "sk_test_123"
         m.PAYSTACK_PLAN_STARTER = "PLN_1"
         m.PAYSTACK_PLAN_GROWTH = "PLN_2"
@@ -33,7 +33,7 @@ def mock_settings():
 class TestPaystackClient:
     @pytest.mark.asyncio
     async def test_paystack_client_init_error(self):
-        with patch("app.modules.reporting.domain.billing.paystack_billing.settings") as m:
+        with patch("app.modules.billing.domain.billing.paystack_billing.settings") as m:
             m.PAYSTACK_SECRET_KEY = None
             with pytest.raises(ValueError, match="PAYSTACK_SECRET_KEY not configured"):
                 PaystackClient()
@@ -62,22 +62,22 @@ class TestBillingService:
     @pytest.mark.asyncio
     async def test_create_checkout_session_trial_error(self, mock_db, mock_settings):
         # Patch client initialization or handle it carefully
-        with patch("app.modules.reporting.domain.billing.paystack_billing.PaystackClient"):
+        with patch("app.modules.billing.domain.billing.paystack_billing.PaystackClient"):
             service = BillingService(mock_db)
-            with pytest.raises(ValueError, match="Cannot checkout trial tier"):
-                await service.create_checkout_session(uuid4(), PricingTier.TRIAL, "e@e.com", "http://url")
+            with pytest.raises(ValueError, match="Cannot checkout free_trial tier"):
+                await service.create_checkout_session(uuid4(), PricingTier.FREE_TRIAL, "e@e.com", "http://url")
 
     @pytest.mark.asyncio
     async def test_create_checkout_session_success(self, mock_db, mock_settings):
         tenant_id = uuid4()
-        with patch("app.modules.reporting.domain.billing.paystack_billing.PaystackClient") as MockClient:
+        with patch("app.modules.billing.domain.billing.paystack_billing.PaystackClient") as MockClient:
             mock_client_instance = MockClient.return_value
             mock_client_instance.initialize_transaction = AsyncMock(return_value={"data": {"authorization_url": "http://pay", "reference": "ref1"}})
             
             service = BillingService(mock_db)
             
-            with patch("app.modules.reporting.domain.billing.currency.ExchangeRateService.get_ngn_rate", return_value=1500.0), \
-                 patch("app.modules.reporting.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn", return_value=1500000):
+            with patch("app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate", return_value=1500.0), \
+                 patch("app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn", return_value=1500000):
                 
                 mock_db.execute.return_value = MagicMock(scalar_one_or_none=lambda: None)
                 
@@ -87,7 +87,7 @@ class TestBillingService:
 
     @pytest.mark.asyncio
     async def test_charge_renewal_no_auth_code(self, mock_db, mock_settings):
-        with patch("app.modules.reporting.domain.billing.paystack_billing.PaystackClient"):
+        with patch("app.modules.billing.domain.billing.paystack_billing.PaystackClient"):
             service = BillingService(mock_db)
             sub = MagicMock()
             sub.paystack_auth_code = None
@@ -97,7 +97,7 @@ class TestBillingService:
     @pytest.mark.asyncio
     async def test_charge_renewal_success(self, mock_db, mock_settings):
         tenant_id = uuid4()
-        with patch("app.modules.reporting.domain.billing.paystack_billing.PaystackClient") as MockClient:
+        with patch("app.modules.billing.domain.billing.paystack_billing.PaystackClient") as MockClient:
             mock_client_instance = MockClient.return_value
             mock_client_instance.charge_authorization = AsyncMock(return_value={"status": True, "data": {"status": "success"}})
             
@@ -107,8 +107,8 @@ class TestBillingService:
             sub.tenant_id = tenant_id
             sub.tier = "starter"
             
-            with patch("app.modules.reporting.domain.billing.paystack_billing.decrypt_string", return_value="AUTH_123"), \
-                 patch("app.modules.reporting.domain.billing.currency.ExchangeRateService") as MockExchangeService, \
+            with patch("app.modules.billing.domain.billing.paystack_billing.decrypt_string", return_value="AUTH_123"), \
+                 patch("app.modules.billing.domain.billing.currency.ExchangeRateService") as MockExchangeService, \
                  patch("app.shared.core.security.decrypt_string", return_value="user@email.com"):
                 
                 # Mock Exchange Service instance
@@ -126,7 +126,7 @@ class TestBillingService:
                 
                 mock_db.execute.side_effect = [mock_plan_res, mock_user_res]
                 
-                with patch("app.modules.reporting.domain.billing.paystack_billing.logger") as mock_logger:
+                with patch("app.modules.billing.domain.billing.paystack_billing.logger") as mock_logger:
                     res = await service.charge_renewal(sub)
                     
                     # Add failure info if assertions fail
@@ -170,7 +170,7 @@ class TestWebhookHandler:
         
         signature = hmac.new(b"sk_test_123", payload, hashlib.sha512).hexdigest()
         
-        with patch("app.modules.reporting.domain.billing.paystack_billing.encrypt_string", return_value="encrypted_auth"):
+        with patch("app.modules.billing.domain.billing.paystack_billing.encrypt_string", return_value="encrypted_auth"):
             mock_db.execute.return_value = MagicMock(scalar_one_or_none=lambda: None)
             res = await handler.handle(payload, signature)
             assert res == {"status": "success"}
@@ -233,6 +233,6 @@ class TestWebhookHandler:
         sub.id = uuid4()
         mock_db.execute.return_value = MagicMock(scalar_one_or_none=lambda: sub)
         
-        with patch("app.modules.reporting.domain.billing.dunning_service.DunningService.process_failed_payment", new_callable=AsyncMock) as mock_dunning:
+        with patch("app.modules.billing.domain.billing.dunning_service.DunningService.process_failed_payment", new_callable=AsyncMock) as mock_dunning:
             await handler.handle(payload, signature)
             mock_dunning.assert_called_once_with(sub.id, is_webhook=True)

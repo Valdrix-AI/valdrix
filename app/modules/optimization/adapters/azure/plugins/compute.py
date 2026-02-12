@@ -21,13 +21,26 @@ class IdleVmsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_azure_vms"
     
-    async def scan(self, subscription_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """
         Scan for idle Azure VMs.
         
         Uses cost_records from Cost Management export for zero-cost detection.
         Falls back to Resource Graph if cost data unavailable.
         """
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            logger.warning("azure_scan_missing_subscription_id", plugin=self.category_key)
+            return []
+
         cost_records = kwargs.get("cost_records")
         
         # Cost-First: Use cost export data
@@ -43,13 +56,20 @@ class IdleVmsPlugin(ZombiePlugin):
             
             async for vm in client.virtual_machines.list_all():
                 # Check for GPU VMs (NC, ND, NV series)
-                vm_size = vm.hardware_profile.vm_size.lower()
+                vm_size_raw = getattr(getattr(vm, "hardware_profile", None), "vm_size", None)
+                if not vm_size_raw:
+                    continue
+                vm_size = vm_size_raw.lower()
                 is_gpu = any(series in vm_size for series in ["standard_nc", "standard_nd", "standard_nv"])
                 
                 if is_gpu and vm.instance_view and vm.instance_view.statuses:
                     power_state = next(
-                        (s.code for s in vm.instance_view.statuses if s.code.startswith("PowerState/")),
-                        None
+                        (
+                            s.code
+                            for s in vm.instance_view.statuses
+                            if s.code and s.code.startswith("PowerState/")
+                        ),
+                        None,
                     )
                     
                     if power_state == "PowerState/running":
@@ -58,7 +78,7 @@ class IdleVmsPlugin(ZombiePlugin):
                             "resource_name": vm.name,
                             "resource_type": "Virtual Machine (GPU)",
                             "location": vm.location,
-                            "vm_size": vm.hardware_profile.vm_size,
+                            "vm_size": vm_size_raw,
                             "recommendation": "Review GPU VM utilization",
                             "action": "review_vm",
                             "confidence_score": 0.60,
@@ -78,8 +98,21 @@ class IdleGpuVmsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_azure_gpu_vms"
     
-    async def scan(self, subscription_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for idle GPU VMs."""
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            logger.warning("azure_scan_missing_subscription_id", plugin=self.category_key)
+            return []
+
         cost_records = kwargs.get("cost_records")
         
         if cost_records:

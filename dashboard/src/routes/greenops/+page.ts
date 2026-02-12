@@ -16,7 +16,8 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 			selectedRegion,
 			carbonData: null,
 			gravitonData: null,
-			budgetData: null
+			budgetData: null,
+			intensityData: null
 		};
 	}
 
@@ -30,7 +31,7 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 				`${PUBLIC_API_URL}/carbon?start_date=${startDate}&end_date=${endDate}&region=${selectedRegion}`,
 				{ headers }
 			),
-			fetch(`${PUBLIC_API_URL}/graviton?region=${selectedRegion}`, { headers }),
+			fetch(`${PUBLIC_API_URL}/carbon/graviton?region=${selectedRegion}`, { headers }),
 			fetch(`${PUBLIC_API_URL}/carbon/budget?region=${selectedRegion}`, { headers }),
 			fetch(`${PUBLIC_API_URL}/carbon/intensity?region=${selectedRegion}&hours=24`, { headers })
 		]);
@@ -39,7 +40,6 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 		const gravitonData = gravitonRes.ok ? await gravitonRes.json() : null;
 		const budgetData = budgetRes.ok ? await budgetRes.json() : null;
 		const intensityData = intensityRes.ok ? await intensityRes.json() : null;
-
 
 		let error = '';
 		if (!carbonRes.ok && carbonRes.status === 401) {
@@ -62,6 +62,7 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 			carbonData: null,
 			gravitonData: null,
 			budgetData: null,
+			intensityData: null,
 			error: 'Network error fetching sustainability data'
 		};
 	}

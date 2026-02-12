@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 import structlog
 from google.oauth2 import service_account
 from app.modules.optimization.domain.ports import BaseZombieDetector
@@ -43,7 +43,8 @@ class GCPZombieDetector(BaseZombieDetector):
                 import json
                 try:
                     info = json.loads(connection.service_account_json)
-                    self._credentials_obj = service_account.Credentials.from_service_account_info(info)
+                    credentials_cls = cast(Any, service_account.Credentials)
+                    self._credentials_obj = credentials_cls.from_service_account_info(info)
                 except Exception as exc:
                     self._credentials_error = str(exc)
                     logger.error("gcp_detector_invalid_service_account_json", error=str(exc))
@@ -54,7 +55,8 @@ class GCPZombieDetector(BaseZombieDetector):
                 import json
                 try:
                     info = json.loads(credentials["service_account_json"])
-                    self._credentials_obj = service_account.Credentials.from_service_account_info(info)
+                    credentials_cls = cast(Any, service_account.Credentials)
+                    self._credentials_obj = credentials_cls.from_service_account_info(info)
                     if not self.project_id:
                         self.project_id = info.get("project_id")
                 except Exception as exc:
@@ -70,7 +72,7 @@ class GCPZombieDetector(BaseZombieDetector):
     def provider_name(self) -> str:
         return "gcp"
 
-    def _initialize_plugins(self):
+    def _initialize_plugins(self) -> None:
         """Register the standard suite of GCP detections."""
         plugins = registry.get_plugins_for_provider("gcp")
         self.plugins = [p for p in plugins if p.category_key in self.ALLOWED_PLUGIN_CATEGORIES]
@@ -91,6 +93,7 @@ class GCPZombieDetector(BaseZombieDetector):
 
         try:
             results = await plugin.scan(
+                session=None,
                 project_id=self.project_id,
                 credentials=self._credentials_obj,
                 region=self.region

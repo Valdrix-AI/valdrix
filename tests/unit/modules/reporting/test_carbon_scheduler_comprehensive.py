@@ -4,15 +4,14 @@ Covers scheduling decisions, region ranking, carbon intensity forecast, and work
 """
 
 import pytest
-from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 from app.modules.reporting.domain.carbon_scheduler import (
     CarbonAwareScheduler,
     CarbonIntensity,
     RegionCarbonProfile,
     REGION_CARBON_PROFILES,
-    validate_carbon_data_freshness,
 )
 
 
@@ -381,7 +380,7 @@ class TestWorkloadDeferralLogic:
         
         # Test various regions
         low_carbon_defer = await scheduler.should_defer_workload("eu-north-1", workload_type="standard")
-        high_carbon_defer = await scheduler.should_defer_workload("ap-south-1", workload_type="standard")
+        await scheduler.should_defer_workload("ap-south-1", workload_type="standard")
         
         # Low-carbon should not defer
         assert low_carbon_defer is False

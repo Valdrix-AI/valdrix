@@ -81,7 +81,7 @@ export const handle: Handle = async ({ event, resolve }) => {
  */
 export const handleError: import('@sveltejs/kit').HandleServerError = ({ error, event }) => {
 	const errorId = crypto.randomUUID();
-	
+
 	console.error('Unhandled server error:', {
 		errorId,
 		error: error instanceof Error ? error.message : error,
@@ -95,4 +95,3 @@ export const handleError: import('@sveltejs/kit').HandleServerError = ({ error, 
 		code: 'INTERNAL_SERVER_ERROR'
 	};
 };
-

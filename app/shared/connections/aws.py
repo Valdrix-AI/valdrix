@@ -1,6 +1,7 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from typing import Any
 import structlog
 from app.models.aws_connection import AWSConnection
 from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
@@ -13,7 +14,7 @@ class AWSConnectionService:
         self.db = db
 
     @staticmethod
-    def get_setup_templates(external_id: str) -> dict:
+    def get_setup_templates(external_id: str) -> dict[str, Any]:
         """
         Returns CloudFormation and Terraform snippets for provisioning the Valdrix role.
         """
@@ -27,7 +28,7 @@ class AWSConnectionService:
             "permissions_summary": ["sts:AssumeRole", "ce:GetCostAndUsage"]
         }
 
-    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict:
+    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict[str, Any]:
         """
         Verifies that the STS AssumeRole works for the given connection.
         """

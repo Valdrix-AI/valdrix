@@ -5,12 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
-from app.models.tenant import User, Tenant
-from app.models.llm import LLMUsage, LLMBudget
-from app.models.background_job import BackgroundJob
-from app.models.aws_connection import AWSConnection
-from app.models.notification_settings import NotificationSettings
-from app.models.pricing import PricingPlan
+from app.models.tenant import User
 
 async def stress_test_leaderboard(n_users=100, n_remediations=5000):
     """

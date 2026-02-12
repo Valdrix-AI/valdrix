@@ -20,8 +20,21 @@ class IdleAksClusterPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_azure_aks"
     
-    async def scan(self, subscription_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for AKS clusters with control plane costs but no nodes."""
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            logger.warning("azure_scan_missing_subscription_id", plugin=self.category_key)
+            return []
+
         cost_records = kwargs.get("cost_records")
         
         if cost_records:
@@ -71,8 +84,21 @@ class UnusedAppServicePlansPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "unused_azure_app_service_plans"
     
-    async def scan(self, subscription_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for App Service Plans with no apps deployed."""
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            logger.warning("azure_scan_missing_subscription_id", plugin=self.category_key)
+            return []
+
         cost_records = kwargs.get("cost_records")
         
         if cost_records:

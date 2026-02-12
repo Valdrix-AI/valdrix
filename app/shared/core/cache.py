@@ -14,10 +14,11 @@ Uses Upstash free tier (10K commands/day) which is sufficient for:
 import json
 import hashlib
 import structlog
-from typing import Optional, Any, Dict, Callable
+from typing import Any, Optional
 from uuid import UUID
 from datetime import timedelta
 from functools import wraps
+from collections.abc import Callable
 
 from upstash_redis import Redis
 from upstash_redis.asyncio import Redis as AsyncRedis
@@ -93,33 +94,33 @@ class CacheService:
     Falls back gracefully when Redis is not configured.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.client = _get_async_client()
         self.enabled = self.client is not None
     
-    async def get_analysis(self, tenant_id: UUID) -> Optional[dict]:
+    async def get_analysis(self, tenant_id: UUID) -> Optional[dict[str, Any]]:
         """Get cached LLM analysis for a tenant."""
         key = f"{PREFIX_ANALYSIS}:{tenant_id}"
         return await self._get(key)
     
-    async def set_analysis(self, tenant_id: UUID, analysis: dict) -> bool:
+    async def set_analysis(self, tenant_id: UUID, analysis: dict[str, Any]) -> bool:
         """Cache LLM analysis with 24h TTL."""
         key = f"{PREFIX_ANALYSIS}:{tenant_id}"
         return await self._set(key, analysis, ANALYSIS_TTL)
     
-    async def get_cost_data(self, tenant_id: UUID, date_range: str) -> Optional[list]:
+    async def get_cost_data(self, tenant_id: UUID, date_range: str) -> Optional[list[Any]]:
         """Get cached cost data for a tenant and date range."""
         key = f"{PREFIX_COSTS}:{tenant_id}:{date_range}"
         return await self._get(key)
     
-    async def set_cost_data(self, tenant_id: UUID, date_range: str, costs: list) -> bool:
+    async def set_cost_data(self, tenant_id: UUID, date_range: str, costs: list[Any]) -> bool:
         """Cache cost data with 6h TTL."""
         key = f"{PREFIX_COSTS}:{tenant_id}:{date_range}"
         return await self._set(key, costs, COST_DATA_TTL)
     
     async def invalidate_tenant(self, tenant_id: UUID) -> bool:
         """Invalidate all cache entries for a tenant."""
-        if not self.enabled:
+        if not self.enabled or self.client is None:
             return False
         try:
             await self.client.delete(f"{PREFIX_ANALYSIS}:{tenant_id}")
@@ -139,15 +140,29 @@ class CacheService:
 
     async def delete_pattern(self, pattern: str) -> bool:
         """Delete keys matching pattern."""
-        if not self.enabled:
+        if not self.enabled or self.client is None:
             return False
         try:
-            keys = []
-            async for key in self.client.scan_iter(match=pattern):
-                keys.append(key)
-            if keys:
-                await self.client.delete(*keys)
-                logger.info("cache_pattern_deleted", pattern=pattern, count=len(keys))
+            scan_iter = getattr(self.client, "scan_iter", None)
+            if callable(scan_iter):
+                keys = [key async for key in scan_iter(match=pattern)]
+                if keys:
+                    await self.client.delete(*keys)
+                    logger.info("cache_pattern_deleted", pattern=pattern, count=len(keys))
+                return True
+
+            cursor = 0
+            total_deleted = 0
+            while True:
+                next_cursor, keys = await self.client.scan(cursor, match=pattern, count=100)
+                if keys:
+                    await self.client.delete(*keys)
+                    total_deleted += len(keys)
+                cursor = int(next_cursor)
+                if cursor == 0:
+                    break
+            if total_deleted > 0:
+                logger.info("cache_pattern_deleted", pattern=pattern, count=total_deleted)
             return True
         except Exception as e:
             logger.warning("cache_delete_pattern_error", pattern=pattern, error=str(e))
@@ -155,7 +170,7 @@ class CacheService:
 
     async def _get(self, key: str) -> Optional[Any]:
         """Internal helper for Redis GET with error handling."""
-        if not self.enabled:
+        if not self.enabled or self.client is None:
             return None
         try:
             data = await self.client.get(key)
@@ -181,7 +196,7 @@ class CacheService:
 
     async def _set(self, key: str, value: Any, ttl: timedelta) -> bool:
         """Internal helper for Redis SET with error handling."""
-        if not self.enabled:
+        if not self.enabled or self.client is None:
             return False
         try:
             await self.client.set(
@@ -199,12 +214,12 @@ class CacheService:
 class QueryCache:
     """Query result caching with automatic invalidation."""
 
-    def __init__(self, redis_client=None, default_ttl: int = 300):
+    def __init__(self, redis_client: Any = None, default_ttl: int = 300) -> None:
         self.redis = redis_client
         self.default_ttl = default_ttl
         self.enabled = redis_client is not None
 
-    def _make_cache_key(self, query: str, params: Dict[str, Any], tenant_id: Optional[str] = None) -> str:
+    def _make_cache_key(self, query: str, params: dict[str, Any], tenant_id: Optional[str] = None) -> str:
         """Generate deterministic cache key from query and parameters."""
         key_data = {
             "query": query,
@@ -219,7 +234,7 @@ class QueryCache:
 
     async def get_cached_result(self, cache_key: str) -> Optional[Any]:
         """Retrieve cached query result."""
-        if not self.enabled:
+        if not self.enabled or self.redis is None:
             return None
 
         try:
@@ -254,7 +269,7 @@ class QueryCache:
 
     async def set_cached_result(self, cache_key: str, result: Any, ttl: Optional[int] = None) -> None:
         """Cache query result with TTL."""
-        if not self.enabled:
+        if not self.enabled or self.redis is None:
             return
 
         try:
@@ -266,7 +281,7 @@ class QueryCache:
 
     async def invalidate_tenant_cache(self, tenant_id: str) -> None:
         """Invalidate all cached queries for a tenant."""
-        if not self.enabled:
+        if not self.enabled or self.redis is None:
             return
 
         try:
@@ -283,7 +298,11 @@ class QueryCache:
         except Exception as e:
             logger.warning("cache_invalidation_error", error=str(e), tenant_id=tenant_id)
 
-    def cached_query(self, ttl: Optional[int] = None, tenant_aware: bool = True):
+    def cached_query(
+        self,
+        ttl: Optional[int] = None,
+        tenant_aware: bool = True,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """
         Decorator for caching SQLAlchemy query results.
 
@@ -292,9 +311,9 @@ class QueryCache:
             async def get_tenant_connections(db, tenant_id):
                 return await db.execute(select(AWSConnection).where(...))
         """
-        def decorator(func: Callable) -> Callable:
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             @wraps(func)
-            async def wrapper(*args, **kwargs):
+            async def wrapper(*args: Any, **kwargs: Any) -> Any:
                 if not self.enabled:
                     return await func(*args, **kwargs)
 

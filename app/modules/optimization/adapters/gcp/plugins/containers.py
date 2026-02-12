@@ -3,6 +3,7 @@ GCP Container Plugins - Zero-Cost Zombie Detection.
 
 Detects empty GKE clusters and idle Cloud Run services.
 """
+import importlib
 from typing import List, Dict, Any
 import structlog
 
@@ -20,8 +21,21 @@ class EmptyGkeClusterPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "empty_gke_clusters"
     
-    async def scan(self, project_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for GKE clusters with control plane costs but no nodes."""
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            logger.warning("gcp_scan_missing_project_id", plugin=self.category_key)
+            return []
+
         billing_records = kwargs.get("billing_records")
         
         if billing_records:
@@ -32,7 +46,7 @@ class EmptyGkeClusterPlugin(ZombiePlugin):
         # Fallback: Check for clusters with 0 nodes
         zombies = []
         try:
-            from google.cloud import container_v1
+            container_v1 = importlib.import_module("google.cloud.container_v1")
             client = container_v1.ClusterManagerClient(credentials=credentials)
             
             parent = f"projects/{project_id}/locations/-"
@@ -73,8 +87,21 @@ class IdleCloudRunPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_cloud_run"
     
-    async def scan(self, project_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for Cloud Run services with no traffic."""
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            logger.warning("gcp_scan_missing_project_id", plugin=self.category_key)
+            return []
+
         billing_records = kwargs.get("billing_records")
         
         if billing_records:
@@ -94,8 +121,21 @@ class IdleCloudFunctionsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_cloud_functions"
     
-    async def scan(self, project_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for Cloud Functions with no invocations."""
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            logger.warning("gcp_scan_missing_project_id", plugin=self.category_key)
+            return []
+
         billing_records = kwargs.get("billing_records")
         
         if billing_records:

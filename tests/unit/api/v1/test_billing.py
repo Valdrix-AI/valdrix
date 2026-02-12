@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
-from app.modules.reporting.api.v1.billing import (
+from app.modules.billing.api.v1.billing import (
     get_public_plans, 
     create_checkout, 
     handle_webhook,
@@ -13,12 +13,15 @@ from app.modules.reporting.api.v1.billing import (
     update_pricing_plan
 )
 from app.models.pricing import PricingPlan, ExchangeRate
-from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription
+from app.modules.billing.domain.billing.paystack_billing import TenantSubscription
 from app.shared.core.pricing import PricingTier
 
 @pytest.fixture
 def mock_db():
-    return AsyncMock()
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.add_all = MagicMock()
+    return db
 
 @pytest.fixture
 def mock_user():
@@ -57,8 +60,8 @@ async def test_get_public_plans_fallback_on_error(mock_db):
     assert len(plans) > 0
 
 @pytest.mark.asyncio
-@patch("app.modules.reporting.domain.billing.paystack_billing.BillingService")
-@patch("app.modules.reporting.api.v1.billing.settings")
+@patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
+@patch("app.modules.billing.api.v1.billing.settings")
 async def test_create_checkout_success(mock_settings, mock_billing_service_class, mock_db, mock_user):
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
     mock_settings.FRONTEND_URL = "https://app.valdrix.io"
@@ -80,8 +83,8 @@ async def test_create_checkout_success(mock_settings, mock_billing_service_class
     assert response["checkout_url"] == "http://checkout.url"
 
 @pytest.mark.asyncio
-@patch("app.modules.reporting.domain.billing.paystack_billing.BillingService")
-@patch("app.modules.reporting.api.v1.billing.settings")
+@patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
+@patch("app.modules.billing.api.v1.billing.settings")
 async def test_create_checkout_rejects_untrusted_callback(mock_settings, mock_billing_service_class, mock_db, mock_user):
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
     mock_settings.FRONTEND_URL = "https://app.valdrix.io"
@@ -99,9 +102,9 @@ async def test_create_checkout_rejects_untrusted_callback(mock_settings, mock_bi
     assert exc.value.status_code == 400
 
 @pytest.mark.asyncio
-@patch("app.modules.reporting.domain.billing.paystack_billing.WebhookHandler")
-@patch("app.modules.reporting.domain.billing.webhook_retry.WebhookRetryService")
-@patch("app.modules.reporting.api.v1.billing.settings")
+@patch("app.modules.billing.domain.billing.paystack_billing.WebhookHandler")
+@patch("app.modules.billing.domain.billing.webhook_retry.WebhookRetryService")
+@patch("app.modules.billing.api.v1.billing.settings")
 async def test_handle_webhook_success(mock_settings, mock_retry_class, mock_handler_class, mock_db):
     mock_settings.ENVIRONMENT = "development"
     request = AsyncMock()
@@ -151,7 +154,7 @@ async def test_get_features(mock_user):
         assert "f1" in response["features"]
 
 @pytest.mark.asyncio
-@patch("app.modules.reporting.domain.billing.paystack_billing.BillingService")
+@patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
 async def test_cancel_subscription_success(mock_billing_service_class, mock_db, mock_user):
     mock_billing = mock_billing_service_class.return_value
     mock_billing.cancel_subscription = AsyncMock()

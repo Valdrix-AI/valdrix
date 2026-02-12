@@ -20,9 +20,9 @@
 	import ProviderSelector from '$lib/components/ProviderSelector.svelte';
 	import AllocationBreakdown from '$lib/components/AllocationBreakdown.svelte';
 	import StatsGrid from '$lib/components/StatsGrid.svelte';
+	import UnitEconomicsCards from '$lib/components/UnitEconomicsCards.svelte';
 	import SavingsHero from '$lib/components/SavingsHero.svelte';
 	import FindingsTable from '$lib/components/FindingsTable.svelte';
-	import CarbonImpact from '$lib/components/CarbonImpact.svelte';
 	import GreenOpsWidget from '$lib/components/GreenOpsWidget.svelte';
 	import CloudDistributionMatrix from '$lib/components/CloudDistributionMatrix.svelte';
 	import ROAChart from '$lib/components/ROAChart.svelte';
@@ -33,8 +33,9 @@
 	let costs = $derived(data.costs);
 	let carbon = $derived(data.carbon);
 	let zombies = $derived(data.zombies);
-	let analysis = $derived(data.analysis);
+	let analysis = $derived(data.analysis as { analysis?: string } | null);
 	let allocation = $derived(data.allocation);
+	let unitEconomics = $derived(data.unitEconomics);
 	let freshness = $derived(data.freshness);
 	let error = $derived(data.error || '');
 	let startDate = $derived(data.startDate || '');
@@ -250,6 +251,8 @@
 				totalMonthlyWaste={zombies?.total_monthly_waste}
 				{periodLabel}
 			/>
+
+			<UnitEconomicsCards {unitEconomics} />
 
 			<!-- AI Insights - Interactive Cards -->
 			{#if zombies?.ai_analysis}

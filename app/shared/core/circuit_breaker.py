@@ -7,13 +7,15 @@ Implements the Circuit Breaker pattern to prevent cascade failures.
 import asyncio
 import time
 from enum import Enum
-from typing import Any, Callable, Optional, Dict, Union
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
+from typing import Any, Optional, TypeVar
+from dataclasses import dataclass
 import structlog
 
 from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
+T = TypeVar("T")
 
 
 class CircuitState(Enum):
@@ -29,7 +31,7 @@ class CircuitBreakerConfig:
     failure_threshold: int = 5  # Failures before opening
     success_threshold: int = 3  # Successes needed to close
     timeout: float = 60.0  # Recovery timeout in seconds
-    expected_exception: tuple = (Exception,)  # Exceptions that count as failures
+    expected_exception: tuple[type[Exception], ...] = (Exception,)  # Exceptions that count as failures
     name: str = "default"  # Circuit breaker name for logging
 
 
@@ -130,9 +132,9 @@ class CircuitBreaker:
             total_failures=self.metrics.total_failures
         )
 
-    def protect(self, func: Callable) -> Callable:
+    def protect(self, func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         """Decorator to protect a function with circuit breaker."""
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
             probe_lock = None
             async with self._lock:
                 # Check if circuit should attempt reset
@@ -183,12 +185,14 @@ class CircuitBreaker:
 
         return wrapper
 
-    async def call(self, func: Callable, *args, **kwargs):
+    async def call(
+        self, func: Callable[..., Awaitable[T]], *args: Any, **kwargs: Any
+    ) -> T:
         """Call a function with circuit breaker protection."""
         protected_func = self.protect(func)
         return await protected_func(*args, **kwargs)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get circuit breaker status for monitoring."""
         return {
             "name": self.config.name,
@@ -212,7 +216,7 @@ class CircuitBreaker:
 
 
 # Global circuit breaker registry
-_circuit_breakers: Dict[str, CircuitBreaker] = {}
+_circuit_breakers: dict[str, CircuitBreaker] = {}
 
 
 def get_circuit_breaker(name: str, config: Optional[CircuitBreakerConfig] = None) -> CircuitBreaker:
@@ -225,7 +229,7 @@ def get_circuit_breaker(name: str, config: Optional[CircuitBreakerConfig] = None
     return _circuit_breakers[name]
 
 
-def get_all_circuit_breakers() -> Dict[str, Dict[str, Any]]:
+def get_all_circuit_breakers() -> dict[str, dict[str, Any]]:
     """Get status of all circuit breakers for monitoring."""
     return {name: breaker.get_status() for name, breaker in _circuit_breakers.items()}
 

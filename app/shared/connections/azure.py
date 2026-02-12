@@ -1,4 +1,5 @@
 from uuid import UUID
+from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.azure_connection import AzureConnection
@@ -9,13 +10,13 @@ class AzureConnectionService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_connections(self, tenant_id: UUID):
+    async def list_connections(self, tenant_id: UUID) -> list[AzureConnection]:
         result = await self.db.execute(
             select(AzureConnection).where(AzureConnection.tenant_id == tenant_id)
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
-    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict:
+    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict[str, Any]:
         result = await self.db.execute(
             select(AzureConnection).where(
                 AzureConnection.id == connection_id,

@@ -1,5 +1,4 @@
 import pytest
-from typing import Dict
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
 from app.shared.llm.zombie_analyzer import ZombieAnalyzer
@@ -60,7 +59,7 @@ async def test_zombie_analyzer_claude_byok(zombie_analyzer):
     zombie_analyzer.prompt = MagicMock()
     zombie_analyzer.prompt.__or__.return_value = mock_chain
 
-    with patch("app.shared.llm.zombie_analyzer.get_settings") as mock_settings, \
+    with patch("app.shared.llm.zombie_analyzer.get_settings"), \
          patch("app.shared.llm.factory.LLMFactory", new_callable=MagicMock) as mock_factory, \
          patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails:
 
@@ -97,7 +96,7 @@ async def test_zombie_analyzer_gemini_byok(zombie_analyzer):
     zombie_analyzer.prompt = MagicMock()
     zombie_analyzer.prompt.__or__.return_value = mock_chain
 
-    with patch("app.shared.llm.zombie_analyzer.get_settings") as mock_settings, \
+    with patch("app.shared.llm.zombie_analyzer.get_settings"), \
          patch("app.shared.llm.factory.LLMFactory", new_callable=MagicMock) as mock_factory, \
          patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails:
 
@@ -154,7 +153,7 @@ async def test_zombie_analyzer_groq_byok(zombie_analyzer):
     zombie_analyzer.prompt = MagicMock()
     zombie_analyzer.prompt.__or__.return_value = mock_chain
 
-    with patch("app.shared.llm.zombie_analyzer.get_settings") as mock_settings, \
+    with patch("app.shared.llm.zombie_analyzer.get_settings"), \
          patch("app.shared.llm.factory.LLMFactory", new_callable=MagicMock) as mock_factory, \
          patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails:
 

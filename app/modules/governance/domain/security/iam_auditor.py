@@ -90,7 +90,7 @@ class IAMAuditor:
             logger.error("iam_audit_failed", error=str(e))
             return {"error": str(e), "status": "failed"}
 
-    def _analyze_policy_document(self, doc: Dict) -> Dict[str, List[str]]:
+    def _analyze_policy_document(self, doc: Dict[str, Any]) -> Dict[str, List[str]]:
         """
         Analyzes a policy document JSON for security risks.
         """

@@ -7,7 +7,7 @@ class ConnectionInstructionService:
     """
 
     @staticmethod
-    def get_azure_setup_snippet(tenant_id: str) -> dict:
+    def get_azure_setup_snippet(tenant_id: str) -> dict[str, str]:
         """Generate Azure Workload Identity setup instructions."""
         settings = get_settings()
         issuer = settings.API_URL.rstrip('/')
@@ -31,7 +31,7 @@ class ConnectionInstructionService:
         }
 
     @staticmethod
-    def get_gcp_setup_snippet(tenant_id: str) -> dict:
+    def get_gcp_setup_snippet(tenant_id: str) -> dict[str, str]:
         """Generate GCP Identity Federation setup instructions."""
         settings = get_settings()
         issuer = settings.API_URL.rstrip('/')

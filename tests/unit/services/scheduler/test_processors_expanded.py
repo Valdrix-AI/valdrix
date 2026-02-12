@@ -1,5 +1,4 @@
 import pytest
-from typing import Dict
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -21,6 +20,8 @@ def mock_tenant():
     tenant.notification_settings.digest_schedule = "daily"
     tenant.notification_settings.slack_channel_override = None
     tenant.aws_connections = [MagicMock()]
+    tenant.azure_connections = []
+    tenant.gcp_connections = []
     return tenant
 
 class TestAnalysisProcessorExpanded:
@@ -28,6 +29,8 @@ class TestAnalysisProcessorExpanded:
     async def test_process_tenant_no_connections(self, mock_db):
         tenant = MagicMock()
         tenant.aws_connections = []
+        tenant.azure_connections = []
+        tenant.gcp_connections = []
         with patch("app.modules.governance.domain.scheduler.processors.get_settings"):
             processor = AnalysisProcessor()
             result = await processor.process_tenant(mock_db, tenant, date.today(), date.today())
@@ -38,11 +41,11 @@ class TestAnalysisProcessorExpanded:
     async def test_process_tenant_timeout(self, mock_db, mock_tenant):
         with patch("app.modules.governance.domain.scheduler.processors.get_settings"):
             processor = AnalysisProcessor()
-            with patch("app.modules.governance.domain.scheduler.processors.MultiTenantAWSAdapter") as mock_adapter, \
+            with patch("app.modules.governance.domain.scheduler.processors.AdapterFactory") as mock_factory, \
                  patch("app.modules.governance.domain.scheduler.processors.LLMFactory"):
-                mock_adapter_instance = AsyncMock()
+                mock_adapter_instance = MagicMock()
                 mock_adapter_instance.get_daily_costs = AsyncMock(side_effect=asyncio.TimeoutError)
-                mock_adapter.return_value = mock_adapter_instance
+                mock_factory.get_adapter.return_value = mock_adapter_instance
 
                 await processor.process_tenant(mock_db, mock_tenant, date.today(), date.today())
                 # Logged error and continued
@@ -51,11 +54,11 @@ class TestAnalysisProcessorExpanded:
     async def test_process_tenant_exception(self, mock_db, mock_tenant):
         with patch("app.modules.governance.domain.scheduler.processors.get_settings"):
             processor = AnalysisProcessor()
-            with patch("app.modules.governance.domain.scheduler.processors.MultiTenantAWSAdapter") as mock_adapter, \
+            with patch("app.modules.governance.domain.scheduler.processors.AdapterFactory") as mock_factory, \
                  patch("app.modules.governance.domain.scheduler.processors.LLMFactory"):
-                mock_adapter_instance = AsyncMock()
+                mock_adapter_instance = MagicMock()
                 mock_adapter_instance.get_daily_costs.side_effect = Exception("Crash")
-                mock_adapter.return_value = mock_adapter_instance
+                mock_factory.get_adapter.return_value = mock_adapter_instance
                 await processor.process_tenant(mock_db, mock_tenant, date.today(), date.today())
                 # Logged error and continued
 
@@ -75,7 +78,7 @@ class TestSavingsProcessorExpanded:
             MagicMock(autonomous_ready=False, confidence="high", action="Delete volume", resource="vol-123", resource_type="EBS")
         ]
         
-        with patch("app.modules.optimization.domain.remediation_service.RemediationService"):
+        with patch("app.modules.optimization.domain.remediation.RemediationService"):
             await processor.process_recommendations(mock_db, tenant_id, mock_result)
             # Should not call remediation since autonomous_ready=False
 
@@ -125,7 +128,7 @@ class TestSavingsProcessorExpanded:
         mock_result = MagicMock()
         mock_result.recommendations = [mock_rec]
         
-        with patch("app.modules.optimization.domain.remediation_service.RemediationService"):
+        with patch("app.modules.optimization.domain.remediation.RemediationService"):
             # Should not raise, just skip unsupported actions
             await processor.process_recommendations(mock_db, tenant_id, mock_result)
 

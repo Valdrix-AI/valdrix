@@ -1,5 +1,6 @@
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from typing import List, Dict, Any, Optional
 import structlog
 from datetime import datetime, timezone
@@ -40,7 +41,7 @@ class BaseZombieDetector(ABC):
         self.plugins: List[ZombiePlugin] = [] 
 
     @abstractmethod
-    def _initialize_plugins(self):
+    def _initialize_plugins(self) -> None:
         """Register provider-specific plugins for the cloud service."""
 
     @property
@@ -48,7 +49,10 @@ class BaseZombieDetector(ABC):
     def provider_name(self) -> str:
         """The cloud provider identifier (e.g., 'aws')."""
 
-    async def scan_all(self, on_category_complete=None) -> Dict[str, Any]:
+    async def scan_all(
+        self,
+        on_category_complete: Callable[[str, list[dict[str, Any]]], Awaitable[None]] | None = None,
+    ) -> Dict[str, Any]:
         """
         Orchestrates the scan across all registered plugins in parallel.
         
@@ -76,7 +80,9 @@ class BaseZombieDetector(ABC):
             # Run plugins in parallel with timeout protection
             tasks = [self._run_plugin_with_timeout(plugin) for plugin in self.plugins]
             
-            async def run_and_checkpoint(task):
+            async def run_and_checkpoint(
+                task: Awaitable[tuple[str, list[dict[str, Any]]]]
+            ) -> tuple[str, list[dict[str, Any]]]:
                 cat_key, items = await task
                 if on_category_complete:
                     await on_category_complete(cat_key, items)
@@ -108,9 +114,9 @@ class BaseZombieDetector(ABC):
 
             # Calculate the total monthly waste across all items
             total = Decimal("0")
-            for items in results.values():
-                if isinstance(items, list):
-                    for item in items:
+            for result_value in results.values():
+                if isinstance(result_value, list):
+                    for item in result_value:
                         total += Decimal(str(item.get("monthly_cost", 0)))
             
             results["total_monthly_waste"] = float(round(total, 2))
@@ -132,7 +138,9 @@ class BaseZombieDetector(ABC):
 
         return results
 
-    async def _run_plugin_with_timeout(self, plugin: ZombiePlugin) -> tuple[str, List[Dict]]:
+    async def _run_plugin_with_timeout(
+        self, plugin: ZombiePlugin
+    ) -> tuple[str, list[dict[str, Any]]]:
         """Wraps plugin execution with a generic timeout."""
         try:
             scan_coro = self._execute_plugin_scan(plugin)

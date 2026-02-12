@@ -1,20 +1,24 @@
 import pytest
 import uuid
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock, patch
-from app.shared.core.exceptions import ValdrixException
+from unittest.mock import MagicMock, AsyncMock
 from app.modules.optimization.domain.remediation import RemediationService, RemediationAction
 from app.models.remediation import RemediationStatus
 
 @pytest.fixture
 def mock_db():
-    db = AsyncMock()
+    db = MagicMock()
     # default result for safety checks
     mock_result = MagicMock()
     mock_result.scalar.return_value = Decimal("0")
     mock_result.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock()
     db.execute.return_value = mock_result
+    db.add = MagicMock()
+    db.add_all = MagicMock()
     db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.flush = AsyncMock()
     return db
 
 @pytest.fixture

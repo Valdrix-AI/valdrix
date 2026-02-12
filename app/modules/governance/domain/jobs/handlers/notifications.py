@@ -102,7 +102,7 @@ class WebhookRetryHandler(BaseJobHandler):
         provider = payload.get("provider", "generic")
         
         if provider == "paystack":
-            from app.modules.reporting.domain.billing.webhook_retry import process_paystack_webhook
+            from app.modules.billing.domain.billing.webhook_retry import process_paystack_webhook
             return await process_paystack_webhook(job, db)
         
         # Generic HTTP webhook retry

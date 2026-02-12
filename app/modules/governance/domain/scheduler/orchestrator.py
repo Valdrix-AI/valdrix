@@ -279,6 +279,9 @@ class SchedulerOrchestrator:
         self.scheduler.start()
 
     def stop(self) -> None:
+        if not self.scheduler.running:
+            logger.debug("scheduler_stop_skipped_not_running")
+            return
         self.scheduler.shutdown(wait=True)
 
     def get_status(self) -> Dict[str, Any]:

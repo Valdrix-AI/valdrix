@@ -3,7 +3,7 @@ import json
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from typing import Annotated, Dict, Any, Callable, Awaitable, cast
+from typing import Annotated, Dict, Any, Callable, Awaitable, cast, AsyncGenerator, List, Sequence
 from fastapi import FastAPI, Depends, Request, HTTPException, Response
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.staticfiles import StaticFiles
@@ -35,6 +35,8 @@ import app.models.tenant
 import app.models.aws_connection
 import app.models.azure_connection
 import app.models.gcp_connection
+import app.models.saas_connection
+import app.models.license_connection
 import app.models.llm
 import app.models.notification_settings
 import app.models.remediation
@@ -48,6 +50,7 @@ import app.models.pricing
 import app.models.security
 import app.models.anomaly_marker
 import app.models.optimization
+import app.models.unit_economics_settings
 import app.modules.governance.domain.security.audit_log
 
 
@@ -56,11 +59,12 @@ from app.modules.governance.api.v1.settings.connections import router as connect
 from app.modules.governance.api.v1.settings import router as settings_router
 from app.modules.reporting.api.v1.leaderboards import router as leaderboards_router
 from app.modules.reporting.api.v1.costs import router as costs_router
+from app.modules.reporting.api.v1.attribution import router as attribution_router
 from app.modules.reporting.api.v1.carbon import router as carbon_router
 from app.modules.optimization.api.v1.zombies import router as zombies_router
 from app.modules.optimization.api.v1.strategies import router as strategies_router
 from app.modules.governance.api.v1.admin import router as admin_router
-from app.modules.reporting.api.v1.billing import router as billing_router
+from app.modules.billing.api.v1.billing import router as billing_router
 from app.modules.governance.api.v1.audit import router as audit_router
 from app.modules.governance.api.v1.jobs import router as jobs_router
 from app.modules.governance.api.v1.health_dashboard import router as health_dashboard_router
@@ -70,16 +74,16 @@ from app.modules.governance.api.v1.public import router as public_router
 from app.modules.reporting.api.v1.currency import router as currency_router
 
 # Configure logging and Sentry
-setup_logging()  # type: ignore[no-untyped-call]
+setup_logging()
 init_sentry()
 settings = get_settings()
 
 class CsrfSettings(BaseModel):
     """Configuration for CSRF protection."""
-    secret_key: str = cast(str, settings.CSRF_SECRET_KEY)
+    secret_key: str = settings.CSRF_SECRET_KEY
     cookie_samesite: str = "lax"
 
-@CsrfProtect.load_config
+@CsrfProtect.load_config # type: ignore[arg-type]
 def get_csrf_config() -> CsrfSettings:
     return CsrfSettings()
 
@@ -88,7 +92,7 @@ logger = structlog.get_logger()
 def _is_test_mode() -> bool:
     return settings.TESTING or os.getenv("PYTEST_CURRENT_TEST") is not None
 
-def _load_emissions_tracker():
+def _load_emissions_tracker() -> Any:
     if _is_test_mode():
         return None
     try:
@@ -108,7 +112,7 @@ def _load_emissions_tracker():
 EmissionsTracker = _load_emissions_tracker()
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> Any:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Setup: Initialize scheduler and emissions tracker
     logger.info("app_starting", app_name=settings.APP_NAME)
 
@@ -133,9 +137,9 @@ async def lifespan(app: FastAPI) -> Any:
     # Pass shared session factory to scheduler (DI pattern)
     # Lazy import to avoid Celery blocking on module load
     from app.modules.governance.domain.scheduler import SchedulerService
-    scheduler = SchedulerService(session_maker=async_session_maker)  # type: ignore[no-untyped-call]
+    scheduler = SchedulerService(session_maker=async_session_maker)
     if not settings.TESTING and settings.REDIS_URL:
-        scheduler.start()  # type: ignore[no-untyped-call]
+        scheduler.start()
         logger.info("scheduler_started")
     elif settings.TESTING:
         logger.info("scheduler_skipped_in_testing")
@@ -180,7 +184,7 @@ app = valdrix_app # type: ignore[assignment]
 router = valdrix_app
 
 # Initialize Tracing
-setup_tracing(app)  # type: ignore[no-untyped-call]
+setup_tracing(valdrix_app)
 
 @valdrix_app.exception_handler(ValdrixException)
 async def valdrix_exception_handler(request: Request, exc: ValdrixException) -> JSONResponse:
@@ -247,7 +251,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         except Exception:
             return str(value)
 
-    def _sanitize_errors(errors: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    def _sanitize_errors(errors: Sequence[Any]) -> List[Dict[str, Any]]:
         sanitized = []
         for err in errors:
             clean = dict(err)
@@ -297,7 +301,7 @@ setup_rate_limiting(valdrix_app)
 valdrix_app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @valdrix_app.get("/docs", include_in_schema=False)
-async def custom_swagger_ui_html():
+async def custom_swagger_ui_html() -> Any:
     return get_swagger_ui_html(
         openapi_url=valdrix_app.openapi_url, # type: ignore
         title=valdrix_app.title + " - Swagger UI",
@@ -308,7 +312,7 @@ async def custom_swagger_ui_html():
     )
 
 @valdrix_app.get("/redoc", include_in_schema=False)
-async def redoc_html():
+async def redoc_html() -> Any:
     return get_redoc_html(
         openapi_url=valdrix_app.openapi_url, # type: ignore
         title=valdrix_app.title + " - ReDoc",
@@ -466,6 +470,7 @@ valdrix_app.include_router(connections_router, prefix="/api/v1/settings/connecti
 valdrix_app.include_router(settings_router, prefix="/api/v1/settings")
 valdrix_app.include_router(leaderboards_router, prefix="/api/v1/leaderboards")
 valdrix_app.include_router(costs_router, prefix="/api/v1/costs")
+valdrix_app.include_router(attribution_router, prefix="/api/v1/attribution")
 valdrix_app.include_router(carbon_router, prefix="/api/v1/carbon")
 valdrix_app.include_router(zombies_router, prefix="/api/v1/zombies")
 valdrix_app.include_router(strategies_router, prefix="/api/v1/strategies")

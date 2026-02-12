@@ -11,7 +11,7 @@ Covers:
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from app.modules.reporting.domain.billing.webhook_retry import (
+from app.modules.billing.domain.billing.webhook_retry import (
     WebhookRetryService,
     WEBHOOK_MAX_ATTEMPTS
 )

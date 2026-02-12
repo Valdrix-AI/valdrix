@@ -28,7 +28,7 @@ class BaseAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def stream_cost_and_usage(
+    def stream_cost_and_usage(
         self,
         start_date: datetime,
         end_date: datetime,

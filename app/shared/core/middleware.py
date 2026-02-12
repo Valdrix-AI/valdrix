@@ -1,4 +1,6 @@
+from collections.abc import Awaitable, Callable
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from fastapi import Request
 import uuid
 import structlog
@@ -6,7 +8,9 @@ from app.shared.core.config import get_settings
 from app.shared.core.tracing import set_correlation_id
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         settings = get_settings()
 
         response = await call_next(request)
@@ -62,7 +66,9 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     NOTE: This middleware trusts the X-Request-ID header if provided by the client.
     This is intended for correlation and debugging, not as a security principal.
     """
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
         
         # Set unified tracing context

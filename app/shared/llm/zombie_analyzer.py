@@ -156,8 +156,14 @@ class ZombieAnalyzer:
             await self._record_usage(db, tenant_id, effective_provider, effective_model, response, byok_key is not None)
 
         # 6. Parse and Validate
+        response_content = response.content
+        response_text = (
+            response_content
+            if isinstance(response_content, str)
+            else json.dumps(response_content, default=str)
+        )
         try:
-            validated_result = LLMGuardrails.validate_output(response.content, ZombieAnalysisResult)
+            validated_result = LLMGuardrails.validate_output(response_text, ZombieAnalysisResult)
             analysis = validated_result.model_dump()
             logger.info("zombie_analysis_complete", resource_count=len(analysis.get("resources", [])))
             return analysis
@@ -168,7 +174,7 @@ class ZombieAnalyzer:
                 "total_monthly_savings": f"${detection_results.get('total_monthly_waste', 0):.2f}",
                 "resources": [],
                 "general_recommendations": ["Review detected resources manually."],
-                "raw_response": response.content,
+                "raw_response": response_text,
                 "parse_error": str(e)
             }
 
@@ -240,4 +246,3 @@ class ZombieAnalyzer:
             logger.warning("zombie_usage_tracking_failed", 
                            tenant_id=str(tenant_id),
                            error=str(e))
-

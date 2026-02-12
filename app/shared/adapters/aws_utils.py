@@ -1,5 +1,5 @@
 import aioboto3
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from botocore.config import Config as BotoConfig
 from app.models.aws_connection import AWSConnection
 
@@ -42,9 +42,9 @@ def get_boto_session() -> aioboto3.Session:
 async def get_aws_client(
     service_name: str, 
     connection: Optional[AWSConnection] = None,
-    credentials: Optional[Dict] = None,
+    credentials: Optional[Dict[str, str]] = None,
     region: Optional[str] = None
-):
+) -> Any:
     """
     Returns an async AWS client for the specified service.
     Handles temporary credential injection if a connection is provided.

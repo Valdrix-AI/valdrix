@@ -42,7 +42,7 @@ async def get_safety_status(
     request: Request,
     current_user: CurrentUser = Depends(get_current_user),
     _db: AsyncSession = Depends(get_db),
-):
+) -> SafetyStatusResponse:
     """
     Get circuit breaker and safety status for the current tenant.
     
@@ -93,7 +93,7 @@ async def reset_circuit_breaker(
     request: Request,
     current_user: CurrentUser = Depends(requires_role("admin")),
     _db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     """
     Manually reset circuit breaker to closed state (admin-only).
     

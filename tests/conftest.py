@@ -11,7 +11,6 @@ Provides:
 import os
 import sys
 from unittest.mock import MagicMock, AsyncMock, patch
-import sys
 
 # Mock heavy dependencies only if they cause issues in specific environments
 # sys.modules["codecarbon"] = MagicMock()
@@ -51,6 +50,8 @@ def _register_models():
     from app.models.aws_connection import AWSConnection  # noqa: F401
     from app.models.azure_connection import AzureConnection  # noqa: F401
     from app.models.gcp_connection import GCPConnection  # noqa: F401
+    from app.models.saas_connection import SaaSConnection  # noqa: F401
+    from app.models.license_connection import LicenseConnection  # noqa: F401
     from app.models.tenant import Tenant  # noqa: F401
     from app.models.remediation import RemediationRequest  # noqa: F401
     from app.models.security import OIDCKey  # noqa: F401
@@ -65,6 +66,7 @@ def _register_models():
     from app.models.remediation_settings import RemediationSettings  # noqa: F401
     from app.models.optimization import OptimizationStrategy, StrategyRecommendation  # noqa: F401
     from app.models.cost_audit import CostAuditLog  # noqa: F401
+    from app.models.unit_economics_settings import UnitEconomicsSettings  # noqa: F401
 
 
 _register_models()

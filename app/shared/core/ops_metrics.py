@@ -6,9 +6,12 @@ financial guards, and operational resilience.
 Used for investor-grade "Customer Health" dashboards.
 """
 
-from prometheus_client import Counter, Histogram, Gauge, Summary
+from collections.abc import Callable
+from functools import wraps
+from typing import Any, TypeVar, cast
+
+from prometheus_client import Counter, Histogram, Gauge
 import time
-from typing import Optional
 
 # --- Roadmap Compatibility Metrics ---
 STUCK_JOB_COUNT = Gauge(
@@ -266,10 +269,14 @@ POTENTIAL_SAVINGS = Gauge(
 
 
 # Utility functions for metrics
-def time_operation(operation_name: str):
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def time_operation(operation_name: str) -> Callable[[F], F]:
     """Decorator to time operations and record metrics."""
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+    def decorator(func: F) -> F:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
             try:
                 result = func(*args, **kwargs)
@@ -286,7 +293,7 @@ def time_operation(operation_name: str):
                     pass
 
                 return result
-            except Exception as e:
+            except Exception:
                 duration = time.time() - start_time
 
                 # Record error metrics
@@ -295,11 +302,13 @@ def time_operation(operation_name: str):
 
                 raise
 
-        return wrapper
+        return cast(F, wrapper)
     return decorator
 
 
-def record_circuit_breaker_metrics(circuit_name: str, state: str, failures: int, successes: int):
+def record_circuit_breaker_metrics(
+    circuit_name: str, state: str, failures: int, successes: int
+) -> None:
     """Record circuit breaker metrics."""
     # Map state to numeric value
     state_value = {"closed": 0, "open": 1, "half_open": 2}.get(state, 0)
@@ -312,11 +321,11 @@ def record_circuit_breaker_metrics(circuit_name: str, state: str, failures: int,
         CIRCUIT_BREAKER_RECOVERIES.labels(circuit_name=circuit_name).inc(successes)
 
 
-def record_retry_metrics(operation_type: str, attempt: int):
+def record_retry_metrics(operation_type: str, attempt: int) -> None:
     """Record retry metrics."""
     OPERATION_RETRIES_TOTAL.labels(operation_type=operation_type, attempt=str(attempt)).inc()
 
 
-def record_timeout_metrics(operation_type: str):
+def record_timeout_metrics(operation_type: str) -> None:
     """Record timeout metrics."""
     OPERATION_TIMEOUTS_TOTAL.labels(operation_type=operation_type).inc()

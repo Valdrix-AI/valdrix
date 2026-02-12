@@ -61,7 +61,7 @@ class ExchangeRateService:
             logger.warning("currency_using_stale_db_rate", age=datetime.now(timezone.utc) - rate_obj.last_updated)
             return float(rate_obj.rate)
             
-        return settings.FALLBACK_NGN_RATE  # Industry estimated baseline if all else fails
+        return float(settings.FALLBACK_NGN_RATE)  # Industry estimated baseline if all else fails
 
     async def _fetch_from_api(self) -> float:
         """Fetch latest rate from ExchangeRate-API."""
@@ -76,7 +76,7 @@ class ExchangeRateService:
             
             raise ValueError(f"API returned failure: {data.get('error-type')}")
 
-    async def _update_db_cache(self, rate: float):
+    async def _update_db_cache(self, rate: float) -> None:
         """Update or insert the exchange rate in the database."""
         try:
             # Check if exists
@@ -98,8 +98,7 @@ class ExchangeRateService:
                     rate=rate,
                     last_updated=datetime.now(timezone.utc)
                 )
-                from app.shared.core.async_utils import maybe_await
-                await maybe_await(self.db.add(new_rate))
+                self.db.add(new_rate)
             
             await self.db.commit()
             logger.info("currency_db_cache_updated", rate=rate)

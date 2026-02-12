@@ -1,6 +1,7 @@
 import jwt
 import hashlib
-from typing import Optional, Callable
+from functools import lru_cache
+from typing import Any, Callable, Optional, cast
 from uuid import UUID
 from fastapi import HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
 from app.shared.db.session import get_db, set_session_tenant_id
 from app.models.tenant import User, UserRole, Tenant
-from app.shared.core.pricing import PricingTier
+from app.shared.core.pricing import PricingTier, normalize_tier
 
 logger = structlog.get_logger()
 
@@ -23,7 +24,8 @@ def _hash_email(email: str | None) -> str | None:
         return None
     normalized = email.strip().lower()
     return hashlib.sha256(normalized.encode()).hexdigest()[:12]
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+
+def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """
     Generate a new JWT token signed with the application secret.
     """
@@ -54,10 +56,10 @@ class CurrentUser(BaseModel):
     email: str
     tenant_id: Optional[UUID] = None
     role: UserRole = UserRole.MEMBER
-    tier: PricingTier = PricingTier.STARTER
+    tier: PricingTier = PricingTier.FREE_TRIAL
 
 
-def decode_jwt(token: str) -> dict:
+def decode_jwt(token: str) -> dict[str, Any]:
     """
     Decode and verify a Supabase JWT token.
 
@@ -84,7 +86,7 @@ def decode_jwt(token: str) -> dict:
             algorithms=["HS256"],
             audience="authenticated",  # Supabase uses this audience
         )
-        return payload
+        return cast(dict[str, Any], payload)
 
     except jwt.ExpiredSignatureError:
         logger.warning("jwt_expired")
@@ -162,11 +164,12 @@ async def get_current_user(
             raise HTTPException(403, "User not found. Complete Onboarding first.")
 
         user, plan = row
+        tier = normalize_tier(plan)
 
         # Store in request state for downstream rate limiting and RLS
         request.state.tenant_id = user.tenant_id
         request.state.user_id = user.id
-        request.state.tier = plan # BE-LLM-4: Enable tier-aware rate limiting
+        request.state.tier = tier  # BE-LLM-4: Enable tier-aware rate limiting
 
         # Propagate RLS context to the database session
         await set_session_tenant_id(db, user.tenant_id)
@@ -176,7 +179,7 @@ async def get_current_user(
             user_id=str(user.id),
             email_hash=_hash_email(user.email),
             role=user.role,
-            tier=plan
+            tier=tier.value
         )
 
         return CurrentUser(
@@ -184,7 +187,7 @@ async def get_current_user(
             email=user.email,
             tenant_id=user.tenant_id,
             role=user.role,
-            tier=plan
+            tier=tier
         )
     except HTTPException:
         # Re-raise known HTTP exceptions (like 403 User not found)
@@ -200,7 +203,8 @@ async def get_current_user(
 
 
 
-from functools import lru_cache
+
+
 
 @lru_cache()
 def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
@@ -262,7 +266,5 @@ def require_tenant_access(user: CurrentUser = Depends(get_current_user)) -> UUID
             detail="Tenant context required. Please complete onboarding."
         )
     return user.tenant_id
-
-
 
 

@@ -54,6 +54,10 @@ async def test_list_recommendations_filters_and_orders(async_client, db, app, me
         upfront_cost=0.0,
         monthly_recurring_cost=10.0,
         estimated_monthly_savings=5.0,
+        estimated_monthly_savings_low=4.0,
+        estimated_monthly_savings_high=6.0,
+        break_even_months=0.0,
+        confidence_score=0.82,
         roi_percentage=10.0,
         status="open"
     )
@@ -67,6 +71,10 @@ async def test_list_recommendations_filters_and_orders(async_client, db, app, me
         upfront_cost=0.0,
         monthly_recurring_cost=20.0,
         estimated_monthly_savings=15.0,
+        estimated_monthly_savings_low=12.0,
+        estimated_monthly_savings_high=18.0,
+        break_even_months=0.0,
+        confidence_score=0.93,
         roi_percentage=30.0,
         status="open"
     )
@@ -80,6 +88,10 @@ async def test_list_recommendations_filters_and_orders(async_client, db, app, me
         upfront_cost=0.0,
         monthly_recurring_cost=30.0,
         estimated_monthly_savings=25.0,
+        estimated_monthly_savings_low=20.0,
+        estimated_monthly_savings_high=30.0,
+        break_even_months=0.0,
+        confidence_score=0.95,
         roi_percentage=50.0,
         status="applied"
     )
@@ -91,6 +103,10 @@ async def test_list_recommendations_filters_and_orders(async_client, db, app, me
     assert response.status_code == 200
     data = response.json()
     assert [rec["resource_type"] for rec in data] == ["m5.xlarge", "m5.large"]
+    assert data[0]["estimated_monthly_savings_low"] == 12.0
+    assert data[0]["estimated_monthly_savings_high"] == 18.0
+    assert data[0]["break_even_months"] == 0.0
+    assert data[0]["confidence_score"] == 0.93
 
     app.dependency_overrides.pop(get_current_user, None)
     app.dependency_overrides.pop(require_tenant_access, None)

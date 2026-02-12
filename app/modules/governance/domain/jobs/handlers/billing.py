@@ -13,7 +13,7 @@ class RecurringBillingHandler(BaseJobHandler):
     """Processes an individual recurring billing charge for a tenant."""
     
     async def execute(self, job: BackgroundJob, db: AsyncSession) -> Dict[str, Any]:
-        from app.modules.reporting.domain.billing.paystack_billing import BillingService, TenantSubscription
+        from app.modules.billing.domain.billing.paystack_billing import BillingService, TenantSubscription
         
         payload = job.payload or {}
         sub_id = payload.get("subscription_id")

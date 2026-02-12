@@ -60,7 +60,7 @@ async def test_scan_for_tenant_success(mock_db, tenant_id):
     
     with patch("app.modules.optimization.domain.service.ZombieDetectorFactory.get_detector", return_value=mock_detector):
         with patch("app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery", return_value=mock_rd):
-            with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE):
+            with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE_TRIAL):
                 # Mock metrics and notifications
                 with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
                     with patch("app.shared.core.notifications.NotificationDispatcher.notify_zombies") as mock_notify:
@@ -100,7 +100,7 @@ async def test_scan_for_tenant_preserves_custom_categories_and_maps_provider_key
 
     with patch("app.modules.optimization.domain.service.ZombieDetectorFactory.get_detector", return_value=mock_detector):
         with patch("app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery", return_value=mock_rd):
-            with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE):
+            with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE_TRIAL):
                 with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
                     with patch("app.shared.core.notifications.NotificationDispatcher.notify_zombies"):
                         result = await service.scan_for_tenant(tenant_id)
@@ -133,7 +133,7 @@ async def test_scan_for_tenant_timeout(mock_db, tenant_id):
         mock_detector.scan_all.side_effect = slow_scan
         mock_factory.return_value = mock_detector
         
-        with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE):
+        with patch("app.shared.core.pricing.get_tenant_tier", return_value=PricingTier.FREE_TRIAL):
             with patch("app.shared.core.ops_metrics.SCAN_TIMEOUTS"):
                 # Use a very short timeout for testing
                 with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError):

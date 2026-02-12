@@ -1,5 +1,4 @@
 import pytest
-import os
 from unittest.mock import MagicMock, AsyncMock, patch
 from app.shared.db.session import get_db, set_session_tenant_id, before_cursor_execute, after_cursor_execute, check_rls_policy
 from app.shared.core.exceptions import ValdrixException

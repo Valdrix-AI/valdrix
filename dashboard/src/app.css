@@ -32,10 +32,18 @@
 	--color-accent-400: #22d3ee;
 	--color-accent-600: #0891b2;
 	--color-accent-700: #0e7490;
+	--color-accent-500-rgb: 6 182 212;
+	--color-primary-500: #6366f1;
 
 	/* Success - Emerald */
 	--color-success-500: #10b981;
 	--color-success-400: #34d399;
+	--color-success-500-rgb: 16 185 129;
+
+	/* Surface tones for elevated cards */
+	--color-surface-100: #182028;
+	--color-surface-200: #243040;
+	--color-surface-300: #374657;
 
 	/* Warning - Amber */
 	--color-warning-500: #f59e0b;

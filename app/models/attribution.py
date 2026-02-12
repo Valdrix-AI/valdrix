@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 # from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.shared.db.base import Base
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
@@ -29,10 +29,14 @@ class AttributionRule(Base):
     rule_type: Mapped[str] = mapped_column(String, default="DIRECT") 
     
     # Conditions: e.g., {"service": "AmazonS3", "tags": {"Environment": "Prod"}}
-    conditions: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
+    conditions: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False
+    )
     
     # Allocation Targets: e.g., [{"bucket": "Marketing", "percentage": 30}, {"bucket": "Sales", "percentage": 70}]
-    allocation: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
+    allocation: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=False
+    )
     
     is_active: Mapped[bool] = mapped_column(default=True)
 

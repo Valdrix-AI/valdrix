@@ -81,12 +81,12 @@
 <div class="allocation-breakdown">
 	<div class="header">
 		<h2>
-			<Users class="icon" />
+			<Users size={20} />
 			Cost Allocation by Team
 		</h2>
 		{#if unallocatedPercentage() > 5}
 			<div class="warning-badge">
-				<AlertTriangle class="icon-sm" />
+				<AlertTriangle size={14} />
 				{unallocatedPercentage().toFixed(1)}% Unallocated
 			</div>
 		{/if}
@@ -99,12 +99,12 @@
 		</div>
 	{:else if error}
 		<div class="error-state">
-			<AlertTriangle class="icon" />
+			<AlertTriangle size={20} />
 			<span>{error}</span>
 		</div>
 	{:else if !data || data.buckets.length === 0}
 		<div class="empty-state">
-			<Users class="icon-lg" />
+			<Users size={48} color="#64748b" />
 			<h3>No Allocation Data</h3>
 			<p>Create attribution rules to see cost breakdown by team.</p>
 		</div>
@@ -199,20 +199,6 @@
 		font-weight: 600;
 		color: var(--text-primary, #f8fafc);
 		margin: 0;
-	}
-
-	.icon {
-		width: 20px;
-		height: 20px;
-	}
-	.icon-sm {
-		width: 14px;
-		height: 14px;
-	}
-	.icon-lg {
-		width: 48px;
-		height: 48px;
-		color: #64748b;
 	}
 
 	.warning-badge {

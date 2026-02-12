@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 from app.modules.governance.domain.jobs.handlers.billing import RecurringBillingHandler
 from app.models.background_job import BackgroundJob
 # We need to mock the imports logic inside the handler
-from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription
+from app.modules.billing.domain.billing.paystack_billing import TenantSubscription
 from app.models.pricing import PricingPlan
 
 @pytest.mark.asyncio
@@ -74,7 +74,7 @@ async def test_execute_success(db):
     db.execute = AsyncMock(side_effect=[mock_res_sub, mock_res_plan])
     
     # Mock BillingService
-    with patch("app.modules.reporting.domain.billing.paystack_billing.BillingService") as MockService:
+    with patch("app.modules.billing.domain.billing.paystack_billing.BillingService") as MockService:
         service_instance = MockService.return_value
         service_instance.charge_renewal = AsyncMock(return_value=True)
         
@@ -97,7 +97,7 @@ async def test_execute_charge_failed(db):
     
     db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=sub)))
     
-    with patch("app.modules.reporting.domain.billing.paystack_billing.BillingService") as MockService:
+    with patch("app.modules.billing.domain.billing.paystack_billing.BillingService") as MockService:
         service_instance = MockService.return_value
         service_instance.charge_renewal = AsyncMock(return_value=False)
         

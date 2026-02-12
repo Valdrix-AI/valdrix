@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.db.session import async_session_maker
 from sqlalchemy import select
@@ -9,6 +9,7 @@ from app.shared.core.config import get_settings
 from app.models.security import OIDCKey
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa
 import base64
 import structlog
 
@@ -16,7 +17,7 @@ logger = structlog.get_logger()
 
 class OIDCService:
     @staticmethod
-    async def get_discovery_doc():
+    async def get_discovery_doc() -> dict[str, Any]:
         """
         Standard OIDC Discovery document.
         Enhanced with recommended fields for AWS/GCP federated identity compatibility.
@@ -37,7 +38,11 @@ class OIDCService:
         }
 
     @staticmethod
-    async def create_token(tenant_id: str, audience: str, db: Optional[AsyncSession] = None):
+    async def create_token(
+        tenant_id: str,
+        audience: str,
+        db: Optional[AsyncSession] = None,
+    ) -> str:
         """Create a signed OIDC token for GCP/AWS federated identity."""
         
         settings = get_settings()
@@ -50,7 +55,13 @@ class OIDCService:
             return await OIDCService._create_token_with_session(tenant_id, audience, db, settings, now)
 
     @staticmethod
-    async def _create_token_with_session(tenant_id: str, audience: str, db: AsyncSession, settings, now):
+    async def _create_token_with_session(
+        tenant_id: str,
+        audience: str,
+        db: AsyncSession,
+        settings: Any,
+        now: datetime,
+    ) -> str:
         result = await db.execute(
             select(OIDCKey).where(OIDCKey.is_active).order_by(OIDCKey.created_at.desc())
         )
@@ -81,7 +92,7 @@ class OIDCService:
 
 
     @staticmethod
-    async def get_jwks(db: Optional[AsyncSession] = None):
+    async def get_jwks(db: Optional[AsyncSession] = None) -> dict[str, list[dict[str, str]]]:
         if db is None:
             async with async_session_maker() as session:
                 return await OIDCService._get_jwks_with_session(session)
@@ -89,13 +100,13 @@ class OIDCService:
             return await OIDCService._get_jwks_with_session(db)
 
     @staticmethod
-    async def _get_jwks_with_session(db: AsyncSession):
+    async def _get_jwks_with_session(db: AsyncSession) -> dict[str, list[dict[str, str]]]:
         result = await db.execute(
             select(OIDCKey).where(OIDCKey.is_active)
         )
         keys = result.scalars().all()
         
-        jwks = {"keys": []}
+        jwks: dict[str, list[dict[str, str]]] = {"keys": []}
         for k in keys:
             try:
                 # Parse PEM and extract RSA components
@@ -103,10 +114,12 @@ class OIDCService:
                     k.public_key_pem.encode(),
                     backend=default_backend()
                 )
+                if not isinstance(pub_key, rsa.RSAPublicKey):
+                    continue
                 numbers = pub_key.public_numbers()
                 
                 # Convert to base64url
-                def b64url(n: int):
+                def b64url(n: int) -> str:
                     b = n.to_bytes((n.bit_length() + 7) // 8, byteorder='big')
                     return base64.urlsafe_b64encode(b).decode().rstrip('=')
                     

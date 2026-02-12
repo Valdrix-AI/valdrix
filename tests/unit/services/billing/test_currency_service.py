@@ -4,7 +4,7 @@ Tests for ExchangeRateService - Currency Conversion
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone, timedelta
-from app.modules.reporting.domain.billing.currency import ExchangeRateService
+from app.modules.billing.domain.billing.currency import ExchangeRateService
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ async def test_get_ngn_rate_from_cache(mock_db):
     mock_result.scalar_one_or_none.return_value = mock_rate
     mock_db.execute.return_value = mock_result
     
-    with patch("app.modules.reporting.domain.billing.currency.settings") as mock_settings:
+    with patch("app.modules.billing.domain.billing.currency.settings") as mock_settings:
         mock_settings.EXCHANGERATE_API_KEY = "test-key"
         service = ExchangeRateService(mock_db)
         service.api_key = "test-key"
@@ -49,7 +49,7 @@ async def test_get_ngn_rate_stale_cache_fetches_api(mock_db):
     mock_result.scalar_one_or_none.return_value = mock_rate
     mock_db.execute.return_value = mock_result
     
-    with patch("app.modules.reporting.domain.billing.currency.settings") as mock_settings:
+    with patch("app.modules.billing.domain.billing.currency.settings") as mock_settings:
         mock_settings.EXCHANGERATE_API_KEY = "test-key"
         service = ExchangeRateService(mock_db)
         service.api_key = "test-key"
@@ -75,7 +75,7 @@ async def test_get_ngn_rate_no_api_key_uses_stale(mock_db):
     mock_result.scalar_one_or_none.return_value = mock_rate
     mock_db.execute.return_value = mock_result
     
-    with patch("app.modules.reporting.domain.billing.currency.settings") as mock_settings:
+    with patch("app.modules.billing.domain.billing.currency.settings") as mock_settings:
         mock_settings.EXCHANGERATE_API_KEY = None
         service = ExchangeRateService(mock_db)
         service.api_key = None
@@ -92,7 +92,7 @@ async def test_get_ngn_rate_fallback(mock_db):
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
     
-    with patch("app.modules.reporting.domain.billing.currency.settings") as mock_settings:
+    with patch("app.modules.billing.domain.billing.currency.settings") as mock_settings:
         mock_settings.EXCHANGERATE_API_KEY = None
         mock_settings.FALLBACK_NGN_RATE = 1450.0
         service = ExchangeRateService(mock_db)
@@ -108,7 +108,7 @@ async def test_get_ngn_rate_db_exception_uses_api(mock_db):
     """DB lookup errors should not block API fetch."""
     mock_db.execute = AsyncMock(side_effect=RuntimeError("db down"))
 
-    with patch("app.modules.reporting.domain.billing.currency.settings") as mock_settings:
+    with patch("app.modules.billing.domain.billing.currency.settings") as mock_settings:
         mock_settings.EXCHANGERATE_API_KEY = "test-key"
         service = ExchangeRateService(mock_db)
         service.api_key = "test-key"
@@ -131,8 +131,8 @@ async def test_get_ngn_rate_api_failure_uses_stale(mock_db):
     mock_result.scalar_one_or_none.return_value = stale_rate
     mock_db.execute.return_value = mock_result
 
-    with patch("app.modules.reporting.domain.billing.currency.settings") as mock_settings, \
-         patch("app.modules.reporting.domain.billing.currency.logger") as mock_logger:
+    with patch("app.modules.billing.domain.billing.currency.settings") as mock_settings, \
+         patch("app.modules.billing.domain.billing.currency.logger") as mock_logger:
         mock_settings.EXCHANGERATE_API_KEY = "test-key"
         service = ExchangeRateService(mock_db)
         service.api_key = "test-key"

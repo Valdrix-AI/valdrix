@@ -1,12 +1,14 @@
+# mypy: disable-error-code=import-untyped
 import yaml
 import os
 import uuid
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 import json
 import re
 import copy
 import structlog
 from uuid import UUID
+from datetime import date, datetime, timedelta
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
@@ -66,7 +68,9 @@ class FinOpsAnalyzer:
                 with open(prompt_path, "r") as f:
                     registry = yaml.safe_load(f)
                     if isinstance(registry, dict) and "finops_analysis" in registry:
-                        return registry["finops_analysis"].get("system")
+                        prompt = registry["finops_analysis"].get("system")
+                        if isinstance(prompt, str) and prompt.strip():
+                            return prompt
         except Exception as e:
             logger.error("failed_to_load_prompts_yaml", error=str(e), path=prompt_path)
             
@@ -100,7 +104,7 @@ class FinOpsAnalyzer:
         provider: Optional[str] = None,
         model: Optional[str] = None,
         force_refresh: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         PRODUCTION: Analyzes cloud costs with mandatory budget pre-authorization.
         
@@ -206,6 +210,8 @@ class FinOpsAnalyzer:
                 try:
                     # In production, we'd parse actual tokens from response_metadata
                     token_usage = response_metadata.get("token_usage", {})
+                    if tenant_id is None:
+                        raise AIAnalysisError("Tenant ID required to record metered LLM usage")
                     await LLMBudgetManager.record_usage(
                         tenant_id=tenant_id,
                         db=effective_db,
@@ -227,7 +233,7 @@ class FinOpsAnalyzer:
 
     async def _check_cache_and_delta(
         self, tenant_id: Optional[UUID], force_refresh: bool, usage_summary: Any
-    ) -> tuple[Optional[Dict], bool]:
+    ) -> tuple[dict[str, Any] | None, bool]:
         """Checks cache and determines if delta analysis should be performed."""
         if not tenant_id:
             return None, False
@@ -243,7 +249,6 @@ class FinOpsAnalyzer:
         if cached_analysis and get_settings().ENABLE_DELTA_ANALYSIS:
             is_delta = True
             logger.info("analysis_delta_mode_enabled", tenant_id=str(tenant_id))
-            from datetime import date, datetime, timedelta
             settings = get_settings()
             delta_cutoff = date.today() - timedelta(days=settings.DELTA_ANALYSIS_DAYS)
             
@@ -255,9 +260,19 @@ class FinOpsAnalyzer:
             records_to_analyze = []
             for r in raw_records:
                 r_dt = r.get("date") if isinstance(r, dict) else r.date
-                # Normalize r_dt to date for comparison with delta_cutoff
-                r_date = r_dt.date() if isinstance(r_dt, datetime) else r_dt
-                
+
+                if isinstance(r_dt, datetime):
+                    r_date = r_dt.date()
+                elif isinstance(r_dt, date):
+                    r_date = r_dt
+                elif isinstance(r_dt, str):
+                    try:
+                        r_date = date.fromisoformat(r_dt[:10])
+                    except ValueError:
+                        continue
+                else:
+                    continue
+
                 if r_date >= delta_cutoff:
                     # Ensure we have CostRecord objects for the summary copy
                     if isinstance(r, dict):
@@ -286,6 +301,14 @@ class FinOpsAnalyzer:
         usage_tracker = None
         byok_key = None
         budget = None
+        budget_status = None
+
+        def _normalize_provider(value: Any) -> str:
+            if isinstance(value, LLMProvider):
+                return value.value
+            if isinstance(value, str):
+                return value.lower()
+            return ""
         
         if tenant_id and db:
             usage_tracker = UsageTracker(db)
@@ -300,47 +323,51 @@ class FinOpsAnalyzer:
             result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id))
             budget = result.scalar_one_or_none()
             if budget:
-                keys = {
+                keys: dict[str, str | None] = {
                     LLMProvider.OPENAI: budget.openai_api_key,
                     LLMProvider.ANTHROPIC: budget.claude_api_key, # unified
                     LLMProvider.GOOGLE: budget.google_api_key,
                     LLMProvider.GROQ: budget.groq_api_key,
                     LLMProvider.AZURE: getattr(budget, "azure_api_key", None)
                 }
-                byok_key = keys.get(provider or budget.preferred_provider)
+                requested_provider = _normalize_provider(provider) or _normalize_provider(
+                    budget.preferred_provider
+                )
+                byok_key = keys.get(requested_provider)
 
         # Provider & Model Validation
-        VALID_MODELS = {
-            LLMProvider.OPENAI: ["gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
-            LLMProvider.ANTHROPIC: ["claude-3-opus", "claude-3-sonnet", "claude-3-5-sonnet", "claude-3-5-haiku"],
-            LLMProvider.GOOGLE: ["gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash"],
-            LLMProvider.GROQ: ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768", "llama-3.1-8b-instant"],
-            LLMProvider.AZURE: ["gpt-4", "gpt-35-turbo"]
+        valid_models: dict[str, list[str]] = {
+            LLMProvider.OPENAI.value: ["gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
+            LLMProvider.ANTHROPIC.value: ["claude-3-opus", "claude-3-sonnet", "claude-3-5-sonnet", "claude-3-5-haiku"],
+            LLMProvider.GOOGLE.value: ["gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash"],
+            LLMProvider.GROQ.value: ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768", "llama-3.1-8b-instant"],
+            LLMProvider.AZURE.value: ["gpt-4", "gpt-35-turbo"]
         }
 
-        effective_provider = provider or (budget.preferred_provider if budget else get_settings().LLM_PROVIDER)
-        effective_model = model or (budget.preferred_model if budget else "llama-3.3-70b-versatile")
+        preferred_provider = provider or (budget.preferred_provider if budget else get_settings().LLM_PROVIDER)
+        effective_provider = _normalize_provider(preferred_provider) or LLMProvider.GROQ.value
+        effective_model = str(model or (budget.preferred_model if budget else "llama-3.3-70b-versatile"))
 
         # Handle Graceful Degradation (Soft Limit)
         if tenant_id and db and budget_status == BudgetStatus.SOFT_LIMIT:
             logger.warning("llm_budget_soft_limit_degradation", tenant_id=str(tenant_id))
             # Switch to cheapest model for the effective provider
-            if effective_provider == LLMProvider.GROQ:
+            if effective_provider == LLMProvider.GROQ.value:
                 effective_model = "llama-3.1-8b-instant"
-            elif effective_provider == LLMProvider.OPENAI:
+            elif effective_provider == LLMProvider.OPENAI.value:
                 effective_model = "gpt-4o-mini"
-            elif effective_provider == LLMProvider.GOOGLE:
+            elif effective_provider == LLMProvider.GOOGLE.value:
                 effective_model = "gemini-1.5-flash"
-            elif effective_provider == LLMProvider.ANTHROPIC:
+            elif effective_provider == LLMProvider.ANTHROPIC.value:
                 effective_model = "claude-3-5-haiku"
 
-        if effective_provider not in VALID_MODELS:
+        if effective_provider not in valid_models:
             logger.warning("invalid_llm_provider_rejected", provider=effective_provider)
             effective_provider = get_settings().LLM_PROVIDER
             effective_model = "llama-3.3-70b-versatile"
 
         # Validate against known models for the provider
-        allowed_models = VALID_MODELS.get(effective_provider, [])
+        allowed_models = valid_models.get(effective_provider, [])
         if effective_model not in allowed_models:
             # If it's a known provider but unknown model, allow it if it's safe and it's BYOK
             # Otherwise, fallback to the first model in our safe list
@@ -352,7 +379,7 @@ class FinOpsAnalyzer:
 
     async def _invoke_llm(
         self, formatted_data: str, provider: str, model: str, byok_key: Optional[str]
-    ) -> tuple[str, Dict]:
+    ) -> tuple[str, dict[str, Any]]:
         """Orchestrates the LangChain invocation."""
         current_llm = self.llm
         if provider != get_settings().LLM_PROVIDER or byok_key:
@@ -366,10 +393,13 @@ class FinOpsAnalyzer:
             retry=retry_if_exception_type(Exception),
             reraise=True,
         )
-        async def _invoke_with_retry():
+        async def _invoke_with_retry() -> tuple[str, dict[str, Any]]:
             logger.info("invoking_llm", provider=provider, model=model)
             response = await chain.ainvoke({"cost_data": formatted_data})
-            return response.content, getattr(response, "response_metadata", {})
+            content = response.content
+            safe_content = content if isinstance(content, str) else json.dumps(content, default=str)
+            metadata = getattr(response, "response_metadata", {})
+            return safe_content, metadata if isinstance(metadata, dict) else {}
 
         # BE-LLM-7: Fallback model selection on primary failure
         # Aligned with DR_RUNBOOK.md: Groq -> Gemini -> OpenAI
@@ -396,9 +426,12 @@ class FinOpsAnalyzer:
                         fallback_chain = self.prompt | fallback_llm
                         logger.info("trying_fallback_llm", provider=fallback_provider, model=fallback_model)
                         response = await fallback_chain.ainvoke({"cost_data": formatted_data})
+                        content = response.content
+                        safe_content = content if isinstance(content, str) else json.dumps(content, default=str)
+                        metadata = getattr(response, "response_metadata", {})
                         span.set_attribute("llm.fallback_used", True)
                         span.set_attribute("llm.fallback_provider", fallback_provider)
-                        return response.content, getattr(response, "response_metadata", {})
+                        return safe_content, metadata if isinstance(metadata, dict) else {}
                     except Exception as fallback_error:
                         logger.warning("llm_fallback_failed", provider=fallback_provider, error=str(fallback_error))
                         continue
@@ -411,7 +444,7 @@ class FinOpsAnalyzer:
 
     async def _process_analysis_results(
         self, content: str, tenant_id: Optional[UUID], usage_summary: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Validates output, handles alerts, and caches results."""
         cache = get_cache_service()
         
@@ -433,6 +466,12 @@ class FinOpsAnalyzer:
             except Exception as ex:
                 logger.error("llm_fallback_failed_unexpectedly", error=str(ex))
                 llm_result = {"error": "AI analysis processing failed", "raw_content": content}
+
+        if not isinstance(llm_result, dict):
+            llm_result = {
+                "error": "AI analysis produced non-object payload",
+                "raw_content": llm_result,
+            }
 
         # Grounding: What does the deterministic math say?
         effective_db = self.db # In process_analysis_results we only have self.db
@@ -458,7 +497,7 @@ class FinOpsAnalyzer:
         
         return final_result
 
-    async def _check_and_alert_anomalies(self, result: Dict):
+    async def _check_and_alert_anomalies(self, result: dict[str, Any]) -> None:
         """Sends Slack alerts if high-severity anomalies are found."""
         anomalies = result.get("anomalies", [])
         if not anomalies:

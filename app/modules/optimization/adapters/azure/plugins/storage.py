@@ -22,8 +22,21 @@ class UnattachedDisksPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "unattached_azure_disks"
     
-    async def scan(self, subscription_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for unattached disks using Compute API (free)."""
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            logger.warning("azure_scan_missing_subscription_id", plugin=self.category_key)
+            return []
+
         zombies = []
         
         cost_records = kwargs.get("cost_records")
@@ -41,7 +54,8 @@ class UnattachedDisksPlugin(ZombiePlugin):
                     size_gb = disk.disk_size_gb or 0
                     # Estimate cost based on disk type and size
                     # Standard HDD: ~$0.04/GB, Premium SSD: ~$0.12/GB
-                    price_per_gb = 0.12 if "premium" in (disk.sku.name or "").lower() else 0.04
+                    sku_name = getattr(getattr(disk, "sku", None), "name", "")
+                    price_per_gb = 0.12 if "premium" in str(sku_name).lower() else 0.04
                     estimated_cost = size_gb * price_per_gb
                     
                     zombies.append({
@@ -72,8 +86,21 @@ class OldSnapshotsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "old_azure_snapshots"
     
-    async def scan(self, subscription_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for snapshots older than retention period."""
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            logger.warning("azure_scan_missing_subscription_id", plugin=self.category_key)
+            return []
+
         zombies = []
         age_days = kwargs.get("age_days", 90)
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=age_days)

@@ -1,9 +1,6 @@
 import pytest
-import os
-import ssl
 import uuid
 from unittest.mock import MagicMock, AsyncMock, patch
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.db.session import (
     get_db, 
     set_session_tenant_id, 

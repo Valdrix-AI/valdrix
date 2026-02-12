@@ -6,6 +6,8 @@ from fastapi import HTTPException
 from app.shared.core.cloud_connection import CloudConnectionService
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
+from app.models.saas_connection import SaaSConnection
+from app.models.license_connection import LicenseConnection
 
 @pytest.fixture
 def mock_db():
@@ -22,12 +24,16 @@ async def test_list_all_connections(mock_db, tenant_id):
     mock_aws = [MagicMock(spec=AWSConnection), MagicMock(spec=AWSConnection)]
     mock_azure = [MagicMock(spec=AzureConnection)]
     mock_gcp = []
+    mock_saas = [MagicMock(spec=SaaSConnection)]
+    mock_license = [MagicMock(spec=LicenseConnection)]
     
     # Mock sequence of DB executions
     mock_db.execute.side_effect = [
         MagicMock(scalars=lambda: MagicMock(all=lambda: mock_aws)),
         MagicMock(scalars=lambda: MagicMock(all=lambda: mock_azure)),
         MagicMock(scalars=lambda: MagicMock(all=lambda: mock_gcp)),
+        MagicMock(scalars=lambda: MagicMock(all=lambda: mock_saas)),
+        MagicMock(scalars=lambda: MagicMock(all=lambda: mock_license)),
     ]
     
     results = await service.list_all_connections(tenant_id)
@@ -35,7 +41,9 @@ async def test_list_all_connections(mock_db, tenant_id):
     assert results["aws"] == mock_aws
     assert results["azure"] == mock_azure
     assert results["gcp"] == mock_gcp
-    assert mock_db.execute.call_count == 3
+    assert results["saas"] == mock_saas
+    assert results["license"] == mock_license
+    assert mock_db.execute.call_count == 5
 
 @pytest.mark.asyncio
 async def test_verify_connection_unsupported_provider(mock_db, tenant_id):

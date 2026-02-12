@@ -1,8 +1,7 @@
-import pytest
 """
 Tests for Database Session Management
 """
-import os
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import Request
 from app.shared.db.session import (

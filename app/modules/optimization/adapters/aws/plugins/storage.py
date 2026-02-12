@@ -14,7 +14,7 @@ class UnattachedVolumesPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "unattached_volumes"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] | None = None, config: Any = None, inventory: Any = None, **kwargs: Any) -> List[Dict[str, Any]]:
         zombies = []
         try:
             async with self._get_client(session, "ec2", region, credentials, config=config) as ec2:
@@ -105,7 +105,7 @@ class OldSnapshotsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "old_snapshots"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] | None = None, config: Any = None, inventory: Any = None, **kwargs: Any) -> List[Dict[str, Any]]:
         zombies = []
         days_old = 90
         cutoff = datetime.now(timezone.utc) - timedelta(days=days_old)
@@ -151,7 +151,7 @@ class IdleS3BucketsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_s3_buckets"
 
-    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] = None, config: Any = None, inventory: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(self, session: aioboto3.Session, region: str, credentials: Dict[str, str] | None = None, config: Any = None, inventory: Any = None, **kwargs: Any) -> List[Dict[str, Any]]:
         zombies = []
         try:
             async with self._get_client(session, "s3", region, credentials, config=config) as s3:

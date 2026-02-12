@@ -8,7 +8,7 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Boolean, event, JSON, Uuid as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -76,8 +76,12 @@ class BackgroundJob(Base):
         nullable=True
     )
     status: Mapped[str] = mapped_column(String(20), default=JobStatus.PENDING, index=True)
-    payload: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
-    result: Mapped[dict | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    result: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
     # BE-SCHED-5: Job priority (higher = more urgent, 0 = normal, negative = low priority)
@@ -104,7 +108,7 @@ class BackgroundJob(Base):
 
 # Item P3: Audit Trigger for deletions
 @event.listens_for(BackgroundJob, "before_delete")
-def audit_job_deletion(_mapper, _connection, target):
+def audit_job_deletion(_mapper: Any, _connection: Any, target: BackgroundJob) -> None:
     """
     Log job deletion to audit trail before it's gone.
     """
@@ -117,4 +121,3 @@ def audit_job_deletion(_mapper, _connection, target):
         tenant_id=str(target.tenant_id),
         job_type=str(target.job_type)
     )
-

@@ -1,27 +1,21 @@
-import pytest
 """
 Comprehensive tests for WebhookRetryService module.
 Covers webhook storage, idempotency, retry logic, duplicate detection, and Paystack webhook processing.
 """
-
 import json
-from typing import Dict
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone, timedelta
-import hashlib
+import pytest
 import uuid
-from typing import Dict, Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.modules.reporting.domain.billing.webhook_retry import (
+from app.modules.billing.domain.billing.webhook_retry import (
     WebhookRetryService,
     process_paystack_webhook,
     WEBHOOK_MAX_ATTEMPTS,
     WEBHOOK_IDEMPOTENCY_TTL_HOURS,
 )
-from app.models.background_job import BackgroundJob, JobStatus, JobType
+from app.models.background_job import BackgroundJob
 
 
 @pytest.fixture
@@ -147,7 +141,7 @@ class TestWebhookStorage:
         mock_db.execute.return_value = mock_result
         
         # Mock enqueue_job
-        with patch('app.modules.reporting.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
+        with patch('app.modules.billing.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
             mock_job.id = uuid.uuid4()
             mock_enqueue.return_value = mock_job
@@ -193,7 +187,7 @@ class TestWebhookStorage:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         
-        with patch('app.modules.reporting.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
+        with patch('app.modules.billing.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
             mock_enqueue.return_value = mock_job
             
@@ -216,7 +210,7 @@ class TestWebhookStorage:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         
-        with patch('app.modules.reporting.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
+        with patch('app.modules.billing.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
             mock_enqueue.return_value = mock_job
             
@@ -312,7 +306,7 @@ class TestWebhookPayloadValidation:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         
-        with patch('app.modules.reporting.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
+        with patch('app.modules.billing.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
             mock_enqueue.return_value = mock_job
             
@@ -333,7 +327,7 @@ class TestWebhookPayloadValidation:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         
-        with patch('app.modules.reporting.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
+        with patch('app.modules.billing.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
             mock_enqueue.return_value = mock_job
             
@@ -368,7 +362,7 @@ class TestProcessPaystackWebhook:
             }
         }
         
-        with patch('app.modules.reporting.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
+        with patch('app.modules.billing.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
             mock_handler = AsyncMock()
             mock_handler_class.return_value = mock_handler
             mock_handler._handle_charge_success = AsyncMock()
@@ -395,7 +389,7 @@ class TestProcessPaystackWebhook:
             }
         }
         
-        with patch('app.modules.reporting.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
+        with patch('app.modules.billing.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
             mock_handler = AsyncMock()
             mock_handler_class.return_value = mock_handler
             mock_handler._handle_subscription_create = AsyncMock()
@@ -417,7 +411,7 @@ class TestProcessPaystackWebhook:
             }
         }
         
-        with patch('app.modules.reporting.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
+        with patch('app.modules.billing.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
             mock_handler = AsyncMock()
             mock_handler_class.return_value = mock_handler
             mock_handler._handle_subscription_disable = AsyncMock()
@@ -439,7 +433,7 @@ class TestProcessPaystackWebhook:
             }
         }
         
-        with patch('app.modules.reporting.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
+        with patch('app.modules.billing.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
             mock_handler = AsyncMock()
             mock_handler_class.return_value = mock_handler
             mock_handler._handle_invoice_failed = AsyncMock()
@@ -461,7 +455,7 @@ class TestProcessPaystackWebhook:
             }
         }
         
-        with patch('app.modules.reporting.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
+        with patch('app.modules.billing.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
             mock_handler = AsyncMock()
             mock_handler_class.return_value = mock_handler
             
@@ -493,7 +487,7 @@ class TestProcessPaystackWebhook:
             "signature": "valid-signature",
         }
 
-        with patch("app.modules.reporting.domain.billing.paystack_billing.WebhookHandler") as mock_handler_class:
+        with patch("app.modules.billing.domain.billing.paystack_billing.WebhookHandler") as mock_handler_class:
             mock_handler = MagicMock()
             mock_handler_class.return_value = mock_handler
             mock_handler.verify_signature.return_value = True
@@ -514,8 +508,8 @@ class TestProcessPaystackWebhook:
             "payload": {"event": "charge.success", "data": {}},
         }
 
-        with patch("app.modules.reporting.domain.billing.paystack_billing.WebhookHandler") as mock_handler_class, \
-             patch("app.modules.reporting.domain.billing.webhook_retry.get_settings") as mock_get_settings:
+        with patch("app.modules.billing.domain.billing.paystack_billing.WebhookHandler") as mock_handler_class, \
+             patch("app.modules.billing.domain.billing.webhook_retry.get_settings") as mock_get_settings:
             mock_handler_class.return_value = AsyncMock()
             mock_get_settings.return_value = MagicMock(ENVIRONMENT="production")
             result = await process_paystack_webhook(mock_job, mock_db)
@@ -549,7 +543,7 @@ class TestWebhookIntegration:
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
         
-        with patch('app.modules.reporting.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
+        with patch('app.modules.billing.domain.billing.webhook_retry.enqueue_job') as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
             mock_job.id = uuid.uuid4()
             mock_job.payload = {
@@ -570,7 +564,7 @@ class TestWebhookIntegration:
             assert stored_job is not None
             
             # Step 2: Process webhook
-            with patch('app.modules.reporting.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
+            with patch('app.modules.billing.domain.billing.paystack_billing.WebhookHandler') as mock_handler_class:
                 mock_handler = AsyncMock()
                 mock_handler_class.return_value = mock_handler
                 mock_handler._handle_charge_success = AsyncMock()

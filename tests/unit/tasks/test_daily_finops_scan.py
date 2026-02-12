@@ -1,6 +1,5 @@
 
-import pytest
-from unittest.mock import patch, call, MagicMock
+from unittest.mock import patch, call
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 
 def test_daily_finops_scan_exists():

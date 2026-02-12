@@ -5,7 +5,7 @@ Provides:
 - GET /audit/logs - Paginated audit logs (admin-only)
 """
 
-from typing import Annotated, Optional, List, Literal
+from typing import Annotated, Any, Optional, List, Literal
 from uuid import UUID
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -33,6 +33,11 @@ def _sanitize_csv_cell(value: str) -> str:
     return value
 
 
+def _rowcount(result: Any) -> int:
+    raw_count = getattr(result, "rowcount", None)
+    return raw_count if isinstance(raw_count, int) else 0
+
+
 class AuditLogResponse(BaseModel):
     id: UUID
     event_type: str
@@ -55,7 +60,7 @@ async def get_audit_logs(
     event_type: Optional[str] = Query(None, description="Filter by event type"),
     sort_by: Literal["event_timestamp", "event_type", "actor_email"] = Query("event_timestamp"),
     order: Literal["asc", "desc"] = Query("desc")
-):
+) -> list[AuditLogResponse]:
     """
     Get paginated audit logs for tenant.
     
@@ -109,7 +114,7 @@ async def get_audit_log_detail(
     log_id: UUID,
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Get single audit log entry with full details."""
     try:
         result = await db.execute(
@@ -150,7 +155,7 @@ async def get_audit_log_detail(
 @router.get("/event-types")
 async def get_event_types(
     _: Annotated[CurrentUser, Depends(requires_role("admin"))],
-):
+) -> dict[str, list[str]]:
     """Get list of available audit event types for filtering."""
     from app.modules.governance.domain.security.audit_log import AuditEventType
 
@@ -166,7 +171,7 @@ async def export_audit_logs(
     start_date: Optional[datetime] = Query(None, description="Start of date range"),
     end_date: Optional[datetime] = Query(None, description="End of date range"),
     event_type: Optional[str] = Query(None, description="Filter by event type"),
-):
+) -> Any:
     """
     Export audit logs as CSV for the tenant.
     GDPR/SOC2: Provides audit trail export for compliance.
@@ -237,7 +242,7 @@ async def request_data_erasure(
     user: Annotated[CurrentUser, Depends(requires_role("owner"))],
     db: AsyncSession = Depends(get_db),
     confirmation: str = Query(..., description="Type 'DELETE ALL MY DATA' to confirm")
-):
+) -> dict[str, Any]:
     """
     GDPR Article 17 - Right to Erasure (Right to be Forgotten).
     
@@ -310,24 +315,24 @@ async def request_data_erasure(
         result = await db.execute(
             delete(CostRecord).where(CostRecord.tenant_id == tenant_id)
         )
-        deleted_counts["cost_records"] = result.rowcount
+        deleted_counts["cost_records"] = _rowcount(result)
         
         # 4. Delete anomaly markers
         result = await db.execute(
             delete(AnomalyMarker).where(AnomalyMarker.tenant_id == tenant_id)
         )
-        deleted_counts["anomaly_markers"] = result.rowcount
+        deleted_counts["anomaly_markers"] = _rowcount(result)
 
         # 5. Delete remediation and discovery data
         result = await db.execute(
             delete(RemediationRequest).where(RemediationRequest.tenant_id == tenant_id)
         )
-        deleted_counts["remediation_requests"] = result.rowcount
+        deleted_counts["remediation_requests"] = _rowcount(result)
 
         result = await db.execute(
             delete(StrategyRecommendation).where(StrategyRecommendation.tenant_id == tenant_id)
         )
-        deleted_counts["strategy_recommendations"] = result.rowcount
+        deleted_counts["strategy_recommendations"] = _rowcount(result)
 
         # Optimization strategies are global catalog entries, not tenant-owned records.
         # Tenant data erasure must only remove tenant-specific recommendations.
@@ -344,7 +349,7 @@ async def request_data_erasure(
                 )
             )
         )
-        deleted_counts["discovered_accounts"] = result.rowcount
+        deleted_counts["discovered_accounts"] = _rowcount(result)
 
         # 6. Delete Cloud Connections and Attribution
         await db.execute(
@@ -365,7 +370,7 @@ async def request_data_erasure(
         result = await db.execute(
             delete(LLMUsage).where(LLMUsage.tenant_id == tenant_id)
         )
-        deleted_counts["llm_usage_records"] = result.rowcount
+        deleted_counts["llm_usage_records"] = _rowcount(result)
         
         await db.execute(
             delete(LLMBudget).where(LLMBudget.tenant_id == tenant_id)
@@ -383,13 +388,13 @@ async def request_data_erasure(
         result = await db.execute(
             delete(BackgroundJob).where(BackgroundJob.tenant_id == tenant_id)
         )
-        deleted_counts["background_jobs"] = result.rowcount
+        deleted_counts["background_jobs"] = _rowcount(result)
 
         # 10. Delete Cloud accounts (Meta)
         result = await db.execute(
             delete(CloudAccount).where(CloudAccount.tenant_id == tenant_id)
         )
-        deleted_counts["cloud_accounts"] = result.rowcount
+        deleted_counts["cloud_accounts"] = _rowcount(result)
         
         # 11. Delete users (except the requesting user - they delete last)
         result = await db.execute(
@@ -398,7 +403,7 @@ async def request_data_erasure(
                 User.id != user.id
             )
         )
-        deleted_counts["other_users"] = result.rowcount
+        deleted_counts["other_users"] = _rowcount(result)
 
         
         # 6. Audit logs preserved (required for compliance) but marked

@@ -28,6 +28,12 @@ logger = structlog.get_logger()
 router = APIRouter(tags=["Usage Metering"])
 
 
+def _require_tenant_id(user: CurrentUser) -> UUID:
+    if user.tenant_id is None:
+        raise ValueError("tenant_id is required for usage metrics")
+    return user.tenant_id
+
+
 class LLMUsageMetrics(BaseModel):
     """LLM usage for the current period."""
     tokens_used: int
@@ -82,7 +88,7 @@ class UsageResponse(BaseModel):
 async def get_usage_metrics(
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db)
-):
+) -> UsageResponse:
     """
     Get current usage metrics for the tenant.
     
@@ -94,21 +100,22 @@ async def get_usage_metrics(
     """
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    tenant_id = _require_tenant_id(user)
     
     # LLM Usage Aggregates
-    llm_metrics = await _get_llm_usage(db, user.tenant_id, now)
+    llm_metrics = await _get_llm_usage(db, tenant_id, now)
 
     # Recent LLM Usage Records
-    recent_usage = await _get_recent_llm_activity(db, user.tenant_id)
+    recent_usage = await _get_recent_llm_activity(db, tenant_id)
     
     # AWS Metering
-    aws_metrics = await _get_aws_metering(db, user.tenant_id, today_start)
+    aws_metrics = await _get_aws_metering(db, tenant_id, today_start)
     
     # Feature Usage
-    feature_metrics = await _get_feature_usage(db, user.tenant_id)
+    feature_metrics = await _get_feature_usage(db, tenant_id)
     
     return UsageResponse(
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         period="current_month",
         llm=llm_metrics,
         usage=recent_usage,
@@ -136,7 +143,7 @@ async def _get_recent_llm_activity(db: AsyncSession, tenant_id: UUID) -> list[LL
             input_tokens=rec.input_tokens,
             output_tokens=rec.output_tokens,
             total_tokens=rec.total_tokens,
-            cost_usd=rec.cost_usd,
+            cost_usd=float(rec.cost_usd),
             request_type=rec.request_type
         )
         for rec in records
@@ -260,8 +267,8 @@ async def _get_feature_usage(db: AsyncSession, tenant_id: UUID) -> FeatureUsageM
     )
     
     # Determine features based on tier
-    tier = tenant.plan if tenant else "trial"
-    is_paid = tier not in ["trial", "starter"]
+    tier = tenant.plan if tenant else "free_trial"
+    is_paid = tier not in ["free_trial", "starter"]
     
     return FeatureUsageMetrics(
         greenops_enabled=is_paid,

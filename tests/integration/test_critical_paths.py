@@ -3,11 +3,10 @@ Integration tests for critical paths in CloudSentinel-AI.
 Tests end-to-end workflows for zombie detection and remediation.
 """
 import pytest
-from datetime import datetime, timezone, date, timedelta
+from datetime import datetime, timezone, date
 from decimal import Decimal
 from uuid import uuid4
 from unittest.mock import MagicMock, patch, AsyncMock
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.costs import CloudUsageSummary, CostRecord
 from app.shared.llm.analyzer import FinOpsAnalyzer
@@ -15,7 +14,6 @@ from app.models.tenant import Tenant
 from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
 from app.modules.optimization.domain.remediation import RemediationService
 from app.shared.core.exceptions import BudgetExceededError, KillSwitchTriggeredError
-from app.shared.llm.usage_tracker import UsageTracker
 
 
 @pytest.fixture
@@ -193,7 +191,7 @@ class TestRemediationIntegration:
         # Mock remediation service
         with patch('app.modules.optimization.domain.remediation.RemediationService._get_client') as mock_get_client, \
              patch('app.shared.llm.budget_manager.LLMBudgetManager') as mock_budget_mgr, \
-             patch('app.shared.core.cache.get_cache_service') as mock_cache_svc:
+             patch('app.shared.core.cache.get_cache_service'):
 
             mock_budget_mgr.check_and_reserve = AsyncMock(return_value=Decimal("1.50"))
             mock_budget_mgr.record_usage = AsyncMock()
@@ -263,7 +261,7 @@ class TestRemediationIntegration:
         await db.commit()
 
         with patch('app.modules.optimization.domain.remediation.SafetyGuardrailService') as mock_safety, \
-             patch('app.modules.optimization.domain.remediation.RemediationService._get_client') as mock_get_client:
+             patch('app.modules.optimization.domain.remediation.RemediationService._get_client'):
 
             mock_safety.return_value.check_all_guards = AsyncMock(
                 side_effect=KillSwitchTriggeredError("Budget hard cap")
@@ -306,7 +304,7 @@ class TestTenantIsolationIntegration:
             total_cost=Decimal("100.00")
         )
 
-        usage2 = CloudUsageSummary(
+        CloudUsageSummary(
             tenant_id=str(tenant2.id),
             provider="aws",
             start_date=date(2024, 1, 1),
@@ -330,7 +328,7 @@ class TestTenantIsolationIntegration:
              patch('app.shared.llm.analyzer.SymbolicForecaster.forecast') as mock_forecast, \
              patch.object(analyzer, '_setup_client_and_usage') as mock_setup, \
              patch.object(analyzer, '_invoke_llm') as mock_invoke, \
-             patch('app.shared.llm.analyzer.LLMBudgetManager.record_usage') as mock_record, \
+             patch('app.shared.llm.analyzer.LLMBudgetManager.record_usage'), \
              patch.object(analyzer, '_process_analysis_results') as mock_process:
 
             # Setup mocks
@@ -485,7 +483,7 @@ class TestPerformanceIntegration:
              patch('app.shared.llm.analyzer.SymbolicForecaster.forecast') as mock_forecast, \
              patch.object(analyzer, '_setup_client_and_usage') as mock_setup, \
              patch.object(analyzer, '_invoke_llm') as mock_invoke, \
-             patch('app.shared.llm.analyzer.LLMBudgetManager.record_usage') as mock_record, \
+             patch('app.shared.llm.analyzer.LLMBudgetManager.record_usage'), \
              patch.object(analyzer, '_process_analysis_results') as mock_process:
 
             import time
@@ -529,7 +527,7 @@ class TestErrorHandlingIntegration:
              patch.object(analyzer, '_process_analysis_results') as mock_process:
 
             # Should handle LLM failure and still return a result
-            result = await analyzer.analyze(sample_cloud_usage, tenant_id=test_tenant.id)
+            await analyzer.analyze(sample_cloud_usage, tenant_id=test_tenant.id)
 
             # Verify error handling worked
             mock_process.assert_called_once()

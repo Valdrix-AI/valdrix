@@ -8,7 +8,7 @@ Centralizes:
 """
 
 from uuid import UUID
-from typing import Dict, Any, List
+from typing import Any
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -17,6 +17,8 @@ from fastapi import HTTPException
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
+from app.models.saas_connection import SaaSConnection
+from app.models.license_connection import LicenseConnection
 from app.shared.adapters.factory import AdapterFactory
 from app.shared.core.logging import audit_log
 
@@ -26,49 +28,87 @@ class CloudConnectionService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_all_connections(self, tenant_id: UUID) -> Dict[str, List[Any]]:
+    async def list_all_connections(
+        self, tenant_id: UUID
+    ) -> dict[str, list[AWSConnection | AzureConnection | GCPConnection | SaaSConnection | LicenseConnection]]:
         """Lists all cloud connections for a tenant, grouped by provider."""
-        results = {
+        results: dict[str, list[AWSConnection | AzureConnection | GCPConnection | SaaSConnection | LicenseConnection]] = {
             "aws": [],
             "azure": [],
-            "gcp": []
+            "gcp": [],
+            "saas": [],
+            "license": [],
         }
         
         # AWS
         aws_q = await self.db.execute(select(AWSConnection).where(AWSConnection.tenant_id == tenant_id))
-        results["aws"] = aws_q.scalars().all()
+        results["aws"] = list(aws_q.scalars().all())
         
         # Azure
         azure_q = await self.db.execute(select(AzureConnection).where(AzureConnection.tenant_id == tenant_id))
-        results["azure"] = azure_q.scalars().all()
+        results["azure"] = list(azure_q.scalars().all())
         
         # GCP
         gcp_q = await self.db.execute(select(GCPConnection).where(GCPConnection.tenant_id == tenant_id))
-        results["gcp"] = gcp_q.scalars().all()
+        results["gcp"] = list(gcp_q.scalars().all())
+
+        # SaaS
+        saas_q = await self.db.execute(select(SaaSConnection).where(SaaSConnection.tenant_id == tenant_id))
+        results["saas"] = list(saas_q.scalars().all())
+
+        # License
+        license_q = await self.db.execute(select(LicenseConnection).where(LicenseConnection.tenant_id == tenant_id))
+        results["license"] = list(license_q.scalars().all())
         
         return results
 
-    async def verify_connection(self, provider: str, connection_id: UUID, tenant_id: UUID) -> Dict[str, Any]:
+    async def verify_connection(
+        self, provider: str, connection_id: UUID, tenant_id: UUID
+    ) -> dict[str, Any]:
         """
         Generic entry point for connection verification.
         Delegates to provider-specific logic while maintaining a common interface.
         """
-        model_map = {
-            "aws": AWSConnection,
-            "azure": AzureConnection,
-            "gcp": GCPConnection
-        }
-        
-        model = model_map.get(provider.lower())
-        if not model:
+        provider_lower = provider.lower()
+        if provider_lower not in {"aws", "azure", "gcp", "saas", "license"}:
             raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
-            
-        result = await self.db.execute(
-            select(model).where(
-                model.id == connection_id,
-                model.tenant_id == tenant_id
+
+        connection: AWSConnection | AzureConnection | GCPConnection | SaaSConnection | LicenseConnection | None
+        if provider_lower == "aws":
+            result = await self.db.execute(
+                select(AWSConnection).where(
+                    AWSConnection.id == connection_id,
+                    AWSConnection.tenant_id == tenant_id,
+                )
             )
-        )
+        elif provider_lower == "azure":
+            result = await self.db.execute(
+                select(AzureConnection).where(
+                    AzureConnection.id == connection_id,
+                    AzureConnection.tenant_id == tenant_id,
+                )
+            )
+        elif provider_lower == "gcp":
+            result = await self.db.execute(
+                select(GCPConnection).where(
+                    GCPConnection.id == connection_id,
+                    GCPConnection.tenant_id == tenant_id,
+                )
+            )
+        elif provider_lower == "saas":
+            result = await self.db.execute(
+                select(SaaSConnection).where(
+                    SaaSConnection.id == connection_id,
+                    SaaSConnection.tenant_id == tenant_id,
+                )
+            )
+        else:
+            result = await self.db.execute(
+                select(LicenseConnection).where(
+                    LicenseConnection.id == connection_id,
+                    LicenseConnection.tenant_id == tenant_id,
+                )
+            )
         connection = result.scalar_one_or_none()
         
         if not connection:
@@ -118,12 +158,13 @@ class CloudConnectionService:
             logger.error("provider_verification_failed", provider=provider, error=str(e), connection_id=str(connection_id))
             if hasattr(connection, "status"):
                 connection.status = "error"
+            if hasattr(connection, "error_message"):
                 connection.error_message = str(e)
             await self.db.commit()
             raise HTTPException(status_code=500, detail=str(e))
 
     @staticmethod
-    def get_aws_setup_templates(external_id: str) -> Dict[str, str]:
+    def get_aws_setup_templates(external_id: str) -> dict[str, str]:
         """AWS specific onboarding templates."""
         return {
             "magic_link": f"https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=ValdrixAccess&templateURL=https://valdrix-public.s3.amazonaws.com/templates/aws-access.yaml&param_ExternalId={external_id}",

@@ -1,6 +1,5 @@
 import pytest
 from app.shared.core.config import Settings
-from pydantic import ValidationError
 
 def test_csrf_hardening_production():
     """Verify that default CSRF key is rejected in production."""

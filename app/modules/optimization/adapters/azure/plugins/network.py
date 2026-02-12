@@ -21,8 +21,21 @@ class OrphanPublicIpsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "orphan_azure_ips"
     
-    async def scan(self, subscription_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for orphan public IPs using Network API (free)."""
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            logger.warning("azure_scan_missing_subscription_id", plugin=self.category_key)
+            return []
+
         zombies = []
         
         cost_records = kwargs.get("cost_records")
@@ -68,8 +81,21 @@ class OrphanNicsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "orphan_azure_nics"
     
-    async def scan(self, subscription_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for orphan NICs."""
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            logger.warning("azure_scan_missing_subscription_id", plugin=self.category_key)
+            return []
+
         zombies = []
         
         try:
@@ -103,8 +129,21 @@ class OrphanNsgsPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "orphan_azure_nsgs"
     
-    async def scan(self, subscription_id: str, credentials=None, config: Any = None, **kwargs) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """Scan for orphan NSGs."""
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            logger.warning("azure_scan_missing_subscription_id", plugin=self.category_key)
+            return []
+
         zombies = []
         
         try:

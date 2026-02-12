@@ -10,12 +10,6 @@
 
 	Chart.register(...registerables);
 
-	let {
-		loading = false
-	}: {
-		loading?: boolean;
-	} = $props();
-
 	let canvas: HTMLCanvasElement;
 	let chart: Chart | null = null;
 
@@ -108,7 +102,7 @@
 	<div class="header">
 		<div class="title-area">
 			<div class="icon-wrap">
-				<Activity class="icon-activity" />
+				<Activity size={18} color="#a78bfa" />
 			</div>
 			<div>
 				<h3>12-Month ROA</h3>
@@ -167,12 +161,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-	}
-
-	.icon-activity {
-		color: #a78bfa;
-		width: 18px;
-		height: 18px;
 	}
 
 	h3 {

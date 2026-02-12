@@ -1,4 +1,5 @@
 import structlog
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.aws_connection import AWSConnection
@@ -11,10 +12,10 @@ class CURIngestionJob:
     Background job to ingest AWS CUR data from S3.
     """
 
-    def __init__(self, db: AsyncSession = None):
+    def __init__(self, db: Optional[AsyncSession] = None):
         self.db = db
 
-    async def run(self, connection_id: str = None, tenant_id: str = None):
+    async def run(self, connection_id: Optional[str] = None, tenant_id: Optional[str] = None) -> None:
         """
         Execute ingestion for a specific connection or all CUR-enabled connections.
         """
@@ -26,7 +27,16 @@ class CURIngestionJob:
         else:
             await self._execute(connection_id, tenant_id)
 
-    async def _execute(self, connection_id: str = None, tenant_id: str = None):
+    async def _execute(
+        self,
+        connection_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> None:
+        db_session = db or self.db
+        if db_session is None:
+            raise RuntimeError("Database session is required for CUR ingestion")
+
         # 1. Fetch connection(s)
         if not tenant_id:
             raise ValueError("tenant_id is required for CUR ingestion scope")
@@ -38,7 +48,7 @@ class CURIngestionJob:
         
         # We only want connections where CUR is configured (e.g. has bucket info)
         # Note: CUR configuration status might be stored in metadata or a flag
-        result = await self.db.execute(query)
+        result = await db_session.execute(query)
         connections = result.scalars().all()
 
         for conn in connections:
@@ -47,7 +57,7 @@ class CURIngestionJob:
             except Exception as e:
                 logger.error("cur_ingestion_connection_failed", connection_id=str(conn.id), error=str(e))
 
-    async def ingest_for_connection(self, connection: AWSConnection):
+    async def ingest_for_connection(self, connection: AWSConnection) -> None:
         """
         Ingest the latest CUR data for a connection.
         """
@@ -72,4 +82,4 @@ class CURIngestionJob:
 
     async def _find_latest_cur_key(self, connection: AWSConnection, bucket: str) -> str:
         # Implementation of S3 listing and manifest parsing
-        pass
+        raise NotImplementedError("CUR key discovery is not yet implemented")

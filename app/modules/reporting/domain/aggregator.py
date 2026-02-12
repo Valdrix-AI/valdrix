@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Dict, Any, Optional
 from uuid import UUID
@@ -158,7 +158,7 @@ class CostAggregator:
         schema_records = []
         for r in records:
             schema_records.append(SchemaCostRecord(
-                date=r.recorded_at,
+                date=datetime.combine(r.recorded_at, datetime.min.time(), tzinfo=timezone.utc),
                 amount=r.cost_usd,
                 service=r.service,
                 region=r.region
@@ -166,7 +166,7 @@ class CostAggregator:
             
         # Group by service for the *full* set is better done in DB if truncated
         # But for now, we'll indicate in metadata that the breakdown is partial
-        by_service = {}
+        by_service: dict[str, Decimal] = {}
         for r in records:
             by_service[r.service] = by_service.get(r.service, Decimal(0)) + r.cost_usd
 
@@ -228,6 +228,12 @@ class CostAggregator:
         breakdown_data = await CostAggregator.get_basic_breakdown(
             db, tenant_id, start_date, end_date, provider
         )
+        freshness = await CostAggregator.get_data_freshness(
+            db, tenant_id, start_date, end_date
+        )
+        canonical_quality = await CostAggregator.get_canonical_data_quality(
+            db, tenant_id, start_date, end_date, provider
+        )
         
         return {
             "total_cost": float(total_cost),
@@ -235,7 +241,60 @@ class CostAggregator:
             "provider": provider or "multi",
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),
-            "breakdown": breakdown_data["breakdown"]
+            "breakdown": breakdown_data["breakdown"],
+            "data_quality": {
+                "freshness": freshness,
+                "canonical_mapping": canonical_quality,
+            },
+        }
+
+    @staticmethod
+    async def get_canonical_data_quality(
+        db: AsyncSession,
+        tenant_id: UUID,
+        start_date: date,
+        end_date: date,
+        provider: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Returns canonical mapping coverage metrics.
+        """
+        mapped_filter = (
+            CostRecord.canonical_charge_category.is_not(None)
+        ) & (func.lower(CostRecord.canonical_charge_category) != "unmapped")
+        stmt = (
+            select(
+                func.count(CostRecord.id).label("total_records"),
+                func.count(CostRecord.id).filter(mapped_filter).label("mapped_records"),
+            )
+            .where(
+                CostRecord.tenant_id == tenant_id,
+                CostRecord.recorded_at >= start_date,
+                CostRecord.recorded_at <= end_date,
+            )
+        )
+
+        if provider:
+            stmt = stmt.join(CloudAccount, CostRecord.account_id == CloudAccount.id).where(
+                CloudAccount.provider == provider.lower()
+            )
+
+        result = await db.execute(stmt)
+        row = result.one_or_none()
+
+        total_records = int(row.total_records or 0) if row else 0
+        mapped_records = int(row.mapped_records or 0) if row else 0
+        unmapped_records = max(total_records - mapped_records, 0)
+        mapped_pct = (mapped_records / total_records * 100) if total_records > 0 else 0.0
+
+        return {
+            "status": "no_data" if total_records == 0 else "ok",
+            "target_percentage": 99.0,
+            "total_records": total_records,
+            "mapped_records": mapped_records,
+            "unmapped_records": unmapped_records,
+            "mapped_percentage": round(mapped_pct, 2),
+            "meets_target": mapped_pct >= 99.0 if total_records > 0 else False,
         }
     
     @staticmethod

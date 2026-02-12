@@ -1,28 +1,31 @@
 """
 Carbon Footprint Calculator (2026 Edition)
 
-Estimates CO₂ emissions from AWS cloud usage based on:
-1. AWS region (electricity grid carbon intensity)
-2. Service type (compute, storage, networking)
+Estimates CO2 emissions from cloud and Cloud+ spend based on:
+1. Region/grid carbon intensity
+2. Service type (compute, storage, networking, SaaS/license)
 3. Cost as a proxy for resource consumption
 4. Embodied emissions (server manufacturing impact)
 
 Methodology Sources:
-- AWS Customer Carbon Footprint Tool (CCFT) v3.0.0 (Oct 2025)
-- Cloud Carbon Footprint (CCF) open source project
+- Cloud Carbon Footprint (CCF) methodology patterns
+- Provider sustainability references (AWS/Azure/GCP)
 - GHG Protocol for Scope 1, 2, and 3 emissions
 - EPA emissions factors
 """
 
-from typing import List, Dict, Any
 from decimal import Decimal
+import hashlib
+import json
+from typing import Any, Dict, List
+
 import structlog
 
 logger = structlog.get_logger()
 
 
-# Carbon intensity by AWS region (gCO₂eq per kWh)
-# Source: Electricity Maps, EPA eGRID, and AWS sustainability reports (2025)
+# Carbon intensity by cloud region (gCO2eq per kWh)
+# Source: Electricity Maps, EPA eGRID, and provider sustainability reports.
 REGION_CARBON_INTENSITY = {
     # Low carbon (renewables/nuclear)
     "us-west-2": 21,      # Oregon - hydro
@@ -38,67 +41,121 @@ REGION_CARBON_INTENSITY = {
     # High carbon (coal/gas heavy)
     "us-east-1": 379,     # N. Virginia
     "us-east-2": 440,     # Ohio
-    "ap-southeast-1": 408,# Singapore
+    "ap-southeast-1": 408,  # Singapore
     "ap-south-1": 708,    # Mumbai
-    "ap-northeast-1": 506,# Tokyo
+    "ap-northeast-1": 506,  # Tokyo
 
     # Default for unknown regions
     "default": 400,
 }
 
-# Energy consumption per dollar spent (kWh/$)
-# These are rough estimates based on CCF methodology
-# Different services have different energy profiles
-SERVICE_ENERGY_FACTORS = {
-    "Amazon Elastic Compute Cloud - Compute": 0.05,  # EC2 is energy-intensive
-    "EC2 - Other": 0.04,                             # EC2 related services
-    "Amazon Simple Storage Service": 0.01,           # S3 is efficient
-    "Amazon Relational Database Service": 0.04,      # RDS moderate
-    "Amazon CloudFront": 0.02,                       # CDN is efficient
-    "AWS Lambda": 0.03,                              # Serverless moderate
-    "Amazon DynamoDB": 0.02,                         # NoSQL efficient
-    "Amazon Virtual Private Cloud": 0.02,            # VPC networking
-    "default": 0.03,                                 # Default estimate
+# Energy consumption per dollar spent (kWh/$), provider-aware.
+AWS_SERVICE_ENERGY_FACTORS = {
+    "Amazon Elastic Compute Cloud - Compute": 0.05,
+    "EC2 - Other": 0.04,
+    "Amazon Simple Storage Service": 0.01,
+    "Amazon Relational Database Service": 0.04,
+    "Amazon CloudFront": 0.02,
+    "AWS Lambda": 0.03,
+    "Amazon DynamoDB": 0.02,
+    "Amazon Virtual Private Cloud": 0.02,
+    "default": 0.03,
 }
 
-# Power Usage Effectiveness (PUE) - datacenter overhead
-# AWS reports PUE of ~1.2 for modern datacenters
-AWS_PUE = 1.2
+AZURE_SERVICE_ENERGY_FACTORS = {
+    "Virtual Machines": 0.05,
+    "Azure Kubernetes Service": 0.04,
+    "Storage": 0.012,
+    "SQL Database": 0.04,
+    "Functions": 0.03,
+    "default": 0.03,
+}
+
+GCP_SERVICE_ENERGY_FACTORS = {
+    "Compute Engine": 0.05,
+    "Google Kubernetes Engine": 0.04,
+    "Cloud Storage": 0.01,
+    "Cloud SQL": 0.04,
+    "Cloud Functions": 0.03,
+    "default": 0.03,
+}
+
+SAAS_SERVICE_ENERGY_FACTORS = {
+    "default": 0.015,
+}
+
+LICENSE_SERVICE_ENERGY_FACTORS = {
+    "default": 0.01,
+}
+
+GENERIC_SERVICE_ENERGY_FACTORS = {
+    "default": 0.03,
+}
+
+SERVICE_ENERGY_FACTORS_BY_PROVIDER = {
+    "aws": AWS_SERVICE_ENERGY_FACTORS,
+    "azure": AZURE_SERVICE_ENERGY_FACTORS,
+    "gcp": GCP_SERVICE_ENERGY_FACTORS,
+    "saas": SAAS_SERVICE_ENERGY_FACTORS,
+    "license": LICENSE_SERVICE_ENERGY_FACTORS,
+    "generic": GENERIC_SERVICE_ENERGY_FACTORS,
+}
+
+# Power Usage Effectiveness (PUE) - cloud datacenter overhead.
+CLOUD_PUE = 1.2
 
 # Embodied emissions factor (kgCO2e per kWh of compute)
-# Source: CCF methodology - accounts for server manufacturing
-# Typical value: ~0.025 kgCO2e per kWh (amortized over 4-year server lifecycle)
 EMBODIED_EMISSIONS_FACTOR = 0.025
+CARBON_FACTOR_SOURCE = "Electricity Maps + EPA eGRID + provider sustainability reports"
+CARBON_FACTOR_VERSION = "2025-Q4"
+CARBON_FACTOR_TIMESTAMP = "2025-12-01"
+CARBON_METHODOLOGY_VERSION = "valdrix-carbon-v2.0"
 
 
 class CarbonCalculator:
     """
-    Calculates carbon footprint from cloud cost data.
+    Calculates carbon footprint from cloud and Cloud+ cost data.
 
-    2026 Methodology (aligned with CCF and AWS CCFT):
-    1. Estimate energy (kWh) from cost using service-specific factors
+    2026 Methodology:
+    1. Estimate energy (kWh) from cost using provider/service factors
     2. Apply PUE multiplier for datacenter overhead
-    3. Multiply by region carbon intensity (gCO₂/kWh) → Scope 2
+    3. Multiply by region carbon intensity (gCO2/kWh) -> Scope 2
     4. Add embodied emissions (Scope 3)
-    5. Convert to kg CO₂
+    5. Convert to kg CO2
     6. Calculate carbon efficiency score (gCO2e per $1)
     """
+
+    @staticmethod
+    def _normalize_provider(provider: str | None) -> str:
+        provider_key = (provider or "aws").strip().lower()
+        return provider_key if provider_key in SERVICE_ENERGY_FACTORS_BY_PROVIDER else "generic"
+
+    def _resolve_energy_factor(self, provider: str, service: str | None) -> Decimal:
+        provider_key = self._normalize_provider(provider)
+        service_key = str(service or "default")
+        factor_map = SERVICE_ENERGY_FACTORS_BY_PROVIDER[provider_key]
+
+        if service_key in factor_map:
+            return Decimal(str(factor_map[service_key]))
+
+        # Cross-provider fallback for known AWS labels common in normalized inputs.
+        if service_key in AWS_SERVICE_ENERGY_FACTORS:
+            return Decimal(str(AWS_SERVICE_ENERGY_FACTORS[service_key]))
+
+        return Decimal(str(factor_map.get("default", GENERIC_SERVICE_ENERGY_FACTORS["default"])))
 
     def calculate_from_costs(
         self,
         cost_data: List[Dict[str, Any]],
         region: str = "us-east-1",
+        provider: str = "aws",
     ) -> Dict[str, Any]:
-        """
-        Cost-proxy calculation for manual uploads and quick views.
-        """
+        """Cost-proxy calculation for grouped/flat usage inputs."""
         total_cost_usd = Decimal("0")
         total_energy_kwh = Decimal("0")
 
-        # Sum up costs and estimate energy
         for record in cost_data:
             try:
-                # Case 1: Grouped data (e.g. by Service)
                 groups = record.get("Groups", [])
                 if groups:
                     for group in groups:
@@ -107,135 +164,119 @@ class CarbonCalculator:
                             group.get("Metrics", {})
                             .get("UnblendedCost", {})
                             .get("Amount", "0")
-                            )
+                        )
                         if cost_amount > 0:
                             total_cost_usd += cost_amount
-                            # Get factor for this specific service or use default
-                            factor_key = service if service in SERVICE_ENERGY_FACTORS else "default"
-                            energy_factor = Decimal(str(SERVICE_ENERGY_FACTORS[factor_key]))
+                            energy_factor = self._resolve_energy_factor(provider, service)
                             total_energy_kwh += cost_amount * energy_factor
-
-                # Case 2: Flat data (un-grouped)
+                elif "cost_usd" in record:
+                    # Normalized adapter payload (AWS/Azure/GCP/SaaS/license).
+                    cost_amount = Decimal(str(record.get("cost_usd", "0")))
+                    if cost_amount > 0:
+                        total_cost_usd += cost_amount
+                        service = str(record.get("service") or "default")
+                        row_provider = str(record.get("provider") or provider)
+                        energy_factor = self._resolve_energy_factor(row_provider, service)
+                        total_energy_kwh += cost_amount * energy_factor
                 else:
                     cost_amount = Decimal(
                         record.get("Total", {})
                         .get("UnblendedCost", {})
                         .get("Amount", "0")
-                        )
+                    )
                     if cost_amount > 0:
                         total_cost_usd += cost_amount
-                        energy_factor = Decimal(str(SERVICE_ENERGY_FACTORS["default"]))
+                        energy_factor = self._resolve_energy_factor(provider, None)
                         total_energy_kwh += cost_amount * energy_factor
-
-            except (KeyError, TypeError, ValueError) as e:
-                logger.warning("carbon_calc_skip_record", error=str(e))
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("carbon_calc_skip_record", error=str(exc))
                 continue
 
-        return self._finalize_calculation(total_cost_usd, total_energy_kwh, region)
+        return self._finalize_calculation(total_cost_usd, total_energy_kwh, region, provider)
 
     def calculate_from_records(
         self,
-        records: List[Any], # List[CostRecord]
+        records: List[Any],
         region: str = "us-east-1",
+        provider: str = "aws",
     ) -> Dict[str, Any]:
         """
-        High-precision SKU-level calculation. 
-        Uses amount_raw if it represents actual usage quantities.
+        High-precision calculation from record objects.
+        Uses amount_raw when available as higher-fidelity signal.
         """
         total_cost_usd = Decimal("0")
         total_energy_kwh = Decimal("0")
 
         for record in records:
+            record_provider = str(getattr(record, "provider", provider) or provider)
             total_cost_usd += record.cost_usd
-            
-            # If we have raw usage (vCPU-Hours, GB-Months), we can be much more accurate.
-            # In a full implementation, we'd map usage_type to precise kWh consumption.
-            # For now, we use amount_raw as a refined proxy or direct kWh if the CUR adapter 
-            # pre-calculates it.
-            
+
             if record.amount_raw and record.amount_raw > 0:
-                # Refined conversion logic: 
-                # EC2 Compute: amount_raw (Hours) * Watts per vCPU / 1000
+                # Example refinement for explicit EC2 vCPU-hours usage.
                 if "EC2" in record.service and "vCPU-Hours" in str(record.usage_type):
-                    # Average 2026 server: 10W per vCPU active
-                    total_energy_kwh += record.amount_raw * Decimal("0.010") 
+                    total_energy_kwh += record.amount_raw * Decimal("0.010")
                 else:
-                    # Fallback to refined cost-proxy if usage_type isn't mapped
-                    factor_key = record.service if record.service in SERVICE_ENERGY_FACTORS else "default"
-                    energy_factor = Decimal(str(SERVICE_ENERGY_FACTORS[factor_key]))
+                    energy_factor = self._resolve_energy_factor(record_provider, record.service)
                     total_energy_kwh += record.cost_usd * energy_factor
             else:
-                # Absolute fallback
-                factor_key = record.service if record.service in SERVICE_ENERGY_FACTORS else "default"
-                energy_factor = Decimal(str(SERVICE_ENERGY_FACTORS[factor_key]))
+                energy_factor = self._resolve_energy_factor(record_provider, record.service)
                 total_energy_kwh += record.cost_usd * energy_factor
 
-        return self._finalize_calculation(total_cost_usd, total_energy_kwh, region)
+        return self._finalize_calculation(total_cost_usd, total_energy_kwh, region, provider)
 
     def _finalize_calculation(
-        self, 
-        total_cost_usd: Decimal, 
-        total_energy_kwh: Decimal, 
-        region: str
+        self,
+        total_cost_usd: Decimal,
+        total_energy_kwh: Decimal,
+        region: str,
+        provider: str = "aws",
     ) -> Dict[str, Any]:
         """Shared logic for emissions calculation and result formatting."""
-        # Apply PUE (datacenter overhead)
-        total_energy_with_pue = total_energy_kwh * Decimal(str(AWS_PUE))
+        total_energy_with_pue = total_energy_kwh * Decimal(str(CLOUD_PUE))
 
-        # Get carbon intensity for region
-        carbon_intensity = REGION_CARBON_INTENSITY.get(
-            region, REGION_CARBON_INTENSITY["default"]
-        )
+        carbon_intensity = REGION_CARBON_INTENSITY.get(region, REGION_CARBON_INTENSITY["default"])
 
-        # Calculate Scope 2 CO₂ (operational emissions) in grams
         scope2_co2_grams = total_energy_with_pue * Decimal(str(carbon_intensity))
         scope2_co2_kg = scope2_co2_grams / Decimal("1000")
 
-        # Calculate Scope 3 CO₂ (embodied emissions from server manufacturing)
         scope3_co2_kg = total_energy_with_pue * Decimal(str(EMBODIED_EMISSIONS_FACTOR))
-
-        # Total CO₂ = Scope 2 + Scope 3
         total_co2_kg = scope2_co2_kg + scope3_co2_kg
 
-        # Calculate Carbon Efficiency Score (gCO2e per $1 of usage)
         carbon_efficiency_score = 0.0
         if total_cost_usd > 0:
             carbon_efficiency_score = float(total_co2_kg * 1000 / total_cost_usd)
         elif total_co2_kg > 0:
-            # If cost is 0 but co2 is not (rare but possible in some edge cases)
-            carbon_efficiency_score = 9999.9  # High inefficiency sentinel
+            carbon_efficiency_score = 9999.9
 
-        # Calculate equivalencies for user-friendly display
         equivalencies = self._calculate_equivalencies(float(total_co2_kg))
+        methodology_metadata = self._build_methodology_metadata(
+            provider=provider,
+            region=region,
+            carbon_intensity=carbon_intensity,
+            total_cost_usd=total_cost_usd,
+            total_energy_kwh=total_energy_kwh,
+        )
 
+        normalized_provider = self._normalize_provider(provider)
         result = {
-            # Core metrics
             "total_co2_kg": round(float(total_co2_kg), 3),
             "scope2_co2_kg": round(float(scope2_co2_kg), 3),
             "scope3_co2_kg": round(float(scope3_co2_kg), 3),
             "total_cost_usd": round(float(total_cost_usd), 2),
             "estimated_energy_kwh": round(float(total_energy_with_pue), 3),
-
-            # FinOps Carbon KPI (lower is better)
             "carbon_efficiency_score": round(carbon_efficiency_score, 2),
             "carbon_efficiency_unit": "gCO2e per $1 spent",
-
-            # Region info
+            "provider": normalized_provider,
             "region": region,
             "carbon_intensity_gco2_kwh": carbon_intensity,
-
-            # Human-readable equivalencies
             "equivalencies": equivalencies,
-
-            # Methodology metadata
-            "methodology": "Valdrix 2026 (CCF + AWS CCFT v3.0.0)",
+            "methodology": "Valdrix 2026 (CCF + multi-cloud provider factors v2.0)",
+            "methodology_metadata": methodology_metadata,
             "includes_embodied_emissions": True,
-
-            # Projections
-            "forecast_30d": self.forecast_emissions(float(total_co2_kg) / 30 if total_co2_kg > 0 else 0),
-
-            # GreenOps recommendations
-            "green_region_recommendations": self.get_green_region_recommendations(region)
+            "forecast_30d": self.forecast_emissions(
+                float(total_co2_kg) / 30 if total_co2_kg > 0 else 0
+            ),
+            "green_region_recommendations": self.get_green_region_recommendations(region),
         }
 
         logger.info(
@@ -243,41 +284,81 @@ class CarbonCalculator:
             co2_kg=result["total_co2_kg"],
             cost_usd=result["total_cost_usd"],
             efficiency_score=result["carbon_efficiency_score"],
+            provider=result["provider"],
             region=region,
         )
 
         return result
 
-    def _calculate_equivalencies(self, co2_kg: float) -> Dict[str, Any]:
-        """
-        Convert CO₂ to relatable equivalencies.
+    def _build_methodology_metadata(
+        self,
+        provider: str,
+        region: str,
+        carbon_intensity: int,
+        total_cost_usd: Decimal,
+        total_energy_kwh: Decimal,
+    ) -> Dict[str, Any]:
+        normalized_provider = self._normalize_provider(provider)
 
-        Sources: EPA Greenhouse Gas Equivalencies Calculator
-        """
+        factor_payload = {
+            "region_carbon_intensity": REGION_CARBON_INTENSITY,
+            "service_energy_factors_by_provider": SERVICE_ENERGY_FACTORS_BY_PROVIDER,
+            "provider": normalized_provider,
+            "cloud_pue": CLOUD_PUE,
+            "embodied_emissions_factor": EMBODIED_EMISSIONS_FACTOR,
+            "factor_source": CARBON_FACTOR_SOURCE,
+            "factor_version": CARBON_FACTOR_VERSION,
+            "factor_timestamp": CARBON_FACTOR_TIMESTAMP,
+            "methodology_version": CARBON_METHODOLOGY_VERSION,
+        }
+        factors_checksum = hashlib.sha256(
+            json.dumps(factor_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+        input_checksum = hashlib.sha256(
+            json.dumps(
+                {
+                    "provider": normalized_provider,
+                    "region": region,
+                    "carbon_intensity": carbon_intensity,
+                    "total_cost_usd": str(total_cost_usd),
+                    "total_energy_kwh": str(total_energy_kwh),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+
         return {
-            # Average car emits 404g CO₂ per mile
+            "methodology_version": CARBON_METHODOLOGY_VERSION,
+            "factor_source": CARBON_FACTOR_SOURCE,
+            "factor_version": CARBON_FACTOR_VERSION,
+            "factor_timestamp": CARBON_FACTOR_TIMESTAMP,
+            "provider": normalized_provider,
+            "region_factor": {
+                "region": region,
+                "carbon_intensity_gco2_kwh": carbon_intensity,
+            },
+            "constants": {
+                "cloud_pue": CLOUD_PUE,
+                "embodied_emissions_factor_kg_per_kwh": EMBODIED_EMISSIONS_FACTOR,
+            },
+            "factors_checksum_sha256": factors_checksum,
+            "calculation_input_checksum_sha256": input_checksum,
+        }
+
+    def _calculate_equivalencies(self, co2_kg: float) -> Dict[str, Any]:
+        """Convert CO2 to relatable equivalencies."""
+        return {
             "miles_driven": round(co2_kg * 1000 / 404, 1),
-
-            # One tree absorbs ~22kg CO₂ per year
             "trees_needed_for_year": round(co2_kg / 22, 1),
-
-            # Average smartphone charge uses ~0.0085 kWh = ~3.4g CO₂
             "smartphone_charges": round(co2_kg * 1000 / 3.4, 0),
-
-            # Average home uses ~900kWh/month = ~360kg CO₂/month
             "percent_of_home_month": round((co2_kg / 360) * 100, 2),
         }
 
     def get_green_region_recommendations(self, current_region: str) -> List[Dict[str, Any]]:
-        """
-        Recommend lower-carbon regions for workload placement.
-
-        Valdrix Innovation: Help users reduce emissions
-        by migrating to greener AWS regions.
-        """
-        current_intensity = REGION_CARBON_INTENSITY.get(
-            current_region, REGION_CARBON_INTENSITY["default"]
-        )
+        """Recommend lower-carbon regions for workload placement."""
+        current_intensity = REGION_CARBON_INTENSITY.get(current_region, REGION_CARBON_INTENSITY["default"])
 
         recommendations = []
         for region, intensity in sorted(REGION_CARBON_INTENSITY.items(), key=lambda x: x[1]):
@@ -285,35 +366,24 @@ class CarbonCalculator:
                 continue
             if intensity < current_intensity and current_intensity > 0:
                 savings_percent = round((1 - intensity / current_intensity) * 100, 1)
-                recommendations.append({
-                    "region": region,
-                    "carbon_intensity": intensity,
-                    "savings_percent": savings_percent,
-                })
+                recommendations.append(
+                    {
+                        "region": region,
+                        "carbon_intensity": intensity,
+                        "savings_percent": savings_percent,
+                    }
+                )
 
-        return recommendations[:5]  # Top 5 greenest alternatives
+        return recommendations[:5]
 
     def forecast_emissions(
         self,
         current_daily_co2_kg: float,
         days: int = 30,
-        region_trend_factor: float = 0.99  # Assuming 1% monthly grid improvement (optimistic) or flat
+        region_trend_factor: float = 0.99,
     ) -> Dict[str, Any]:
-        """
-        Predict future emissions based on current workload and grid trends.
-
-        Args:
-            current_daily_co2_kg: Current daily emission rate.
-            days: Number of days to forecast.
-            region_trend_factor: Monthly grid efficiency improvement (default 0.99 = 1% better).
-
-        Returns:
-            Dict with forecasted totals and trend description.
-        """
-        # Simple projection
+        """Predict future emissions based on current workload and grid trends."""
         baseline_projection = current_daily_co2_kg * days
-
-        # Adjusted projection (accounting for grid improvements or degradation)
         projected_co2_kg = baseline_projection * region_trend_factor
 
         return {

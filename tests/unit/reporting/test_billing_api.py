@@ -91,7 +91,7 @@ async def test_get_subscription_trial(mock_db):
     mock_db.execute.return_value = mock_result
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/api/v1/billing/subscription")
-    assert response.json()["tier"] == "trial"
+    assert response.json()["tier"] == "free_trial"
 
 @pytest.mark.asyncio
 async def test_get_subscription_error(mock_db):
@@ -112,8 +112,8 @@ async def test_get_features():
 
 @pytest.mark.asyncio
 async def test_create_checkout_success(mock_db):
-    with patch("app.modules.reporting.api.v1.billing.settings") as mock_settings, \
-         patch("app.modules.reporting.domain.billing.paystack_billing.BillingService") as mock_service_cls:
+    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings, \
+         patch("app.modules.billing.domain.billing.paystack_billing.BillingService") as mock_service_cls:
         mock_settings.PAYSTACK_SECRET_KEY = "sk_test"
         mock_settings.FRONTEND_URL = "https://app"
         mock_service = mock_service_cls.return_value
@@ -125,7 +125,7 @@ async def test_create_checkout_success(mock_db):
 @pytest.mark.asyncio
 async def test_create_checkout_no_tenant(mock_user):
     mock_user.tenant_id = None
-    with patch("app.modules.reporting.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
         mock_settings.PAYSTACK_SECRET_KEY = "sk_test"
         async with AsyncClient(transport=transport, base_url="https://test") as ac:
             response = await ac.post("/api/v1/billing/checkout", json={"tier": "pro"})
@@ -133,12 +133,12 @@ async def test_create_checkout_no_tenant(mock_user):
 
 @pytest.mark.asyncio
 async def test_create_checkout_error(mock_db):
-    with patch("app.modules.reporting.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
         mock_settings.PAYSTACK_SECRET_KEY = "sk_test"
         mock_settings.FRONTEND_URL = "https://app.valdrix.test"
         mock_settings.CORS_ORIGINS = ["https://app.valdrix.test"]
         mock_settings.ENVIRONMENT = "development"
-        with patch("app.modules.reporting.domain.billing.paystack_billing.BillingService") as mock_service_cls:
+        with patch("app.modules.billing.domain.billing.paystack_billing.BillingService") as mock_service_cls:
             mock_service = mock_service_cls.return_value
             mock_service.create_checkout_session.side_effect = Exception("Checkout Fail")
             async with AsyncClient(transport=transport, base_url="https://test") as ac:
@@ -150,7 +150,7 @@ async def test_create_checkout_error(mock_db):
 @pytest.mark.asyncio
 async def test_cancel_subscription_success(mock_db, mock_user):
     mock_user.role = UserRole.ADMIN
-    with patch("app.modules.reporting.domain.billing.paystack_billing.BillingService") as mock_service_cls:
+    with patch("app.modules.billing.domain.billing.paystack_billing.BillingService") as mock_service_cls:
         mock_service = mock_service_cls.return_value
         mock_service.cancel_subscription = AsyncMock()
         async with AsyncClient(transport=transport, base_url="https://test") as ac:
@@ -236,8 +236,8 @@ async def test_handle_webhook_no_signature():
 @pytest.mark.asyncio
 async def test_handle_webhook_processing_error(mock_db):
     payload = {"event": "charge.success", "data": {"reference": "ref_123"}}
-    with patch("app.modules.reporting.domain.billing.paystack_billing.WebhookHandler") as mock_handler_cls, \
-         patch("app.modules.reporting.domain.billing.webhook_retry.WebhookRetryService") as mock_retry_cls:
+    with patch("app.modules.billing.domain.billing.paystack_billing.WebhookHandler") as mock_handler_cls, \
+         patch("app.modules.billing.domain.billing.webhook_retry.WebhookRetryService") as mock_retry_cls:
         mock_handler = mock_handler_cls.return_value
         mock_handler.verify_signature.return_value = True
         mock_handler.handle.side_effect = Exception("Process Error")
@@ -251,7 +251,7 @@ async def test_handle_webhook_processing_error(mock_db):
 
 @pytest.mark.asyncio
 async def test_handle_webhook_unauthorized_ip():
-    with patch("app.modules.reporting.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
         mock_settings.ENVIRONMENT = "production"
         async with AsyncClient(transport=transport, base_url="https://test") as ac:
             response = await ac.post("/api/v1/billing/webhook", headers={"X-Forwarded-For": "1.2.3.4"})

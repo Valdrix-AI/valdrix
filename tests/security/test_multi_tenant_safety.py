@@ -37,7 +37,6 @@ async def test_row_limit_enforcement(db):
     pass
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Async Shift feature implementation is missing in CostAggregator")
 async def test_large_dataset_async_shift(ac, monkeypatch):
     """
     Verify that requesting a large dataset via API returns 202 Accepted.
@@ -55,7 +54,10 @@ async def test_large_dataset_async_shift(ac, monkeypatch):
     mock_job = AsyncMock()
     mock_job.id = uuid4()
     mock_job.status = "pending"
-    monkeypatch.setattr("app.modules.costs.enqueue_job", AsyncMock(return_value=mock_job))
+    monkeypatch.setattr(
+        "app.modules.governance.domain.jobs.processor.enqueue_job",
+        AsyncMock(return_value=mock_job),
+    )
     
     # Mock get_current_user to bypass auth
     from app.shared.core.auth import get_current_user, CurrentUser, require_tenant_access

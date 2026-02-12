@@ -118,20 +118,21 @@ async def get_exchange_rate(to_currency: str) -> Decimal:
         redis_key = f"currency_rate:{to_currency}"
         redis_data = await cache._get(redis_key)
         if redis_data:
-            rate = Decimal(str(redis_data["rate"]))
-            _RATES_CACHE[to_currency] = (rate, now)
-            return rate
+            redis_rate = Decimal(str(redis_data["rate"]))
+            _RATES_CACHE[to_currency] = (redis_rate, now)
+            return redis_rate
         
     # 3. Cache expired or missing: Fetch new rate
     logger.info("syncing_exchange_rate", currency=to_currency)
     
-    rate = None
+    rate: Decimal | None = None
     if to_currency == "NGN":
         rate = await fetch_paystack_ngn_rate()
         
     if not rate:
         all_fallbacks = await fetch_fallback_rates()
-        rate = all_fallbacks.get(to_currency, FALLBACK_RATES.get(to_currency))
+        fallback_rate = all_fallbacks.get(to_currency, FALLBACK_RATES.get(to_currency))
+        rate = Decimal(str(fallback_rate)) if fallback_rate is not None else None
         
     if rate:
         # Update L1 and L2

@@ -1,5 +1,5 @@
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, cast
 import structlog
 from kubernetes_asyncio import client, config as k8s_config
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -18,7 +18,15 @@ class OrphanedPVCPlugin(ZombiePlugin):
     def provider(self) -> str:
         return "kubernetes"
 
-    async def scan(self, session: Any, region: str, credentials: Dict[str, str] = None, config: Dict[str, Any] = None, inventory: Any = None) -> List[Dict[str, Any]]:
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Dict[str, str] | None = None,
+        config: Dict[str, Any] | None = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """
         Scans for Persistent Volume Claims (PVCs) that are 'Bound' but not mounted by any Pod.
         """
@@ -28,7 +36,7 @@ class OrphanedPVCPlugin(ZombiePlugin):
             if config and "kubeconfig" in config:
                 await k8s_config.load_kube_config(config_file=config["kubeconfig"])
             else:
-                k8s_config.load_incluster_config()
+                cast(Any, k8s_config.load_incluster_config)()
 
             async with client.ApiClient() as api_client:
                 v1 = client.CoreV1Api(api_client)

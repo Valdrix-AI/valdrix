@@ -1,7 +1,7 @@
 <script lang="ts">
 	import CloudLogo from './CloudLogo.svelte';
 	import DOMPurify from 'dompurify';
-	import { Terminal, Copy, Check } from '@lucide/svelte';
+	import { Terminal, Check } from '@lucide/svelte';
 
 	interface ZombieFinding {
 		provider: 'aws' | 'azure' | 'gcp';

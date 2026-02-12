@@ -17,6 +17,8 @@ Usage:
 """
 
 import os
+from typing import Any
+
 import structlog
 
 logger = structlog.get_logger()
@@ -89,7 +91,7 @@ def init_sentry() -> bool:
     return True
 
 
-def _before_send(event, hint):
+def _before_send(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
     """
     Filter and enrich events before sending to Sentry.
     
@@ -112,7 +114,7 @@ def _before_send(event, hint):
     return event
 
 
-def capture_message(message: str, level: str = "info", **extras):
+def capture_message(message: str, level: str = "info", **extras: Any) -> None:
     """
     Capture a custom message in Sentry.
     """
@@ -125,7 +127,20 @@ def capture_message(message: str, level: str = "info", **extras):
         sentry_sdk.capture_message(message, level)
 
 
-def set_user(user_id: str, tenant_id: str = None, email: str = None):
+def capture_exception(error: Exception, **extras: Any) -> None:
+    """Capture an exception in Sentry with optional extra context."""
+    if not SENTRY_AVAILABLE:
+        return
+
+    with sentry_sdk.push_scope() as scope:
+        for key, value in extras.items():
+            scope.set_extra(key, value)
+        sentry_sdk.capture_exception(error)
+
+
+def set_user(
+    user_id: str, tenant_id: str | None = None, email: str | None = None
+) -> None:
     """
     Set user context for Sentry events.
     """
@@ -139,7 +154,7 @@ def set_user(user_id: str, tenant_id: str = None, email: str = None):
     })
 
 
-def set_tenant_context(tenant_id: str, tenant_name: str = None):
+def set_tenant_context(tenant_id: str, tenant_name: str | None = None) -> None:
     """
     Set tenant context for multi-tenant error tracking.
     """

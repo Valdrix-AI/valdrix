@@ -11,6 +11,7 @@
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { createSupabaseBrowserClient } from '$lib/supabase';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { base } from '$app/paths';
 
 	let email = $state('');
@@ -21,6 +22,12 @@
 	let mode: 'login' | 'signup' = $state('login');
 
 	const supabase = createSupabaseBrowserClient();
+
+	$effect(() => {
+		if ($page.url.searchParams.get('mode') === 'signup') {
+			mode = 'signup';
+		}
+	});
 
 	async function handleSubmit() {
 		loading = true;
@@ -95,7 +102,13 @@
 			{/if}
 
 			<!-- Form -->
-			<form onsubmit={handleSubmit} class="space-y-4">
+			<form
+				onsubmit={(event) => {
+					event.preventDefault();
+					void handleSubmit();
+				}}
+				class="space-y-4"
+			>
 				<div>
 					<label for="email" class="label">Email</label>
 					<input

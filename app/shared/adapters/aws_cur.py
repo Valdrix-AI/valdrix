@@ -10,7 +10,7 @@ import json
 import tempfile
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Dict, Any, List
+from typing import Any, Dict, List, cast
 import aioboto3
 import pandas as pd
 import pyarrow.parquet as pq
@@ -160,7 +160,9 @@ class AWSCURAdapter(CostAdapter):
         summary = await self.ingest_latest_parquet()
         return [r.dict() for r in summary.records]
 
-    async def discover_resources(self, resource_type: str, region: str = None) -> List[Dict[str, Any]]:
+    async def discover_resources(
+        self, resource_type: str, region: str | None = None
+    ) -> List[Dict[str, Any]]:
         """
         CUR adapters do not typically discover live resources; they process
         historical billing records. Use AWSAdapter for live discovery.
@@ -187,7 +189,8 @@ class AWSCURAdapter(CostAdapter):
                 "currency": record.currency,
                 "amount_raw": record.amount_raw,
                 "usage_type": record.usage_type,
-                "tags": record.tags
+                "tags": record.tags,
+                "source_adapter": "cur_parquet",
             }
 
     async def get_costs(
@@ -266,10 +269,10 @@ class AWSCURAdapter(CostAdapter):
         
         # Initialize Summary
         total_cost_usd = Decimal("0")
-        by_service = {}
-        by_region = {}
-        by_tag = {}
-        all_records = [] # Still keeping records for now, but could be limited if needed
+        by_service: dict[str, Decimal] = {}
+        by_region: dict[str, Decimal] = {}
+        by_tag: dict[str, dict[str, Decimal]] = {}
+        all_records: list[CostRecord] = [] # Still keeping records for now, but could be limited if needed
         
         min_date = None
         max_date = None
@@ -326,8 +329,10 @@ class AWSCURAdapter(CostAdapter):
 
                 # Aggregation
                 total_cost_usd += record.amount
-                by_service[record.service] = by_service.get(record.service, Decimal("0")) + record.amount
-                by_region[record.region] = by_region.get(record.region, Decimal("0")) + record.amount
+                service_key = record.service or "unknown"
+                region_key = record.region or "unknown"
+                by_service[service_key] = by_service.get(service_key, Decimal("0")) + record.amount
+                by_region[region_key] = by_region.get(region_key, Decimal("0")) + record.amount
                 
                 for tk, tv in record.tags.items():
                     if tk not in by_tag:
@@ -346,7 +351,7 @@ class AWSCURAdapter(CostAdapter):
             by_tag=by_tag
         )
 
-    def _parse_row(self, row: pd.Series, col_map: Dict[str, str]) -> CostRecord:
+    def _parse_row(self, row: pd.Series, col_map: Dict[str, str | None]) -> CostRecord:
         """Parses a single CUR row into a CostRecord."""
         cost_key = col_map.get("cost")
         raw_value = row.get(cost_key, 0) if cost_key else 0
@@ -379,7 +384,10 @@ class AWSCURAdapter(CostAdapter):
         tags = self._extract_tags(row)
 
         # Use raw datetime to preserve hourly granularity
-        dt = pd.to_datetime(row[col_map["date"]])
+        date_column = col_map["date"]
+        if not date_column:
+            raise ValueError("Missing date column mapping")
+        dt = pd.to_datetime(row[date_column])
         if pd.isna(dt):
             raise ValueError("Invalid usage start date")
         if dt.tzinfo is None:
@@ -408,12 +416,13 @@ class AWSCURAdapter(CostAdapter):
                     tags[str_k.replace("resource_tags_user_", "")] = str(v)
         return tags
 
-    async def _get_credentials(self) -> Dict:
+    async def _get_credentials(self) -> dict[str, str]:
         """Helper to get credentials from existing adapter logic or shared util."""
         # For simplicity, we assume the credentials logic is shared or we re-implement
         from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
         adapter = MultiTenantAWSAdapter(self.connection)
-        return await adapter.get_credentials()
+        credentials = await adapter.get_credentials()
+        return cast(dict[str, str], credentials)
 
     def _empty_summary(self) -> CloudUsageSummary:
         return CloudUsageSummary(
@@ -428,7 +437,9 @@ class AWSCURAdapter(CostAdapter):
         )
 
 
-    async def get_resource_usage(self, service_name: str, resource_id: str = None) -> List[Dict[str, Any]]:
+    async def get_resource_usage(
+        self, service_name: str, resource_id: str | None = None
+    ) -> List[Dict[str, Any]]:
         """
         Detailed usage metrics are parsed from the CUR records during ingestion.
         """

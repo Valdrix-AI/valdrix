@@ -1,6 +1,5 @@
 import pytest
 import uuid
-import sys
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch

@@ -5,7 +5,8 @@ Cloud Cost and Usage Schemas - Normalization Layer
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from uuid import UUID
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 class CostRecord(BaseModel):
     """Normalized cost entry for a specific date/time and dimension."""
@@ -20,6 +21,8 @@ class CostRecord(BaseModel):
 
 class CloudUsageSummary(BaseModel):
     """High-level summary of cloud usage over a period."""
+    model_config = ConfigDict(validate_assignment=True)
+
     tenant_id: str
     provider: str  # aws, azure, gcp
     start_date: date
@@ -33,6 +36,13 @@ class CloudUsageSummary(BaseModel):
     by_tag: Dict[str, Dict[str, Decimal]] = Field(default_factory=dict) # e.g., {"Project": {"Prod": 10.5, "Dev": 5.2}}
     
     metadata: Dict[str, Any] = Field(default_factory=dict) # Added for Phase 21: Truncation flags, etc.
+
+    @field_validator("tenant_id", mode="before")
+    @classmethod
+    def _coerce_tenant_id(cls, value: str | UUID) -> str:
+        if isinstance(value, UUID):
+            return str(value)
+        return value
 
 class ResourceCandidate(BaseModel):
     """Normalized resource identified for optimization/remediation."""

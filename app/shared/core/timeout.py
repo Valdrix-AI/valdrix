@@ -8,12 +8,14 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 from functools import wraps
-from typing import Any, Callable, TypeVar, Optional, Dict, Union
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any, TypeVar
 
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
 
 from app.shared.core.config import get_settings
 from app.shared.core.exceptions import ExternalAPIError
@@ -27,7 +29,7 @@ DEFAULT_TIMEOUT_SECONDS = 300  # 5 minutes
 T = TypeVar("T")
 
 # Default timeout configurations (seconds)
-TIMEOUT_CONFIGS = {
+TIMEOUT_CONFIGS: dict[str, dict[str, float]] = {
     "default": {
         "total": 30.0,
         "connect": 10.0,
@@ -72,7 +74,12 @@ class TimeoutManager:
             "read": 20.0,
         })
 
-    async def execute_with_timeout(self, coro: Callable[..., T], *args, **kwargs) -> T:
+    async def execute_with_timeout(
+        self,
+        coro: Callable[..., Awaitable[T]],
+        *args: Any,
+        **kwargs: Any,
+    ) -> T:
         """Execute a coroutine with timeout handling."""
         start_time = time.perf_counter()
 
@@ -123,7 +130,9 @@ class TimeoutManager:
             raise
 
 
-def timeout_operation(operation_type: str = "default"):
+def timeout_operation(
+    operation_type: str = "default",
+) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     """
     Decorator for operations that need timeout handling.
 
@@ -133,9 +142,9 @@ def timeout_operation(operation_type: str = "default"):
             # API call here
             pass
     """
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> T:
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
             timeout_manager = TimeoutManager(operation_type)
             return await timeout_manager.execute_with_timeout(func, *args, **kwargs)
         return wrapper
@@ -143,7 +152,10 @@ def timeout_operation(operation_type: str = "default"):
 
 
 @asynccontextmanager
-async def timeout_context(operation_type: str = "default", custom_timeout: Optional[float] = None):
+async def timeout_context(
+    operation_type: str = "default",
+    custom_timeout: float | None = None,
+) -> AsyncIterator[TimeoutManager]:
     """
     Context manager for timeout handling.
 
@@ -161,7 +173,7 @@ async def timeout_context(operation_type: str = "default", custom_timeout: Optio
 
     try:
         yield timeout_manager
-    except Exception as e:
+    except Exception:
         if task and not task.done():
             task.cancel()
             try:
@@ -171,12 +183,14 @@ async def timeout_context(operation_type: str = "default", custom_timeout: Optio
         raise
 
 
-def get_timeout_config(operation_type: str) -> Dict[str, float]:
+def get_timeout_config(operation_type: str) -> dict[str, float]:
     """Get timeout configuration for an operation type."""
     return TIMEOUT_CONFIGS.get(operation_type, TIMEOUT_CONFIGS["default"]).copy()
 
 
-def validate_timeout_config(operation_type: str, config: Dict[str, Union[int, float]]) -> bool:
+def validate_timeout_config(
+    operation_type: str, config: dict[str, int | float]
+) -> bool:
     """Validate timeout configuration."""
     required_keys = {"total", "connect", "read"}
 
@@ -187,7 +201,7 @@ def validate_timeout_config(operation_type: str, config: Dict[str, Union[int, fl
     return all(isinstance(v, (int, float)) and v > 0 for v in config.values())
 
 
-def set_timeout_config(operation_type: str, config: Dict[str, Union[int, float]]) -> None:
+def set_timeout_config(operation_type: str, config: dict[str, int | float]) -> None:
     """Set custom timeout configuration for an operation type."""
     if not validate_timeout_config(operation_type, config):
         raise ValueError(f"Invalid timeout configuration for {operation_type}")
@@ -204,12 +218,14 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
     resource exhaustion from long-running operations.
     """
 
-    def __init__(self, app, timeout_seconds: int | None = None):
+    def __init__(self, app: ASGIApp, timeout_seconds: int | None = None) -> None:
         super().__init__(app)
         settings = get_settings()
         self.timeout_seconds = timeout_seconds or getattr(settings, "REQUEST_TIMEOUT", DEFAULT_TIMEOUT_SECONDS)
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         try:
             return await asyncio.wait_for(
                 call_next(request),

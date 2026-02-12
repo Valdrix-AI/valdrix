@@ -43,12 +43,12 @@ class LeaderboardResponse(BaseModel):
 # ============================================================
 
 @router.get("", response_model=LeaderboardResponse)
-@requires_tier(PricingTier.GROWTH, PricingTier.PRO, PricingTier.ENTERPRISE, PricingTier.TRIAL)
+@requires_tier(PricingTier.GROWTH, PricingTier.PRO, PricingTier.ENTERPRISE, PricingTier.FREE_TRIAL)
 async def get_leaderboard(
     period: str = Query("30d", pattern="^(7d|30d|90d|all)$"),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> LeaderboardResponse:
     """
     Get the savings leaderboard for the current tenant.
 
@@ -70,7 +70,7 @@ async def get_leaderboard(
         select(
             User.email.label("user_email"),
             func.sum(RemediationRequest.estimated_monthly_savings).label("total_savings"),
-            func.count(RemediationRequest.id).label("count"),
+            func.count(RemediationRequest.id).label("remediation_count"),
         )
         .join(User, RemediationRequest.reviewed_by_user_id == User.id)
         .where(
@@ -93,14 +93,19 @@ async def get_leaderboard(
     total_savings = 0.0
 
     for rank, row in enumerate(rows, start=1):
-        savings = float(row.total_savings or 0)
+        row_mapping = getattr(row, "_mapping", row)
+        user_email = row_mapping.get("user_email") if hasattr(row_mapping, "get") else getattr(row, "user_email", "")
+        row_total_savings = row_mapping.get("total_savings") if hasattr(row_mapping, "get") else getattr(row, "total_savings", 0)
+        remediation_count = row_mapping.get("remediation_count") if hasattr(row_mapping, "get") else getattr(row, "remediation_count", 0)
+
+        savings = float(row_total_savings or 0)
         total_savings += savings
 
         entries.append(LeaderboardEntry(
             rank=rank,
-            user_email=row.user_email,
+            user_email=str(user_email or ""),
             savings_usd=savings,
-            remediation_count=row.count,
+            remediation_count=int(remediation_count or 0),
         ))
 
     period_labels = {

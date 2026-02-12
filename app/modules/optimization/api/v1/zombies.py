@@ -37,7 +37,7 @@ class ReviewRequest(BaseModel):
 # --- Endpoints ---
 
 @router.get("")
-@rate_limit("10/minute") # type: ignore[untyped-decorator]
+@rate_limit("10/minute")
 async def scan_zombies(
     request: Request,
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],

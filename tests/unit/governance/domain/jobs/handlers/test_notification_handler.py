@@ -118,7 +118,7 @@ async def test_webhook_retry_execute_paystack(db):
     handler = WebhookRetryHandler()
     job = BackgroundJob(payload={"provider": "paystack"})
     
-    with patch("app.modules.reporting.domain.billing.webhook_retry.process_paystack_webhook", new_callable=AsyncMock) as mock_process:
+    with patch("app.modules.billing.domain.billing.webhook_retry.process_paystack_webhook", new_callable=AsyncMock) as mock_process:
         mock_process.return_value = {"status": "processed"}
         
         result = await handler.execute(job, db)

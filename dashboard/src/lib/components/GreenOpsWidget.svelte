@@ -19,11 +19,9 @@
 			gpu_waste_reduction_kg: 85.2,
 			total_avoided_emissions_kg: 1450.8,
 			equivalence_trees: 66
-		},
-		loading = false
+		}
 	}: {
 		data?: GreenOpsData;
-		loading?: boolean;
 	} = $props();
 
 	function formatKG(kg: number): string {
@@ -36,7 +34,7 @@
 	<div class="header">
 		<div class="title-area">
 			<div class="icon-wrap">
-				<Leaf class="icon-leaf" />
+				<Leaf size={20} color="#4ade80" />
 			</div>
 			<div>
 				<h3>GreenOps Sustainability</h3>
@@ -112,12 +110,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-	}
-
-	.icon-leaf {
-		color: #4ade80;
-		width: 20px;
-		height: 20px;
 	}
 
 	h3 {
@@ -214,6 +206,7 @@
 
 	.text-gradient {
 		background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+		background-clip: text;
 		-webkit-background-clip: text;
 		-webkit-text-fill-color: transparent;
 	}

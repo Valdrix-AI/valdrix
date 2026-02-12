@@ -1,6 +1,7 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
+	import { api } from '$lib/api';
 
 	let { data } = $props();
 
@@ -52,14 +53,15 @@
 		}
 
 		try {
-			const res = await fetch(`${API_URL}/settings/onboard`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${token}`
-				},
-				body: JSON.stringify({ tenant_name: 'My Organization' })
-			});
+			const res = await api.post(
+				`${API_URL}/settings/onboard`,
+				{ tenant_name: 'My Organization' },
+				{
+					headers: {
+						Authorization: `Bearer ${token}`
+					}
+				}
+			);
 
 			if (res.ok) {
 				return true;
@@ -83,6 +85,9 @@
 		error = '';
 		try {
 			const token = await getAccessToken();
+			if (!token) {
+				throw new Error('Please log in first');
+			}
 			const endpoint =
 				selectedProvider === 'aws'
 					? '/settings/connections/aws/setup'
@@ -90,8 +95,7 @@
 						? '/settings/connections/azure/setup'
 						: '/settings/connections/gcp/setup';
 
-			const res = await fetch(`${API_URL}${endpoint}`, {
-				method: 'POST',
+			const res = await api.post(`${API_URL}${endpoint}`, undefined, {
 				headers: {
 					Authorization: `Bearer ${token}`
 				}
@@ -165,20 +169,24 @@
 			isVerifying = true;
 			try {
 				const token = await getAccessToken();
-				const res = await fetch(`${API_URL}/settings/connections/azure`, {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						Authorization: `Bearer ${token}`
-					},
-					body: JSON.stringify({
+				if (!token) {
+					throw new Error('Please log in first');
+				}
+				const res = await api.post(
+					`${API_URL}/settings/connections/azure`,
+					{
 						name: `Azure-${azureSubscriptionId.slice(0, 8)}`,
 						azure_tenant_id: azureTenantId,
 						subscription_id: azureSubscriptionId,
 						client_id: azureClientId,
 						auth_method: 'workload_identity'
-					})
-				});
+					},
+					{
+						headers: {
+							Authorization: `Bearer ${token}`
+						}
+					}
+				);
 				if (!res.ok) {
 					const errData = await res.json();
 					throw new Error(errData.detail || 'Failed to connect');
@@ -187,10 +195,10 @@
 				const connection = await res.json();
 
 				// Explicit verify step
-				const verifyRes = await fetch(
+				const verifyRes = await api.post(
 					`${API_URL}/settings/connections/azure/${connection.id}/verify`,
+					undefined,
 					{
-						method: 'POST',
 						headers: { Authorization: `Bearer ${token}` }
 					}
 				);
@@ -200,6 +208,7 @@
 					throw new Error(errData.detail || 'Verification failed');
 				}
 
+				success = true;
 				currentStep = 3; // Done
 			} catch (e) {
 				const err = e as Error;
@@ -215,21 +224,25 @@
 			isVerifying = true;
 			try {
 				const token = await getAccessToken();
-				const res = await fetch(`${API_URL}/settings/connections/gcp`, {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						Authorization: `Bearer ${token}`
-					},
-					body: JSON.stringify({
+				if (!token) {
+					throw new Error('Please log in first');
+				}
+				const res = await api.post(
+					`${API_URL}/settings/connections/gcp`,
+					{
 						name: `GCP-${gcpProjectId}`,
 						project_id: gcpProjectId,
 						billing_project_id: gcpBillingProjectId || gcpProjectId,
 						billing_dataset: gcpBillingDataset,
 						billing_table: gcpBillingTable,
 						auth_method: 'workload_identity'
-					})
-				});
+					},
+					{
+						headers: {
+							Authorization: `Bearer ${token}`
+						}
+					}
+				);
 				if (!res.ok) {
 					const errData = await res.json();
 					throw new Error(errData.detail || 'Failed to connect');
@@ -238,10 +251,10 @@
 				const connection = await res.json();
 
 				// Explicit verify step
-				const verifyRes = await fetch(
+				const verifyRes = await api.post(
 					`${API_URL}/settings/connections/gcp/${connection.id}/verify`,
+					undefined,
 					{
-						method: 'POST',
 						headers: { Authorization: `Bearer ${token}` }
 					}
 				);
@@ -251,6 +264,7 @@
 					throw new Error(errData.detail || 'Verification failed');
 				}
 
+				success = true;
 				currentStep = 3; // Done
 			} catch (e) {
 				const err = e as Error;
@@ -288,21 +302,22 @@
 				return;
 			}
 
-			const createRes = await fetch(`${API_URL}/settings/connections/aws`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${token}`
-				},
-				body: JSON.stringify({
+			const createRes = await api.post(
+				`${API_URL}/settings/connections/aws`,
+				{
 					aws_account_id: awsAccountId,
 					role_arn: roleArn,
 					external_id: externalId, // Pass the SAME external_id from step 1!
 					is_management_account: isManagementAccount,
 					organization_id: organizationId,
 					region: 'us-east-1'
-				})
-			});
+				},
+				{
+					headers: {
+						Authorization: `Bearer ${token}`
+					}
+				}
+			);
 
 			if (!createRes.ok) {
 				const errData = await createRes.json();
@@ -311,10 +326,13 @@
 
 			const connection = await createRes.json();
 
-			const verifyRes = await fetch(`${API_URL}/settings/connections/aws/${connection.id}/verify`, {
-				method: 'POST',
-				headers: { Authorization: `Bearer ${token}` }
-			});
+			const verifyRes = await api.post(
+				`${API_URL}/settings/connections/aws/${connection.id}/verify`,
+				undefined,
+				{
+					headers: { Authorization: `Bearer ${token}` }
+				}
+			);
 
 			if (!verifyRes.ok) {
 				const errData = await verifyRes.json();
@@ -329,16 +347,6 @@
 			isVerifying = false;
 		}
 	}
-
-	$effect(() => {
-		// This effect was likely intended to call fetchSetupData()
-		// but was named getTemplates(). Correcting to fetchSetupData()
-		// if that was the original intent, or removing if not needed.
-		// Assuming it was meant to fetch setup data on component mount.
-		if (currentStep === 1 && selectedProvider) {
-			fetchSetupData();
-		}
-	});
 </script>
 
 <div class="onboarding-container">
@@ -443,6 +451,7 @@
 						<a
 							href={magicLink}
 							target="_blank"
+							rel="noopener noreferrer"
 							class="primary-btn !w-auto px-8 py-3 bg-accent-500 hover:bg-accent-600"
 						>
 							⚡ Launch AWS Stack
@@ -513,6 +522,7 @@
 									Navigate to the <a
 										href="https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template"
 										target="_blank"
+										rel="noopener noreferrer"
 										class="text-accent-400 hover:text-accent-300 underline underline-offset-4 decoration-accent-500/30"
 										>AWS CloudFormation Console</a
 									>. Select <strong>Create Stack</strong> and choose
@@ -606,7 +616,7 @@
 
 					<div
 						class="form-group pt-4 border-t border-ink-800 relative mt-4"
-						class:opacity-50={!['growth', 'pro', 'enterprise', 'trial'].includes(
+						class:opacity-50={!['growth', 'pro', 'enterprise'].includes(
 							data?.subscription?.tier
 						)}
 					>
@@ -616,13 +626,13 @@
 									type="checkbox"
 									bind:checked={isManagementAccount}
 									class="toggle"
-									disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(
+									disabled={!['growth', 'pro', 'enterprise'].includes(
 										data?.subscription?.tier
 									)}
 								/>
 								<span class="font-bold">Register as Management Account</span>
 							</div>
-							{#if !['growth', 'pro', 'enterprise', 'trial'].includes(data?.subscription?.tier)}
+							{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 								<span class="badge badge-warning text-[10px]">Growth Tier +</span>
 							{/if}
 						</label>
@@ -797,7 +807,7 @@
 
 			<div
 				class="form-group pt-4 border-t border-ink-800 relative"
-				class:opacity-50={!['growth', 'pro', 'enterprise', 'trial'].includes(
+				class:opacity-50={!['growth', 'pro', 'enterprise'].includes(
 					data?.subscription?.tier
 				)}
 			>
@@ -807,13 +817,13 @@
 							type="checkbox"
 							bind:checked={isManagementAccount}
 							class="toggle"
-							disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(
+							disabled={!['growth', 'pro', 'enterprise'].includes(
 								data?.subscription?.tier
 							)}
 						/>
 						<span class="font-bold">Register as Management Account</span>
 					</div>
-					{#if !['growth', 'pro', 'enterprise', 'trial'].includes(data?.subscription?.tier)}
+					{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 						<span class="badge badge-warning text-[10px]">Growth Tier +</span>
 					{/if}
 				</label>
@@ -821,7 +831,7 @@
 					Enable this if this account is the Management Account of an AWS Organization. Valdrix will
 					automatically discover and help you link member accounts.
 				</p>
-				{#if !['growth', 'pro', 'enterprise', 'trial'].includes(data?.subscription?.tier)}
+				{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 					<p class="text-[10px] text-accent-400 mt-1">
 						⚡ Multi-account discovery requires Growth tier or higher.
 					</p>
@@ -964,7 +974,7 @@
 		height: 64px;
 		border-radius: 50%;
 		display: flex;
-		items-center: center;
+		align-items: center;
 		justify-content: center;
 		padding: 12px;
 		margin-bottom: 0.5rem;

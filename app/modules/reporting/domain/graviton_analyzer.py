@@ -12,7 +12,7 @@ References:
 - AWS Sustainability Pillar recommends Graviton for carbon reduction
 """
 
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 import structlog
 import aioboto3
 
@@ -88,7 +88,9 @@ class GravitonAnalyzer:
     by recommending energy-efficient ARM-based instances.
     """
 
-    def __init__(self, credentials: Optional[Dict] = None, region: str = "us-east-1"):
+    def __init__(
+        self, credentials: Optional[dict[str, str]] = None, region: str = "us-east-1"
+    ):
         """
         Initialize the analyzer.
 
@@ -100,7 +102,7 @@ class GravitonAnalyzer:
         self.region = region
         self.session = aioboto3.Session()
 
-    def _get_ec2_client_context(self):
+    def _get_ec2_client_context(self) -> Any:
         """Get EC2 client context manager with optional STS credentials."""
         if self.credentials:
             return self.session.client(

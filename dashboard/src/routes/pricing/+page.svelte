@@ -13,6 +13,7 @@
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { api } from '$lib/api';
 
 	import { onMount } from 'svelte';
 
@@ -78,7 +79,7 @@
 
 		// If not logged in, redirect to signup
 		if (!data.user) {
-			goto(`${base}/auth/signup?plan=${planId}&cycle=${billingCycle}`);
+			goto(`${base}/auth/login?mode=signup&plan=${planId}&cycle=${billingCycle}`);
 			return;
 		}
 
@@ -88,17 +89,18 @@
 			const session = data.session;
 			if (!session) throw new Error('Not authenticated');
 
-			const res = await fetch(`${PUBLIC_API_URL}/billing/checkout`, {
-				method: 'POST',
-				headers: {
-					Authorization: `Bearer ${session.access_token}`,
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
+			const res = await api.post(
+				`${PUBLIC_API_URL}/billing/checkout`,
+				{
 					tier: planId,
 					billing_cycle: billingCycle
-				})
-			});
+				},
+				{
+					headers: {
+						Authorization: `Bearer ${session.access_token}`
+					}
+				}
+			);
 
 			if (!res.ok) {
 				const err = await res.json();

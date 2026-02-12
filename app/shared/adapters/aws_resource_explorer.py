@@ -23,7 +23,7 @@ class AWSResourceExplorerAdapter:
         self.connection = connection
         self.session = aioboto3.Session()
 
-    async def _get_client(self):
+    async def _get_client(self) -> Any:
         """Helper to get a configured resource-explorer-2 client."""
         from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
         adapter = MultiTenantAWSAdapter(self.connection)

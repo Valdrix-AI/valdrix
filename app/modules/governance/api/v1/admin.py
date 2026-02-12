@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Header, HTTPException, Request, Depends
+from typing import Any
 from app.shared.core.config import get_settings
 from app.shared.db.session import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,7 @@ logger = structlog.get_logger()
 async def validate_admin_key(
     request: Request,
     x_admin_key: str = Header(..., alias="X-Admin-Key")
-):
+) -> bool:
     """Dependency to validate the admin API key with production hardening."""
     settings = get_settings()
 
@@ -51,7 +52,7 @@ async def validate_admin_key(
 async def trigger_analysis(
     request: Request,
     _: bool = Depends(validate_admin_key)
-):
+) -> dict[str, str]:
     """Manually trigger a scheduled analysis job."""
 
     logger.info("manual_trigger_requested")
@@ -69,7 +70,7 @@ async def reconcile_tenant_costs(
     end_date: date,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(validate_admin_key)
-):
+) -> dict[str, Any]:
     """
     Diagnostic tool to compare Explorer vs CUR data for a tenant.
     Used for investigating billing discrepancies.

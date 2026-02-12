@@ -17,7 +17,7 @@ async def test_ingestion_execute_no_connections(db):
     handler = CostIngestionHandler()
     job = BackgroundJob(tenant_id=uuid4())
     
-    # Mock DB to return empty lists for AWS, Azure, GCP
+    # Mock DB to return empty lists for AWS, Azure, GCP, SaaS, and license
     db.execute = AsyncMock(return_value=MagicMock(scalars=lambda: MagicMock(all=lambda: [])))
     
     result = await handler.execute(job, db)
@@ -39,13 +39,16 @@ async def test_ingestion_execute_success(db):
     # 1. Select AWS
     # 2. Select Azure
     # 3. Select GCP
-    # 4. Upsert CloudAccount (pg_insert)
-    # 5. Commit
+    # 4. Select SaaS
+    # 5. Select License
+    # 6. Upsert CloudAccount (pg_insert)
     
     mock_aws_res = MagicMock(scalars=lambda: MagicMock(all=lambda: [conn]))
     mock_empty_res = MagicMock(scalars=lambda: MagicMock(all=lambda: []))
     
-    db.execute = AsyncMock(side_effect=[mock_aws_res, mock_empty_res, mock_empty_res, None])
+    db.execute = AsyncMock(
+        side_effect=[mock_aws_res, mock_empty_res, mock_empty_res, mock_empty_res, mock_empty_res, None]
+    )
     db.add = MagicMock()
     db.commit = AsyncMock()
     

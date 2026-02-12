@@ -122,7 +122,7 @@ class SymbolicForecaster:
         # Extract forecast window
         result_df = forecast.tail(days)
         forecast_entries = []
-        total_cost = 0
+        total_cost = 0.0
         
         for _, row in result_df.iterrows():
             amount = max(0.0, float(row['yhat']))

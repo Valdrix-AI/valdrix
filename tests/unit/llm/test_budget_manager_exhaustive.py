@@ -1,5 +1,4 @@
 import pytest
-from typing import Dict
 from decimal import Decimal
 from uuid import uuid4
 from unittest.mock import MagicMock, patch, AsyncMock

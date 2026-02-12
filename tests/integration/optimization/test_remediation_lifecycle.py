@@ -9,7 +9,6 @@ from app.models.tenant import Tenant, User, UserRole
 from app.models.aws_connection import AWSConnection
 from app.models.remediation import RemediationRequest, RemediationStatus
 from app.shared.core.pricing import PricingTier
-from app.shared.db.session import get_db
 from tests.utils import create_test_token
 
 @pytest.fixture(autouse=True)

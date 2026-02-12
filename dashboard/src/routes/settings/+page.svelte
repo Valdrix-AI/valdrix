@@ -418,8 +418,8 @@
 		<!-- Carbon Budget Settings -->
 		<div
 			class="card stagger-enter relative"
-			class:opacity-60={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
-			class:pointer-events-none={!['growth', 'pro', 'enterprise', 'trial'].includes(
+			class:opacity-60={!['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
+			class:pointer-events-none={!['growth', 'pro', 'enterprise'].includes(
 				data.subscription?.tier
 			)}
 		>
@@ -428,12 +428,12 @@
 					<span>🌱</span> Carbon Budget
 				</h2>
 
-				{#if !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+				{#if !['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
 					<span class="badge badge-warning text-xs">Growth Plan Required</span>
 				{/if}
 			</div>
 
-			{#if !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+			{#if !['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
 				<div class="absolute inset-0 z-10 flex items-center justify-center bg-transparent">
 					<a href="{base}/billing" class="btn btn-primary shadow-lg pointer-events-auto">
 						Upgrade to Unlock GreenOps
@@ -453,7 +453,7 @@
 							bind:value={carbonSettings.carbon_budget_kg}
 							min="0"
 							step="10"
-							disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+							disabled={!['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
 							aria-label="Monthly carbon budget in kilograms"
 						/>
 						<p class="text-xs text-ink-500 mt-1">Set your monthly carbon footprint limit</p>
@@ -467,7 +467,7 @@
 							bind:value={carbonSettings.alert_threshold_percent}
 							min="0"
 							max="100"
-							disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+							disabled={!['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
 							aria-label="Carbon alert threshold percentage"
 						/>
 						<p class="text-xs text-ink-500 mt-1">
@@ -481,7 +481,7 @@
 							id="default_region"
 							bind:value={carbonSettings.default_region}
 							class="select"
-							disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+							disabled={!['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
 							aria-label="Default AWS region for carbon analysis"
 						>
 							<option value="us-west-2">US West (Oregon) - 21 gCO₂/kWh ⭐</option>
@@ -503,7 +503,7 @@
 								type="checkbox"
 								bind:checked={carbonSettings.email_enabled}
 								class="toggle"
-								disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(
+								disabled={!['growth', 'pro', 'enterprise'].includes(
 									data.subscription?.tier
 								)}
 								aria-label="Enable email notifications for carbon alerts"
@@ -520,7 +520,7 @@
 								id="email_recipients"
 								bind:value={carbonSettings.email_recipients}
 								placeholder="email1@example.com, email2@example.com"
-								disabled={!['growth', 'pro', 'enterprise', 'trial'].includes(
+								disabled={!['growth', 'pro', 'enterprise'].includes(
 									data.subscription?.tier
 								)}
 								aria-label="Carbon alert email recipients"
@@ -535,7 +535,7 @@
 						class="btn btn-primary"
 						onclick={saveCarbonSettings}
 						disabled={savingCarbon ||
-							!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+							!['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
 						aria-label="Save carbon budget settings"
 					>
 						{savingCarbon ? '⏳ Saving...' : '💾 Save Carbon Settings'}

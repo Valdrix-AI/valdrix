@@ -65,7 +65,7 @@ async def test_kubernetes_pvc_scan_logic():
     
     with patch("app.modules.optimization.adapters.kubernetes.plugins.kubernetes_pvc.client.ApiClient", return_value=mock_api_client_instance):
         with patch("app.modules.optimization.adapters.kubernetes.plugins.kubernetes_pvc.client.CoreV1Api", return_value=mock_core_v1):
-            with patch("app.modules.optimization.adapters.kubernetes.plugins.kubernetes_pvc.k8s_config.load_kube_config", new_callable=AsyncMock) as mock_load_config:
+            with patch("app.modules.optimization.adapters.kubernetes.plugins.kubernetes_pvc.k8s_config.load_kube_config", new_callable=AsyncMock):
                  zombies = await plugin.scan(session=session, region="us-east-1", config={"kubeconfig": "fake"})
              
     assert len(zombies) == 1

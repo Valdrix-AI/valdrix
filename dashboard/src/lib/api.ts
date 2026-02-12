@@ -32,16 +32,23 @@ export async function resilientFetch(
 	const id = setTimeout(() => controller.abort(), timeout);
 
 	try {
-		options.signal = controller.signal;
+		const requestOptions: RequestInit = {
+			...options,
+			signal: controller.signal,
+			credentials: options.credentials ?? 'include'
+		};
+
 		// Automatic CSRF Protection (SEC-01)
-		const method = options.method?.toUpperCase() || 'GET';
+		const method = requestOptions.method?.toUpperCase() || 'GET';
 		if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
 			let csrfToken = getCookie('fastapi-csrf-token');
 
 			// If token missing, try to fetch it from the unified CSRF endpoint
 			if (!csrfToken) {
 				try {
-					const csrfRes = await fetch(`${PUBLIC_API_URL}/csrf`);
+					const csrfRes = await fetch(`${PUBLIC_API_URL}/public/csrf`, {
+						credentials: requestOptions.credentials
+					});
 					if (csrfRes.ok) {
 						const data = await csrfRes.json();
 						csrfToken = data.csrf_token;
@@ -52,14 +59,13 @@ export async function resilientFetch(
 			}
 
 			if (csrfToken) {
-				options.headers = {
-					...options.headers,
-					'X-CSRF-Token': csrfToken
-				};
+				const headers = new Headers(requestOptions.headers);
+				headers.set('X-CSRF-Token', csrfToken);
+				requestOptions.headers = headers;
 			}
 		}
 
-		let response = await fetch(url, options);
+		let response = await fetch(url, requestOptions);
 		clearTimeout(id);
 
 		if (response.status === 401) {
@@ -71,11 +77,10 @@ export async function resilientFetch(
 
 			if (session?.access_token) {
 				// Retry once with new token
-				options.headers = {
-					...options.headers,
-					Authorization: `Bearer ${session.access_token}`
-				};
-				response = await fetch(url, options);
+				const headers = new Headers(requestOptions.headers);
+				headers.set('Authorization', `Bearer ${session.access_token}`);
+				requestOptions.headers = headers;
+				response = await fetch(url, requestOptions);
 			} else {
 				console.warn('[API Auth] 401 Unauthorized and Refresh failed. Session expired.');
 			}
@@ -92,9 +97,9 @@ export async function resilientFetch(
 				const clone = response.clone();
 				const data = await clone.json();
 				const session = (await createSupabaseBrowserClient().auth.getSession()).data.session;
-				const userTenantId = session?.user?.user_metadata?.tenant_id || session?.user?.id; // Fallback
+				const userTenantId = session?.user?.user_metadata?.tenant_id;
 
-				if (data && typeof data === 'object') {
+				if (userTenantId && data && typeof data === 'object') {
 					const checkTenant = (obj: Record<string, unknown> | Array<unknown>) => {
 						if (Array.isArray(obj)) {
 							obj.forEach((item) => {
@@ -115,15 +120,7 @@ export async function resilientFetch(
 							if (val && typeof val === 'object') checkTenant(val as Record<string, unknown>);
 						}
 					};
-					// Only check if it's a direct resource or list of resources
-					const dataObj = data as Record<string, unknown>;
-					const dataArr = data as Array<Record<string, unknown>>;
-					if (
-						dataObj.tenant_id ||
-						(Array.isArray(data) && data.length > 0 && dataArr[0].tenant_id)
-					) {
-						checkTenant(dataObj);
-					}
+					checkTenant(data as Record<string, unknown> | Array<unknown>);
 				}
 			} catch (e: unknown) {
 				if (e instanceof Error && e.message.startsWith('Security Error')) throw e;
@@ -177,7 +174,9 @@ export async function resilientFetchWithRetry(
 			// Handle 503 Service Unavailable with backoff
 			if (response.status === 503 && i < maxRetries - 1) {
 				const delay = Math.pow(2, i) * 1000;
-				console.warn(`[API] 503 detected. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+				console.warn(
+					`[API] 503 detected. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`
+				);
 				await new Promise((resolve) => setTimeout(resolve, delay));
 				continue;
 			}
@@ -206,20 +205,24 @@ export async function resilientFetchWithRetry(
 export const api = {
 	get: (url: string, options: RequestInit = {}) =>
 		resilientFetchWithRetry(url, { ...options, method: 'GET' }),
-	post: (url: string, body: unknown, options: RequestInit = {}) =>
-		resilientFetchWithRetry(url, {
-			...options,
-			method: 'POST',
-			body: JSON.stringify(body),
-			headers: { 'Content-Type': 'application/json', ...options.headers }
-		}),
-	put: (url: string, body: unknown, options: RequestInit = {}) =>
-		resilientFetchWithRetry(url, {
-			...options,
-			method: 'PUT',
-			body: JSON.stringify(body),
-			headers: { 'Content-Type': 'application/json', ...options.headers }
-		}),
+	post: (url: string, body?: unknown, options: RequestInit = {}) => {
+		const headers = new Headers(options.headers);
+		const requestOptions: RequestInit = { ...options, method: 'POST', headers };
+		if (body !== undefined) {
+			headers.set('Content-Type', 'application/json');
+			requestOptions.body = JSON.stringify(body);
+		}
+		return resilientFetchWithRetry(url, requestOptions);
+	},
+	put: (url: string, body?: unknown, options: RequestInit = {}) => {
+		const headers = new Headers(options.headers);
+		const requestOptions: RequestInit = { ...options, method: 'PUT', headers };
+		if (body !== undefined) {
+			headers.set('Content-Type', 'application/json');
+			requestOptions.body = JSON.stringify(body);
+		}
+		return resilientFetchWithRetry(url, requestOptions);
+	},
 	delete: (url: string, options: RequestInit = {}) =>
 		resilientFetchWithRetry(url, { ...options, method: 'DELETE' })
 };

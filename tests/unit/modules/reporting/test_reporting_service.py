@@ -1,24 +1,18 @@
-import pytest
 """
 Comprehensive tests for ReportingService module.
 Covers cost ingestion, connection handling, data aggregation, and error scenarios.
 """
+import pytest
 
-from typing import Dict
-from unittest.mock import AsyncMock, MagicMock, patch, call
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal
-from typing import List, Dict, Any
+from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.modules.reporting.domain.service import ReportingService
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
-from app.models.cloud import CloudAccount
 
 
 # Fixtures for mock connections
@@ -308,7 +302,7 @@ class TestCloudAccountRegistry:
             )
             mock_persistence.return_value = mock_persistence_instance
             
-            result = await service.ingest_costs_for_tenant(tenant_id)
+            await service.ingest_costs_for_tenant(tenant_id)
             
             # Check that execute was called (for registry sync with upsert)
             assert mock_db.execute.called
@@ -498,7 +492,6 @@ class TestConnectionMetadataUpdate:
     ):
         """Test that connection's last_ingested_at timestamp is updated."""
         tenant_id = mock_aws_connection.tenant_id
-        original_timestamp = mock_aws_connection.last_ingested_at
         
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]

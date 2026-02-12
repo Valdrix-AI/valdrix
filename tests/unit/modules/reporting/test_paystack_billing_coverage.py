@@ -1,26 +1,28 @@
 import pytest
 import uuid
 import json
-import hmac
-import hashlib
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, AsyncMock, patch
-from app.modules.reporting.domain.billing.paystack_billing import (
+from app.modules.billing.domain.billing.paystack_billing import (
     BillingService, 
-    PaystackClient, 
     WebhookHandler,
-    TenantSubscription,
-    SubscriptionStatus
+    TenantSubscription
 )
 from app.shared.core.pricing import PricingTier
 
 @pytest.fixture
 def mock_db():
-    return AsyncMock()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.add = MagicMock()
+    db.add_all = MagicMock()
+    return db
 
 @pytest.fixture
 def billing_service(mock_db):
-    with patch("app.modules.reporting.domain.billing.paystack_billing.settings") as mock_settings:
+    with patch("app.modules.billing.domain.billing.paystack_billing.settings") as mock_settings:
         mock_settings.PAYSTACK_SECRET_KEY = "test-key"
         return BillingService(mock_db)
 
@@ -34,8 +36,8 @@ async def test_charge_renewal_success(billing_service, mock_db):
         paystack_auth_code="encrypted-auth-code"
     )
     
-    with patch("app.modules.reporting.domain.billing.paystack_billing.decrypt_string", return_value="AUTH_123"), \
-         patch("app.modules.reporting.domain.billing.paystack_billing.PaystackClient.charge_authorization") as mock_charge:
+    with patch("app.modules.billing.domain.billing.paystack_billing.decrypt_string", return_value="AUTH_123"), \
+         patch("app.modules.billing.domain.billing.paystack_billing.PaystackClient.charge_authorization") as mock_charge:
         
         mock_charge.return_value = {"status": True, "data": {"status": "success"}}
         
@@ -66,7 +68,7 @@ async def test_webhook_handler_invalid_signature(mock_db):
     handler = WebhookHandler(mock_db)
     payload = b'{"event":"test"}'
     
-    with patch("app.modules.reporting.domain.billing.paystack_billing.settings") as mock_settings:
+    with patch("app.modules.billing.domain.billing.paystack_billing.settings") as mock_settings:
         mock_settings.PAYSTACK_SECRET_KEY = "secret"
         
         with pytest.raises(HTTPException) as exc:
@@ -93,7 +95,7 @@ async def test_webhook_handle_charge_success(mock_db):
         mock_result.scalar_one_or_none.return_value = None # No existing sub
         mock_db.execute.return_value = mock_result
         
-        with patch("app.modules.reporting.domain.billing.paystack_billing.encrypt_string", return_value="encrypted-auth"):
+        with patch("app.modules.billing.domain.billing.paystack_billing.encrypt_string", return_value="encrypted-auth"):
             response = await handler.handle(payload, "valid-sig")
             assert response["status"] == "success"
             mock_db.add.assert_called() # Should add new subscription

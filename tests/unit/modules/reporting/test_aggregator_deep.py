@@ -5,12 +5,12 @@ Covers aggregation summaries, dashboard data, and governance reports.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone, timedelta, date
+from datetime import datetime, date
 from decimal import Decimal
 import uuid
 
 from app.modules.reporting.domain.aggregator import CostAggregator
-from app.models.cloud import CostRecord, CloudAccount
+from app.models.cloud import CostRecord
 
 @pytest.fixture
 def mock_db():
@@ -188,9 +188,17 @@ class TestCostAggregator:
              mock_breakdown_result # Breakdown query
         ]
 
-        summary = await CostAggregator.get_dashboard_summary(
-            mock_db, tenant_id, date.today(), date.today()
-        )
+        with (
+            patch.object(CostAggregator, "get_data_freshness", return_value={"status": "final"}),
+            patch.object(
+                CostAggregator,
+                "get_canonical_data_quality",
+                return_value={"mapped_percentage": 100.0, "meets_target": True},
+            ),
+        ):
+            summary = await CostAggregator.get_dashboard_summary(
+                mock_db, tenant_id, date.today(), date.today()
+            )
 
         assert summary["total_cost"] == 100.0
         assert summary["total_carbon_kg"] == 50.0

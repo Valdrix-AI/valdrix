@@ -153,7 +153,7 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)) -> List[Dict[str,
 
 
 @router.get("/subscription", response_model=SubscriptionResponse)
-@auth_limit # type: ignore[untyped-decorator]
+@auth_limit
 async def get_subscription(
     request: Request,
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
@@ -161,7 +161,7 @@ async def get_subscription(
 ) -> SubscriptionResponse:
     """Get current subscription status for tenant."""
     try:
-        from app.modules.reporting.domain.billing.paystack_billing import TenantSubscription
+        from app.modules.billing.domain.billing.paystack_billing import TenantSubscription
         from sqlalchemy import select
 
         result = await db.execute(
@@ -172,7 +172,7 @@ async def get_subscription(
         sub = result.scalar_one_or_none()
 
         if not sub:
-            return SubscriptionResponse(tier="trial", status="active")
+            return SubscriptionResponse(tier="free_trial", status="active")
 
         return SubscriptionResponse(
             tier=sub.tier,
@@ -187,7 +187,7 @@ async def get_subscription(
 
 
 @router.get("/features")
-@auth_limit # type: ignore[untyped-decorator]
+@auth_limit
 async def get_features(
     request: Request,
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
@@ -198,7 +198,7 @@ async def get_features(
     """
     from app.shared.core.pricing import PricingTier, get_tier_config
     
-    user_tier = getattr(user, "tier", PricingTier.STARTER)
+    user_tier = getattr(user, "tier", PricingTier.FREE_TRIAL)
     config = get_tier_config(user_tier)
     
     return {
@@ -210,7 +210,7 @@ async def get_features(
 
 
 @router.post("/checkout")
-@auth_limit # type: ignore[untyped-decorator]
+@auth_limit
 async def create_checkout(
     request: Request,
     checkout_req: CheckoutRequest,
@@ -222,7 +222,7 @@ async def create_checkout(
         raise HTTPException(503, "Billing not configured")
 
     try:
-        from app.modules.reporting.domain.billing.paystack_billing import BillingService
+        from app.modules.billing.domain.billing.paystack_billing import BillingService
         from app.shared.core.pricing import PricingTier
 
         # Validate tier
@@ -264,7 +264,7 @@ async def cancel_subscription(
 ) -> Dict[str, str]:
     """Cancel current subscription."""
     try:
-        from app.modules.reporting.domain.billing.paystack_billing import BillingService
+        from app.modules.billing.domain.billing.paystack_billing import BillingService
 
         billing = BillingService(db)
         if not user.tenant_id:
@@ -291,8 +291,8 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
     enabling automatic retry on failure.
     """
     try:
-        from app.modules.reporting.domain.billing.paystack_billing import WebhookHandler
-        from app.modules.reporting.domain.billing.webhook_retry import WebhookRetryService
+        from app.modules.billing.domain.billing.paystack_billing import WebhookHandler
+        from app.modules.billing.domain.billing.webhook_retry import WebhookRetryService
         import json
 
         # BE-BILLING-1: Validate Paystack origin IP (Mandatory for SOC2/Security)
@@ -390,13 +390,12 @@ async def update_exchange_rate(
         rate_obj.provider = request.provider
         rate_obj.last_updated = datetime.now(timezone.utc)
     else:
-        from app.shared.core.async_utils import maybe_await
-        await maybe_await(db.add(ExchangeRate(
+        db.add(ExchangeRate(
             from_currency="USD",
             to_currency="NGN",
             rate=request.rate,
             provider=request.provider
-        )))
+        ))
     
     await db.commit()
     return {"status": "success", "rate": request.rate}
@@ -428,7 +427,7 @@ async def get_exchange_rate(
     }
 
 @router.post("/admin/plans/{plan_id}")
-@auth_limit # type: ignore[untyped-decorator]
+@auth_limit
 async def update_pricing_plan(
     request: Request,
     plan_id: str, # Note: plan_id is a slug (e.g., 'starter'), not a UUID

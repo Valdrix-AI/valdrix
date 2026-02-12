@@ -339,11 +339,11 @@ class DeltaAnalysisService:
 
 
 async def analyze_with_delta(
-    analyzer,
+    analyzer: Any,
     tenant_id: UUID,
     current_costs: List[Dict[str, Any]],
     previous_costs: Optional[List[Dict[str, Any]]] = None,
-    db = None,
+    db: Any | None = None,
     force_refresh: bool = False
 ) -> Dict[str, Any]:
     """

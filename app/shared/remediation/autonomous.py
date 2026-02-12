@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.remediation import RemediationAction
 from app.modules.optimization.adapters.aws.detector import AWSZombieDetector
@@ -18,7 +19,7 @@ class AutonomousRemediationEngine:
     Engine for autonomous remediation (ActiveOps).
     Bridges to RemediationService for execution.
     """
-    def __init__(self, db, tenant_id: str):
+    def __init__(self, db: AsyncSession, tenant_id: str | UUID):
         self.db = db
         self.tenant_id = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
         self.service = RemediationService(db)
@@ -33,7 +34,7 @@ class AutonomousRemediationEngine:
         savings: float,
         confidence: float,
         reason: str
-    ):
+    ) -> bool:
         """Processes a single remediation candidate."""
         # BE-OP-Autonomous: High-Confidence Auto-Execution (Phase 8)
         

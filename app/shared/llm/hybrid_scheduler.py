@@ -10,6 +10,7 @@ This provides 95% quality at 20% of the cost of always doing full analysis.
 
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,11 +99,11 @@ class HybridAnalysisScheduler:
     async def run_analysis(
         self,
         tenant_id: UUID,
-        current_costs: list,
-        previous_costs: list = None,
+        current_costs: list[dict[str, Any]],
+        previous_costs: list[dict[str, Any]] | None = None,
         force_full: bool = False,
         force_delta: bool = False
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Run the appropriate analysis based on schedule.
         
@@ -165,8 +166,8 @@ class HybridAnalysisScheduler:
     async def _run_full_analysis(
         self, 
         tenant_id: UUID, 
-        costs: list
-    ) -> dict:
+        costs: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Run comprehensive 30-day analysis."""
         import json
 
@@ -198,9 +199,9 @@ class HybridAnalysisScheduler:
     async def _run_delta_analysis(
         self,
         tenant_id: UUID,
-        current_costs: list,
-        previous_costs: list = None
-    ) -> dict:
+        current_costs: list[dict[str, Any]],
+        previous_costs: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """Run lightweight delta analysis."""
         
         delta = await self.delta_service.compute_delta(
@@ -251,7 +252,9 @@ class HybridAnalysisScheduler:
         return parsed
 
     @staticmethod
-    def _coerce_usage_summary(tenant_id: UUID, costs: list) -> CloudUsageSummary:
+    def _coerce_usage_summary(
+        tenant_id: UUID, costs: list[dict[str, Any]]
+    ) -> CloudUsageSummary:
         """
         Convert scheduler input costs into a valid CloudUsageSummary object.
         """
@@ -305,7 +308,9 @@ class HybridAnalysisScheduler:
             records=records,
         )
     
-    def _merge_with_full(self, delta_result: dict, full_result: dict) -> dict:
+    def _merge_with_full(
+        self, delta_result: dict[str, Any], full_result: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Merge delta insights with last full analysis.
         
@@ -335,10 +340,10 @@ class HybridAnalysisScheduler:
 async def run_hybrid_analysis(
     db: AsyncSession,
     tenant_id: UUID,
-    current_costs: list,
-    previous_costs: list = None,
+    current_costs: list[dict[str, Any]],
+    previous_costs: list[dict[str, Any]] | None = None,
     force_full: bool = False
-) -> dict:
+) -> dict[str, Any]:
     """
     Convenience wrapper for hybrid analysis.
     

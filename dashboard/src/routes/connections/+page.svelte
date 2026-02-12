@@ -148,8 +148,6 @@
 			// Handle Success (204) OR Not Found (404 - already deleted)
 			if (res.ok || res.status === 404) {
 				success = `${provider.toUpperCase()} connection deleted successfully.`;
-				if (res.status === 404) {
-				}
 
 				// If this was the management account, clear discovered accounts
 				if (provider === 'aws' && awsConnection?.id === id) {
@@ -332,7 +330,9 @@
 								<div>
 									<div class="flex items-center gap-2 mb-1">
 										<span class="text-[10px] text-ink-500 font-mono"
-											>Sub ID: {conn.subscription_id.slice(0, 8)}...</span
+											>Sub ID: {conn.subscription_id
+												? `${conn.subscription_id.slice(0, 8)}...`
+												: 'N/A'}</span
 										>
 									</div>
 								</div>
@@ -364,8 +364,7 @@
 				</p>
 				<div class="flex flex-col gap-2">
 					<a
-						<a
-						href={['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)
+						href={['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)
 							? `${base}/onboarding`
 							: `${base}/billing`}
 						class="btn btn-secondary text-xs w-full"
@@ -423,7 +422,9 @@
 							</div>
 							<div class="flex justify-between text-[10px]">
 								<span class="text-ink-500">Auth Method:</span>
-								<span class="text-accent-400 capitalize">{conn.auth_method.replace('_', ' ')}</span>
+								<span class="text-accent-400 capitalize"
+									>{conn.auth_method ? conn.auth_method.replace('_', ' ') : 'unknown'}</span
+								>
 							</div>
 						</div>
 					{/each}
@@ -440,7 +441,7 @@
 				</p>
 				<div class="flex flex-col gap-2">
 					<a
-						href={['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)
+						href={['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)
 							? `${base}/onboarding`
 							: `${base}/billing`}
 						class="btn btn-secondary text-xs w-full"
@@ -459,7 +460,7 @@
 	{#if awsConnection?.is_management_account}
 		<div
 			class="card stagger-enter mt-12 border-accent-500/30 bg-accent-500/5 relative overflow-hidden"
-			class:opacity-60={!['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+			class:opacity-60={!['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
 		>
 			<!-- Background pattern -->
 			<div class="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
@@ -480,7 +481,7 @@
 					</div>
 
 					<div class="flex items-center gap-3">
-						{#if !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+						{#if !['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
 							<span class="badge badge-warning">Growth Tier Required</span>
 						{:else}
 							<button
@@ -502,7 +503,7 @@
 					</div>
 				</div>
 
-				{#if !['growth', 'pro', 'enterprise', 'trial'].includes(data.subscription?.tier)}
+				{#if !['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)}
 					<div class="py-20 text-center glass-panel bg-black/20 border-white/5">
 						<div class="mb-6 text-5xl">🔒</div>
 						<h3 class="text-xl font-bold mb-2">Enterprise Organization Discovery</h3>

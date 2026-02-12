@@ -29,13 +29,13 @@ class TestFeatureAccess:
     
     def test_free_tier_has_basic_features(self):
         """Free tier should have zombie scan, cost, carbon tracking."""
-        assert has_feature(PricingTier.FREE, FeatureFlag.ZOMBIE_SCAN)
-        assert has_feature(PricingTier.FREE, FeatureFlag.COST_TRACKING)
-        assert has_feature(PricingTier.FREE, FeatureFlag.CARBON_TRACKING)
+        assert has_feature(PricingTier.FREE_TRIAL, FeatureFlag.ZOMBIE_SCAN)
+        assert has_feature(PricingTier.FREE_TRIAL, FeatureFlag.COST_TRACKING)
+        assert has_feature(PricingTier.FREE_TRIAL, FeatureFlag.CARBON_TRACKING)
     
     def test_free_tier_no_ai_insights(self):
         """Free tier should NOT have AI insights."""
-        assert not has_feature(PricingTier.FREE, FeatureFlag.AI_INSIGHTS)
+        assert not has_feature(PricingTier.FREE_TRIAL, FeatureFlag.AI_INSIGHTS)
     
     def test_starter_tier_has_ai_insights(self):
         """Starter tier should have AI insights."""
@@ -64,9 +64,9 @@ class TestTierLimits:
     
     def test_free_tier_limits(self):
         """Free tier should have restrictive limits."""
-        assert get_limit(PricingTier.FREE, "max_aws_accounts") == 1
-        assert get_limit(PricingTier.FREE, "ai_insights_per_month") == 0
-        assert get_limit(PricingTier.FREE, "scan_frequency_hours") == 24
+        assert get_limit(PricingTier.FREE_TRIAL, "max_aws_accounts") == 1
+        assert get_limit(PricingTier.FREE_TRIAL, "ai_insights_per_month") == 0
+        assert get_limit(PricingTier.FREE_TRIAL, "scan_frequency_hours") == 24
     
     def test_starter_tier_limits(self):
         """Starter tier should have reasonable limits."""
@@ -101,7 +101,7 @@ class TestGetTenantTier:
         mock_db.execute.return_value = mock_result
         
         tier = await get_tenant_tier("tenant-123", mock_db)
-        assert tier == PricingTier.FREE
+        assert tier == PricingTier.FREE_TRIAL
     
     @pytest.mark.asyncio
     async def test_subscription_returns_tier(self):
@@ -119,7 +119,7 @@ class TestGetTenantTier:
         mock_db.execute.return_value = mock_result
         
         tier = await get_tenant_tier("tenant-123", mock_db)
-        assert tier == PricingTier.FREE
+        assert tier == PricingTier.FREE_TRIAL
     
     @pytest.mark.asyncio
     async def test_db_error_returns_free(self):
@@ -128,7 +128,7 @@ class TestGetTenantTier:
         mock_db.execute.side_effect = Exception("DB connection failed")
         
         tier = await get_tenant_tier("tenant-123", mock_db)
-        assert tier == PricingTier.FREE
+        assert tier == PricingTier.FREE_TRIAL
 
 
 class TestTierGuard:
@@ -196,7 +196,7 @@ class TestTierFeatureMatrix:
     
     def test_higher_tier_superset(self):
         """Higher tiers should have all features of lower tiers."""
-        tier_order = [PricingTier.FREE, PricingTier.STARTER, PricingTier.PRO, PricingTier.ENTERPRISE]
+        tier_order = [PricingTier.FREE_TRIAL, PricingTier.STARTER, PricingTier.PRO, PricingTier.ENTERPRISE]
         
         for i, lower_tier in enumerate(tier_order[:-1]):
             higher_tier = tier_order[i + 1]

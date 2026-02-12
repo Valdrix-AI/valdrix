@@ -3,7 +3,7 @@
 	 * PieChart Component using Chart.js
 	 * For cost allocation visualization (Allocated vs Unallocated, Team Breakdown)
 	 */
-	import { onMount, onDestroy } from 'svelte';
+	import { onDestroy } from 'svelte';
 	import { Chart, registerables } from 'chart.js';
 
 	Chart.register(...registerables);
@@ -28,7 +28,7 @@
 		showPercentage?: boolean;
 	} = $props();
 
-	let canvas: HTMLCanvasElement;
+	let canvas = $state<HTMLCanvasElement | undefined>(undefined);
 	let chart: Chart | null = null;
 
 	const defaultColors = [
@@ -102,10 +102,6 @@
 			}
 		});
 	}
-
-	onMount(() => {
-		createChart();
-	});
 
 	onDestroy(() => {
 		if (chart) {

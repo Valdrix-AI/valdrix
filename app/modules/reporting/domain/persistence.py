@@ -5,7 +5,7 @@ Handles idempotent storage of normalized cost data into the database.
 Supports both daily and hourly granularity.
 """
 
-from typing import Any, Dict, AsyncIterable, List
+from typing import Any, AsyncIterable
 from datetime import date, datetime, timedelta, timezone
 import uuid
 from decimal import Decimal
@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 from app.models.cloud import CostRecord
 from app.schemas.costs import CloudUsageSummary
+from app.shared.core.async_utils import maybe_await
+from app.modules.reporting.domain.canonicalization import map_canonical_charge_category
 
 logger = structlog.get_logger()
 
@@ -48,7 +50,7 @@ class CostPersistenceService:
         account_id: str,
         reconciliation_run_id: uuid.UUID | None = None,
         is_preliminary: bool = True
-    ) -> dict:
+    ) -> dict[str, int]:
         """
         Saves a CloudUsageSummary to the database.
         Uses PostgreSQL ON CONFLICT DO UPDATE for idempotency.
@@ -67,12 +69,30 @@ class CostPersistenceService:
             # Prepare values for bulk insert
             values = []
             for r in batch:
+                summary_source = "summary_import"
+                if isinstance(summary.metadata, dict):
+                    summary_source = str(summary.metadata.get("source_adapter") or summary_source)
+
+                canonical_mapping = map_canonical_charge_category(
+                    provider=summary.provider,
+                    service=r.service,
+                    usage_type=r.usage_type,
+                )
+
                 # Forensic Lineage (FinOps Audit Phase 1)
                 # We store the hash of the raw record if a specific ID isn't provided
                 ingestion_meta = {
                     "source_id": str(uuid.uuid4()), # CostRecord schema doesn't have ID, always generate new
                     "ingestion_timestamp": datetime.now(timezone.utc).isoformat(),
-                    "api_request_id": str(reconciliation_run_id) if reconciliation_run_id else None
+                    "api_request_id": str(reconciliation_run_id) if reconciliation_run_id else None,
+                    "canonical_mapping": {
+                        "category": canonical_mapping.category,
+                        "subcategory": canonical_mapping.subcategory,
+                        "is_mapped": canonical_mapping.is_mapped,
+                        "confidence": canonical_mapping.confidence,
+                        "version": canonical_mapping.mapping_version,
+                    },
+                    "source_adapter": summary_source,
                 }
                 
                 values.append({
@@ -86,6 +106,9 @@ class CostPersistenceService:
                     "recorded_at": r.date.date(), # Partition-aligned date column
                     "timestamp": r.date,           # New hourly/timestamp column
                     "usage_type": r.usage_type,
+                    "canonical_charge_category": canonical_mapping.category,
+                    "canonical_charge_subcategory": canonical_mapping.subcategory,
+                    "canonical_mapping_version": canonical_mapping.mapping_version,
                     "is_preliminary": is_preliminary,
                     "cost_status": "PRELIMINARY" if is_preliminary else "FINAL",
                     "reconciliation_run_id": reconciliation_run_id,
@@ -111,10 +134,10 @@ class CostPersistenceService:
 
     async def save_records_stream(
         self, 
-        records: AsyncIterable[Dict[str, Any]], 
+        records: AsyncIterable[dict[str, Any]], 
         tenant_id: str, 
         account_id: str
-    ) -> dict:
+    ) -> dict[str, int]:
         """
         Consumes an async stream of cost records and saves them in batches.
         Prevents memory spikes for massive accounts.
@@ -126,6 +149,20 @@ class CostPersistenceService:
         account_uuid = self._coerce_uuid(account_id, "account_id")
 
         async for r in records:
+            source_adapter = str(r.get("source_adapter") or "unknown_stream")
+            canonical_mapping = map_canonical_charge_category(
+                provider=r.get("provider"),
+                service=r.get("service"),
+                usage_type=r.get("usage_type"),
+            )
+            ingestion_meta = {
+                "source_id": str(r.get("source_id") or uuid.uuid4()),
+                "ingestion_timestamp": datetime.now(timezone.utc).isoformat(),
+                "source_adapter": source_adapter,
+            }
+            if isinstance(r.get("tags"), dict):
+                ingestion_meta["tags"] = r["tags"]
+
             batch.append({
                 "tenant_id": tenant_uuid,
                 "account_id": account_uuid,
@@ -136,7 +173,11 @@ class CostPersistenceService:
                 "currency": r.get("currency"),
                 "recorded_at": r["timestamp"].date(),
                 "timestamp": r["timestamp"],
-                "usage_type": r.get("usage_type", "Usage")
+                "usage_type": r.get("usage_type", "Usage"),
+                "canonical_charge_category": canonical_mapping.category,
+                "canonical_charge_subcategory": canonical_mapping.subcategory,
+                "canonical_mapping_version": canonical_mapping.mapping_version,
+                "ingestion_metadata": ingestion_meta,
             })
 
             if len(batch) >= BATCH_SIZE:
@@ -155,11 +196,14 @@ class CostPersistenceService:
         
         return {"records_saved": records_saved}
 
-    async def _bulk_upsert(self, values: List[Dict[str, Any]]):
+    async def _bulk_upsert(self, values: list[dict[str, Any]]) -> None:
         """Helper for PostgreSQL ON CONFLICT DO UPDATE bulk insert."""
         if not values:
             return
-        bind_url = str(self.db.bind.url if self.db.bind else "")
+        bind_url = str(getattr(getattr(self.db, "bind", None), "url", ""))
+        if not bind_url:
+            bind = await maybe_await(self.db.get_bind())
+            bind_url = str(getattr(bind, "url", ""))
         if "postgresql" in bind_url:
             stmt = pg_insert(CostRecord).values(values)
             stmt = stmt.on_conflict_do_update(
@@ -169,6 +213,9 @@ class CostPersistenceService:
                     "amount_raw": stmt.excluded.amount_raw,
                     "currency": stmt.excluded.currency,
                     "usage_type": stmt.excluded.usage_type,
+                    "canonical_charge_category": stmt.excluded.canonical_charge_category,
+                    "canonical_charge_subcategory": stmt.excluded.canonical_charge_subcategory,
+                    "canonical_mapping_version": stmt.excluded.canonical_mapping_version,
                     "is_preliminary": stmt.excluded.is_preliminary,
                     "cost_status": stmt.excluded.cost_status,
                     "reconciliation_run_id": stmt.excluded.reconciliation_run_id,
@@ -181,7 +228,7 @@ class CostPersistenceService:
             # We use session methods directly to avoid driver-level conflicts
             for val in values:
                 # Use a fresh select to avoid session state issues
-                stmt = select(CostRecord).where(
+                select_stmt = select(CostRecord).where(
                     CostRecord.account_id == val["account_id"],
                     CostRecord.recorded_at == val["recorded_at"],
                     CostRecord.timestamp == val["timestamp"],
@@ -190,8 +237,9 @@ class CostPersistenceService:
                     CostRecord.usage_type == val["usage_type"]
                 )
                 # Use scalar() which is safer
-                res = await self.db.execute(stmt)
-                existing = res.scalars().first()
+                res = await self.db.execute(select_stmt)
+                scalars_result = await maybe_await(res.scalars())
+                existing = await maybe_await(scalars_result.first())
                 
                 if existing:
                     if val.get("cost_usd") is not None:
@@ -202,13 +250,18 @@ class CostPersistenceService:
                         existing.currency = str(val["currency"])
                     if val.get("usage_type") is not None:
                         existing.usage_type = val["usage_type"]
+                    if val.get("canonical_charge_category") is not None:
+                        existing.canonical_charge_category = val["canonical_charge_category"]
+                    if "canonical_charge_subcategory" in val:
+                        existing.canonical_charge_subcategory = val["canonical_charge_subcategory"]
+                    if val.get("canonical_mapping_version") is not None:
+                        existing.canonical_mapping_version = val["canonical_mapping_version"]
                     existing.is_preliminary = bool(val.get("is_preliminary", existing.is_preliminary))
                     existing.cost_status = str(val.get("cost_status") or existing.cost_status)
                     existing.reconciliation_run_id = val.get("reconciliation_run_id")
                     existing.ingestion_metadata = val.get("ingestion_metadata")
                 else:
-                    from app.shared.core.async_utils import maybe_await
-                    await maybe_await(self.db.add(CostRecord(**val)))
+                    self.db.add(CostRecord(**val))
             
             await self.db.flush()
 
@@ -216,8 +269,8 @@ class CostPersistenceService:
         self, 
         tenant_id: uuid.UUID, 
         account_id: uuid.UUID, 
-        new_records: List[Dict[str, Any]]
-    ):
+        new_records: list[dict[str, Any]]
+    ) -> None:
         """
         Alerts if updated costs differ by >2% from existing records.
         Essential for financial reconciliation (Phase 2).
@@ -294,7 +347,9 @@ class CostPersistenceService:
             self.db.add_all(audit_logs)
             await self.db.flush() # Ensure logs are sent before main records are updated
 
-    async def clear_range(self, tenant_id: str, account_id: str, start_date: Any, end_date: Any):
+    async def clear_range(
+        self, tenant_id: str, account_id: str, start_date: Any, end_date: Any
+    ) -> None:
         """Clears existing records for a tenant/account range to allow re-ingestion."""
         tenant_scoped = self._coerce_uuid_if_valid(tenant_id)
         account_scoped = self._coerce_uuid_if_valid(account_id)
@@ -306,7 +361,7 @@ class CostPersistenceService:
         )
         await self.db.execute(stmt)
 
-    async def cleanup_old_records(self, days_retention: int = 365) -> Dict[str, int]:
+    async def cleanup_old_records(self, days_retention: int = 365) -> dict[str, int]:
         """
         Deletes cost records older than the specified retention period in small batches.
         Optimized for space reclamation without long-running database locks.
@@ -320,23 +375,25 @@ class CostPersistenceService:
         batch_size = 5000 # Configurable batch size
         while True:
             # 1. Fetch a batch of IDs to delete
-            stmt = select(CostRecord.id).where(CostRecord.timestamp < cutoff_date).limit(batch_size)
-            result = await self.db.execute(stmt)
+            select_stmt = select(CostRecord.id).where(CostRecord.timestamp < cutoff_date).limit(batch_size)
+            result = await self.db.execute(select_stmt)
             ids = result.scalars().all()
             
             if not ids:
                 break
                 
             # 2. Delete this batch
-            stmt = delete(CostRecord).where(CostRecord.id.in_(ids))
-            await self.db.execute(stmt)
+            delete_stmt = delete(CostRecord).where(CostRecord.id.in_(ids))
+            await self.db.execute(delete_stmt)
             
             total_deleted += len(ids)
             await self.db.flush() # Flush each batch to DB but don't commit outer transaction
         
         logger.info("cost_retention_cleanup_complete", cutoff_date=str(cutoff_date), total_deleted=total_deleted)
         return {"deleted_count": total_deleted}
-    async def finalize_batch(self, days_ago: int = 2, tenant_id: str | None = None) -> Dict[str, int]:
+    async def finalize_batch(
+        self, days_ago: int = 2, tenant_id: str | None = None
+    ) -> dict[str, int]:
         """
         Transition cost records from PRELIMINARY to FINAL after the restatement window.
         AWS typically finalizes costs within 24-48 hours.
@@ -361,7 +418,8 @@ class CostPersistenceService:
         result = await self.db.execute(stmt)
         await self.db.flush()
         
-        count = result.rowcount
+        rowcount = getattr(result, "rowcount", None)
+        count = int(rowcount or 0)
         logger.info(
             "cost_batch_finalization_complete",
             tenant_id=tenant_id,

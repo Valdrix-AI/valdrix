@@ -56,7 +56,7 @@ class CarbonSettingsUpdate(BaseModel):
         return ", ".join(emails)
 
     @model_validator(mode="after")
-    def _validate_email_settings(self):
+    def _validate_email_settings(self) -> "CarbonSettingsUpdate":
         if self.email_enabled and not self.email_recipients:
             raise ValueError("email_recipients is required when email_enabled is true")
         return self
@@ -70,7 +70,7 @@ class CarbonSettingsUpdate(BaseModel):
 async def get_carbon_settings(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> CarbonSettingsResponse:
     """
     Get carbon budget settings for the current tenant.
 
@@ -90,6 +90,8 @@ async def get_carbon_settings(
             carbon_budget_kg=100.0,
             alert_threshold_percent=80,
             default_region="us-east-1",
+            email_enabled=False,
+            email_recipients=None,
         )
         db.add(settings)
         await db.commit()
@@ -100,7 +102,13 @@ async def get_carbon_settings(
             tenant_id=str(current_user.tenant_id),
         )
 
-    return settings
+    return CarbonSettingsResponse(
+        carbon_budget_kg=float(settings.carbon_budget_kg),
+        alert_threshold_percent=settings.alert_threshold_percent,
+        default_region=settings.default_region,
+        email_enabled=bool(settings.email_enabled),
+        email_recipients=settings.email_recipients,
+    )
 
 
 @router.put("/carbon", response_model=CarbonSettingsResponse)
@@ -108,7 +116,7 @@ async def update_carbon_settings(
     data: CarbonSettingsUpdate,
     current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
-):
+) -> CarbonSettingsResponse:
     """
     Update carbon budget settings for the current tenant.
 
@@ -153,4 +161,10 @@ async def update_carbon_settings(
         {"budget_kg": float(settings.carbon_budget_kg), "region": settings.default_region}
     )
 
-    return settings
+    return CarbonSettingsResponse(
+        carbon_budget_kg=float(settings.carbon_budget_kg),
+        alert_threshold_percent=settings.alert_threshold_percent,
+        default_region=settings.default_region,
+        email_enabled=bool(settings.email_enabled),
+        email_recipients=settings.email_recipients,
+    )
