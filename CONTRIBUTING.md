@@ -100,6 +100,15 @@ app/
 
 By contributing, you agree that your contributions will be licensed under the [BSL 1.1](LICENSE).
 
+## Contributor License Agreement (CLA)
+
+All contributors must accept the repository CLA:
+
+- See [CLA.md](CLA.md)
+- Pull request submission constitutes CLA acceptance for that contribution
+- The CLA bot may ask you to comment:
+  `I have read the CLA Document and I hereby sign the CLA`
+
 ## Developer Certificate of Origin (DCO)
 
 We require DCO sign-off for all commits.
@@ -107,3 +116,10 @@ We require DCO sign-off for all commits.
 - Add sign-off using `git commit -s`
 - This appends `Signed-off-by: Your Name <email>` to the commit message
 - By signing off, you confirm you have the right to submit the contribution under this repository's license terms
+
+## Trademark and Commercial Use
+
+Please review:
+
+- [TRADEMARK_POLICY.md](TRADEMARK_POLICY.md)
+- [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md)

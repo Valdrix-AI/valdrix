@@ -6,7 +6,7 @@
 <h3 align="center">Optimize Cloud Value, Not Just Cost</h3>
 
 <p align="center">
-  <em><strong>Val</strong>ue + Mat<strong>rix</strong> — A FinOps engine that continuously optimizes cloud value<br/>
+  <em><strong>Value + Matrix</strong> — A FinOps engine that continuously optimizes cloud value<br/>
   by eliminating waste, controlling cost, and reducing unnecessary overhead.</em>
 </p>
 
@@ -176,7 +176,10 @@ We're paranoid, so you don't have to be:
 
 ### Prerequisites
 - Docker & Docker Compose
-- An AWS account (with Cost Explorer enabled)
+- An AWS account with:
+  - AWS CUR configured to deliver Parquet reports to S3
+  - Resource Explorer 2 enabled
+- Cost Explorer is optional (Valdrix ingestion path is CUR + Resource Explorer 2)
 - An LLM API key (OpenAI, Anthropic, Google, or Groq)
 
 ### 1. Clone & Configure
@@ -297,7 +300,10 @@ Valdrix is **source available** under the **Business Source License (BSL) 1.1**.
 See [LICENSE](LICENSE) for full terms.
 
 Additional policy docs:
-- [Licensing Guide](docs/licensing.md)
+- [Licensing FAQ](docs/licensing.md#licensing-faq)
+- [Commercial Licensing](COMMERCIAL_LICENSE.md)
+- [Trademark Policy](TRADEMARK_POLICY.md)
+- [Contributor License Agreement (CLA)](CLA.md)
 - [Open-Core Boundary](docs/open_core_boundary.md)
 - [Tenancy ADR](docs/architecture/ADR-0001-tenancy-model.md)
 - [Pricing Metric Model](docs/pricing_model.md)

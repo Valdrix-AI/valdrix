@@ -32,20 +32,39 @@ This project is released under the Business Source License 1.1 (BSL 1.1). The le
 - Hosted service: software operated by one party for use by unrelated third parties over a network.
 - Competitive offering: hosted use where Valdrix functionality is sold or bundled as a service.
 
-## FAQ
+## Licensing FAQ
 
 ### Can I self-host Valdrix?
 
 Yes, for your own internal operations.
 
+### Can Valdrix-AI offer an official hosted SaaS?
+
+Yes. The BSL restriction targets third parties offering competing hosted services. It does not block the project owner from operating the official Valdrix SaaS.
+
 ### Can I run it for my clients?
 
 You can deploy/support a client-owned instance. You cannot operate a shared hosted Valdrix service for third-party consumption.
 
+### Can I buy rights to run Valdrix as a managed service?
+
+Yes. We provide commercial exceptions for qualified partners and OEM use cases. See `COMMERCIAL_LICENSE.md`.
+
 ### Can I resell or white-label it as a hosted platform?
 
-No, not under BSL terms before the change date.
+Not under default BSL terms before the change date. This requires a separate commercial agreement.
 
 ### When does it become Apache 2.0?
 
 On January 12, 2029, per the change terms in `LICENSE`.
+
+### Does Apache conversion stop Valdrix-AI from making money?
+
+No. Valdrix-AI can continue monetizing through the official SaaS, enterprise features, support, compliance packaging, and commercial agreements.
+
+## Related Policy Documents
+
+- [`LICENSE`](../LICENSE)
+- [`COMMERCIAL_LICENSE.md`](../COMMERCIAL_LICENSE.md)
+- [`TRADEMARK_POLICY.md`](../TRADEMARK_POLICY.md)
+- [`CLA.md`](../CLA.md)

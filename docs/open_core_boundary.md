@@ -27,4 +27,7 @@ All code in this repository is licensed under BSL 1.1 unless stated otherwise.
 ## Notes
 
 - This document is a product policy summary, not a replacement for the legal license text.
-- Legal terms are defined in `LICENSE`.
+- Legal terms are defined in [`LICENSE`](../LICENSE).
+- Commercial exceptions are described in [`COMMERCIAL_LICENSE.md`](../COMMERCIAL_LICENSE.md).
+- Trademark usage is governed by [`TRADEMARK_POLICY.md`](../TRADEMARK_POLICY.md).
+- Contribution IP terms are governed by [`CLA.md`](../CLA.md) and [`CONTRIBUTING.md`](../CONTRIBUTING.md).
