@@ -62,7 +62,7 @@ class ConnectionInstructionService:
             '  "name": "Stripe Billing",\n'
             '  "vendor": "stripe",\n'
             '  "auth_method": "api_key",\n'
-            '  "api_key": "sk_live_xxx",\n'
+            '  "api_key": "<stripe_api_key>",\n'
             '  "connector_config": {},\n'
             '  "spend_feed": []\n'
             "}"
