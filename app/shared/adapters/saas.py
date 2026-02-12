@@ -274,11 +274,13 @@ class SaaSAdapter(BaseAdapter):
             raise ExternalAPIError("Salesforce requires connector_config.instance_url")
 
         endpoint = urljoin(base_url.rstrip("/") + "/", "services/data/v60.0/query")
+        start_iso = start_date.date().isoformat()
+        end_iso = end_date.date().isoformat()
         soql = (
-            "SELECT Id, Description, ServiceDate, TotalPrice, CurrencyIsoCode "
+            "SELECT Id, Description, ServiceDate, TotalPrice, CurrencyIsoCode "  # nosec B608
             "FROM ContractLineItem "
-            f"WHERE ServiceDate >= {start_date.date().isoformat()} "
-            f"AND ServiceDate <= {end_date.date().isoformat()} "
+            f"WHERE ServiceDate >= {start_iso} "
+            f"AND ServiceDate <= {end_iso} "
             "ORDER BY ServiceDate DESC"
         )
         headers = {"Authorization": f"Bearer {token}"}
