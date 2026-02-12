@@ -296,6 +296,12 @@ Valdrix is **source available** under the **Business Source License (BSL) 1.1**.
 
 See [LICENSE](LICENSE) for full terms.
 
+Additional policy docs:
+- [Licensing Guide](docs/licensing.md)
+- [Open-Core Boundary](docs/open_core_boundary.md)
+- [Tenancy ADR](docs/architecture/ADR-0001-tenancy-model.md)
+- [Pricing Metric Model](docs/pricing_model.md)
+
 ---
 
 ## 🤝 Contributing

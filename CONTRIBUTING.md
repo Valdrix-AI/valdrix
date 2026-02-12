@@ -99,3 +99,11 @@ app/
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [BSL 1.1](LICENSE).
+
+## Developer Certificate of Origin (DCO)
+
+We require DCO sign-off for all commits.
+
+- Add sign-off using `git commit -s`
+- This appends `Signed-off-by: Your Name <email>` to the commit message
+- By signing off, you confirm you have the right to submit the contribution under this repository's license terms
