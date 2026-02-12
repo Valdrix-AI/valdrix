@@ -70,5 +70,13 @@ async def test_connections_settings_lifecycle(async_client: AsyncClient, db, moc
         # Check GCP setup snippet
         response = await async_client.post("/api/v1/settings/connections/gcp/setup")
         assert response.status_code == 200
+
+        # Check SaaS setup snippet
+        response = await async_client.post("/api/v1/settings/connections/saas/setup")
+        assert response.status_code == 200
+
+        # Check License setup snippet
+        response = await async_client.post("/api/v1/settings/connections/license/setup")
+        assert response.status_code == 200
     finally:
         app.dependency_overrides.pop(get_current_user, None)

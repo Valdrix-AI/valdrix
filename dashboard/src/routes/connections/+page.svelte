@@ -8,10 +8,12 @@
 
 	interface CloudConnection {
 		id: string;
-		provider: 'aws' | 'azure' | 'gcp';
+		provider: 'aws' | 'azure' | 'gcp' | 'saas' | 'license';
 		aws_account_id?: string;
 		subscription_id?: string;
 		project_id?: string;
+		name?: string;
+		vendor?: string;
 		is_management_account?: boolean;
 		organization_id?: string;
 		auth_method?: string;
@@ -29,11 +31,15 @@
 	let loadingAWS = $state(true);
 	let loadingAzure = $state(true);
 	let loadingGCP = $state(true);
+	let loadingSaaS = $state(true);
+	let loadingLicense = $state(true);
 
 	let awsConnection = $state<CloudConnection | null>(null);
 	let awsConnections = $state<CloudConnection[]>([]);
 	let azureConnections = $state<CloudConnection[]>([]);
 	let gcpConnections = $state<CloudConnection[]>([]);
+	let saasConnections = $state<CloudConnection[]>([]);
+	let licenseConnections = $state<CloudConnection[]>([]);
 
 	let discoveredAccounts = $state<DiscoveredAccount[]>([]);
 	let loadingDiscovered = $state(false);
@@ -76,12 +82,26 @@
 			}
 			loadingGCP = false;
 
+			// SaaS
+			const saasRes = await api.get(`${PUBLIC_API_URL}/settings/connections/saas`, { headers });
+			if (saasRes.ok) {
+				saasConnections = await saasRes.json();
+			}
+			loadingSaaS = false;
+
+			// License
+			const licenseRes = await api.get(`${PUBLIC_API_URL}/settings/connections/license`, { headers });
+			if (licenseRes.ok) {
+				licenseConnections = await licenseRes.json();
+			}
+			loadingLicense = false;
+
 			if (awsConnection?.is_management_account) {
 				loadDiscoveredAccounts();
 			}
 		} catch {
 			error = 'Failed to load cloud accounts. Check backend connection.';
-			loadingAWS = loadingAzure = loadingGCP = false;
+			loadingAWS = loadingAzure = loadingGCP = loadingSaaS = loadingLicense = false;
 		}
 	}
 
@@ -228,7 +248,7 @@
 	{/if}
 
 	<!-- Integration Status Cards -->
-	<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+	<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
 		<!-- AWS -->
 		<div class="glass-panel stagger-enter" style="animation-delay: 0ms;">
 			<div class="flex items-center justify-between mb-4">
@@ -451,6 +471,140 @@
 					<span class="badge badge-warning text-[10px] w-full justify-center"
 						>Growth Tier Required</span
 					>
+				</div>
+			{/if}
+		</div>
+
+		<!-- SaaS -->
+		<div class="glass-panel stagger-enter" style="animation-delay: 300ms;">
+			<div class="flex items-center justify-between mb-4">
+				<div class="flex items-center gap-3">
+					<CloudLogo provider="saas" size={40} />
+					<div>
+						<h3 class="font-bold text-lg">SaaS</h3>
+						<p class="text-xs text-ink-500">Cloud+ Spend Connector</p>
+					</div>
+				</div>
+				{#if loadingSaaS}
+					<div class="skeleton w-4 h-4 rounded-full"></div>
+				{:else if saasConnections.length > 0}
+					<span class="badge badge-accent">Connected ({saasConnections.length})</span>
+				{:else}
+					<span class="badge badge-default">Disconnected</span>
+				{/if}
+			</div>
+
+			{#if saasConnections.length > 0}
+				<div class="space-y-4 mb-6">
+					{#each saasConnections as conn (conn.id)}
+						<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800">
+							<div class="flex justify-between items-start mb-2">
+								<div>
+									<div class="text-[11px] text-ink-300 font-semibold">{conn.name || 'SaaS Feed'}</div>
+									<div class="text-[10px] text-ink-500 font-mono">Vendor: {conn.vendor || 'unknown'}</div>
+								</div>
+								<button
+									class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
+									onclick={() => deleteConnection('saas', conn.id)}
+									title="Delete Connection"
+								>
+									<span class="text-xs">🗑️</span>
+								</button>
+							</div>
+							<div class="flex justify-between text-[10px]">
+								<span class="text-ink-500">Auth Method:</span>
+								<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
+							</div>
+						</div>
+					{/each}
+				</div>
+				<a
+					href="{base}/onboarding"
+					class="btn btn-ghost text-xs w-full border-dashed border-ink-800 hover:border-accent-500/50"
+				>
+					<span>➕</span> Add SaaS Connector
+				</a>
+			{:else if !loadingSaaS}
+				<p class="text-xs text-ink-400 mb-6">
+					Connect SaaS spend feeds for Cloud+ cost visibility and optimization.
+				</p>
+				<div class="flex flex-col gap-2">
+					<a
+						href={['pro', 'enterprise'].includes(data.subscription?.tier)
+							? `${base}/onboarding`
+							: `${base}/billing`}
+						class="btn btn-secondary text-xs w-full"
+					>
+						Connect SaaS
+					</a>
+					<span class="badge badge-warning text-[10px] w-full justify-center">Pro Tier Required</span>
+				</div>
+			{/if}
+		</div>
+
+		<!-- License / ITAM -->
+		<div class="glass-panel stagger-enter" style="animation-delay: 400ms;">
+			<div class="flex items-center justify-between mb-4">
+				<div class="flex items-center gap-3">
+					<CloudLogo provider="license" size={40} />
+					<div>
+						<h3 class="font-bold text-lg">License</h3>
+						<p class="text-xs text-ink-500">Cloud+ ITAM Connector</p>
+					</div>
+				</div>
+				{#if loadingLicense}
+					<div class="skeleton w-4 h-4 rounded-full"></div>
+				{:else if licenseConnections.length > 0}
+					<span class="badge badge-accent">Connected ({licenseConnections.length})</span>
+				{:else}
+					<span class="badge badge-default">Disconnected</span>
+				{/if}
+			</div>
+
+			{#if licenseConnections.length > 0}
+				<div class="space-y-4 mb-6">
+					{#each licenseConnections as conn (conn.id)}
+						<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800">
+							<div class="flex justify-between items-start mb-2">
+								<div>
+									<div class="text-[11px] text-ink-300 font-semibold">{conn.name || 'License Feed'}</div>
+									<div class="text-[10px] text-ink-500 font-mono">Vendor: {conn.vendor || 'unknown'}</div>
+								</div>
+								<button
+									class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
+									onclick={() => deleteConnection('license', conn.id)}
+									title="Delete Connection"
+								>
+									<span class="text-xs">🗑️</span>
+								</button>
+							</div>
+							<div class="flex justify-between text-[10px]">
+								<span class="text-ink-500">Auth Method:</span>
+								<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
+							</div>
+						</div>
+					{/each}
+				</div>
+				<a
+					href="{base}/onboarding"
+					class="btn btn-ghost text-xs w-full border-dashed border-ink-800 hover:border-accent-500/50"
+				>
+					<span>➕</span> Add License Connector
+				</a>
+			{:else if !loadingLicense}
+				<p class="text-xs text-ink-400 mb-6">
+					Connect license/ITAM spend feeds to include seat and contract costs in FinOps.
+				</p>
+				<div class="flex flex-col gap-2">
+					<a
+						href={['pro', 'enterprise'].includes(data.subscription?.tier)
+							? `${base}/onboarding`
+							: `${base}/billing`}
+						class="btn btn-secondary text-xs w-full"
+					>
+						Connect License
+					</a>
+					<span class="badge badge-warning text-[10px] w-full justify-center">Pro Tier Required</span>
 				</div>
 			{/if}
 		</div>

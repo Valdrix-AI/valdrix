@@ -201,6 +201,21 @@ async def test_aws_setup_templates(ac):
         data = resp.json()
         assert data["external_id"] == "vx-123"
 
+
+@pytest.mark.asyncio
+async def test_cloud_plus_setup_templates(ac, override_auth):
+    saas = await ac.post("/api/v1/settings/connections/saas/setup")
+    assert saas.status_code == 200
+    saas_data = saas.json()
+    assert "snippet" in saas_data
+    assert "sample_feed" in saas_data
+
+    license_res = await ac.post("/api/v1/settings/connections/license/setup")
+    assert license_res.status_code == 200
+    license_data = license_res.json()
+    assert "snippet" in license_data
+    assert "sample_feed" in license_data
+
 @pytest.mark.asyncio
 async def test_create_aws_connection(ac, override_auth, auth_user, db):
     payload = {

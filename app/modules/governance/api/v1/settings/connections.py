@@ -171,6 +171,22 @@ async def get_gcp_setup(
     return ConnectionInstructionService.get_gcp_setup_snippet(str(_require_tenant_id(current_user)))
 
 
+@router.post("/saas/setup")
+async def get_saas_setup(
+    current_user: CurrentUser = Depends(requires_role("member")),
+) -> dict[str, str]:
+    """Get SaaS Cloud+ setup instructions."""
+    return ConnectionInstructionService.get_saas_setup_snippet(str(_require_tenant_id(current_user)))
+
+
+@router.post("/license/setup")
+async def get_license_setup(
+    current_user: CurrentUser = Depends(requires_role("member")),
+) -> dict[str, str]:
+    """Get License/ITAM Cloud+ setup instructions."""
+    return ConnectionInstructionService.get_license_setup_snippet(str(_require_tenant_id(current_user)))
+
+
 @router.post("/aws", response_model=AWSConnectionResponse, status_code=status.HTTP_201_CREATED)
 @standard_limit
 async def create_aws_connection(

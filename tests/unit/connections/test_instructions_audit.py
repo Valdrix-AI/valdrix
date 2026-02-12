@@ -19,3 +19,17 @@ def test_get_gcp_setup_snippet(mock_settings):
     assert result["issuer"] == "https://api.valdrix.ai"
     assert result["subject"] == "tenant:tenant-456"
     assert "valdrix-pool" in result["snippet"]
+
+
+def test_get_saas_setup_snippet(mock_settings):
+    result = ConnectionInstructionService.get_saas_setup_snippet("tenant-789")
+    assert result["subject"] == "tenant:tenant-789"
+    assert "settings/connections/saas" in result["snippet"]
+    assert "sample_feed" in result
+
+
+def test_get_license_setup_snippet(mock_settings):
+    result = ConnectionInstructionService.get_license_setup_snippet("tenant-901")
+    assert result["subject"] == "tenant:tenant-901"
+    assert "settings/connections/license" in result["snippet"]
+    assert "sample_feed" in result

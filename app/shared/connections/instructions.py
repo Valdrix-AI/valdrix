@@ -51,3 +51,81 @@ class ConnectionInstructionService:
             "subject": f"tenant:{tenant_id}",
             "snippet": snippet
         }
+
+    @staticmethod
+    def get_saas_setup_snippet(tenant_id: str) -> dict[str, str]:
+        """Generate SaaS Cloud+ onboarding instructions."""
+        settings = get_settings()
+        api_url = settings.API_URL.rstrip("/")
+        sample_payload = (
+            '[\n'
+            '  {\n'
+            '    "timestamp": "2026-02-01T00:00:00Z",\n'
+            '    "vendor": "example_saas",\n'
+            '    "service": "Example Workspace",\n'
+            '    "usage_type": "subscription",\n'
+            '    "cost_usd": 249.99,\n'
+            '    "currency": "USD",\n'
+            '    "tags": {"team": "growth", "environment": "prod"}\n'
+            "  }\n"
+            "]"
+        )
+        snippet = (
+            "# SaaS Cloud+ onboarding options\n"
+            "# 1) API key mode (recommended for vendors with billing APIs)\n"
+            "# 2) Manual/CSV feed mode for quick onboarding\n"
+            "#\n"
+            "# Tenant-scoped subject for API/OIDC trust:\n"
+            f"tenant:{tenant_id}\n"
+            "#\n"
+            "# Example SaaS spend feed payload (JSON array):\n"
+            f"{sample_payload}\n"
+            "#\n"
+            "# Create connector via API:\n"
+            f"POST {api_url}/settings/connections/saas\n"
+        )
+        return {
+            "subject": f"tenant:{tenant_id}",
+            "snippet": snippet,
+            "sample_feed": sample_payload,
+        }
+
+    @staticmethod
+    def get_license_setup_snippet(tenant_id: str) -> dict[str, str]:
+        """Generate License/ITAM Cloud+ onboarding instructions."""
+        settings = get_settings()
+        api_url = settings.API_URL.rstrip("/")
+        sample_payload = (
+            '[\n'
+            '  {\n'
+            '    "timestamp": "2026-02-01T00:00:00Z",\n'
+            '    "vendor": "example_vendor",\n'
+            '    "service": "Enterprise Seat License",\n'
+            '    "usage_type": "seat_license",\n'
+            '    "cost_usd": 1200.00,\n'
+            '    "currency": "USD",\n'
+            '    "purchased_seats": 250,\n'
+            '    "assigned_seats": 198,\n'
+            '    "tags": {"cost_center": "it", "owner": "platform"}\n'
+            "  }\n"
+            "]"
+        )
+        snippet = (
+            "# License / ITAM Cloud+ onboarding options\n"
+            "# 1) API key mode for ITAM/license platforms\n"
+            "# 2) Manual/CSV feed mode for contract exports\n"
+            "#\n"
+            "# Tenant-scoped subject for API/OIDC trust:\n"
+            f"tenant:{tenant_id}\n"
+            "#\n"
+            "# Example license feed payload (JSON array):\n"
+            f"{sample_payload}\n"
+            "#\n"
+            "# Create connector via API:\n"
+            f"POST {api_url}/settings/connections/license\n"
+        )
+        return {
+            "subject": f"tenant:{tenant_id}",
+            "snippet": snippet,
+            "sample_feed": sample_payload,
+        }

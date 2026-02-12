@@ -7,7 +7,7 @@
 
 	// State management
 	let currentStep = $state(0); // 0: Select Provider, 1: Setup, 2: Verify, 3: Done
-	let selectedProvider: 'aws' | 'azure' | 'gcp' = $state('aws');
+	let selectedProvider: 'aws' | 'azure' | 'gcp' | 'saas' | 'license' = $state('aws');
 	let selectedTab: 'cloudformation' | 'terraform' = $state('cloudformation');
 	let externalId = $state('');
 	let magicLink = $state('');
@@ -27,6 +27,14 @@
 	let gcpBillingDataset = $state('');
 	let gcpBillingTable = $state('');
 	let cloudShellSnippet = $state('');
+	let cloudPlusSampleFeed = $state('');
+
+	// SaaS / License specific
+	let cloudPlusName = $state('');
+	let cloudPlusVendor = $state('');
+	let cloudPlusAuthMethod: 'manual' | 'api_key' | 'oauth' | 'csv' = $state('manual');
+	let cloudPlusApiKey = $state('');
+	let cloudPlusFeedInput = $state('[]');
 
 	let isLoading = $state(false);
 	let isVerifying = $state(false);
@@ -38,6 +46,32 @@
 	import { PUBLIC_API_URL } from '$env/static/public';
 
 	const API_URL = PUBLIC_API_URL || 'http://localhost:8000';
+
+	const growthAndAbove = ['growth', 'pro', 'enterprise'];
+	const cloudPlusAllowed = ['pro', 'enterprise'];
+
+	function canUseGrowthFeatures(): boolean {
+		return growthAndAbove.includes(data?.subscription?.tier);
+	}
+
+	function canUseCloudPlusFeatures(): boolean {
+		return cloudPlusAllowed.includes(data?.subscription?.tier);
+	}
+
+	function getProviderLabel(provider: typeof selectedProvider): string {
+		switch (provider) {
+			case 'aws':
+				return 'AWS';
+			case 'azure':
+				return 'Azure';
+			case 'gcp':
+				return 'GCP';
+			case 'saas':
+				return 'SaaS';
+			case 'license':
+				return 'License';
+		}
+	}
 
 	// Get access token from server-loaded session (avoids getSession warning)
 	async function getAccessToken(): Promise<string | null> {
@@ -93,7 +127,11 @@
 					? '/settings/connections/aws/setup'
 					: selectedProvider === 'azure'
 						? '/settings/connections/azure/setup'
-						: '/settings/connections/gcp/setup';
+						: selectedProvider === 'gcp'
+							? '/settings/connections/gcp/setup'
+							: selectedProvider === 'saas'
+								? '/settings/connections/saas/setup'
+								: '/settings/connections/license/setup';
 
 			const res = await api.post(`${API_URL}${endpoint}`, undefined, {
 				headers: {
@@ -112,8 +150,12 @@
 				magicLink = data.magic_link;
 				cloudformationYaml = data.cloudformation_yaml;
 				terraformHcl = data.terraform_hcl;
+			} else if (selectedProvider === 'azure' || selectedProvider === 'gcp') {
+				cloudShellSnippet = data.snippet;
 			} else {
 				cloudShellSnippet = data.snippet;
+				cloudPlusSampleFeed = data.sample_feed || '[]';
+				cloudPlusFeedInput = data.sample_feed || '[]';
 			}
 		} catch (e) {
 			const err = e as Error;
@@ -124,12 +166,22 @@
 	}
 
 	async function handleContinueToSetup() {
+		if ((selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()) {
+			error = `${getProviderLabel(selectedProvider)} onboarding requires Growth tier or higher.`;
+			return;
+		}
+		if ((selectedProvider === 'saas' || selectedProvider === 'license') && !canUseCloudPlusFeatures()) {
+			error = `${getProviderLabel(selectedProvider)} onboarding requires Pro tier or higher.`;
+			return;
+		}
+
 		isLoading = true;
 		const onboarded = await ensureOnboarded();
 		if (!onboarded) {
 			isLoading = false;
 			return;
 		}
+		error = '';
 		currentStep = 1;
 		await fetchSetupData();
 	}
@@ -157,6 +209,17 @@
 	}
 
 	// Move to step 2 or verify directly for Azure/GCP
+	function parseCloudPlusFeed(): Array<Record<string, unknown>> {
+		if (!cloudPlusFeedInput.trim()) {
+			return [];
+		}
+		const parsed = JSON.parse(cloudPlusFeedInput);
+		if (!Array.isArray(parsed)) {
+			throw new Error('Feed JSON must be an array of records.');
+		}
+		return parsed as Array<Record<string, unknown>>;
+	}
+
 	async function proceedToVerify() {
 		error = ''; // Clear previous errors
 		if (selectedProvider === 'aws') {
@@ -272,6 +335,74 @@
 			} finally {
 				isVerifying = false;
 			}
+		} else if (selectedProvider === 'saas' || selectedProvider === 'license') {
+			if (!cloudPlusName.trim() || cloudPlusName.trim().length < 3) {
+				error = 'Please enter a connection name (minimum 3 characters).';
+				return;
+			}
+			if (!cloudPlusVendor.trim() || cloudPlusVendor.trim().length < 2) {
+				error = 'Please enter a vendor name (minimum 2 characters).';
+				return;
+			}
+			if (cloudPlusAuthMethod === 'api_key' && !cloudPlusApiKey.trim()) {
+				error = 'API key is required when auth method is API key.';
+				return;
+			}
+			isVerifying = true;
+			try {
+				const token = await getAccessToken();
+				if (!token) {
+					throw new Error('Please log in first');
+				}
+				const feed = parseCloudPlusFeed();
+				const createPath = selectedProvider === 'saas' ? 'saas' : 'license';
+				const payload =
+					selectedProvider === 'saas'
+						? {
+								name: cloudPlusName.trim(),
+								vendor: cloudPlusVendor.trim(),
+								auth_method: cloudPlusAuthMethod,
+								api_key: cloudPlusApiKey.trim() || null,
+								spend_feed: feed
+							}
+						: {
+								name: cloudPlusName.trim(),
+								vendor: cloudPlusVendor.trim(),
+								auth_method: cloudPlusAuthMethod,
+								api_key: cloudPlusApiKey.trim() || null,
+								license_feed: feed
+							};
+
+				const res = await api.post(`${API_URL}/settings/connections/${createPath}`, payload, {
+					headers: {
+						Authorization: `Bearer ${token}`
+					}
+				});
+				if (!res.ok) {
+					const errData = await res.json();
+					throw new Error(errData.detail || 'Failed to connect');
+				}
+
+				const connection = await res.json();
+				const verifyRes = await api.post(
+					`${API_URL}/settings/connections/${createPath}/${connection.id}/verify`,
+					undefined,
+					{
+						headers: { Authorization: `Bearer ${token}` }
+					}
+				);
+				if (!verifyRes.ok) {
+					const errData = await verifyRes.json();
+					throw new Error(errData.detail || 'Verification failed');
+				}
+				success = true;
+				currentStep = 3;
+			} catch (e) {
+				const err = e as Error;
+				error = err.message;
+			} finally {
+				isVerifying = false;
+			}
 		}
 	}
 
@@ -350,7 +481,7 @@
 </script>
 
 <div class="onboarding-container">
-	<h1>🔗 Connect Your AWS Account</h1>
+	<h1>🔗 Connect Cloud & Cloud+ Providers</h1>
 
 	<!-- Progress indicator -->
 	<div class="progress-steps">
@@ -407,7 +538,7 @@
 						<CloudLogo provider="azure" size={32} />
 					</div>
 					<h3>Microsoft Azure</h3>
-					<span class="badge">Growth Tier +</span>
+					<span class="badge">Growth Tier+</span>
 				</button>
 
 				<button
@@ -419,13 +550,42 @@
 						<CloudLogo provider="gcp" size={32} />
 					</div>
 					<h3>Google Cloud</h3>
-					<span class="badge">Growth Tier +</span>
+					<span class="badge">Growth Tier+</span>
+				</button>
+
+				<button
+					class="provider-card"
+					class:selected={selectedProvider === 'saas'}
+					onclick={() => (selectedProvider = 'saas')}
+				>
+					<div class="logo-circle">
+						<CloudLogo provider="saas" size={32} />
+					</div>
+					<h3>SaaS Spend Connector</h3>
+					<span class="badge">Pro Tier+</span>
+				</button>
+
+				<button
+					class="provider-card"
+					class:selected={selectedProvider === 'license'}
+					onclick={() => (selectedProvider = 'license')}
+				>
+					<div class="logo-circle">
+						<CloudLogo provider="license" size={32} />
+					</div>
+					<h3>License / ITAM Connector</h3>
+					<span class="badge">Pro Tier+</span>
 				</button>
 			</div>
 
-			<button class="primary-btn mt-8" onclick={handleContinueToSetup}>
-				Continue to Setup →
-			</button>
+			{#if (selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()}
+				<a href="{base}/billing" class="primary-btn mt-8">Upgrade to Growth →</a>
+			{:else if (selectedProvider === 'saas' || selectedProvider === 'license') &&
+				!canUseCloudPlusFeatures()}
+				<a href="{base}/billing" class="primary-btn mt-8">Upgrade to Pro →</a>
+			{:else}
+				<button class="primary-btn mt-8" onclick={handleContinueToSetup}>Continue to Setup →</button>
+			{/if}
 		</div>
 	{/if}
 
@@ -698,7 +858,8 @@
 						Copy and paste this into your Azure Cloud Shell to establish trust.
 					</p>
 					<div class="bg-black/50 p-3 rounded font-mono text-xs break-all text-green-400">
-						# Establishing Workload Identity Trust... (Snippet coming soon)
+						{cloudShellSnippet ||
+							'# Establishing Workload Identity Trust... (Wait for initialization)'}
 					</div>
 				</div>
 			{:else if selectedProvider === 'gcp'}
@@ -761,6 +922,75 @@
 							'# Establishing Workload Identity Trust... (Wait for initialization)'}
 					</div>
 				</div>
+			{:else if selectedProvider === 'saas' || selectedProvider === 'license'}
+				<h2>Step 2: Connect {selectedProvider === 'saas' ? 'SaaS' : 'License / ITAM'} Spend</h2>
+				<p class="mb-6">
+					Configure a Cloud+ connector using API key or manual/CSV feed ingestion.
+				</p>
+
+				<div class="space-y-4 mb-8">
+					<div class="form-group">
+						<label for="cloudPlusName">Connection Name</label>
+						<input
+							type="text"
+							id="cloudPlusName"
+							bind:value={cloudPlusName}
+							placeholder={selectedProvider === 'saas' ? 'Salesforce Spend Feed' : 'Microsoft 365 Seats'}
+						/>
+					</div>
+					<div class="form-group">
+						<label for="cloudPlusVendor">Vendor</label>
+						<input
+							type="text"
+							id="cloudPlusVendor"
+							bind:value={cloudPlusVendor}
+							placeholder={selectedProvider === 'saas' ? 'salesforce' : 'microsoft'}
+						/>
+					</div>
+					<div class="form-group">
+						<label for="cloudPlusAuthMethod">Auth Method</label>
+						<select id="cloudPlusAuthMethod" bind:value={cloudPlusAuthMethod}>
+							<option value="manual">manual</option>
+							<option value="api_key">api_key</option>
+							<option value="oauth">oauth</option>
+							<option value="csv">csv</option>
+						</select>
+					</div>
+					{#if cloudPlusAuthMethod === 'api_key'}
+						<div class="form-group">
+							<label for="cloudPlusApiKey">API Key</label>
+							<input
+								type="password"
+								id="cloudPlusApiKey"
+								bind:value={cloudPlusApiKey}
+								placeholder="Paste vendor API key"
+							/>
+						</div>
+					{/if}
+				</div>
+
+				<div class="info-box mb-6">
+					<h4 class="text-sm font-bold mb-2">📘 Setup Snippet</h4>
+					<p class="text-xs text-ink-400 mb-3">
+						Use this as your setup guide and feed template.
+					</p>
+					<div class="bg-black/50 p-3 rounded font-mono text-xs whitespace-pre-wrap break-all text-accent-300">
+						{cloudShellSnippet || '# Cloud+ setup snippet is loading...'}
+					</div>
+				</div>
+
+				<div class="info-box mb-6">
+					<h4 class="text-sm font-bold mb-2">🧾 Feed JSON (Optional)</h4>
+					<p class="text-xs text-ink-400 mb-3">
+						Provide an initial feed payload to validate ingestion immediately.
+					</p>
+					<textarea
+						rows="10"
+						class="input font-mono text-xs"
+						bind:value={cloudPlusFeedInput}
+						placeholder={cloudPlusSampleFeed || '[]'}
+					></textarea>
+				</div>
 			{/if}
 
 			<div class="flex gap-4 mt-8">
@@ -770,9 +1000,15 @@
 						{isVerifying ? '⏳ Verifying...' : '✅ Verify Connection'}
 					</button>
 				{:else}
-					<button class="primary-btn !flex-1" onclick={proceedToVerify}
-						>Next: Verify Connection →</button
-					>
+					<button class="primary-btn !flex-1" onclick={proceedToVerify} disabled={isVerifying}>
+						{#if isVerifying}
+							⏳ Verifying...
+						{:else if selectedProvider === 'saas' || selectedProvider === 'license'}
+							✅ Create & Verify Connector
+						{:else}
+							Next: Verify Connection →
+						{/if}
+					</button>
 				{/if}
 			</div>
 		</div>
@@ -864,7 +1100,10 @@
 		<div class="step-content success">
 			<div class="success-icon">🎉</div>
 			<h2>Connection Successful!</h2>
-			<p>Valdrix can now analyze your AWS costs and help you save money.</p>
+			<p>
+				Valdrix can now analyze your {getProviderLabel(selectedProvider)} spend and include it in Cloud+
+				optimization workflows.
+			</p>
 
 			<a href="{base}/" class="primary-btn"> Go to Dashboard → </a>
 		</div>
