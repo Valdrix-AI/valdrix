@@ -174,7 +174,7 @@ async def get_gcp_setup(
 @router.post("/saas/setup")
 async def get_saas_setup(
     current_user: CurrentUser = Depends(requires_role("member")),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Get SaaS Cloud+ setup instructions."""
     return ConnectionInstructionService.get_saas_setup_snippet(str(_require_tenant_id(current_user)))
 
@@ -182,7 +182,7 @@ async def get_saas_setup(
 @router.post("/license/setup")
 async def get_license_setup(
     current_user: CurrentUser = Depends(requires_role("member")),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Get License/ITAM Cloud+ setup instructions."""
     return ConnectionInstructionService.get_license_setup_snippet(str(_require_tenant_id(current_user)))
 

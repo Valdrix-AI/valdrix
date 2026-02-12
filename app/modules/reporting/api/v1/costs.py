@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 
 router = APIRouter(tags=["Costs"])
 logger = structlog.get_logger()
+SUPPORTED_PROVIDER_FILTERS = {"aws", "azure", "gcp", "saas", "license"}
 
 
 def _require_tenant_id(user: CurrentUser) -> UUID:
@@ -34,6 +35,21 @@ def _require_tenant_id(user: CurrentUser) -> UUID:
 
 def _resolve_user_tier(user: CurrentUser) -> PricingTier:
     return normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
+
+
+def _normalize_provider_filter(provider: str | None) -> str | None:
+    if provider is None:
+        return None
+    normalized = provider.strip().lower()
+    if not normalized:
+        return None
+    if normalized not in SUPPORTED_PROVIDER_FILTERS:
+        supported = ", ".join(sorted(SUPPORTED_PROVIDER_FILTERS))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported provider '{provider}'. Use one of: {supported}",
+        )
+    return normalized
 
 
 class UnitEconomicsSettingsResponse(BaseModel):
@@ -256,6 +272,73 @@ async def get_cost_attribution_summary(
         end_date=datetime.combine(end_date, time.max, tzinfo=timezone.utc),
         bucket=bucket,
     )
+
+
+@router.get("/attribution/coverage")
+async def get_cost_attribution_coverage(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(requires_feature(FeatureFlag.CHARGEBACK)),
+) -> Dict[str, Any]:
+    """
+    Returns allocation coverage KPI against the 90% target.
+    """
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="start_date must be <= end_date")
+    tenant_id = _require_tenant_id(current_user)
+    from app.modules.reporting.domain.attribution_engine import AttributionEngine
+
+    attribution_engine = AttributionEngine(db)
+    return await attribution_engine.get_allocation_coverage(
+        tenant_id=tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+        target_percentage=90.0,
+    )
+
+
+@router.get("/canonical/quality")
+async def get_canonical_quality(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    provider: Optional[str] = Query(default=None),
+    notify_on_breach: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Returns canonical mapping quality metrics and optional breach alerting.
+    """
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="start_date must be <= end_date")
+    tenant_id = _require_tenant_id(current_user)
+    normalized_provider = _normalize_provider_filter(provider)
+    quality = await CostAggregator.get_canonical_data_quality(
+        db=db,
+        tenant_id=tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+        provider=normalized_provider,
+    )
+
+    if notify_on_breach and quality.get("total_records", 0) > 0 and not quality.get("meets_target", False):
+        try:
+            await NotificationDispatcher.send_alert(
+                title=f"Canonical mapping coverage below target ({quality.get('mapped_percentage', 0)}%)",
+                message=(
+                    f"Tenant {tenant_id} canonical mapping coverage is "
+                    f"{quality.get('mapped_percentage', 0)}% vs target {quality.get('target_percentage', 99.0)}%. "
+                    f"Unmapped records: {quality.get('unmapped_records', 0)}."
+                ),
+                severity="warning",
+            )
+            quality["alert_triggered"] = True
+        except Exception as exc:
+            logger.error("canonical_quality_alert_failed", error=str(exc), tenant_id=str(tenant_id))
+            quality["alert_triggered"] = False
+            quality["alert_error"] = str(exc)
+    return quality
 
 @router.get("/forecast")
 async def get_cost_forecast(
@@ -544,6 +627,7 @@ async def get_unit_economics(
 async def get_reconciliation_close_package(
     start_date: date = Query(...),
     end_date: date = Query(...),
+    provider: Optional[str] = Query(default=None),
     response_format: str = Query(default="json", pattern="^(json|csv)$"),
     enforce_finalized: bool = Query(default=True),
     user: CurrentUser = Depends(requires_feature(FeatureFlag.CLOSE_WORKFLOW)),
@@ -557,6 +641,7 @@ async def get_reconciliation_close_package(
         raise HTTPException(status_code=400, detail="start_date must be <= end_date")
 
     tenant_id = _require_tenant_id(user)
+    normalized_provider = _normalize_provider_filter(provider)
     service = CostReconciliationService(db)
     try:
         package = await service.generate_close_package(
@@ -564,6 +649,7 @@ async def get_reconciliation_close_package(
             start_date=start_date,
             end_date=end_date,
             enforce_finalized=enforce_finalized,
+            provider=normalized_provider,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -577,6 +663,7 @@ async def get_reconciliation_close_package(
 async def get_restatement_history(
     start_date: date = Query(...),
     end_date: date = Query(...),
+    provider: Optional[str] = Query(default=None),
     response_format: str = Query(default="json", pattern="^(json|csv)$"),
     user: CurrentUser = Depends(requires_feature(FeatureFlag.RECONCILIATION)),
     db: AsyncSession = Depends(get_db),
@@ -588,6 +675,7 @@ async def get_restatement_history(
         raise HTTPException(status_code=400, detail="start_date must be <= end_date")
 
     tenant_id = _require_tenant_id(user)
+    normalized_provider = _normalize_provider_filter(provider)
     service = CostReconciliationService(db)
     export_csv = response_format == "csv"
     payload = await service.get_restatement_history(
@@ -595,6 +683,7 @@ async def get_restatement_history(
         start_date=start_date,
         end_date=end_date,
         export_csv=export_csv,
+        provider=normalized_provider,
     )
 
     if export_csv:

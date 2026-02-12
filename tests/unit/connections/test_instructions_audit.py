@@ -26,6 +26,10 @@ def test_get_saas_setup_snippet(mock_settings):
     assert result["subject"] == "tenant:tenant-789"
     assert "settings/connections/saas" in result["snippet"]
     assert "sample_feed" in result
+    assert "native_connectors" in result
+    assert isinstance(result["native_connectors"], list)
+    assert result["native_connectors"][0]["vendor"] == "stripe"
+    assert "manual_feed_schema" in result
 
 
 def test_get_license_setup_snippet(mock_settings):
@@ -33,3 +37,7 @@ def test_get_license_setup_snippet(mock_settings):
     assert result["subject"] == "tenant:tenant-901"
     assert "settings/connections/license" in result["snippet"]
     assert "sample_feed" in result
+    assert "native_connectors" in result
+    assert isinstance(result["native_connectors"], list)
+    assert result["native_connectors"][0]["vendor"] == "microsoft_365"
+    assert "manual_feed_schema" in result

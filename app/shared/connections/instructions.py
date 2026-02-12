@@ -53,10 +53,11 @@ class ConnectionInstructionService:
         }
 
     @staticmethod
-    def get_saas_setup_snippet(tenant_id: str) -> dict[str, str]:
+    def get_saas_setup_snippet(tenant_id: str) -> dict[str, object]:
         """Generate SaaS Cloud+ onboarding instructions."""
         settings = get_settings()
         api_url = settings.API_URL.rstrip("/")
+        saas_catalog = ConnectionInstructionService.get_saas_connector_catalog()
         stripe_native_payload = (
             '{\n'
             '  "name": "Stripe Billing",\n'
@@ -115,13 +116,19 @@ class ConnectionInstructionService:
             "snippet": snippet,
             "sample_feed": sample_payload,
             "supported_vendors": "stripe,salesforce",
+            "native_connectors": saas_catalog,
+            "manual_feed_schema": {
+                "required_fields": ["timestamp|date", "cost_usd|amount_usd"],
+                "optional_fields": ["service", "usage_type", "currency", "tags"],
+            },
         }
 
     @staticmethod
-    def get_license_setup_snippet(tenant_id: str) -> dict[str, str]:
+    def get_license_setup_snippet(tenant_id: str) -> dict[str, object]:
         """Generate License/ITAM Cloud+ onboarding instructions."""
         settings = get_settings()
         api_url = settings.API_URL.rstrip("/")
+        license_catalog = ConnectionInstructionService.get_license_connector_catalog()
         native_payload = (
             '{\n'
             '  "name": "Microsoft 365 License Sync",\n'
@@ -172,4 +179,48 @@ class ConnectionInstructionService:
             "snippet": snippet,
             "sample_feed": sample_payload,
             "supported_vendors": "microsoft_365",
+            "native_connectors": license_catalog,
+            "manual_feed_schema": {
+                "required_fields": ["timestamp|date", "cost_usd|amount_usd"],
+                "optional_fields": [
+                    "service",
+                    "usage_type",
+                    "currency",
+                    "purchased_seats",
+                    "assigned_seats",
+                    "tags",
+                ],
+            },
         }
+
+    @staticmethod
+    def get_saas_connector_catalog() -> list[dict[str, object]]:
+        return [
+            {
+                "vendor": "stripe",
+                "display_name": "Stripe",
+                "recommended_auth_method": "api_key",
+                "supported_auth_methods": ["api_key", "manual", "csv"],
+                "required_connector_config_fields": [],
+            },
+            {
+                "vendor": "salesforce",
+                "display_name": "Salesforce",
+                "recommended_auth_method": "oauth",
+                "supported_auth_methods": ["oauth", "api_key", "manual", "csv"],
+                "required_connector_config_fields": ["instance_url"],
+            },
+        ]
+
+    @staticmethod
+    def get_license_connector_catalog() -> list[dict[str, object]]:
+        return [
+            {
+                "vendor": "microsoft_365",
+                "display_name": "Microsoft 365",
+                "recommended_auth_method": "oauth",
+                "supported_auth_methods": ["oauth", "api_key", "manual", "csv"],
+                "required_connector_config_fields": [],
+                "optional_connector_config_fields": ["default_seat_price_usd", "sku_prices", "currency"],
+            }
+        ]

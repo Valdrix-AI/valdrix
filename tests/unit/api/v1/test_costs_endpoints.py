@@ -87,6 +87,119 @@ async def test_get_cost_attribution_summary(async_client: AsyncClient, app):
 
 
 @pytest.mark.asyncio
+async def test_get_cost_attribution_coverage(async_client: AsyncClient, app):
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    mock_user = CurrentUser(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="coverage@valdrix.io",
+        role=UserRole.MEMBER,
+        tier=PricingTier.GROWTH,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch(
+            "app.modules.reporting.domain.attribution_engine.AttributionEngine.get_allocation_coverage",
+            new=AsyncMock(),
+        ) as mock_coverage:
+            mock_coverage.return_value = {
+                "target_percentage": 90.0,
+                "coverage_percentage": 93.5,
+                "meets_target": True,
+                "status": "ok",
+            }
+
+            response = await async_client.get(
+                "/api/v1/costs/attribution/coverage",
+                params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["coverage_percentage"] == 93.5
+            assert data["meets_target"] is True
+            assert mock_coverage.await_count == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_canonical_quality_with_alert(async_client: AsyncClient, app):
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    mock_user = CurrentUser(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="canonical@valdrix.io",
+        role=UserRole.MEMBER,
+        tier=PricingTier.STARTER,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch(
+            "app.modules.reporting.api.v1.costs.CostAggregator.get_canonical_data_quality",
+            new=AsyncMock(),
+        ) as mock_quality, patch(
+            "app.modules.reporting.api.v1.costs.NotificationDispatcher.send_alert",
+            new=AsyncMock(),
+        ) as mock_alert:
+            mock_quality.return_value = {
+                "target_percentage": 99.0,
+                "total_records": 100,
+                "mapped_percentage": 95.0,
+                "unmapped_records": 5,
+                "meets_target": False,
+                "status": "warning",
+            }
+            response = await async_client.get(
+                "/api/v1/costs/canonical/quality",
+                params={
+                    "start_date": "2026-01-01",
+                    "end_date": "2026-01-31",
+                    "provider": "saas",
+                    "notify_on_breach": "true",
+                },
+            )
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["status"] == "warning"
+            assert payload["alert_triggered"] is True
+            assert mock_alert.await_count == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_canonical_quality_rejects_invalid_provider(async_client: AsyncClient, app):
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    mock_user = CurrentUser(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="canonical-invalid@valdrix.io",
+        role=UserRole.MEMBER,
+        tier=PricingTier.STARTER,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.get(
+            "/api/v1/costs/canonical/quality",
+            params={
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-31",
+                "provider": "oracle",
+            },
+        )
+        assert response.status_code == 400
+        assert "unsupported provider" in response.json()["error"].lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
 async def test_get_cost_forecast_paths(async_client: AsyncClient, app):
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()

@@ -15,13 +15,14 @@ from datetime import date
 from decimal import Decimal
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.cloud import CostRecord
+from app.models.cloud import CostRecord, CloudAccount
 from app.models.cost_audit import CostAuditLog
 
 logger = structlog.get_logger()
 
 
 RECON_ALERT_THRESHOLD_PCT = 1.0
+SUPPORTED_RECON_PROVIDERS = {"aws", "azure", "gcp", "saas", "license"}
 
 
 class CostReconciliationService:
@@ -38,10 +39,43 @@ class CostReconciliationService:
             return "cur"
         if any(
             token in source_key
-            for token in ("explorer", "cost_explorer", "ce_api", "api", "cost_management")
+            for token in ("explorer", "cost_explorer", "ce_api", "cost_management")
         ):
             return "explorer"
         return source_key
+
+    @staticmethod
+    def _normalize_provider(provider: str | None) -> str | None:
+        if provider is None:
+            return None
+        provider_key = provider.strip().lower()
+        if not provider_key:
+            return None
+        if provider_key not in SUPPORTED_RECON_PROVIDERS:
+            raise ValueError(
+                f"Unsupported provider '{provider}'. Supported providers: "
+                f"{', '.join(sorted(SUPPORTED_RECON_PROVIDERS))}"
+            )
+        return provider_key
+
+    @staticmethod
+    def _normalize_cloud_plus_source(source: str | None, provider: str) -> str:
+        source_key = (source or "unknown").strip().lower()
+        if provider == "saas":
+            if source_key == "saas_feed":
+                return "feed"
+            if source_key.startswith("saas_"):
+                return "native"
+            return "unknown"
+
+        if provider == "license":
+            if source_key == "license_feed":
+                return "feed"
+            if source_key.startswith("license_"):
+                return "native"
+            return "unknown"
+
+        return "unknown"
 
     @staticmethod
     def _compute_confidence(
@@ -169,7 +203,9 @@ class CostReconciliationService:
         start_date: date,
         end_date: date,
         export_csv: bool = False,
+        provider: str | None = None,
     ) -> Dict[str, Any]:
+        normalized_provider = self._normalize_provider(provider)
         stmt = (
             select(
                 CostAuditLog.recorded_at.label("audit_recorded_at"),
@@ -195,6 +231,10 @@ class CostReconciliationService:
                 CostRecord.recorded_at <= end_date,
             )
         )
+        if normalized_provider:
+            stmt = stmt.join(CloudAccount, CostRecord.account_id == CloudAccount.id).where(
+                CloudAccount.provider == normalized_provider
+            )
         result = await self.db.execute(stmt)
         rows = sorted(
             result.all(),
@@ -234,6 +274,7 @@ class CostReconciliationService:
 
         payload: Dict[str, Any] = {
             "tenant_id": str(tenant_id),
+            "provider": normalized_provider,
             "period": {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
             "restatement_count": len(entries),
             "net_delta_usd": float(net_delta),
@@ -250,7 +291,9 @@ class CostReconciliationService:
         start_date: date,
         end_date: date,
         enforce_finalized: bool = True,
+        provider: str | None = None,
     ) -> Dict[str, Any]:
+        normalized_provider = self._normalize_provider(provider)
         lifecycle_stmt = (
             select(
                 func.count(CostRecord.id).label("total_records"),
@@ -272,6 +315,10 @@ class CostReconciliationService:
                 CostRecord.recorded_at <= end_date,
             )
         )
+        if normalized_provider:
+            lifecycle_stmt = lifecycle_stmt.join(
+                CloudAccount, CostRecord.account_id == CloudAccount.id
+            ).where(CloudAccount.provider == normalized_provider)
         lifecycle_result = await self.db.execute(lifecycle_stmt)
         lifecycle_row = lifecycle_result.one()
 
@@ -294,16 +341,19 @@ class CostReconciliationService:
             tenant_id=tenant_id,
             start_date=start_date,
             end_date=end_date,
+            provider=normalized_provider,
         )
         restatement_payload = await self.get_restatement_history(
             tenant_id=tenant_id,
             start_date=start_date,
             end_date=end_date,
             export_csv=False,
+            provider=normalized_provider,
         )
 
         package_core: Dict[str, Any] = {
             "tenant_id": str(tenant_id),
+            "provider": normalized_provider,
             "period": {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()},
             "close_status": close_status,
             "lifecycle": lifecycle_summary,
@@ -336,11 +386,13 @@ class CostReconciliationService:
         start_date: date, 
         end_date: date,
         alert_threshold_pct: float = RECON_ALERT_THRESHOLD_PCT,
+        provider: str | None = None,
     ) -> Dict[str, Any]:
         """
         Compare Explorer and CUR cost views by service for reconciliation.
         Uses ingestion metadata source markers to derive source buckets.
         """
+        normalized_provider = self._normalize_provider(provider)
         source_expr = func.coalesce(
             func.lower(CostRecord.ingestion_metadata["source_adapter"].as_string()),
             "unknown",
@@ -359,6 +411,10 @@ class CostReconciliationService:
             )
             .group_by(CostRecord.service, source_expr)
         )
+        if normalized_provider:
+            stmt = stmt.join(CloudAccount, CostRecord.account_id == CloudAccount.id).where(
+                CloudAccount.provider == normalized_provider
+            )
         
         result = await self.db.execute(stmt)
         rows = result.all()
@@ -368,9 +424,23 @@ class CostReconciliationService:
         by_service: dict[str, dict[str, float]] = {}
         by_service_records: dict[str, dict[str, int]] = {}
 
+        comparison_basis = "explorer_vs_cur"
+        expected_primary_source = "cur"
+        expected_secondary_source = "explorer"
+        if normalized_provider in {"saas", "license"}:
+            comparison_basis = "native_vs_feed"
+            expected_primary_source = "native"
+            expected_secondary_source = "feed"
+
         for row in rows:
             service_name = str(getattr(row, "service", "") or "Unknown")
-            source_name = self._normalize_source(getattr(row, "source_adapter", None))
+            if normalized_provider in {"saas", "license"}:
+                source_name = self._normalize_cloud_plus_source(
+                    getattr(row, "source_adapter", None),
+                    normalized_provider,
+                )
+            else:
+                source_name = self._normalize_source(getattr(row, "source_adapter", None))
             row_cost = float(getattr(row, "total_cost", 0) or 0)
             row_records = int(getattr(row, "record_count", 0) or 0)
 
@@ -393,31 +463,34 @@ class CostReconciliationService:
         comparable_record_count = 0
 
         for service_name, sources in by_service.items():
-            if "cur" not in sources or "explorer" not in sources:
+            if expected_primary_source not in sources or expected_secondary_source not in sources:
                 continue
 
-            cur_cost = float(sources["cur"])
-            explorer_cost = float(sources["explorer"])
-            delta_usd = explorer_cost - cur_cost
-            denominator = abs(cur_cost) if abs(cur_cost) > 0 else max(abs(explorer_cost), 1.0)
+            primary_cost = float(sources[expected_primary_source])
+            secondary_cost = float(sources[expected_secondary_source])
+            delta_usd = secondary_cost - primary_cost
+            denominator = abs(primary_cost) if abs(primary_cost) > 0 else max(abs(secondary_cost), 1.0)
             discrepancy_pct = abs(delta_usd) / denominator * 100
 
-            total_cur += cur_cost
-            total_explorer += explorer_cost
+            total_cur += primary_cost
+            total_explorer += secondary_cost
             comparable_record_count += (
-                by_service_records[service_name].get("cur", 0)
-                + by_service_records[service_name].get("explorer", 0)
+                by_service_records[service_name].get(expected_primary_source, 0)
+                + by_service_records[service_name].get(expected_secondary_source, 0)
             )
 
-            impacted_services.append(
-                {
-                    "service": service_name,
-                    "explorer_cost": round(explorer_cost, 6),
-                    "cur_cost": round(cur_cost, 6),
-                    "delta_usd": round(delta_usd, 6),
-                    "discrepancy_percentage": round(discrepancy_pct, 4),
-                }
-            )
+            payload: dict[str, Any] = {
+                "service": service_name,
+                "delta_usd": round(delta_usd, 6),
+                "discrepancy_percentage": round(discrepancy_pct, 4),
+            }
+            if comparison_basis == "native_vs_feed":
+                payload["native_cost"] = round(primary_cost, 6)
+                payload["feed_cost"] = round(secondary_cost, 6)
+            else:
+                payload["cur_cost"] = round(primary_cost, 6)
+                payload["explorer_cost"] = round(secondary_cost, 6)
+            impacted_services.append(payload)
 
         comparable_services = len(impacted_services)
         if comparable_services > 0:
@@ -464,7 +537,9 @@ class CostReconciliationService:
 
         summary: Dict[str, Any] = {
             "tenant_id": str(tenant_id),
+            "provider_scope": normalized_provider or "all",
             "period": f"{start_date} to {end_date}",
+            "comparison_basis": comparison_basis,
             "status": status,
             "total_records": total_records,
             "total_cost": round(total_cost, 6),
@@ -474,8 +549,8 @@ class CostReconciliationService:
             "impacted_services": impacted_services,
             "discrepancies": threshold_discrepancies,
             "source_totals": {
-                "explorer": round(total_explorer, 6),
-                "cur": round(total_cur, 6),
+                expected_secondary_source: round(total_explorer, 6),
+                expected_primary_source: round(total_cur, 6),
             },
             "alert_triggered": alert_triggered,
         }

@@ -15,6 +15,9 @@ def test_reconciliation_helper_paths() -> None:
     assert CostReconciliationService._normalize_source("cur_parquet") == "cur"
     assert CostReconciliationService._normalize_source("cost_explorer_api") == "explorer"
     assert CostReconciliationService._normalize_source("  ") == "unknown"
+    assert CostReconciliationService._normalize_cloud_plus_source("saas_feed", "saas") == "feed"
+    assert CostReconciliationService._normalize_cloud_plus_source("saas_stripe_api", "saas") == "native"
+    assert CostReconciliationService._normalize_cloud_plus_source("license_feed", "license") == "feed"
     assert CostReconciliationService._compute_confidence(10, 5, 1000) == 0.7
     assert CostReconciliationService._compute_confidence(0, 0, 0) == 0.0
     assert CostReconciliationService._to_float(None) == 0.0
@@ -163,3 +166,28 @@ async def test_compare_explorer_vs_cur_alert_failure_path() -> None:
     assert summary["alert_error"] == "alert failed"
     assert summary["source_totals"]["cur"] == 150.0
     assert summary["source_totals"]["explorer"] == 159.0
+
+
+@pytest.mark.asyncio
+async def test_compare_cloud_plus_native_vs_feed() -> None:
+    db = MagicMock()
+    rows = [
+        SimpleNamespace(service="Salesforce Contract", source_adapter="saas_feed", total_cost=100.0, record_count=5),
+        SimpleNamespace(service="Salesforce Contract", source_adapter="saas_salesforce_api", total_cost=96.0, record_count=5),
+    ]
+    db.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: rows))
+    service = CostReconciliationService(db)
+
+    summary = await service.compare_explorer_vs_cur(
+        tenant_id=uuid4(),
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        provider="saas",
+        alert_threshold_pct=1.0,
+    )
+    assert summary["comparison_basis"] == "native_vs_feed"
+    assert summary["source_totals"]["native"] == 96.0
+    assert summary["source_totals"]["feed"] == 100.0
+    assert summary["status"] == "warning"
+    assert summary["impacted_services"][0]["native_cost"] == 96.0
+    assert summary["impacted_services"][0]["feed_cost"] == 100.0

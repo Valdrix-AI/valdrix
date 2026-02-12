@@ -286,15 +286,99 @@ class CostAggregator:
         mapped_records = int(row.mapped_records or 0) if row else 0
         unmapped_records = max(total_records - mapped_records, 0)
         mapped_pct = (mapped_records / total_records * 100) if total_records > 0 else 0.0
+        target_pct = 99.0
+
+        unmapped_filter = (
+            CostRecord.canonical_charge_category.is_(None)
+        ) | (func.lower(CostRecord.canonical_charge_category) == "unmapped")
+
+        top_unmapped_stmt = (
+            select(
+                CloudAccount.provider.label("provider"),
+                CostRecord.service.label("service"),
+                CostRecord.usage_type.label("usage_type"),
+                func.count(CostRecord.id).label("record_count"),
+                func.min(CostRecord.recorded_at).label("first_seen"),
+                func.max(CostRecord.recorded_at).label("last_seen"),
+            )
+            .join(CloudAccount, CostRecord.account_id == CloudAccount.id)
+            .where(
+                CostRecord.tenant_id == tenant_id,
+                CostRecord.recorded_at >= start_date,
+                CostRecord.recorded_at <= end_date,
+                unmapped_filter,
+            )
+            .group_by(CloudAccount.provider, CostRecord.service, CostRecord.usage_type)
+            .order_by(func.count(CostRecord.id).desc())
+            .limit(10)
+        )
+        if provider:
+            top_unmapped_stmt = top_unmapped_stmt.where(CloudAccount.provider == provider.lower())
+
+        top_unmapped_res = await db.execute(top_unmapped_stmt)
+        top_unmapped_rows = top_unmapped_res.all()
+        top_unmapped_signatures = [
+            {
+                "provider": str(getattr(r, "provider", "") or "unknown"),
+                "service": str(getattr(r, "service", "") or "Unknown"),
+                "usage_type": str(getattr(r, "usage_type", "") or "Unknown"),
+                "record_count": int(getattr(r, "record_count", 0) or 0),
+                "first_seen": getattr(r, "first_seen", None).isoformat()
+                if getattr(r, "first_seen", None)
+                else None,
+                "last_seen": getattr(r, "last_seen", None).isoformat()
+                if getattr(r, "last_seen", None)
+                else None,
+            }
+            for r in top_unmapped_rows
+        ]
+
+        reasons_stmt = (
+            select(CostRecord.ingestion_metadata)
+            .where(
+                CostRecord.tenant_id == tenant_id,
+                CostRecord.recorded_at >= start_date,
+                CostRecord.recorded_at <= end_date,
+                unmapped_filter,
+            )
+            .limit(5000)
+        )
+        if provider:
+            reasons_stmt = reasons_stmt.join(CloudAccount, CostRecord.account_id == CloudAccount.id).where(
+                CloudAccount.provider == provider.lower()
+            )
+        reasons_res = await db.execute(reasons_stmt)
+        reason_counts: dict[str, int] = {}
+        sampled_unmapped_records = 0
+        for metadata in reasons_res.scalars().all():
+            sampled_unmapped_records += 1
+            if not isinstance(metadata, dict):
+                continue
+            canonical_meta = metadata.get("canonical_mapping")
+            if not isinstance(canonical_meta, dict):
+                continue
+            reason = canonical_meta.get("unmapped_reason")
+            reason_key = str(reason).strip() if reason is not None else ""
+            if not reason_key:
+                reason_key = "unknown"
+            reason_counts[reason_key] = reason_counts.get(reason_key, 0) + 1
 
         return {
-            "status": "no_data" if total_records == 0 else "ok",
-            "target_percentage": 99.0,
+            "status": (
+                "no_data"
+                if total_records == 0
+                else ("warning" if mapped_pct < target_pct else "ok")
+            ),
+            "target_percentage": target_pct,
             "total_records": total_records,
             "mapped_records": mapped_records,
             "unmapped_records": unmapped_records,
             "mapped_percentage": round(mapped_pct, 2),
-            "meets_target": mapped_pct >= 99.0 if total_records > 0 else False,
+            "target_gap_percentage": round(max(target_pct - mapped_pct, 0.0), 2),
+            "meets_target": mapped_pct >= target_pct if total_records > 0 else False,
+            "top_unmapped_signatures": top_unmapped_signatures,
+            "unmapped_reason_breakdown": reason_counts,
+            "sampled_unmapped_records": sampled_unmapped_records,
         }
     
     @staticmethod

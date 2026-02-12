@@ -18,6 +18,8 @@ from app.schemas.costs import CloudUsageSummary, CostRecord as UsageCostRecord
 
 from app.shared.llm.delta_analysis import DeltaAnalysisService, analyze_with_delta
 from app.shared.llm.analyzer import FinOpsAnalyzer
+from app.shared.llm.factory import LLMFactory
+from app.shared.core.config import get_settings
 from app.shared.core.cache import get_cache_service
 
 logger = structlog.get_logger()
@@ -46,6 +48,21 @@ class HybridAnalysisScheduler:
         self.cache = get_cache_service()
         self.delta_service = DeltaAnalysisService(self.cache)
         self._analyzer: FinOpsAnalyzer | None = None
+        # Capture dependencies at construction for deterministic behavior in tests
+        # that patch these symbols during scheduler creation.
+        self._llm_factory_create = LLMFactory.create
+        self._settings_getter = get_settings
+        self._analyzer_cls = FinOpsAnalyzer
+
+    @property
+    def analyzer(self) -> FinOpsAnalyzer:
+        """Backward-compatible analyzer accessor."""
+        return self._get_analyzer()
+
+    @analyzer.setter
+    def analyzer(self, value: FinOpsAnalyzer) -> None:
+        """Allow explicit analyzer injection in tests and specialized flows."""
+        self._analyzer = value
 
     def _get_analyzer(self) -> FinOpsAnalyzer:
         """
@@ -53,11 +70,9 @@ class HybridAnalysisScheduler:
         in code paths that only evaluate scheduling decisions.
         """
         if self._analyzer is None:
-            from app.shared.llm.factory import LLMFactory
-            from app.shared.core.config import get_settings
-
-            llm = LLMFactory.create(get_settings().LLM_PROVIDER)
-            self._analyzer = FinOpsAnalyzer(llm, db=self.db)
+            settings = self._settings_getter()
+            llm = self._llm_factory_create(settings.LLM_PROVIDER)
+            self._analyzer = self._analyzer_cls(llm, db=self.db)
         return self._analyzer
     
     async def should_run_full_analysis(self, tenant_id: UUID) -> bool:

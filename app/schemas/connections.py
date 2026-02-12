@@ -3,6 +3,17 @@ from datetime import datetime
 from typing import Any, Self
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
+_SAAS_NATIVE_VENDORS = {"stripe", "salesforce"}
+_LICENSE_NATIVE_VENDORS = {"microsoft_365", "microsoft365", "m365", "microsoft"}
+
+
+def _normalize_non_empty(value: str, field_name: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must not be empty")
+    return normalized
+
+
 class AWSConnectionCreate(BaseModel):
     """Request body for creating a new AWS connection."""
     aws_account_id: str = Field(..., pattern=r"^\d{12}$", description="12-digit AWS account ID")
@@ -146,6 +157,16 @@ class SaaSConnectionCreate(BaseModel):
     )
     spend_feed: list[dict[str, Any]] = Field(default_factory=list, description="Normalized SaaS spend records")
 
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        return _normalize_non_empty(value, "name")
+
+    @field_validator("vendor")
+    @classmethod
+    def _validate_vendor(cls, value: str) -> str:
+        return _normalize_non_empty(value, "vendor").lower()
+
     @field_validator("auth_method")
     @classmethod
     def _validate_auth_method(cls, value: str) -> str:
@@ -159,14 +180,22 @@ class SaaSConnectionCreate(BaseModel):
         if self.auth_method in {"api_key", "oauth"} and not self.api_key:
             raise ValueError("api_key is required when auth_method is 'api_key' or 'oauth'")
 
-        vendor = self.vendor.strip().lower()
+        vendor = self.vendor
         native_mode = self.auth_method in {"api_key", "oauth"}
+        if native_mode and vendor not in _SAAS_NATIVE_VENDORS:
+            raise ValueError(
+                "native SaaS auth currently supports vendors: stripe, salesforce. "
+                "Use auth_method manual/csv for other vendors."
+            )
+
         if vendor == "salesforce" and native_mode:
             instance_url = self.connector_config.get("instance_url")
             if not isinstance(instance_url, str) or not instance_url.strip():
                 raise ValueError(
                     "connector_config.instance_url is required for Salesforce native connectors"
                 )
+            if not instance_url.strip().startswith(("https://", "http://")):
+                raise ValueError("connector_config.instance_url must be an http(s) URL")
         return self
 
 
@@ -194,6 +223,16 @@ class LicenseConnectionCreate(BaseModel):
     )
     license_feed: list[dict[str, Any]] = Field(default_factory=list, description="Normalized license spend records")
 
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        return _normalize_non_empty(value, "name")
+
+    @field_validator("vendor")
+    @classmethod
+    def _validate_vendor(cls, value: str) -> str:
+        return _normalize_non_empty(value, "vendor").lower()
+
     @field_validator("auth_method")
     @classmethod
     def _validate_auth_method(cls, value: str) -> str:
@@ -206,6 +245,19 @@ class LicenseConnectionCreate(BaseModel):
     def _validate_credentials(self) -> Self:
         if self.auth_method in {"api_key", "oauth"} and not self.api_key:
             raise ValueError("api_key is required when auth_method is 'api_key' or 'oauth'")
+
+        native_mode = self.auth_method in {"api_key", "oauth"}
+        if native_mode and self.vendor not in _LICENSE_NATIVE_VENDORS:
+            raise ValueError(
+                "native license auth currently supports Microsoft 365 vendors only. "
+                "Use auth_method manual/csv for other vendors."
+            )
+
+        default_seat_price = self.connector_config.get("default_seat_price_usd")
+        if default_seat_price is not None and not isinstance(default_seat_price, (int, float)):
+            raise ValueError("connector_config.default_seat_price_usd must be numeric")
+        if isinstance(default_seat_price, (int, float)) and default_seat_price < 0:
+            raise ValueError("connector_config.default_seat_price_usd cannot be negative")
 
         sku_prices = self.connector_config.get("sku_prices")
         if sku_prices is not None:

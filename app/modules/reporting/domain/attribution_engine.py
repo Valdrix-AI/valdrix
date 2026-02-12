@@ -485,6 +485,80 @@ class AttributionEngine:
 
         return summary
 
+    async def get_allocation_coverage(
+        self,
+        tenant_id: uuid.UUID,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        target_percentage: float = 90.0,
+    ) -> Dict[str, Any]:
+        """
+        Compute allocation coverage KPI for a tenant and date window.
+
+        Coverage = allocated_cost / total_cost * 100
+        """
+        from sqlalchemy import func
+
+        total_query = (
+            select(
+                func.coalesce(func.sum(CostRecord.cost_usd), 0).label("total_cost"),
+                func.count(CostRecord.id).label("total_records"),
+            )
+            .where(CostRecord.tenant_id == tenant_id)
+        )
+        if start_date:
+            total_query = total_query.where(CostRecord.recorded_at >= start_date)
+        if end_date:
+            total_query = total_query.where(CostRecord.recorded_at <= end_date)
+
+        total_result = await self.db.execute(total_query)
+        total_row = total_result.one()
+        total_cost = float(total_row.total_cost or 0)
+        total_records = int(total_row.total_records or 0)
+
+        allocated_query = (
+            select(
+                func.coalesce(func.sum(CostAllocation.amount), 0).label("allocated_cost"),
+                func.count(CostAllocation.id).label("allocation_rows"),
+                func.count(func.distinct(CostAllocation.cost_record_id)).label("allocated_records"),
+            )
+            .join(
+                CostRecord,
+                (CostAllocation.cost_record_id == CostRecord.id)
+                & (CostAllocation.recorded_at == CostRecord.recorded_at),
+            )
+            .where(CostRecord.tenant_id == tenant_id)
+        )
+        if start_date:
+            allocated_query = allocated_query.where(CostRecord.recorded_at >= start_date)
+        if end_date:
+            allocated_query = allocated_query.where(CostRecord.recorded_at <= end_date)
+
+        allocated_result = await self.db.execute(allocated_query)
+        allocated_row = allocated_result.one()
+        raw_allocated_cost = float(allocated_row.allocated_cost or 0)
+        allocated_cost = min(raw_allocated_cost, total_cost) if total_cost > 0 else 0.0
+        over_allocated_cost = max(raw_allocated_cost - total_cost, 0.0)
+        coverage_percentage = (allocated_cost / total_cost * 100.0) if total_cost > 0 else 0.0
+
+        return {
+            "target_percentage": target_percentage,
+            "coverage_percentage": round(coverage_percentage, 2),
+            "meets_target": coverage_percentage >= target_percentage if total_cost > 0 else False,
+            "status": (
+                "no_data" if total_cost <= 0 else ("ok" if coverage_percentage >= target_percentage else "warning")
+            ),
+            "total_cost": round(total_cost, 6),
+            "allocated_cost": round(allocated_cost, 6),
+            "unallocated_cost": round(max(total_cost - allocated_cost, 0.0), 6),
+            "over_allocated_cost": round(over_allocated_cost, 6),
+            "total_records": total_records,
+            "allocated_records": int(allocated_row.allocated_records or 0),
+            "allocation_rows": int(allocated_row.allocation_rows or 0),
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+        }
+
     async def get_unallocated_analysis(
         self,
         tenant_id: uuid.UUID,

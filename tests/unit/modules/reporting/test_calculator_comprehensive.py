@@ -365,6 +365,35 @@ class TestCarbonCalculatorMetrics:
         for field in required_fields:
             assert field in result
 
+    def test_methodology_metadata_contains_assurance_fields_and_is_stable(self):
+        """Methodology metadata must be auditable and deterministic for same inputs."""
+        calculator = CarbonCalculator()
+        cost_data = [{"service": "Compute Engine", "cost_usd": 120.0, "provider": "gcp"}]
+
+        result_one = calculator.calculate_from_costs(cost_data, region="us-west-1", provider="gcp")
+        result_two = calculator.calculate_from_costs(cost_data, region="us-west-1", provider="gcp")
+
+        metadata_one = result_one["methodology_metadata"]
+        metadata_two = result_two["methodology_metadata"]
+
+        required_metadata_fields = [
+            "methodology_version",
+            "factor_source",
+            "factor_version",
+            "factor_timestamp",
+            "factors_checksum_sha256",
+            "calculation_input_checksum_sha256",
+            "region_factor",
+            "constants",
+        ]
+        for field in required_metadata_fields:
+            assert field in metadata_one
+
+        assert metadata_one["methodology_version"] == "valdrix-carbon-v2.0"
+        assert metadata_one["provider"] == "gcp"
+        assert metadata_one["factors_checksum_sha256"] == metadata_two["factors_checksum_sha256"]
+        assert metadata_one["calculation_input_checksum_sha256"] == metadata_two["calculation_input_checksum_sha256"]
+
     def test_scope2_and_scope3_breakdown(self):
         """Test that Scope 2 and Scope 3 emissions are calculated correctly."""
         calculator = CarbonCalculator()

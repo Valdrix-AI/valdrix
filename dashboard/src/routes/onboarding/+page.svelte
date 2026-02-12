@@ -3,6 +3,25 @@
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
 	import { api } from '$lib/api';
 
+	type CloudPlusAuthMethod = 'manual' | 'api_key' | 'oauth' | 'csv';
+	type CloudPlusProvider = 'saas' | 'license';
+
+	interface NativeConnectorMeta {
+		vendor: string;
+		display_name: string;
+		recommended_auth_method: CloudPlusAuthMethod;
+		supported_auth_methods: CloudPlusAuthMethod[];
+		required_connector_config_fields: string[];
+		optional_connector_config_fields: string[];
+	}
+
+	interface ManualFeedSchema {
+		required_fields: string[];
+		optional_fields: string[];
+	}
+
+	const CLOUD_PLUS_AUTH_METHODS: CloudPlusAuthMethod[] = ['manual', 'api_key', 'oauth', 'csv'];
+
 	let { data } = $props();
 
 	// State management
@@ -32,9 +51,14 @@
 	// SaaS / License specific
 	let cloudPlusName = $state('');
 	let cloudPlusVendor = $state('');
-	let cloudPlusAuthMethod: 'manual' | 'api_key' | 'oauth' | 'csv' = $state('manual');
+	let cloudPlusAuthMethod: CloudPlusAuthMethod = $state('manual');
 	let cloudPlusApiKey = $state('');
 	let cloudPlusFeedInput = $state('[]');
+	let cloudPlusConnectorConfigInput = $state('{}');
+	let cloudPlusNativeConnectors = $state<NativeConnectorMeta[]>([]);
+	let cloudPlusManualFeedSchema = $state<ManualFeedSchema>({ required_fields: [], optional_fields: [] });
+	let cloudPlusRequiredConfigValues = $state<Record<string, string>>({});
+	let cloudPlusConfigProvider = $state<CloudPlusProvider | null>(null);
 
 	let isLoading = $state(false);
 	let isVerifying = $state(false);
@@ -71,6 +95,181 @@
 			case 'license':
 				return 'License';
 		}
+	}
+
+	function toCloudPlusAuthMethod(value: unknown, fallback: CloudPlusAuthMethod = 'manual'): CloudPlusAuthMethod {
+		if (typeof value !== 'string') {
+			return fallback;
+		}
+		const normalized = value.trim().toLowerCase();
+		if (
+			normalized === 'manual' ||
+			normalized === 'api_key' ||
+			normalized === 'oauth' ||
+			normalized === 'csv'
+		) {
+			return normalized;
+		}
+		return fallback;
+	}
+
+	function parseStringArray(value: unknown): string[] {
+		if (!Array.isArray(value)) {
+			return [];
+		}
+		return value
+			.filter((item): item is string => typeof item === 'string')
+			.map((item) => item.trim())
+			.filter((item) => item.length > 0);
+	}
+
+	function normalizeNativeConnectors(value: unknown): NativeConnectorMeta[] {
+		if (!Array.isArray(value)) {
+			return [];
+		}
+
+		return value
+			.map((raw) => {
+				if (!raw || typeof raw !== 'object') {
+					return null;
+				}
+				const item = raw as Record<string, unknown>;
+				const vendor = typeof item.vendor === 'string' ? item.vendor.trim().toLowerCase() : '';
+				if (!vendor) {
+					return null;
+				}
+				const displayName =
+					typeof item.display_name === 'string' && item.display_name.trim().length > 0
+						? item.display_name.trim()
+						: vendor;
+				const supportedAuthMethodsRaw = parseStringArray(item.supported_auth_methods).map((authMethod) =>
+					toCloudPlusAuthMethod(authMethod)
+				);
+				const supportedAuthMethods: CloudPlusAuthMethod[] = supportedAuthMethodsRaw.length
+					? supportedAuthMethodsRaw
+					: ['manual'];
+
+				return {
+					vendor,
+					display_name: displayName,
+					recommended_auth_method: toCloudPlusAuthMethod(
+						item.recommended_auth_method,
+						supportedAuthMethods[0] ?? 'manual'
+					),
+					supported_auth_methods: supportedAuthMethods,
+					required_connector_config_fields: parseStringArray(item.required_connector_config_fields),
+					optional_connector_config_fields: parseStringArray(item.optional_connector_config_fields)
+				} satisfies NativeConnectorMeta;
+			})
+			.filter((item): item is NativeConnectorMeta => item !== null);
+	}
+
+	function parseManualFeedSchema(value: unknown): ManualFeedSchema {
+		if (!value || typeof value !== 'object') {
+			return { required_fields: [], optional_fields: [] };
+		}
+		const schema = value as Record<string, unknown>;
+		return {
+			required_fields: parseStringArray(schema.required_fields),
+			optional_fields: parseStringArray(schema.optional_fields)
+		};
+	}
+
+	function parseConnectorConfigInputSafely(): Record<string, unknown> {
+		if (!cloudPlusConnectorConfigInput.trim()) {
+			return {};
+		}
+		try {
+			const parsed = JSON.parse(cloudPlusConnectorConfigInput);
+			if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+				return {};
+			}
+			return parsed as Record<string, unknown>;
+		} catch {
+			return {};
+		}
+	}
+
+	function getSelectedNativeConnector(): NativeConnectorMeta | null {
+		const vendor = cloudPlusVendor.trim().toLowerCase();
+		if (!vendor) {
+			return null;
+		}
+		return cloudPlusNativeConnectors.find((connector) => connector.vendor === vendor) ?? null;
+	}
+
+	function getAvailableCloudPlusAuthMethods(): CloudPlusAuthMethod[] {
+		const connector = getSelectedNativeConnector();
+		if (!connector) {
+			return CLOUD_PLUS_AUTH_METHODS;
+		}
+		return connector.supported_auth_methods.length
+			? connector.supported_auth_methods
+			: CLOUD_PLUS_AUTH_METHODS;
+	}
+
+	function applyCloudPlusVendorDefaults(forceRecommendedAuth: boolean = false): void {
+		const connector = getSelectedNativeConnector();
+		if (!connector) {
+			cloudPlusRequiredConfigValues = {};
+			return;
+		}
+
+		const supportedAuthMethods = connector.supported_auth_methods.length
+			? connector.supported_auth_methods
+			: CLOUD_PLUS_AUTH_METHODS;
+		if (forceRecommendedAuth || !supportedAuthMethods.includes(cloudPlusAuthMethod)) {
+			cloudPlusAuthMethod = supportedAuthMethods.includes(connector.recommended_auth_method)
+				? connector.recommended_auth_method
+				: supportedAuthMethods[0] ?? 'manual';
+		}
+
+		const existingConfig = parseConnectorConfigInputSafely();
+		const requiredFields = connector.required_connector_config_fields;
+		const nextValues: Record<string, string> = {};
+		for (const field of requiredFields) {
+			const currentValue = cloudPlusRequiredConfigValues[field];
+			if (typeof currentValue === 'string' && currentValue.trim().length > 0) {
+				nextValues[field] = currentValue;
+				continue;
+			}
+			const configuredValue = existingConfig[field];
+			nextValues[field] =
+				configuredValue === undefined || configuredValue === null ? '' : String(configuredValue);
+		}
+		cloudPlusRequiredConfigValues = nextValues;
+	}
+
+	function handleCloudPlusVendorInputChanged(): void {
+		cloudPlusVendor = cloudPlusVendor.trim().toLowerCase();
+		applyCloudPlusVendorDefaults(false);
+	}
+
+	function chooseNativeCloudPlusVendor(vendor: string): void {
+		cloudPlusVendor = vendor.trim().toLowerCase();
+		applyCloudPlusVendorDefaults(true);
+	}
+
+	function handleCloudPlusAuthMethodChanged(): void {
+		const supportedAuthMethods = getAvailableCloudPlusAuthMethods();
+		if (!supportedAuthMethods.includes(cloudPlusAuthMethod)) {
+			cloudPlusAuthMethod = supportedAuthMethods[0] ?? 'manual';
+		}
+		if (cloudPlusAuthMethod !== 'api_key' && cloudPlusAuthMethod !== 'oauth') {
+			cloudPlusApiKey = '';
+		}
+	}
+
+	function isCloudPlusNativeAuthMethod(): boolean {
+		return cloudPlusAuthMethod === 'api_key' || cloudPlusAuthMethod === 'oauth';
+	}
+
+	function setRequiredConfigField(field: string, value: string): void {
+		cloudPlusRequiredConfigValues = { ...cloudPlusRequiredConfigValues, [field]: value };
+	}
+
+	function getRequiredConfigFieldValue(field: string): string {
+		return cloudPlusRequiredConfigValues[field] ?? '';
 	}
 
 	// Get access token from server-loaded session (avoids getSession warning)
@@ -144,18 +343,41 @@
 				throw new Error(errData.detail || 'Failed to fetch setup data');
 			}
 
-			const data = await res.json();
+			const responseData = await res.json();
 			if (selectedProvider === 'aws') {
-				externalId = data.external_id;
-				magicLink = data.magic_link;
-				cloudformationYaml = data.cloudformation_yaml;
-				terraformHcl = data.terraform_hcl;
+				externalId = responseData.external_id;
+				magicLink = responseData.magic_link;
+				cloudformationYaml = responseData.cloudformation_yaml;
+				terraformHcl = responseData.terraform_hcl;
 			} else if (selectedProvider === 'azure' || selectedProvider === 'gcp') {
-				cloudShellSnippet = data.snippet;
+				cloudShellSnippet = responseData.snippet;
 			} else {
-				cloudShellSnippet = data.snippet;
-				cloudPlusSampleFeed = data.sample_feed || '[]';
-				cloudPlusFeedInput = data.sample_feed || '[]';
+				const providerDefaults: Record<CloudPlusProvider, { vendor: string; config: string }> = {
+					saas: { vendor: 'stripe', config: '{}' },
+					license: { vendor: 'microsoft_365', config: '{"default_seat_price_usd": 36}' }
+				};
+				const providerKey = selectedProvider as CloudPlusProvider;
+				const defaults = providerDefaults[providerKey];
+				const providerSwitched = cloudPlusConfigProvider !== providerKey;
+				cloudPlusConfigProvider = providerKey;
+
+				cloudShellSnippet = responseData.snippet;
+				cloudPlusSampleFeed = responseData.sample_feed || '[]';
+				cloudPlusFeedInput = responseData.sample_feed || '[]';
+				cloudPlusNativeConnectors = normalizeNativeConnectors(responseData.native_connectors);
+				cloudPlusManualFeedSchema = parseManualFeedSchema(responseData.manual_feed_schema);
+				if (providerSwitched || !cloudPlusVendor.trim()) {
+					cloudPlusVendor =
+						cloudPlusNativeConnectors[0]?.vendor ||
+						defaults.vendor;
+				} else {
+					cloudPlusVendor = cloudPlusVendor.trim().toLowerCase();
+				}
+				if (providerSwitched || !cloudPlusConnectorConfigInput.trim()) {
+					cloudPlusConnectorConfigInput = defaults.config;
+					cloudPlusRequiredConfigValues = {};
+				}
+				applyCloudPlusVendorDefaults(true);
 			}
 		} catch (e) {
 			const err = e as Error;
@@ -218,6 +440,43 @@
 			throw new Error('Feed JSON must be an array of records.');
 		}
 		return parsed as Array<Record<string, unknown>>;
+	}
+
+	function parseCloudPlusConnectorConfig(): Record<string, unknown> {
+		let parsed: unknown = {};
+		if (cloudPlusConnectorConfigInput.trim()) {
+			try {
+				parsed = JSON.parse(cloudPlusConnectorConfigInput);
+			} catch {
+				throw new Error('Connector config JSON must be valid.');
+			}
+			if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+				throw new Error('Connector config JSON must be an object.');
+			}
+		}
+
+		const connectorConfig: Record<string, unknown> = {
+			...(parsed as Record<string, unknown>)
+		};
+		const selectedConnector = getSelectedNativeConnector();
+		if (!selectedConnector || !isCloudPlusNativeAuthMethod()) {
+			return connectorConfig;
+		}
+
+		for (const field of selectedConnector.required_connector_config_fields) {
+			const fieldValue = getRequiredConfigFieldValue(field).trim();
+			if (!fieldValue) {
+				throw new Error(
+					`connector_config.${field} is required for ${selectedConnector.display_name}.`
+				);
+			}
+			if (field.toLowerCase().includes('url') && !/^https?:\/\//i.test(fieldValue)) {
+				throw new Error(`connector_config.${field} must be an http(s) URL.`);
+			}
+			connectorConfig[field] = fieldValue;
+		}
+
+		return connectorConfig;
 	}
 
 	async function proceedToVerify() {
@@ -344,8 +603,8 @@
 				error = 'Please enter a vendor name (minimum 2 characters).';
 				return;
 			}
-			if (cloudPlusAuthMethod === 'api_key' && !cloudPlusApiKey.trim()) {
-				error = 'API key is required when auth method is API key.';
+			if ((cloudPlusAuthMethod === 'api_key' || cloudPlusAuthMethod === 'oauth') && !cloudPlusApiKey.trim()) {
+				error = 'API key / OAuth token is required for this auth method.';
 				return;
 			}
 			isVerifying = true;
@@ -353,25 +612,28 @@
 				const token = await getAccessToken();
 				if (!token) {
 					throw new Error('Please log in first');
-				}
-				const feed = parseCloudPlusFeed();
-				const createPath = selectedProvider === 'saas' ? 'saas' : 'license';
-				const payload =
-					selectedProvider === 'saas'
-						? {
-								name: cloudPlusName.trim(),
-								vendor: cloudPlusVendor.trim(),
-								auth_method: cloudPlusAuthMethod,
-								api_key: cloudPlusApiKey.trim() || null,
-								spend_feed: feed
-							}
-						: {
-								name: cloudPlusName.trim(),
-								vendor: cloudPlusVendor.trim(),
-								auth_method: cloudPlusAuthMethod,
-								api_key: cloudPlusApiKey.trim() || null,
-								license_feed: feed
-							};
+					}
+					const feed = parseCloudPlusFeed();
+					const connectorConfig = parseCloudPlusConnectorConfig();
+					const createPath = selectedProvider === 'saas' ? 'saas' : 'license';
+					const payload =
+						selectedProvider === 'saas'
+							? {
+									name: cloudPlusName.trim(),
+									vendor: cloudPlusVendor.trim().toLowerCase(),
+									auth_method: cloudPlusAuthMethod,
+									api_key: cloudPlusApiKey.trim() || null,
+									connector_config: connectorConfig,
+									spend_feed: feed
+								}
+							: {
+									name: cloudPlusName.trim(),
+									vendor: cloudPlusVendor.trim().toLowerCase(),
+									auth_method: cloudPlusAuthMethod,
+									api_key: cloudPlusApiKey.trim() || null,
+									connector_config: connectorConfig,
+									license_feed: feed
+								};
 
 				const res = await api.post(`${API_URL}/settings/connections/${createPath}`, payload, {
 					headers: {
@@ -929,6 +1191,27 @@
 				</p>
 
 				<div class="space-y-4 mb-8">
+					{#if cloudPlusNativeConnectors.length > 0}
+						<div class="info-box mb-4">
+							<h4 class="text-sm font-bold mb-2">🔌 Native Connectors</h4>
+							<p class="text-xs text-ink-400 mb-3">
+								Choose a supported vendor to auto-configure recommended auth and required fields.
+							</p>
+							<div class="flex flex-wrap gap-2">
+								{#each cloudPlusNativeConnectors as connector}
+									<button
+										type="button"
+										class="secondary-btn !w-auto px-3 py-1.5 text-xs"
+										class:opacity-70={cloudPlusVendor.trim().toLowerCase() !== connector.vendor}
+										onclick={() => chooseNativeCloudPlusVendor(connector.vendor)}
+									>
+										{connector.display_name}
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
 					<div class="form-group">
 						<label for="cloudPlusName">Connection Name</label>
 						<input
@@ -944,27 +1227,61 @@
 							type="text"
 							id="cloudPlusVendor"
 							bind:value={cloudPlusVendor}
+							onchange={handleCloudPlusVendorInputChanged}
 							placeholder={selectedProvider === 'saas' ? 'salesforce' : 'microsoft'}
 						/>
 					</div>
 					<div class="form-group">
 						<label for="cloudPlusAuthMethod">Auth Method</label>
-						<select id="cloudPlusAuthMethod" bind:value={cloudPlusAuthMethod}>
-							<option value="manual">manual</option>
-							<option value="api_key">api_key</option>
-							<option value="oauth">oauth</option>
-							<option value="csv">csv</option>
+						<select
+							id="cloudPlusAuthMethod"
+							bind:value={cloudPlusAuthMethod}
+							onchange={handleCloudPlusAuthMethodChanged}
+						>
+							{#each getAvailableCloudPlusAuthMethods() as authMethod}
+								<option value={authMethod}>{authMethod}</option>
+							{/each}
 						</select>
 					</div>
-					{#if cloudPlusAuthMethod === 'api_key'}
+					{#if cloudPlusAuthMethod === 'api_key' || cloudPlusAuthMethod === 'oauth'}
 						<div class="form-group">
-							<label for="cloudPlusApiKey">API Key</label>
+							<label for="cloudPlusApiKey">API Key / OAuth Token</label>
 							<input
 								type="password"
 								id="cloudPlusApiKey"
 								bind:value={cloudPlusApiKey}
-								placeholder="Paste vendor API key"
+								placeholder="Paste vendor API key or OAuth access token"
 							/>
+						</div>
+					{/if}
+
+					{#if isCloudPlusNativeAuthMethod() &&
+						getSelectedNativeConnector()?.required_connector_config_fields?.length}
+						<div class="info-box">
+							<h4 class="text-sm font-bold mb-2">⚙️ Required Connector Fields</h4>
+							<p class="text-xs text-ink-400 mb-3">
+								These fields are required for {getSelectedNativeConnector()?.display_name} native mode.
+							</p>
+							<div class="space-y-3">
+								{#each getSelectedNativeConnector()?.required_connector_config_fields ?? [] as field}
+									<div class="form-group">
+										<label for={`cfg-${field}`}>connector_config.{field}</label>
+										<input
+											type="text"
+											id={`cfg-${field}`}
+											value={getRequiredConfigFieldValue(field)}
+											oninput={(event) =>
+												setRequiredConfigField(
+													field,
+													(event.currentTarget as HTMLInputElement).value
+												)}
+											placeholder={field === 'instance_url'
+												? 'https://your-org.my.salesforce.com'
+												: `Enter ${field}`}
+										/>
+									</div>
+								{/each}
+							</div>
 						</div>
 					{/if}
 				</div>
@@ -980,10 +1297,33 @@
 				</div>
 
 				<div class="info-box mb-6">
+					<h4 class="text-sm font-bold mb-2">🧩 Connector Config JSON (Optional)</h4>
+					<p class="text-xs text-ink-400 mb-3">
+						Add non-secret vendor options to <code>connector_config</code> (required fields above are merged automatically).
+					</p>
+					{#if getSelectedNativeConnector()?.optional_connector_config_fields?.length}
+						<p class="text-[11px] text-ink-500 mb-3">
+							Optional keys: {getSelectedNativeConnector()?.optional_connector_config_fields.join(', ')}
+						</p>
+					{/if}
+					<textarea
+						rows="5"
+						class="input font-mono text-xs"
+						bind:value={cloudPlusConnectorConfigInput}
+						placeholder={selectedProvider === 'license' ? '{"default_seat_price_usd": 36}' : '{}'}
+					></textarea>
+				</div>
+
+				<div class="info-box mb-6">
 					<h4 class="text-sm font-bold mb-2">🧾 Feed JSON (Optional)</h4>
 					<p class="text-xs text-ink-400 mb-3">
 						Provide an initial feed payload to validate ingestion immediately.
 					</p>
+					{#if cloudPlusManualFeedSchema.required_fields.length > 0}
+						<p class="text-[11px] text-ink-500 mb-3">
+							Required feed keys: {cloudPlusManualFeedSchema.required_fields.join(', ')}
+						</p>
+					{/if}
 					<textarea
 						rows="10"
 						class="input font-mono text-xs"

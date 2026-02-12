@@ -13,6 +13,8 @@ from app.modules.reporting.domain.service import ReportingService
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
+from app.models.saas_connection import SaaSConnection
+from app.models.license_connection import LicenseConnection
 
 
 # Fixtures for mock connections
@@ -58,6 +60,30 @@ def mock_gcp_connection():
     return conn
 
 
+@pytest.fixture
+def mock_saas_connection():
+    """Create a mock SaaS connection."""
+    conn = MagicMock(spec=SaaSConnection)
+    conn.id = str(uuid.uuid4())
+    conn.tenant_id = str(uuid.uuid4())
+    conn.provider = "saas"
+    conn.name = "Test SaaS Feed"
+    conn.last_ingested_at = None
+    return conn
+
+
+@pytest.fixture
+def mock_license_connection():
+    """Create a mock license connection."""
+    conn = MagicMock(spec=LicenseConnection)
+    conn.id = str(uuid.uuid4())
+    conn.tenant_id = str(uuid.uuid4())
+    conn.provider = "license"
+    conn.name = "Test License Feed"
+    conn.last_ingested_at = None
+    return conn
+
+
 class TestGetAllConnections:
     """Test the _get_all_connections internal method."""
 
@@ -68,7 +94,7 @@ class TestGetAllConnections:
         
         # Mock the database execute call
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         
         mock_db.execute = AsyncMock(return_value=query_result)
         
@@ -99,32 +125,34 @@ class TestGetAllConnections:
         mock_db, 
         mock_aws_connection, 
         mock_azure_connection, 
-        mock_gcp_connection
+        mock_gcp_connection,
+        mock_saas_connection,
+        mock_license_connection,
     ):
-        """Test fetching connections from multiple cloud providers."""
+        """Test fetching connections from cloud and Cloud+ providers."""
         tenant_id = str(uuid.uuid4())
-        
+
         # All connections have same tenant_id
-        for conn in [mock_aws_connection, mock_azure_connection, mock_gcp_connection]:
+        all_connections = [
+            mock_aws_connection,
+            mock_azure_connection,
+            mock_gcp_connection,
+            mock_saas_connection,
+            mock_license_connection,
+        ]
+        for conn in all_connections:
             conn.tenant_id = tenant_id
-        
-        # Mock execute to return different connections for each model query
-        async def mock_execute(stmt):
-            result = MagicMock()
-            # Return appropriate connection based on the query
-            all_connections = [mock_aws_connection, mock_azure_connection, mock_gcp_connection]
-            result.scalars.return_value.all.return_value = all_connections
-            return result
-        
-        mock_db.execute = AsyncMock(side_effect=mock_execute)
+
+        query_result = MagicMock()
+        query_result.scalars.return_value.all.side_effect = [[conn] for conn in all_connections]
+        mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
-        
+
         service = ReportingService(mock_db)
         connections = await service._get_all_connections(tenant_id)
-        
-        # Should fetch from 3 models (AWS, Azure, GCP)
-        # Actual count depends on mock setup, should be >= 3
-        assert len(connections) >= 0
+
+        providers = {conn.provider for conn in connections}
+        assert providers == {"aws", "azure", "gcp", "saas", "license"}
 
 
 class TestCostIngestionNoConnections:
@@ -157,7 +185,7 @@ class TestCostIngestionWithConnections:
         
         # Mock database operations
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -215,7 +243,7 @@ class TestCostIngestionWithConnections:
         
         # Mock database
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [mock_azure_connection], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [mock_azure_connection], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -246,12 +274,61 @@ class TestCostIngestionWithConnections:
             assert result["connections_processed"] == 2
 
     @pytest.mark.asyncio
+    async def test_ingest_costs_cloud_plus_connections(
+        self,
+        mock_db,
+        mock_saas_connection,
+        mock_license_connection,
+    ):
+        """Cloud+ connectors should participate in unified ingestion."""
+        tenant_id = str(uuid.uuid4())
+        mock_saas_connection.tenant_id = tenant_id
+        mock_license_connection.tenant_id = tenant_id
+
+        query_result = MagicMock()
+        query_result.scalars.return_value.all.side_effect = [
+            [],
+            [],
+            [],
+            [mock_saas_connection],
+            [mock_license_connection],
+        ]
+        mock_db.execute = AsyncMock(return_value=query_result)
+        mock_db.commit = AsyncMock()
+        mock_db.add = MagicMock()
+
+        service = ReportingService(mock_db)
+
+        with patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory, \
+             patch("app.modules.reporting.domain.service.CostPersistenceService") as mock_persistence, \
+             patch("app.modules.reporting.domain.service.AttributionEngine"):
+
+            mock_adapter = AsyncMock()
+            mock_factory.get_adapter.return_value = mock_adapter
+
+            async def mock_stream():
+                yield {"cost_usd": "15.0"}
+
+            mock_adapter.stream_cost_and_usage = MagicMock(side_effect=lambda *args, **kwargs: mock_stream())
+
+            mock_persistence_instance = AsyncMock()
+            mock_persistence_instance.save_records_stream = AsyncMock(return_value={"records_saved": 1})
+            mock_persistence.return_value = mock_persistence_instance
+
+            result = await service.ingest_costs_for_tenant(tenant_id)
+
+            assert result["status"] == "completed"
+            assert result["connections_processed"] == 2
+            providers = {entry.get("provider") for entry in result["details"]}
+            assert providers == {"saas", "license"}
+
+    @pytest.mark.asyncio
     async def test_ingest_costs_connection_failure(self, mock_db, mock_aws_connection):
         """Test cost ingestion handles connection errors gracefully."""
         tenant_id = mock_aws_connection.tenant_id
         
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -277,7 +354,7 @@ class TestCloudAccountRegistry:
         tenant_id = mock_aws_connection.tenant_id
         
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -318,7 +395,7 @@ class TestAttributionTriggering:
         tenant_id = mock_aws_connection.tenant_id
         
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -358,7 +435,7 @@ class TestAttributionTriggering:
         tenant_id = mock_aws_connection.tenant_id
         
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -403,7 +480,7 @@ class TestCostAggregation:
         tenant_id = mock_aws_connection.tenant_id
         
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -448,7 +525,7 @@ class TestCostAggregation:
         tenant_id = mock_aws_connection.tenant_id
         
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -494,7 +571,7 @@ class TestConnectionMetadataUpdate:
         tenant_id = mock_aws_connection.tenant_id
         
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -534,7 +611,7 @@ class TestDaysParameter:
         tenant_id = mock_aws_connection.tenant_id
         
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()
@@ -580,7 +657,7 @@ class TestResponseStructure:
         tenant_id = mock_aws_connection.tenant_id
         
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], []]
+        query_result.scalars.return_value.all.side_effect = [[mock_aws_connection], [], [], [], []]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
         mock_db.add = MagicMock()

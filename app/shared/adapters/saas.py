@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -13,6 +14,8 @@ from app.shared.core.exceptions import ExternalAPIError
 logger = structlog.get_logger()
 
 _NATIVE_TIMEOUT_SECONDS = 20.0
+_NATIVE_MAX_RETRIES = 3
+_RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 _NATIVE_VENDOR_STRIPE = "stripe"
 _NATIVE_VENDOR_SALESFORCE = "salesforce"
 _NATIVE_SUPPORTED_VENDORS = {
@@ -48,6 +51,14 @@ def _as_float(value: Any, default: float = 0.0, *, divisor: int = 1) -> float:
     if divisor <= 0:
         divisor = 1
     return float(amount / Decimal(divisor))
+
+
+def _is_number(value: Any) -> bool:
+    try:
+        Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+    return True
 
 
 class SaaSAdapter(BaseAdapter):
@@ -97,6 +108,15 @@ class SaaSAdapter(BaseAdapter):
     async def verify_connection(self) -> bool:
         self._last_error = None
         native_vendor = self._native_vendor
+        if self._auth_method in {"api_key", "oauth"} and native_vendor is None:
+            supported_vendors = ", ".join(sorted(_NATIVE_SUPPORTED_VENDORS))
+            self._last_error = (
+                f"Native SaaS auth is not supported for vendor '{self._vendor}'. "
+                f"Supported vendors: {supported_vendors}. "
+                "Use auth_method manual/csv for custom vendors."
+            )
+            return False
+
         if native_vendor:
             try:
                 if native_vendor == _NATIVE_VENDOR_STRIPE:
@@ -115,10 +135,33 @@ class SaaSAdapter(BaseAdapter):
                 return False
 
         feed = getattr(self.connection, "spend_feed", None) or getattr(self.connection, "cost_feed", None)
-        is_valid = isinstance(feed, list)
+        is_valid = self._validate_manual_feed(feed)
         if not is_valid:
-            self._last_error = "Spend feed is missing or invalid."
+            if self._last_error is None:
+                self._last_error = "Spend feed is missing or invalid."
         return is_valid
+
+    def _validate_manual_feed(self, feed: Any) -> bool:
+        if not isinstance(feed, list) or not feed:
+            self._last_error = "Spend feed must contain at least one record for manual/csv verification."
+            return False
+        for idx, entry in enumerate(feed):
+            if not isinstance(entry, dict):
+                self._last_error = f"Spend feed entry #{idx + 1} must be a JSON object."
+                return False
+            has_timestamp = entry.get("timestamp") or entry.get("date")
+            if not has_timestamp:
+                self._last_error = (
+                    f"Spend feed entry #{idx + 1} is missing timestamp/date."
+                )
+                return False
+            amount = entry.get("cost_usd", entry.get("amount_usd"))
+            if not _is_number(amount):
+                self._last_error = (
+                    f"Spend feed entry #{idx + 1} must include numeric cost_usd or amount_usd."
+                )
+                return False
+        return True
 
     async def get_cost_and_usage(
         self,
@@ -330,19 +373,52 @@ class SaaSAdapter(BaseAdapter):
         headers: dict[str, str],
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        try:
-            async with httpx.AsyncClient(timeout=_NATIVE_TIMEOUT_SECONDS) as client:
-                response = await client.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            payload = response.json()
-        except httpx.HTTPError as exc:
-            raise ExternalAPIError(f"SaaS connector API request failed: {exc}") from exc
-        except ValueError as exc:
-            raise ExternalAPIError("SaaS connector API returned invalid JSON payload") from exc
+        last_error: Exception | None = None
+        for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
+            try:
+                async with httpx.AsyncClient(timeout=_NATIVE_TIMEOUT_SECONDS) as client:
+                    response = await client.get(url, headers=headers, params=params)
+                response.raise_for_status()
+                payload = response.json()
+                if not isinstance(payload, dict):
+                    raise ExternalAPIError("SaaS connector API returned invalid payload shape")
+                return payload
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+                status_code = exc.response.status_code
+                retryable = status_code in _RETRYABLE_STATUS_CODES
+                if retryable and attempt < _NATIVE_MAX_RETRIES:
+                    logger.warning(
+                        "saas_native_retry_http_status",
+                        attempt=attempt,
+                        max_attempts=_NATIVE_MAX_RETRIES,
+                        status_code=status_code,
+                        url=url,
+                    )
+                    await asyncio.sleep(0.05 * attempt)
+                    continue
+                raise ExternalAPIError(
+                    f"SaaS connector API request failed with status {status_code}: {exc}"
+                ) from exc
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                last_error = exc
+                if attempt < _NATIVE_MAX_RETRIES:
+                    logger.warning(
+                        "saas_native_retry_transport_error",
+                        attempt=attempt,
+                        max_attempts=_NATIVE_MAX_RETRIES,
+                        url=url,
+                        error=str(exc),
+                    )
+                    await asyncio.sleep(0.05 * attempt)
+                    continue
+                raise ExternalAPIError(f"SaaS connector API request failed: {exc}") from exc
+            except ValueError as exc:
+                raise ExternalAPIError("SaaS connector API returned invalid JSON payload") from exc
 
-        if not isinstance(payload, dict):
-            raise ExternalAPIError("SaaS connector API returned invalid payload shape")
-        return payload
+        if last_error is not None:
+            raise ExternalAPIError(f"SaaS connector API request failed: {last_error}") from last_error
+        raise ExternalAPIError("SaaS connector API request failed unexpectedly")
 
     async def discover_resources(self, resource_type: str, region: str | None = None) -> list[dict[str, Any]]:
         return []

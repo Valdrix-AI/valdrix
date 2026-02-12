@@ -91,6 +91,7 @@ class CostPersistenceService:
                         "is_mapped": canonical_mapping.is_mapped,
                         "confidence": canonical_mapping.confidence,
                         "version": canonical_mapping.mapping_version,
+                        "unmapped_reason": canonical_mapping.unmapped_reason,
                     },
                     "source_adapter": summary_source,
                 }
@@ -159,6 +160,9 @@ class CostPersistenceService:
                 "source_id": str(r.get("source_id") or uuid.uuid4()),
                 "ingestion_timestamp": datetime.now(timezone.utc).isoformat(),
                 "source_adapter": source_adapter,
+                "canonical_mapping": {
+                    "unmapped_reason": canonical_mapping.unmapped_reason,
+                },
             }
             if isinstance(r.get("tags"), dict):
                 ingestion_meta["tags"] = r["tags"]

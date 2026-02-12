@@ -144,9 +144,13 @@ async def test_get_canonical_data_quality_no_data(mock_db, tenant_id):
     mock_row.total_records = 0
     mock_row.mapped_records = 0
 
-    mock_result = MagicMock()
-    mock_result.one_or_none.return_value = mock_row
-    mock_db.execute.return_value = mock_result
+    main_result = MagicMock()
+    main_result.one_or_none.return_value = mock_row
+    top_result = MagicMock()
+    top_result.all.return_value = []
+    reason_result = MagicMock()
+    reason_result.scalars.return_value.all.return_value = []
+    mock_db.execute.side_effect = [main_result, top_result, reason_result]
 
     result = await CostAggregator.get_canonical_data_quality(
         mock_db, tenant_id, date(2026, 1, 1), date(2026, 1, 31)
@@ -155,6 +159,7 @@ async def test_get_canonical_data_quality_no_data(mock_db, tenant_id):
     assert result["status"] == "no_data"
     assert result["mapped_percentage"] == 0.0
     assert result["meets_target"] is False
+    assert result["top_unmapped_signatures"] == []
 
 
 @pytest.mark.asyncio
@@ -163,15 +168,19 @@ async def test_get_canonical_data_quality_below_target(mock_db, tenant_id):
     mock_row.total_records = 100
     mock_row.mapped_records = 97
 
-    mock_result = MagicMock()
-    mock_result.one_or_none.return_value = mock_row
-    mock_db.execute.return_value = mock_result
+    main_result = MagicMock()
+    main_result.one_or_none.return_value = mock_row
+    top_result = MagicMock()
+    top_result.all.return_value = []
+    reason_result = MagicMock()
+    reason_result.scalars.return_value.all.return_value = []
+    mock_db.execute.side_effect = [main_result, top_result, reason_result]
 
     result = await CostAggregator.get_canonical_data_quality(
         mock_db, tenant_id, date(2026, 1, 1), date(2026, 1, 31)
     )
 
-    assert result["status"] == "ok"
+    assert result["status"] == "warning"
     assert result["mapped_percentage"] == 97.0
     assert result["unmapped_records"] == 3
     assert result["meets_target"] is False

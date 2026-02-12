@@ -73,6 +73,11 @@ async def test_cost_persistence_idempotency(db):
     )
     ec2_record = result.scalar_one()
     assert ec2_record.canonical_charge_category == "compute"
+    assert isinstance(ec2_record.ingestion_metadata, dict)
+    assert (
+        ec2_record.ingestion_metadata.get("canonical_mapping", {}).get("unmapped_reason")
+        is None
+    )
 
     result = await db.execute(
         select(CostRecord)
@@ -83,6 +88,11 @@ async def test_cost_persistence_idempotency(db):
     )
     s3_record = result.scalar_one()
     assert s3_record.canonical_charge_category == "storage"
+    assert isinstance(s3_record.ingestion_metadata, dict)
+    assert (
+        s3_record.ingestion_metadata.get("canonical_mapping", {}).get("unmapped_reason")
+        is None
+    )
 
     # 4. Second Ingestion (Same Data)
     await service.save_summary(summary, str(account.id))

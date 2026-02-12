@@ -18,6 +18,7 @@ class CanonicalChargeMapping:
     is_mapped: bool
     confidence: float
     mapping_version: str = MAPPING_VERSION
+    unmapped_reason: str | None = None
 
 
 def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
@@ -35,6 +36,7 @@ def map_canonical_charge_category(
     The mapping is intentionally simple for the first implementation and should
     be expanded as new service signatures are observed in production telemetry.
     """
+    supported_providers = {"aws", "azure", "gcp", "saas", "license", "generic"}
     provider_key = (provider or "").strip().lower()
     service_key = (service or "").strip().lower()
     usage_key = (usage_type or "").strip().lower()
@@ -46,6 +48,16 @@ def map_canonical_charge_category(
             subcategory=None,
             is_mapped=False,
             confidence=0.0,
+            unmapped_reason="missing_provider_service_usage",
+        )
+
+    if provider_key and provider_key not in supported_providers:
+        return CanonicalChargeMapping(
+            category=UNMAPPED_CATEGORY,
+            subcategory=None,
+            is_mapped=False,
+            confidence=0.0,
+            unmapped_reason="unsupported_provider",
         )
 
     if _contains_any(
@@ -72,6 +84,7 @@ def map_canonical_charge_category(
             subcategory="runtime",
             is_mapped=True,
             confidence=0.95,
+            unmapped_reason=None,
         )
 
     if _contains_any(
@@ -94,6 +107,7 @@ def map_canonical_charge_category(
             subcategory="capacity",
             is_mapped=True,
             confidence=0.95,
+            unmapped_reason=None,
         )
 
     if _contains_any(
@@ -116,6 +130,7 @@ def map_canonical_charge_category(
             subcategory="transfer",
             is_mapped=True,
             confidence=0.9,
+            unmapped_reason=None,
         )
 
     if _contains_any(
@@ -137,6 +152,7 @@ def map_canonical_charge_category(
             subcategory="managed",
             is_mapped=True,
             confidence=0.9,
+            unmapped_reason=None,
         )
 
     if _contains_any(
@@ -158,11 +174,21 @@ def map_canonical_charge_category(
             subcategory="adjustment",
             is_mapped=True,
             confidence=0.8,
+            unmapped_reason=None,
         )
+
+    unmapped_reason = "unclassified_signature"
+    if not service_key and not usage_key:
+        unmapped_reason = "missing_service_and_usage"
+    elif not service_key:
+        unmapped_reason = "missing_service"
+    elif not usage_key:
+        unmapped_reason = "missing_usage_type"
 
     return CanonicalChargeMapping(
         category=UNMAPPED_CATEGORY,
         subcategory=None,
         is_mapped=False,
         confidence=0.0,
+        unmapped_reason=unmapped_reason,
     )

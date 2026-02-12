@@ -68,6 +68,7 @@ async def reconcile_tenant_costs(
     tenant_id: UUID,
     start_date: date,
     end_date: date,
+    provider: str | None = None,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(validate_admin_key)
 ) -> dict[str, Any]:
@@ -79,5 +80,13 @@ async def reconcile_tenant_costs(
     from app.modules.reporting.domain.reconciliation import CostReconciliationService
     service = CostReconciliationService(db)
     
-    result = await service.compare_explorer_vs_cur(tenant_id, start_date, end_date)
+    try:
+        result = await service.compare_explorer_vs_cur(
+            tenant_id,
+            start_date,
+            end_date,
+            provider=provider,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result

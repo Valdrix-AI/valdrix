@@ -32,6 +32,7 @@ def test_map_canonical_charge_category_flags_unmapped_values() -> None:
 
     assert mapping.category == "unmapped"
     assert mapping.is_mapped is False
+    assert mapping.unmapped_reason == "unclassified_signature"
 
 
 def test_map_canonical_charge_category_maps_known_network_service() -> None:
@@ -81,3 +82,15 @@ def test_map_canonical_charge_category_empty_values_returns_unmapped() -> None:
     assert mapping.category == "unmapped"
     assert mapping.subcategory is None
     assert mapping.confidence == 0.0
+    assert mapping.unmapped_reason == "missing_provider_service_usage"
+
+
+def test_map_canonical_charge_category_flags_unsupported_provider() -> None:
+    mapping = map_canonical_charge_category(
+        provider="oracle",
+        service="compute",
+        usage_type="usage",
+    )
+
+    assert mapping.category == "unmapped"
+    assert mapping.unmapped_reason == "unsupported_provider"

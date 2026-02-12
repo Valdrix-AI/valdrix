@@ -205,3 +205,29 @@ class TestAttributionEngine:
         # Only first rule should apply
         assert len(allocations) == 1
         assert allocations[0].allocated_to == "First"
+
+    @pytest.mark.asyncio
+    async def test_get_allocation_coverage_metrics(self):
+        db = AsyncMock()
+
+        total_row = MagicMock(total_cost=Decimal("1000.00"), total_records=20)
+        allocated_row = MagicMock(allocated_cost=Decimal("920.00"), allocation_rows=20, allocated_records=18)
+
+        total_result = MagicMock()
+        total_result.one.return_value = total_row
+        allocated_result = MagicMock()
+        allocated_result.one.return_value = allocated_row
+        db.execute.side_effect = [total_result, allocated_result]
+
+        engine = AttributionEngine(db)
+        coverage = await engine.get_allocation_coverage(
+            tenant_id=uuid4(),
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 31),
+            target_percentage=90.0,
+        )
+
+        assert coverage["coverage_percentage"] == 92.0
+        assert coverage["meets_target"] is True
+        assert coverage["status"] == "ok"
+        assert coverage["unallocated_cost"] == 80.0

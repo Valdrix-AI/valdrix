@@ -15,6 +15,8 @@ from app.modules.reporting.domain.attribution_engine import AttributionEngine
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
+from app.models.saas_connection import SaaSConnection
+from app.models.license_connection import LicenseConnection
 from app.models.cloud import CloudAccount
 from app.shared.core.service import BaseService
 from app.shared.core.async_utils import maybe_call
@@ -23,9 +25,11 @@ logger = structlog.get_logger()
 
 class ReportingService(BaseService):
     async def _get_all_connections(self, tenant_id: Any) -> List[Any]:
-        """Fetch all cloud connections for a tenant."""
-        connections: List[AWSConnection | AzureConnection | GCPConnection] = []
-        for model in [AWSConnection, AzureConnection, GCPConnection]:
+        """Fetch all cloud and Cloud+ connections for a tenant."""
+        connections: List[
+            AWSConnection | AzureConnection | GCPConnection | SaaSConnection | LicenseConnection
+        ] = []
+        for model in [AWSConnection, AzureConnection, GCPConnection, SaaSConnection, LicenseConnection]:
             stmt = self._scoped_query(model, tenant_id)
             result = await self.db.execute(stmt)
             connections.extend(result.scalars().all())

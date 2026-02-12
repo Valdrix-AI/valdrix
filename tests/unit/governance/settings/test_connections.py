@@ -50,11 +50,13 @@ async def test_get_cloud_plus_setup_templates(async_client: AsyncClient):
     assert saas_res.status_code == 200
     assert "snippet" in saas_res.json()
     assert "sample_feed" in saas_res.json()
+    assert "native_connectors" in saas_res.json()
 
     license_res = await async_client.post("/api/v1/settings/connections/license/setup")
     assert license_res.status_code == 200
     assert "snippet" in license_res.json()
     assert "sample_feed" in license_res.json()
+    assert "native_connectors" in license_res.json()
 
 @pytest.mark.asyncio
 async def test_create_aws_connection(async_client: AsyncClient, db_session, mock_user):

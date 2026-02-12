@@ -172,7 +172,25 @@
 				);
 			}
 
-			success = `${provider.toUpperCase()} connection created. Run verify to activate it.`;
+			const connectionId =
+				typeof (body as { id?: unknown }).id === 'string' ? ((body as { id: string }).id as string) : null;
+			if (!connectionId) {
+				throw new Error(`Failed to read ${provider.toUpperCase()} connection id from create response.`);
+			}
+
+			const verifyRes = await api.post(
+				`${PUBLIC_API_URL}/settings/connections/${provider}/${connectionId}/verify`,
+				{},
+				{ headers }
+			);
+			const verifyBody = await verifyRes.json().catch(() => ({}));
+			if (!verifyRes.ok) {
+				throw new Error(
+					extractErrorMessage(verifyBody, `Failed to verify ${provider.toUpperCase()} connection.`)
+				);
+			}
+
+			success = `${provider.toUpperCase()} connection created and verified.`;
 			await loadConnections();
 			if (isSaaS) {
 				saasName = '';
@@ -756,7 +774,7 @@
 							onclick={() => createCloudPlusConnection('saas')}
 							disabled={creatingSaaS}
 						>
-							{creatingSaaS ? 'Creating...' : 'Create SaaS Connector'}
+							{creatingSaaS ? 'Creating...' : 'Create & Verify SaaS Connector'}
 						</button>
 					</div>
 				</details>
@@ -879,7 +897,7 @@
 							onclick={() => createCloudPlusConnection('license')}
 							disabled={creatingLicense}
 						>
-							{creatingLicense ? 'Creating...' : 'Create License Connector'}
+							{creatingLicense ? 'Creating...' : 'Create & Verify License Connector'}
 						</button>
 					</div>
 				</details>
