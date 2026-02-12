@@ -354,8 +354,7 @@ class BillingService:
 
         try:
             # Paystack Charge Authorization API
-            client = PaystackClient()
-            response = await client.charge_authorization(
+            response = await self.client.charge_authorization(
                 email=user_email,
                 amount_kobo=amount_kobo,
                 authorization_code=auth_code,

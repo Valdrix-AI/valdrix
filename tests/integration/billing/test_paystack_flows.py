@@ -69,28 +69,33 @@ async def test_create_checkout_success(ac: AsyncClient, test_data, db):
         }
     )
     
-    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
-        mock_settings.PAYSTACK_SECRET_KEY = "test-secret-key"
-        mock_settings.FRONTEND_URL = "http://localhost:3000"
-    
-    # 2. Mock Paystack Initialize Transaction
-    respx.post("https://api.paystack.co/transaction/initialize").respond(
-        json={
-            "status": True,
-            "data": {
-                "authorization_url": "https://checkout.paystack.com/test_token",
-                "reference": "test_ref_123"
+    with patch("app.modules.billing.api.v1.billing.settings") as api_settings, patch(
+        "app.modules.billing.domain.billing.paystack_billing.settings"
+    ) as billing_settings:
+        api_settings.PAYSTACK_SECRET_KEY = "test-secret-key"
+        api_settings.FRONTEND_URL = "http://localhost:3000"
+        api_settings.ENVIRONMENT = "development"
+        api_settings.CORS_ORIGINS = []
+        billing_settings.PAYSTACK_SECRET_KEY = "test-secret-key"
+
+        # 2. Mock Paystack Initialize Transaction
+        respx.post("https://api.paystack.co/transaction/initialize").respond(
+            json={
+                "status": True,
+                "data": {
+                    "authorization_url": "https://checkout.paystack.com/test_token",
+                    "reference": "test_ref_123"
+                }
             }
+        )
+        
+        headers = {"Authorization": f"Bearer {test_data['token']}"}
+        payload = {
+            "tier": "growth",
+            "billing_cycle": "monthly"
         }
-    )
-    
-    headers = {"Authorization": f"Bearer {test_data['token']}"}
-    payload = {
-        "tier": "growth",
-        "billing_cycle": "monthly"
-    }
-    
-    response = await ac.post("/api/v1/billing/checkout", json=payload, headers=headers)
+        
+        response = await ac.post("/api/v1/billing/checkout", json=payload, headers=headers)
     
     assert response.status_code == 200
     data = response.json()

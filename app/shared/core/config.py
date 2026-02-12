@@ -79,16 +79,6 @@ class Settings(BaseSettings):
             if self.DB_SSL_MODE in ["verify-ca", "verify-full"] and not self.DB_SSL_CA_CERT_PATH:
                 raise ValueError(f"SECURITY ERROR: DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE is '{self.DB_SSL_MODE}'.")
 
-            # SEC-P0: Paystack Billing Hardening
-            if not self.PAYSTACK_SECRET_KEY or self.PAYSTACK_SECRET_KEY.startswith("sk_test"):
-                # If we are in prod, we MUST use live keys.
-                # However, allow sk_test ONLY if explicitly in staging (which we treat as non-prod for this check or handle separately)
-                if self.ENVIRONMENT == "production":
-                    raise ValueError("SECURITY ERROR: PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production.")
-            
-            if not self.PAYSTACK_PUBLIC_KEY and self.ENVIRONMENT == "production":
-                raise ValueError("SECURITY ERROR: PAYSTACK_PUBLIC_KEY is missing in production.")
-
             # SEC-P1: LLM Key Hardening
             # If a provider is set, its key MUST be present in production
             if self.LLM_PROVIDER == "openai" and not self.OPENAI_API_KEY:
@@ -99,6 +89,16 @@ class Settings(BaseSettings):
                 raise ValueError("SECURITY ERROR: GOOGLE_API_KEY is missing in production.")
             if self.LLM_PROVIDER == "groq" and not self.GROQ_API_KEY:
                 raise ValueError("SECURITY ERROR: GROQ_API_KEY is missing in production.")
+
+            # SEC-P0: Paystack Billing Hardening
+            if not self.PAYSTACK_SECRET_KEY or self.PAYSTACK_SECRET_KEY.startswith("sk_test"):
+                # If we are in prod, we MUST use live keys.
+                # However, allow sk_test ONLY if explicitly in staging (which we treat as non-prod for this check or handle separately)
+                if self.ENVIRONMENT == "production":
+                    raise ValueError("SECURITY ERROR: PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production.")
+            
+            if not self.PAYSTACK_PUBLIC_KEY and self.ENVIRONMENT == "production":
+                raise ValueError("SECURITY ERROR: PAYSTACK_PUBLIC_KEY is missing in production.")
 
 
         # SEC-05: Admin API Key validation for staging/production

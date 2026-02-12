@@ -45,13 +45,20 @@ class HybridAnalysisScheduler:
         self.db = db
         self.cache = get_cache_service()
         self.delta_service = DeltaAnalysisService(self.cache)
-        
-        # Proper initialization with default LLM
-        # Item 25: Use LLMFactory for analyzer initialization
-        from app.shared.llm.factory import LLMFactory
-        from app.shared.core.config import get_settings
-        llm = LLMFactory.create(get_settings().LLM_PROVIDER)
-        self.analyzer = FinOpsAnalyzer(llm, db=db)
+        self._analyzer: FinOpsAnalyzer | None = None
+
+    def _get_analyzer(self) -> FinOpsAnalyzer:
+        """
+        Lazily initialize analyzer to avoid constructor-time provider validation
+        in code paths that only evaluate scheduling decisions.
+        """
+        if self._analyzer is None:
+            from app.shared.llm.factory import LLMFactory
+            from app.shared.core.config import get_settings
+
+            llm = LLMFactory.create(get_settings().LLM_PROVIDER)
+            self._analyzer = FinOpsAnalyzer(llm, db=self.db)
+        return self._analyzer
     
     async def should_run_full_analysis(self, tenant_id: UUID) -> bool:
         """
@@ -172,8 +179,9 @@ class HybridAnalysisScheduler:
         import json
 
         usage_summary = self._coerce_usage_summary(tenant_id=tenant_id, costs=costs)
+        analyzer = self._get_analyzer()
         
-        result = await self.analyzer.analyze(
+        result = await analyzer.analyze(
             usage_summary=usage_summary,
             tenant_id=tenant_id,
             db=self.db,
@@ -226,8 +234,9 @@ class HybridAnalysisScheduler:
             }
         
         # Run LLM analysis on delta data
+        analyzer = self._get_analyzer()
         result = await analyze_with_delta(
-            analyzer=self.analyzer,
+            analyzer=analyzer,
             tenant_id=tenant_id,
             current_costs=current_costs,
             previous_costs=previous_costs,
