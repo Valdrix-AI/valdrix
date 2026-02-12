@@ -140,6 +140,10 @@ class SaaSConnectionCreate(BaseModel):
     vendor: str = Field(..., min_length=2, max_length=100, description="SaaS vendor name")
     auth_method: str = Field(default="manual", max_length=20, description="manual, api_key, oauth, csv")
     api_key: str | None = Field(default=None, max_length=1024, description="Optional API key for vendor access")
+    connector_config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Vendor-specific non-secret settings (for example Salesforce instance URL, SKU price map).",
+    )
     spend_feed: list[dict[str, Any]] = Field(default_factory=list, description="Normalized SaaS spend records")
 
     @field_validator("auth_method")
@@ -152,8 +156,17 @@ class SaaSConnectionCreate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_credentials(self) -> Self:
-        if self.auth_method == "api_key" and not self.api_key:
-            raise ValueError("api_key is required when auth_method is 'api_key'")
+        if self.auth_method in {"api_key", "oauth"} and not self.api_key:
+            raise ValueError("api_key is required when auth_method is 'api_key' or 'oauth'")
+
+        vendor = self.vendor.strip().lower()
+        native_mode = self.auth_method in {"api_key", "oauth"}
+        if vendor == "salesforce" and native_mode:
+            instance_url = self.connector_config.get("instance_url")
+            if not isinstance(instance_url, str) or not instance_url.strip():
+                raise ValueError(
+                    "connector_config.instance_url is required for Salesforce native connectors"
+                )
         return self
 
 
@@ -162,6 +175,7 @@ class SaaSConnectionResponse(BaseModel):
     name: str
     vendor: str
     auth_method: str
+    connector_config: dict[str, Any]
     is_active: bool
     last_synced_at: datetime | None
     created_at: datetime
@@ -174,6 +188,10 @@ class LicenseConnectionCreate(BaseModel):
     vendor: str = Field(..., min_length=2, max_length=100, description="License vendor name")
     auth_method: str = Field(default="manual", max_length=20, description="manual, api_key, oauth, csv")
     api_key: str | None = Field(default=None, max_length=1024, description="Optional API key for vendor access")
+    connector_config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Vendor-specific non-secret settings (for example Microsoft 365 SKU pricing overrides).",
+    )
     license_feed: list[dict[str, Any]] = Field(default_factory=list, description="Normalized license spend records")
 
     @field_validator("auth_method")
@@ -186,8 +204,18 @@ class LicenseConnectionCreate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_credentials(self) -> Self:
-        if self.auth_method == "api_key" and not self.api_key:
-            raise ValueError("api_key is required when auth_method is 'api_key'")
+        if self.auth_method in {"api_key", "oauth"} and not self.api_key:
+            raise ValueError("api_key is required when auth_method is 'api_key' or 'oauth'")
+
+        sku_prices = self.connector_config.get("sku_prices")
+        if sku_prices is not None:
+            if not isinstance(sku_prices, dict):
+                raise ValueError("connector_config.sku_prices must be a key/value object")
+            for key, value in sku_prices.items():
+                if not isinstance(key, str):
+                    raise ValueError("connector_config.sku_prices keys must be strings")
+                if not isinstance(value, (int, float)):
+                    raise ValueError("connector_config.sku_prices values must be numeric")
         return self
 
 
@@ -196,6 +224,7 @@ class LicenseConnectionResponse(BaseModel):
     name: str
     vendor: str
     auth_method: str
+    connector_config: dict[str, Any]
     is_active: bool
     last_synced_at: datetime | None
     created_at: datetime

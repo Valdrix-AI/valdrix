@@ -595,6 +595,7 @@ async def create_saas_connection(
         vendor=data.vendor,
         auth_method=data.auth_method,
         api_key=data.api_key,
+        connector_config=data.connector_config,
         spend_feed=data.spend_feed,
         is_active=False,
     )
@@ -682,6 +683,7 @@ async def create_license_connection(
         vendor=data.vendor,
         auth_method=data.auth_method,
         api_key=data.api_key,
+        connector_config=data.connector_config,
         license_feed=data.license_feed,
         is_active=False,
     )

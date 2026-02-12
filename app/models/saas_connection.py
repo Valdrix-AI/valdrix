@@ -41,6 +41,11 @@ class SaaSConnection(Base):
         StringEncryptedType(String(1024), _encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
+    connector_config: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
 
     spend_feed: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"),

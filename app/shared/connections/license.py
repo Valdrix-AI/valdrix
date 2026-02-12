@@ -35,9 +35,10 @@ class LicenseConnectionService:
         success = await adapter.verify_connection()
         connection.last_synced_at = datetime.now(timezone.utc)
         connection.is_active = success
-        connection.error_message = None if success else "Failed to validate license spend feed."
+        failure_message = adapter.last_error or "Failed to validate license connector."
+        connection.error_message = None if success else failure_message
         await self.db.commit()
 
         if success:
             return {"status": "success", "message": "License connection verified."}
-        return {"status": "failed", "message": "Failed to validate license spend feed."}
+        return {"status": "failed", "message": failure_message}

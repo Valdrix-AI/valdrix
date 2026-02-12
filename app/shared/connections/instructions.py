@@ -57,6 +57,26 @@ class ConnectionInstructionService:
         """Generate SaaS Cloud+ onboarding instructions."""
         settings = get_settings()
         api_url = settings.API_URL.rstrip("/")
+        stripe_native_payload = (
+            '{\n'
+            '  "name": "Stripe Billing",\n'
+            '  "vendor": "stripe",\n'
+            '  "auth_method": "api_key",\n'
+            '  "api_key": "sk_live_xxx",\n'
+            '  "connector_config": {},\n'
+            '  "spend_feed": []\n'
+            "}"
+        )
+        salesforce_native_payload = (
+            '{\n'
+            '  "name": "Salesforce Contracts",\n'
+            '  "vendor": "salesforce",\n'
+            '  "auth_method": "oauth",\n'
+            '  "api_key": "<access_token>",\n'
+            '  "connector_config": {"instance_url": "https://your-org.my.salesforce.com"},\n'
+            '  "spend_feed": []\n'
+            "}"
+        )
         sample_payload = (
             '[\n'
             '  {\n'
@@ -72,11 +92,17 @@ class ConnectionInstructionService:
         )
         snippet = (
             "# SaaS Cloud+ onboarding options\n"
-            "# 1) API key mode (recommended for vendors with billing APIs)\n"
+            "# 1) Native pull mode (recommended): Stripe, Salesforce\n"
             "# 2) Manual/CSV feed mode for quick onboarding\n"
             "#\n"
             "# Tenant-scoped subject for API/OIDC trust:\n"
             f"tenant:{tenant_id}\n"
+            "#\n"
+            "# Native Stripe connector payload:\n"
+            f"{stripe_native_payload}\n"
+            "#\n"
+            "# Native Salesforce connector payload:\n"
+            f"{salesforce_native_payload}\n"
             "#\n"
             "# Example SaaS spend feed payload (JSON array):\n"
             f"{sample_payload}\n"
@@ -88,6 +114,7 @@ class ConnectionInstructionService:
             "subject": f"tenant:{tenant_id}",
             "snippet": snippet,
             "sample_feed": sample_payload,
+            "supported_vendors": "stripe,salesforce",
         }
 
     @staticmethod
@@ -95,6 +122,19 @@ class ConnectionInstructionService:
         """Generate License/ITAM Cloud+ onboarding instructions."""
         settings = get_settings()
         api_url = settings.API_URL.rstrip("/")
+        native_payload = (
+            '{\n'
+            '  "name": "Microsoft 365 License Sync",\n'
+            '  "vendor": "microsoft_365",\n'
+            '  "auth_method": "oauth",\n'
+            '  "api_key": "<graph_access_token>",\n'
+            '  "connector_config": {\n'
+            '    "default_seat_price_usd": 36,\n'
+            '    "sku_prices": {"ENTERPRISEPREMIUM": 38, "SPE_E5": 57}\n'
+            "  },\n"
+            '  "license_feed": []\n'
+            "}"
+        )
         sample_payload = (
             '[\n'
             '  {\n'
@@ -112,11 +152,14 @@ class ConnectionInstructionService:
         )
         snippet = (
             "# License / ITAM Cloud+ onboarding options\n"
-            "# 1) API key mode for ITAM/license platforms\n"
+            "# 1) Native pull mode (recommended): Microsoft 365 via Microsoft Graph\n"
             "# 2) Manual/CSV feed mode for contract exports\n"
             "#\n"
             "# Tenant-scoped subject for API/OIDC trust:\n"
             f"tenant:{tenant_id}\n"
+            "#\n"
+            "# Native Microsoft 365 connector payload:\n"
+            f"{native_payload}\n"
             "#\n"
             "# Example license feed payload (JSON array):\n"
             f"{sample_payload}\n"
@@ -128,4 +171,5 @@ class ConnectionInstructionService:
             "subject": f"tenant:{tenant_id}",
             "snippet": snippet,
             "sample_feed": sample_payload,
+            "supported_vendors": "microsoft_365",
         }

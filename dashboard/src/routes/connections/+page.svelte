@@ -17,6 +17,7 @@
 		is_management_account?: boolean;
 		organization_id?: string;
 		auth_method?: string;
+		is_active?: boolean;
 	}
 
 	interface DiscoveredAccount {
@@ -48,6 +49,180 @@
 
 	let error = $state('');
 	let success = $state('');
+
+	const cloudPlusTierAllowed = ['pro', 'enterprise'];
+	let verifyingCloudPlus = $state<Record<string, boolean>>({});
+	let creatingSaaS = $state(false);
+	let creatingLicense = $state(false);
+
+	let saasName = $state('');
+	let saasVendor = $state('stripe');
+	let saasAuthMethod = $state<'manual' | 'api_key' | 'oauth' | 'csv'>('api_key');
+	let saasApiKey = $state('');
+	let saasConnectorConfig = $state('{}');
+	let saasFeedInput = $state('[]');
+
+	let licenseName = $state('');
+	let licenseVendor = $state('microsoft_365');
+	let licenseAuthMethod = $state<'manual' | 'api_key' | 'oauth' | 'csv'>('oauth');
+	let licenseApiKey = $state('');
+	let licenseConnectorConfig = $state('{"default_seat_price_usd": 36}');
+	let licenseFeedInput = $state('[]');
+
+	function canUseCloudPlusFeatures(): boolean {
+		return cloudPlusTierAllowed.includes(data.subscription?.tier);
+	}
+
+	function parseJsonObject(raw: string, fieldName: string): Record<string, unknown> {
+		if (!raw.trim()) return {};
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(raw);
+		} catch {
+			throw new Error(`${fieldName} must be valid JSON.`);
+		}
+		if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+			throw new Error(`${fieldName} must be a JSON object.`);
+		}
+		return parsed as Record<string, unknown>;
+	}
+
+	function parseJsonArray(raw: string, fieldName: string): Array<Record<string, unknown>> {
+		if (!raw.trim()) return [];
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(raw);
+		} catch {
+			throw new Error(`${fieldName} must be valid JSON.`);
+		}
+		if (!Array.isArray(parsed)) {
+			throw new Error(`${fieldName} must be a JSON array.`);
+		}
+		return parsed as Array<Record<string, unknown>>;
+	}
+
+	function extractErrorMessage(payload: unknown, fallback: string): string {
+		if (!payload || typeof payload !== 'object') return fallback;
+		const maybeError = payload as { detail?: unknown; message?: unknown; error?: unknown };
+		for (const candidate of [maybeError.detail, maybeError.message, maybeError.error]) {
+			if (typeof candidate === 'string' && candidate.trim()) return candidate;
+		}
+		return fallback;
+	}
+
+	async function createCloudPlusConnection(provider: 'saas' | 'license') {
+		if (!canUseCloudPlusFeatures()) {
+			error = 'Cloud+ connectors require Pro tier or higher.';
+			return;
+		}
+
+		const isSaaS = provider === 'saas';
+		if (isSaaS ? creatingSaaS : creatingLicense) return;
+		if (isSaaS) {
+			creatingSaaS = true;
+		} else {
+			creatingLicense = true;
+		}
+
+		success = '';
+		error = '';
+		try {
+			const headers = await getHeaders();
+			const name = isSaaS ? saasName.trim() : licenseName.trim();
+			const vendor = (isSaaS ? saasVendor : licenseVendor).trim();
+			const authMethod = isSaaS ? saasAuthMethod : licenseAuthMethod;
+			const apiKey = (isSaaS ? saasApiKey : licenseApiKey).trim();
+			const configRaw = isSaaS ? saasConnectorConfig : licenseConnectorConfig;
+			const feedRaw = isSaaS ? saasFeedInput : licenseFeedInput;
+
+			if (name.length < 3) throw new Error('Connection name must have at least 3 characters.');
+			if (vendor.length < 2) throw new Error('Vendor must have at least 2 characters.');
+			if ((authMethod === 'api_key' || authMethod === 'oauth') && !apiKey) {
+				throw new Error('API key or OAuth token is required for selected auth method.');
+			}
+
+			const connectorConfig = parseJsonObject(configRaw, 'Connector config');
+			const feed = parseJsonArray(feedRaw, 'Feed');
+
+			const payload = isSaaS
+				? {
+						name,
+						vendor,
+						auth_method: authMethod,
+						api_key: apiKey || null,
+						connector_config: connectorConfig,
+						spend_feed: feed
+					}
+				: {
+						name,
+						vendor,
+						auth_method: authMethod,
+						api_key: apiKey || null,
+						connector_config: connectorConfig,
+						license_feed: feed
+					};
+
+			const response = await api.post(`${PUBLIC_API_URL}/settings/connections/${provider}`, payload, {
+				headers
+			});
+			const body = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				throw new Error(
+					extractErrorMessage(body, `Failed to create ${provider.toUpperCase()} connection.`)
+				);
+			}
+
+			success = `${provider.toUpperCase()} connection created. Run verify to activate it.`;
+			await loadConnections();
+			if (isSaaS) {
+				saasName = '';
+				saasApiKey = '';
+				saasConnectorConfig = '{}';
+				saasFeedInput = '[]';
+			} else {
+				licenseName = '';
+				licenseApiKey = '';
+				licenseConnectorConfig = '{"default_seat_price_usd": 36}';
+				licenseFeedInput = '[]';
+			}
+		} catch (e) {
+			const err = e as Error;
+			error = err.message;
+		} finally {
+			if (isSaaS) {
+				creatingSaaS = false;
+			} else {
+				creatingLicense = false;
+			}
+		}
+	}
+
+	async function verifyCloudPlusConnection(provider: 'saas' | 'license', connectionId: string) {
+		verifyingCloudPlus = { ...verifyingCloudPlus, [connectionId]: true };
+		success = '';
+		error = '';
+		try {
+			const headers = await getHeaders();
+			const response = await api.post(
+				`${PUBLIC_API_URL}/settings/connections/${provider}/${connectionId}/verify`,
+				{},
+				{ headers }
+			);
+			const body = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				throw new Error(
+					extractErrorMessage(body, `Failed to verify ${provider.toUpperCase()} connection.`)
+				);
+			}
+			success = extractErrorMessage(body, `${provider.toUpperCase()} connection verified.`);
+			await loadConnections();
+		} catch (e) {
+			const err = e as Error;
+			error = err.message;
+		} finally {
+			verifyingCloudPlus = { ...verifyingCloudPlus, [connectionId]: false };
+		}
+	}
 
 	async function getHeaders() {
 		return {
@@ -503,40 +678,94 @@
 									<div class="text-[11px] text-ink-300 font-semibold">{conn.name || 'SaaS Feed'}</div>
 									<div class="text-[10px] text-ink-500 font-mono">Vendor: {conn.vendor || 'unknown'}</div>
 								</div>
-								<button
-									class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
-									onclick={() => deleteConnection('saas', conn.id)}
-									title="Delete Connection"
-								>
-									<span class="text-xs">🗑️</span>
-								</button>
+								<div class="flex items-center gap-2">
+									<button
+										class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
+										onclick={() => verifyCloudPlusConnection('saas', conn.id)}
+										disabled={!!verifyingCloudPlus[conn.id]}
+									>
+										{verifyingCloudPlus[conn.id] ? 'Verifying...' : 'Verify'}
+									</button>
+									<button
+										class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
+										onclick={() => deleteConnection('saas', conn.id)}
+										title="Delete Connection"
+									>
+										<span class="text-xs">🗑️</span>
+									</button>
+								</div>
 							</div>
 							<div class="flex justify-between text-[10px]">
 								<span class="text-ink-500">Auth Method:</span>
 								<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
 							</div>
+							<div class="flex justify-between text-[10px] mt-1">
+								<span class="text-ink-500">Status:</span>
+								<span class={conn.is_active ? 'text-success-400' : 'text-warning-400'}>
+									{conn.is_active ? 'active' : 'pending verification'}
+								</span>
+							</div>
 						</div>
 					{/each}
 				</div>
-				<a
-					href="{base}/onboarding"
-					class="btn btn-ghost text-xs w-full border-dashed border-ink-800 hover:border-accent-500/50"
-				>
-					<span>➕</span> Add SaaS Connector
-				</a>
+			{/if}
+
+			{#if canUseCloudPlusFeatures()}
+				<details class="rounded-xl border border-ink-800 bg-ink-900/40 p-3 space-y-3">
+					<summary class="cursor-pointer text-xs font-semibold text-ink-200">
+						{saasConnections.length > 0 ? 'Add another SaaS connector' : 'Create SaaS connector'}
+					</summary>
+					<div class="space-y-3 mt-3">
+						<input
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+							placeholder="Connection name (e.g. Stripe Billing)"
+							bind:value={saasName}
+						/>
+						<input
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+							placeholder="Vendor (stripe, salesforce, etc.)"
+							bind:value={saasVendor}
+						/>
+						<select
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+							bind:value={saasAuthMethod}
+						>
+							<option value="api_key">API key</option>
+							<option value="oauth">OAuth token</option>
+							<option value="manual">Manual feed</option>
+							<option value="csv">CSV feed</option>
+						</select>
+						<input
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+							type="password"
+							placeholder="API key / OAuth token"
+							bind:value={saasApiKey}
+						/>
+						<textarea
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-20 font-mono"
+							placeholder="Connector config JSON (example: include instance_url for Salesforce)"
+							bind:value={saasConnectorConfig}
+						></textarea>
+						<textarea
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-24 font-mono"
+							placeholder="Spend feed JSON array for manual/csv mode"
+							bind:value={saasFeedInput}
+						></textarea>
+						<button
+							class="btn btn-secondary text-xs w-full"
+							onclick={() => createCloudPlusConnection('saas')}
+							disabled={creatingSaaS}
+						>
+							{creatingSaaS ? 'Creating...' : 'Create SaaS Connector'}
+						</button>
+					</div>
+				</details>
 			{:else if !loadingSaaS}
-				<p class="text-xs text-ink-400 mb-6">
+				<p class="text-xs text-ink-400 mb-4">
 					Connect SaaS spend feeds for Cloud+ cost visibility and optimization.
 				</p>
 				<div class="flex flex-col gap-2">
-					<a
-						href={['pro', 'enterprise'].includes(data.subscription?.tier)
-							? `${base}/onboarding`
-							: `${base}/billing`}
-						class="btn btn-secondary text-xs w-full"
-					>
-						Connect SaaS
-					</a>
+					<a href="{base}/billing" class="btn btn-secondary text-xs w-full">Upgrade for SaaS Connectors</a>
 					<span class="badge badge-warning text-[10px] w-full justify-center">Pro Tier Required</span>
 				</div>
 			{/if}
@@ -570,40 +799,98 @@
 									<div class="text-[11px] text-ink-300 font-semibold">{conn.name || 'License Feed'}</div>
 									<div class="text-[10px] text-ink-500 font-mono">Vendor: {conn.vendor || 'unknown'}</div>
 								</div>
-								<button
-									class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
-									onclick={() => deleteConnection('license', conn.id)}
-									title="Delete Connection"
-								>
-									<span class="text-xs">🗑️</span>
-								</button>
+								<div class="flex items-center gap-2">
+									<button
+										class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
+										onclick={() => verifyCloudPlusConnection('license', conn.id)}
+										disabled={!!verifyingCloudPlus[conn.id]}
+									>
+										{verifyingCloudPlus[conn.id] ? 'Verifying...' : 'Verify'}
+									</button>
+									<button
+										class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
+										onclick={() => deleteConnection('license', conn.id)}
+										title="Delete Connection"
+									>
+										<span class="text-xs">🗑️</span>
+									</button>
+								</div>
 							</div>
 							<div class="flex justify-between text-[10px]">
 								<span class="text-ink-500">Auth Method:</span>
 								<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
 							</div>
+							<div class="flex justify-between text-[10px] mt-1">
+								<span class="text-ink-500">Status:</span>
+								<span class={conn.is_active ? 'text-success-400' : 'text-warning-400'}>
+									{conn.is_active ? 'active' : 'pending verification'}
+								</span>
+							</div>
 						</div>
 					{/each}
 				</div>
-				<a
-					href="{base}/onboarding"
-					class="btn btn-ghost text-xs w-full border-dashed border-ink-800 hover:border-accent-500/50"
-				>
-					<span>➕</span> Add License Connector
-				</a>
+			{/if}
+
+			{#if canUseCloudPlusFeatures()}
+				<details class="rounded-xl border border-ink-800 bg-ink-900/40 p-3 space-y-3">
+					<summary class="cursor-pointer text-xs font-semibold text-ink-200">
+						{licenseConnections.length > 0
+							? 'Add another License connector'
+							: 'Create License connector'}
+					</summary>
+					<div class="space-y-3 mt-3">
+						<input
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+							placeholder="Connection name (e.g. Microsoft 365 Licenses)"
+							bind:value={licenseName}
+						/>
+						<input
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+							placeholder="Vendor (microsoft_365, flexera, etc.)"
+							bind:value={licenseVendor}
+						/>
+						<select
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+							bind:value={licenseAuthMethod}
+						>
+							<option value="oauth">OAuth token</option>
+							<option value="api_key">API key</option>
+							<option value="manual">Manual feed</option>
+							<option value="csv">CSV feed</option>
+						</select>
+						<input
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+							type="password"
+							placeholder="API key / OAuth token"
+							bind:value={licenseApiKey}
+						/>
+						<textarea
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-20 font-mono"
+							placeholder="Connector config JSON (example: default_seat_price_usd and sku_prices)"
+							bind:value={licenseConnectorConfig}
+						></textarea>
+						<textarea
+							class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-24 font-mono"
+							placeholder="License feed JSON array for manual/csv mode"
+							bind:value={licenseFeedInput}
+						></textarea>
+						<button
+							class="btn btn-secondary text-xs w-full"
+							onclick={() => createCloudPlusConnection('license')}
+							disabled={creatingLicense}
+						>
+							{creatingLicense ? 'Creating...' : 'Create License Connector'}
+						</button>
+					</div>
+				</details>
 			{:else if !loadingLicense}
-				<p class="text-xs text-ink-400 mb-6">
+				<p class="text-xs text-ink-400 mb-4">
 					Connect license/ITAM spend feeds to include seat and contract costs in FinOps.
 				</p>
 				<div class="flex flex-col gap-2">
-					<a
-						href={['pro', 'enterprise'].includes(data.subscription?.tier)
-							? `${base}/onboarding`
-							: `${base}/billing`}
-						class="btn btn-secondary text-xs w-full"
+					<a href="{base}/billing" class="btn btn-secondary text-xs w-full"
+						>Upgrade for License Connectors</a
 					>
-						Connect License
-					</a>
 					<span class="badge badge-warning text-[10px] w-full justify-center">Pro Tier Required</span>
 				</div>
 			{/if}
