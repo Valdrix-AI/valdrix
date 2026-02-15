@@ -12,7 +12,7 @@
 - **Sentinel (Internal)**: Custom checks for hardcoded credentials.
 
 ## 3. Supply Chain Security
-- **Pinned Versions**: All dependencies are pinned in `requirements.txt` or `pyproject.toml`.
+- **Pinned Versions**: All dependencies are pinned in `pyproject.toml` (project uses **uv**, not pip).
 - **Signed Commits**: Only GPG-signed commits are allowed to merge into `main`.
 
 ---

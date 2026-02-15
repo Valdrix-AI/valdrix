@@ -23,7 +23,7 @@ MOCK_UNATTACHED_VOLUME = {
     "VolumeType": "gp3",
     "CreateTime": datetime.now(timezone.utc) - timedelta(days=30),
     "AvailabilityZone": "us-east-1a",
-    "Tags": [{"Key": "Name", "Value": "orphaned-vol"}]
+    "Tags": [{"Key": "Name", "Value": "orphaned-vol"}],
 }
 
 MOCK_OLD_SNAPSHOT = {
@@ -32,7 +32,7 @@ MOCK_OLD_SNAPSHOT = {
     "VolumeSize": 50,
     "StartTime": datetime.now(timezone.utc) - timedelta(days=400),
     "Description": "Old backup",
-    "Tags": []
+    "Tags": [],
 }
 
 
@@ -53,14 +53,12 @@ class TestZombieDetectorFactory:
     def test_factory_extracts_aws_credentials(self, mock_aws_connection):
         """Verify factory extracts credentials from AWS connection."""
         from app.modules.optimization.domain.factory import ZombieDetectorFactory
-        
+
         # Get detector - should pass connection
         detector = ZombieDetectorFactory.get_detector(
-            connection=mock_aws_connection,
-            region="us-east-1",
-            db=None
+            connection=mock_aws_connection, region="us-east-1", db=None
         )
-        
+
         # Verify connection was passed and adapter is created
         assert detector is not None
         assert detector.connection == mock_aws_connection
@@ -69,19 +67,17 @@ class TestZombieDetectorFactory:
     def test_factory_handles_azure_connection(self):
         """Verify factory correctly handles Azure connections."""
         from app.modules.optimization.domain.factory import ZombieDetectorFactory
-        
+
         mock_azure = MagicMock()
         type(mock_azure).__name__ = "AzureConnection"
         mock_azure.tenant_id = "azure-tenant-123"
         mock_azure.subscription_id = "azure-sub-456"
         mock_azure.client_id = "azure-client-789"
-        
+
         detector = ZombieDetectorFactory.get_detector(
-            connection=mock_azure,
-            region="eastus",
-            db=None
+            connection=mock_azure, region="eastus", db=None
         )
-        
+
         assert detector is not None
         assert detector.connection == mock_azure
 
@@ -90,7 +86,7 @@ class TestZombieDetectorFactory:
         """Verify factory correctly handles GCP connections."""
         mock_creds.return_value = MagicMock()
         from app.modules.optimization.domain.factory import ZombieDetectorFactory
-        
+
         mock_gcp = MagicMock()
         type(mock_gcp).__name__ = "GCPConnection"
         mock_gcp.project_id = "my-gcp-project"
@@ -102,18 +98,14 @@ class TestZombieDetectorFactory:
             '"auth_provider_x509_cert_url": "https://...", '
             '"client_x509_cert_url": "https://..."}'
         )
-        
+
         detector = ZombieDetectorFactory.get_detector(
-            connection=mock_gcp,
-            region="us-central1",
-            db=None
+            connection=mock_gcp, region="us-central1", db=None
         )
-        
+
         # Verify credentials were set
         assert detector is not None
         assert detector.project_id == "my-gcp-project"
-
-
 
 
 class AsyncPaginatorWrapper:
@@ -133,29 +125,37 @@ class AsyncPaginatorWrapper:
         except StopIteration:
             raise StopAsyncIteration
 
+
 class AsyncClientWrapper:
     """Wrapper to make boto3 sync clients behave like aioboto3 async clients."""
+
     def __init__(self, sync_client):
         self._sync_client = sync_client
-    
+
     def __getattr__(self, name):
         attr = getattr(self._sync_client, name)
         if name == "get_paginator":
+
             def get_paginator_wrapper(*args, **kwargs):
                 return AsyncPaginatorWrapper(attr(*args, **kwargs))
+
             return get_paginator_wrapper
-            
+
         if callable(attr):
+
             async def wrapper(*args, **kwargs):
                 # Execute directly in main thread for moto compatibility
                 return attr(*args, **kwargs)
+
             return wrapper
         return attr
 
     async def __aenter__(self):
         return self
+
     async def __aexit__(self, *args):
         pass
+
 
 class TestZombieScanWithMoto:
     """Integration tests using moto server to mock AWS services."""
@@ -165,6 +165,7 @@ class TestZombieScanWithMoto:
         """Test that unattached volumes are correctly identified using moto."""
         with mock_aws():
             from app.shared.core.config import get_settings
+
             settings = get_settings()
             old_endpoint = settings.AWS_ENDPOINT_URL
             settings.AWS_ENDPOINT_URL = None
@@ -180,48 +181,58 @@ class TestZombieScanWithMoto:
                 vol_response = ec2.create_volume(
                     AvailabilityZone="us-east-1a",
                     Size=10,
-                    TagSpecifications=[{
-                        'ResourceType': 'volume',
-                        'Tags': [{'Key': 'Name', 'Value': 'orphaned-vol'}]
-                    }]
+                    TagSpecifications=[
+                        {
+                            "ResourceType": "volume",
+                            "Tags": [{"Key": "Name", "Value": "orphaned-vol"}],
+                        }
+                    ],
                 )
                 volume_id = vol_response["VolumeId"]
             finally:
                 settings.AWS_ENDPOINT_URL = old_endpoint
-        
+
             # 2. Act - Run the storage plugin
-            from app.modules.optimization.adapters.aws.plugins.storage import UnattachedVolumesPlugin
+            from app.modules.optimization.adapters.aws.plugins.storage import (
+                UnattachedVolumesPlugin,
+            )
+
             plugin = UnattachedVolumesPlugin()
-            
-            boto_config = Config(read_timeout=30, connect_timeout=10, retries={"max_attempts": 3})
-            
+
+            boto_config = Config(
+                read_timeout=30, connect_timeout=10, retries={"max_attempts": 3}
+            )
+
             session = MagicMock()
             session.client = lambda service_name, **kwargs: AsyncClientWrapper(
                 boto3.client(service_name, **kwargs)
             )
-            
+
             zombies = await plugin.scan(
                 session=session,
                 region="us-east-1",
                 credentials={
                     "AccessKeyId": "testing",
                     "SecretAccessKey": "testing",
-                    "aws_account_id": "123456789012"
+                    "aws_account_id": "123456789012",
                 },
-                config=boto_config
+                config=boto_config,
             )
-        
+
         # 3. Assert - Should detect the unattached volume
         assert len(zombies) > 0
         zombie_ids = [z["resource_id"] for z in zombies]
         assert volume_id in zombie_ids
-        assert any("detached" in (z.get("explainability_notes") or "").lower() for z in zombies)
+        assert any(
+            "detached" in (z.get("explainability_notes") or "").lower() for z in zombies
+        )
 
     @pytest.mark.asyncio
     async def test_old_snapshot_detection_with_moto(self):
         """Test that old snapshots are correctly identified as zombies with moto."""
         with mock_aws():
             from app.shared.core.config import get_settings
+
             settings = get_settings()
             old_endpoint = settings.AWS_ENDPOINT_URL
             settings.AWS_ENDPOINT_URL = None
@@ -239,29 +250,34 @@ class TestZombieScanWithMoto:
                 snap["SnapshotId"]
             finally:
                 settings.AWS_ENDPOINT_URL = old_endpoint
-        
+
             # 2. Act - Run the storage plugin
-            from app.modules.optimization.adapters.aws.plugins.storage import OldSnapshotsPlugin
+            from app.modules.optimization.adapters.aws.plugins.storage import (
+                OldSnapshotsPlugin,
+            )
+
             plugin = OldSnapshotsPlugin()
-            
-            boto_config = Config(read_timeout=30, connect_timeout=10, retries={"max_attempts": 3})
-            
+
+            boto_config = Config(
+                read_timeout=30, connect_timeout=10, retries={"max_attempts": 3}
+            )
+
             session = MagicMock()
             session.client = lambda service_name, **kwargs: AsyncClientWrapper(
                 boto3.client(service_name, **kwargs)
             )
-            
+
             zombies = await plugin.scan(
                 session=session,
                 region="us-east-1",
                 credentials={
                     "AccessKeyId": "testing",
                     "SecretAccessKey": "testing",
-                    "aws_account_id": "123456789012"
+                    "aws_account_id": "123456789012",
                 },
-                config=boto_config
+                config=boto_config,
             )
-        
+
         # In mock environment, all snapshots are "new", so we just verify it returned a list
         assert isinstance(zombies, list)
         # Verify scan executed without error
@@ -274,10 +290,10 @@ class TestPluginRegistry:
     def test_aws_plugins_registered(self):
         """Verify AWS plugins are registered."""
         from app.modules.optimization.domain.registry import registry
-        
+
         aws_plugins = registry.get_plugins_for_provider("aws")
         assert len(aws_plugins) > 0
-        
+
         # Verify expected plugins exist
         plugin_names = [p.__class__.__name__ for p in aws_plugins]
         assert any("Volume" in name or "Snapshot" in name for name in plugin_names)
@@ -285,23 +301,23 @@ class TestPluginRegistry:
     def test_azure_plugins_registered(self):
         """Verify Azure plugins are registered."""
         from app.modules.optimization.domain.registry import registry
-        
+
         # Import plugins to trigger registration
         import app.modules.optimization.adapters.azure.plugins.storage  # noqa
         import app.modules.optimization.adapters.azure.plugins.network  # noqa
         import app.modules.optimization.adapters.azure.plugins.compute  # noqa
-        
+
         azure_plugins = registry.get_plugins_for_provider("azure")
         assert len(azure_plugins) >= 3
 
     def test_gcp_plugins_registered(self):
         """Verify GCP plugins are registered."""
         from app.modules.optimization.domain.registry import registry
-        
+
         # Import plugins to trigger registration
         import app.modules.optimization.adapters.gcp.plugins.storage  # noqa
         import app.modules.optimization.adapters.gcp.plugins.network  # noqa
         import app.modules.optimization.adapters.gcp.plugins.compute  # noqa
-        
+
         gcp_plugins = registry.get_plugins_for_provider("gcp")
         assert len(gcp_plugins) >= 3

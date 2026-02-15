@@ -24,7 +24,8 @@ def upgrade():
     # Update RemediationStatus enum (PostgreSQL)
     # Note: Alembic doesn't natively support adding values to existing Enums easily across all DBs.
     # For PostgreSQL, we use ALTER TYPE.
-    op.execute("ALTER TYPE remediationstatus ADD VALUE IF NOT EXISTS 'scheduled' AFTER 'executing'")
+    # Enum labels for this type are stored as member names (uppercase).
+    op.execute("ALTER TYPE remediationstatus ADD VALUE IF NOT EXISTS 'SCHEDULED'")
 
 
 def downgrade():

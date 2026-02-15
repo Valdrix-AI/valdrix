@@ -9,6 +9,7 @@ from app.shared.core.exceptions import ResourceNotFoundError, AdapterError
 
 logger = structlog.get_logger()
 
+
 class AWSConnectionService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -22,20 +23,21 @@ class AWSConnectionService:
         return {
             "external_id": external_id,
             "cloudformation_yaml": f"https://valdrix-public.s3.amazonaws.com/templates/valdrix-role.yaml?external_id={external_id}",
-            "terraform_hcl": f"module \"valdrix_connection\" {{ source = \"valdrix/aws-connection\" external_id = \"{external_id}\" }}",
+            "terraform_hcl": f'module "valdrix_connection" {{ source = "valdrix/aws-connection" external_id = "{external_id}" }}',
             "magic_link": f"https://app.valdrix.ai/onboard/aws?external_id={external_id}",
             "instructions": "Follow the link to setup your AWS connection.",
-            "permissions_summary": ["sts:AssumeRole", "ce:GetCostAndUsage"]
+            "permissions_summary": ["sts:AssumeRole", "ce:GetCostAndUsage"],
         }
 
-    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict[str, Any]:
+    async def verify_connection(
+        self, connection_id: UUID, tenant_id: UUID
+    ) -> dict[str, Any]:
         """
         Verifies that the STS AssumeRole works for the given connection.
         """
         result = await self.db.execute(
             select(AWSConnection).where(
-                AWSConnection.id == connection_id,
-                AWSConnection.tenant_id == tenant_id
+                AWSConnection.id == connection_id, AWSConnection.tenant_id == tenant_id
             )
         )
         connection = result.scalar_one_or_none()
@@ -48,15 +50,28 @@ class AWSConnectionService:
             if success:
                 connection.status = "active"
                 await self.db.commit()
-                return {"status": "success", "message": "Connection verified and active."}
+                return {
+                    "status": "success",
+                    "message": "Connection verified and active.",
+                }
             else:
                 connection.status = "error"
                 await self.db.commit()
-                return {"status": "failed", "message": "Failed to assume role. Check IAM policy and Trust Relationship."}
+                return {
+                    "status": "failed",
+                    "message": "Failed to assume role. Check IAM policy and Trust Relationship.",
+                }
         except AdapterError as e:
             connection.status = "error"
             await self.db.commit()
             return {"status": "error", "message": str(e), "code": e.code}
         except Exception as e:
-            logger.error("aws_verification_unexpected_error", error=str(e), connection_id=str(connection_id))
-            return {"status": "error", "message": "An unexpected error occurred during verification."}
+            logger.error(
+                "aws_verification_unexpected_error",
+                error=str(e),
+                connection_id=str(connection_id),
+            )
+            return {
+                "status": "error",
+                "message": "An unexpected error occurred during verification.",
+            }

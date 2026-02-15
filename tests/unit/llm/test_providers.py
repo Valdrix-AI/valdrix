@@ -2,6 +2,7 @@
 Production-quality tests for LLM Providers.
 Tests cover security, API key validation, model creation, and error handling.
 """
+
 import os
 import pytest
 from unittest.mock import patch, MagicMock
@@ -46,17 +47,22 @@ class TestBaseProvider:
             "your-key-here",
             "default_key",
             "SK-XXX",
-            "CHANGE-ME"
+            "CHANGE-ME",
         ]
 
         for key in placeholder_keys:
-            with pytest.raises(ValueError, match="Invalid API key for test: Key contains a placeholder value"):
+            with pytest.raises(
+                ValueError,
+                match="Invalid API key for test: Key contains a placeholder value",
+            ):
                 provider.validate_api_key(key, "test")
 
     def test_validate_api_key_too_short(self):
         """Test API key validation rejects keys that are too short."""
         provider = self.DummyProvider()
-        with pytest.raises(ValueError, match="Invalid API key for test: Key is too short"):
+        with pytest.raises(
+            ValueError, match="Invalid API key for test: Key is too short"
+        ):
             provider.validate_api_key("short", "test")
 
     def test_validate_api_key_minimum_length(self):
@@ -70,10 +76,12 @@ class TestBaseProvider:
         # Can't instantiate abstract class directly, so test that concrete providers work
         provider = OpenAIProvider()
         # This should work without raising NotImplementedError
-        with patch('app.shared.llm.providers.openai.ChatOpenAI') as mock_chat:
+        with patch("app.shared.llm.providers.openai.ChatOpenAI") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
-            result = provider.create_model(api_key="sk-valid123456789012345678901234567890")
+            result = provider.create_model(
+                api_key="sk-valid123456789012345678901234567890"
+            )
             assert result == mock_instance
 
 
@@ -84,23 +92,22 @@ class TestOpenAIProvider:
         """Test model creation with provided API key."""
         provider = OpenAIProvider()
 
-        with patch('app.shared.llm.providers.openai.ChatOpenAI') as mock_chat:
+        with patch("app.shared.llm.providers.openai.ChatOpenAI") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
             result = provider.create_model(
-                model="gpt-4",
-                api_key="sk-valid123456789012345678901234567890"
+                model="gpt-4", api_key="sk-valid123456789012345678901234567890"
             )
 
             mock_chat.assert_called_once_with(
                 api_key="sk-valid123456789012345678901234567890",
                 model="gpt-4",
-                temperature=0
+                temperature=0,
             )
             assert result == mock_instance
 
-    @patch('app.shared.llm.providers.openai.get_settings')
+    @patch("app.shared.llm.providers.openai.get_settings")
     def test_create_model_from_settings(self, mock_get_settings):
         """Test model creation using settings API key."""
         mock_settings = MagicMock()
@@ -110,7 +117,7 @@ class TestOpenAIProvider:
 
         provider = OpenAIProvider()
 
-        with patch('app.shared.llm.providers.openai.ChatOpenAI') as mock_chat:
+        with patch("app.shared.llm.providers.openai.ChatOpenAI") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
@@ -119,11 +126,11 @@ class TestOpenAIProvider:
             mock_chat.assert_called_once_with(
                 api_key="sk-settings123456789012345678901234567890",
                 model="gpt-3.5-turbo",
-                temperature=0
+                temperature=0,
             )
             assert result == mock_instance
 
-    @patch('app.shared.llm.providers.openai.get_settings')
+    @patch("app.shared.llm.providers.openai.get_settings")
     def test_create_model_invalid_api_key(self, mock_get_settings):
         """Test model creation with invalid API key."""
         mock_settings = MagicMock()
@@ -143,23 +150,24 @@ class TestGoogleProvider:
         """Test model creation with provided API key."""
         provider = GoogleProvider()
 
-        with patch('app.shared.llm.providers.google.ChatGoogleGenerativeAI') as mock_chat:
+        with patch(
+            "app.shared.llm.providers.google.ChatGoogleGenerativeAI"
+        ) as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
             result = provider.create_model(
-                model="gemini-pro",
-                api_key="AIzaSy-valid123456789012345678901234567890"
+                model="gemini-pro", api_key="AIzaSy-valid123456789012345678901234567890"
             )
 
             mock_chat.assert_called_once_with(
                 google_api_key="AIzaSy-valid123456789012345678901234567890",
                 model="gemini-pro",
-                temperature=0
+                temperature=0,
             )
             assert result == mock_instance
 
-    @patch('app.shared.llm.providers.google.get_settings')
+    @patch("app.shared.llm.providers.google.get_settings")
     def test_create_model_from_settings(self, mock_get_settings):
         """Test model creation using settings API key."""
         mock_settings = MagicMock()
@@ -169,7 +177,9 @@ class TestGoogleProvider:
 
         provider = GoogleProvider()
 
-        with patch('app.shared.llm.providers.google.ChatGoogleGenerativeAI') as mock_chat:
+        with patch(
+            "app.shared.llm.providers.google.ChatGoogleGenerativeAI"
+        ) as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
@@ -178,7 +188,7 @@ class TestGoogleProvider:
             mock_chat.assert_called_once_with(
                 google_api_key="AIzaSy-settings123456789012345678901234567890",
                 model="gemini-1.5-flash",
-                temperature=0
+                temperature=0,
             )
             assert result == mock_instance
 
@@ -190,23 +200,23 @@ class TestAnthropicProvider:
         """Test model creation with provided API key."""
         provider = AnthropicProvider()
 
-        with patch('app.shared.llm.providers.anthropic.ChatAnthropic') as mock_chat:
+        with patch("app.shared.llm.providers.anthropic.ChatAnthropic") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
             result = provider.create_model(
                 model="claude-3-sonnet-20240229",
-                api_key="sk-ant-valid123456789012345678901234567890"
+                api_key="sk-ant-valid123456789012345678901234567890",
             )
 
             mock_chat.assert_called_once_with(
                 api_key="sk-ant-valid123456789012345678901234567890",
                 model="claude-3-sonnet-20240229",
-                temperature=0
+                temperature=0,
             )
             assert result == mock_instance
 
-    @patch('app.shared.llm.providers.anthropic.get_settings')
+    @patch("app.shared.llm.providers.anthropic.get_settings")
     def test_create_model_fallback_api_keys(self, mock_get_settings):
         """Test model creation with fallback API key logic."""
         mock_settings = MagicMock()
@@ -217,7 +227,7 @@ class TestAnthropicProvider:
 
         provider = AnthropicProvider()
 
-        with patch('app.shared.llm.providers.anthropic.ChatAnthropic') as mock_chat:
+        with patch("app.shared.llm.providers.anthropic.ChatAnthropic") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
@@ -226,11 +236,11 @@ class TestAnthropicProvider:
             mock_chat.assert_called_once_with(
                 api_key="sk-claude-valid123456789012345678901234567890",
                 model="claude-3-haiku-20240307",
-                temperature=0
+                temperature=0,
             )
             assert result == mock_instance
 
-    @patch('app.shared.llm.providers.anthropic.get_settings')
+    @patch("app.shared.llm.providers.anthropic.get_settings")
     def test_create_model_anthropic_priority(self, mock_get_settings):
         """Test that ANTHROPIC_API_KEY takes priority over CLAUDE_API_KEY."""
         mock_settings = MagicMock()
@@ -241,7 +251,7 @@ class TestAnthropicProvider:
 
         provider = AnthropicProvider()
 
-        with patch('app.shared.llm.providers.anthropic.ChatAnthropic') as mock_chat:
+        with patch("app.shared.llm.providers.anthropic.ChatAnthropic") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
@@ -251,7 +261,7 @@ class TestAnthropicProvider:
             mock_chat.assert_called_once_with(
                 api_key="sk-anth-valid123456789012345678901234567890",
                 model="claude-3-haiku-20240307",
-                temperature=0
+                temperature=0,
             )
 
 
@@ -262,23 +272,23 @@ class TestGroqProvider:
         """Test model creation with provided API key."""
         provider = GroqProvider()
 
-        with patch('app.shared.llm.providers.groq.ChatGroq') as mock_chat:
+        with patch("app.shared.llm.providers.groq.ChatGroq") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
             result = provider.create_model(
                 model="llama2-70b-4096",
-                api_key="gsk_valid123456789012345678901234567890"
+                api_key="gsk_valid123456789012345678901234567890",
             )
 
             mock_chat.assert_called_once_with(
                 api_key="gsk_valid123456789012345678901234567890",
                 model="llama2-70b-4096",
-                temperature=0
+                temperature=0,
             )
             assert result == mock_instance
 
-    @patch('app.shared.llm.providers.groq.get_settings')
+    @patch("app.shared.llm.providers.groq.get_settings")
     def test_create_model_from_settings(self, mock_get_settings):
         """Test model creation using settings API key."""
         mock_settings = MagicMock()
@@ -288,7 +298,7 @@ class TestGroqProvider:
 
         provider = GroqProvider()
 
-        with patch('app.shared.llm.providers.groq.ChatGroq') as mock_chat:
+        with patch("app.shared.llm.providers.groq.ChatGroq") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
@@ -297,7 +307,7 @@ class TestGroqProvider:
             mock_chat.assert_called_once_with(
                 api_key="gsk_settings123456789012345678901234567890",
                 model="mixtral-8x7b-32768",
-                temperature=0
+                temperature=0,
             )
             assert result == mock_instance
 
@@ -307,7 +317,12 @@ class TestLLMProvidersProductionQuality:
 
     def test_api_key_security_validation_comprehensive(self):
         """Test comprehensive API key security validation across all providers."""
-        providers = [OpenAIProvider(), GoogleProvider(), AnthropicProvider(), GroqProvider()]
+        providers = [
+            OpenAIProvider(),
+            GoogleProvider(),
+            AnthropicProvider(),
+            GroqProvider(),
+        ]
 
         malicious_keys = [
             "sk-123",  # Too short
@@ -321,7 +336,7 @@ class TestLLMProvidersProductionQuality:
         ]
 
         for provider in providers:
-            provider_name = provider.__class__.__name__.replace('Provider', '').lower()
+            provider_name = provider.__class__.__name__.replace("Provider", "").lower()
             for malicious_key in malicious_keys:
                 with pytest.raises(ValueError):
                     provider.validate_api_key(malicious_key, provider_name)
@@ -341,7 +356,7 @@ class TestLLMProvidersProductionQuality:
         provider = OpenAIProvider()
 
         # Test with invalid API key that passes validation but fails in LangChain
-        with patch('app.shared.llm.providers.openai.ChatOpenAI') as mock_chat:
+        with patch("app.shared.llm.providers.openai.ChatOpenAI") as mock_chat:
             mock_chat.side_effect = Exception("LangChain initialization failed")
 
             with pytest.raises(Exception, match="LangChain initialization failed"):
@@ -351,10 +366,10 @@ class TestLLMProvidersProductionQuality:
         """Test that provider configurations don't interfere with each other."""
         # Create multiple providers and ensure they maintain separate state
         providers = {
-            'openai': OpenAIProvider(),
-            'google': GoogleProvider(),
-            'anthropic': AnthropicProvider(),
-            'groq': GroqProvider()
+            "openai": OpenAIProvider(),
+            "google": GoogleProvider(),
+            "anthropic": AnthropicProvider(),
+            "groq": GroqProvider(),
         }
 
         # Each provider should validate keys independently
@@ -373,17 +388,21 @@ class TestLLMProvidersProductionQuality:
         # Create and use multiple providers
         providers = []
         for _ in range(100):  # Create many provider instances
-            providers.extend([
-                OpenAIProvider(),
-                GoogleProvider(),
-                AnthropicProvider(),
-                GroqProvider()
-            ])
+            providers.extend(
+                [
+                    OpenAIProvider(),
+                    GoogleProvider(),
+                    AnthropicProvider(),
+                    GroqProvider(),
+                ]
+            )
 
         # Test API key validation on all providers
         for provider in providers:
-            provider_name = provider.__class__.__name__.replace('Provider', '').lower()
-            provider.validate_api_key("sk-valid123456789012345678901234567890", provider_name)
+            provider_name = provider.__class__.__name__.replace("Provider", "").lower()
+            provider.validate_api_key(
+                "sk-valid123456789012345678901234567890", provider_name
+            )
 
         # Check memory usage
         final_memory = process.memory_info().rss / 1024 / 1024  # MB
@@ -402,7 +421,9 @@ class TestLLMProvidersProductionQuality:
 
         def validate_key():
             try:
-                provider.validate_api_key("sk-valid123456789012345678901234567890", "openai")
+                provider.validate_api_key(
+                    "sk-valid123456789012345678901234567890", "openai"
+                )
                 results.append("success")
             except Exception as e:
                 errors.append(str(e))
@@ -430,7 +451,7 @@ class TestLLMProvidersProductionQuality:
             "sk-1234567890123456789012345678901234567890",
             "AIzaSy-1234567890123456789012345678901234567890",
             "sk-ant-1234567890123456789012345678901234567890",
-            "gsk_1234567890123456789012345678901234567890"
+            "gsk_1234567890123456789012345678901234567890",
         ]
 
         for sensitive_key in sensitive_keys:
@@ -439,33 +460,42 @@ class TestLLMProvidersProductionQuality:
             except ValueError as e:
                 error_msg = str(e)
                 # Error message should not contain the actual key
-                assert sensitive_key not in error_msg, f"Error message leaked API key: {error_msg}"
+                assert sensitive_key not in error_msg, (
+                    f"Error message leaked API key: {error_msg}"
+                )
 
     def test_provider_model_parameter_validation(self):
         """Test model parameter validation and defaults."""
         provider = OpenAIProvider()
 
-        with patch('app.shared.llm.providers.openai.ChatOpenAI') as mock_chat:
+        with patch("app.shared.llm.providers.openai.ChatOpenAI") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
             # Test with None model (should use default)
             provider.create_model(
-                model=None,
-                api_key="sk-valid123456789012345678901234567890"
+                model=None, api_key="sk-valid123456789012345678901234567890"
             )
 
             # Should be called with model parameter (will be None, settings default used)
             call_args = mock_chat.call_args
-            assert 'model' in call_args[1]
+            assert "model" in call_args[1]
 
     def test_provider_temperature_consistency(self):
         """Test that all providers use consistent temperature settings."""
         providers = [
-            ('openai', OpenAIProvider(), 'app.shared.llm.providers.openai.ChatOpenAI'),
-            ('google', GoogleProvider(), 'app.shared.llm.providers.google.ChatGoogleGenerativeAI'),
-            ('anthropic', AnthropicProvider(), 'app.shared.llm.providers.anthropic.ChatAnthropic'),
-            ('groq', GroqProvider(), 'app.shared.llm.providers.groq.ChatGroq')
+            ("openai", OpenAIProvider(), "app.shared.llm.providers.openai.ChatOpenAI"),
+            (
+                "google",
+                GoogleProvider(),
+                "app.shared.llm.providers.google.ChatGoogleGenerativeAI",
+            ),
+            (
+                "anthropic",
+                AnthropicProvider(),
+                "app.shared.llm.providers.anthropic.ChatAnthropic",
+            ),
+            ("groq", GroqProvider(), "app.shared.llm.providers.groq.ChatGroq"),
         ]
 
         for provider_name, provider, mock_path in providers:
@@ -477,9 +507,11 @@ class TestLLMProvidersProductionQuality:
 
                 # All providers should use temperature=0 for consistency
                 call_kwargs = mock_chat.call_args[1]
-                assert call_kwargs.get('temperature') == 0, f"{provider_name} provider doesn't use temperature=0"
+                assert call_kwargs.get("temperature") == 0, (
+                    f"{provider_name} provider doesn't use temperature=0"
+                )
 
-    @patch('app.shared.llm.providers.openai.get_settings')
+    @patch("app.shared.llm.providers.openai.get_settings")
     def test_provider_integration_with_settings(self, mock_get_settings):
         """Test provider integration with settings system."""
         mock_settings = MagicMock()
@@ -489,7 +521,7 @@ class TestLLMProvidersProductionQuality:
 
         provider = OpenAIProvider()
 
-        with patch('app.shared.llm.providers.openai.ChatOpenAI') as mock_chat:
+        with patch("app.shared.llm.providers.openai.ChatOpenAI") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
 
@@ -497,6 +529,6 @@ class TestLLMProvidersProductionQuality:
 
             # Should use settings values
             call_kwargs = mock_chat.call_args[1]
-            assert call_kwargs['api_key'] == "sk-settings123456789012345678901234567890"
-            assert call_kwargs['model'] == "gpt-4"
-            assert call_kwargs['temperature'] == 0
+            assert call_kwargs["api_key"] == "sk-settings123456789012345678901234567890"
+            assert call_kwargs["model"] == "gpt-4"
+            assert call_kwargs["temperature"] == 0

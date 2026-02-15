@@ -160,6 +160,19 @@ Your engineering team lives in Slack. So does Valdrix.
 
 ---
 
+### 🔁 **Workflow Automation (GitHub/GitLab/CI)**
+
+Trigger runbooks directly from policy/remediation events:
+
+- `policy.block` / `policy.escalate` / `remediation.completed`
+- Native dispatch to GitHub Actions and GitLab CI
+- Generic CI webhook fallback
+- Deterministic evidence links embedded in event payloads
+
+See configuration details in `docs/integrations/workflow_automation.md`.
+
+---
+
 ### 🛡️ **Enterprise-Grade Security**
 
 We're paranoid, so you don't have to be:

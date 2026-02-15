@@ -6,6 +6,7 @@ from app.models.azure_connection import AzureConnection
 from app.shared.adapters.azure import AzureAdapter
 from app.shared.core.exceptions import ResourceNotFoundError
 
+
 class AzureConnectionService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -16,11 +17,13 @@ class AzureConnectionService:
         )
         return list(result.scalars().all())
 
-    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict[str, Any]:
+    async def verify_connection(
+        self, connection_id: UUID, tenant_id: UUID
+    ) -> dict[str, Any]:
         result = await self.db.execute(
             select(AzureConnection).where(
                 AzureConnection.id == connection_id,
-                AzureConnection.tenant_id == tenant_id
+                AzureConnection.tenant_id == tenant_id,
             )
         )
         connection = result.scalar_one_or_none()
@@ -34,4 +37,7 @@ class AzureConnectionService:
             await self.db.commit()
             return {"status": "success", "message": "Azure connection verified."}
         else:
-            return {"status": "failed", "message": "Failed to authenticate with Azure. Check Client ID and Secret."}
+            return {
+                "status": "failed",
+                "message": "Failed to authenticate with Azure. Check Client ID and Secret.",
+            }

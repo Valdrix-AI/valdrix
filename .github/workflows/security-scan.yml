@@ -45,9 +45,7 @@ jobs:
         run: uv run bandit -r app/ -ll
         
       - name: Run pip-audit
-        run: |
-          uv run pip install --upgrade pip
-          uv run pip-audit --ignore-vuln CVE-2026-1703
+        run: uv run pip-audit --ignore-vuln CVE-2026-1703
         
       - name: TruffleHog OSS
         uses: trufflesecurity/trufflehog@main

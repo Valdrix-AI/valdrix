@@ -17,7 +17,9 @@ def _mock_settings(**overrides):
 
 
 def test_get_multi_fernet_requires_key_in_production():
-    mock_settings = _mock_settings(ENVIRONMENT="production", TESTING=False, ENCRYPTION_KEY=None)
+    mock_settings = _mock_settings(
+        ENVIRONMENT="production", TESTING=False, ENCRYPTION_KEY=None
+    )
 
     with patch("app.shared.core.security.get_settings", return_value=mock_settings):
         with pytest.raises(ValueError, match="ENCRYPTION_KEY must be set"):
@@ -25,7 +27,9 @@ def test_get_multi_fernet_requires_key_in_production():
 
 
 def test_get_multi_fernet_allows_dev_fallback():
-    mock_settings = _mock_settings(ENVIRONMENT="development", TESTING=False, ENCRYPTION_KEY=None)
+    mock_settings = _mock_settings(
+        ENVIRONMENT="development", TESTING=False, ENCRYPTION_KEY=None
+    )
 
     with patch("app.shared.core.security.get_settings", return_value=mock_settings):
         fernet = _get_multi_fernet(None)

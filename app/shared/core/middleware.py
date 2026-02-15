@@ -7,6 +7,7 @@ import structlog
 from app.shared.core.config import get_settings
 from app.shared.core.tracing import set_correlation_id
 
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -21,13 +22,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             if settings.DEBUG:
                 response.headers["Strict-Transport-Security"] = "max-age=0"
             else:
-                response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+                response.headers["Strict-Transport-Security"] = (
+                    "max-age=31536000; includeSubDomains; preload"
+                )
 
         if "X-Content-Type-Options" not in response.headers:
             response.headers["X-Content-Type-Options"] = "nosniff"
-        
+
         if "X-Frame-Options" not in response.headers:
-             response.headers["X-Frame-Options"] = "DENY"
+            response.headers["X-Frame-Options"] = "DENY"
 
         # Skip strict CSP for Swagger UI (requires inline scripts)
         if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
@@ -50,14 +53,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         if "Content-Security-Policy" not in response.headers:
             response.headers["Content-Security-Policy"] = csp_policy
-            
+
         if "Referrer-Policy" not in response.headers:
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-            
+
         if "Permissions-Policy" not in response.headers:
-            response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
-            
+            response.headers["Permissions-Policy"] = (
+                "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+            )
+
         return response
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """
@@ -66,14 +72,15 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     NOTE: This middleware trusts the X-Request-ID header if provided by the client.
     This is intended for correlation and debugging, not as a security principal.
     """
+
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
-        
+
         # Set unified tracing context
         set_correlation_id(request_id)
-        
+
         # Store in state for easy access in endpoints and tests
         request.state.request_id = request_id
 

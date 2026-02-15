@@ -81,20 +81,27 @@ class ZombieAnalyzer:
 
     def __init__(self, llm: BaseChatModel):
         self.llm = llm
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", ZOMBIE_ANALYSIS_PROMPT),
-            ("user", "Analyze these detected zombie resources:\n\n[BEGIN DATA]\n{zombie_data}\n[END DATA]")
-        ])
+        self.prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", ZOMBIE_ANALYSIS_PROMPT),
+                (
+                    "user",
+                    "Analyze these detected zombie resources:\n\n[BEGIN DATA]\n{zombie_data}\n[END DATA]",
+                ),
+            ]
+        )
 
     def _strip_markdown(self, text: str) -> str:
         """Remove markdown code block wrappers from LLM responses."""
-        pattern = r'^```(?:json)?\s*\n?(.*?)\n?```$'
+        pattern = r"^```(?:json)?\s*\n?(.*?)\n?```$"
         match = re.match(pattern, text.strip(), re.DOTALL)
         if match:
             return match.group(1).strip()
         return text.strip()
 
-    def _flatten_zombies(self, detection_results: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _flatten_zombies(
+        self, detection_results: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """Flatten nested zombie categories into a single list for LLM analysis."""
         flattened = []
 
@@ -127,20 +134,23 @@ class ZombieAnalyzer:
                 "summary": "No zombie resources detected.",
                 "total_monthly_savings": "$0.00",
                 "resources": [],
-                "general_recommendations": []
+                "general_recommendations": [],
             }
 
         logger.info("zombie_analysis_starting", zombie_count=len(zombies))
 
         # 1. Resolve LLM Configuration
-        effective_provider, effective_model, byok_key = await self._get_effective_llm_config(
-            db, tenant_id, provider, model
-        )
+        (
+            effective_provider,
+            effective_model,
+            byok_key,
+        ) = await self._get_effective_llm_config(db, tenant_id, provider, model)
 
         # 2. Build/Get LLM Instance
         current_llm = self.llm
         if effective_provider != get_settings().LLM_PROVIDER or byok_key:
             from app.shared.llm.factory import LLMFactory
+
             current_llm = LLMFactory.create(effective_provider, api_key=byok_key)
 
         # 3. Sanitize and Format
@@ -153,7 +163,14 @@ class ZombieAnalyzer:
 
         # 5. Track Usage
         if tenant_id and db:
-            await self._record_usage(db, tenant_id, effective_provider, effective_model, response, byok_key is not None)
+            await self._record_usage(
+                db,
+                tenant_id,
+                effective_provider,
+                effective_model,
+                response,
+                byok_key is not None,
+            )
 
         # 6. Parse and Validate
         response_content = response.content
@@ -163,9 +180,14 @@ class ZombieAnalyzer:
             else json.dumps(response_content, default=str)
         )
         try:
-            validated_result = LLMGuardrails.validate_output(response_text, ZombieAnalysisResult)
+            validated_result = LLMGuardrails.validate_output(
+                response_text, ZombieAnalysisResult
+            )
             analysis = validated_result.model_dump()
-            logger.info("zombie_analysis_complete", resource_count=len(analysis.get("resources", [])))
+            logger.info(
+                "zombie_analysis_complete",
+                resource_count=len(analysis.get("resources", [])),
+            )
             return analysis
         except ValueError as e:
             logger.error("zombie_analysis_validation_failed", error=str(e))
@@ -175,7 +197,7 @@ class ZombieAnalyzer:
                 "resources": [],
                 "general_recommendations": ["Review detected resources manually."],
                 "raw_response": response_text,
-                "parse_error": str(e)
+                "parse_error": str(e),
             }
 
     async def _get_effective_llm_config(
@@ -183,7 +205,7 @@ class ZombieAnalyzer:
         db: Optional[AsyncSession],
         tenant_id: Optional[UUID],
         provider: Optional[str],
-        model: Optional[str]
+        model: Optional[str],
     ) -> tuple[str, str, Optional[str]]:
         """Resolves the best provider, model, and optional BYOK key."""
         effective_provider = provider
@@ -192,12 +214,15 @@ class ZombieAnalyzer:
 
         if tenant_id and db:
             from app.models.llm import LLMBudget
-            result = await db.execute(select(LLMBudget).where(LLMBudget.tenant_id == tenant_id).limit(1))
+
+            result = await db.execute(
+                select(LLMBudget).where(LLMBudget.tenant_id == tenant_id).limit(1)
+            )
             budget = result.scalar_one_or_none()
             if budget:
                 effective_provider = effective_provider or budget.preferred_provider
                 effective_model = effective_model or budget.preferred_model
-                
+
                 # Extract BYOK key if applicable
                 prov = effective_provider or get_settings().LLM_PROVIDER
                 if prov == "openai":
@@ -211,7 +236,7 @@ class ZombieAnalyzer:
 
         effective_provider = effective_provider or get_settings().LLM_PROVIDER
         effective_model = effective_model or "llama-3.3-70b-versatile"
-        
+
         return effective_provider, effective_model, byok_key
 
     async def _record_usage(
@@ -221,7 +246,7 @@ class ZombieAnalyzer:
         provider: str,
         model: str,
         response: Any,
-        is_byok: bool
+        is_byok: bool,
     ) -> None:
         """Records LLM usage metrics."""
         try:
@@ -239,10 +264,12 @@ class ZombieAnalyzer:
                 is_byok=is_byok,
                 request_type="zombie_analysis",
             )
-            logger.info("zombie_analysis_usage_tracked",
-                       input_tokens=input_tokens,
-                       output_tokens=output_tokens)
+            logger.info(
+                "zombie_analysis_usage_tracked",
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
         except Exception as e:
-            logger.warning("zombie_usage_tracking_failed", 
-                           tenant_id=str(tenant_id),
-                           error=str(e))
+            logger.warning(
+                "zombie_usage_tracking_failed", tenant_id=str(tenant_id), error=str(e)
+            )

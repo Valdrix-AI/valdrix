@@ -11,11 +11,13 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { PUBLIC_API_URL } from '$env/static/public';
-	import { base } from '$app/paths';
+	import { assets, base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
 
 	import { onMount } from 'svelte';
+	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
+	import { page } from '$app/stores';
 
 	let { data } = $props();
 
@@ -62,7 +64,7 @@
 
 	onMount(async () => {
 		try {
-			const res = await fetch(`${PUBLIC_API_URL}/billing/plans`);
+			const res = await fetchWithTimeout(fetch, `${PUBLIC_API_URL}/billing/plans`, {}, 5000);
 			if (res.ok) {
 				const data = await res.json();
 				if (data && data.length > 0) {
@@ -70,7 +72,11 @@
 				}
 			}
 		} catch (e) {
-			console.error('Failed to fetch dynamic pricing', e);
+			const message =
+				e instanceof TimeoutError
+					? 'Dynamic pricing request timed out; using defaults.'
+					: 'Failed to fetch dynamic pricing; using defaults.';
+			console.warn(message, e);
 		}
 	});
 
@@ -121,6 +127,23 @@
 	<title>Pricing | Valdrix</title>
 	<meta
 		name="description"
+		content="Simple, transparent pricing for cloud cost optimization. Start with a 14-day free trial."
+	/>
+	<meta property="og:title" content="Pricing | Valdrix" />
+	<meta
+		property="og:description"
+		content="Simple, transparent pricing for cloud cost optimization. Start with a 14-day free trial."
+	/>
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
+	<meta
+		property="og:image"
+		content={new URL(`${assets}/valdrix_icon.png`, $page.url.origin).toString()}
+	/>
+	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:title" content="Pricing | Valdrix" />
+	<meta
+		name="twitter:description"
 		content="Simple, transparent pricing for cloud cost optimization. Start with a 14-day free trial."
 	/>
 </svelte:head>

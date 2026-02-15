@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.models.attribution import CostAllocation
 from app.models.cloud import CloudAccount, CostRecord
 from app.models.tenant import Tenant, User, UserRole
+from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLog
 from app.shared.core.auth import CurrentUser, get_current_user
 from app.shared.core.pricing import PricingTier
 
@@ -18,7 +19,12 @@ async def admin_user(db):
     tenant_id = uuid4()
     user_id = uuid4()
     tenant = Tenant(id=tenant_id, name="Attribution Tenant", plan="pro")
-    user = User(id=user_id, email="admin@attribution.io", tenant_id=tenant_id, role=UserRole.ADMIN)
+    user = User(
+        id=user_id,
+        email="admin@attribution.io",
+        tenant_id=tenant_id,
+        role=UserRole.ADMIN,
+    )
     db.add_all([tenant, user])
     await db.commit()
     return CurrentUser(
@@ -35,7 +41,12 @@ async def member_user(db):
     tenant_id = uuid4()
     user_id = uuid4()
     tenant = Tenant(id=tenant_id, name="Attribution Member Tenant", plan="pro")
-    user = User(id=user_id, email="member@attribution.io", tenant_id=tenant_id, role=UserRole.MEMBER)
+    user = User(
+        id=user_id,
+        email="member@attribution.io",
+        tenant_id=tenant_id,
+        role=UserRole.MEMBER,
+    )
     db.add_all([tenant, user])
     await db.commit()
     return CurrentUser(
@@ -48,7 +59,7 @@ async def member_user(db):
 
 
 @pytest.mark.asyncio
-async def test_rule_crud_flow(async_client, app, admin_user):
+async def test_rule_crud_flow(async_client, app, db, admin_user):
     app.dependency_overrides[get_current_user] = lambda: admin_user
     try:
         create_payload = {
@@ -62,7 +73,9 @@ async def test_rule_crud_flow(async_client, app, admin_user):
             ],
             "is_active": True,
         }
-        create_response = await async_client.post("/api/v1/attribution/rules", json=create_payload)
+        create_response = await async_client.post(
+            "/api/v1/attribution/rules", json=create_payload
+        )
         assert create_response.status_code == 200
         created = create_response.json()
         rule_id = created["id"]
@@ -85,13 +98,27 @@ async def test_rule_crud_flow(async_client, app, admin_user):
         assert active_only_response.status_code == 200
         assert all(rule["id"] != rule_id for rule in active_only_response.json())
 
-        include_inactive_response = await async_client.get("/api/v1/attribution/rules?include_inactive=true")
+        include_inactive_response = await async_client.get(
+            "/api/v1/attribution/rules?include_inactive=true"
+        )
         assert include_inactive_response.status_code == 200
         assert any(rule["id"] == rule_id for rule in include_inactive_response.json())
 
-        delete_response = await async_client.delete(f"/api/v1/attribution/rules/{rule_id}")
+        delete_response = await async_client.delete(
+            f"/api/v1/attribution/rules/{rule_id}"
+        )
         assert delete_response.status_code == 200
         assert delete_response.json()["status"] == "deleted"
+
+        audit_result = await db.execute(
+            select(AuditLog.event_type).where(
+                AuditLog.tenant_id == admin_user.tenant_id
+            )
+        )
+        event_types = [row[0] for row in audit_result.all()]
+        assert AuditEventType.ATTRIBUTION_RULE_CREATED.value in event_types
+        assert AuditEventType.ATTRIBUTION_RULE_UPDATED.value in event_types
+        assert AuditEventType.ATTRIBUTION_RULE_DELETED.value in event_types
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -184,12 +211,23 @@ async def test_simulate_rule_returns_projection(async_client, app, db, member_us
         assert data["matched_records"] == 1
         assert data["projected_allocation_total"] == 50.0
         assert len(data["projected_allocations"]) == 2
+
+        audit_result = await db.execute(
+            select(AuditLog.event_type).where(
+                AuditLog.tenant_id == member_user.tenant_id
+            )
+        )
+        assert AuditEventType.ATTRIBUTION_RULE_SIMULATED.value in [
+            row[0] for row in audit_result.all()
+        ]
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio
-async def test_apply_rules_endpoint_creates_allocations(async_client, app, db, admin_user):
+async def test_apply_rules_endpoint_creates_allocations(
+    async_client, app, db, admin_user
+):
     app.dependency_overrides[get_current_user] = lambda: admin_user
     try:
         account = CloudAccount(
@@ -250,6 +288,117 @@ async def test_apply_rules_endpoint_creates_allocations(async_client, app, db, a
         allocations = allocations_result.scalars().all()
         assert len(allocations) == 1
         assert allocations[0].allocated_to == "Platform"
+
+        audit_result = await db.execute(
+            select(AuditLog.event_type).where(
+                AuditLog.tenant_id == admin_user.tenant_id
+            )
+        )
+        assert AuditEventType.ATTRIBUTION_RULES_APPLIED.value in [
+            row[0] for row in audit_result.all()
+        ]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_attribution_coverage_endpoint(async_client, app, db, member_user):
+    app.dependency_overrides[get_current_user] = lambda: member_user
+    try:
+        account = CloudAccount(
+            tenant_id=member_user.tenant_id,
+            provider="aws",
+            name="Coverage AWS",
+            is_active=True,
+        )
+        db.add(account)
+        await db.flush()
+
+        record_date = date(2026, 2, 3)
+        db.add(
+            CostRecord(
+                tenant_id=member_user.tenant_id,
+                account_id=account.id,
+                service="AmazonS3",
+                region="us-east-1",
+                usage_type="TimedStorage-ByteHrs",
+                cost_usd=Decimal("10.00"),
+                currency="USD",
+                canonical_charge_category="storage",
+                canonical_mapping_version="focus-1.3-v1",
+                recorded_at=record_date,
+                timestamp=datetime(2026, 2, 3, 10, 0, tzinfo=timezone.utc),
+            )
+        )
+        await db.commit()
+
+        response = await async_client.get(
+            "/api/v1/attribution/coverage",
+            params={"start_date": "2026-02-03", "end_date": "2026-02-03"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] in {"warning", "ok", "no_data"}
+        assert "coverage_percentage" in payload
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_unallocated_analysis_endpoint(async_client, app, db, member_user):
+    app.dependency_overrides[get_current_user] = lambda: member_user
+    try:
+        account = CloudAccount(
+            tenant_id=member_user.tenant_id,
+            provider="aws",
+            name="Unallocated AWS",
+            is_active=True,
+        )
+        db.add(account)
+        await db.flush()
+
+        record_date = date(2026, 2, 4)
+        db.add_all(
+            [
+                CostRecord(
+                    tenant_id=member_user.tenant_id,
+                    account_id=account.id,
+                    service="AmazonS3",
+                    region="us-east-1",
+                    usage_type="TimedStorage-ByteHrs",
+                    cost_usd=Decimal("50.00"),
+                    currency="USD",
+                    canonical_charge_category="storage",
+                    canonical_mapping_version="focus-1.3-v1",
+                    recorded_at=record_date,
+                    timestamp=datetime(2026, 2, 4, 10, 0, tzinfo=timezone.utc),
+                ),
+                CostRecord(
+                    tenant_id=member_user.tenant_id,
+                    account_id=account.id,
+                    service="AmazonEC2",
+                    region="us-east-1",
+                    usage_type="BoxUsage",
+                    cost_usd=Decimal("20.00"),
+                    currency="USD",
+                    canonical_charge_category="compute",
+                    canonical_mapping_version="focus-1.3-v1",
+                    recorded_at=record_date,
+                    timestamp=datetime(2026, 2, 4, 11, 0, tzinfo=timezone.utc),
+                ),
+            ]
+        )
+        await db.commit()
+
+        response = await async_client.get(
+            "/api/v1/attribution/unallocated-analysis",
+            params={"start_date": "2026-02-04", "end_date": "2026-02-04"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "success"
+        assert payload["items"]
+        assert payload["items"][0]["service"] in {"AmazonS3", "AmazonEC2"}
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -280,7 +429,9 @@ async def test_delete_rule_not_found(async_client, app, admin_user):
 
 
 @pytest.mark.asyncio
-async def test_simulate_rule_rejects_invalid_date_window(async_client, app, member_user):
+async def test_simulate_rule_rejects_invalid_date_window(
+    async_client, app, member_user
+):
     app.dependency_overrides[get_current_user] = lambda: member_user
     try:
         response = await async_client.post(

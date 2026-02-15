@@ -4,27 +4,35 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from app.shared.llm.analyzer import FinOpsAnalyzer
 
+
 @pytest.fixture
 def mock_llm():
     return MagicMock()
+
 
 class TestFinOpsAnalyzerExpanded:
     def test_init_with_prompt_yaml(self, tmp_path):
         prompt_dir = tmp_path / "app/core"
         prompt_dir.mkdir(parents=True)
         prompt_file = prompt_dir / "prompts.yaml"
-        prompt_file.write_text(yaml.dump({"finops_analysis": {"system": "Custom Prompt"}}))
-        
-        with patch("os.path.join", return_value=str(prompt_file)), \
-             patch("os.path.exists", return_value=True):
+        prompt_file.write_text(
+            yaml.dump({"finops_analysis": {"system": "Custom Prompt"}})
+        )
+
+        with (
+            patch("os.path.join", return_value=str(prompt_file)),
+            patch("os.path.exists", return_value=True),
+        ):
             FinOpsAnalyzer(MagicMock())
             # Hit initialization code
-            
+
     def test_init_with_invalid_yaml(self, tmp_path):
         prompt_file = tmp_path / "prompts.yaml"
         prompt_file.write_text("NOT_YAML: <<<")  # Invalid YAML
-        with patch("os.path.join", return_value=str(prompt_file)), \
-             patch("os.path.exists", return_value=True):
+        with (
+            patch("os.path.join", return_value=str(prompt_file)),
+            patch("os.path.exists", return_value=True),
+        ):
             FinOpsAnalyzer(MagicMock())
             # Should use fallback prompt
 
@@ -33,15 +41,15 @@ class TestFinOpsAnalyzerExpanded:
         analyzer = FinOpsAnalyzer(mock_llm)
         tenant_id = uuid4()
         summary = MagicMock()
-        
+
         with patch("app.shared.llm.analyzer.get_cache_service") as mock_cache:
             mock_cache_instance = AsyncMock()
             mock_cache_instance.get_analysis.return_value = {"cached": "data"}
             mock_cache.return_value = mock_cache_instance
-            
+
             with patch("app.shared.llm.analyzer.get_settings") as mock_settings:
                 mock_settings.return_value.ENABLE_DELTA_ANALYSIS = False
-                
+
                 result = await analyzer.analyze(summary, tenant_id=tenant_id)
                 assert result == {"cached": "data"}
 
@@ -51,17 +59,19 @@ class TestFinOpsAnalyzerExpanded:
         tenant_id = uuid4()
         summary = MagicMock()
         summary.records = []
-        
+
         with patch("app.shared.llm.analyzer.get_cache_service") as mock_cache:
             mock_cache_instance = AsyncMock()
             mock_cache_instance.get_analysis.return_value = {"records": []}
             mock_cache.return_value = mock_cache_instance
-            
+
             with patch("app.shared.llm.analyzer.get_settings") as mock_settings:
                 mock_settings.return_value.ENABLE_DELTA_ANALYSIS = True
                 mock_settings.return_value.DELTA_ANALYSIS_DAYS = 7
-                
-                cached, is_delta = await analyzer._check_cache_and_delta(tenant_id, False, summary)
+
+                cached, is_delta = await analyzer._check_cache_and_delta(
+                    tenant_id, False, summary
+                )
                 assert is_delta is False
 
                 assert cached == {"records": []}
@@ -71,26 +81,27 @@ class TestFinOpsAnalyzerExpanded:
         analyzer = FinOpsAnalyzer(mock_llm)
         tenant_id = uuid4()
         db = AsyncMock()
-        
+
         from app.shared.llm.usage_tracker import BudgetStatus
+
         with patch("app.shared.llm.analyzer.UsageTracker") as mock_tracker:
             mock_tracker_instance = AsyncMock()
             mock_tracker_instance.check_budget.return_value = BudgetStatus.SOFT_LIMIT
             mock_tracker_instance.authorize_request = AsyncMock()
             mock_tracker.return_value = mock_tracker_instance
-            
+
             mock_res = MagicMock()
             mock_res.scalar_one_or_none.return_value = None
             db.execute.return_value = mock_res
-            
+
             with patch("app.shared.llm.analyzer.get_settings") as mock_settings:
                 mock_settings.return_value.LLM_PROVIDER = "groq"
-                
+
                 for provider, expected_model in [
                     ("groq", "llama-3.1-8b-instant"),
                     ("openai", "gpt-4o-mini"),
                     ("google", "gemini-1.5-flash"),
-                    ("anthropic", "claude-3-5-haiku")
+                    ("anthropic", "claude-3-5-haiku"),
                 ]:
                     _, _, eff_model, _ = await analyzer._setup_client_and_usage(
                         tenant_id, db, provider, None, input_text="test"
@@ -102,45 +113,47 @@ class TestFinOpsAnalyzerExpanded:
         analyzer = FinOpsAnalyzer(mock_llm)
         with patch("app.shared.llm.analyzer.get_settings") as mock_settings:
             mock_settings.return_value.LLM_PROVIDER = "openai"
-            _, provider, _, _ = await analyzer._setup_client_and_usage(None, None, "INVALID", None)
+            _, provider, _, _ = await analyzer._setup_client_and_usage(
+                None, None, "INVALID", None
+            )
             assert provider == "openai"
 
     @pytest.mark.asyncio
     async def test_setup_client_unsupported_model_fallback(self, mock_llm):
         analyzer = FinOpsAnalyzer(mock_llm)
-        _, _, model, _ = await analyzer._setup_client_and_usage(None, None, "openai", "UNKNOWN_MODEL")
+        _, _, model, _ = await analyzer._setup_client_and_usage(
+            None, None, "openai", "UNKNOWN_MODEL"
+        )
         assert model == "gpt-4"  # First in VALID_MODELS["openai"]
 
     @pytest.mark.asyncio
     async def test_check_and_alert_anomalies_slack(self, mock_llm):
         analyzer = FinOpsAnalyzer(mock_llm)
         result = {
-            "anomalies": [{
-                "resource": "r-1",
-                "issue": "waste",
-                "cost_impact": "$100",
-                "severity": "high"
-            }]
+            "anomalies": [
+                {
+                    "resource": "r-1",
+                    "issue": "waste",
+                    "cost_impact": "$100",
+                    "severity": "high",
+                }
+            ]
         }
-        
-        with patch("app.shared.llm.analyzer.get_settings") as mock_settings:
-            mock_settings.return_value.SLACK_BOT_TOKEN = "xoxb-test"
-            mock_settings.return_value.SLACK_CHANNEL_ID = "C123"
-            
-            with patch("app.shared.llm.analyzer.SlackService") as mock_slack:
-                mock_slack_instance = AsyncMock()
-                mock_slack.return_value = mock_slack_instance
-                await analyzer._check_and_alert_anomalies(result)
-                mock_slack_instance.send_alert.assert_called_once()
+
+        with patch("app.shared.llm.analyzer.get_slack_service") as mock_get_slack:
+            mock_slack_instance = AsyncMock()
+            mock_get_slack.return_value = mock_slack_instance
+            await analyzer._check_and_alert_anomalies(result)
+            mock_slack_instance.send_alert.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_check_and_alert_no_anomalies(self, mock_llm):
         """No alert should fire if anomalies list is empty."""
         analyzer = FinOpsAnalyzer(mock_llm)
         result = {"anomalies": []}
-        
-        with patch("app.shared.llm.analyzer.SlackService") as mock_slack:
+
+        with patch("app.shared.llm.analyzer.get_slack_service") as mock_get_slack:
             mock_slack_instance = AsyncMock()
-            mock_slack.return_value = mock_slack_instance
+            mock_get_slack.return_value = mock_slack_instance
             await analyzer._check_and_alert_anomalies(result)
             mock_slack_instance.send_alert.assert_not_called()

@@ -24,6 +24,7 @@ from upstash_redis import Redis
 from upstash_redis.asyncio import Redis as AsyncRedis
 
 from app.shared.core.config import get_settings
+
 logger = structlog.get_logger()
 
 # Cache TTLs
@@ -53,18 +54,17 @@ def _get_sync_client() -> Optional[Redis]:
     """Get or create synchronous Redis client."""
     global _sync_client
     settings = get_settings()
-    
+
     if not settings.UPSTASH_REDIS_URL or not settings.UPSTASH_REDIS_TOKEN:
         logger.debug("redis_disabled", reason="UPSTASH credentials not configured")
         return None
-    
+
     if _sync_client is None:
         _sync_client = Redis(
-            url=settings.UPSTASH_REDIS_URL,
-            token=settings.UPSTASH_REDIS_TOKEN
+            url=settings.UPSTASH_REDIS_URL, token=settings.UPSTASH_REDIS_TOKEN
         )
         logger.info("redis_sync_client_created")
-    
+
     return _sync_client
 
 
@@ -72,52 +72,55 @@ def _get_async_client() -> Optional[AsyncRedis]:
     """Get or create async Redis client."""
     global _async_client
     settings = get_settings()
-    
+
     if not settings.UPSTASH_REDIS_URL or not settings.UPSTASH_REDIS_TOKEN:
         logger.debug("redis_disabled", reason="UPSTASH credentials not configured")
         return None
-    
+
     if _async_client is None:
         _async_client = AsyncRedis(
-            url=settings.UPSTASH_REDIS_URL,
-            token=settings.UPSTASH_REDIS_TOKEN
+            url=settings.UPSTASH_REDIS_URL, token=settings.UPSTASH_REDIS_TOKEN
         )
         logger.info("redis_async_client_created")
-    
+
     return _async_client
 
 
 class CacheService:
     """
     Async caching service for Valdrix.
-    
+
     Falls back gracefully when Redis is not configured.
     """
-    
+
     def __init__(self) -> None:
         self.client = _get_async_client()
         self.enabled = self.client is not None
-    
+
     async def get_analysis(self, tenant_id: UUID) -> Optional[dict[str, Any]]:
         """Get cached LLM analysis for a tenant."""
         key = f"{PREFIX_ANALYSIS}:{tenant_id}"
         return await self._get(key)
-    
+
     async def set_analysis(self, tenant_id: UUID, analysis: dict[str, Any]) -> bool:
         """Cache LLM analysis with 24h TTL."""
         key = f"{PREFIX_ANALYSIS}:{tenant_id}"
         return await self._set(key, analysis, ANALYSIS_TTL)
-    
-    async def get_cost_data(self, tenant_id: UUID, date_range: str) -> Optional[list[Any]]:
+
+    async def get_cost_data(
+        self, tenant_id: UUID, date_range: str
+    ) -> Optional[list[Any]]:
         """Get cached cost data for a tenant and date range."""
         key = f"{PREFIX_COSTS}:{tenant_id}:{date_range}"
         return await self._get(key)
-    
-    async def set_cost_data(self, tenant_id: UUID, date_range: str, costs: list[Any]) -> bool:
+
+    async def set_cost_data(
+        self, tenant_id: UUID, date_range: str, costs: list[Any]
+    ) -> bool:
         """Cache cost data with 6h TTL."""
         key = f"{PREFIX_COSTS}:{tenant_id}:{date_range}"
         return await self._set(key, costs, COST_DATA_TTL)
-    
+
     async def invalidate_tenant(self, tenant_id: UUID) -> bool:
         """Invalidate all cache entries for a tenant."""
         if not self.enabled or self.client is None:
@@ -148,13 +151,17 @@ class CacheService:
                 keys = [key async for key in scan_iter(match=pattern)]
                 if keys:
                     await self.client.delete(*keys)
-                    logger.info("cache_pattern_deleted", pattern=pattern, count=len(keys))
+                    logger.info(
+                        "cache_pattern_deleted", pattern=pattern, count=len(keys)
+                    )
                 return True
 
             cursor = 0
             total_deleted = 0
             while True:
-                next_cursor, keys = await self.client.scan(cursor, match=pattern, count=100)
+                next_cursor, keys = await self.client.scan(
+                    cursor, match=pattern, count=100
+                )
                 if keys:
                     await self.client.delete(*keys)
                     total_deleted += len(keys)
@@ -162,7 +169,9 @@ class CacheService:
                 if cursor == 0:
                     break
             if total_deleted > 0:
-                logger.info("cache_pattern_deleted", pattern=pattern, count=total_deleted)
+                logger.info(
+                    "cache_pattern_deleted", pattern=pattern, count=total_deleted
+                )
             return True
         except Exception as e:
             logger.warning("cache_delete_pattern_error", pattern=pattern, error=str(e))
@@ -180,7 +189,9 @@ class CacheService:
                     try:
                         data = data.decode("utf-8")
                     except UnicodeDecodeError as exc:
-                        logger.warning("cache_payload_invalid_encoding", key=key, error=str(exc))
+                        logger.warning(
+                            "cache_payload_invalid_encoding", key=key, error=str(exc)
+                        )
                         return None
                 if isinstance(data, str):
                     return _safe_json_loads(data, key=key)
@@ -188,7 +199,11 @@ class CacheService:
                     return data
                 if data is None:
                     return None
-                logger.warning("cache_payload_unexpected_type", key=key, payload_type=type(data).__name__)
+                logger.warning(
+                    "cache_payload_unexpected_type",
+                    key=key,
+                    payload_type=type(data).__name__,
+                )
                 return None
         except Exception as e:
             logger.warning("cache_get_error", key=key, error=str(e))
@@ -200,9 +215,7 @@ class CacheService:
             return False
         try:
             await self.client.set(
-                key,
-                json.dumps(value, default=str),
-                ex=int(ttl.total_seconds())
+                key, json.dumps(value, default=str), ex=int(ttl.total_seconds())
             )
             logger.debug("cache_set", key=key, ttl_seconds=int(ttl.total_seconds()))
             return True
@@ -219,13 +232,11 @@ class QueryCache:
         self.default_ttl = default_ttl
         self.enabled = redis_client is not None
 
-    def _make_cache_key(self, query: str, params: dict[str, Any], tenant_id: Optional[str] = None) -> str:
+    def _make_cache_key(
+        self, query: str, params: dict[str, Any], tenant_id: Optional[str] = None
+    ) -> str:
         """Generate deterministic cache key from query and parameters."""
-        key_data = {
-            "query": query,
-            "params": params,
-            "tenant_id": tenant_id
-        }
+        key_data = {"query": query, "params": params, "tenant_id": tenant_id}
         key_str = json.dumps(key_data, sort_keys=True, default=str)
         digest = hashlib.sha256(key_str.encode()).hexdigest()
         if tenant_id:
@@ -267,7 +278,9 @@ class QueryCache:
             logger.warning("cache_get_error", error=str(e), key=cache_key)
             return None
 
-    async def set_cached_result(self, cache_key: str, result: Any, ttl: Optional[int] = None) -> None:
+    async def set_cached_result(
+        self, cache_key: str, result: Any, ttl: Optional[int] = None
+    ) -> None:
         """Cache query result with TTL."""
         if not self.enabled or self.redis is None:
             return
@@ -292,11 +305,15 @@ class QueryCache:
                 cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
                 if keys:
                     await self.redis.delete(*keys)
-                    logger.info("cache_invalidated", tenant_id=tenant_id, keys_deleted=len(keys))
+                    logger.info(
+                        "cache_invalidated", tenant_id=tenant_id, keys_deleted=len(keys)
+                    )
                 if cursor == 0:
                     break
         except Exception as e:
-            logger.warning("cache_invalidation_error", error=str(e), tenant_id=tenant_id)
+            logger.warning(
+                "cache_invalidation_error", error=str(e), tenant_id=tenant_id
+            )
 
     def cached_query(
         self,
@@ -311,6 +328,7 @@ class QueryCache:
             async def get_tenant_connections(db, tenant_id):
                 return await db.execute(select(AWSConnection).where(...))
         """
+
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             @wraps(func)
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -321,13 +339,18 @@ class QueryCache:
                 tenant_id = None
                 if tenant_aware:
                     # Look for tenant_id in kwargs or as second positional arg (after db)
-                    tenant_id = kwargs.get('tenant_id') or (args[1] if len(args) > 1 else None)
+                    tenant_id = kwargs.get("tenant_id") or (
+                        args[1] if len(args) > 1 else None
+                    )
 
                 # Generate cache key from function name and arguments
                 cache_key = self._make_cache_key(
                     query=func.__name__,
-                    params={"args": args[2:], "kwargs": {k: v for k, v in kwargs.items() if k != 'tenant_id'}},
-                    tenant_id=str(tenant_id) if tenant_id else None
+                    params={
+                        "args": args[2:],
+                        "kwargs": {k: v for k, v in kwargs.items() if k != "tenant_id"},
+                    },
+                    tenant_id=str(tenant_id) if tenant_id else None,
                 )
 
                 # Try cache first
@@ -344,6 +367,7 @@ class QueryCache:
                 return result
 
             return wrapper
+
         return decorator
 
 

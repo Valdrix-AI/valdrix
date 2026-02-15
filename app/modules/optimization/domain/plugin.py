@@ -18,8 +18,9 @@ ESTIMATED_COSTS = {
     "ecr_gb": 0.10,
     "sagemaker_endpoint": 108.00,
     "redshift_cluster": 180.00,
-    "nat_gateway": 32.40
+    "nat_gateway": 32.40,
 }
+
 
 class ZombiePlugin(ABC):
     """
@@ -46,10 +47,9 @@ class ZombiePlugin(ABC):
         inventory: Any = None,
         **kwargs: Any,
     ) -> List[Dict[str, Any]]:
-
         """
         Scan for zombie resources.
-        
+
         Subclasses should document their expected arguments (e.g., session, client, region).
         """
         raise NotImplementedError
@@ -64,15 +64,16 @@ class ZombiePlugin(ABC):
     ) -> Any:
         """Helper to get AWS client with optional credentials and config."""
         from app.shared.core.config import get_settings
+
         settings = get_settings()
-        
+
         kwargs = {"region_name": region}
         if settings.AWS_ENDPOINT_URL:
             kwargs["endpoint_url"] = settings.AWS_ENDPOINT_URL
-            
+
         if credentials:
             kwargs.update(map_aws_credentials(credentials))
-            
+
         if config:
             kwargs["config"] = config
         return session.client(service_name, **kwargs)

@@ -74,7 +74,9 @@ async def test_run_load_test_uses_simulated_users(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_simulate_user_records_failure_and_exception(monkeypatch):
-    config = LoadTestConfig(duration_seconds=5, concurrent_users=1, ramp_up_seconds=1, endpoints=["/fail"])
+    config = LoadTestConfig(
+        duration_seconds=5, concurrent_users=1, ramp_up_seconds=1, endpoints=["/fail"]
+    )
     tester = LoadTester(config)
     tester._running = True
 
@@ -96,7 +98,10 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
             tester._running = False
             return DummyResponse()
 
-    monkeypatch.setattr("app.shared.core.performance_testing.httpx.AsyncClient", lambda **kwargs: DummyClient())
+    monkeypatch.setattr(
+        "app.shared.core.performance_testing.httpx.AsyncClient",
+        lambda **kwargs: DummyClient(),
+    )
     sleep_mock = AsyncMock()
     monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
 
@@ -116,7 +121,10 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
             tester2._running = False
             raise Exception("network down")
 
-    monkeypatch.setattr("app.shared.core.performance_testing.httpx.AsyncClient", lambda **kwargs: ExplodingClient())
+    monkeypatch.setattr(
+        "app.shared.core.performance_testing.httpx.AsyncClient",
+        lambda **kwargs: ExplodingClient(),
+    )
     await tester2._simulate_user(0, test_start_time=time.time())
 
     assert tester2.results.failed_requests == 1
@@ -125,7 +133,12 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_simulate_user_records_metrics(monkeypatch):
-    config = LoadTestConfig(duration_seconds=1, concurrent_users=1, ramp_up_seconds=0, endpoints=["/ok", "/fail"])
+    config = LoadTestConfig(
+        duration_seconds=1,
+        concurrent_users=1,
+        ramp_up_seconds=0,
+        endpoints=["/ok", "/fail"],
+    )
     tester = LoadTester(config)
     tester._running = True
 
@@ -155,30 +168,47 @@ async def test_simulate_user_records_metrics(monkeypatch):
                 return DummyResponse(500)
             return DummyResponse(200)
 
-    monkeypatch.setattr("app.shared.core.performance_testing.httpx.AsyncClient", lambda **kwargs: DummyClient())
+    monkeypatch.setattr(
+        "app.shared.core.performance_testing.httpx.AsyncClient",
+        lambda **kwargs: DummyClient(),
+    )
     sleep_mock = AsyncMock()
     monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
 
-    with patch("app.shared.core.performance_testing.API_REQUESTS_TOTAL") as mock_requests, \
-         patch("app.shared.core.performance_testing.API_REQUEST_DURATION") as mock_duration, \
-         patch("app.shared.core.performance_testing.API_ERRORS_TOTAL") as mock_errors:
+    with (
+        patch(
+            "app.shared.core.performance_testing.API_REQUESTS_TOTAL"
+        ) as mock_requests,
+        patch(
+            "app.shared.core.performance_testing.API_REQUEST_DURATION"
+        ) as mock_duration,
+        patch("app.shared.core.performance_testing.API_ERRORS_TOTAL") as mock_errors,
+    ):
         await tester._simulate_user(0, test_start_time=time.time())
 
-        mock_requests.labels.assert_any_call(method="GET", endpoint="/ok", status_code=200)
-        mock_requests.labels.assert_any_call(method="GET", endpoint="/fail", status_code=500)
+        mock_requests.labels.assert_any_call(
+            method="GET", endpoint="/ok", status_code=200
+        )
+        mock_requests.labels.assert_any_call(
+            method="GET", endpoint="/fail", status_code=500
+        )
         assert mock_requests.labels.return_value.inc.call_count == 2
 
         mock_duration.labels.assert_any_call(method="GET", endpoint="/ok")
         mock_duration.labels.assert_any_call(method="GET", endpoint="/fail")
         assert mock_duration.labels.return_value.observe.call_count == 2
 
-        mock_errors.labels.assert_called_once_with(path="/fail", method="GET", status_code=500)
+        mock_errors.labels.assert_called_once_with(
+            path="/fail", method="GET", status_code=500
+        )
         mock_errors.labels.return_value.inc.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_simulate_user_records_exception_metrics(monkeypatch):
-    config = LoadTestConfig(duration_seconds=1, concurrent_users=1, ramp_up_seconds=0, endpoints=["/boom"])
+    config = LoadTestConfig(
+        duration_seconds=1, concurrent_users=1, ramp_up_seconds=0, endpoints=["/boom"]
+    )
     tester = LoadTester(config)
     tester._running = True
 
@@ -193,18 +223,33 @@ async def test_simulate_user_records_exception_metrics(monkeypatch):
             tester._running = False
             raise Exception("network down")
 
-    monkeypatch.setattr("app.shared.core.performance_testing.httpx.AsyncClient", lambda **kwargs: ExplodingClient())
+    monkeypatch.setattr(
+        "app.shared.core.performance_testing.httpx.AsyncClient",
+        lambda **kwargs: ExplodingClient(),
+    )
     sleep_mock = AsyncMock()
     monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
 
-    with patch("app.shared.core.performance_testing.API_REQUESTS_TOTAL") as mock_requests, \
-         patch("app.shared.core.performance_testing.API_REQUEST_DURATION") as mock_duration, \
-         patch("app.shared.core.performance_testing.API_ERRORS_TOTAL") as mock_errors:
+    with (
+        patch(
+            "app.shared.core.performance_testing.API_REQUESTS_TOTAL"
+        ) as mock_requests,
+        patch(
+            "app.shared.core.performance_testing.API_REQUEST_DURATION"
+        ) as mock_duration,
+        patch("app.shared.core.performance_testing.API_ERRORS_TOTAL") as mock_errors,
+    ):
         await tester._simulate_user(0, test_start_time=time.time())
 
-        mock_requests.labels.assert_called_once_with(method="GET", endpoint="/boom", status_code="exception")
+        mock_requests.labels.assert_called_once_with(
+            method="GET", endpoint="/boom", status_code="exception"
+        )
         mock_duration.labels.assert_called_once_with(method="GET", endpoint="/boom")
-        mock_errors.labels.assert_called_once_with(path="/boom", method="GET", status_code="exception")
+        mock_errors.labels.assert_called_once_with(
+            path="/boom", method="GET", status_code="exception"
+        )
+
+
 @pytest.mark.asyncio
 async def test_performance_benchmark_async():
     benchmark = PerformanceBenchmark("unit")
@@ -277,15 +322,19 @@ def test_performance_regression_detector_detects(tmp_path):
 
 
 def test_load_baselines_file_not_found(tmp_path):
-    detector = PerformanceRegressionDetector(baseline_file=str(tmp_path / "missing.json"))
+    detector = PerformanceRegressionDetector(
+        baseline_file=str(tmp_path / "missing.json")
+    )
     detector.load_baselines()
     assert detector.baselines == {}
 
 
 def test_save_baselines_error():
     detector = PerformanceRegressionDetector(baseline_file="/nonexistent/path.json")
-    with patch("app.shared.core.performance_testing.open", side_effect=OSError("nope")), \
-         patch("app.shared.core.performance_testing.logger") as mock_logger:
+    with (
+        patch("app.shared.core.performance_testing.open", side_effect=OSError("nope")),
+        patch("app.shared.core.performance_testing.logger") as mock_logger,
+    ):
         detector.save_baselines({"results": []})
         mock_logger.error.assert_called_once()
 
@@ -324,9 +373,18 @@ async def test_benchmark_health_endpoint_uses_httpx():
         await func()
         return BenchmarkResult(name="health_endpoint_health_check")
 
-    with patch("app.shared.core.performance_testing.httpx.AsyncClient", return_value=DummyClient()), \
-         patch("app.shared.core.performance_testing.PerformanceBenchmark.benchmark_async", new=fake_benchmark_async):
+    with (
+        patch(
+            "app.shared.core.performance_testing.httpx.AsyncClient",
+            return_value=DummyClient(),
+        ),
+        patch(
+            "app.shared.core.performance_testing.PerformanceBenchmark.benchmark_async",
+            new=fake_benchmark_async,
+        ),
+    ):
         from app.shared.core.performance_testing import benchmark_health_endpoint
+
         result = await benchmark_health_endpoint(base_url="http://test")
         assert result.name == "health_endpoint_health_check"
 
@@ -341,9 +399,15 @@ async def test_benchmark_cache_operations_uses_cache():
         await func()
         return BenchmarkResult(name="cache_operations_cache_set_get")
 
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache), \
-         patch("app.shared.core.performance_testing.PerformanceBenchmark.benchmark_async", new=fake_benchmark_async):
+    with (
+        patch("app.shared.core.cache.get_cache_service", return_value=cache),
+        patch(
+            "app.shared.core.performance_testing.PerformanceBenchmark.benchmark_async",
+            new=fake_benchmark_async,
+        ),
+    ):
         from app.shared.core.performance_testing import benchmark_cache_operations
+
         result = await benchmark_cache_operations()
         assert result.name == "cache_operations_cache_set_get"
         cache.set.assert_called_once()
@@ -380,26 +444,33 @@ async def test_run_comprehensive_performance_test_aggregates_results():
         throughput=5.0,
     )
 
-    with patch(
-        "app.shared.core.performance_testing.run_api_load_test",
-        new_callable=AsyncMock,
-        return_value=dummy_load,
-    ), patch(
-        "app.shared.core.performance_testing.benchmark_health_endpoint",
-        new_callable=AsyncMock,
-        return_value=dummy_health,
-    ), patch(
-        "app.shared.core.performance_testing.benchmark_cache_operations",
-        new_callable=AsyncMock,
-        return_value=dummy_cache,
-    ), patch(
-        "app.shared.core.performance_testing.PerformanceRegressionDetector.load_baselines"
-    ), patch(
-        "app.shared.core.performance_testing.PerformanceRegressionDetector.detect_regressions",
-        return_value=[],
-    ), patch(
-        "app.shared.core.performance_testing.PerformanceRegressionDetector.save_baselines"
-    ) as mock_save:
+    with (
+        patch(
+            "app.shared.core.performance_testing.run_api_load_test",
+            new_callable=AsyncMock,
+            return_value=dummy_load,
+        ),
+        patch(
+            "app.shared.core.performance_testing.benchmark_health_endpoint",
+            new_callable=AsyncMock,
+            return_value=dummy_health,
+        ),
+        patch(
+            "app.shared.core.performance_testing.benchmark_cache_operations",
+            new_callable=AsyncMock,
+            return_value=dummy_cache,
+        ),
+        patch(
+            "app.shared.core.performance_testing.PerformanceRegressionDetector.load_baselines"
+        ),
+        patch(
+            "app.shared.core.performance_testing.PerformanceRegressionDetector.detect_regressions",
+            return_value=[],
+        ),
+        patch(
+            "app.shared.core.performance_testing.PerformanceRegressionDetector.save_baselines"
+        ) as mock_save,
+    ):
         summary = await run_comprehensive_performance_test()
 
         assert summary["load_test"]["total_requests"] == 10

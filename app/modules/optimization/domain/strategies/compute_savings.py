@@ -3,7 +3,11 @@ from typing import Any, Dict, List, Sequence
 from uuid import UUID
 
 from app.modules.optimization.domain.strategies.base import BaseOptimizationStrategy
-from app.models.optimization import StrategyRecommendation, CommitmentTerm, PaymentOption
+from app.models.optimization import (
+    StrategyRecommendation,
+    CommitmentTerm,
+    PaymentOption,
+)
 
 
 class ComputeSavingsStrategy(BaseOptimizationStrategy):
@@ -11,7 +15,9 @@ class ComputeSavingsStrategy(BaseOptimizationStrategy):
     Strategy for analyzing Compute usage and recommending Savings Plans / RIs.
     """
 
-    async def analyze(self, tenant_id: UUID, usage_data: Dict[str, Any]) -> List[StrategyRecommendation]:
+    async def analyze(
+        self, tenant_id: UUID, usage_data: Dict[str, Any]
+    ) -> List[StrategyRecommendation]:
         """
         Analyzes compute usage for savings opportunities.
 
@@ -28,18 +34,18 @@ class ComputeSavingsStrategy(BaseOptimizationStrategy):
         recommendations: List[StrategyRecommendation] = []
 
         # 1. Compute Savings Plan logic anchored on observed baseline spend.
-        baseline_spend = float(
-            usage_data.get("baseline_hourly_spend")
-            or usage_data.get("min_hourly_spend")
-            or 0.0
-        )
+        baseline_spend = float(usage_data.get("baseline_hourly_spend") or 0.0)
         min_hourly_threshold = float(self.config.get("min_hourly_threshold", 0.05))
         if baseline_spend <= min_hourly_threshold:
             return recommendations
 
         savings_mid = float(self.config.get("savings_rate", 0.25))
-        savings_low = float(self.config.get("savings_rate_low", max(savings_mid - 0.05, 0.0)))
-        savings_high = float(self.config.get("savings_rate_high", min(savings_mid + 0.05, 0.95)))
+        savings_low = float(
+            self.config.get("savings_rate_low", max(savings_mid - 0.05, 0.0))
+        )
+        savings_high = float(
+            self.config.get("savings_rate_high", min(savings_mid + 0.05, 0.95))
+        )
 
         hours_per_month = float(self.config.get("hours_per_month", 730.0))
         on_demand_monthly = baseline_spend * hours_per_month
@@ -59,7 +65,16 @@ class ComputeSavingsStrategy(BaseOptimizationStrategy):
             coverage_ratio=float(usage_data.get("coverage_ratio", 0.0)),
         )
 
-        roi = self.calculate_roi(on_demand_monthly, monthly_commitment_cost + upfront_cost)
+        hourly_series = usage_data.get("hourly_cost_series")
+        if isinstance(hourly_series, list) and hourly_series:
+            tolerance = float(self.config.get("backtest_tolerance", 0.30))
+            backtest = self.backtest_hourly_series(hourly_series, tolerance=tolerance)
+            if not backtest.get("within_tolerance", True):
+                confidence = round(max(0.0, confidence * 0.7), 3)
+
+        roi = self.calculate_roi(
+            on_demand_monthly, monthly_commitment_cost + upfront_cost
+        )
 
         rec = self._create_recommendation(
             tenant_id=tenant_id,
@@ -126,7 +141,9 @@ class ComputeSavingsStrategy(BaseOptimizationStrategy):
             "predicted_hourly_baseline": predicted_baseline,
         }
 
-    def _bounded_confidence(self, usage_confidence: float, coverage_ratio: float) -> float:
+    def _bounded_confidence(
+        self, usage_confidence: float, coverage_ratio: float
+    ) -> float:
         """Blend model confidence with ingestion coverage and clamp to [0, 1]."""
         coverage_component = max(0.0, min(coverage_ratio, 1.0))
         usage_component = max(0.0, min(usage_confidence, 1.0))

@@ -63,7 +63,9 @@
 					<p class="text-sm text-ink-400 mb-1">{metric.label}</p>
 					<p class="text-2xl font-bold text-accent-400">{formatCurrency(metric.cost_per_unit)}</p>
 					<p class={`text-xs mt-2 ${deltaClass(metric)}`}>
-						{formatDelta(metric.delta_percent)} vs baseline ({formatCurrency(metric.baseline_cost_per_unit)})
+						{formatDelta(metric.delta_percent)} vs baseline ({formatCurrency(
+							metric.baseline_cost_per_unit
+						)})
 					</p>
 				</div>
 			{/each}

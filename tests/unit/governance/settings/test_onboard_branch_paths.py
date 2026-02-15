@@ -37,10 +37,14 @@ def _current_user() -> CurrentUser:
     )
 
 
-def _db(existing_user: bool = False, commit_error: Exception | None = None) -> MagicMock:
+def _db(
+    existing_user: bool = False, commit_error: Exception | None = None
+) -> MagicMock:
     db = MagicMock()
     result = MagicMock()
-    result.scalar_one_or_none.return_value = SimpleNamespace(id=uuid4()) if existing_user else None
+    result.scalar_one_or_none.return_value = (
+        SimpleNamespace(id=uuid4()) if existing_user else None
+    )
     db.execute = AsyncMock(return_value=result)
     db.add = MagicMock()
 
@@ -63,7 +67,10 @@ def _db(existing_user: bool = False, commit_error: Exception | None = None) -> M
 @pytest.mark.parametrize(
     ("platform", "cloud_config"),
     [
-        ("aws", {"platform": "aws", "role_arn": "arn:aws:iam::123456789012:role/TestRole"}),
+        (
+            "aws",
+            {"platform": "aws", "role_arn": "arn:aws:iam::123456789012:role/TestRole"},
+        ),
         (
             "azure",
             {
@@ -84,7 +91,9 @@ def _db(existing_user: bool = False, commit_error: Exception | None = None) -> M
         ),
     ],
 )
-async def test_onboard_cloud_platform_paths(platform: str, cloud_config: dict[str, str]) -> None:
+async def test_onboard_cloud_platform_paths(
+    platform: str, cloud_config: dict[str, str]
+) -> None:
     db = _db()
     req = OnboardRequest(tenant_name=f"{platform}-tenant", cloud_config=cloud_config)
     user = _current_user()
@@ -93,8 +102,14 @@ async def test_onboard_cloud_platform_paths(platform: str, cloud_config: dict[st
     mock_adapter.verify_connection.return_value = True
 
     with (
-        patch("app.modules.governance.api.v1.settings.onboard.get_settings", return_value=mock_settings),
-        patch("app.shared.adapters.factory.AdapterFactory.get_adapter", return_value=mock_adapter) as get_adapter,
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.get_settings",
+            return_value=mock_settings,
+        ),
+        patch(
+            "app.shared.adapters.factory.AdapterFactory.get_adapter",
+            return_value=mock_adapter,
+        ) as get_adapter,
         patch("app.modules.governance.api.v1.settings.onboard.audit_log"),
     ):
         response = await onboard(
@@ -115,13 +130,19 @@ async def test_onboard_unexpected_adapter_error_is_translated() -> None:
     db = _db()
     req = OnboardRequest(
         tenant_name="aws-tenant",
-        cloud_config={"platform": "aws", "role_arn": "arn:aws:iam::123456789012:role/TestRole"},
+        cloud_config={
+            "platform": "aws",
+            "role_arn": "arn:aws:iam::123456789012:role/TestRole",
+        },
     )
     user = _current_user()
     mock_settings = SimpleNamespace(ENVIRONMENT="development")
 
     with (
-        patch("app.modules.governance.api.v1.settings.onboard.get_settings", return_value=mock_settings),
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.get_settings",
+            return_value=mock_settings,
+        ),
         patch(
             "app.shared.adapters.factory.AdapterFactory.get_adapter",
             side_effect=RuntimeError("adapter exploded"),
@@ -137,7 +158,9 @@ async def test_onboard_unexpected_adapter_error_is_translated() -> None:
 
 @pytest.mark.asyncio
 async def test_onboard_integrity_error_maps_to_already_onboarded() -> None:
-    db = _db(commit_error=IntegrityError("insert users", {}, Exception("duplicate user")))
+    db = _db(
+        commit_error=IntegrityError("insert users", {}, Exception("duplicate user"))
+    )
     req = OnboardRequest(tenant_name="race-tenant")
     user = _current_user()
 

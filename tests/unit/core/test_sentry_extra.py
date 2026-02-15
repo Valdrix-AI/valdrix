@@ -10,6 +10,8 @@ def test_before_send_drops_health():
 
 def test_before_send_adds_trace_id():
     event = {"request": {"url": "http://localhost/api"}}
-    with patch("app.shared.core.tracing.get_current_trace_id", return_value="trace-123"):
+    with patch(
+        "app.shared.core.tracing.get_current_trace_id", return_value="trace-123"
+    ):
         result = _before_send(event, {})
     assert result["tags"]["trace_id"] == "trace-123"

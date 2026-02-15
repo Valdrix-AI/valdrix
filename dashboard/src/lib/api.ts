@@ -11,6 +11,15 @@
 import { PUBLIC_API_URL } from '$env/static/public';
 import { uiState } from './stores/ui.svelte';
 import { createSupabaseBrowserClient } from './supabase';
+import { fetchWithTimeout } from './fetchWithTimeout';
+
+export type ResilientRequestInit = RequestInit & {
+	/**
+	 * Per-request timeout applied to the underlying fetch (aborts on expiry).
+	 * Defaults to 30s.
+	 */
+	timeoutMs?: number;
+};
 
 /**
  * Utility to get a cookie value by name
@@ -25,17 +34,15 @@ function getCookie(name: string): string | undefined {
 
 export async function resilientFetch(
 	url: string | URL,
-	options: RequestInit = {}
+	options: ResilientRequestInit = {}
 ): Promise<Response> {
-	const timeout = 30000; // 30 seconds (Requirement FE-M7)
-	const controller = new AbortController();
-	const id = setTimeout(() => controller.abort(), timeout);
+	const { timeoutMs: timeoutMsOverride, ...optionsRest } = options;
+	const timeoutMs = timeoutMsOverride ?? 30000; // 30 seconds (Requirement FE-M7)
 
 	try {
 		const requestOptions: RequestInit = {
-			...options,
-			signal: controller.signal,
-			credentials: options.credentials ?? 'include'
+			...optionsRest,
+			credentials: optionsRest.credentials ?? 'include'
 		};
 
 		// Automatic CSRF Protection (SEC-01)
@@ -46,9 +53,12 @@ export async function resilientFetch(
 			// If token missing, try to fetch it from the unified CSRF endpoint
 			if (!csrfToken) {
 				try {
-					const csrfRes = await fetch(`${PUBLIC_API_URL}/public/csrf`, {
-						credentials: requestOptions.credentials
-					});
+					const csrfRes = await fetchWithTimeout(
+						fetch,
+						`${PUBLIC_API_URL}/public/csrf`,
+						{ credentials: requestOptions.credentials },
+						Math.min(5000, timeoutMs)
+					);
 					if (csrfRes.ok) {
 						const data = await csrfRes.json();
 						csrfToken = data.csrf_token;
@@ -65,8 +75,7 @@ export async function resilientFetch(
 			}
 		}
 
-		let response = await fetch(url, requestOptions);
-		clearTimeout(id);
+		let response = await fetchWithTimeout(fetch, url, requestOptions, timeoutMs);
 
 		if (response.status === 401) {
 			// FE-M8: Token Refresh Logic
@@ -80,7 +89,7 @@ export async function resilientFetch(
 				const headers = new Headers(requestOptions.headers);
 				headers.set('Authorization', `Bearer ${session.access_token}`);
 				requestOptions.headers = headers;
-				response = await fetch(url, requestOptions);
+				response = await fetchWithTimeout(fetch, url, requestOptions, timeoutMs);
 			} else {
 				console.warn('[API Auth] 401 Unauthorized and Refresh failed. Session expired.');
 			}
@@ -163,7 +172,7 @@ export async function resilientFetch(
  */
 export async function resilientFetchWithRetry(
 	url: string | URL,
-	options: RequestInit = {},
+	options: ResilientRequestInit = {},
 	maxRetries = 3
 ): Promise<Response> {
 	let lastError: Error | null = null;
@@ -203,26 +212,26 @@ export async function resilientFetchWithRetry(
 }
 
 export const api = {
-	get: (url: string, options: RequestInit = {}) =>
+	get: (url: string, options: ResilientRequestInit = {}) =>
 		resilientFetchWithRetry(url, { ...options, method: 'GET' }),
-	post: (url: string, body?: unknown, options: RequestInit = {}) => {
+	post: (url: string, body?: unknown, options: ResilientRequestInit = {}) => {
 		const headers = new Headers(options.headers);
-		const requestOptions: RequestInit = { ...options, method: 'POST', headers };
+		const requestOptions: ResilientRequestInit = { ...options, method: 'POST', headers };
 		if (body !== undefined) {
 			headers.set('Content-Type', 'application/json');
 			requestOptions.body = JSON.stringify(body);
 		}
 		return resilientFetchWithRetry(url, requestOptions);
 	},
-	put: (url: string, body?: unknown, options: RequestInit = {}) => {
+	put: (url: string, body?: unknown, options: ResilientRequestInit = {}) => {
 		const headers = new Headers(options.headers);
-		const requestOptions: RequestInit = { ...options, method: 'PUT', headers };
+		const requestOptions: ResilientRequestInit = { ...options, method: 'PUT', headers };
 		if (body !== undefined) {
 			headers.set('Content-Type', 'application/json');
 			requestOptions.body = JSON.stringify(body);
 		}
 		return resilientFetchWithRetry(url, requestOptions);
 	},
-	delete: (url: string, options: RequestInit = {}) =>
+	delete: (url: string, options: ResilientRequestInit = {}) =>
 		resilientFetchWithRetry(url, { ...options, method: 'DELETE' })
 };

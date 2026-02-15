@@ -1,6 +1,7 @@
 """
 Tests for gcp_usage_analyzer.py - GCP BigQuery billing export analysis for resource utilization.
 """
+
 from app.shared.analysis.gcp_usage_analyzer import GCPUsageAnalyzer
 
 
@@ -17,13 +18,13 @@ class TestGCPUsageAnalyzer:
                 "usage_amount": "168.0",
                 "usage_unit": "seconds",
                 "cost": "0.05",
-                "currency": "USD"
+                "currency": "USD",
             }
         ]
 
         analyzer = GCPUsageAnalyzer(records)
         assert analyzer.records == records
-        assert hasattr(analyzer, '_resource_costs')
+        assert hasattr(analyzer, "_resource_costs")
         assert isinstance(analyzer._resource_costs, dict)
 
     def test_group_by_resource(self):
@@ -31,16 +32,13 @@ class TestGCPUsageAnalyzer:
         records = [
             {
                 "resource_id": "projects/my-project/zones/us-central1-a/instances/vm-1",
-                "cost": "10.50"
+                "cost": "10.50",
             },
             {
                 "resource_id": "projects/my-project/zones/us-central1-a/instances/vm-1",
-                "cost": "15.75"
+                "cost": "15.75",
             },
-            {
-                "resource_id": "projects/my-project/buckets/my-bucket",
-                "cost": "5.00"
-            }
+            {"resource_id": "projects/my-project/buckets/my-bucket", "cost": "5.00"},
         ]
 
         analyzer = GCPUsageAnalyzer(records)
@@ -48,7 +46,9 @@ class TestGCPUsageAnalyzer:
 
         assert "projects/my-project/zones/us-central1-a/instances/vm-1" in grouped
         assert "projects/my-project/buckets/my-bucket" in grouped
-        assert len(grouped["projects/my-project/zones/us-central1-a/instances/vm-1"]) == 2
+        assert (
+            len(grouped["projects/my-project/zones/us-central1-a/instances/vm-1"]) == 2
+        )
         assert len(grouped["projects/my-project/buckets/my-bucket"]) == 1
 
     def test_find_idle_vms_no_vms(self):
@@ -57,7 +57,7 @@ class TestGCPUsageAnalyzer:
             {
                 "resource_id": "projects/my-project/buckets/my-bucket",
                 "service": "Cloud Storage",
-                "cost": "5.00"
+                "cost": "5.00",
             }
         ]
 
@@ -76,7 +76,7 @@ class TestGCPUsageAnalyzer:
                 "sku_description": "N1 Predefined Instance Core running in Americas",
                 "usage_amount": "2.4",  # 2.4 hours total for 7 days = 0.34 hours/day (low usage)
                 "usage_unit": "seconds",
-                "cost": "15.00"
+                "cost": "15.00",
             }
         ]
 
@@ -87,7 +87,10 @@ class TestGCPUsageAnalyzer:
         assert len(result) == 1
 
         vm = result[0]
-        assert vm["resource_id"] == "projects/my-project/zones/us-central1-a/instances/vm-1"
+        assert (
+            vm["resource_id"]
+            == "projects/my-project/zones/us-central1-a/instances/vm-1"
+        )
         assert vm["resource_type"] == "Compute Engine VM"
         assert vm["recommendation"] == "Stop or delete idle VM"
 
@@ -100,7 +103,7 @@ class TestGCPUsageAnalyzer:
                 "sku_description": "N1 Predefined Instance Core running in Americas",
                 "usage_amount": "60480.0",  # 1008 hours = 144 hours/day (high usage)
                 "usage_unit": "seconds",
-                "cost": "50.00"
+                "cost": "50.00",
             }
         ]
 
@@ -120,7 +123,7 @@ class TestGCPUsageAnalyzer:
                 "sku_description": "N1 Predefined Instance Core running in Americas",
                 "usage_amount": "2.4",  # Low usage - should be flagged as idle
                 "usage_unit": "seconds",
-                "cost": "15.00"
+                "cost": "15.00",
             },
             # Active VM
             {
@@ -129,8 +132,8 @@ class TestGCPUsageAnalyzer:
                 "sku_description": "N1 Predefined Instance Core running in Americas",
                 "usage_amount": "60480.0",  # High usage
                 "usage_unit": "seconds",
-                "cost": "50.00"
-            }
+                "cost": "50.00",
+            },
         ]
 
         analyzer = GCPUsageAnalyzer(records)
@@ -140,7 +143,10 @@ class TestGCPUsageAnalyzer:
         assert len(result) == 1  # Only the idle VM
 
         vm = result[0]
-        assert vm["resource_id"] == "projects/my-project/zones/us-central1-a/instances/vm-1"
+        assert (
+            vm["resource_id"]
+            == "projects/my-project/zones/us-central1-a/instances/vm-1"
+        )
 
     def test_find_idle_cloud_sql_no_databases(self):
         """Test finding idle Cloud SQL databases when no SQL resources in data."""
@@ -148,7 +154,7 @@ class TestGCPUsageAnalyzer:
             {
                 "resource_id": "projects/my-project/buckets/my-bucket",
                 "service": "Cloud Storage",
-                "cost": "5.00"
+                "cost": "5.00",
             }
         ]
 
@@ -167,7 +173,7 @@ class TestGCPUsageAnalyzer:
                 "sku_description": "Cloud SQL for MySQL: db-f1-micro",
                 "usage_amount": "3024.0",  # Low usage
                 "usage_unit": "seconds",
-                "cost": "10.00"
+                "cost": "10.00",
             }
         ]
 
@@ -188,7 +194,7 @@ class TestGCPUsageAnalyzer:
             {
                 "resource_id": "projects/my-project/buckets/my-bucket",
                 "service": "Cloud Storage",
-                "cost": "5.00"
+                "cost": "5.00",
             }
         ]
 
@@ -207,7 +213,7 @@ class TestGCPUsageAnalyzer:
                 "sku_description": "Kubernetes Engine Cluster Management Fee",
                 "usage_amount": "1008.0",  # Control plane usage
                 "usage_unit": "seconds",
-                "cost": "25.00"
+                "cost": "25.00",
             }
             # No node cost records
         ]

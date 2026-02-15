@@ -41,9 +41,7 @@ class TestCarbonBudgetService:
         mock_db.execute.return_value = mock_result
 
         status = await alert_service.get_budget_status(
-            tenant_id=tenant_id,
-            month_start=date(2023, 1, 1),
-            current_co2_kg=50.0
+            tenant_id=tenant_id, month_start=date(2023, 1, 1), current_co2_kg=50.0
         )
 
         assert status["budget_kg"] == 100.0
@@ -57,15 +55,13 @@ class TestCarbonBudgetService:
         mock_settings = MagicMock()
         mock_settings.carbon_budget_kg = 100.0
         mock_settings.alert_threshold_percent = 80
-        
+
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_settings
         mock_db.execute.return_value = mock_result
 
         status = await alert_service.get_budget_status(
-            tenant_id=tenant_id,
-            month_start=date(2023, 1, 1),
-            current_co2_kg=85.0
+            tenant_id=tenant_id, month_start=date(2023, 1, 1), current_co2_kg=85.0
         )
 
         assert status["alert_status"] == "warning"
@@ -77,26 +73,26 @@ class TestCarbonBudgetService:
         mock_settings = MagicMock()
         mock_settings.carbon_budget_kg = 100.0
         mock_settings.alert_threshold_percent = 80
-        
+
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_settings
         mock_db.execute.return_value = mock_result
 
         status = await alert_service.get_budget_status(
-            tenant_id=tenant_id,
-            month_start=date(2023, 1, 1),
-            current_co2_kg=120.0
+            tenant_id=tenant_id, month_start=date(2023, 1, 1), current_co2_kg=120.0
         )
 
         assert status["alert_status"] == "exceeded"
 
     @pytest.mark.asyncio
-    async def test_should_send_alert_rate_limiting(self, alert_service, mock_db, tenant_id):
+    async def test_should_send_alert_rate_limiting(
+        self, alert_service, mock_db, tenant_id
+    ):
         """Test alert rate limiting with status awareness."""
         # Case 1: No settings -> True
         mock_result_none = MagicMock()
         mock_result_none.scalar_one_or_none.return_value = None
-        
+
         # Case 2: Settings exist, last alert today for SAME status -> False
         mock_settings_today = MagicMock()
         mock_settings_today.last_alert_sent = datetime.now(timezone.utc)
@@ -106,7 +102,9 @@ class TestCarbonBudgetService:
 
         # Case 3: Settings exist, last alert yesterday -> True
         mock_settings_yesterday = MagicMock()
-        mock_settings_yesterday.last_alert_sent = datetime.now(timezone.utc) - timedelta(days=1)
+        mock_settings_yesterday.last_alert_sent = datetime.now(
+            timezone.utc
+        ) - timedelta(days=1)
         mock_settings_yesterday.last_alert_status = "warning"
         mock_result_yesterday = MagicMock()
         mock_result_yesterday.scalar_one_or_none.return_value = mock_settings_yesterday
@@ -122,7 +120,7 @@ class TestCarbonBudgetService:
             mock_result_none,
             mock_result_today,
             mock_result_yesterday,
-            mock_result_diff
+            mock_result_diff,
         ]
 
         # 1
@@ -142,18 +140,25 @@ class TestCarbonBudgetService:
             "current_usage_kg": 85.0,
             "budget_kg": 100.0,
             "usage_percent": 85.0,
-            "recommendations": ["Rec 1"]
+            "recommendations": ["Rec 1"],
         }
 
         # Mock dependencies
-        with patch("app.shared.core.config.get_settings") as mock_get_settings, \
-             patch("app.shared.core.logging.audit_log") as mock_audit, \
-             patch("app.modules.notifications.domain.SlackService") as MockSlackService, \
-             patch("app.modules.notifications.domain.email_service.EmailService") as MockEmailService:
-            
+        with (
+            patch("app.shared.core.config.get_settings") as mock_get_settings,
+            patch("app.shared.core.logging.audit_log") as mock_audit,
+            patch(
+                "app.modules.notifications.domain.get_tenant_slack_service",
+                new_callable=AsyncMock,
+            ) as mock_get_tenant_slack,
+            patch(
+                "app.modules.notifications.domain.email_service.EmailService"
+            ) as MockEmailService,
+        ):
             # Configure Slack mock
-            mock_slack_instance = MockSlackService.return_value
+            mock_slack_instance = AsyncMock()
             mock_slack_instance.send_alert = AsyncMock(return_value=True)
+            mock_get_tenant_slack.return_value = mock_slack_instance
 
             # Configure Email mock
             mock_email_instance = MockEmailService.return_value
@@ -167,36 +172,56 @@ class TestCarbonBudgetService:
 
             # Mock DB responses
             mock_db.execute.side_effect = [
-                MagicMock(scalar_one_or_none=MagicMock(return_value=None)), # should_send_alert (CarbonSettings)
-                MagicMock(scalar_one_or_none=MagicMock(return_value=None)), # notif_settings pre-fetch
-                MagicMock(scalar_one_or_none=MagicMock(return_value=MagicMock(email_enabled=True, email_recipients="test@example.com"))), # email settings (CarbonSettings)
-                MagicMock(), # mark_alert_sent
-                MagicMock()  # commit
+                MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=None)
+                ),  # should_send_alert (CarbonSettings)
+                MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=None)
+                ),  # notif_settings pre-fetch
+                MagicMock(
+                    scalar_one_or_none=MagicMock(
+                        return_value=MagicMock(
+                            email_enabled=True, email_recipients="test@example.com"
+                        )
+                    )
+                ),  # email settings (CarbonSettings)
+                MagicMock(),  # mark_alert_sent
+                MagicMock(),  # commit
             ]
 
             sent = await alert_service.send_carbon_alert(tenant_id, budget_status)
-            
+
             assert sent is True
             mock_audit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_send_carbon_alert_email_only(self, alert_service, mock_db, tenant_id):
+    async def test_send_carbon_alert_email_only(
+        self, alert_service, mock_db, tenant_id
+    ):
         """Test alert flow when Slack is disabled and Email is enabled (Fixes UnboundLocalError)."""
         budget_status = {
             "alert_status": "exceeded",
             "current_usage_kg": 110.0,
             "budget_kg": 100.0,
             "usage_percent": 110.0,
-            "recommendations": ["Optimize immediately"]
+            "recommendations": ["Optimize immediately"],
         }
 
-        with patch("app.shared.core.config.get_settings") as mock_get_settings, \
-             patch("app.shared.core.logging.audit_log"), \
-             patch("app.modules.notifications.domain.email_service.EmailService") as MockEmailService:
-            
+        with (
+            patch("app.shared.core.config.get_settings") as mock_get_settings,
+            patch("app.shared.core.logging.audit_log"),
+            patch(
+                "app.modules.notifications.domain.get_tenant_slack_service",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "app.modules.notifications.domain.email_service.EmailService"
+            ) as MockEmailService,
+        ):
             # SLACK DISABLED
             mock_app_settings = MagicMock()
-            mock_app_settings.SLACK_BOT_TOKEN = None 
+            mock_app_settings.SLACK_BOT_TOKEN = None
             mock_app_settings.SMTP_HOST = "smtp.valdrix.io"
             mock_get_settings.return_value = mock_app_settings
 
@@ -205,11 +230,21 @@ class TestCarbonBudgetService:
 
             # DB Mocks
             mock_db.execute.side_effect = [
-                MagicMock(scalar_one_or_none=MagicMock(return_value=None)), # should_send_alert
-                MagicMock(scalar_one_or_none=MagicMock(return_value=None)), # notif_settings pre-fetch
-                MagicMock(scalar_one_or_none=MagicMock(return_value=MagicMock(email_enabled=True, email_recipients="dev@valdrix.io"))), # email settings check
-                MagicMock(), # mark_alert_sent
-                MagicMock()  # commit
+                MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=None)
+                ),  # should_send_alert
+                MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=None)
+                ),  # notif_settings pre-fetch
+                MagicMock(
+                    scalar_one_or_none=MagicMock(
+                        return_value=MagicMock(
+                            email_enabled=True, email_recipients="dev@valdrix.io"
+                        )
+                    )
+                ),  # email settings check
+                MagicMock(),  # mark_alert_sent
+                MagicMock(),  # commit
             ]
 
             # This should NOT raise UnboundLocalError

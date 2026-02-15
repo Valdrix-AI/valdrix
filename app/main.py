@@ -1,9 +1,21 @@
 import structlog
 import json
 import asyncio
+import inspect
 import os
 from contextlib import asynccontextmanager
-from typing import Annotated, Dict, Any, Callable, Awaitable, cast, AsyncGenerator, List, Sequence
+from typing import (
+    Annotated,
+    Dict,
+    Any,
+    Callable,
+    Awaitable,
+    cast,
+    AsyncGenerator,
+    List,
+    Sequence,
+    TypeVar,
+)
 from fastapi import FastAPI, Depends, Request, HTTPException, Response
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.staticfiles import StaticFiles
@@ -22,13 +34,18 @@ from app.shared.core.middleware import RequestIDMiddleware, SecurityHeadersMiddl
 from app.shared.core.security_metrics import CSRF_ERRORS, RATE_LIMIT_EXCEEDED
 from app.shared.core.ops_metrics import API_ERRORS_TOTAL
 from app.shared.core.sentry import init_sentry
+
 # SchedulerService imported lazily in lifespan() to avoid Celery blocking on startup
 from app.shared.core.timeout import TimeoutMiddleware
 from app.shared.core.tracing import setup_tracing
 from app.shared.db.session import get_db, async_session_maker, engine
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.core.exceptions import ValdrixException
-from app.shared.core.rate_limit import setup_rate_limiting, RateLimitExceeded, _rate_limit_exceeded_handler
+from app.shared.core.rate_limit import (
+    setup_rate_limiting,
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
 
 # Ensure all models are registered with SQLAlchemy
 import app.models.tenant
@@ -37,6 +54,8 @@ import app.models.azure_connection
 import app.models.gcp_connection
 import app.models.saas_connection
 import app.models.license_connection
+import app.models.platform_connection
+import app.models.hybrid_connection
 import app.models.llm
 import app.models.notification_settings
 import app.models.remediation
@@ -51,65 +70,94 @@ import app.models.security
 import app.models.anomaly_marker
 import app.models.optimization
 import app.models.unit_economics_settings
+import app.models.tenant_identity_settings
 import app.modules.governance.domain.security.audit_log
 
 
 from app.modules.governance.api.v1.settings.onboard import router as onboard_router
-from app.modules.governance.api.v1.settings.connections import router as connections_router
+from app.modules.governance.api.v1.settings.connections import (
+    router as connections_router,
+)
 from app.modules.governance.api.v1.settings import router as settings_router
 from app.modules.reporting.api.v1.leaderboards import router as leaderboards_router
 from app.modules.reporting.api.v1.costs import router as costs_router
+from app.modules.reporting.api.v1.savings import router as savings_router
 from app.modules.reporting.api.v1.attribution import router as attribution_router
 from app.modules.reporting.api.v1.carbon import router as carbon_router
+from app.modules.reporting.api.v1.leadership import router as leadership_router
 from app.modules.optimization.api.v1.zombies import router as zombies_router
 from app.modules.optimization.api.v1.strategies import router as strategies_router
 from app.modules.governance.api.v1.admin import router as admin_router
 from app.modules.billing.api.v1.billing import router as billing_router
 from app.modules.governance.api.v1.audit import router as audit_router
 from app.modules.governance.api.v1.jobs import router as jobs_router
-from app.modules.governance.api.v1.health_dashboard import router as health_dashboard_router
+from app.modules.governance.api.v1.health_dashboard import (
+    router as health_dashboard_router,
+)
 from app.modules.reporting.api.v1.usage import router as usage_router
 from app.modules.governance.api.oidc import router as oidc_router
 from app.modules.governance.api.v1.public import router as public_router
 from app.modules.reporting.api.v1.currency import router as currency_router
+from app.modules.governance.api.v1.scim import (
+    router as scim_router,
+    ScimError,
+    scim_error_response,
+)
 
 # Configure logging and Sentry
 setup_logging()
 init_sentry()
 settings = get_settings()
 
+
 class CsrfSettings(BaseModel):
     """Configuration for CSRF protection."""
-    secret_key: str = settings.CSRF_SECRET_KEY
+
+    secret_key: str = settings.CSRF_SECRET_KEY or ""
     cookie_samesite: str = "lax"
 
-@CsrfProtect.load_config # type: ignore[arg-type]
+
+# fastapi-csrf-protect uses a decorator with a dynamic callable signature.
+# Cast once to keep runtime behavior while avoiding type-ignore noise.
+F = TypeVar("F", bound=Callable[..., Any])
+_csrf_load_config = cast(Callable[[F], F], CsrfProtect.load_config)
+
+
+# fastapi-csrf-protect uses a decorator with a dynamic callable signature.
+# Static type checkers can't infer it reliably, but runtime behavior is correct.
+@_csrf_load_config
 def get_csrf_config() -> CsrfSettings:
     return CsrfSettings()
 
+
 logger = structlog.get_logger()
+
 
 def _is_test_mode() -> bool:
     return settings.TESTING or os.getenv("PYTEST_CURRENT_TEST") is not None
+
 
 def _load_emissions_tracker() -> Any:
     if _is_test_mode():
         return None
     try:
         import warnings
+
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
                 message="The pynvml package is deprecated.*",
-                category=FutureWarning
+                category=FutureWarning,
             )
             from codecarbon import EmissionsTracker as Tracker
         return Tracker
-    except Exception as exc:
+    except (ImportError, AttributeError) as exc:
         logger.warning("emissions_tracker_unavailable", error=str(exc))
         return None
 
+
 EmissionsTracker = _load_emissions_tracker()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -131,12 +179,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         tracker.start()
     else:
-        logger.info("emissions_tracker_skipped", reason="testing" if _is_test_mode() else "unavailable")
+        logger.info(
+            "emissions_tracker_skipped",
+            reason="testing" if _is_test_mode() else "unavailable",
+        )
     app.state.emissions_tracker = tracker
 
     # Pass shared session factory to scheduler (DI pattern)
     # Lazy import to avoid Celery blocking on module load
     from app.modules.governance.domain.scheduler import SchedulerService
+
     scheduler = SchedulerService(session_maker=async_session_maker)
     if not settings.TESTING and settings.REDIS_URL:
         scheduler.start()
@@ -144,19 +196,40 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     elif settings.TESTING:
         logger.info("scheduler_skipped_in_testing")
     else:
-        logger.warning("scheduler_skipped_no_redis", msg="Set REDIS_URL to enable background job")
+        logger.warning(
+            "scheduler_skipped_no_redis", msg="Set REDIS_URL to enable background job"
+        )
     app.state.scheduler = scheduler
 
-    # Refresh LLM pricing from DB on startup (non-fatal)
-    try:
-        if not settings.TESTING:
-            from app.shared.llm.pricing_data import refresh_llm_pricing
-            await refresh_llm_pricing()
-            logger.info("llm_pricing_refreshed")
-        else:
-            logger.info("llm_pricing_refresh_skipped_testing")
-    except Exception as e:
-        logger.warning("llm_pricing_refresh_failed_startup", error=str(e))
+    # Refresh LLM pricing from DB on startup (non-fatal but important for correctness).
+    if settings.TESTING:
+        logger.info("llm_pricing_refresh_skipped_testing")
+    else:
+        from app.shared.llm.pricing_data import refresh_llm_pricing
+
+        last_error: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                await refresh_llm_pricing()
+                logger.info("llm_pricing_refreshed", attempt=attempt)
+                last_error = None
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                logger.warning(
+                    "llm_pricing_refresh_failed_startup",
+                    attempt=attempt,
+                    error=str(exc),
+                    exc_info=True,
+                )
+                await asyncio.sleep(0.2 * attempt)
+        if last_error is not None:
+            # Keep the app running, but surface the risk loudly (Ops should alert on this log/metric).
+            logger.error(
+                "llm_pricing_refresh_failed_startup_final",
+                error=str(last_error),
+                exc_info=True,
+            )
 
     yield
 
@@ -177,22 +250,22 @@ valdrix_app = FastAPI(
     version=settings.VERSION,
     lifespan=lifespan,
     docs_url=None,
-    redoc_url=None
+    redoc_url=None,
 )
-# MyPy: 'app' shadows the package name, ignore the assignment error
-app = valdrix_app # type: ignore[assignment]
+app: FastAPI = valdrix_app  # noqa: A001  # type: ignore[no-redef] (uvicorn app.main:app)
 router = valdrix_app
 
 # Initialize Tracing
 setup_tracing(valdrix_app)
 
+
 @valdrix_app.exception_handler(ValdrixException)
-async def valdrix_exception_handler(request: Request, exc: ValdrixException) -> JSONResponse:
+async def valdrix_exception_handler(
+    request: Request, exc: ValdrixException
+) -> JSONResponse:
     """Handle custom application exceptions."""
     API_ERRORS_TOTAL.labels(
-        path=request.url.path, 
-        method=request.method, 
-        status_code=exc.status_code
+        path=request.url.path, method=request.method, status_code=exc.status_code
     ).inc()
     return JSONResponse(
         status_code=exc.status_code,
@@ -200,55 +273,57 @@ async def valdrix_exception_handler(request: Request, exc: ValdrixException) -> 
             "status": "error",
             "message": exc.message,
             "code": exc.code,
-            "details": exc.details
+            "details": exc.details,
         },
     )
 
+
 @valdrix_app.exception_handler(CsrfProtectError)
-async def csrf_protect_exception_handler(request: Request, exc: CsrfProtectError) -> JSONResponse:
+async def csrf_protect_exception_handler(
+    request: Request, exc: CsrfProtectError
+) -> JSONResponse:
     """Handle CSRF protection exceptions."""
     CSRF_ERRORS.labels(path=request.url.path, method=request.method).inc()
     API_ERRORS_TOTAL.labels(
-        path=request.url.path, 
-        method=request.method, 
-        status_code=exc.status_code
+        path=request.url.path, method=request.method, status_code=exc.status_code
     ).inc()
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "status": "error",
-            "message": exc.message,
-            "code": "csrf_error"
-        },
+        content={"status": "error", "message": exc.message, "code": "csrf_error"},
     )
+
 
 @valdrix_app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Handle FastAPI HTTP exceptions with standardized format."""
     API_ERRORS_TOTAL.labels(
-        path=request.url.path, 
-        method=request.method, 
-        status_code=exc.status_code
+        path=request.url.path, method=request.method, status_code=exc.status_code
     ).inc()
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": exc.detail if isinstance(exc.detail, str) else "Error",
             "code": "HTTP_ERROR",
-            "message": str(exc.detail) if isinstance(exc.detail, str) else "Request failed"
-        }
+            "message": str(exc.detail)
+            if isinstance(exc.detail, str)
+            else "Request failed",
+        },
     )
 
+
 @valdrix_app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     """Handle Pydantic validation errors."""
+
     def _json_safe(value: Any) -> Any:
         if isinstance(value, Exception):
             return str(value)
         try:
             json.dumps(value)
             return value
-        except Exception:
+        except (TypeError, ValueError):
             return str(value)
 
     def _sanitize_errors(errors: Sequence[Any]) -> List[Dict[str, Any]]:
@@ -263,9 +338,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         return sanitized
 
     API_ERRORS_TOTAL.labels(
-        path=request.url.path,
-        method=request.method,
-        status_code=422
+        path=request.url.path, method=request.method, status_code=422
     ).inc()
     return JSONResponse(
         status_code=422,
@@ -273,26 +346,28 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "error": "Unprocessable Entity",
             "code": "VALIDATION_ERROR",
             "message": "The request body or parameters are invalid.",
-            "details": _sanitize_errors(exc.errors())
-        }
+            "details": _sanitize_errors(exc.errors()),
+        },
     )
+
 
 @valdrix_app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
     """Handle business logic ValueErrors."""
     API_ERRORS_TOTAL.labels(
-        path=request.url.path,
-        method=request.method,
-        status_code=400
+        path=request.url.path, method=request.method, status_code=400
     ).inc()
     return JSONResponse(
         status_code=400,
-        content={
-            "error": "Bad Request",
-            "code": "VALUE_ERROR",
-            "message": str(exc)
-        }
+        content={"error": "Bad Request", "code": "VALUE_ERROR", "message": str(exc)},
     )
+
+
+@valdrix_app.exception_handler(ScimError)
+async def scim_error_handler(_request: Request, exc: ScimError) -> JSONResponse:
+    """Return SCIM-compliant error responses for /scim/v2 endpoints."""
+    return scim_error_response(exc)
+
 
 # Setup rate limiting early for test visibility
 setup_rate_limiting(valdrix_app)
@@ -300,10 +375,11 @@ setup_rate_limiting(valdrix_app)
 # Serve static files for local Swagger UI
 valdrix_app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+
 @valdrix_app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html() -> Any:
     return get_swagger_ui_html(
-        openapi_url=valdrix_app.openapi_url, # type: ignore
+        openapi_url=valdrix_app.openapi_url or "/openapi.json",
         title=valdrix_app.title + " - Swagger UI",
         oauth2_redirect_url=valdrix_app.swagger_ui_oauth2_redirect_url,
         swagger_js_url="/static/swagger-ui-bundle.js",
@@ -311,38 +387,45 @@ async def custom_swagger_ui_html() -> Any:
         swagger_favicon_url="/static/favicon.png",
     )
 
+
 @valdrix_app.get("/redoc", include_in_schema=False)
 async def redoc_html() -> Any:
     return get_redoc_html(
-        openapi_url=valdrix_app.openapi_url, # type: ignore
+        openapi_url=valdrix_app.openapi_url or "/openapi.json",
         title=valdrix_app.title + " - ReDoc",
-        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js", # Redoc still remote for now
+        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js",  # Redoc still remote for now
         redoc_favicon_url="/static/favicon.png",
     )
 
+
 # Override handler to include metrics (SEC-03)
 # MyPy: 'exception_handlers' is dynamic on FastAPI instance
-original_handler = valdrix_app.exception_handlers.get(RateLimitExceeded, _rate_limit_exceeded_handler)
+original_handler = valdrix_app.exception_handlers.get(
+    RateLimitExceeded, _rate_limit_exceeded_handler
+)
+
 
 async def custom_rate_limit_handler(request: Request, exc: Exception) -> Response:
     if not isinstance(exc, RateLimitExceeded):
         raise exc
     RATE_LIMIT_EXCEEDED.labels(
-        path=request.url.path, 
+        path=request.url.path,
         method=request.method,
-        tier=getattr(request.state, "tier", "unknown")
+        tier=getattr(request.state, "tier", "unknown"),
     ).inc()
     API_ERRORS_TOTAL.labels(
         path=request.url.path,
         method=request.method,
-        status_code=getattr(exc, "status_code", 429)
+        status_code=getattr(exc, "status_code", 429),
     ).inc()
     res = original_handler(request, exc)
-    if asyncio.iscoroutine(res):
-        return await res # type: ignore
-    return cast(Response, res)
+    if inspect.isawaitable(res):
+        return await res
+    return res
+
 
 valdrix_app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
+
 
 @valdrix_app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -352,19 +435,20 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     Ensures NO internal variables (env or local) are leaked in the response.
     """
     from uuid import uuid4
+
     error_id = str(uuid4())
-    
+
     # Log the full exception internally (Sentry or local logs)
-    logger.exception("unhandled_exception", 
-                     path=request.url.path, 
-                     method=request.method,
-                     error_id=error_id)
-    API_ERRORS_TOTAL.labels(
+    logger.exception(
+        "unhandled_exception",
         path=request.url.path,
         method=request.method,
-        status_code=500
+        error_id=error_id,
+    )
+    API_ERRORS_TOTAL.labels(
+        path=request.url.path, method=request.method, status_code=500
     ).inc()
-    
+
     # Standardized response for end users
     return JSONResponse(
         status_code=500,
@@ -372,29 +456,32 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
             "error": "Internal Server Error",
             "code": "INTERNAL_ERROR",
             "message": "An unexpected error occurred. Please contact support with the error ID.",
-            "error_id": error_id
-        }
+            "error_id": error_id,
+        },
     )
 
 
-
 # Prometheus Gauge for System Health
-SYSTEM_HEALTH = Gauge("valdrix_system_health", "System health status (1=healthy, 0.5=degraded, 0=unhealthy)")
+SYSTEM_HEALTH = Gauge(
+    "valdrix_system_health",
+    "System health status (1=healthy, 0.5=degraded, 0=unhealthy)",
+)
+
 
 @valdrix_app.get("/", tags=["Lifecycle"])
 async def root() -> Dict[str, str]:
     """Root endpoint for basic reachability."""
     return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}
 
+
 @valdrix_app.get("/health/live", tags=["Lifecycle"])
 async def liveness_check() -> Dict[str, str]:
     """Fast liveness check without dependencies."""
     return {"status": "healthy"}
 
+
 @valdrix_app.get("/health", tags=["Lifecycle"])
-async def health_check(
-    db: Annotated[AsyncSession, Depends(get_db)]
-) -> Any:
+async def health_check(db: Annotated[AsyncSession, Depends(get_db)]) -> Any:
     """
     Enhanced health check for load balancers.
     Checks DB, Redis, and AWS STS reachability.
@@ -403,19 +490,17 @@ async def health_check(
 
     service = HealthService(db)
     health = await service.check_all()
-    
+
     # Update Prometheus metrics
     status_map = {"healthy": 1.0, "degraded": 0.5, "unhealthy": 0.0}
     SYSTEM_HEALTH.set(status_map.get(health["status"], 0.0))
-    
+
     # Critical dependency: Database
     if health["database"]["status"] == "down":
-        return JSONResponse(
-            status_code=503,
-            content=health
-        )
-    
+        return JSONResponse(status_code=503, content=health)
+
     return health
+
 
 # Initialize Prometheus Metrics
 Instrumentator().instrument(valdrix_app).expose(valdrix_app)
@@ -441,9 +526,12 @@ valdrix_app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"],
 )
 
+
 # CSRF Protection Middleware - processes after CORS but before auth
 @valdrix_app.middleware("http")
-async def csrf_protect_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+async def csrf_protect_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     if request.method not in ("GET", "HEAD", "OPTIONS", "TRACE"):
         # Skip CSRF for health checks and in testing mode
         if settings.TESTING:
@@ -453,16 +541,34 @@ async def csrf_protect_middleware(request: Request, call_next: Callable[[Request
         if request.url.path.startswith("/api/v1/public"):
             return await call_next(request)
 
+        # CSRF only protects cookie-authenticated browser requests.
+        # If there's no Cookie header, there's nothing to protect against.
+        cookie_header = request.headers.get("cookie")
+        if not cookie_header:
+            return await call_next(request)
+
+        # If the caller authenticates via an Authorization header (bearer token),
+        # CSRF protection is unnecessary: browsers don't attach Authorization
+        # headers implicitly like cookies. Keep CSRF for cookie/session flows.
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.strip().lower().startswith("bearer "):
+            return await call_next(request)
+
         if request.url.path.startswith("/api/v1"):
             csrf = CsrfProtect()
             try:
                 await csrf.validate_csrf(request)
             except CsrfProtectError as e:
                 # Log and block
-                logger.warning("csrf_validation_failed", path=request.url.path, method=request.method)
+                logger.warning(
+                    "csrf_validation_failed",
+                    path=request.url.path,
+                    method=request.method,
+                )
                 return await csrf_protect_exception_handler(request, e)
 
     return await call_next(request)
+
 
 # Register Routers
 valdrix_app.include_router(onboard_router, prefix="/api/v1/settings/onboard")
@@ -470,6 +576,8 @@ valdrix_app.include_router(connections_router, prefix="/api/v1/settings/connecti
 valdrix_app.include_router(settings_router, prefix="/api/v1/settings")
 valdrix_app.include_router(leaderboards_router, prefix="/api/v1/leaderboards")
 valdrix_app.include_router(costs_router, prefix="/api/v1/costs")
+valdrix_app.include_router(savings_router, prefix="/api/v1/savings")
+valdrix_app.include_router(leadership_router, prefix="/api/v1/leadership")
 valdrix_app.include_router(attribution_router, prefix="/api/v1/attribution")
 valdrix_app.include_router(carbon_router, prefix="/api/v1/carbon")
 valdrix_app.include_router(zombies_router, prefix="/api/v1/zombies")
@@ -478,8 +586,11 @@ valdrix_app.include_router(admin_router, prefix="/api/v1/admin")
 valdrix_app.include_router(billing_router, prefix="/api/v1/billing")
 valdrix_app.include_router(audit_router, prefix="/api/v1/audit")
 valdrix_app.include_router(jobs_router, prefix="/api/v1/jobs")
-valdrix_app.include_router(health_dashboard_router, prefix="/api/v1/admin/health-dashboard")
+valdrix_app.include_router(
+    health_dashboard_router, prefix="/api/v1/admin/health-dashboard"
+)
 valdrix_app.include_router(usage_router, prefix="/api/v1/usage")
 valdrix_app.include_router(currency_router, prefix="/api/v1/currency")
 valdrix_app.include_router(oidc_router)
 valdrix_app.include_router(public_router, prefix="/api/v1/public")
+valdrix_app.include_router(scim_router, prefix="/scim/v2")

@@ -18,16 +18,22 @@ from app.shared.core.rate_limit import auth_limit
 
 logger = structlog.get_logger()
 
+
 class OnboardRequest(BaseModel):
     tenant_name: str = Field(..., min_length=3, max_length=100)
     admin_email: EmailStr | None = None
-    cloud_config: Dict[str, Any] | None = Field(None, description="Optional cloud credentials for immediate verification")
+    cloud_config: Dict[str, Any] | None = Field(
+        None, description="Optional cloud credentials for immediate verification"
+    )
+
 
 class OnboardResponse(BaseModel):
     status: str
     tenant_id: UUID
 
+
 router = APIRouter(tags=["onboarding"])
+
 
 @router.post("", response_model=OnboardResponse)
 @auth_limit
@@ -49,30 +55,36 @@ async def onboard(
     tenant = Tenant(
         name=onboard_req.tenant_name,
         plan=PricingTier.FREE_TRIAL.value,
-        trial_started_at=datetime.now(timezone.utc)
+        trial_started_at=datetime.now(timezone.utc),
     )
 
     # 3. Active Credential Validation (Hardening)
     if onboard_req.cloud_config:
         settings = get_settings()
         if settings.ENVIRONMENT in ["production", "staging"]:
-            forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-            forwarded_proto = forwarded_proto.split(",")[0].strip().lower() if forwarded_proto else request.url.scheme
+            forwarded_proto = request.headers.get(
+                "x-forwarded-proto", request.url.scheme
+            )
+            forwarded_proto = (
+                forwarded_proto.split(",")[0].strip().lower()
+                if forwarded_proto
+                else request.url.scheme
+            )
             if forwarded_proto != "https":
                 raise HTTPException(
                     status_code=400,
-                    detail="HTTPS is required when submitting cloud credentials."
+                    detail="HTTPS is required when submitting cloud credentials.",
                 )
 
         platform = onboard_req.cloud_config.get("platform", "").lower()
         logger.info("verifying_initial_cloud_connection", platform=platform)
-        
+
         try:
             from app.shared.adapters.factory import AdapterFactory
             from app.models.aws_connection import AWSConnection
             from app.models.azure_connection import AzureConnection
             from app.models.gcp_connection import GCPConnection
-            
+
             # Create a mock/temporary connection object for verification
             conn: Any = None
             if platform == "aws":
@@ -80,8 +92,10 @@ async def onboard(
                     role_arn=onboard_req.cloud_config.get("role_arn"),
                     external_id=onboard_req.cloud_config.get("external_id"),
                     region=onboard_req.cloud_config.get("region", "us-east-1"),
-                    aws_account_id=onboard_req.cloud_config.get("aws_account_id", "000000000000"),
-                    tenant_id=UUID("00000000-0000-0000-0000-000000000000") # Temp ID
+                    aws_account_id=onboard_req.cloud_config.get(
+                        "aws_account_id", "000000000000"
+                    ),
+                    tenant_id=UUID("00000000-0000-0000-0000-000000000000"),  # Temp ID
                 )
             elif platform == "azure":
                 conn = AzureConnection(
@@ -89,13 +103,15 @@ async def onboard(
                     client_secret=onboard_req.cloud_config.get("client_secret"),
                     azure_tenant_id=onboard_req.cloud_config.get("azure_tenant_id"),
                     subscription_id=onboard_req.cloud_config.get("subscription_id"),
-                    tenant_id=UUID("00000000-0000-0000-0000-000000000000")
+                    tenant_id=UUID("00000000-0000-0000-0000-000000000000"),
                 )
             elif platform == "gcp":
                 conn = GCPConnection(
                     project_id=onboard_req.cloud_config.get("project_id"),
-                    service_account_json=onboard_req.cloud_config.get("service_account_json"),
-                    tenant_id=UUID("00000000-0000-0000-0000-000000000000")
+                    service_account_json=onboard_req.cloud_config.get(
+                        "service_account_json"
+                    ),
+                    tenant_id=UUID("00000000-0000-0000-0000-000000000000"),
                 )
             else:
                 raise HTTPException(400, f"Unsupported platform: {platform}")
@@ -103,26 +119,35 @@ async def onboard(
             if conn:
                 adapter = AdapterFactory.get_adapter(conn)
                 if not await adapter.verify_connection():
-                    raise HTTPException(400, f"Cloud connection verification failed for {platform}. Please check your credentials.")
+                    raise HTTPException(
+                        400,
+                        f"Cloud connection verification failed for {platform}. Please check your credentials.",
+                    )
                 logger.info("cloud_connection_verified_successfully", platform=platform)
-        
+
         except HTTPException:
             raise
         except Exception as e:
-            logger.error("onboarding_verification_error", platform=platform, error=str(e))
+            logger.error(
+                "onboarding_verification_error", platform=platform, error=str(e)
+            )
             raise HTTPException(400, f"Error verifying {platform} connection: {str(e)}")
-    
+
     db.add(tenant)
     await db.flush()  # Get tenant.id
 
     # 3. Create User linked to Tenant
-    new_user = User(id=user.id, email=user.email, tenant_id=tenant.id, role=UserRole.OWNER)
+    new_user = User(
+        id=user.id, email=user.email, tenant_id=tenant.id, role=UserRole.OWNER
+    )
     db.add(new_user)
     try:
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        logger.warning("onboarding_race_detected_user_already_exists", user_id=str(user.id))
+        logger.warning(
+            "onboarding_race_detected_user_already_exists", user_id=str(user.id)
+        )
         raise HTTPException(400, "Already onboarded") from exc
 
     # 4. Audit Log
@@ -130,7 +155,7 @@ async def onboard(
         event="tenant_onboarded",
         user_id=str(user.id),
         tenant_id=str(tenant.id),
-        details={"tenant_name": onboard_req.tenant_name}
+        details={"tenant_name": onboard_req.tenant_name},
     )
 
     return OnboardResponse(status="onboarded", tenant_id=tenant.id)

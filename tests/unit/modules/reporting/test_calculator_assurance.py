@@ -40,8 +40,12 @@ def test_calculation_input_checksum_is_reproducible_for_same_inputs() -> None:
             ]
         }
     ]
-    first = calculator.calculate_from_costs(cost_data=cost_data, region="eu-west-1", provider="aws")
-    second = calculator.calculate_from_costs(cost_data=cost_data, region="eu-west-1", provider="aws")
+    first = calculator.calculate_from_costs(
+        cost_data=cost_data, region="eu-west-1", provider="aws"
+    )
+    second = calculator.calculate_from_costs(
+        cost_data=cost_data, region="eu-west-1", provider="aws"
+    )
 
     assert (
         first["methodology_metadata"]["calculation_input_checksum_sha256"]

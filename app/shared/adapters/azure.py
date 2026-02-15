@@ -4,7 +4,13 @@ from typing import Any, AsyncGenerator
 import structlog
 from azure.identity.aio import ClientSecretCredential
 from azure.mgmt.costmanagement.aio import CostManagementClient
-from azure.mgmt.costmanagement.models import QueryDefinition, QueryTimePeriod, QueryDataset, QueryAggregation, QueryGrouping
+from azure.mgmt.costmanagement.models import (
+    QueryDefinition,
+    QueryTimePeriod,
+    QueryDataset,
+    QueryAggregation,
+    QueryGrouping,
+)
 from azure.mgmt.resource.resources.aio import ResourceManagementClient
 from azure.core.exceptions import ServiceRequestError, ServiceResponseError
 import tenacity
@@ -22,11 +28,12 @@ azure_retry = tenacity.retry(
     before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
 )
 
+
 class AzureAdapter(BaseAdapter):
     """
     Azure Cost Management Adapter using official Azure SDK.
     """
-    
+
     def __init__(self, connection: AzureConnection):
         self.connection = connection
         self._credential: ClientSecretCredential | None = None
@@ -36,11 +43,13 @@ class AzureAdapter(BaseAdapter):
     async def _get_credentials(self) -> ClientSecretCredential:
         if not self._credential:
             if not self.connection.client_secret:
-                raise ValueError("Azure client_secret is required for client secret auth")
+                raise ValueError(
+                    "Azure client_secret is required for client secret auth"
+                )
             self._credential = ClientSecretCredential(
                 tenant_id=self.connection.azure_tenant_id,
                 client_id=self.connection.client_id,
-                client_secret=self.connection.client_secret
+                client_secret=self.connection.client_secret,
             )
         return self._credential
 
@@ -54,8 +63,7 @@ class AzureAdapter(BaseAdapter):
         if not self._resource_client:
             creds = await self._get_credentials()
             self._resource_client = ResourceManagementClient(
-                credential=creds,
-                subscription_id=self.connection.subscription_id
+                credential=creds, subscription_id=self.connection.subscription_id
             )
         return self._resource_client
 
@@ -69,7 +77,11 @@ class AzureAdapter(BaseAdapter):
                 break
             return True
         except Exception as e:
-            logger.error("azure_verify_failed", error=str(e), tenant_id=str(self.connection.azure_tenant_id))
+            logger.error(
+                "azure_verify_failed",
+                error=str(e),
+                tenant_id=str(self.connection.azure_tenant_id),
+            )
             return False
 
     async def get_cost_and_usage(
@@ -77,24 +89,27 @@ class AzureAdapter(BaseAdapter):
         start_date: datetime,
         end_date: datetime,
         granularity: str = "DAILY",
-        cost_type: str = "ActualCost"
+        cost_type: str = "ActualCost",
     ) -> list[dict[str, Any]]:
         """Fetch costs using Azure Query API."""
         try:
             client = await self._get_cost_client()
             scope = f"subscriptions/{self.connection.subscription_id}"
-            
+
             query_definition = self._build_query_definition(
                 start_date, end_date, granularity, cost_type
             )
-            
-            response = await client.query.usage(scope=scope, parameters=query_definition)
-            
+
+            response = await client.query.usage(
+                scope=scope, parameters=query_definition
+            )
+
             if response and response.rows:
                 return [self._parse_row(row, cost_type) for row in response.rows]
             return []
         except Exception as e:
             from app.shared.core.exceptions import AdapterError
+
             logger.error("azure_cost_fetch_failed", error=str(e))
             raise AdapterError(f"Azure cost fetch failed: {str(e)}") from e
 
@@ -115,16 +130,16 @@ class AzureAdapter(BaseAdapter):
                     QueryGrouping(type="Dimension", name="ServiceName"),
                     QueryGrouping(type="Dimension", name="ResourceLocation"),
                     QueryGrouping(type="Dimension", name="ChargeType"),
-                    QueryGrouping(type="Dimension", name="UsageDate")
-                ]
-            )
+                    QueryGrouping(type="Dimension", name="UsageDate"),
+                ],
+            ),
         )
 
     def _parse_row(self, row: list[Any], cost_type: str) -> dict[str, Any]:
         """Normalizes a single Azure result row."""
         # Indices: PreTaxCost (0), ServiceName (1), ResourceLocation (2), ChargeType (3), UsageDate (4)
         raw_date = str(row[4]).strip()
-        
+
         # Try multiple formats (Azure can be inconsistent depending on the API version/export)
         dt = None
         for fmt in ["%Y%m%d", "%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ"]:
@@ -133,7 +148,7 @@ class AzureAdapter(BaseAdapter):
                 break
             except ValueError:
                 continue
-        
+
         if not dt:
             # Fallback for ISO date if simple strptime fails
             try:
@@ -149,7 +164,7 @@ class AzureAdapter(BaseAdapter):
                 dt = datetime.now(timezone.utc)
 
         now = datetime.now(timezone.utc)
-        
+
         return {
             "timestamp": dt,
             "service": row[1],
@@ -162,11 +177,9 @@ class AzureAdapter(BaseAdapter):
             "is_finalized": (now - dt).days > 3,
             "source_adapter": "explorer_api",
         }
+
     async def get_amortized_costs(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        granularity: str = "DAILY"
+        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> list[dict[str, Any]]:
         """
         Fetch amortized costs (RI/Savings Plans spread across usage).
@@ -177,10 +190,7 @@ class AzureAdapter(BaseAdapter):
         )
 
     async def stream_cost_and_usage(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        granularity: str = "DAILY"
+        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> AsyncGenerator[dict[str, Any], None]:
         """
         Stream Azure costs.
@@ -197,27 +207,33 @@ class AzureAdapter(BaseAdapter):
         Discover Azure resources with OTel tracing.
         """
         from app.shared.core.tracing import get_tracer
+
         tracer = get_tracer(__name__)
-        
+
         with tracer.start_as_current_span("azure_discover_resources") as span:
             span.set_attribute("subscription_id", self.connection.subscription_id)
-            
+
             try:
                 client = await self._get_resource_client()
                 resources = []
                 async for resource in client.resources.list():
-                    if resource_type and resource_type.lower() not in resource.type.lower():
+                    if (
+                        resource_type
+                        and resource_type.lower() not in resource.type.lower()
+                    ):
                         continue
                     if region and region.lower() != resource.location.lower():
                         continue
-                        
-                    resources.append({
-                        "id": resource.id,
-                        "name": resource.name,
-                        "type": resource.type,
-                        "location": resource.location,
-                        "tags": resource.tags
-                    })
+
+                    resources.append(
+                        {
+                            "id": resource.id,
+                            "name": resource.name,
+                            "type": resource.type,
+                            "location": resource.location,
+                            "tags": resource.tags,
+                        }
+                    )
                 return resources
             except Exception as e:
                 logger.error("azure_resource_discovery_failed", error=str(e))

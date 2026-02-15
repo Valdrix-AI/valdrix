@@ -4,6 +4,7 @@ Retry Logic with Exponential Backoff
 Provides robust retry mechanisms for transient failures in database operations,
 external API calls, and other unreliable operations.
 """
+
 import asyncio
 import logging
 import random
@@ -16,13 +17,13 @@ from tenacity import (
     wait_exponential,
     retry_if_exception_type,
     before_sleep_log,
-    after_log
+    after_log,
 )
 
 from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class RetryConfig(TypedDict):
@@ -31,6 +32,7 @@ class RetryConfig(TypedDict):
     max_wait: float
     multiplier: float
     exceptions: tuple[type[BaseException], ...]
+
 
 # Default retry configurations
 RETRY_CONFIGS: dict[str, RetryConfig] = {
@@ -70,13 +72,16 @@ class RetryManager:
 
     def __init__(self, operation_type: str = "default") -> None:
         self.operation_type = operation_type
-        self.config: RetryConfig = RETRY_CONFIGS.get(operation_type, {
-            "max_attempts": 3,
-            "min_wait": 0.1,
-            "max_wait": 2.0,
-            "multiplier": 2.0,
-            "exceptions": (Exception,),
-        })
+        self.config: RetryConfig = RETRY_CONFIGS.get(
+            operation_type,
+            {
+                "max_attempts": 3,
+                "min_wait": 0.1,
+                "max_wait": 2.0,
+                "multiplier": 2.0,
+                "exceptions": (Exception,),
+            },
+        )
 
     def _calculate_backoff(self, attempt: int) -> float:
         """Calculate exponential backoff with jitter."""
@@ -85,7 +90,7 @@ class RetryManager:
         max_delay = self.config["max_wait"]
         multiplier = self.config["multiplier"]
 
-        delay = min(base_delay * (multiplier ** attempt), max_delay)
+        delay = min(base_delay * (multiplier**attempt), max_delay)
 
         # Add jitter (±25%) to prevent thundering herd
         jitter = delay * 0.25 * (random.random() * 2 - 1)
@@ -111,7 +116,7 @@ class RetryManager:
                         "operation_succeeded_after_retry",
                         operation_type=self.operation_type,
                         attempt=attempt + 1,
-                        max_attempts=self.config["max_attempts"]
+                        max_attempts=self.config["max_attempts"],
                     )
 
                 return result
@@ -128,7 +133,7 @@ class RetryManager:
                         max_attempts=self.config["max_attempts"],
                         delay_seconds=round(delay, 3),
                         error=str(e),
-                        error_type=type(e).__name__
+                        error_type=type(e).__name__,
                     )
 
                     await asyncio.sleep(delay)
@@ -138,7 +143,7 @@ class RetryManager:
                         operation_type=self.operation_type,
                         total_attempts=self.config["max_attempts"],
                         error=str(e),
-                        error_type=type(e).__name__
+                        error_type=type(e).__name__,
                     )
 
         # All retries exhausted
@@ -159,12 +164,15 @@ def retry_operation(
             # Database operation here
             pass
     """
+
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             retry_manager = RetryManager(operation_type)
             return await retry_manager.execute_with_retry(func, *args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -192,15 +200,17 @@ def tenacity_retry(
             wait=wait_exponential(
                 multiplier=config["multiplier"],
                 min=config["min_wait"],
-                max=config["max_wait"]
+                max=config["max_wait"],
             ),
             retry=retry_if_exception_type(config["exceptions"]),
             before_sleep=before_sleep_log(logger, logging.WARNING),
-            after=after_log(logger, logging.INFO)
+            after=after_log(logger, logging.INFO),
         )
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             return await func(*args, **kwargs)
+
         return cast(Callable[..., Awaitable[T]], wrapper)
+
     return decorator
 
 
@@ -225,19 +235,21 @@ async def execute_with_deadlock_retry(
             error_msg = str(e).lower()
 
             # Check if this is a deadlock error
-            if ("deadlock" in error_msg or "lock wait timeout" in error_msg or
-                "serialization failure" in error_msg):
-
+            if (
+                "deadlock" in error_msg
+                or "lock wait timeout" in error_msg
+                or "serialization failure" in error_msg
+            ):
                 if attempt < max_attempts - 1:
                     # Exponential backoff for deadlocks
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                    delay = base_delay * (2**attempt) + random.uniform(0, 0.1)
 
                     logger.warning(
                         "database_deadlock_detected_retry",
                         attempt=attempt + 1,
                         max_attempts=max_attempts,
                         delay_seconds=round(delay, 3),
-                        error=str(e)
+                        error=str(e),
                     )
 
                     await asyncio.sleep(delay)
@@ -246,7 +258,7 @@ async def execute_with_deadlock_retry(
                     logger.error(
                         "database_deadlock_all_retries_exhausted",
                         total_attempts=max_attempts,
-                        error=str(e)
+                        error=str(e),
                     )
 
             # Non-deadlock error, re-raise immediately

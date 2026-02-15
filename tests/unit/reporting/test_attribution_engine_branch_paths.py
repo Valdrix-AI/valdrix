@@ -31,8 +31,12 @@ def engine(db: AsyncMock) -> AttributionEngine:
 
 def test_validate_rule_payload_exhaustive_errors(engine: AttributionEngine) -> None:
     direct_errors = engine.validate_rule_payload("DIRECT", [])
-    pct_errors = engine.validate_rule_payload("PERCENTAGE", [{"bucket": "", "percentage": "x"}])
-    fixed_errors = engine.validate_rule_payload("FIXED", [{"bucket": "", "amount": "x"}])
+    pct_errors = engine.validate_rule_payload(
+        "PERCENTAGE", [{"bucket": "", "percentage": "x"}]
+    )
+    fixed_errors = engine.validate_rule_payload(
+        "FIXED", [{"bucket": "", "amount": "x"}]
+    )
     assert "exactly one bucket" in " ".join(direct_errors)
     assert "non-empty 'bucket'" in " ".join(pct_errors)
     assert "numeric 'percentage'" in " ".join(pct_errors)
@@ -40,7 +44,9 @@ def test_validate_rule_payload_exhaustive_errors(engine: AttributionEngine) -> N
 
 
 @pytest.mark.asyncio
-async def test_list_get_create_delete_rule_paths(engine: AttributionEngine, db: AsyncMock) -> None:
+async def test_list_get_create_delete_rule_paths(
+    engine: AttributionEngine, db: AsyncMock
+) -> None:
     tenant_id = uuid4()
     rule_id = uuid4()
     fake_rule = MagicMock(spec=AttributionRule)
@@ -69,7 +75,9 @@ async def test_list_get_create_delete_rule_paths(engine: AttributionEngine, db: 
     assert deleted is True
 
 
-def test_match_conditions_falls_back_to_ingestion_metadata_tags(engine: AttributionEngine) -> None:
+def test_match_conditions_falls_back_to_ingestion_metadata_tags(
+    engine: AttributionEngine,
+) -> None:
     record = MagicMock(spec=CostRecord)
     record.service = "S3"
     record.region = "us-east-1"
@@ -81,7 +89,9 @@ def test_match_conditions_falls_back_to_ingestion_metadata_tags(engine: Attribut
 
 
 @pytest.mark.asyncio
-async def test_apply_rules_allocation_fallback_variants(engine: AttributionEngine) -> None:
+async def test_apply_rules_allocation_fallback_variants(
+    engine: AttributionEngine,
+) -> None:
     record = MagicMock(spec=CostRecord)
     record.id = uuid4()
     record.recorded_at = date(2026, 1, 1)
@@ -120,7 +130,9 @@ async def test_apply_rules_allocation_fallback_variants(engine: AttributionEngin
 
 
 @pytest.mark.asyncio
-async def test_simulate_rule_projects_allocations(engine: AttributionEngine, db: AsyncMock) -> None:
+async def test_simulate_rule_projects_allocations(
+    engine: AttributionEngine, db: AsyncMock
+) -> None:
     tenant_id = uuid4()
     record = MagicMock(spec=CostRecord)
     record.id = uuid4()
@@ -152,17 +164,23 @@ async def test_simulate_rule_projects_allocations(engine: AttributionEngine, db:
 
 
 @pytest.mark.asyncio
-async def test_apply_rules_to_tenant_no_records_and_summary_filters(engine: AttributionEngine, db: AsyncMock) -> None:
+async def test_apply_rules_to_tenant_no_records_and_summary_filters(
+    engine: AttributionEngine, db: AsyncMock
+) -> None:
     tenant_id = uuid4()
     empty_exec = MagicMock()
     empty_exec.scalars.return_value.all.return_value = []
     db.execute.return_value = empty_exec
 
-    no_records = await engine.apply_rules_to_tenant(tenant_id, date(2026, 1, 1), date(2026, 1, 2))
+    no_records = await engine.apply_rules_to_tenant(
+        tenant_id, date(2026, 1, 1), date(2026, 1, 2)
+    )
     assert no_records == {"records_processed": 0, "allocations_created": 0}
 
     summary_exec = MagicMock()
-    summary_exec.all.return_value = [SimpleNamespace(allocated_to="Ops", total_amount=Decimal("12"), record_count=2)]
+    summary_exec.all.return_value = [
+        SimpleNamespace(allocated_to="Ops", total_amount=Decimal("12"), record_count=2)
+    ]
     db.execute.return_value = summary_exec
     summary = await engine.get_allocation_summary(
         tenant_id,

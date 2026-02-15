@@ -23,6 +23,7 @@ from app.shared.db.session import get_db
 from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.core.pricing import PricingTier
 from app.shared.core.ops_metrics import LLM_BUDGET_BURN_RATE
+from app.shared.core.cache import get_cache_service
 from app.models.tenant import Tenant
 from app.models.background_job import BackgroundJob, JobStatus
 from app.models.aws_connection import AWSConnection
@@ -33,6 +34,7 @@ router = APIRouter(tags=["Investor Health"])
 
 class SystemHealth(BaseModel):
     """Overall system health status."""
+
     status: str  # healthy, degraded, critical
     uptime_hours: float
     last_check: str
@@ -40,6 +42,7 @@ class SystemHealth(BaseModel):
 
 class TenantMetrics(BaseModel):
     """Tenant growth and activity metrics."""
+
     total_tenants: int
     active_last_24h: int
     active_last_7d: int
@@ -50,6 +53,7 @@ class TenantMetrics(BaseModel):
 
 class JobQueueHealth(BaseModel):
     """Background job queue metrics."""
+
     pending_jobs: int
     running_jobs: int
     failed_last_24h: int
@@ -62,6 +66,7 @@ class JobQueueHealth(BaseModel):
 
 class LLMUsageMetrics(BaseModel):
     """LLM cost and usage metrics."""
+
     total_requests_24h: int
     cache_hit_rate: float
     estimated_cost_24h: float
@@ -70,6 +75,7 @@ class LLMUsageMetrics(BaseModel):
 
 class AWSConnectionHealth(BaseModel):
     """AWS connection status."""
+
     total_connections: int
     verified_connections: int
     failed_connections: int
@@ -77,6 +83,7 @@ class AWSConnectionHealth(BaseModel):
 
 class InvestorHealthDashboard(BaseModel):
     """Complete health dashboard for investors."""
+
     generated_at: str
     system: SystemHealth
     tenants: TenantMetrics
@@ -87,16 +94,17 @@ class InvestorHealthDashboard(BaseModel):
 
 # Track startup time
 _startup_time = datetime.now(timezone.utc)
+HEALTH_DASHBOARD_CACHE_TTL = timedelta(seconds=20)
 
 
 @router.get("", response_model=InvestorHealthDashboard)
 async def get_investor_health_dashboard(
     _user: Annotated[CurrentUser, Depends(requires_role("admin"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> InvestorHealthDashboard:
     """
     Get comprehensive health dashboard for investor due diligence.
-    
+
     Shows:
     - System uptime and availability
     - Tenant growth and engagement metrics
@@ -105,132 +113,141 @@ async def get_investor_health_dashboard(
     - AWS connection reliability
     """
     now = datetime.now(timezone.utc)
-    
+    tenant_scope = str(_user.tenant_id) if _user.tenant_id else "global"
+    cache_key = f"api:health-dashboard:{tenant_scope}"
+    cache = get_cache_service()
+    if cache.enabled:
+        cached_payload = await cache.get(cache_key)
+        if isinstance(cached_payload, dict):
+            try:
+                return InvestorHealthDashboard.model_validate(cached_payload)
+            except Exception as exc:
+                logger.warning("health_dashboard_cache_decode_failed", error=str(exc))
+
     # System Health
     uptime = now - _startup_time
     system = SystemHealth(
         status="healthy",
         uptime_hours=round(uptime.total_seconds() / 3600, 2),
-        last_check=now.isoformat()
+        last_check=now.isoformat(),
     )
-    
+
     # Tenant Metrics
     tenants = await _get_tenant_metrics(db, now)
-    
+
     # Job Queue Health
     job_queue = await _get_job_queue_health(db, now)
-    
+
     # LLM Usage
     llm_usage = await _get_llm_usage_metrics(db, now)
-    
+
     # AWS Connection Health
     aws_connections = await _get_aws_connection_health(db)
-    
-    return InvestorHealthDashboard(
+
+    payload = InvestorHealthDashboard(
         generated_at=now.isoformat(),
         system=system,
         tenants=tenants,
         job_queue=job_queue,
         llm_usage=llm_usage,
-        aws_connections=aws_connections
+        aws_connections=aws_connections,
     )
+    if cache.enabled:
+        await cache.set(
+            cache_key,
+            payload.model_dump(mode="json"),
+            ttl=HEALTH_DASHBOARD_CACHE_TTL,
+        )
+    return payload
 
 
 async def _get_tenant_metrics(db: AsyncSession, now: datetime) -> TenantMetrics:
     """Calculate tenant growth and activity metrics."""
-    
-    # Total tenants
-    total = await db.scalar(select(func.count(Tenant.id)))
-    
-    # Active in last 24h
     day_ago = now - timedelta(hours=24)
-    active_24h = await db.scalar(
-        select(func.count(Tenant.id))
-        .where(Tenant.last_accessed_at >= day_ago)
-    )
-    
-    # Active in last 7d
     week_ago = now - timedelta(days=7)
-    active_7d = await db.scalar(
-        select(func.count(Tenant.id))
-        .where(Tenant.last_accessed_at >= week_ago)
-    )
-    
-    # Trial vs paid
-    trial = await db.scalar(
-        select(func.count(Tenant.id))
-        .where(Tenant.plan == PricingTier.FREE_TRIAL.value)
-    )
-    
-    paid = (total or 0) - (trial or 0)
-    
-    # Churn risk: paid tenants not active in 7d
-    churn_risk = await db.scalar(
-        select(func.count(Tenant.id))
-        .where(
-            Tenant.plan != PricingTier.FREE_TRIAL.value,
-            (Tenant.last_accessed_at < week_ago) | (Tenant.last_accessed_at.is_(None))
+    free_trial_plan = PricingTier.FREE_TRIAL.value
+
+    result = await db.execute(
+        select(
+            func.count(Tenant.id).label("total_tenants"),
+            func.count(Tenant.id)
+            .filter(Tenant.last_accessed_at >= day_ago)
+            .label("active_last_24h"),
+            func.count(Tenant.id)
+            .filter(Tenant.last_accessed_at >= week_ago)
+            .label("active_last_7d"),
+            func.count(Tenant.id)
+            .filter(Tenant.plan == free_trial_plan)
+            .label("trial_tenants"),
+            func.count(Tenant.id)
+            .filter(Tenant.plan != free_trial_plan)
+            .label("paid_tenants"),
+            func.count(Tenant.id)
+            .filter(
+                Tenant.plan != free_trial_plan,
+                (Tenant.last_accessed_at < week_ago)
+                | (Tenant.last_accessed_at.is_(None)),
+            )
+            .label("churn_risk"),
         )
     )
-    
+    row = result.one()
+
     return TenantMetrics(
-        total_tenants=total or 0,
-        active_last_24h=active_24h or 0,
-        active_last_7d=active_7d or 0,
-        trial_tenants=trial or 0,
-        paid_tenants=paid,
-        churn_risk=churn_risk or 0
+        total_tenants=int(row.total_tenants or 0),
+        active_last_24h=int(row.active_last_24h or 0),
+        active_last_7d=int(row.active_last_7d or 0),
+        trial_tenants=int(row.trial_tenants or 0),
+        paid_tenants=int(row.paid_tenants or 0),
+        churn_risk=int(row.churn_risk or 0),
     )
 
 
 async def _get_job_queue_health(db: AsyncSession, now: datetime) -> JobQueueHealth:
     """Calculate job queue health metrics."""
-    
-    pending = await db.scalar(
-        select(func.count(BackgroundJob.id))
-        .where(BackgroundJob.status == JobStatus.PENDING)
-    )
-    
-    running = await db.scalar(
-        select(func.count(BackgroundJob.id))
-        .where(BackgroundJob.status == JobStatus.RUNNING)
-    )
-    
     day_ago = now - timedelta(hours=24)
-    failed_24h = await db.scalar(
-        select(func.count(BackgroundJob.id))
-        .where(
-            BackgroundJob.status == JobStatus.FAILED,
-            BackgroundJob.completed_at >= day_ago
+    counts_result = await db.execute(
+        select(
+            func.count(BackgroundJob.id)
+            .filter(BackgroundJob.status == JobStatus.PENDING)
+            .label("pending_jobs"),
+            func.count(BackgroundJob.id)
+            .filter(BackgroundJob.status == JobStatus.RUNNING)
+            .label("running_jobs"),
+            func.count(BackgroundJob.id)
+            .filter(
+                BackgroundJob.status == JobStatus.FAILED,
+                BackgroundJob.completed_at >= day_ago,
+            )
+            .label("failed_last_24h"),
+            func.count(BackgroundJob.id)
+            .filter(BackgroundJob.status == JobStatus.DEAD_LETTER)
+            .label("dead_letter_count"),
         )
     )
-    
-    dead_letter_count = await db.scalar(
-        select(func.count(BackgroundJob.id))
-        .where(BackgroundJob.status == JobStatus.DEAD_LETTER)
-    )
-    
+    counts_row = counts_result.one()
+
     # Item 5 & 12: Calculate average and percentile processing time from completed jobs (last 24h)
-    day_ago = now - timedelta(hours=24)
     duration_expr = (
-        func.extract('epoch', BackgroundJob.completed_at) - 
-        func.extract('epoch', BackgroundJob.created_at)
+        func.extract("epoch", BackgroundJob.completed_at)
+        - func.extract("epoch", BackgroundJob.created_at)
     ) * 1000
-    
+
     # Determine if we are on Postgres for percentile support
     from app.shared.db.session import engine
+
     is_postgres = engine.url.get_backend_name().startswith("postgresql")
-    
+
     if is_postgres:
         metrics = await db.execute(
             select(
                 func.avg(duration_expr),
                 func.percentile_cont(0.5).within_group(duration_expr),
                 func.percentile_cont(0.95).within_group(duration_expr),
-                func.percentile_cont(0.99).within_group(duration_expr)
+                func.percentile_cont(0.99).within_group(duration_expr),
             ).where(
                 BackgroundJob.status == JobStatus.COMPLETED,
-                BackgroundJob.completed_at >= day_ago
+                BackgroundJob.completed_at >= day_ago,
             )
         )
         avg_time, p50, p95, p99 = metrics.one()
@@ -239,80 +256,91 @@ async def _get_job_queue_health(db: AsyncSession, now: datetime) -> JobQueueHeal
         metrics = await db.execute(
             select(func.avg(duration_expr)).where(
                 BackgroundJob.status == JobStatus.COMPLETED,
-                BackgroundJob.completed_at >= day_ago
+                BackgroundJob.completed_at >= day_ago,
             )
         )
         avg_time = metrics.scalar()
         p50 = p95 = p99 = avg_time  # Simple fallback
 
-    
     return JobQueueHealth(
-        pending_jobs=pending or 0,
-        running_jobs=running or 0,
-        failed_last_24h=failed_24h or 0,
-        dead_letter_count=dead_letter_count or 0,
+        pending_jobs=int(counts_row.pending_jobs or 0),
+        running_jobs=int(counts_row.running_jobs or 0),
+        failed_last_24h=int(counts_row.failed_last_24h or 0),
+        dead_letter_count=int(counts_row.dead_letter_count or 0),
         avg_processing_time_ms=round(avg_time or 0.0, 2),
         p50_processing_time_ms=round(p50 or 0.0, 2),
         p95_processing_time_ms=round(p95 or 0.0, 2),
-        p99_processing_time_ms=round(p99 or 0.0, 2)
+        p99_processing_time_ms=round(p99 or 0.0, 2),
     )
 
 
 async def _get_llm_usage_metrics(db: AsyncSession, now: datetime) -> LLMUsageMetrics:
     """Calculate real LLM usage metrics."""
     from app.models.llm import LLMUsage, LLMBudget
-    
+
     day_ago = now - timedelta(hours=24)
-    
-    # Total requests in last 24h
-    requests_24h = await db.scalar(
-        select(func.count(LLMUsage.id))
-        .where(LLMUsage.created_at >= day_ago)
+
+    usage_result = await db.execute(
+        select(
+            func.count(LLMUsage.id).label("total_requests_24h"),
+            func.coalesce(func.sum(LLMUsage.cost_usd), 0).label("estimated_cost_24h"),
+        ).where(LLMUsage.created_at >= day_ago)
     )
-    
-    # Estimated cost in last 24h
-    cost_24h = await db.scalar(
-        select(func.sum(LLMUsage.cost_usd))
-        .where(LLMUsage.created_at >= day_ago)
-    )
-    
-    # Budget utilization (Average across all tenants with a budget)
-    # We look at this month's utilization
+    usage_row = usage_result.one()
+
+    # Budget utilization (average across tenants with a budget)
+    # Aggregate monthly spend per tenant once, then join to budgets.
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    
-    utilization = await db.scalar(
-        select(func.avg(
-            select(func.sum(LLMUsage.cost_usd))
-            .where(LLMUsage.tenant_id == LLMBudget.tenant_id)
-            .where(LLMUsage.created_at >= start_of_month)
-            .scalar_subquery() / LLMBudget.monthly_limit_usd
-        ))
+
+    monthly_spend = (
+        select(
+            LLMUsage.tenant_id.label("tenant_id"),
+            func.coalesce(func.sum(LLMUsage.cost_usd), 0).label("month_spend"),
+        )
+        .where(LLMUsage.created_at >= start_of_month)
+        .group_by(LLMUsage.tenant_id)
+        .subquery()
     )
+
+    utilization_result = await db.execute(
+        select(
+            func.avg(
+                func.coalesce(monthly_spend.c.month_spend, 0)
+                / func.nullif(LLMBudget.monthly_limit_usd, 0)
+            )
+        )
+        .select_from(LLMBudget)
+        .outerjoin(monthly_spend, monthly_spend.c.tenant_id == LLMBudget.tenant_id)
+    )
+    utilization = utilization_result.scalar()
     utilization_pct = round(float(utilization or 0.0) * 100, 2)
     LLM_BUDGET_BURN_RATE.set(utilization_pct)
-    
+
     return LLMUsageMetrics(
-        total_requests_24h=requests_24h or 0,
-        cache_hit_rate=0.85, # Fixed target for now
-        estimated_cost_24h=float(cost_24h or 0.0),
-        budget_utilization=utilization_pct
+        total_requests_24h=int(usage_row.total_requests_24h or 0),
+        cache_hit_rate=0.85,  # Fixed target for now
+        estimated_cost_24h=float(usage_row.estimated_cost_24h or 0.0),
+        budget_utilization=utilization_pct,
     )
 
 
 async def _get_aws_connection_health(db: AsyncSession) -> AWSConnectionHealth:
     """Calculate AWS connection health metrics."""
-    
-    total = await db.scalar(select(func.count(AWSConnection.id)))
-    
-    verified = await db.scalar(
-        select(func.count(AWSConnection.id))
-        .where(AWSConnection.status == "active")
+    result = await db.execute(
+        select(
+            func.count(AWSConnection.id).label("total_connections"),
+            func.count(AWSConnection.id)
+            .filter(AWSConnection.status == "active")
+            .label("verified_connections"),
+        )
     )
-    
-    failed = (total or 0) - (verified or 0)
-    
+    row = result.one()
+    total = int(row.total_connections or 0)
+    verified = int(row.verified_connections or 0)
+    failed = max(total - verified, 0)
+
     return AWSConnectionHealth(
-        total_connections=total or 0,
-        verified_connections=verified or 0,
-        failed_connections=failed
+        total_connections=total,
+        verified_connections=verified,
+        failed_connections=failed,
     )

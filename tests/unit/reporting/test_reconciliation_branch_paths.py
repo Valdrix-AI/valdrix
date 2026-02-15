@@ -13,11 +13,26 @@ from app.modules.reporting.domain.reconciliation import CostReconciliationServic
 
 def test_reconciliation_helper_paths() -> None:
     assert CostReconciliationService._normalize_source("cur_parquet") == "cur"
-    assert CostReconciliationService._normalize_source("cost_explorer_api") == "explorer"
+    assert (
+        CostReconciliationService._normalize_source("cost_explorer_api") == "explorer"
+    )
     assert CostReconciliationService._normalize_source("  ") == "unknown"
-    assert CostReconciliationService._normalize_cloud_plus_source("saas_feed", "saas") == "feed"
-    assert CostReconciliationService._normalize_cloud_plus_source("saas_stripe_api", "saas") == "native"
-    assert CostReconciliationService._normalize_cloud_plus_source("license_feed", "license") == "feed"
+    assert (
+        CostReconciliationService._normalize_cloud_plus_source("saas_feed", "saas")
+        == "feed"
+    )
+    assert (
+        CostReconciliationService._normalize_cloud_plus_source(
+            "saas_stripe_api", "saas"
+        )
+        == "native"
+    )
+    assert (
+        CostReconciliationService._normalize_cloud_plus_source(
+            "license_feed", "license"
+        )
+        == "feed"
+    )
     assert CostReconciliationService._compute_confidence(10, 5, 1000) == 0.7
     assert CostReconciliationService._compute_confidence(0, 0, 0) == 0.0
     assert CostReconciliationService._to_float(None) == 0.0
@@ -52,10 +67,9 @@ def test_reconciliation_csv_renderers_and_hash() -> None:
     assert "close_status" in close_csv
     assert "restatements" in close_csv
     assert "usage_date,recorded_at,service" in rest_csv
-    assert (
-        CostReconciliationService._stable_hash({"a": 1})
-        == CostReconciliationService._stable_hash({"a": 1})
-    )
+    assert CostReconciliationService._stable_hash(
+        {"a": 1}
+    ) == CostReconciliationService._stable_hash({"a": 1})
 
 
 @pytest.mark.asyncio
@@ -104,10 +118,24 @@ async def test_generate_close_package_ready_and_blocked_paths() -> None:
     db.execute = AsyncMock(return_value=lifecycle_result)
     service = CostReconciliationService(db)
 
-    with patch.object(service, "compare_explorer_vs_cur", new=AsyncMock(return_value={"status": "healthy"})), patch.object(
-        service,
-        "get_restatement_history",
-        new=AsyncMock(return_value={"restatement_count": 0, "net_delta_usd": 0.0, "absolute_delta_usd": 0.0, "entries": []}),
+    with (
+        patch.object(
+            service,
+            "compare_explorer_vs_cur",
+            new=AsyncMock(return_value={"status": "healthy"}),
+        ),
+        patch.object(
+            service,
+            "get_restatement_history",
+            new=AsyncMock(
+                return_value={
+                    "restatement_count": 0,
+                    "net_delta_usd": 0.0,
+                    "absolute_delta_usd": 0.0,
+                    "entries": [],
+                }
+            ),
+        ),
     ):
         package = await service.generate_close_package(
             tenant_id=uuid4(),
@@ -143,10 +171,30 @@ async def test_generate_close_package_ready_and_blocked_paths() -> None:
 async def test_compare_explorer_vs_cur_alert_failure_path() -> None:
     db = MagicMock()
     rows = [
-        SimpleNamespace(service="Compute", source_adapter="cur_parquet", total_cost=100.0, record_count=5),
-        SimpleNamespace(service="Compute", source_adapter="cost_explorer_api", total_cost=110.0, record_count=5),
-        SimpleNamespace(service="Storage", source_adapter="cur_parquet", total_cost=50.0, record_count=2),
-        SimpleNamespace(service="Storage", source_adapter="cost_explorer_api", total_cost=49.0, record_count=2),
+        SimpleNamespace(
+            service="Compute",
+            source_adapter="cur_parquet",
+            total_cost=100.0,
+            record_count=5,
+        ),
+        SimpleNamespace(
+            service="Compute",
+            source_adapter="cost_explorer_api",
+            total_cost=110.0,
+            record_count=5,
+        ),
+        SimpleNamespace(
+            service="Storage",
+            source_adapter="cur_parquet",
+            total_cost=50.0,
+            record_count=2,
+        ),
+        SimpleNamespace(
+            service="Storage",
+            source_adapter="cost_explorer_api",
+            total_cost=49.0,
+            record_count=2,
+        ),
     ]
     db.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: rows))
     service = CostReconciliationService(db)
@@ -172,8 +220,18 @@ async def test_compare_explorer_vs_cur_alert_failure_path() -> None:
 async def test_compare_cloud_plus_native_vs_feed() -> None:
     db = MagicMock()
     rows = [
-        SimpleNamespace(service="Salesforce Contract", source_adapter="saas_feed", total_cost=100.0, record_count=5),
-        SimpleNamespace(service="Salesforce Contract", source_adapter="saas_salesforce_api", total_cost=96.0, record_count=5),
+        SimpleNamespace(
+            service="Salesforce Contract",
+            source_adapter="saas_feed",
+            total_cost=100.0,
+            record_count=5,
+        ),
+        SimpleNamespace(
+            service="Salesforce Contract",
+            source_adapter="saas_salesforce_api",
+            total_cost=96.0,
+            record_count=5,
+        ),
     ]
     db.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: rows))
     service = CostReconciliationService(db)

@@ -2,14 +2,18 @@
 Slack notification service for Valdrix.
 Sends alerts and daily digests to configured Slack channel.
 """
+
 import structlog
 from typing import Any
 import asyncio
 import hashlib
 import time
+from uuid import UUID
 
 from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.errors import SlackApiError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
 
@@ -19,11 +23,11 @@ class SlackService:
 
     # Color mapping for severity levels
     SEVERITY_COLORS = {
-        "info": "#10b981",      # Green
-        "warning": "#f59e0b",   # Amber
+        "info": "#10b981",  # Green
+        "warning": "#f59e0b",  # Amber
         "critical": "#f43f5e",  # Red
     }
-    
+
     @staticmethod
     def escape_mrkdwn(text: str) -> str:
         """
@@ -32,18 +36,13 @@ class SlackService:
         """
         if not text:
             return ""
-        return (
-            str(text)
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
+        return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     def __init__(self, bot_token: str, channel_id: str):
         """Initialize with bot token and target channel."""
         self.client = AsyncWebClient(token=bot_token)
         self.channel_id = channel_id
-        
+
         # BE-NOTIF-4: Alert deduplication cache (stores alert hashes with timestamps)
         self._sent_alerts: dict[str, float] = {}
         self._dedup_window_seconds = 3600  # 1 hour deduplication window
@@ -58,10 +57,14 @@ class SlackService:
                 await func(**kwargs)
                 return True
             except SlackApiError as e:
-                error_code = e.response.get('error', '')
-                if error_code == 'ratelimited' and attempt < max_retries:
-                    retry_after = int(e.response.headers.get('Retry-After', 2 ** attempt))
-                    logger.warning("slack_rate_limited_retrying", retry_after=retry_after, attempt=attempt)
+                error_code = e.response.get("error", "")
+                if error_code == "ratelimited" and attempt < max_retries:
+                    retry_after = int(e.response.headers.get("Retry-After", 2**attempt))
+                    logger.warning(
+                        "slack_rate_limited_retrying",
+                        retry_after=retry_after,
+                        attempt=attempt,
+                    )
                     await asyncio.sleep(retry_after)
                     continue
                 logger.error("slack_api_error", method=method, error_code=error_code)
@@ -71,58 +74,65 @@ class SlackService:
                 return False
         return False
 
+    async def health_check(self) -> bool:
+        """
+        Perform a non-invasive Slack connectivity check.
+
+        This avoids sending messages (unlike send_alert) and is safe to run on
+        a schedule for SaaS multi-tenant monitoring.
+        """
+        return await self._send_with_retry("auth_test")
+
     async def send_alert(
-        self,
-        title: str,
-        message: str,
-        severity: str = "warning"
+        self, title: str, message: str, severity: str = "warning"
     ) -> bool:
         """Send an alert message to Slack with retry logic and deduplication."""
-        
+
         # BE-NOTIF-4: Check for duplicate alerts within dedup window
         # Include message hash to avoid suppressing distinct alerts with same title
         msg_hash = hashlib.sha256(message.encode()).hexdigest()[:12]
-        alert_hash = hashlib.sha256(f"{title}:{severity}:{msg_hash}".encode()).hexdigest()
+        alert_hash = hashlib.sha256(
+            f"{title}:{severity}:{msg_hash}".encode()
+        ).hexdigest()
         current_time = time.time()
 
-        
         if alert_hash in self._sent_alerts:
             last_sent = self._sent_alerts[alert_hash]
             if current_time - last_sent < self._dedup_window_seconds:
                 logger.info("duplicate_alert_suppressed", title=title)
                 return True  # Suppress duplicate
-        
+
         # Record this alert
         self._sent_alerts[alert_hash] = current_time
-        
+
         # Cleanup old entries (simple garbage collection)
         self._sent_alerts = {
-            k: v for k, v in self._sent_alerts.items()
+            k: v
+            for k, v in self._sent_alerts.items()
             if current_time - v < self._dedup_window_seconds
         }
-        
+
         color = self.SEVERITY_COLORS.get(severity, self.SEVERITY_COLORS["warning"])
         return await self._send_with_retry(
             "chat_postMessage",
             channel=self.channel_id,
-            text=f"Alert: {title}", # BE-NOTIF-5: Fallback text for notifications
+            text=f"Alert: {title}",  # BE-NOTIF-5: Fallback text for notifications
             attachments=[
                 {
-                    "fallback": message, # BE-NOTIF-5: Slack fallback text for older clients
+                    "fallback": message,  # BE-NOTIF-5: Slack fallback text for older clients
                     "color": color,
-
                     "blocks": [
                         {
                             "type": "header",
-                            "text": {"type": "plain_text", "text": f"🚨 {title}"}
+                            "text": {"type": "plain_text", "text": f"🚨 {title}"},
                         },
                         {
                             "type": "section",
-                            "text": {"type": "mrkdwn", "text": message}
+                            "text": {"type": "mrkdwn", "text": message},
                         },
-                    ]
+                    ],
                 }
-            ]
+            ],
         )
 
     async def send_digest(self, stats: dict[str, Any]) -> bool:
@@ -130,32 +140,46 @@ class SlackService:
         return await self._send_with_retry(
             "chat_postMessage",
             channel=self.channel_id,
-            text="Daily Cloud Cost Digest", # BE-NOTIF-5: Fallback text
+            text="Daily Cloud Cost Digest",  # BE-NOTIF-5: Fallback text
             blocks=[
-
                 {
                     "type": "header",
-                    "text": {"type": "plain_text", "text": "📊 Daily Cloud Cost Digest"}
+                    "text": {
+                        "type": "plain_text",
+                        "text": "📊 Daily Cloud Cost Digest",
+                    },
                 },
                 {
                     "type": "section",
                     "fields": [
-                        {"type": "mrkdwn", "text": f"*💰 Total Cost*\n${stats.get('total_cost', 0):.2f}"},
-                        {"type": "mrkdwn", "text": f"*🌱 Carbon*\n{stats.get('carbon_kg', 0):.2f} kg CO₂"},
-                        {"type": "mrkdwn", "text": f"*👻 Zombies*\n{stats.get('zombie_count', 0)} resources"},
-                        {"type": "mrkdwn", "text": f"*📅 Period*\n{stats.get('period', 'Last 24h')}"},
-                    ]
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*💰 Total Cost*\n${stats.get('total_cost', 0):.2f}",
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*🌱 Carbon*\n{stats.get('carbon_kg', 0):.2f} kg CO₂",
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*👻 Zombies*\n{stats.get('zombie_count', 0)} resources",
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*📅 Period*\n{stats.get('period', 'Last 24h')}",
+                        },
+                    ],
                 },
                 {
                     "type": "context",
-                    "elements": [
-                        {"type": "mrkdwn", "text": "Powered by Valdrix"}
-                    ]
-                }
-            ]
+                    "elements": [{"type": "mrkdwn", "text": "Powered by Valdrix"}],
+                },
+            ],
         )
 
-    async def notify_zombies(self, zombies: dict[str, Any], estimated_savings: float = 0.0) -> bool:
+    async def notify_zombies(
+        self, zombies: dict[str, Any], estimated_savings: float = 0.0
+    ) -> bool:
         """
         Send zombie detection alert.
 
@@ -163,7 +187,9 @@ class SlackService:
             zombies: Dict of zombie categories to lists of resources
             estimated_savings: Estimated monthly savings in dollars
         """
-        zombie_count = sum(len(items) for items in zombies.values() if isinstance(items, list))
+        zombie_count = sum(
+            len(items) for items in zombies.values() if isinstance(items, list)
+        )
         if zombie_count == 0:
             return True  # No zombies, nothing to report
 
@@ -175,22 +201,17 @@ class SlackService:
                 summary_lines.append(f"• {safe_label}: {len(items)}")
 
         message = (
-            f"Found *{zombie_count} zombie resources*.\n" +
-            "\n".join(summary_lines) +
-            f"\n💰 Estimated Savings: *${estimated_savings:.2f}/mo*"
+            f"Found *{zombie_count} zombie resources*.\n"
+            + "\n".join(summary_lines)
+            + f"\n💰 Estimated Savings: *${estimated_savings:.2f}/mo*"
         )
 
         return await self.send_alert(
-            title="Zombie Resources Detected!",
-            message=message,
-            severity="warning"
+            title="Zombie Resources Detected!", message=message, severity="warning"
         )
 
     async def notify_budget_alert(
-        self,
-        current_spend: float,
-        budget_limit: float,
-        percent_used: float
+        self, current_spend: float, budget_limit: float, percent_used: float
     ) -> bool:
         """
         Send budget threshold alert.
@@ -209,9 +230,7 @@ class SlackService:
         )
 
         return await self.send_alert(
-            title="Budget Alert Threshold Reached",
-            message=message,
-            severity=severity
+            title="Budget Alert Threshold Reached", message=message, severity=severity
         )
 
 
@@ -221,8 +240,56 @@ def get_slack_service() -> SlackService | None:
     Returns None if Slack is not configured.
     """
     from app.shared.core.config import get_settings
+
     settings = get_settings()
+
+    if getattr(settings, "SAAS_STRICT_INTEGRATIONS", False):
+        logger.info("env_slack_service_disabled_by_saas_strict_mode")
+        return None
 
     if settings.SLACK_BOT_TOKEN and settings.SLACK_CHANNEL_ID:
         return SlackService(settings.SLACK_BOT_TOKEN, settings.SLACK_CHANNEL_ID)
     return None
+
+
+async def get_tenant_slack_service(
+    db: AsyncSession, tenant_id: UUID | str
+) -> SlackService | None:
+    """
+    Build Slack service from tenant-scoped notification settings.
+    Uses global bot token and tenant channel override when present.
+    Returns None when Slack is disabled or not fully configured.
+    """
+    from app.models.notification_settings import NotificationSettings
+    from app.shared.core.config import get_settings
+
+    try:
+        tenant_uuid = UUID(str(tenant_id))
+    except ValueError:
+        logger.warning(
+            "tenant_slack_settings_invalid_tenant_id", tenant_id=str(tenant_id)
+        )
+        return None
+
+    result = await db.execute(
+        select(NotificationSettings).where(
+            NotificationSettings.tenant_id == tenant_uuid
+        )
+    )
+    notif = result.scalar_one_or_none()
+    if notif and not bool(getattr(notif, "slack_enabled", True)):
+        return None
+
+    settings = get_settings()
+    channel_override = getattr(notif, "slack_channel_override", None) if notif else None
+    channel = channel_override or settings.SLACK_CHANNEL_ID
+    if not settings.SLACK_BOT_TOKEN or not channel:
+        logger.warning(
+            "tenant_slack_settings_incomplete",
+            tenant_id=str(tenant_uuid),
+            has_bot_token=bool(settings.SLACK_BOT_TOKEN),
+            has_channel=bool(channel),
+        )
+        return None
+
+    return SlackService(settings.SLACK_BOT_TOKEN, channel)

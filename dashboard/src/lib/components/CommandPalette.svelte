@@ -12,14 +12,22 @@
 	const actions = [
 		{ id: 'dash', label: 'Go to Dashboard', icon: '📊', path: '/' },
 		{ id: 'ops', label: 'Open Ops Center', icon: '🛠️', path: '/ops' },
+		{ id: 'onb', label: 'Open Onboarding', icon: '🧭', path: '/onboarding' },
 		{ id: 'audit', label: 'Open Audit Logs', icon: '🧾', path: '/audit' },
 		{ id: 'conn', label: 'Manage Cloud Connections', icon: '☁️', path: '/connections' },
 		{ id: 'green', label: 'View GreenOps Metrics', icon: '🌱', path: '/greenops' },
 		{ id: 'llm', label: 'LLM Usage Tracking', icon: '🤖', path: '/llm' },
 		{ id: 'bill', label: 'Billing & Subscriptions', icon: '💳', path: '/billing' },
 		{ id: 'trop', label: 'Leaderboards', icon: '🏆', path: '/leaderboards' },
-		{ id: 'sett', label: 'Account Settings', icon: '⚙️', path: '/settings' }
+		{ id: 'sett', label: 'Account Settings', icon: '⚙️', path: '/settings' },
+		{ id: 'admh', label: 'Admin Health Dashboard', icon: '🩺', path: '/admin/health' }
 	];
+
+	function toAppPath(path: string): string {
+		const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+		const normalizedBase = base === '/' ? '' : base;
+		return `${normalizedBase}${normalizedPath}`;
+	}
 
 	let filteredActions = $derived(
 		actions.filter((a) => a.label.toLowerCase().includes(query.toLowerCase()))
@@ -37,7 +45,7 @@
 	}
 
 	function handleAction(path: string) {
-		goto(`${base}${path}`);
+		goto(toAppPath(path));
 		close();
 	}
 

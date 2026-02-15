@@ -1,6 +1,7 @@
 """
 Tests for app/shared/core/config.py - Configuration management
 """
+
 import pytest
 from unittest.mock import patch
 from pydantic import ValidationError
@@ -8,6 +9,11 @@ from app.shared.core.config import Settings
 
 FAKE_PAYSTACK_SECRET_KEY = "sk_live_TEST_KEY_NOT_REAL_1234567890"
 FAKE_PAYSTACK_PUBLIC_KEY = "pk_live_TEST_KEY_NOT_REAL_1234567890"
+FAKE_SUPABASE_SECRET = "x" * 32
+FAKE_CSRF_SECRET = "c" * 32
+FAKE_ENCRYPTION_KEY = "k" * 32
+# Base64 for 'KDF_SALT_FOR_TESTING_32_BYTES_OK' (32 bytes)
+FAKE_KDF_SALT = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="
 
 
 class TestSettingsValidation:
@@ -17,8 +23,9 @@ class TestSettingsValidation:
         """Test validation when required fields are missing."""
         # Ensure no env vars interfere and defaults apply
         with patch.dict("os.environ", {}, clear=True):
-            settings = Settings(_env_file=None)
-            assert settings.SUPABASE_JWT_SECRET
+            with pytest.raises(ValidationError) as exc:
+                Settings(_env_file=None)
+            assert "CSRF_SECRET_KEY must be set" in str(exc.value)
 
     def test_settings_invalid_ssl_mode(self):
         """Test validation with invalid SSL mode."""
@@ -27,17 +34,20 @@ class TestSettingsValidation:
                 Settings(
                     ENVIRONMENT="production",
                     DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                    SUPABASE_JWT_SECRET="x"*32,
-                    ENCRYPTION_KEY="k"*32,
-                    CSRF_SECRET_KEY="c"*32,
-                    KDF_SALT="s"*32,
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
                     DEBUG=False,
                     TESTING=False,
-                    GROQ_API_KEY="g"*32,
+                    GROQ_API_KEY="g" * 32,
                     DB_SSL_MODE="invalid_mode",
-                    _env_file=None
+                    _env_file=None,
                 )
-            assert "SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production" in str(exc.value)
+            assert (
+                "SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production"
+                in str(exc.value)
+            )
 
     def test_settings_production_ssl_require_without_ca(self):
         """Test production SSL requirement without CA certificate."""
@@ -46,17 +56,17 @@ class TestSettingsValidation:
                 Settings(
                     ENVIRONMENT="production",
                     DATABASE_URL="postgresql+asyncpg://test",
-                    SUPABASE_JWT_SECRET="x"*32,
-                    ENCRYPTION_KEY="k"*32,
-                    CSRF_SECRET_KEY="c"*32,
-                    KDF_SALT="s"*32,
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
                     DEBUG=False,  # Production mode
                     TESTING=False,
                     DB_SSL_MODE="verify-ca",
                     DB_SSL_CA_CERT_PATH=None,  # Missing CA cert
-                    _env_file=None
+                    _env_file=None,
                 )
-            
+
             assert "DB_SSL_CA_CERT_PATH" in str(exc.value)
             assert "mandatory" in str(exc.value)
 
@@ -66,21 +76,21 @@ class TestSettingsValidation:
             settings = Settings(
                 ENVIRONMENT="production",
                 DATABASE_URL="postgresql+asyncpg://test",
-                SUPABASE_JWT_SECRET="x"*32,
-                ENCRYPTION_KEY="k"*32,
-                CSRF_SECRET_KEY="c"*32,
-                KDF_SALT="s"*32,
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
                 DEBUG=False,  # Production mode
                 TESTING=False,
                 DB_SSL_MODE="verify-ca",
                 DB_SSL_CA_CERT_PATH="/path/to/ca.crt",
-                ADMIN_API_KEY="a"*32,
-                GROQ_API_KEY="g"*32,
+                ADMIN_API_KEY="a" * 32,
+                GROQ_API_KEY="g" * 32,
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
-                _env_file=None
+                _env_file=None,
             )
-            
+
             assert settings.DB_SSL_MODE == "verify-ca"
             assert settings.is_production is True
 
@@ -89,15 +99,15 @@ class TestSettingsValidation:
         with patch.dict("os.environ", {}, clear=True):
             settings = Settings(
                 DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                SUPABASE_JWT_SECRET="x"*32,
-                ENCRYPTION_KEY="k"*32,
-                CSRF_SECRET_KEY="c"*32,
-                KDF_SALT="s"*32,
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
                 DEBUG=True,  # Development mode
                 DB_SSL_MODE="disable",
-                _env_file=None
+                _env_file=None,
             )
-            
+
             assert settings.DB_SSL_MODE == "disable"
             assert settings.is_production is False
 
@@ -107,21 +117,21 @@ class TestSettingsValidation:
             with pytest.raises(ValidationError) as exc:
                 Settings(
                     DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                    SUPABASE_JWT_SECRET="x"*32,
-                    ENCRYPTION_KEY="k"*32,
-                    CSRF_SECRET_KEY="c"*32,
-                    KDF_SALT="s"*32,
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
                     DEBUG=False,  # Production mode
                     ENVIRONMENT="production",
                     TESTING=False,
                     DB_SSL_MODE="require",
                     ADMIN_API_KEY="short",  # Too short
-                    GROQ_API_KEY="g"*32,
+                    GROQ_API_KEY="g" * 32,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
-                    _env_file=None
+                    _env_file=None,
                 )
-            
+
             assert "ADMIN_API_KEY" in str(exc.value)
             assert "32 characters" in str(exc.value)
 
@@ -132,29 +142,32 @@ class TestSettingsValidation:
                 # Must pass valid prod config to avoid other validation errors
                 settings = Settings(
                     DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                    SUPABASE_JWT_SECRET="x"*32,
-                    ENCRYPTION_KEY="k"*32,
-                    CSRF_SECRET_KEY="c"*32,
-                    KDF_SALT="s"*32,
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
                     DEBUG=False,  # Production mode
                     TESTING=False,
-                    ADMIN_API_KEY="a"*32, # Valid API Key
-                    ENVIRONMENT="production", # Trigger CORS check
+                    ADMIN_API_KEY="a" * 32,  # Valid API Key
+                    ENVIRONMENT="production",  # Trigger CORS check
                     API_URL="https://api.example.com",
                     FRONTEND_URL="https://app.example.com",
                     CORS_ORIGINS=["http://localhost:3000", "https://example.com"],
-                    GROQ_API_KEY="g"*32,
+                    GROQ_API_KEY="g" * 32,
                     DB_SSL_MODE="require",
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
-                    _env_file=None
+                    _env_file=None,
                 )
-                
+
                 assert settings.is_production is True
                 # Should log warning about localhost in production
                 mock_logger.return_value.warning.assert_called()
                 # Find the call with "cors_localhost_in_production"
-                warning_calls = [args[0] for args, kwargs in mock_logger.return_value.warning.call_args_list]
+                warning_calls = [
+                    args[0]
+                    for args, kwargs in mock_logger.return_value.warning.call_args_list
+                ]
                 assert "cors_localhost_in_production" in warning_calls
 
     def test_settings_frontend_url_https_warning(self):
@@ -163,27 +176,30 @@ class TestSettingsValidation:
             with patch("structlog.get_logger") as mock_logger:
                 settings = Settings(
                     DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                    SUPABASE_JWT_SECRET="x"*32,
-                    ENCRYPTION_KEY="k"*32,
-                    CSRF_SECRET_KEY="c"*32,
-                    KDF_SALT="s"*32,
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
                     DEBUG=False,  # Production mode
                     TESTING=False,
-                    ADMIN_API_KEY="a"*32, # Valid API Key
+                    ADMIN_API_KEY="a" * 32,  # Valid API Key
                     ENVIRONMENT="production",
-                    API_URL="https://api.example.com", # Set to HTTPS to isolate frontend warning
+                    API_URL="https://api.example.com",  # Set to HTTPS to isolate frontend warning
                     FRONTEND_URL="http://example.com",  # HTTP instead of HTTPS
-                    GROQ_API_KEY="g"*32,
+                    GROQ_API_KEY="g" * 32,
                     DB_SSL_MODE="require",
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
-                    _env_file=None
+                    _env_file=None,
                 )
-                
+
                 assert settings.is_production is True
                 # Should log warning about HTTP in production
                 mock_logger.return_value.warning.assert_called()
-                warning_calls = [args[0] for args, kwargs in mock_logger.return_value.warning.call_args_list]
+                warning_calls = [
+                    args[0]
+                    for args, kwargs in mock_logger.return_value.warning.call_args_list
+                ]
                 assert "frontend_url_not_https" in warning_calls
 
     def test_settings_llm_provider_key_missing(self):
@@ -194,19 +210,19 @@ class TestSettingsValidation:
                 Settings(
                     ENVIRONMENT="production",
                     DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                    SUPABASE_JWT_SECRET="x"*32,
-                    ENCRYPTION_KEY="k"*32,
-                    CSRF_SECRET_KEY="c"*32,
-                    KDF_SALT="s"*32,
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
                     LLM_PROVIDER="openai",
                     OPENAI_API_KEY=None,
-                    DEBUG=False, # Strict validation in prod
+                    DEBUG=False,  # Strict validation in prod
                     TESTING=False,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
-                    _env_file=None # Ignore .env
+                    _env_file=None,  # Ignore .env
                 )
-            
+
             assert "is missing in production" in str(exc.value)
 
     def test_settings_llm_provider_key_present(self):
@@ -214,15 +230,15 @@ class TestSettingsValidation:
         with patch.dict("os.environ", {}, clear=True):
             settings = Settings(
                 DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                SUPABASE_JWT_SECRET="x"*32,
-                ENCRYPTION_KEY="k"*32,
-                CSRF_SECRET_KEY="c"*32,
-                KDF_SALT="s"*32,
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
                 LLM_PROVIDER="openai",
                 OPENAI_API_KEY="sk-test-key",
-                _env_file=None
+                _env_file=None,
             )
-            
+
             assert settings.LLM_PROVIDER == "openai"
             assert settings.OPENAI_API_KEY == "sk-test-key"
 
@@ -232,28 +248,32 @@ class TestSettingsValidation:
             # Debug=True should be non-production
             settings_debug = Settings(
                 DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                SUPABASE_JWT_SECRET="x"*32,
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
                 DEBUG=True,
-                _env_file=None
+                DB_SSL_MODE="disable",
+                _env_file=None,
             )
             assert settings_debug.is_production is False
-            
+
             # Debug=False should be production
             settings_prod = Settings(
                 ENVIRONMENT="production",
                 DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                SUPABASE_JWT_SECRET="x"*32,
-                ENCRYPTION_KEY="k"*32, # Required in prod
-                CSRF_SECRET_KEY="c"*32, # Required in prod
-                KDF_SALT="s"*32, # Required in prod
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,  # Required in prod
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,  # Required in prod
+                KDF_SALT=FAKE_KDF_SALT,  # Required in prod
                 DB_SSL_MODE="require",
-                ADMIN_API_KEY="a"*32,
-                GROQ_API_KEY="g"*32,
+                ADMIN_API_KEY="a" * 32,
+                GROQ_API_KEY="g" * 32,
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                 DEBUG=False,
                 TESTING=False,
-                _env_file=None
+                _env_file=None,
             )
             assert settings_prod.is_production is True
 
@@ -263,19 +283,71 @@ class TestSettingsValidation:
         with patch.dict("os.environ", {}, clear=True):
             settings = Settings(
                 DATABASE_URL="sqlite+aiosqlite:///:memory:",
-                SUPABASE_JWT_SECRET="x"*32,
-                ENCRYPTION_KEY="k"*32,
-                CSRF_SECRET_KEY="c"*32,
-                KDF_SALT="s"*32,
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
                 DB_SSL_MODE="require",
-                GROQ_API_KEY="g"*32,
+                GROQ_API_KEY="g" * 32,
                 TESTING=False,
-                _env_file=None
+                _env_file=None,
             )
-            
+
             # Check default values
             assert settings.LLM_PROVIDER == "groq"
             assert settings.OPENAI_API_KEY is None
             assert settings.CORS_ORIGINS == []
             assert settings.FRONTEND_URL == "http://localhost:5173"
             assert settings.ADMIN_API_KEY is None
+
+    def test_settings_saas_strict_integrations_blocks_env_integration_config_in_production(
+        self,
+    ):
+        """Strict SaaS mode must reject env-based workflow/notification config in production."""
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    ENVIRONMENT="production",
+                    DATABASE_URL="postgresql+asyncpg://test",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DEBUG=False,
+                    TESTING=False,
+                    DB_SSL_MODE="require",
+                    ADMIN_API_KEY="a" * 32,
+                    GROQ_API_KEY="g" * 32,
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    SAAS_STRICT_INTEGRATIONS=True,
+                    SLACK_CHANNEL_ID="C0123456789",
+                    _env_file=None,
+                )
+            assert (
+                "SAAS_STRICT_INTEGRATIONS forbids env-based integration settings in production"
+                in str(exc.value)
+            )
+
+    def test_settings_saas_strict_integrations_allows_shared_slack_bot_token(self):
+        """Strict SaaS mode may keep shared Slack bot token while blocking env routing config."""
+        with patch.dict("os.environ", {}, clear=True):
+            settings = Settings(
+                ENVIRONMENT="production",
+                DATABASE_URL="postgresql+asyncpg://test",
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
+                DEBUG=False,
+                TESTING=False,
+                DB_SSL_MODE="require",
+                ADMIN_API_KEY="a" * 32,
+                GROQ_API_KEY="g" * 32,
+                PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                SAAS_STRICT_INTEGRATIONS=True,
+                SLACK_BOT_TOKEN="xoxb-shared-token",
+                _env_file=None,
+            )
+            assert settings.SAAS_STRICT_INTEGRATIONS is True

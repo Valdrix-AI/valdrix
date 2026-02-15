@@ -3,12 +3,13 @@ Unit tests for Azure Usage Analyzer.
 
 Tests zero-cost zombie detection logic using mock cost export data.
 """
+
 from app.shared.analysis.azure_usage_analyzer import AzureUsageAnalyzer
 
 
 class TestAzureUsageAnalyzerIdleVMs:
     """Tests for idle VM detection."""
-    
+
     def test_detects_idle_vm(self):
         """VM with low cost should be flagged as idle."""
         cost_records = [
@@ -21,12 +22,12 @@ class TestAzureUsageAnalyzerIdleVMs:
                 "Tags": {"Environment": "Dev"},
             },
         ]
-        
+
         analyzer = AzureUsageAnalyzer(cost_records)
         zombies = analyzer.find_idle_vms(days=30, cost_threshold=10.0)
-        
+
         assert isinstance(zombies, list)
-    
+
     def test_empty_records_returns_empty(self):
         """Empty records should return no zombies."""
         analyzer = AzureUsageAnalyzer([])
@@ -35,7 +36,7 @@ class TestAzureUsageAnalyzerIdleVMs:
 
 class TestAzureUsageAnalyzerDisks:
     """Tests for unattached disk detection."""
-    
+
     def test_detects_unattached_disk(self):
         """Disk with storage cost but no VM association should be flagged."""
         cost_records = [
@@ -47,16 +48,16 @@ class TestAzureUsageAnalyzerDisks:
                 "Cost": 19.20,
             },
         ]
-        
+
         analyzer = AzureUsageAnalyzer(cost_records)
         zombies = analyzer.find_unattached_disks()
-        
+
         assert isinstance(zombies, list)
 
 
 class TestAzureUsageAnalyzerSQL:
     """Tests for idle SQL database detection."""
-    
+
     def test_detects_idle_sql_database(self):
         """SQL database with no DTU usage should be flagged."""
         cost_records = [
@@ -68,16 +69,16 @@ class TestAzureUsageAnalyzerSQL:
                 "Cost": 15.0,
             },
         ]
-        
+
         analyzer = AzureUsageAnalyzer(cost_records)
         zombies = analyzer.find_idle_sql_databases(days=7)
-        
+
         assert isinstance(zombies, list)
 
 
 class TestAzureUsageAnalyzerAKS:
     """Tests for idle AKS cluster detection."""
-    
+
     def test_detects_idle_aks_cluster(self):
         """AKS cluster with minimal workload should be flagged."""
         cost_records = [
@@ -89,16 +90,16 @@ class TestAzureUsageAnalyzerAKS:
                 "Cost": 73.0,
             },
         ]
-        
+
         analyzer = AzureUsageAnalyzer(cost_records)
         zombies = analyzer.find_idle_aks_clusters(days=7)
-        
+
         assert isinstance(zombies, list)
 
 
 class TestAzureUsageAnalyzerNICs:
     """Tests for orphan NIC detection."""
-    
+
     def test_detects_orphan_nic(self):
         """Unused NIC with association should be flagged."""
         cost_records = [
@@ -110,8 +111,8 @@ class TestAzureUsageAnalyzerNICs:
                 "Cost": 0.0,
             },
         ]
-        
+
         analyzer = AzureUsageAnalyzer(cost_records)
         zombies = analyzer.find_orphan_nics()
-        
+
         assert isinstance(zombies, list)

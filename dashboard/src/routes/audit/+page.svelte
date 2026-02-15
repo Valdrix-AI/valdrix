@@ -1,8 +1,11 @@
 <script lang="ts">
-	/* eslint-disable svelte/no-navigation-without-resolve */
+	import { onMount } from 'svelte';
 	import { PUBLIC_API_URL } from '$env/static/public';
-	import { base } from '$app/paths';
 	import { api } from '$lib/api';
+	import AuthGate from '$lib/components/AuthGate.svelte';
+	import { buildCompliancePackPath } from '$lib/compliancePack';
+	import { buildFocusExportPath } from '$lib/focusExport';
+	import { filenameFromContentDispositionHeader } from '$lib/utils';
 
 	type AuditLog = {
 		id: string;
@@ -31,9 +34,12 @@
 	};
 
 	let { data } = $props();
+	const AUDIT_REQUEST_TIMEOUT_MS = 8000;
 	let loading = $state(true);
 	let loadingDetail = $state(false);
 	let exporting = $state(false);
+	let exportingPack = $state(false);
+	let exportingFocus = $state(false);
 	let error = $state('');
 	let success = $state('');
 
@@ -46,10 +52,28 @@
 	let selectedLogId = $state<string | null>(null);
 	let selectedDetail = $state<AuditDetail | null>(null);
 
+	let focusStartDate = $state(
+		new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+	);
+	let focusEndDate = $state(new Date().toISOString().slice(0, 10));
+	let focusProvider = $state('');
+	let focusIncludePreliminary = $state(false);
+	let packIncludeFocus = $state(false);
+	let packIncludeSavingsProof = $state(false);
+	let packIncludeClosePackage = $state(false);
+	let packCloseEnforceFinalized = $state(true);
+	let packCloseMaxRestatements = $state(5000);
+
+	const savingsProviderAllowed = ['aws', 'azure', 'gcp', 'saas', 'license'];
+
 	function getHeaders() {
 		return {
 			Authorization: `Bearer ${data.session?.access_token}`
 		};
+	}
+
+	async function getWithTimeout(url: string, headers: Record<string, string>) {
+		return api.get(url, { headers, timeoutMs: AUDIT_REQUEST_TIMEOUT_MS });
 	}
 
 	function formatDate(value: string): string {
@@ -58,7 +82,7 @@
 
 	async function loadEventTypes() {
 		const headers = getHeaders();
-		const res = await api.get(`${PUBLIC_API_URL}/audit/event-types`, { headers });
+		const res = await getWithTimeout(`${PUBLIC_API_URL}/audit/event-types`, headers);
 		if (res.ok) {
 			const payload = await res.json();
 			eventTypes = payload.event_types || [];
@@ -80,9 +104,10 @@
 				queryParts.push(`event_type=${encodeURIComponent(selectedEventType)}`);
 			}
 
-			const res = await api.get(`${PUBLIC_API_URL}/audit/logs?${queryParts.join('&')}`, {
+			const res = await getWithTimeout(
+				`${PUBLIC_API_URL}/audit/logs?${queryParts.join('&')}`,
 				headers
-			});
+			);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to load audit logs.');
@@ -104,7 +129,7 @@
 		error = '';
 		try {
 			const headers = getHeaders();
-			const res = await api.get(`${PUBLIC_API_URL}/audit/logs/${id}`, { headers });
+			const res = await getWithTimeout(`${PUBLIC_API_URL}/audit/logs/${id}`, headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to load audit log detail.');
@@ -132,7 +157,7 @@
 			const headers = getHeaders();
 			const query = selectedEventType ? `event_type=${encodeURIComponent(selectedEventType)}` : '';
 
-			const res = await api.get(`${PUBLIC_API_URL}/audit/export?${query}`, { headers });
+			const res = await getWithTimeout(`${PUBLIC_API_URL}/audit/export?${query}`, headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to export audit logs.');
@@ -155,7 +180,125 @@
 		}
 	}
 
-	$effect(() => {
+	async function exportCompliancePack() {
+		exportingPack = true;
+		error = '';
+		success = '';
+		try {
+			const headers = getHeaders();
+			const selectedSavingsProvider =
+				focusProvider && savingsProviderAllowed.includes(focusProvider) ? focusProvider : undefined;
+			const path = buildCompliancePackPath({
+				includeFocusExport: packIncludeFocus,
+				focusProvider: focusProvider || undefined,
+				focusIncludePreliminary,
+				focusMaxRows: 50000,
+				focusStartDate,
+				focusEndDate,
+				includeSavingsProof: packIncludeSavingsProof,
+				savingsProvider: selectedSavingsProvider,
+				savingsStartDate: focusStartDate,
+				savingsEndDate: focusEndDate,
+				includeClosePackage: packIncludeClosePackage,
+				closeProvider: focusProvider || undefined,
+				closeStartDate: focusStartDate,
+				closeEndDate: focusEndDate,
+				closeEnforceFinalized: packCloseEnforceFinalized,
+				closeMaxRestatements: packCloseMaxRestatements
+			});
+
+			const res = await getWithTimeout(`${PUBLIC_API_URL}${path}`, headers);
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				throw new Error(
+					payload.detail ||
+						payload.message ||
+						(res.status === 403
+							? 'Owner role required to export compliance pack.'
+							: 'Failed to export compliance pack.')
+				);
+			}
+
+			const buffer = await res.arrayBuffer();
+			const blob = new Blob([buffer], { type: 'application/zip' });
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = filenameFromContentDispositionHeader(
+				res.headers.get('content-disposition'),
+				`compliance-pack_${new Date().toISOString().slice(0, 10)}.zip`
+			);
+			link.click();
+			URL.revokeObjectURL(url);
+			success = 'Compliance pack downloaded.';
+		} catch (e) {
+			const err = e as Error;
+			error = err.message;
+		} finally {
+			exportingPack = false;
+		}
+	}
+
+	async function exportFocusCsv() {
+		exportingFocus = true;
+		error = '';
+		success = '';
+		try {
+			const headers = getHeaders();
+			const path = buildFocusExportPath({
+				startDate: focusStartDate,
+				endDate: focusEndDate,
+				provider: focusProvider,
+				includePreliminary: focusIncludePreliminary
+			});
+			const res = await getWithTimeout(`${PUBLIC_API_URL}${path}`, headers);
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				throw new Error(
+					payload.detail ||
+						payload.message ||
+						(res.status === 403
+							? 'Pro plan + admin role required to export FOCUS.'
+							: 'Failed to export FOCUS CSV.')
+				);
+			}
+
+			const csv = await res.text();
+			const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = filenameFromContentDispositionHeader(
+				res.headers.get('content-disposition'),
+				`focus-v1.3-core_${focusStartDate}_${focusEndDate}.csv`
+			);
+			link.click();
+			URL.revokeObjectURL(url);
+			success = 'FOCUS export downloaded.';
+		} catch (e) {
+			const err = e as Error;
+			error = err.message;
+		} finally {
+			exportingFocus = false;
+		}
+	}
+
+	async function applyFilters() {
+		offset = 0;
+		await loadLogs();
+	}
+
+	async function previousPage() {
+		offset = Math.max(0, offset - limit);
+		await loadLogs();
+	}
+
+	async function nextPage() {
+		offset = offset + limit;
+		await loadLogs();
+	}
+
+	onMount(() => {
 		void loadEventTypes();
 		void loadLogs();
 	});
@@ -175,14 +318,11 @@
 		</div>
 	</div>
 
-	{#if !data.user}
-		<div class="card text-center py-10">
-			<p class="text-ink-400">
-				Please <a href="{base}/auth/login" class="text-accent-400 hover:underline">sign in</a> to access
-				audit logs.
-			</p>
-		</div>
-	{:else}
+	<AuthGate
+		authenticated={!!data.user}
+		action="access audit logs"
+		className="card text-center py-10"
+	>
 		{#if error}
 			<div class="card border-danger-500/50 bg-danger-500/10">
 				<p class="text-danger-400">{error}</p>
@@ -216,19 +356,109 @@
 					</select>
 				</div>
 				<div class="flex gap-2">
-					<button class="btn btn-secondary text-xs" onclick={loadLogs}>Apply</button>
-					<button
-						class="btn btn-secondary text-xs"
-						onclick={() => (offset = Math.max(0, offset - limit))}
-					>
-						Prev
-					</button>
-					<button class="btn btn-secondary text-xs" onclick={() => (offset = offset + limit)}
-						>Next</button
-					>
+					<button class="btn btn-secondary text-xs" onclick={applyFilters}>Apply</button>
+					<button class="btn btn-secondary text-xs" onclick={previousPage}> Prev </button>
+					<button class="btn btn-secondary text-xs" onclick={nextPage}>Next</button>
 					<button class="btn btn-primary text-xs" disabled={exporting} onclick={exportCsv}>
 						{exporting ? 'Exporting...' : 'Export CSV'}
 					</button>
+					<button
+						class="btn btn-primary text-xs"
+						disabled={exportingPack}
+						onclick={exportCompliancePack}
+					>
+						{exportingPack ? 'Exporting...' : 'Compliance Pack'}
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<div class="card">
+			<h2 class="text-lg font-semibold mb-1">Compliance Exports</h2>
+			<p class="text-ink-400 text-sm mb-4">
+				Download FOCUS v1.3 core CSV (Pro+) or bundle exports into the Compliance Pack ZIP (Owner).
+			</p>
+			<div class="flex flex-wrap gap-3 items-end">
+				<div class="flex flex-col gap-1">
+					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-start">Start</label
+					>
+					<input id="focus-start" type="date" class="select-input" bind:value={focusStartDate} />
+				</div>
+				<div class="flex flex-col gap-1">
+					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-end">End</label>
+					<input id="focus-end" type="date" class="select-input" bind:value={focusEndDate} />
+				</div>
+				<div class="flex flex-col gap-1">
+					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-provider"
+						>Provider</label
+					>
+					<select id="focus-provider" bind:value={focusProvider} class="select-input">
+						<option value="">All providers</option>
+						<option value="aws">AWS</option>
+						<option value="azure">Azure</option>
+						<option value="gcp">GCP</option>
+						<option value="saas">SaaS</option>
+						<option value="license">License</option>
+						<option value="platform">Platform</option>
+						<option value="hybrid">Hybrid</option>
+					</select>
+				</div>
+				<label class="flex items-center gap-2 text-xs text-ink-400">
+					<input type="checkbox" class="accent-accent-500" bind:checked={focusIncludePreliminary} />
+					<span>Include preliminary</span>
+				</label>
+				<button class="btn btn-primary text-xs" disabled={exportingFocus} onclick={exportFocusCsv}>
+					{exportingFocus ? 'Exporting...' : 'FOCUS CSV'}
+				</button>
+			</div>
+
+			<div class="mt-5 border-t border-ink-700/40 pt-4">
+				<h3 class="text-sm font-semibold mb-2">Compliance Pack Add-ons</h3>
+				<p class="text-ink-400 text-xs mb-3">
+					Optional exports included inside the ZIP. Uses the same date/provider filters above.
+				</p>
+				<div class="flex flex-wrap gap-4 items-center">
+					<label class="flex items-center gap-2 text-xs text-ink-300">
+						<input type="checkbox" class="accent-accent-500" bind:checked={packIncludeFocus} />
+						<span>Include FOCUS CSV</span>
+					</label>
+					<label class="flex items-center gap-2 text-xs text-ink-300">
+						<input
+							type="checkbox"
+							class="accent-accent-500"
+							bind:checked={packIncludeSavingsProof}
+						/>
+						<span>Include Savings Proof</span>
+					</label>
+					<label class="flex items-center gap-2 text-xs text-ink-300">
+						<input
+							type="checkbox"
+							class="accent-accent-500"
+							bind:checked={packIncludeClosePackage}
+						/>
+						<span>Include Close Package</span>
+					</label>
+					{#if packIncludeClosePackage}
+						<label class="flex items-center gap-2 text-xs text-ink-300">
+							<input
+								type="checkbox"
+								class="accent-accent-500"
+								bind:checked={packCloseEnforceFinalized}
+							/>
+							<span>Enforce finalized</span>
+						</label>
+						<label class="flex items-center gap-2 text-xs text-ink-300">
+							<span>Max restatements</span>
+							<input
+								type="number"
+								min="0"
+								max="200000"
+								step="100"
+								class="select-input w-28"
+								bind:value={packCloseMaxRestatements}
+							/>
+						</label>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -284,7 +514,7 @@
 				</div>
 			{/if}
 		</div>
-	{/if}
+	</AuthGate>
 </div>
 
 {#if selectedLogId}

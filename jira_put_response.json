@@ -1,0 +1,23 @@
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0*   Trying 127.0.0.1:8000...
+* Connected to 127.0.0.1 (127.0.0.1) port 8000
+> PUT /api/v1/settings/notifications HTTP/1.1
+> Host: 127.0.0.1:8000
+> User-Agent: curl/8.5.0
+> Accept: */*
+> Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmZmI2MDBmNi00NmNjLTQxMGUtYTlmMy0yNzVkOTQyNjYzZjMiLSJlbWFpbCI6ImFkbWluQGppcmFzbW8ua2UiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiaXNzIjoic3VwYWJhc2UiLCJleHAiOjE3NzA5MzUyMjB9._4yj2k43RzNwUxOorg_jQ0sRVGQaANmABasjtQcAm_I
+> Content-Type: application/json
+> Content-Length: 460
+> 
+} [460 bytes data]
+< HTTP/1.1 400 Bad Request
+< date: Thu, 12 Feb 2026 21:30:04 GMT
+< server: uvicorn
+< content-length: 88
+< content-type: application/json
+< 
+{ [88 bytes data]
+100   548  100    88  100   460  47722   243k --:--:-- --:--:-- --:--:--  535k
+* Connection #0 to host 127.0.0.1 left intact
+{"status":"error","message":"Missing Cookie: `fastapi-csrf-token`.","code":"csrf_error"}

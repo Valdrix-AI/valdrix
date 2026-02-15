@@ -1,6 +1,7 @@
 """
 Tests for usage_tracker.py - LLM usage tracking and cost calculation.
 """
+
 import pytest
 from decimal import Decimal
 import builtins
@@ -13,9 +14,9 @@ class TestTokenCounting:
 
     def test_count_tokens_with_tiktoken_gpt4(self):
         """Test token counting with tiktoken for GPT-4."""
-        with patch('tiktoken.get_encoding') as mock_get_encoding:
+        with patch("tiktoken.get_encoding") as mock_get_encoding:
             mock_encoding = MagicMock()
-            mock_encoding.encode.return_value = ['token1', 'token2', 'token3']
+            mock_encoding.encode.return_value = ["token1", "token2", "token3"]
             mock_get_encoding.return_value = mock_encoding
 
             result = count_tokens("Hello world", "gpt-4")
@@ -26,9 +27,9 @@ class TestTokenCounting:
 
     def test_count_tokens_with_tiktoken_claude(self):
         """Test token counting with tiktoken for Claude."""
-        with patch('tiktoken.get_encoding') as mock_get_encoding:
+        with patch("tiktoken.get_encoding") as mock_get_encoding:
             mock_encoding = MagicMock()
-            mock_encoding.encode.return_value = ['token'] * 100
+            mock_encoding.encode.return_value = ["token"] * 100
             mock_get_encoding.return_value = mock_encoding
 
             result = count_tokens("Some text", "claude-3-5-sonnet")
@@ -53,7 +54,7 @@ class TestTokenCounting:
 
     def test_count_tokens_fallback_on_error(self):
         """Test token counting fallback when tiktoken fails."""
-        with patch('tiktoken.get_encoding') as mock_get_encoding:
+        with patch("tiktoken.get_encoding") as mock_get_encoding:
             mock_get_encoding.side_effect = Exception("Encoding error")
 
             result = count_tokens("Hello world", "gpt-4")
@@ -63,9 +64,9 @@ class TestTokenCounting:
 
     def test_count_tokens_unknown_model(self):
         """Test token counting with unknown model (should use default encoding)."""
-        with patch('tiktoken.get_encoding') as mock_get_encoding:
+        with patch("tiktoken.get_encoding") as mock_get_encoding:
             mock_encoding = MagicMock()
-            mock_encoding.encode.return_value = ['token'] * 5
+            mock_encoding.encode.return_value = ["token"] * 5
             mock_get_encoding.return_value = mock_encoding
 
             result = count_tokens("Test", "unknown-model")
@@ -75,7 +76,7 @@ class TestTokenCounting:
 
     def test_count_tokens_empty_text(self):
         """Test token counting with empty text."""
-        with patch('tiktoken.get_encoding') as mock_get_encoding:
+        with patch("tiktoken.get_encoding") as mock_get_encoding:
             mock_encoding = MagicMock()
             mock_encoding.encode.return_value = []
             mock_get_encoding.return_value = mock_encoding
@@ -102,15 +103,17 @@ class TestUsageTracker:
         mock_db = MagicMock()
         tracker = UsageTracker(mock_db)
 
-        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.record_usage', new_callable=AsyncMock) as mock_record:
-
+        with patch(
+            "app.shared.llm.usage_tracker.LLMBudgetManager.record_usage",
+            new_callable=AsyncMock,
+        ) as mock_record:
             await tracker.record(
                 tenant_id="test-tenant-id",
                 provider="groq",
                 model="llama-3.3-70b-versatile",
                 input_tokens=1500,
                 output_tokens=800,
-                request_type="daily_analysis"
+                request_type="daily_analysis",
             )
 
             mock_record.assert_called_once_with(
@@ -121,7 +124,7 @@ class TestUsageTracker:
                 completion_tokens=800,
                 provider="groq",
                 operation_id=None,
-                request_type="daily_analysis"
+                request_type="daily_analysis",
             )
 
     @pytest.mark.asyncio
@@ -130,14 +133,17 @@ class TestUsageTracker:
         mock_db = MagicMock()
         tracker = UsageTracker(mock_db)
 
-        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.check_and_reserve', new_callable=AsyncMock) as mock_check:
-            with patch('app.shared.llm.usage_tracker.count_tokens', return_value=100):
+        with patch(
+            "app.shared.llm.usage_tracker.LLMBudgetManager.check_and_reserve",
+            new_callable=AsyncMock,
+        ) as mock_check:
+            with patch("app.shared.llm.usage_tracker.count_tokens", return_value=100):
                 result = await tracker.authorize_request(
                     tenant_id="test-tenant-id",
                     provider="openai",
                     model="gpt-4",
                     input_text="Hello world",
-                    max_output_tokens=500
+                    max_output_tokens=500,
                 )
 
                 assert result
@@ -147,7 +153,7 @@ class TestUsageTracker:
                     provider="openai",
                     model="gpt-4",
                     prompt_tokens=100,
-                    completion_tokens=500
+                    completion_tokens=500,
                 )
 
     @pytest.mark.asyncio
@@ -158,7 +164,7 @@ class TestUsageTracker:
 
         mock_result = MagicMock()
         mock_result.scalar.return_value = Decimal("25.50")
-        
+
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         result = await tracker.get_monthly_usage("test-tenant-id")
@@ -174,7 +180,7 @@ class TestUsageTracker:
 
         mock_result = MagicMock()
         mock_result.scalar.return_value = None
-        
+
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         result = await tracker.get_monthly_usage("test-tenant-id")
@@ -187,7 +193,10 @@ class TestUsageTracker:
         mock_db = MagicMock()
         tracker = UsageTracker(mock_db)
 
-        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.check_budget', new_callable=AsyncMock) as mock_check:
+        with patch(
+            "app.shared.llm.usage_tracker.LLMBudgetManager.check_budget",
+            new_callable=AsyncMock,
+        ) as mock_check:
             mock_check.return_value = MagicMock()
 
             result = await tracker.check_budget("test-tenant-id")
@@ -200,14 +209,13 @@ class TestUsageTracker:
         mock_db = MagicMock()
         tracker = UsageTracker(mock_db)
 
-        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.estimate_cost') as mock_estimate:
+        with patch(
+            "app.shared.llm.usage_tracker.LLMBudgetManager.estimate_cost"
+        ) as mock_estimate:
             mock_estimate.return_value = Decimal("0.15")
 
             result = tracker.calculate_cost(
-                provider="openai",
-                model="gpt-4",
-                input_tokens=100,
-                output_tokens=50
+                provider="openai", model="gpt-4", input_tokens=100, output_tokens=50
             )
 
             mock_estimate.assert_called_once_with(100, 50, "gpt-4", "openai")
@@ -226,14 +234,17 @@ class TestUsageTrackerProductionQuality:
         tracker1 = UsageTracker(mock_db)
         tracker2 = UsageTracker(mock_db)
 
-        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.record_usage', new_callable=AsyncMock) as mock_record:
+        with patch(
+            "app.shared.llm.usage_tracker.LLMBudgetManager.record_usage",
+            new_callable=AsyncMock,
+        ) as mock_record:
             # Tenant 1 usage
             await tracker1.record(
                 tenant_id="tenant-1",
                 provider="openai",
                 model="gpt-4",
                 input_tokens=100,
-                output_tokens=50
+                output_tokens=50,
             )
 
             # Tenant 2 usage
@@ -242,7 +253,7 @@ class TestUsageTrackerProductionQuality:
                 provider="openai",
                 model="gpt-4",
                 input_tokens=200,
-                output_tokens=100
+                output_tokens=100,
             )
 
             # Verify calls are separate
@@ -250,12 +261,12 @@ class TestUsageTrackerProductionQuality:
             calls = mock_record.call_args_list
 
             # First call should be for tenant-1
-            assert calls[0][1]['tenant_id'] == "tenant-1"
-            assert calls[0][1]['prompt_tokens'] == 100
+            assert calls[0][1]["tenant_id"] == "tenant-1"
+            assert calls[0][1]["prompt_tokens"] == 100
 
             # Second call should be for tenant-2
-            assert calls[1][1]['tenant_id'] == "tenant-2"
-            assert calls[1][1]['prompt_tokens'] == 200
+            assert calls[1][1]["tenant_id"] == "tenant-2"
+            assert calls[1][1]["prompt_tokens"] == 200
 
     @pytest.mark.asyncio
     async def test_input_validation_and_sanitization(self):
@@ -272,7 +283,10 @@ class TestUsageTrackerProductionQuality:
             "<img src=x onerror=alert('xss')>",
         ]
 
-        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.record_usage', new_callable=AsyncMock):
+        with patch(
+            "app.shared.llm.usage_tracker.LLMBudgetManager.record_usage",
+            new_callable=AsyncMock,
+        ):
             for malicious_input in malicious_inputs:
                 # Should not crash or expose vulnerabilities
                 try:
@@ -282,7 +296,7 @@ class TestUsageTrackerProductionQuality:
                         model="gpt-4",
                         input_tokens=100,
                         output_tokens=50,
-                        request_type=malicious_input  # Potentially malicious
+                        request_type=malicious_input,  # Potentially malicious
                     )
                 except Exception as e:
                     # Should fail gracefully with appropriate error
@@ -293,6 +307,7 @@ class TestUsageTrackerProductionQuality:
     async def test_concurrent_usage_load_testing(self):
         """Test concurrent usage scenarios and load handling."""
         import asyncio
+
         mock_db = MagicMock()
         tracker = UsageTracker(mock_db)
 
@@ -305,7 +320,7 @@ class TestUsageTrackerProductionQuality:
                 model="gpt-4",
                 input_tokens=100 + request_id,
                 output_tokens=50 + request_id,
-                request_type=f"request-{request_id}"
+                request_type=f"request-{request_id}",
             )
 
         # Launch multiple concurrent requests
@@ -348,21 +363,24 @@ class TestUsageTrackerProductionQuality:
 
         # Test with very large token counts
         large_input_tokens = 1000000  # 1M tokens
-        large_output_tokens = 500000   # 500K tokens
+        large_output_tokens = 500000  # 500K tokens
 
-        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.record_usage', new_callable=AsyncMock) as mock_record:
+        with patch(
+            "app.shared.llm.usage_tracker.LLMBudgetManager.record_usage",
+            new_callable=AsyncMock,
+        ) as mock_record:
             await tracker.record(
                 tenant_id="test-tenant",
                 provider="openai",
                 model="gpt-4",
                 input_tokens=large_input_tokens,
-                output_tokens=large_output_tokens
+                output_tokens=large_output_tokens,
             )
 
             # Verify large values are handled correctly
             call_args = mock_record.call_args[1]
-            assert call_args['prompt_tokens'] == large_input_tokens
-            assert call_args['completion_tokens'] == large_output_tokens
+            assert call_args["prompt_tokens"] == large_input_tokens
+            assert call_args["completion_tokens"] == large_output_tokens
 
     @pytest.mark.asyncio
     async def test_cost_calculation_precision_and_accuracy(self):
@@ -373,9 +391,9 @@ class TestUsageTrackerProductionQuality:
         # Test with precise decimal values
         test_cases = [
             (1000, 1000, "openai", "gpt-4o-mini"),  # Balanced usage
-            (10000, 100, "openai", "gpt-4"),        # Input heavy
+            (10000, 100, "openai", "gpt-4"),  # Input heavy
             (100, 10000, "anthropic", "claude-3"),  # Output heavy
-            (0, 0, "openai", "gpt-4"),              # Edge case
+            (0, 0, "openai", "gpt-4"),  # Edge case
         ]
 
         for input_tokens, output_tokens, provider, model in test_cases:
@@ -406,7 +424,9 @@ class TestUsageTrackerProductionQuality:
         end_time = time.time()
 
         # Should complete within reasonable time
-        assert end_time - start_time < 1.0, f"Operation too slow: {end_time - start_time:.3f}s"
+        assert end_time - start_time < 1.0, (
+            f"Operation too slow: {end_time - start_time:.3f}s"
+        )
 
         # Test cost calculation performance
         start_time = time.time()
@@ -415,7 +435,9 @@ class TestUsageTrackerProductionQuality:
         end_time = time.time()
 
         # Should handle 1000 calculations quickly
-        assert end_time - start_time < 2.0, f"Cost calculations too slow: {end_time - start_time:.3f}s"
+        assert end_time - start_time < 2.0, (
+            f"Cost calculations too slow: {end_time - start_time:.3f}s"
+        )
 
     @pytest.mark.asyncio
     async def test_multi_tenant_cost_tracking_accuracy(self):
@@ -425,7 +447,10 @@ class TestUsageTrackerProductionQuality:
 
         # Simulate multiple tenants with different usage patterns
         tenants_data = {
-            "tenant-a": [("openai", "gpt-4", 1000, 500), ("anthropic", "claude-3", 800, 400)],
+            "tenant-a": [
+                ("openai", "gpt-4", 1000, 500),
+                ("anthropic", "claude-3", 800, 400),
+            ],
             "tenant-b": [("openai", "gpt-4o-mini", 5000, 1000)],
             "tenant-c": [("openai", "gpt-4", 200, 800), ("openai", "gpt-4", 300, 200)],
         }
@@ -435,7 +460,9 @@ class TestUsageTrackerProductionQuality:
         for tenant_id, usages in tenants_data.items():
             tenant_cost = Decimal("0")
             for provider, model, input_tokens, output_tokens in usages:
-                cost = tracker.calculate_cost(provider, model, input_tokens, output_tokens)
+                cost = tracker.calculate_cost(
+                    provider, model, input_tokens, output_tokens
+                )
                 tenant_cost += cost
             total_costs[tenant_id] = tenant_cost
 
@@ -446,7 +473,9 @@ class TestUsageTrackerProductionQuality:
 
         # Verify costs are different (different usage patterns)
         costs = list(total_costs.values())
-        assert len(set(costs)) == len(costs), "All tenants have same cost (should be different)"
+        assert len(set(costs)) == len(costs), (
+            "All tenants have same cost (should be different)"
+        )
 
     @pytest.mark.asyncio
     async def test_quota_enforcement_and_budget_integration(self):
@@ -454,18 +483,21 @@ class TestUsageTrackerProductionQuality:
         mock_db = MagicMock()
         tracker = UsageTracker(mock_db)
 
-        with patch('app.shared.llm.usage_tracker.LLMBudgetManager.record_usage', new_callable=AsyncMock) as mock_record:
+        with patch(
+            "app.shared.llm.usage_tracker.LLMBudgetManager.record_usage",
+            new_callable=AsyncMock,
+        ) as mock_record:
             # Record usage that might trigger quota checks
             await tracker.record(
                 tenant_id="test-tenant",
                 provider="openai",
                 model="gpt-4",
                 input_tokens=50000,  # Large usage that might hit quotas
-                output_tokens=25000
+                output_tokens=25000,
             )
 
             # Verify usage was recorded
             mock_record.assert_awaited_once()
             call_args = mock_record.call_args[1]
-            assert call_args['prompt_tokens'] == 50000
-            assert call_args['completion_tokens'] == 25000
+            assert call_args["prompt_tokens"] == 50000
+            assert call_args["completion_tokens"] == 25000

@@ -27,18 +27,19 @@ class DummyProdSettings:
 
 def test_get_api_key_fernet_uses_fallback_in_dev():
     with patch("app.shared.core.security.get_settings", return_value=DummySettings()):
-        fernet = _get_api_key_fernet()
-        assert fernet is not None
+        with pytest.raises(ValueError, match="ENCRYPTION_KEY must be set"):
+            _get_api_key_fernet()
 
 
 def test_encrypt_decrypt_fallback_in_dev():
     with patch("app.shared.core.security.get_settings", return_value=DummySettings()):
-        token = encrypt_string("secret")
-        assert token is not None
-        assert decrypt_string(token) == "secret"
+        with pytest.raises(ValueError, match="ENCRYPTION_KEY must be set"):
+            encrypt_string("secret")
 
 
 def test_decrypt_raises_in_production_on_invalid_ciphertext():
-    with patch("app.shared.core.security.get_settings", return_value=DummyProdSettings()):
+    with patch(
+        "app.shared.core.security.get_settings", return_value=DummyProdSettings()
+    ):
         with pytest.raises(DecryptionError):
             decrypt_string("invalid-base64-or-fernet")

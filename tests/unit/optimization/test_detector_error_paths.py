@@ -43,18 +43,22 @@ async def test_azure_detector_handles_none_results():
         "tenant_id": "tenant",
         "client_id": "client",
         "client_secret": "secret",
-        "subscription_id": "sub"
+        "subscription_id": "sub",
     }
     plugin = MagicMock()
     plugin.category_key = "test"
     plugin.scan = AsyncMock(return_value=None)
 
-    with patch("app.modules.optimization.adapters.azure.detector.ClientSecretCredential", return_value=MagicMock()):
+    with patch(
+        "app.modules.optimization.adapters.azure.detector.ClientSecretCredential",
+        return_value=MagicMock(),
+    ):
         detector = AzureZombieDetector(region="eastus", credentials=creds)
         results = await detector._execute_plugin_scan(plugin)
 
     assert results == []
     plugin.scan.assert_awaited_once()
+
 
 @pytest.mark.asyncio
 async def test_azure_detector_handles_invalid_result_type():
@@ -62,17 +66,21 @@ async def test_azure_detector_handles_invalid_result_type():
         "tenant_id": "tenant",
         "client_id": "client",
         "client_secret": "secret",
-        "subscription_id": "sub"
+        "subscription_id": "sub",
     }
     plugin = MagicMock()
     plugin.category_key = "test"
     plugin.scan = AsyncMock(return_value={"not": "a-list"})
 
-    with patch("app.modules.optimization.adapters.azure.detector.ClientSecretCredential", return_value=MagicMock()):
+    with patch(
+        "app.modules.optimization.adapters.azure.detector.ClientSecretCredential",
+        return_value=MagicMock(),
+    ):
         detector = AzureZombieDetector(region="eastus", credentials=creds)
         results = await detector._execute_plugin_scan(plugin)
 
     assert results == []
+
 
 @pytest.mark.asyncio
 async def test_azure_detector_connection_initialization_sets_subscription():
@@ -82,20 +90,24 @@ async def test_azure_detector_connection_initialization_sets_subscription():
     conn.client_id = "client"
     conn.client_secret = "secret"
 
-    with patch("app.modules.optimization.adapters.azure.detector.ClientSecretCredential") as mock_cred:
+    with patch(
+        "app.modules.optimization.adapters.azure.detector.ClientSecretCredential"
+    ) as mock_cred:
         detector = AzureZombieDetector(region="eastus", connection=conn)
 
     assert detector.subscription_id == "sub-123"
     mock_cred.assert_called_once_with(
-        tenant_id="tenant",
-        client_id="client",
-        client_secret="secret"
+        tenant_id="tenant", client_id="client", client_secret="secret"
     )
+
 
 @pytest.mark.asyncio
 async def test_azure_detector_missing_subscription_logs_error_path():
     creds = {"tenant_id": "tenant", "client_id": "client", "client_secret": "secret"}
-    with patch("app.modules.optimization.adapters.azure.detector.ClientSecretCredential", return_value=MagicMock()):
+    with patch(
+        "app.modules.optimization.adapters.azure.detector.ClientSecretCredential",
+        return_value=MagicMock(),
+    ):
         detector = AzureZombieDetector(region="eastus", credentials=creds)
 
     assert detector.subscription_id is None
@@ -105,15 +117,19 @@ async def test_azure_detector_missing_subscription_logs_error_path():
     results = await detector._execute_plugin_scan(plugin)
     assert results == []
 
+
 @pytest.mark.asyncio
 async def test_azure_detector_aexit_closes_resources():
     creds = {
         "tenant_id": "tenant",
         "client_id": "client",
         "client_secret": "secret",
-        "subscription_id": "sub"
+        "subscription_id": "sub",
     }
-    with patch("app.modules.optimization.adapters.azure.detector.ClientSecretCredential", return_value=MagicMock()):
+    with patch(
+        "app.modules.optimization.adapters.azure.detector.ClientSecretCredential",
+        return_value=MagicMock(),
+    ):
         detector = AzureZombieDetector(region="eastus", credentials=creds)
 
     detector._compute_client = AsyncMock()
@@ -128,6 +144,7 @@ async def test_azure_detector_aexit_closes_resources():
     detector._monitor_client.close.assert_awaited_once()
     detector._credential.close.assert_awaited_once()
 
+
 @pytest.mark.asyncio
 async def test_gcp_detector_invalid_service_account_json_blocks_scan():
     plugin = MagicMock()
@@ -136,15 +153,13 @@ async def test_gcp_detector_invalid_service_account_json_blocks_scan():
 
     detector = GCPZombieDetector(
         region="us-central1-a",
-        credentials={
-            "project_id": "proj",
-            "service_account_json": "{bad-json"
-        }
+        credentials={"project_id": "proj", "service_account_json": "{bad-json"},
     )
 
     results = await detector._execute_plugin_scan(plugin)
     assert results == []
     plugin.scan.assert_not_called()
+
 
 def test_gcp_detector_initialization_skips_noncanonical_plugins():
     class Plugin:
@@ -159,7 +174,9 @@ def test_gcp_detector_initialization_skips_noncanonical_plugins():
         "app.modules.optimization.adapters.gcp.detector.registry.get_plugins_for_provider",
         return_value=[Plugin("idle_instances"), Plugin("idle_gcp_vms")],
     ):
-        detector = GCPZombieDetector(region="us-central1-a", credentials={"project_id": "proj"})
+        detector = GCPZombieDetector(
+            region="us-central1-a", credentials={"project_id": "proj"}
+        )
         detector._initialize_plugins()
     assert [p.category_key for p in detector.plugins] == ["idle_gcp_vms"]
 
@@ -176,6 +193,7 @@ async def test_gcp_detector_missing_project_id_returns_empty():
     assert results == []
     plugin.scan.assert_not_called()
 
+
 @pytest.mark.asyncio
 async def test_gcp_detector_connection_initialization_parses_json():
     payload = {"project_id": "proj-123", "client_email": "x@y", "private_key": "key"}
@@ -183,12 +201,16 @@ async def test_gcp_detector_connection_initialization_parses_json():
     conn.project_id = "proj-123"
     conn.service_account_json = json.dumps(payload)
 
-    with patch("google.oauth2.service_account.Credentials.from_service_account_info", return_value=MagicMock()) as mock_creds:
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info",
+        return_value=MagicMock(),
+    ) as mock_creds:
         detector = GCPZombieDetector(region="us-central1-a", connection=conn)
 
     assert detector.project_id == "proj-123"
     assert detector._credentials_obj is not None
     mock_creds.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_gcp_detector_connection_invalid_json_sets_error():
@@ -206,16 +228,25 @@ async def test_gcp_detector_connection_invalid_json_sets_error():
     assert results == []
     plugin.scan.assert_not_called()
 
+
 @pytest.mark.asyncio
 async def test_gcp_detector_credentials_project_id_fallback():
-    payload = {"project_id": "proj-fallback", "client_email": "x@y", "private_key": "key"}
-    with patch("google.oauth2.service_account.Credentials.from_service_account_info", return_value=MagicMock()):
+    payload = {
+        "project_id": "proj-fallback",
+        "client_email": "x@y",
+        "private_key": "key",
+    }
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info",
+        return_value=MagicMock(),
+    ):
         detector = GCPZombieDetector(
             region="us-central1-a",
-            credentials={"service_account_json": json.dumps(payload)}
+            credentials={"service_account_json": json.dumps(payload)},
         )
 
     assert detector.project_id == "proj-fallback"
+
 
 @pytest.mark.asyncio
 async def test_gcp_detector_handles_invalid_result_type():
@@ -223,7 +254,9 @@ async def test_gcp_detector_handles_invalid_result_type():
     plugin.category_key = "test"
     plugin.scan = AsyncMock(return_value={"bad": "type"})
 
-    detector = GCPZombieDetector(region="us-central1-a", credentials={"project_id": "proj"})
+    detector = GCPZombieDetector(
+        region="us-central1-a", credentials={"project_id": "proj"}
+    )
     results = await detector._execute_plugin_scan(plugin)
 
     assert results == []

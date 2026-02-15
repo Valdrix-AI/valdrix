@@ -18,7 +18,9 @@ async def admin_user(db):
     tenant_id = uuid4()
     user_id = uuid4()
     tenant = Tenant(id=tenant_id, name="Unit Econ Tenant", plan="pro")
-    user = User(id=user_id, email="admin@unit-econ.io", tenant_id=tenant_id, role=UserRole.ADMIN)
+    user = User(
+        id=user_id, email="admin@unit-econ.io", tenant_id=tenant_id, role=UserRole.ADMIN
+    )
     db.add_all([tenant, user])
     await db.commit()
     return CurrentUser(
@@ -35,7 +37,12 @@ async def member_user(db):
     tenant_id = uuid4()
     user_id = uuid4()
     tenant = Tenant(id=tenant_id, name="Unit Econ Member Tenant", plan="pro")
-    user = User(id=user_id, email="member@unit-econ.io", tenant_id=tenant_id, role=UserRole.MEMBER)
+    user = User(
+        id=user_id,
+        email="member@unit-econ.io",
+        tenant_id=tenant_id,
+        role=UserRole.MEMBER,
+    )
     db.add_all([tenant, user])
     await db.commit()
     return CurrentUser(
@@ -70,7 +77,9 @@ async def _seed_costs(db, tenant_id):
                 canonical_charge_category="compute",
                 canonical_mapping_version="focus-1.3-v1",
                 recorded_at=day,
-                timestamp=datetime(day.year, day.month, day.day, hour, 0, tzinfo=timezone.utc),
+                timestamp=datetime(
+                    day.year, day.month, day.day, hour, 0, tzinfo=timezone.utc
+                ),
             )
         )
 
@@ -119,7 +128,9 @@ async def test_unit_economics_settings_lifecycle(async_client, app, db, admin_us
 
 
 @pytest.mark.asyncio
-async def test_unit_economics_reports_anomalies_and_dispatches_alert(async_client, app, db, admin_user):
+async def test_unit_economics_reports_anomalies_and_dispatches_alert(
+    async_client, app, db, admin_user
+):
     app.dependency_overrides[get_current_user] = lambda: admin_user
     try:
         await _seed_costs(db, admin_user.tenant_id)
@@ -157,7 +168,9 @@ async def test_unit_economics_reports_anomalies_and_dispatches_alert(async_clien
 
 
 @pytest.mark.asyncio
-async def test_unit_economics_allows_alert_suppression(async_client, app, db, admin_user):
+async def test_unit_economics_allows_alert_suppression(
+    async_client, app, db, admin_user
+):
     app.dependency_overrides[get_current_user] = lambda: admin_user
     try:
         await _seed_costs(db, admin_user.tenant_id)
@@ -193,7 +206,9 @@ async def test_unit_economics_allows_alert_suppression(async_client, app, db, ad
 
 
 @pytest.mark.asyncio
-async def test_unit_economics_settings_update_requires_admin(async_client, app, member_user):
+async def test_unit_economics_settings_update_requires_admin(
+    async_client, app, member_user
+):
     app.dependency_overrides[get_current_user] = lambda: member_user
     try:
         response = await async_client.put(

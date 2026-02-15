@@ -14,39 +14,50 @@ MOCK_CUR_DATA = {
     "lineItem/UsageStartDate": [datetime(2023, 10, 1)] * 5,
     "lineItem/UnblendedCost": [1.0] * 5,
     "lineItem/CurrencyCode": ["USD"] * 5,
-    "lineItem/ProductCode": ["AmazonEC2", "AmazonS3", "AmazonRDS", "AmazonLambda", "AmazonVPC"],
+    "lineItem/ProductCode": [
+        "AmazonEC2",
+        "AmazonS3",
+        "AmazonRDS",
+        "AmazonLambda",
+        "AmazonVPC",
+    ],
     "product/region": ["us-east-1"] * 5,
     "lineItem/UsageType": ["Usage"] * 5,
-    "resourceTags/user:Project": ["P1", "P2", "P3", "P4", "P5"]
+    "resourceTags/user:Project": ["P1", "P2", "P3", "P4", "P5"],
 }
+
 
 class MockStream:
     def __init__(self, data):
         self.data = data
         self.offset = 0
+
     async def __aenter__(self):
         return self
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
+
     async def read(self, amt):
         chunk = self.data[self.offset : self.offset + amt]
         self.offset += len(chunk)
         return chunk
 
+
 class MockPaginator:
     def __init__(self, pages):
         self._pages = pages
+
     async def paginate(self, **_kwargs):
         for page in self._pages:
             yield page
+
 
 @pytest.mark.asyncio
 async def test_ingest_latest_parquet_streaming():
     # 1. Create a mock connection
     conn = AWSConnection(
-        tenant_id=uuid.uuid4(),
-        aws_account_id="123456789012",
-        region="us-east-1"
+        tenant_id=uuid.uuid4(), aws_account_id="123456789012", region="us-east-1"
     )
 
     # 2. Prepare Parquet Bytes
@@ -60,9 +71,7 @@ async def test_ingest_latest_parquet_streaming():
 
     # 3. Mock S3 Client
     mock_s3 = MagicMock()
-    page = {
-        "Contents": [{"Key": "cur/test.parquet", "LastModified": datetime.now()}]
-    }
+    page = {"Contents": [{"Key": "cur/test.parquet", "LastModified": datetime.now()}]}
     mock_s3.get_paginator.return_value = MockPaginator([page])
     mock_s3.get_object = AsyncMock(return_value={"Body": MockStream(parquet_bytes)})
 
@@ -70,20 +79,26 @@ async def test_ingest_latest_parquet_streaming():
     with patch("aioboto3.Session") as MockSession:
         session_instance = MockSession.return_value
         session_instance.client.return_value.__aenter__.return_value = mock_s3
-        
-        with patch.object(AWSCURAdapter, "_get_credentials", return_value={
-            "AccessKeyId": "fake", "SecretAccessKey": "fake", "SessionToken": "fake"
-        }):
+
+        with patch.object(
+            AWSCURAdapter,
+            "_get_credentials",
+            return_value={
+                "AccessKeyId": "fake",
+                "SecretAccessKey": "fake",
+                "SessionToken": "fake",
+            },
+        ):
             adapter = AWSCURAdapter(conn)
             summary = await adapter.ingest_latest_parquet()
-            
+
             # Assertions
             assert isinstance(summary, CloudUsageSummary)
             assert summary.total_cost == Decimal("5.0")
             assert len(summary.records) == 5
             assert summary.by_service["AmazonEC2"] == Decimal("1.0")
             assert summary.by_service["AmazonS3"] == Decimal("1.0")
-            
+
             # Check if tags were extracted
             assert summary.records[0].tags["Project"] == "P1"
             assert summary.by_tag["Project"]["P1"] == Decimal("1.0")

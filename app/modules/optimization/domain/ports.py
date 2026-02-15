@@ -13,10 +13,11 @@ from app.modules.optimization.domain.plugin import ZombiePlugin
 logger = structlog.get_logger()
 settings = get_settings()
 
+
 class BaseZombieDetector(ABC):
     """
     Abstract Base Class for multi-cloud zombie resource detection.
-    
+
     Responsibilities:
     - Orchestrate scans across multiple plugins (Strategy Pattern).
     - Aggregate results and calculate total waste.
@@ -24,10 +25,16 @@ class BaseZombieDetector(ABC):
     - Provide a bridge between generic plugins and provider-specific clients.
     """
 
-    def __init__(self, region: str = "global", credentials: Optional[Dict[str, str]] = None, db: Optional[AsyncSession] = None, connection: Any = None):
+    def __init__(
+        self,
+        region: str = "global",
+        credentials: Optional[Dict[str, str]] = None,
+        db: Optional[AsyncSession] = None,
+        connection: Any = None,
+    ):
         """
         Initializes the detector for a specific region.
-        
+
         Args:
             region: Cloud region (e.g., 'us-east-1').
             credentials: Optional provider-specific credentials override.
@@ -38,7 +45,7 @@ class BaseZombieDetector(ABC):
         self.credentials = credentials
         self.db = db
         self.connection = connection
-        self.plugins: List[ZombiePlugin] = [] 
+        self.plugins: List[ZombiePlugin] = []
 
     @abstractmethod
     def _initialize_plugins(self) -> None:
@@ -51,20 +58,21 @@ class BaseZombieDetector(ABC):
 
     async def scan_all(
         self,
-        on_category_complete: Callable[[str, list[dict[str, Any]]], Awaitable[None]] | None = None,
+        on_category_complete: Callable[[str, list[dict[str, Any]]], Awaitable[None]]
+        | None = None,
     ) -> Dict[str, Any]:
         """
         Orchestrates the scan across all registered plugins in parallel.
-        
+
         Args:
             on_category_complete: Optional async callback triggered after each plugin finishing.
-            
+
         Returns:
             A dictionary containing scan results, waste metrics, and metadata.
         """
         if not self.plugins:
             self._initialize_plugins()
-        
+
         results = {
             "provider": self.provider_name,
             "region": self.region,
@@ -79,9 +87,9 @@ class BaseZombieDetector(ABC):
         try:
             # Run plugins in parallel with timeout protection
             tasks = [self._run_plugin_with_timeout(plugin) for plugin in self.plugins]
-            
+
             async def run_and_checkpoint(
-                task: Awaitable[tuple[str, list[dict[str, Any]]]]
+                task: Awaitable[tuple[str, list[dict[str, Any]]]],
             ) -> tuple[str, list[dict[str, Any]]]:
                 cat_key, items = await task
                 if on_category_complete:
@@ -99,17 +107,19 @@ class BaseZombieDetector(ABC):
                 for item in items:
                     item_region = item.get("region", self.region)
                     if item_region != self.region:
-                        logger.warning("cross_region_resource_detected",
-                                       plugin=category_key,
-                                       resource=item.get("resource_id"),
-                                       item_region=item_region,
-                                       detector_region=self.region)
+                        logger.warning(
+                            "cross_region_resource_detected",
+                            plugin=category_key,
+                            resource=item.get("resource_id"),
+                            item_region=item_region,
+                            detector_region=self.region,
+                        )
                         continue
-                    
+
                     # Ensure region is set consistently in output
                     item["region"] = self.region
                     validated_items.append(item)
-                
+
                 results[category_key] = validated_items
 
             # Calculate the total monthly waste across all items
@@ -118,14 +128,14 @@ class BaseZombieDetector(ABC):
                 if isinstance(result_value, list):
                     for item in result_value:
                         total += Decimal(str(item.get("monthly_cost", 0)))
-            
+
             results["total_monthly_waste"] = float(round(total, 2))
 
             logger.info(
                 "zombie_scan_complete",
                 provider=self.provider_name,
                 waste=results["total_monthly_waste"],
-                plugins_run=len(self.plugins)
+                plugins_run=len(self.plugins),
             )
 
         except asyncio.CancelledError:
@@ -133,7 +143,9 @@ class BaseZombieDetector(ABC):
             logger.info("zombie_scan_cancelled", provider=self.provider_name)
             raise
         except Exception as e:
-            logger.error("zombie_scan_failed", provider=self.provider_name, error=str(e))
+            logger.error(
+                "zombie_scan_failed", provider=self.provider_name, error=str(e)
+            )
             results["error"] = str(e)
 
         return results
@@ -144,12 +156,12 @@ class BaseZombieDetector(ABC):
         """Wraps plugin execution with a generic timeout."""
         try:
             scan_coro = self._execute_plugin_scan(plugin)
-            
+
             # Use global timeout from settings
             timeout = settings.ZOMBIE_PLUGIN_TIMEOUT_SECONDS
             items = await asyncio.wait_for(scan_coro, timeout=timeout)
             return plugin.category_key, items
-            
+
         except asyncio.TimeoutError:
             logger.error("plugin_timeout", plugin=plugin.category_key)
             return plugin.category_key, []

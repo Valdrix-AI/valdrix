@@ -10,20 +10,22 @@ from app.models.background_job import JobType, JobStatus
 from app.models.cloud import CostRecord as CostRecordModel
 from app.modules.governance.domain.jobs.processor import JobProcessor, enqueue_job
 
+
 @pytest.mark.asyncio
 async def test_end_to_end_cost_ingestion_pipeline(db):
     # Set RLS context for the session
     tenant_id = uuid.uuid4()
     from app.shared.db.session import set_session_tenant_id
+
     await set_session_tenant_id(db, tenant_id)
-    
+
     # 1. Setup Initial Data
     tenant = Tenant(id=tenant_id, name="Enterprise Corp", plan="enterprise")
-    
+
     db.add(tenant)
     await db.flush()
     await db.refresh(tenant)
-    
+
     # Set context
     await set_session_tenant_id(db, tenant.id)
 
@@ -35,14 +37,14 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
         external_id="ext-123",
         region="us-east-1",
         cur_bucket_name="test-cur-bucket",
-        cur_status="active"
+        cur_status="active",
     )
     db.add(connection)
     await db.flush()
 
     # 2. Mock the AWSCURAdapter to return sample data instead of calling S3
     from app.schemas.costs import CloudUsageSummary, CostRecord as CostRecordSchema
-    
+
     sample_now = datetime.now(timezone.utc)
     mock_summary = CloudUsageSummary(
         tenant_id=str(tenant.id),
@@ -56,21 +58,21 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
                 amount=Decimal("100.00"),
                 service="AmazonEC2",
                 region="us-east-1",
-                usage_type="BoxUsage"
+                usage_type="BoxUsage",
             ),
             CostRecordSchema(
                 date=sample_now,
                 amount=Decimal("50.00"),
                 service="AmazonS3",
                 region="us-east-1",
-                usage_type="PutRequests"
-            )
-        ]
+                usage_type="PutRequests",
+            ),
+        ],
     )
 
     # Patch the Factory to return our mock summary
     mock_adapter = AsyncMock()
-    
+
     async def mock_stream(*args, **kwargs):
         for r in mock_summary.records:
             yield {
@@ -80,60 +82,60 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
                 "cost_usd": float(r.amount),
                 "currency": "USD",
                 "amount_raw": float(r.amount),
-                "usage_type": r.usage_type
+                "usage_type": r.usage_type,
             }
-            
+
     mock_adapter.stream_cost_and_usage = mock_stream
 
-    with patch("app.shared.adapters.factory.AdapterFactory.get_adapter", return_value=mock_adapter):
+    with patch(
+        "app.shared.adapters.factory.AdapterFactory.get_adapter",
+        return_value=mock_adapter,
+    ):
         # 3. Enqueue the job
         job = await enqueue_job(
-            db=db,
-            job_type=JobType.COST_INGESTION,
-            tenant_id=tenant.id
+            db=db, job_type=JobType.COST_INGESTION, tenant_id=tenant.id
         )
         await db.refresh(job)
-            
+
         assert job.status == JobStatus.PENDING.value
         assert job.tenant_id == tenant_id
-            
+
         # 4. Process the job
         processor = JobProcessor(db)
         # Force the processor to see the job by bypassing RLS if needed, but here we set context
         await set_session_tenant_id(db, tenant.id)
-        
+
         results = await processor.process_pending_jobs(limit=1)
         assert results["processed"] == 1
         assert results["succeeded"] == 1
         assert results["failed"] == 0
-        
+
         # 5. Verify Database State
         await db.refresh(job)
         assert job.status == JobStatus.COMPLETED.value
         assert job.error_message is None
-        
+
         # Check Cost Records
         result = await db.execute(
             select(CostRecordModel).where(CostRecordModel.account_id == connection.id)
         )
         records = result.scalars().all()
         assert len(records) == 2
-        
+
         ec2_record = next(r for r in records if r.service == "AmazonEC2")
         assert ec2_record.cost_usd == Decimal("100.00")
         assert ec2_record.tenant_id == tenant_id
 
-    # 6. Verify Idempotency 
-    await enqueue_job(
-            db=db,
-            job_type=JobType.COST_INGESTION,
-            tenant_id=tenant.id
-    )
-    
-    with patch("app.shared.adapters.factory.AdapterFactory.get_adapter", return_value=mock_adapter):
+    # 6. Verify Idempotency
+    await enqueue_job(db=db, job_type=JobType.COST_INGESTION, tenant_id=tenant.id)
+
+    with patch(
+        "app.shared.adapters.factory.AdapterFactory.get_adapter",
+        return_value=mock_adapter,
+    ):
         results = await processor.process_pending_jobs(limit=1)
         assert results["processed"] == 1
-        
+
         result = await db.execute(
             select(CostRecordModel).where(CostRecordModel.account_id == connection.id)
         )

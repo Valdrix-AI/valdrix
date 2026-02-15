@@ -10,6 +10,7 @@ describe('/+page.svelte', () => {
 				user: null,
 				session: null,
 				subscription: { tier: 'free_trial', status: 'active' },
+				profile: null,
 				costs: null,
 				carbon: null,
 				zombies: null,

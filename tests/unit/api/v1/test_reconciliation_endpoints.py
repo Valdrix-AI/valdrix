@@ -73,6 +73,9 @@ async def test_close_package_endpoint_csv(async_client, app) -> None:
             )
             assert response.status_code == 200
             assert "text/csv" in response.headers["content-type"]
+            assert "attachment; filename=" in response.headers.get(
+                "content-disposition", ""
+            )
             assert "section,key,value" in response.text
     finally:
         app.dependency_overrides.pop(get_current_user, None)
@@ -92,7 +95,11 @@ async def test_close_package_endpoint_returns_conflict(async_client, app) -> Non
     try:
         with patch(
             "app.modules.reporting.api.v1.costs.CostReconciliationService.generate_close_package",
-            new=AsyncMock(side_effect=ValueError("Cannot generate final close package while preliminary records exist in the selected period.")),
+            new=AsyncMock(
+                side_effect=ValueError(
+                    "Cannot generate final close package while preliminary records exist in the selected period."
+                )
+            ),
         ):
             response = await async_client.get(
                 "/api/v1/costs/reconciliation/close-package",
@@ -153,6 +160,62 @@ async def test_restatement_history_endpoint_json_and_csv(async_client, app) -> N
             )
             assert csv_response.status_code == 200
             assert "text/csv" in csv_response.headers["content-type"]
+            assert "attachment; filename=" in csv_response.headers.get(
+                "content-disposition", ""
+            )
             assert "usage_date,recorded_at,service" in csv_response.text
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_restatement_runs_endpoint_json_and_csv(async_client, app) -> None:
+    tenant_id = uuid4()
+    user = CurrentUser(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        email="restatement-runs@valdrix.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        with patch(
+            "app.modules.reporting.api.v1.costs.CostReconciliationService.get_restatement_runs",
+            new=AsyncMock(
+                side_effect=[
+                    {
+                        "run_count": 1,
+                        "runs": [{"ingestion_batch_id": "abc", "entry_count": 3}],
+                    },
+                    {
+                        "run_count": 1,
+                        "runs": [{"ingestion_batch_id": "abc", "entry_count": 3}],
+                        "csv": "ingestion_batch_id,entry_count\nabc,3\n",
+                    },
+                ]
+            ),
+        ):
+            json_response = await async_client.get(
+                "/api/v1/costs/reconciliation/restatement-runs",
+                params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
+            )
+            assert json_response.status_code == 200
+            assert json_response.json()["run_count"] == 1
+
+            csv_response = await async_client.get(
+                "/api/v1/costs/reconciliation/restatement-runs",
+                params={
+                    "start_date": "2026-01-01",
+                    "end_date": "2026-01-31",
+                    "response_format": "csv",
+                },
+            )
+            assert csv_response.status_code == 200
+            assert "text/csv" in csv_response.headers["content-type"]
+            assert "attachment; filename=" in csv_response.headers.get(
+                "content-disposition", ""
+            )
+            assert "ingestion_batch_id" in csv_response.text
     finally:
         app.dependency_overrides.pop(get_current_user, None)

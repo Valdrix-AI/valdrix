@@ -91,7 +91,8 @@ async def test_get_ingestion_sla_includes_dead_letter_and_duration_filters() -> 
         SimpleNamespace(
             status=JobStatus.COMPLETED.value,
             started_at=now,
-            completed_at=now - timedelta(seconds=10),  # negative duration should be ignored
+            completed_at=now
+            - timedelta(seconds=10),  # negative duration should be ignored
             result={"ingested": "bad"},
         ),
         SimpleNamespace(
@@ -131,3 +132,27 @@ async def test_get_ingestion_sla_includes_dead_letter_and_duration_filters() -> 
     assert response.p95_duration_seconds == 120.0
     assert response.meets_sla is True
     assert response.latest_completed_at is not None
+
+
+def test_build_provider_recency_summary_counts_recent_stale_and_never() -> None:
+    now = datetime.now(timezone.utc)
+    connections = [
+        SimpleNamespace(status="active", last_ingested_at=now - timedelta(hours=2)),
+        SimpleNamespace(status="active", last_ingested_at=now - timedelta(hours=96)),
+        SimpleNamespace(status="active", last_ingested_at=None),
+        SimpleNamespace(status="pending", last_ingested_at=now - timedelta(hours=1)),
+    ]
+
+    summary = costs_api._build_provider_recency_summary(
+        "aws",
+        connections,
+        now=now,
+        recency_target_hours=48,
+    )
+
+    assert summary.provider == "aws"
+    assert summary.active_connections == 3
+    assert summary.recently_ingested == 1
+    assert summary.stale_connections == 1
+    assert summary.never_ingested == 1
+    assert summary.meets_recency_target is False

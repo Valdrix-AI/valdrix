@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.shared.connections.azure import AzureConnectionService
 from app.models.azure_connection import AzureConnection
 
+
 @pytest.mark.asyncio
 async def test_azure_verify_connection_success():
     # Arrange
@@ -26,12 +27,15 @@ async def test_azure_verify_connection_success():
         mock_adapter_instance.verify_connection = AsyncMock(return_value=True)
 
         # Act
-        response = await AzureConnectionService(db).verify_connection(connection_id, tenant_id)
+        response = await AzureConnectionService(db).verify_connection(
+            connection_id, tenant_id
+        )
 
         # Assert - production returns 'success', not 'active'
         assert response["status"] == "success"
         assert mock_connection.is_active is True
         db.commit.assert_called()
+
 
 @pytest.mark.asyncio
 async def test_azure_verify_connection_failure():
@@ -54,8 +58,10 @@ async def test_azure_verify_connection_failure():
         mock_adapter_instance.verify_connection = AsyncMock(return_value=False)
 
         # Act - production now returns a status dict instead of raising
-        response = await AzureConnectionService(db).verify_connection(connection_id, tenant_id)
-        
+        response = await AzureConnectionService(db).verify_connection(
+            connection_id, tenant_id
+        )
+
         # Assert
         assert response["status"] == "failed"
         assert "Failed to authenticate" in response["message"]

@@ -10,4 +10,12 @@ from app.modules.billing.domain.billing.paystack_billing import (
     WebhookHandler,
 )
 
-__all__ = ["router", "BillingService", "TenantSubscription", "WebhookHandler", "CheckoutRequest", "PricingPlanUpdate", "SubscriptionResponse"]
+__all__ = [
+    "router",
+    "BillingService",
+    "TenantSubscription",
+    "WebhookHandler",
+    "CheckoutRequest",
+    "PricingPlanUpdate",
+    "SubscriptionResponse",
+]

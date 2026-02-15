@@ -102,11 +102,14 @@ Add these in Koyeb's dashboard under **Environment Variables**:
 | `LLM_PROVIDER` | `groq` | Free LLM provider |
 | `GROQ_API_KEY` | `gsk_...` | From Step 2.1 |
 | `CORS_ORIGINS` | `["https://your-vercel-app.vercel.app"]` | Update after Vercel deploy |
+| `SAAS_STRICT_INTEGRATIONS` | `true` | Recommended for multi-tenant SaaS mode |
 
 ### 3.4 Deploy
 1. Click **Deploy**
 2. Wait for build to complete (~3-5 minutes)
 3. Note your service URL: `https://valdrix-xxx.koyeb.app`
+
+> In strict SaaS mode, tenant integrations (Jira/workflows/channels) are configured in-app, not via backend env vars.
 
 ### 3.5 Run Database Migrations
 After deployment, run migrations via Koyeb's console or locally:

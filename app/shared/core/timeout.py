@@ -68,11 +68,14 @@ class TimeoutManager:
 
     def __init__(self, operation_type: str = "default"):
         self.operation_type = operation_type
-        self.config = TIMEOUT_CONFIGS.get(operation_type, {
-            "total": 30.0,
-            "connect": 10.0,
-            "read": 20.0,
-        })
+        self.config = TIMEOUT_CONFIGS.get(
+            operation_type,
+            {
+                "total": 30.0,
+                "connect": 10.0,
+                "read": 20.0,
+            },
+        )
 
     async def execute_with_timeout(
         self,
@@ -85,8 +88,7 @@ class TimeoutManager:
 
         try:
             result = await asyncio.wait_for(
-                coro(*args, **kwargs),
-                timeout=self.config["total"]
+                coro(*args, **kwargs), timeout=self.config["total"]
             )
 
             execution_time = time.perf_counter() - start_time
@@ -94,7 +96,7 @@ class TimeoutManager:
                 "operation_completed_within_timeout",
                 operation_type=self.operation_type,
                 execution_time_seconds=round(execution_time, 3),
-                timeout_seconds=self.config["total"]
+                timeout_seconds=self.config["total"],
             )
 
             return result
@@ -105,7 +107,7 @@ class TimeoutManager:
                 "operation_timed_out",
                 operation_type=self.operation_type,
                 execution_time_seconds=round(execution_time, 3),
-                timeout_seconds=self.config["total"]
+                timeout_seconds=self.config["total"],
             )
 
             raise ExternalAPIError(
@@ -115,7 +117,7 @@ class TimeoutManager:
                     "operation_type": self.operation_type,
                     "timeout_seconds": self.config["total"],
                     "execution_time_seconds": round(execution_time, 3),
-                }
+                },
             )
 
         except Exception as e:
@@ -125,7 +127,7 @@ class TimeoutManager:
                 operation_type=self.operation_type,
                 execution_time_seconds=round(execution_time, 3),
                 error=str(e),
-                error_type=type(e).__name__
+                error_type=type(e).__name__,
             )
             raise
 
@@ -142,12 +144,15 @@ def timeout_operation(
             # API call here
             pass
     """
+
     def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             timeout_manager = TimeoutManager(operation_type)
             return await timeout_manager.execute_with_timeout(func, *args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -221,27 +226,28 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp, timeout_seconds: int | None = None) -> None:
         super().__init__(app)
         settings = get_settings()
-        self.timeout_seconds = timeout_seconds or getattr(settings, "REQUEST_TIMEOUT", DEFAULT_TIMEOUT_SECONDS)
+        self.timeout_seconds = timeout_seconds or getattr(
+            settings, "REQUEST_TIMEOUT", DEFAULT_TIMEOUT_SECONDS
+        )
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         try:
             return await asyncio.wait_for(
-                call_next(request),
-                timeout=self.timeout_seconds
+                call_next(request), timeout=self.timeout_seconds
             )
         except asyncio.TimeoutError:
             logger.warning(
                 "request_timeout",
                 path=request.url.path,
                 method=request.method,
-                timeout_seconds=self.timeout_seconds
+                timeout_seconds=self.timeout_seconds,
             )
             return JSONResponse(
                 status_code=504,
                 content={
                     "detail": f"Request timed out after {self.timeout_seconds} seconds",
-                    "error": "gateway_timeout"
-                }
+                    "error": "gateway_timeout",
+                },
             )

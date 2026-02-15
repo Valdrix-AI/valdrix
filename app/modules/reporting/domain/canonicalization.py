@@ -36,7 +36,16 @@ def map_canonical_charge_category(
     The mapping is intentionally simple for the first implementation and should
     be expanded as new service signatures are observed in production telemetry.
     """
-    supported_providers = {"aws", "azure", "gcp", "saas", "license", "generic"}
+    supported_providers = {
+        "aws",
+        "azure",
+        "gcp",
+        "saas",
+        "license",
+        "platform",
+        "hybrid",
+        "generic",
+    }
     provider_key = (provider or "").strip().lower()
     service_key = (service or "").strip().lower()
     usage_key = (usage_type or "").strip().lower()

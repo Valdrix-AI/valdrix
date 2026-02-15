@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from app.shared.core.config import get_settings
 
 from app.modules.billing.domain.billing.paystack_billing import (
-    TenantSubscription, 
+    TenantSubscription,
     SubscriptionStatus,
-    BillingService
+    BillingService,
 )
 from app.shared.core.pricing import PricingTier
 from app.models.background_job import JobType
@@ -38,7 +38,7 @@ DUNNING_MAX_ATTEMPTS = 3
 class DunningService:
     """
     Handles failed payment recovery workflow.
-    
+
     Dunning Flow:
     1. Webhook receives invoice.payment_failed → calls process_failed_payment
     2. Subscription status → ATTENTION, schedule retry
@@ -46,7 +46,7 @@ class DunningService:
     4. On success: clear dunning, status → ACTIVE
     5. On final failure: downgrade → TRIAL, send notice
     """
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -73,19 +73,17 @@ class DunningService:
             smtp_password=str(settings.SMTP_PASSWORD),
             from_email=str(getattr(settings, "SMTP_FROM", "billing@valdrix.io")),
         )
-    
+
     async def process_failed_payment(
-        self, 
-        subscription_id: UUID,
-        is_webhook: bool = True
+        self, subscription_id: UUID, is_webhook: bool = True
     ) -> Dict[str, Any]:
         """
         Process a failed payment - called by webhook or job handler.
-        
+
         Args:
             subscription_id: The TenantSubscription.id
             is_webhook: True if called from webhook (first failure)
-        
+
         Returns:
             Status dict with action taken
         """
@@ -93,78 +91,79 @@ class DunningService:
             select(TenantSubscription).where(TenantSubscription.id == subscription_id)
         )
         subscription = result.scalar_one_or_none()
-        
+
         if not subscription:
-            logger.error("dunning_subscription_not_found", subscription_id=str(subscription_id))
+            logger.error(
+                "dunning_subscription_not_found", subscription_id=str(subscription_id)
+            )
             return {"status": "error", "reason": "subscription_not_found"}
-        
+
         now = datetime.now(timezone.utc)
-        
+
         # Increment attempt counter
         subscription.dunning_attempts += 1
         subscription.last_dunning_at = now
         subscription.status = SubscriptionStatus.ATTENTION.value
-        
+
         attempt = subscription.dunning_attempts
-        
+
         logger.info(
             "dunning_payment_failed",
             tenant_id=str(subscription.tenant_id),
             attempt=attempt,
-            max_attempts=DUNNING_MAX_ATTEMPTS
+            max_attempts=DUNNING_MAX_ATTEMPTS,
         )
-        
+
         # Check if we've exhausted retries
         if attempt >= DUNNING_MAX_ATTEMPTS:
             return await self._handle_final_failure(subscription)
-        
+
         # Schedule next retry
-        retry_delay_days = DUNNING_RETRY_SCHEDULE_DAYS[min(attempt - 1, len(DUNNING_RETRY_SCHEDULE_DAYS) - 1)]
+        retry_delay_days = DUNNING_RETRY_SCHEDULE_DAYS[
+            min(attempt - 1, len(DUNNING_RETRY_SCHEDULE_DAYS) - 1)
+        ]
         next_retry = now + timedelta(days=retry_delay_days)
         subscription.dunning_next_retry_at = next_retry
-        
+
         # Enqueue retry job
         try:
             await enqueue_job(
                 db=self.db,
                 job_type=JobType.DUNNING,
                 tenant_id=subscription.tenant_id,
-                payload={
-                    "subscription_id": subscription.id,
-                    "attempt": attempt + 1
-                },
-                scheduled_for=next_retry
+                payload={"subscription_id": subscription.id, "attempt": attempt + 1},
+                scheduled_for=next_retry,
             )
         except Exception as e:
             logger.error(
                 "dunning_enqueue_failed",
                 subscription_id=str(subscription.id),
-                error=str(e)
+                error=str(e),
             )
             await self.db.commit()
             await self._send_payment_failed_email(subscription, attempt, next_retry)
             return {
                 "status": "enqueue_failed",
                 "attempt": attempt,
-                "next_retry_at": next_retry.isoformat()
+                "next_retry_at": next_retry.isoformat(),
             }
 
         await self.db.commit()
-        
+
         # Send notification email
         await self._send_payment_failed_email(subscription, attempt, next_retry)
-        
+
         return {
             "status": "scheduled_retry",
             "attempt": attempt,
-            "next_retry_at": next_retry.isoformat()
+            "next_retry_at": next_retry.isoformat(),
         }
-    
+
     async def retry_payment(self, subscription_id: UUID) -> Dict[str, Any]:
         """
         Attempt to charge the subscription again.
         Called by DunningHandler.
-        
+
         Returns:
             {"status": "success"} or {"status": "failed", "reason": ...}
         """
@@ -172,83 +171,88 @@ class DunningService:
             select(TenantSubscription).where(TenantSubscription.id == subscription_id)
         )
         subscription = result.scalar_one_or_none()
-        
+
         if not subscription:
             return {"status": "error", "reason": "subscription_not_found"}
-        
+
         billing = BillingService(self.db)
-        
+
         try:
             success = await billing.charge_renewal(subscription)
-            
+
             if success:
                 return await self._handle_retry_success(subscription)
             else:
-                return await self.process_failed_payment(subscription.id, is_webhook=False)
-                
+                return await self.process_failed_payment(
+                    subscription.id, is_webhook=False
+                )
+
         except Exception as e:
             logger.error(
-                "dunning_charge_exception", 
+                "dunning_charge_exception",
                 subscription_id=str(subscription_id),
-                error=str(e)
+                error=str(e),
             )
             return await self.process_failed_payment(subscription.id, is_webhook=False)
-    
-    async def _handle_retry_success(self, subscription: TenantSubscription) -> Dict[str, Any]:
+
+    async def _handle_retry_success(
+        self, subscription: TenantSubscription
+    ) -> Dict[str, Any]:
         """Clear dunning state after successful payment."""
         subscription.status = SubscriptionStatus.ACTIVE.value
         subscription.dunning_attempts = 0
         subscription.last_dunning_at = None
         subscription.dunning_next_retry_at = None
-        
+
         await self.db.commit()
-        
+
         logger.info(
             "dunning_retry_success",
             tenant_id=str(subscription.tenant_id),
-            msg="Payment recovered, subscription reactivated"
+            msg="Payment recovered, subscription reactivated",
         )
-        
+
         # Send success email
         await self._send_payment_recovered_email(subscription)
-        
+
         return {"status": "success", "action": "subscription_reactivated"}
-    
-    async def _handle_final_failure(self, subscription: TenantSubscription) -> Dict[str, Any]:
+
+    async def _handle_final_failure(
+        self, subscription: TenantSubscription
+    ) -> Dict[str, Any]:
         """Handle max retries exhausted - downgrade to TRIAL."""
         subscription.status = SubscriptionStatus.CANCELLED.value
         subscription.tier = PricingTier.FREE_TRIAL.value
         subscription.canceled_at = datetime.now(timezone.utc)
         subscription.dunning_next_retry_at = None
-        
+
         await self.db.commit()
-        
+
         logger.warning(
             "dunning_max_attempts_reached",
             tenant_id=str(subscription.tenant_id),
-            msg="Subscription downgraded to TRIAL due to payment failure"
+            msg="Subscription downgraded to TRIAL due to payment failure",
         )
-        
+
         # Send final notice email
         await self._send_account_downgraded_email(subscription)
-        
+
         return {
             "status": "downgraded",
             "action": "tier_changed_to_trial",
-            "reason": "max_dunning_attempts_exhausted"
+            "reason": "max_dunning_attempts_exhausted",
         }
-    
+
     async def _send_payment_failed_email(
-        self, 
-        subscription: TenantSubscription,
-        attempt: int,
-        next_retry: datetime
+        self, subscription: TenantSubscription, attempt: int, next_retry: datetime
     ) -> None:
         """Send payment failed notification email."""
         try:
             email = await self._get_primary_tenant_email(subscription.tenant_id)
             if not email:
-                logger.warning("dunning_email_no_user", tenant_id=str(subscription.tenant_id))
+                logger.warning(
+                    "dunning_email_no_user", tenant_id=str(subscription.tenant_id)
+                )
                 return
 
             email_service = self._build_email_service()
@@ -257,14 +261,16 @@ class DunningService:
                 attempt=attempt,
                 max_attempts=DUNNING_MAX_ATTEMPTS,
                 next_retry_date=next_retry,
-                tier=subscription.tier
+                tier=subscription.tier,
             )
-            
+
         except Exception as e:
             # Don't fail dunning if email fails
             logger.error("dunning_email_failed", error=str(e))
-    
-    async def _send_payment_recovered_email(self, subscription: TenantSubscription) -> None:
+
+    async def _send_payment_recovered_email(
+        self, subscription: TenantSubscription
+    ) -> None:
         """Send payment recovered confirmation email."""
         try:
             email = await self._get_primary_tenant_email(subscription.tenant_id)
@@ -273,11 +279,13 @@ class DunningService:
 
             email_service = self._build_email_service()
             await email_service.send_payment_recovered_notification(to_email=email)
-            
+
         except Exception as e:
             logger.error("dunning_recovery_email_failed", error=str(e))
-    
-    async def _send_account_downgraded_email(self, subscription: TenantSubscription) -> None:
+
+    async def _send_account_downgraded_email(
+        self, subscription: TenantSubscription
+    ) -> None:
         """Send account downgraded notice."""
         try:
             email = await self._get_primary_tenant_email(subscription.tenant_id)
@@ -286,6 +294,6 @@ class DunningService:
 
             email_service = self._build_email_service()
             await email_service.send_account_downgraded_notification(to_email=email)
-            
+
         except Exception as e:
             logger.error("dunning_downgrade_email_failed", error=str(e))

@@ -1,2 +1,1 @@
 """Billing API namespace."""
-

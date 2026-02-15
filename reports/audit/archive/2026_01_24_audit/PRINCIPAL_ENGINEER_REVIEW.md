@@ -266,7 +266,7 @@ Prophet is designed for smooth trends (YouTube views, weather patterns). Cloud c
 
 **How to Talk About This:**
 NOT: "Our forecasts are accurate."  
-YES: "Our forecasts work for stable workloads. For volatile workloads, we recommend combining Prophet with manual adjustments. We're building volatility modeling in Q2."
+YES: "Our forecasts work for stable workloads. For volatile workloads, we recommend combining Prophet with manual adjustments. We're building volatility modeling next."
 
 **Fix Timeline:** 8 weeks (volatility bands, service decomposition, accuracy tracking)
 

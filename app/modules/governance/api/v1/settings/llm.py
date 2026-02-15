@@ -24,8 +24,10 @@ router = APIRouter(tags=["LLM"])
 # Pydantic Schemas
 # ============================================================
 
+
 class LLMSettingsResponse(BaseModel):
     """Response for LLM budget and selection settings."""
+
     monthly_limit_usd: float
     alert_threshold_percent: int
     hard_limit: bool
@@ -43,8 +45,13 @@ class LLMSettingsResponse(BaseModel):
 
 class LLMSettingsUpdate(BaseModel):
     """Request to update LLM settings."""
-    monthly_limit_usd: float = Field(10.0, ge=0, description="Monthly USD budget for AI")
-    alert_threshold_percent: int = Field(80, ge=0, le=100, description="Warning threshold %")
+
+    monthly_limit_usd: float = Field(
+        10.0, ge=0, description="Monthly USD budget for AI"
+    )
+    alert_threshold_percent: int = Field(
+        80, ge=0, le=100, description="Warning threshold %"
+    )
     hard_limit: bool = Field(False, description="Block requests if budget exceeded")
     preferred_provider: str = Field("groq", pattern="^(openai|claude|google|groq)$")
     preferred_model: str = Field("llama-3.3-70b-versatile")
@@ -60,6 +67,7 @@ class LLMSettingsUpdate(BaseModel):
 # API Endpoints
 # ============================================================
 
+
 @router.get("/llm", response_model=LLMSettingsResponse)
 async def get_llm_settings(
     current_user: CurrentUser = Depends(get_current_user),
@@ -69,9 +77,7 @@ async def get_llm_settings(
     Get LLM budget and selection settings for the current tenant.
     """
     result = await db.execute(
-        select(LLMBudget).where(
-            LLMBudget.tenant_id == current_user.tenant_id
-        )
+        select(LLMBudget).where(LLMBudget.tenant_id == current_user.tenant_id)
     )
     settings = result.scalar_one_or_none()
 
@@ -118,25 +124,24 @@ async def update_llm_settings(
     Update LLM budget and selection settings for the current tenant.
     """
     result = await db.execute(
-        select(LLMBudget).where(
-            LLMBudget.tenant_id == current_user.tenant_id
-        )
+        select(LLMBudget).where(LLMBudget.tenant_id == current_user.tenant_id)
     )
     settings = result.scalar_one_or_none()
 
     if not settings:
-        settings = LLMBudget(
-            tenant_id=current_user.tenant_id,
-            **data.model_dump()
-        )
+        settings = LLMBudget(tenant_id=current_user.tenant_id, **data.model_dump())
         db.add(settings)
     else:
         update_data = data.model_dump()
         # Item 15: Validate thresholds at boundaries
         if update_data["alert_threshold_percent"] == 0:
-            logger.info("llm_alert_threshold_zero", tenant_id=str(current_user.tenant_id))
+            logger.info(
+                "llm_alert_threshold_zero", tenant_id=str(current_user.tenant_id)
+            )
         elif update_data["alert_threshold_percent"] == 100:
-            logger.info("llm_alert_threshold_max", tenant_id=str(current_user.tenant_id))
+            logger.info(
+                "llm_alert_threshold_max", tenant_id=str(current_user.tenant_id)
+            )
 
         allowed_fields = {
             "monthly_limit_usd",
@@ -173,8 +178,12 @@ async def update_llm_settings(
             "monthly_limit": float(settings.monthly_limit_usd),
             "provider": settings.preferred_provider,
             "model": settings.preferred_model,
-            "keys_updated": [k for k, v in data.model_dump().items() if "api_key" in k and v is not None]
-        }
+            "keys_updated": [
+                k
+                for k, v in data.model_dump().items()
+                if "api_key" in k and v is not None
+            ],
+        },
     )
 
     # Map model flags for response

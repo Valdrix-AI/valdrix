@@ -65,7 +65,9 @@ async def test_execute_skips_when_no_connections() -> None:
     job = MagicMock(tenant_id=uuid4(), payload={})
     db = MagicMock()
     empty = _scalar_result([])
-    db.execute = AsyncMock(side_effect=[empty, empty, empty, empty, empty])
+    db.execute = AsyncMock(
+        side_effect=[empty, empty, empty, empty, empty, empty, empty]
+    )
 
     result = await handler.execute(job, db)
     assert result == {"status": "skipped", "reason": "no_connections"}
@@ -84,8 +86,18 @@ async def test_execute_non_aws_path_and_exception_continue() -> None:
     gcp_result = _scalar_result([gcp_conn])
     saas_empty = _scalar_result([])
     license_empty = _scalar_result([])
+    platform_empty = _scalar_result([])
+    hybrid_empty = _scalar_result([])
     db.execute = AsyncMock(
-        side_effect=[aws_empty, azure_result, gcp_result, saas_empty, license_empty]
+        side_effect=[
+            aws_empty,
+            azure_result,
+            gcp_result,
+            saas_empty,
+            license_empty,
+            platform_empty,
+            hybrid_empty,
+        ]
     )
 
     azure_adapter = MagicMock()
@@ -103,20 +115,26 @@ async def test_execute_non_aws_path_and_exception_continue() -> None:
         ]
     )
     gcp_adapter = MagicMock()
-    gcp_adapter.get_cost_and_usage = AsyncMock(side_effect=RuntimeError("provider failure"))
+    gcp_adapter.get_cost_and_usage = AsyncMock(
+        side_effect=RuntimeError("provider failure")
+    )
 
     analyzer = MagicMock()
     analyzer.analyze = AsyncMock(return_value={"insights": ["ok"]})
 
-    with patch(
-        "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory.get_adapter",
-        side_effect=[azure_adapter, gcp_adapter],
-    ), patch(
-        "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
-        return_value=MagicMock(),
-    ), patch(
-        "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer",
-        return_value=analyzer,
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory.get_adapter",
+            side_effect=[azure_adapter, gcp_adapter],
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer",
+            return_value=analyzer,
+        ),
     ):
         result = await handler.execute(job, db)
 
@@ -136,7 +154,9 @@ async def test_execute_skips_when_no_analysis_payloads() -> None:
     aws_conn = MagicMock(provider="aws")
     aws_result = _scalar_result([aws_conn])
     empty = _scalar_result([])
-    db.execute = AsyncMock(side_effect=[aws_result, empty, empty, empty, empty])
+    db.execute = AsyncMock(
+        side_effect=[aws_result, empty, empty, empty, empty, empty, empty]
+    )
 
     usage_summary = MagicMock()
     usage_summary.records = [MagicMock()]
@@ -146,15 +166,19 @@ async def test_execute_skips_when_no_analysis_payloads() -> None:
     analyzer = MagicMock()
     analyzer.analyze = AsyncMock(return_value="non-dict-result")
 
-    with patch(
-        "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory.get_adapter",
-        return_value=aws_adapter,
-    ), patch(
-        "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
-        return_value=MagicMock(),
-    ), patch(
-        "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer",
-        return_value=analyzer,
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory.get_adapter",
+            return_value=aws_adapter,
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer",
+            return_value=analyzer,
+        ),
     ):
         result = await handler.execute(job, db)
 

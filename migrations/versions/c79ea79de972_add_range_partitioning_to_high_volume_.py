@@ -75,7 +75,7 @@ def upgrade() -> None:
         ) PARTITION BY RANGE (recorded_at);
     """)
 
-    # 3. Create Initial Partitions (Q1 2026)
+    # 3. Create initial partitions
     for table in ["audit_logs", "cost_records"]:
         op.execute(f"CREATE TABLE {table}_2026_01 PARTITION OF {table} FOR VALUES FROM ('2026-01-01') TO ('2026-02-01')")
         op.execute(f"CREATE TABLE {table}_2026_02 PARTITION OF {table} FOR VALUES FROM ('2026-02-01') TO ('2026-03-01')")
@@ -134,4 +134,3 @@ def downgrade() -> None:
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         )
     """)
-

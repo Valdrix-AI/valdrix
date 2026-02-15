@@ -39,45 +39,55 @@ JOB_TIMEOUT_SECONDS = 300  # 5 minutes default timeout
 class JobProcessor:
     """
     Processes background jobs from the database queue.
-    
+
     Designed to be called by:
     1. pg_cron (every minute in Supabase)
     2. API endpoint for on-demand processing
     3. Startup hook for catching up
     """
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    
-    
-    async def process_pending_jobs(self, limit: Optional[int] = None) -> Dict[str, Any]:
+    async def process_pending_jobs(
+        self,
+        limit: Optional[int] = None,
+        *,
+        tenant_id: UUID | None = None,
+        job_type: str | None = None,
+    ) -> Dict[str, Any]:
         """
         Process pending jobs up to the limit with OTel tracing.
         """
         limit = limit or MAX_JOBS_PER_BATCH
         from app.shared.core.tracing import get_tracer
+
         tracer = get_tracer(__name__)
-        
+
         with tracer.start_as_current_span("process_pending_jobs") as span:
             span.set_attribute("batch_limit", limit)
+            if tenant_id is not None:
+                span.set_attribute("tenant_id_filter", str(tenant_id))
+            if job_type is not None:
+                span.set_attribute("job_type_filter", str(job_type))
             logger.info("processing_pending_jobs", limit=limit)
             results: Dict[str, Any] = {
                 "processed": 0,
                 "succeeded": 0,
                 "failed": 0,
-                "errors": []
+                "errors": [],
             }
-            
+
             try:
                 # Fetch pending jobs that are due
-                pending_jobs = await self._fetch_pending_jobs(limit)
-                
-                logger.info(
-                    "job_processor_batch_start",
-                    pending_count=len(pending_jobs)
+                pending_jobs = await self._fetch_pending_jobs(
+                    limit, tenant_id=tenant_id, job_type=job_type
                 )
-                
+
+                logger.info(
+                    "job_processor_batch_start", pending_count=len(pending_jobs)
+                )
+
                 for job in pending_jobs:
                     try:
                         await self._process_single_job(job)
@@ -87,47 +97,65 @@ class JobProcessor:
                             results["failed"] += 1
                             if job.error_message:
                                 results["errors"].append(
-                                    {"job_id": str(job.id), "error": job.error_message, "type": "execution"}
+                                    {
+                                        "job_id": str(job.id),
+                                        "error": job.error_message,
+                                        "type": "execution",
+                                    }
                                 )
                     except (KeyError, ValueError) as e:
                         # Handler configuration/payload errors
-                        logger.warning("job_handler_config_error", job_id=str(job.id), error=str(e))
+                        logger.warning(
+                            "job_handler_config_error", job_id=str(job.id), error=str(e)
+                        )
                         results["failed"] += 1
-                        results["errors"].append({"job_id": str(job.id), "error": str(e), "type": "config"})
+                        results["errors"].append(
+                            {"job_id": str(job.id), "error": str(e), "type": "config"}
+                        )
                     except Exception as e:  # noqa: BLE001 - Intentional catch-all for job isolation
                         results["failed"] += 1
-                        results["errors"].append({"job_id": str(job.id), "error": str(e)})
+                        results["errors"].append(
+                            {"job_id": str(job.id), "error": str(e)}
+                        )
                     results["processed"] += 1
-                
-                logger.info(
-                    "job_processor_batch_complete",
-                    **results
-                )
-                
+
+                logger.info("job_processor_batch_complete", **results)
+
             except sa.exc.SQLAlchemyError as e:
                 logger.error("job_processor_batch_db_error", error=str(e))
                 results["errors"].append({"batch_error": str(e)})
             except Exception as e:
                 logger.error("job_processor_batch_unexpected_error", error=str(e))
                 results["errors"].append({"batch_error": str(e)})
-            
+
             return results
-    
-    async def _fetch_pending_jobs(self, limit: int) -> list[BackgroundJob]:
+
+    async def _fetch_pending_jobs(
+        self,
+        limit: int,
+        *,
+        tenant_id: UUID | None = None,
+        job_type: str | None = None,
+    ) -> list[BackgroundJob]:
         """
         Fetch pending jobs that are ready to run.
         Uses SELECT FOR UPDATE SKIP LOCKED for high-concurrency safety.
         """
         now = datetime.now(timezone.utc)
-        
+        filters = [
+            BackgroundJob.status == JobStatus.PENDING.value,
+            BackgroundJob.scheduled_for <= now,
+            BackgroundJob.attempts < BackgroundJob.max_attempts,
+            sa.not_(BackgroundJob.is_deleted),
+        ]
+        if tenant_id is not None:
+            filters.append(BackgroundJob.tenant_id == tenant_id)
+        if job_type is not None:
+            filters.append(BackgroundJob.job_type == job_type)
+
         result = await self.db.execute(
             select(BackgroundJob)
-            .where(
-                BackgroundJob.status == JobStatus.PENDING.value,
-                BackgroundJob.scheduled_for <= now,
-                BackgroundJob.attempts < BackgroundJob.max_attempts,
-                sa.not_(BackgroundJob.is_deleted)
-            )
+            .where(*filters)
             # BE-SCHED-5: Order by priority (desc) first, then scheduled_for
             .order_by(BackgroundJob.priority.desc(), BackgroundJob.scheduled_for)
             .limit(limit)
@@ -136,105 +164,113 @@ class JobProcessor:
         found = list(result.scalars().all())
         return found
 
-    
     async def _process_single_job(self, job: BackgroundJob) -> None:
         """Process a single job with error handling and tracing."""
         from app.shared.core.tracing import get_tracer
+
         tracer = get_tracer(__name__)
-        
+
         with tracer.start_as_current_span(f"job_process:{job.job_type}") as span:
             span.set_attribute("job_id", str(job.id))
-            span.set_attribute("tenant_id", str(job.tenant_id) if job.tenant_id else "system")
-            
+            span.set_attribute(
+                "tenant_id", str(job.tenant_id) if job.tenant_id else "system"
+            )
+
             logger.info(
                 "job_processing_start",
                 job_id=str(job.id),
                 job_type=job.job_type,
-                attempt=job.attempts + 1
+                attempt=job.attempts + 1,
             )
-        
+
         # Mark as running
         job.status = JobStatus.RUNNING.value
         job.started_at = datetime.now(timezone.utc)
         job.attempts += 1
         await self.db.commit()
-        
+
         result = None
-        
+
         try:
             # Get and instantiate handler for job type
-            job_type_key = job.job_type.value if hasattr(job.job_type, "value") else str(job.job_type)
+            job_type_key = (
+                job.job_type.value
+                if hasattr(job.job_type, "value")
+                else str(job.job_type)
+            )
             handler_cls = get_handler_factory(job_type_key)
             handler = handler_cls()
-            
+
             # Use a savepoint to isolate this job's database changes
             async with self.db.begin_nested():
                 # Set tenant context for RLS isolation during job execution
                 if job.tenant_id:
                     from app.shared.db.session import set_session_tenant_id
+
                     await set_session_tenant_id(self.db, job.tenant_id)
-                
+
                 # Execute handler with timeout protection (BE-SCHED-2)
                 result = await asyncio.wait_for(
-                    handler.execute(job, self.db),
-                    timeout=JOB_TIMEOUT_SECONDS
+                    handler.execute(job, self.db), timeout=JOB_TIMEOUT_SECONDS
                 )
-            
+
             # Mark as completed
             job.status = JobStatus.COMPLETED.value
             job.completed_at = datetime.now(timezone.utc)
             job.result = result
             job.error_message = None
-            
+
             logger.info(
-                "job_processing_success",
-                job_id=str(job.id),
-                job_type=job.job_type
+                "job_processing_success", job_id=str(job.id), job_type=job.job_type
             )
-            
+
         except asyncio.TimeoutError:
             logger.error(
                 "job_processing_timeout",
                 job_id=str(job.id),
                 job_type=job.job_type,
-                timeout_seconds=JOB_TIMEOUT_SECONDS
+                timeout_seconds=JOB_TIMEOUT_SECONDS,
             )
             job.error_message = f"Job timed out after {JOB_TIMEOUT_SECONDS}s"
             job.status = JobStatus.FAILED.value
-            
+
             if job.attempts >= job.max_attempts:
                 job.status = JobStatus.DEAD_LETTER.value
                 job.completed_at = datetime.now(timezone.utc)
             else:
                 backoff_seconds = BACKOFF_BASE_SECONDS * (2 ** (job.attempts - 1))
                 job.status = JobStatus.PENDING.value
-                job.scheduled_for = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)
-                
+                job.scheduled_for = datetime.now(timezone.utc) + timedelta(
+                    seconds=backoff_seconds
+                )
+
         except asyncio.CancelledError:
             logger.warning("job_processing_cancelled", job_id=str(job.id))
             job.error_message = "Job was cancelled"
             job.status = JobStatus.PENDING.value
             job.scheduled_for = datetime.now(timezone.utc) + timedelta(seconds=60)
-            
+
         except Exception as e:  # noqa: BLE001 - Intentional catch-all for resilience
             logger.error(
                 "job_processing_failed",
                 job_id=str(job.id),
                 job_type=job.job_type,
-                error=str(e)
+                error=str(e),
             )
-            
+
             job.error_message = str(e)
             job.status = JobStatus.FAILED.value
-            
+
             if job.attempts >= job.max_attempts:
                 job.status = JobStatus.DEAD_LETTER.value
                 job.completed_at = datetime.now(timezone.utc)
             else:
                 backoff_seconds = BACKOFF_BASE_SECONDS * (2 ** (job.attempts - 1))
                 job.status = JobStatus.PENDING.value
-                job.scheduled_for = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)
-        
+                job.scheduled_for = datetime.now(timezone.utc) + timedelta(
+                    seconds=backoff_seconds
+                )
+
         await self.db.commit()
 
 
@@ -247,11 +283,11 @@ async def enqueue_job(
     tenant_id: Optional[UUID] = None,
     payload: Optional[Dict[str, Any]] = None,
     scheduled_for: Optional[datetime] = None,
-    max_attempts: int = 3
+    max_attempts: int = 3,
 ) -> BackgroundJob:
     """
     Enqueue a new background job.
-    
+
     Usage:
         job = await enqueue_job(
             db,
@@ -267,18 +303,18 @@ async def enqueue_job(
         status=JobStatus.PENDING.value,
         scheduled_for=scheduled_for or datetime.now(timezone.utc),
         max_attempts=max_attempts,
-        created_at=datetime.now(timezone.utc)
+        created_at=datetime.now(timezone.utc),
     )
-    
+
     db.add(job)
     await db.commit()
     await db.refresh(job)
-    
+
     logger.info(
         "job_enqueued",
         job_id=str(job.id),
         job_type=job_type,
-        tenant_id=str(tenant_id) if tenant_id else None
+        tenant_id=str(tenant_id) if tenant_id else None,
     )
-    
+
     return job

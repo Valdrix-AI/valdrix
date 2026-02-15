@@ -1,23 +1,24 @@
-
 import pytest
 import httpx
 from httpx import AsyncClient
 from uuid import uuid4
 from app.models.tenant import Tenant, User
-from app.models.remediation import RemediationRequest, RemediationStatus, RemediationAction
+from app.models.remediation import (
+    RemediationRequest,
+    RemediationStatus,
+    RemediationAction,
+)
 from app.shared.core.auth import CurrentUser, get_current_user, require_tenant_access
 from fastapi import Request
+
 
 @pytest.fixture
 def mock_user_t1():
     t1_id = uuid4()
     return CurrentUser(
-        id=uuid4(),
-        email="user@tenant1.com",
-        tenant_id=t1_id,
-        role="member",
-        tier="pro"
+        id=uuid4(), email="user@tenant1.com", tenant_id=t1_id, role="member", tier="pro"
     )
+
 
 @pytest.mark.asyncio
 async def test_tenant_isolation_regression(ac: AsyncClient, db):
@@ -32,7 +33,7 @@ async def test_tenant_isolation_regression(ac: AsyncClient, db):
     t2 = Tenant(id=t2_id, name="Tenant B", plan="pro")
     db.add_all([t1, t2])
     await db.commit()
-    
+
     # Create a user for tenant B (needed for FK constraint)
     user_b = User(id=user_b_id, email="user@tenantb.com", tenant_id=t2_id)
     db.add(user_b)
@@ -57,7 +58,7 @@ async def test_tenant_isolation_regression(ac: AsyncClient, db):
         email="admin@tenantA.com",
         tenant_id=t1_id,
         role="member",
-        tier="pro"
+        tier="pro",
     )
 
     def override_get_current_user(request: Request):
@@ -67,29 +68,30 @@ async def test_tenant_isolation_regression(ac: AsyncClient, db):
         return mock_user
 
     from app.main import app
+
     # Override all potential paths
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[require_tenant_access] = lambda: t1_id
-    
+
     # This is tricky because requires_role("member") returns a NEW function
-    # but luckily list_pending_requests uses the same requires_role("member") 
+    # but luckily list_pending_requests uses the same requires_role("member")
     # if it's imported from the same place.
     # We'll just override get_current_user which should be enough if require_tenant_access is also overridden
-    
+
     try:
         response = await ac.get("/api/v1/zombies/pending")
-        if response.status_code != 200:
-            print(f"DEBUG ISOLATION: {response.status_code} {response.json()}")
         assert response.status_code == 200
-        
+
         data = response.json()
         requests = data.get("requests", [])
         for r in requests:
-            assert r["resource_id"] != "vol-tenant-b", "Cross-tenant data leakage detected!"
+            assert r["resource_id"] != "vol-tenant-b", (
+                "Cross-tenant data leakage detected!"
+            )
     finally:
-        
         app.dependency_overrides.pop(get_current_user, None)
         app.dependency_overrides.pop(require_tenant_access, None)
+
 
 @pytest.mark.asyncio
 async def test_bound_pagination_enforcement(ac: AsyncClient, db):
@@ -102,6 +104,7 @@ async def test_bound_pagination_enforcement(ac: AsyncClient, db):
     await db.commit()
 
     user_id = uuid4()
+
     def override_get_current_user_pagination(request: Request):
         request.state.tenant_id = tenant_id
         request.state.user_id = user_id
@@ -111,6 +114,7 @@ async def test_bound_pagination_enforcement(ac: AsyncClient, db):
         )
 
     from app.main import app
+
     app.dependency_overrides[require_tenant_access] = lambda: tenant_id
     app.dependency_overrides[get_current_user] = override_get_current_user_pagination
 
@@ -118,16 +122,14 @@ async def test_bound_pagination_enforcement(ac: AsyncClient, db):
         # Request with limit=101 (Violates le=100)
         response = await ac.get("/api/v1/zombies/pending?limit=101")
         assert response.status_code == 422, "Limit exceeding le=100 should be rejected"
-        
+
         # Request with valid limit
         response = await ac.get("/api/v1/zombies/pending?limit=50")
-        if response.status_code != 200:
-            print(f"DEBUG PAGINATION: {response.status_code} {response.json()}")
         assert response.status_code == 200
     finally:
-        
         app.dependency_overrides.pop(get_current_user, None)
         app.dependency_overrides.pop(require_tenant_access, None)
+
 
 @pytest.mark.asyncio
 async def test_error_sanitization_middleware(ac: AsyncClient):
@@ -136,11 +138,14 @@ async def test_error_sanitization_middleware(ac: AsyncClient):
     (P1 Error Sanitization)
     """
     from app.main import app
-    
+
     # Force a 500 error using an operation that typically triggers it
     # Only register the route if it doesn't already exist
-    route_exists = any(getattr(r, 'path', None) == "/test-crash-safe" for r in app.routes)
+    route_exists = any(
+        getattr(r, "path", None) == "/test-crash-safe" for r in app.routes
+    )
     if not route_exists:
+
         @app.get("/test-crash-safe")
         async def crash_endpoint_safe():
             # Raise a RuntimeError which is less likely to be caught by test infrastructure
@@ -149,19 +154,20 @@ async def test_error_sanitization_middleware(ac: AsyncClient):
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as safe_client:
         response = await safe_client.get("/test-crash-safe")
-    
+
     # The handler should return 500 with sanitized content
     assert response.status_code == 500
     data = response.json()
-    
+
     # Generic fields must exist
     assert data["error"] == "Internal Server Error"
     assert "error_id" in data
     assert data["code"] == "INTERNAL_ERROR"
-    
+
     # Secret information must NOT exist
     assert "SECRET_VALUE_SHOULD_NOT_LEAK_12345" not in str(data)
     assert "RuntimeError" not in str(data)
+
 
 @pytest.mark.asyncio
 async def test_security_headers_regression(ac: AsyncClient):
@@ -171,16 +177,17 @@ async def test_security_headers_regression(ac: AsyncClient):
     """
     response = await ac.get("/health")
     headers = response.headers
-    
+
     assert "content-security-policy" in headers
     csp = headers["content-security-policy"]
     assert "default-src 'self'" in csp
     assert "frame-ancestors 'none'" in csp
     assert "base-uri 'self'" in csp
-    
+
     assert headers.get("referrer-policy") == "strict-origin-when-cross-origin"
     assert "permissions-policy" in headers
     assert "x-xss-protection" not in headers
+
 
 @pytest.mark.asyncio
 async def test_rate_limiting_metrics_integration():
@@ -190,9 +197,10 @@ async def test_rate_limiting_metrics_integration():
     """
     from app.main import app
     from slowapi.errors import RateLimitExceeded
-    
+
     # Verify the handler is registered in app
     assert RateLimitExceeded in app.exception_handlers
+
 
 @pytest.mark.asyncio
 async def test_remediation_atomicity_lock_check():
@@ -201,7 +209,10 @@ async def test_remediation_atomicity_lock_check():
     (P3 Reliability)
     """
     from app.modules.optimization.domain.remediation import RemediationService
-    
+
     import inspect
+
     source = inspect.getsource(RemediationService.execute)
-    assert "with_for_update" in source, "Remediation execution missing row-level locking!"
+    assert "with_for_update" in source, (
+        "Remediation execution missing row-level locking!"
+    )

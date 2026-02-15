@@ -4,26 +4,43 @@ from .network import OrphanLoadBalancersPlugin, UnderusedNatGatewaysPlugin
 from .database import IdleRdsPlugin, ColdRedshiftPlugin
 from .analytics import IdleSageMakerPlugin
 from .containers import StaleEcrImagesPlugin
+
 # New high-value and infrastructure plugins
-from .high_value import IdleEksPlugin, IdleElastiCachePlugin, IdleSageMakerNotebooksPlugin
-from .infrastructure import StoppedInstancesWithEbsPlugin, UnusedLambdaPlugin, OrphanVpcEndpointsPlugin
+from .high_value import (
+    IdleEksPlugin,
+    IdleElastiCachePlugin,
+    IdleSageMakerNotebooksPlugin,
+)
+from .infrastructure import (
+    StoppedInstancesWithEbsPlugin,
+    UnusedLambdaPlugin,
+    OrphanVpcEndpointsPlugin,
+)
 
 __all__ = [
     # Storage
-    "UnattachedVolumesPlugin", "OldSnapshotsPlugin", "IdleS3BucketsPlugin",
+    "UnattachedVolumesPlugin",
+    "OldSnapshotsPlugin",
+    "IdleS3BucketsPlugin",
     # Compute
-    "UnusedElasticIpsPlugin", "IdleInstancesPlugin",
+    "UnusedElasticIpsPlugin",
+    "IdleInstancesPlugin",
     # Network
-    "OrphanLoadBalancersPlugin", "UnderusedNatGatewaysPlugin",
+    "OrphanLoadBalancersPlugin",
+    "UnderusedNatGatewaysPlugin",
     # Database
-    "IdleRdsPlugin", "ColdRedshiftPlugin",
+    "IdleRdsPlugin",
+    "ColdRedshiftPlugin",
     # Analytics
     "IdleSageMakerPlugin",
     # Containers
     "StaleEcrImagesPlugin",
     # High-Value (NEW)
-    "IdleEksPlugin", "IdleElastiCachePlugin", "IdleSageMakerNotebooksPlugin",
+    "IdleEksPlugin",
+    "IdleElastiCachePlugin",
+    "IdleSageMakerNotebooksPlugin",
     # Infrastructure (NEW)
-    "StoppedInstancesWithEbsPlugin", "UnusedLambdaPlugin", "OrphanVpcEndpointsPlugin",
+    "StoppedInstancesWithEbsPlugin",
+    "UnusedLambdaPlugin",
+    "OrphanVpcEndpointsPlugin",
 ]
-

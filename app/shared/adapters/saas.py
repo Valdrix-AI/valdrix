@@ -1,7 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from datetime import datetime
 from typing import Any
 from urllib.parse import urljoin
 
@@ -9,6 +8,8 @@ import httpx
 import structlog
 
 from app.shared.adapters.base import BaseAdapter
+from app.shared.adapters.feed_utils import as_float, is_number, parse_timestamp
+from app.shared.core.currency import convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
@@ -22,43 +23,6 @@ _NATIVE_SUPPORTED_VENDORS = {
     _NATIVE_VENDOR_STRIPE,
     _NATIVE_VENDOR_SALESFORCE,
 }
-
-
-def _parse_timestamp(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-        except ValueError:
-            return datetime.now(timezone.utc)
-    if isinstance(value, (int, float)):
-        try:
-            return datetime.fromtimestamp(float(value), tz=timezone.utc)
-        except (TypeError, ValueError):
-            return datetime.now(timezone.utc)
-    return datetime.now(timezone.utc)
-
-
-def _as_float(value: Any, default: float = 0.0, *, divisor: int = 1) -> float:
-    if value is None:
-        return default
-    try:
-        amount = Decimal(str(value))
-    except (InvalidOperation, TypeError, ValueError):
-        return default
-    if divisor <= 0:
-        divisor = 1
-    return float(amount / Decimal(divisor))
-
-
-def _is_number(value: Any) -> bool:
-    try:
-        Decimal(str(value))
-    except (InvalidOperation, TypeError, ValueError):
-        return False
-    return True
 
 
 class SaaSAdapter(BaseAdapter):
@@ -134,7 +98,9 @@ class SaaSAdapter(BaseAdapter):
                 )
                 return False
 
-        feed = getattr(self.connection, "spend_feed", None) or getattr(self.connection, "cost_feed", None)
+        feed = getattr(self.connection, "spend_feed", None) or getattr(
+            self.connection, "cost_feed", None
+        )
         is_valid = self._validate_manual_feed(feed)
         if not is_valid:
             if self._last_error is None:
@@ -156,10 +122,8 @@ class SaaSAdapter(BaseAdapter):
                 )
                 return False
             amount = entry.get("cost_usd", entry.get("amount_usd"))
-            if not _is_number(amount):
-                self._last_error = (
-                    f"Spend feed entry #{idx + 1} must include numeric cost_usd or amount_usd."
-                )
+            if not is_number(amount):
+                self._last_error = f"Spend feed entry #{idx + 1} must include numeric cost_usd or amount_usd."
                 return False
         return True
 
@@ -184,11 +148,15 @@ class SaaSAdapter(BaseAdapter):
         if native_vendor:
             try:
                 if native_vendor == _NATIVE_VENDOR_STRIPE:
-                    async for row in self._stream_stripe_cost_and_usage(start_date, end_date):
+                    async for row in self._stream_stripe_cost_and_usage(
+                        start_date, end_date
+                    ):
                         yield row
                     return
                 if native_vendor == _NATIVE_VENDOR_SALESFORCE:
-                    async for row in self._stream_salesforce_cost_and_usage(start_date, end_date):
+                    async for row in self._stream_salesforce_cost_and_usage(
+                        start_date, end_date
+                    ):
                         yield row
                     return
             except ExternalAPIError as exc:
@@ -199,25 +167,54 @@ class SaaSAdapter(BaseAdapter):
                     error=str(exc),
                 )
 
-        feed = getattr(self.connection, "spend_feed", None) or getattr(self.connection, "cost_feed", None) or []
+        feed = (
+            getattr(self.connection, "spend_feed", None)
+            or getattr(self.connection, "cost_feed", None)
+            or []
+        )
         if not isinstance(feed, list):
             return
 
         for entry in feed:
-            timestamp = _parse_timestamp(entry.get("timestamp") or entry.get("date"))
+            timestamp = parse_timestamp(entry.get("timestamp") or entry.get("date"))
             if timestamp < start_date or timestamp > end_date:
                 continue
+            resource_id_raw = entry.get("resource_id") or entry.get("id")
+            resource_id = (
+                str(resource_id_raw).strip()
+                if resource_id_raw not in (None, "")
+                else None
+            )
+            usage_amount_raw = entry.get("usage_amount")
+            usage_amount = (
+                as_float(usage_amount_raw, default=0.0)
+                if is_number(usage_amount_raw)
+                else None
+            )
+            usage_unit_raw = entry.get("usage_unit")
+            usage_unit = (
+                str(usage_unit_raw).strip()
+                if usage_unit_raw not in (None, "")
+                else None
+            )
             yield {
                 "provider": "saas",
                 "service": str(entry.get("service") or entry.get("vendor") or "SaaS"),
                 "region": "global",
                 "usage_type": str(entry.get("usage_type") or "subscription"),
-                "cost_usd": float(entry.get("cost_usd") or entry.get("amount_usd") or 0.0),
+                "resource_id": resource_id,
+                "usage_amount": usage_amount,
+                "usage_unit": usage_unit,
+                "cost_usd": float(
+                    entry.get("cost_usd") or entry.get("amount_usd") or 0.0
+                ),
                 "amount_raw": entry.get("amount_raw"),
                 "currency": str(entry.get("currency") or "USD"),
                 "timestamp": timestamp,
                 "source_adapter": "saas_feed",
-                "tags": entry.get("tags") if isinstance(entry.get("tags"), dict) else {},
+                "tags": entry.get("tags")
+                if isinstance(entry.get("tags"), dict)
+                else {},
             }
 
     async def _verify_stripe(self) -> None:
@@ -261,12 +258,14 @@ class SaaSAdapter(BaseAdapter):
             payload = await self._get_json(endpoint, headers=headers, params=params)
             entries = payload.get("data")
             if not isinstance(entries, list):
-                raise ExternalAPIError("Invalid Stripe invoices payload: expected list in data")
+                raise ExternalAPIError(
+                    "Invalid Stripe invoices payload: expected list in data"
+                )
 
             for invoice in entries:
                 if not isinstance(invoice, dict):
                     continue
-                timestamp = _parse_timestamp(invoice.get("created"))
+                timestamp = parse_timestamp(invoice.get("created"))
                 if timestamp < start_date or timestamp > end_date:
                     continue
 
@@ -274,9 +273,26 @@ class SaaSAdapter(BaseAdapter):
                 if amount_cents is None:
                     amount_cents = invoice.get("total")
 
+                currency_code = str(invoice.get("currency") or "USD").upper()
+                amount_local = as_float(amount_cents, divisor=100)
+                cost_usd = amount_local
+                if currency_code != "USD":
+                    try:
+                        cost_usd = float(
+                            await convert_to_usd(amount_local, currency_code)
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "saas_currency_conversion_failed",
+                            vendor="stripe",
+                            currency=currency_code,
+                            error=str(exc),
+                        )
+
                 service_name = (
                     str(invoice.get("description")).strip()
-                    if isinstance(invoice.get("description"), str) and invoice.get("description")
+                    if isinstance(invoice.get("description"), str)
+                    and invoice.get("description")
                     else "Stripe Billing"
                 )
 
@@ -285,9 +301,12 @@ class SaaSAdapter(BaseAdapter):
                     "service": service_name,
                     "region": "global",
                     "usage_type": "subscription_invoice",
-                    "cost_usd": _as_float(amount_cents, divisor=100),
-                    "amount_raw": amount_cents,
-                    "currency": str(invoice.get("currency") or "USD").upper(),
+                    "resource_id": str(invoice.get("id") or "").strip() or None,
+                    "usage_amount": 1.0,
+                    "usage_unit": "invoice",
+                    "cost_usd": cost_usd,
+                    "amount_raw": amount_local,
+                    "currency": currency_code,
                     "timestamp": timestamp,
                     "source_adapter": "saas_stripe_api",
                     "tags": {
@@ -334,24 +353,43 @@ class SaaSAdapter(BaseAdapter):
             payload = await self._get_json(next_url, headers=headers, params=params)
             records = payload.get("records")
             if not isinstance(records, list):
-                raise ExternalAPIError("Invalid Salesforce query payload: expected list in records")
+                raise ExternalAPIError(
+                    "Invalid Salesforce query payload: expected list in records"
+                )
 
             for record in records:
                 if not isinstance(record, dict):
                     continue
                 service_date = record.get("ServiceDate")
-                timestamp = _parse_timestamp(service_date)
+                timestamp = parse_timestamp(service_date)
                 if timestamp < start_date or timestamp > end_date:
                     continue
-                amount = _as_float(record.get("TotalPrice"))
+                amount_local = as_float(record.get("TotalPrice"))
+                currency_code = str(record.get("CurrencyIsoCode") or "USD").upper()
+                cost_usd = amount_local
+                if currency_code != "USD":
+                    try:
+                        cost_usd = float(
+                            await convert_to_usd(amount_local, currency_code)
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "saas_currency_conversion_failed",
+                            vendor="salesforce",
+                            currency=currency_code,
+                            error=str(exc),
+                        )
                 yield {
                     "provider": "saas",
                     "service": str(record.get("Description") or "Salesforce Contract"),
                     "region": "global",
                     "usage_type": "contract_line_item",
-                    "cost_usd": amount,
-                    "amount_raw": record.get("TotalPrice"),
-                    "currency": str(record.get("CurrencyIsoCode") or "USD").upper(),
+                    "resource_id": str(record.get("Id") or "").strip() or None,
+                    "usage_amount": 1.0,
+                    "usage_unit": "contract_line_item",
+                    "cost_usd": cost_usd,
+                    "amount_raw": amount_local,
+                    "currency": currency_code,
                     "timestamp": timestamp,
                     "source_adapter": "saas_salesforce_api",
                     "tags": {
@@ -381,7 +419,9 @@ class SaaSAdapter(BaseAdapter):
                 response.raise_for_status()
                 payload = response.json()
                 if not isinstance(payload, dict):
-                    raise ExternalAPIError("SaaS connector API returned invalid payload shape")
+                    raise ExternalAPIError(
+                        "SaaS connector API returned invalid payload shape"
+                    )
                 return payload
             except httpx.HTTPStatusError as exc:
                 last_error = exc
@@ -412,13 +452,21 @@ class SaaSAdapter(BaseAdapter):
                     )
                     await asyncio.sleep(0.05 * attempt)
                     continue
-                raise ExternalAPIError(f"SaaS connector API request failed: {exc}") from exc
+                raise ExternalAPIError(
+                    f"SaaS connector API request failed: {exc}"
+                ) from exc
             except ValueError as exc:
-                raise ExternalAPIError("SaaS connector API returned invalid JSON payload") from exc
+                raise ExternalAPIError(
+                    "SaaS connector API returned invalid JSON payload"
+                ) from exc
 
         if last_error is not None:
-            raise ExternalAPIError(f"SaaS connector API request failed: {last_error}") from last_error
+            raise ExternalAPIError(
+                f"SaaS connector API request failed: {last_error}"
+            ) from last_error
         raise ExternalAPIError("SaaS connector API request failed unexpectedly")
 
-    async def discover_resources(self, resource_type: str, region: str | None = None) -> list[dict[str, Any]]:
+    async def discover_resources(
+        self, resource_type: str, region: str | None = None
+    ) -> list[dict[str, Any]]:
         return []

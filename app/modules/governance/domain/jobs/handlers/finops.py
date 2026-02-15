@@ -1,6 +1,7 @@
 """
 FinOps Analysis Job Handler
 """
+
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List
@@ -15,6 +16,8 @@ from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
 from app.models.saas_connection import SaaSConnection
 from app.models.license_connection import LicenseConnection
+from app.models.platform_connection import PlatformConnection
+from app.models.hybrid_connection import HybridConnection
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
 from app.schemas.costs import CloudUsageSummary, CostRecord
 from app.shared.adapters.factory import AdapterFactory
@@ -42,7 +45,9 @@ def _normalize_rows(rows: list[dict[str, Any]]) -> list[CostRecord]:
             continue
 
         amount_raw = row.get("amount_raw")
-        amount_raw_decimal = Decimal(str(amount_raw)) if amount_raw is not None else None
+        amount_raw_decimal = (
+            Decimal(str(amount_raw)) if amount_raw is not None else None
+        )
         tags = row.get("tags")
         records.append(
             CostRecord(
@@ -62,7 +67,7 @@ def _normalize_rows(rows: list[dict[str, Any]]) -> list[CostRecord]:
 
 class FinOpsAnalysisHandler(BaseJobHandler):
     """Handle multi-tenant FinOps analysis with normalized components."""
-    
+
     async def execute(self, job: BackgroundJob, db: AsyncSession) -> Dict[str, Any]:
         tenant_id = job.tenant_id
         if not tenant_id:
@@ -70,8 +75,20 @@ class FinOpsAnalysisHandler(BaseJobHandler):
 
         tenant_uuid = UUID(str(tenant_id))
         connections: list[Any] = []
-        for connection_model in (AWSConnection, AzureConnection, GCPConnection, SaaSConnection, LicenseConnection):
-            result = await db.execute(select(connection_model).where(connection_model.tenant_id == tenant_uuid))
+        for connection_model in (
+            AWSConnection,
+            AzureConnection,
+            GCPConnection,
+            SaaSConnection,
+            LicenseConnection,
+            PlatformConnection,
+            HybridConnection,
+        ):
+            result = await db.execute(
+                select(connection_model).where(
+                    connection_model.tenant_id == tenant_uuid
+                )
+            )
             connections.extend(result.scalars().all())
 
         if not connections:
@@ -100,11 +117,15 @@ class FinOpsAnalysisHandler(BaseJobHandler):
                         group_by_service=True,
                     )
                 else:
-                    rows = await adapter.get_cost_and_usage(start_dt, end_dt, granularity="DAILY")
+                    rows = await adapter.get_cost_and_usage(
+                        start_dt, end_dt, granularity="DAILY"
+                    )
                     records = _normalize_rows(rows)
                     if not records:
                         continue
-                    total_cost = sum((record.amount for record in records), Decimal("0"))
+                    total_cost = sum(
+                        (record.amount for record in records), Decimal("0")
+                    )
                     usage_summary = CloudUsageSummary(
                         tenant_id=str(tenant_uuid),
                         provider=provider,

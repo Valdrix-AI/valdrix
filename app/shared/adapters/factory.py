@@ -13,11 +13,16 @@ from app.shared.adapters.azure import AzureAdapter
 from app.shared.adapters.gcp import GCPAdapter
 from app.shared.adapters.saas import SaaSAdapter
 from app.shared.adapters.license import LicenseAdapter
+from app.shared.adapters.platform import PlatformAdapter
+from app.shared.adapters.hybrid import HybridAdapter
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
 from app.models.saas_connection import SaaSConnection
 from app.models.license_connection import LicenseConnection
+from app.models.platform_connection import PlatformConnection
+from app.models.hybrid_connection import HybridConnection
+
 
 class AdapterFactory:
     @staticmethod
@@ -30,29 +35,36 @@ class AdapterFactory:
             if connection.cur_bucket_name and connection.cur_status == "active":
                 return AWSCURAdapter(connection)
             return MultiTenantAWSAdapter(connection)
-        
+
         elif isinstance(connection, AzureConnection):
             return AzureAdapter(connection)
-            
+
         elif isinstance(connection, GCPConnection):
             return GCPAdapter(connection)
         elif isinstance(connection, SaaSConnection):
             return SaaSAdapter(connection)
         elif isinstance(connection, LicenseConnection):
             return LicenseAdapter(connection)
+        elif isinstance(connection, PlatformConnection):
+            return PlatformAdapter(connection)
+        elif isinstance(connection, HybridConnection):
+            return HybridAdapter(connection)
 
-        # Fallback for dynamic types or older code paths
-        # This allows passing a mock object or checking by provider property
+        # Fallback for dynamic types/mocks: route by `provider` attribute.
         provider = getattr(connection, "provider", "").lower()
         if provider == "azure":
             # Assuming connection has necessary fields or casts
             # This path might need to be removed if strictly typed
-            return AzureAdapter(connection) 
+            return AzureAdapter(connection)
         elif provider == "gcp":
             return GCPAdapter(connection)
-        elif provider in {"saas", "cloud_plus_saas"}:
+        elif provider == "saas":
             return SaaSAdapter(connection)
-        elif provider in {"license", "itam", "cloud_plus_license"}:
+        elif provider == "license":
             return LicenseAdapter(connection)
-            
+        elif provider == "platform":
+            return PlatformAdapter(connection)
+        elif provider == "hybrid":
+            return HybridAdapter(connection)
+
         raise ValueError(f"Unsupported connection type or provider: {type(connection)}")

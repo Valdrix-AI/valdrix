@@ -60,7 +60,9 @@ async def test_check_circuit_breakers_none():
 async def test_check_circuit_breakers_open():
     service = HealthService()
     breakers = {"aws": {"state": "open"}, "db": {"state": "closed"}}
-    with patch("app.shared.core.health.get_all_circuit_breakers", return_value=breakers):
+    with patch(
+        "app.shared.core.health.get_all_circuit_breakers", return_value=breakers
+    ):
         result = await service._check_circuit_breakers()
 
     assert result["status"] == "degraded"
@@ -70,7 +72,9 @@ async def test_check_circuit_breakers_open():
 @pytest.mark.asyncio
 async def test_check_circuit_breakers_exception():
     service = HealthService()
-    with patch("app.shared.core.health.get_all_circuit_breakers", side_effect=Exception("oops")):
+    with patch(
+        "app.shared.core.health.get_all_circuit_breakers", side_effect=Exception("oops")
+    ):
         result = await service._check_circuit_breakers()
 
     assert result["status"] == "unknown"
@@ -83,9 +87,11 @@ async def test_check_system_resources_degraded():
     memory = SimpleNamespace(percent=90, used=5 * 1024**3, available=1 * 1024**3)
     disk = SimpleNamespace(percent=92, free=2 * 1024**3)
 
-    with patch("app.shared.core.health.safe_virtual_memory", return_value=memory), \
-         patch("app.shared.core.health.safe_cpu_percent", return_value=95) as mock_cpu, \
-         patch("app.shared.core.health.safe_disk_usage", return_value=disk) as mock_disk:
+    with (
+        patch("app.shared.core.health.safe_virtual_memory", return_value=memory),
+        patch("app.shared.core.health.safe_cpu_percent", return_value=95) as mock_cpu,
+        patch("app.shared.core.health.safe_disk_usage", return_value=disk) as mock_disk,
+    ):
         result = await service._check_system_resources()
 
     assert result["status"] == "degraded"
@@ -99,7 +105,10 @@ async def test_check_system_resources_degraded():
 @pytest.mark.asyncio
 async def test_check_system_resources_exception():
     service = HealthService()
-    with patch("app.shared.core.health.psutil.virtual_memory", side_effect=Exception("psutil fail")):
+    with patch(
+        "app.shared.core.health.psutil.virtual_memory",
+        side_effect=Exception("psutil fail"),
+    ):
         result = await service._check_system_resources()
 
     assert result["status"] == "unknown"

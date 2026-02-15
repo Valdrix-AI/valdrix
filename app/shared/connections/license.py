@@ -20,7 +20,9 @@ class LicenseConnectionService:
         )
         return list(result.scalars().all())
 
-    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict[str, Any]:
+    async def verify_connection(
+        self, connection_id: UUID, tenant_id: UUID
+    ) -> dict[str, Any]:
         result = await self.db.execute(
             select(LicenseConnection).where(
                 LicenseConnection.id == connection_id,

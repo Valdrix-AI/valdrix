@@ -1,5 +1,5 @@
 # Pre-commit configuration for Valdrix
-# Install: pip install pre-commit && pre-commit install
+# Install: uv sync --group dev && uv run pre-commit install
 
 repos:
   # Ruff - Fast Python linter & formatter

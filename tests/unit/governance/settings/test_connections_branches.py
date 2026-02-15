@@ -69,8 +69,12 @@ def test_enforce_growth_tier_rejects_free(user: CurrentUser) -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_growth_tier_cache_hit_denied(user: CurrentUser, db: MagicMock) -> None:
-    cache = SimpleNamespace(get=AsyncMock(return_value=PricingTier.FREE_TRIAL.value), set=AsyncMock())
+async def test_check_growth_tier_cache_hit_denied(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    cache = SimpleNamespace(
+        get=AsyncMock(return_value=PricingTier.FREE_TRIAL.value), set=AsyncMock()
+    )
     with patch("app.shared.core.cache.get_cache_service", return_value=cache):
         with pytest.raises(HTTPException) as exc:
             await connections_api.check_growth_tier(user, db)
@@ -79,7 +83,9 @@ async def test_check_growth_tier_cache_hit_denied(user: CurrentUser, db: MagicMo
 
 
 @pytest.mark.asyncio
-async def test_check_growth_tier_cache_invalid_and_tenant_missing(user: CurrentUser, db: MagicMock) -> None:
+async def test_check_growth_tier_cache_invalid_and_tenant_missing(
+    user: CurrentUser, db: MagicMock
+) -> None:
     cache = SimpleNamespace(get=AsyncMock(return_value="invalid-plan"), set=AsyncMock())
     db.execute.return_value = _scalar_result(None)
     with patch("app.shared.core.cache.get_cache_service", return_value=cache):
@@ -89,7 +95,9 @@ async def test_check_growth_tier_cache_invalid_and_tenant_missing(user: CurrentU
 
 
 @pytest.mark.asyncio
-async def test_check_growth_tier_cache_set_failure_is_non_fatal(user: CurrentUser, db: MagicMock) -> None:
+async def test_check_growth_tier_cache_set_failure_is_non_fatal(
+    user: CurrentUser, db: MagicMock
+) -> None:
     tenant = SimpleNamespace(plan=PricingTier.GROWTH.value)
     cache = SimpleNamespace(
         get=AsyncMock(return_value=None),
@@ -101,7 +109,9 @@ async def test_check_growth_tier_cache_set_failure_is_non_fatal(user: CurrentUse
 
 
 @pytest.mark.asyncio
-async def test_create_aws_connection_duplicate_raises(user: CurrentUser, db: MagicMock) -> None:
+async def test_create_aws_connection_duplicate_raises(
+    user: CurrentUser, db: MagicMock
+) -> None:
     payload = AWSConnectionCreate(
         aws_account_id="123456789012",
         role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -115,7 +125,9 @@ async def test_create_aws_connection_duplicate_raises(user: CurrentUser, db: Mag
 
 
 @pytest.mark.asyncio
-async def test_delete_aws_connection_not_found(user: CurrentUser, db: MagicMock) -> None:
+async def test_delete_aws_connection_not_found(
+    user: CurrentUser, db: MagicMock
+) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
         await connections_api.delete_aws_connection(uuid4(), user, db)
@@ -123,8 +135,12 @@ async def test_delete_aws_connection_not_found(user: CurrentUser, db: MagicMock)
 
 
 @pytest.mark.asyncio
-async def test_sync_aws_org_requires_management_account(user: CurrentUser, db: MagicMock) -> None:
-    db.execute.return_value = _scalar_result(SimpleNamespace(is_management_account=False))
+async def test_sync_aws_org_requires_management_account(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    db.execute.return_value = _scalar_result(
+        SimpleNamespace(is_management_account=False)
+    )
     with pytest.raises(HTTPException) as exc:
         await connections_api.sync_aws_org(uuid4(), user, db)
     assert exc.value.status_code == 404
@@ -140,7 +156,9 @@ async def test_list_discovered_accounts_returns_empty_when_no_management_connect
 
 
 @pytest.mark.asyncio
-async def test_link_discovered_account_not_authorized(user: CurrentUser, db: MagicMock) -> None:
+async def test_link_discovered_account_not_authorized(
+    user: CurrentUser, db: MagicMock
+) -> None:
     row_result = MagicMock()
     row_result.one_or_none.return_value = None
     db.execute.return_value = row_result
@@ -150,7 +168,9 @@ async def test_link_discovered_account_not_authorized(user: CurrentUser, db: Mag
 
 
 @pytest.mark.asyncio
-async def test_link_discovered_account_existing_connection_path(user: CurrentUser, db: MagicMock) -> None:
+async def test_link_discovered_account_existing_connection_path(
+    user: CurrentUser, db: MagicMock
+) -> None:
     discovered = SimpleNamespace(account_id="123456789012", status="pending")
     mgmt = SimpleNamespace(external_id="vx-" + "a" * 32)
     first = MagicMock()
@@ -165,7 +185,9 @@ async def test_link_discovered_account_existing_connection_path(user: CurrentUse
 
 
 @pytest.mark.asyncio
-async def test_create_azure_connection_duplicate_raises(user: CurrentUser, db: MagicMock) -> None:
+async def test_create_azure_connection_duplicate_raises(
+    user: CurrentUser, db: MagicMock
+) -> None:
     payload = AzureConnectionCreate(
         name="Azure Subscription",
         azure_tenant_id="tenant-1",
@@ -176,12 +198,16 @@ async def test_create_azure_connection_duplicate_raises(user: CurrentUser, db: M
     db.scalar.return_value = SimpleNamespace(id=uuid4())
     with patch.object(connections_api, "check_growth_tier", new=AsyncMock()):
         with pytest.raises(HTTPException) as exc:
-            await connections_api.create_azure_connection(MagicMock(), payload, user, db)
+            await connections_api.create_azure_connection(
+                MagicMock(), payload, user, db
+            )
     assert exc.value.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_delete_azure_connection_not_found(user: CurrentUser, db: MagicMock) -> None:
+async def test_delete_azure_connection_not_found(
+    user: CurrentUser, db: MagicMock
+) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
         await connections_api.delete_azure_connection(uuid4(), user, db)
@@ -189,7 +215,9 @@ async def test_delete_azure_connection_not_found(user: CurrentUser, db: MagicMoc
 
 
 @pytest.mark.asyncio
-async def test_create_gcp_connection_duplicate_raises(user: CurrentUser, db: MagicMock) -> None:
+async def test_create_gcp_connection_duplicate_raises(
+    user: CurrentUser, db: MagicMock
+) -> None:
     payload = GCPConnectionCreate(
         name="GCP Project",
         project_id="project-1",
@@ -204,16 +232,21 @@ async def test_create_gcp_connection_duplicate_raises(user: CurrentUser, db: Mag
 
 
 @pytest.mark.asyncio
-async def test_create_gcp_connection_workload_identity_failure(user: CurrentUser, db: MagicMock) -> None:
+async def test_create_gcp_connection_workload_identity_failure(
+    user: CurrentUser, db: MagicMock
+) -> None:
     payload = GCPConnectionCreate(
         name="GCP Workload Identity",
         project_id="project-2",
         auth_method="workload_identity",
     )
     db.scalar.return_value = None
-    with patch.object(connections_api, "check_growth_tier", new=AsyncMock()), patch(
-        "app.shared.connections.oidc.OIDCService.verify_gcp_access",
-        new=AsyncMock(return_value=(False, "not trusted")),
+    with (
+        patch.object(connections_api, "check_growth_tier", new=AsyncMock()),
+        patch(
+            "app.shared.connections.oidc.OIDCService.verify_gcp_access",
+            new=AsyncMock(return_value=(False, "not trusted")),
+        ),
     ):
         with pytest.raises(HTTPException) as exc:
             await connections_api.create_gcp_connection(MagicMock(), payload, db, user)
@@ -222,7 +255,9 @@ async def test_create_gcp_connection_workload_identity_failure(user: CurrentUser
 
 
 @pytest.mark.asyncio
-async def test_delete_gcp_connection_not_found(user: CurrentUser, db: MagicMock) -> None:
+async def test_delete_gcp_connection_not_found(
+    user: CurrentUser, db: MagicMock
+) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
         await connections_api.delete_gcp_connection(uuid4(), user, db)
@@ -230,8 +265,12 @@ async def test_delete_gcp_connection_not_found(user: CurrentUser, db: MagicMock)
 
 
 @pytest.mark.asyncio
-async def test_check_cloud_plus_tier_denied_for_growth(user: CurrentUser, db: MagicMock) -> None:
-    cache = SimpleNamespace(get=AsyncMock(return_value=PricingTier.GROWTH.value), set=AsyncMock())
+async def test_check_cloud_plus_tier_denied_for_growth(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    cache = SimpleNamespace(
+        get=AsyncMock(return_value=PricingTier.GROWTH.value), set=AsyncMock()
+    )
     with patch("app.shared.core.cache.get_cache_service", return_value=cache):
         with pytest.raises(HTTPException) as exc:
             await connections_api.check_cloud_plus_tier(user, db)
@@ -239,14 +278,20 @@ async def test_check_cloud_plus_tier_denied_for_growth(user: CurrentUser, db: Ma
 
 
 @pytest.mark.asyncio
-async def test_check_cloud_plus_tier_allows_pro(user: CurrentUser, db: MagicMock) -> None:
-    cache = SimpleNamespace(get=AsyncMock(return_value=PricingTier.PRO.value), set=AsyncMock())
+async def test_check_cloud_plus_tier_allows_pro(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    cache = SimpleNamespace(
+        get=AsyncMock(return_value=PricingTier.PRO.value), set=AsyncMock()
+    )
     with patch("app.shared.core.cache.get_cache_service", return_value=cache):
         await connections_api.check_cloud_plus_tier(user, db)
 
 
 @pytest.mark.asyncio
-async def test_create_saas_connection_duplicate_raises(user: CurrentUser, db: MagicMock) -> None:
+async def test_create_saas_connection_duplicate_raises(
+    user: CurrentUser, db: MagicMock
+) -> None:
     payload = SaaSConnectionCreate(
         name="Salesforce",
         vendor="salesforce",
@@ -261,7 +306,9 @@ async def test_create_saas_connection_duplicate_raises(user: CurrentUser, db: Ma
 
 
 @pytest.mark.asyncio
-async def test_delete_saas_connection_not_found(user: CurrentUser, db: MagicMock) -> None:
+async def test_delete_saas_connection_not_found(
+    user: CurrentUser, db: MagicMock
+) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
         await connections_api.delete_saas_connection(uuid4(), user, db)
@@ -269,7 +316,9 @@ async def test_delete_saas_connection_not_found(user: CurrentUser, db: MagicMock
 
 
 @pytest.mark.asyncio
-async def test_create_license_connection_duplicate_raises(user: CurrentUser, db: MagicMock) -> None:
+async def test_create_license_connection_duplicate_raises(
+    user: CurrentUser, db: MagicMock
+) -> None:
     payload = LicenseConnectionCreate(
         name="Microsoft 365",
         vendor="microsoft",
@@ -279,12 +328,16 @@ async def test_create_license_connection_duplicate_raises(user: CurrentUser, db:
     db.scalar.return_value = uuid4()
     with patch.object(connections_api, "check_cloud_plus_tier", new=AsyncMock()):
         with pytest.raises(HTTPException) as exc:
-            await connections_api.create_license_connection(MagicMock(), payload, user, db)
+            await connections_api.create_license_connection(
+                MagicMock(), payload, user, db
+            )
     assert exc.value.status_code == 409
 
 
 @pytest.mark.asyncio
-async def test_delete_license_connection_not_found(user: CurrentUser, db: MagicMock) -> None:
+async def test_delete_license_connection_not_found(
+    user: CurrentUser, db: MagicMock
+) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
         await connections_api.delete_license_connection(uuid4(), user, db)

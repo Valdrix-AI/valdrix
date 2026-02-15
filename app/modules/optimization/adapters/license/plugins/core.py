@@ -62,8 +62,14 @@ class UnusedLicenseSeatsPlugin(ZombiePlugin):
             if monthly_cost <= 0:
                 continue
 
-            purchased = _to_int(entry.get("purchased_seats") or entry.get("total_seats"))
-            assigned = _to_int(entry.get("assigned_seats") or entry.get("used_seats") or entry.get("active_users"))
+            purchased = _to_int(
+                entry.get("purchased_seats") or entry.get("total_seats")
+            )
+            assigned = _to_int(
+                entry.get("assigned_seats")
+                or entry.get("used_seats")
+                or entry.get("active_users")
+            )
             status = str(entry.get("status") or "").strip().lower()
 
             waste = 0.0

@@ -9,6 +9,7 @@ Structure:
 - llm.py - LLM provider and budget settings
 - activeops.py - Autonomous remediation settings
 - safety.py - Circuit breaker and safety controls
+- profile.py - Persona preference and other user-scoped settings
 """
 
 from fastapi import APIRouter
@@ -18,6 +19,8 @@ from .carbon import router as carbon_router
 from .llm import router as llm_router
 from .activeops import router as activeops_router
 from .safety import router as safety_router
+from .identity import router as identity_router
+from .profile import router as profile_router
 
 # Main settings router - aggregates all sub-routers
 router = APIRouter(tags=["Settings"])
@@ -28,3 +31,5 @@ router.include_router(carbon_router)
 router.include_router(llm_router)
 router.include_router(activeops_router)
 router.include_router(safety_router)
+router.include_router(identity_router)
+router.include_router(profile_router)

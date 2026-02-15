@@ -7,16 +7,17 @@ import pytest
 
 from app.shared.llm.pricing_data import ProviderCost, LLM_PRICING, refresh_llm_pricing
 
+
 class TestProviderCost:
     def test_provider_cost_initialization(self):
         """Test ProviderCost initializes correctly with attributes and dict access."""
         cost = ProviderCost(input=1.0, output=2.0, free_tier_tokens=100)
-        
+
         # Test attributes
         assert cost.input == 1.0
         assert cost.output == 2.0
         assert cost.free_tier_tokens == 100
-        
+
         # Test dict access
         assert cost["input"] == 1.0
         assert cost["output"] == 2.0
@@ -27,6 +28,7 @@ class TestProviderCost:
         cost = ProviderCost(input=1.0, output=2.0)
         assert cost.free_tier_tokens == 0
         assert cost["free_tier_tokens"] == 0
+
 
 class TestLLMPricing:
     def test_pricing_structure(self):
@@ -59,7 +61,7 @@ class TestLLMPricing:
                 model="gpt-4o",
                 input_cost_per_million=1.23,
                 output_cost_per_million=4.56,
-                free_tier_tokens=789
+                free_tier_tokens=789,
             )
 
             result = MagicMock()

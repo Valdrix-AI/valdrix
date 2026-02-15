@@ -7,6 +7,7 @@ from app.models.aws_connection import AWSConnection
 
 logger = structlog.get_logger()
 
+
 class S3ParquetAdapter:
     """
     Adapter for reading AWS Cost and Usage Reports (CUR) in Parquet format from S3.
@@ -27,14 +28,17 @@ class S3ParquetAdapter:
             bucket, key = s3_path.replace("s3://", "").split("/", 1)
         else:
             # Assume it's just the key if bucket is known, but better to be explicit
-            bucket = f"valdrix-cur-{self.connection.aws_account_id}-{self.connection.region}"
+            bucket = (
+                f"valdrix-cur-{self.connection.aws_account_id}-{self.connection.region}"
+            )
             key = s3_path
 
         creds = await self._get_credentials()
-        
+
         try:
             import pyarrow.parquet as pq
             import pyarrow.fs as pafs
+
             use_pyarrow = True
         except ImportError:
             use_pyarrow = False
@@ -45,21 +49,27 @@ class S3ParquetAdapter:
                     access_key=creds["AccessKeyId"],
                     secret_key=creds["SecretAccessKey"],
                     session_token=creds.get("SessionToken"),
-                    region=self.connection.region
+                    region=self.connection.region,
                 )
                 path = f"{bucket}/{key}"
                 with s3fs.open_input_file(path) as f:
                     parquet_file = pq.ParquetFile(f)
-                    batches = [batch.to_pandas() for batch in parquet_file.iter_batches()]
-                df = pd.concat(batches, ignore_index=True) if batches else pd.DataFrame()
-                logger.info("cur_parquet_read_success", bucket=bucket, key=key, rows=len(df))
+                    batches = [
+                        batch.to_pandas() for batch in parquet_file.iter_batches()
+                    ]
+                df = (
+                    pd.concat(batches, ignore_index=True) if batches else pd.DataFrame()
+                )
+                logger.info(
+                    "cur_parquet_read_success", bucket=bucket, key=key, rows=len(df)
+                )
                 return df
             except Exception as e:
                 logger.warning(
                     "cur_parquet_stream_read_failed_fallback",
                     bucket=bucket,
                     key=key,
-                    error=str(e)
+                    error=str(e),
                 )
 
         async with self.session.client(
@@ -74,14 +84,19 @@ class S3ParquetAdapter:
 
                 # Use pandas to read parquet from memory buffer (fallback path)
                 df = pd.read_parquet(io.BytesIO(content))
-                logger.info("cur_parquet_read_success", bucket=bucket, key=key, rows=len(df))
+                logger.info(
+                    "cur_parquet_read_success", bucket=bucket, key=key, rows=len(df)
+                )
                 return df
             except Exception as e:
-                logger.error("cur_parquet_read_failed", bucket=bucket, key=key, error=str(e))
+                logger.error(
+                    "cur_parquet_read_failed", bucket=bucket, key=key, error=str(e)
+                )
                 raise
 
     async def _get_credentials(self) -> dict[str, str]:
         from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+
         adapter = MultiTenantAWSAdapter(self.connection)
         credentials = await adapter.get_credentials()
         return cast(dict[str, str], credentials)
@@ -98,19 +113,21 @@ class S3ParquetAdapter:
             "line_item_product_code": "service",
             "line_item_operation": "usage_type",
             "line_item_unblended_cost": "unblended_cost",
-            "line_item_amortized_cost": "cost_usd", # We prefer Amortized
+            "line_item_amortized_cost": "cost_usd",  # We prefer Amortized
             "product_region": "region",
         }
 
         # Filter and rename
         existing_cols = [c for c in mapping.keys() if c in df.columns]
-        df_subset = df[existing_cols].rename(columns={k: v for k, v in mapping.items() if k in existing_cols})
+        df_subset = df[existing_cols].rename(
+            columns={k: v for k, v in mapping.items() if k in existing_cols}
+        )
 
         # Ensure types
         if "timestamp" in df_subset.columns:
             df_subset["timestamp"] = pd.to_datetime(df_subset["timestamp"])
             df_subset["recorded_at"] = df_subset["timestamp"].dt.date
-        
+
         # Convert to list of dicts for bulk insert
         records = df_subset.to_dict("records")
         return cast(list[dict[str, Any]], records)

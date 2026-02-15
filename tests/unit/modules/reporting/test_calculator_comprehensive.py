@@ -16,6 +16,7 @@ from app.modules.reporting.domain.calculator import (
 @dataclass
 class MockCostRecord:
     """Mock for CostRecord used in tests."""
+
     cost_usd: Decimal
     service: str
     usage_type: str = ""
@@ -24,7 +25,7 @@ class MockCostRecord:
 
 class TestCarbonCalculatorFromCosts:
     """Test cost-based carbon calculations."""
-    
+
     def test_calculate_from_grouped_costs_single_service(self):
         """Test calculation with grouped cost data for a single service."""
         calculator = CarbonCalculator()
@@ -33,18 +34,14 @@ class TestCarbonCalculatorFromCosts:
                 "Groups": [
                     {
                         "Keys": ["Amazon Elastic Compute Cloud - Compute"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "100.00"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "100.00"}},
                     }
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="us-east-1")
-        
+
         assert "total_co2_kg" in result
         assert result["total_cost_usd"] == 100.0
         assert result["region"] == "us-east-1"
@@ -59,26 +56,18 @@ class TestCarbonCalculatorFromCosts:
                 "Groups": [
                     {
                         "Keys": ["Amazon Elastic Compute Cloud - Compute"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "100.00"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "100.00"}},
                     },
                     {
                         "Keys": ["Amazon Simple Storage Service"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "50.00"
-                            }
-                        }
-                    }
+                        "Metrics": {"UnblendedCost": {"Amount": "50.00"}},
+                    },
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="eu-north-1")
-        
+
         assert result["total_cost_usd"] == 150.0
         assert result["region"] == "eu-north-1"
         # Compute is more energy-intensive than storage
@@ -87,18 +76,10 @@ class TestCarbonCalculatorFromCosts:
     def test_calculate_from_flat_ungrouped_costs(self):
         """Test calculation with flat (ungrouped) cost data."""
         calculator = CarbonCalculator()
-        cost_data = [
-            {
-                "Total": {
-                    "UnblendedCost": {
-                        "Amount": "75.50"
-                    }
-                }
-            }
-        ]
-        
+        cost_data = [{"Total": {"UnblendedCost": {"Amount": "75.50"}}}]
+
         result = calculator.calculate_from_costs(cost_data, region="ca-central-1")
-        
+
         assert result["total_cost_usd"] == 75.50
         assert result["region"] == "ca-central-1"
         assert result["total_co2_kg"] > 0
@@ -111,18 +92,14 @@ class TestCarbonCalculatorFromCosts:
                 "Groups": [
                     {
                         "Keys": ["Amazon Elastic Compute Cloud - Compute"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "0"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "0"}},
                     }
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="us-west-2")
-        
+
         assert result["total_cost_usd"] == 0.0
         assert result["total_co2_kg"] == 0.0
 
@@ -134,16 +111,14 @@ class TestCarbonCalculatorFromCosts:
                 "Groups": [
                     {
                         "Keys": ["Amazon Elastic Compute Cloud - Compute"],
-                        "Metrics": {
-                            "UnblendedCost": {}
-                        }
+                        "Metrics": {"UnblendedCost": {}},
                     }
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="us-east-1")
-        
+
         assert result["total_cost_usd"] == 0.0
 
     def test_calculate_preserves_service_accuracy(self):
@@ -154,18 +129,14 @@ class TestCarbonCalculatorFromCosts:
                 "Groups": [
                     {
                         "Keys": ["Amazon Simple Storage Service"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "100.00"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "100.00"}},
                     }
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="us-east-1")
-        
+
         # Should return result dict
         assert isinstance(result, dict)
         assert result["total_cost_usd"] == 100.0
@@ -180,18 +151,14 @@ class TestCarbonCalculatorFromCosts:
                 "Groups": [
                     {
                         "Keys": ["Unknown Cloud Service"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "100.00"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "100.00"}},
                     }
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="us-east-1")
-        
+
         assert result["total_cost_usd"] == 100.0
         # Should use default energy factor (0.03)
         assert result["total_co2_kg"] > 0
@@ -207,7 +174,9 @@ class TestCarbonCalculatorFromCosts:
             }
         ]
 
-        result = calculator.calculate_from_costs(cost_data, region="us-west-1", provider="gcp")
+        result = calculator.calculate_from_costs(
+            cost_data, region="us-west-1", provider="gcp"
+        )
 
         assert result["total_cost_usd"] == 120.0
         assert result["provider"] == "gcp"
@@ -221,22 +190,18 @@ class TestCarbonCalculatorFromCosts:
                 "Groups": [
                     {
                         "Keys": ["Amazon Elastic Compute Cloud - Compute"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "100.00"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "100.00"}},
                     }
                 ]
             }
         ]
-        
+
         # Low-carbon region
         result_green = calculator.calculate_from_costs(cost_data, region="eu-north-1")
-        
+
         # High-carbon region
         result_brown = calculator.calculate_from_costs(cost_data, region="ap-south-1")
-        
+
         # Same cost should produce different emissions in different regions
         assert result_green["total_co2_kg"] > 0
         assert result_brown["total_co2_kg"] > result_green["total_co2_kg"]
@@ -253,12 +218,12 @@ class TestCarbonCalculatorFromRecords:
                 cost_usd=Decimal("50.0"),
                 service="Amazon Elastic Compute Cloud - Compute",
                 usage_type="vCPU-Hours",
-                amount_raw=100.0
+                amount_raw=100.0,
             )
         ]
-        
+
         result = calculator.calculate_from_records(records, region="us-east-1")
-        
+
         assert result["total_cost_usd"] == 50.0
         assert result["total_co2_kg"] > 0
         assert result["region"] == "us-east-1"
@@ -271,12 +236,12 @@ class TestCarbonCalculatorFromRecords:
                 cost_usd=Decimal("100.0"),
                 service="Amazon Elastic Compute Cloud - EC2",
                 usage_type="on-demand-ec2-instances",
-                amount_raw=1000.0
+                amount_raw=1000.0,
             )
         ]
-        
+
         result = calculator.calculate_from_records(records, region="us-west-2")
-        
+
         # Should calculate emissions based on cost
         assert result["estimated_energy_kwh"] > 0
         assert result["total_co2_kg"] > 0
@@ -289,12 +254,12 @@ class TestCarbonCalculatorFromRecords:
                 cost_usd=Decimal("100.0"),
                 service="Amazon Simple Storage Service",
                 usage_type="",
-                amount_raw=0.0
+                amount_raw=0.0,
             )
         ]
-        
+
         result = calculator.calculate_from_records(records, region="eu-west-1")
-        
+
         assert result["total_cost_usd"] == 100.0
         assert result["total_co2_kg"] > 0
         """Test record calculation falls back to cost-proxy when usage_type is missing."""
@@ -304,12 +269,12 @@ class TestCarbonCalculatorFromRecords:
                 cost_usd=Decimal("100.0"),
                 service="Amazon Simple Storage Service",
                 usage_type="",
-                amount_raw=0.0
+                amount_raw=0.0,
             )
         ]
-        
+
         result = calculator.calculate_from_records(records, region="eu-west-1")
-        
+
         assert result["total_cost_usd"] == 100.0
         assert result["total_co2_kg"] > 0
 
@@ -319,20 +284,18 @@ class TestCarbonCalculatorFromRecords:
         records = [
             MockCostRecord(
                 cost_usd=Decimal("50.0"),
-                service="Amazon Elastic Compute Cloud - Compute"
+                service="Amazon Elastic Compute Cloud - Compute",
             ),
             MockCostRecord(
-                cost_usd=Decimal("30.0"),
-                service="Amazon Simple Storage Service"
+                cost_usd=Decimal("30.0"), service="Amazon Simple Storage Service"
             ),
             MockCostRecord(
-                cost_usd=Decimal("20.0"),
-                service="Amazon Relational Database Service"
-            )
+                cost_usd=Decimal("20.0"), service="Amazon Relational Database Service"
+            ),
         ]
-        
+
         result = calculator.calculate_from_records(records, region="us-east-1")
-        
+
         assert result["total_cost_usd"] == 100.0
         assert result["total_co2_kg"] > 0
 
@@ -344,9 +307,9 @@ class TestCarbonCalculatorMetrics:
         """Test that result contains all required metric fields."""
         calculator = CarbonCalculator()
         cost_data = [{"Groups": []}]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="us-east-1")
-        
+
         required_fields = [
             "total_co2_kg",
             "scope2_co2_kg",
@@ -361,17 +324,23 @@ class TestCarbonCalculatorMetrics:
             "methodology",
             "includes_embodied_emissions",
         ]
-        
+
         for field in required_fields:
             assert field in result
 
     def test_methodology_metadata_contains_assurance_fields_and_is_stable(self):
         """Methodology metadata must be auditable and deterministic for same inputs."""
         calculator = CarbonCalculator()
-        cost_data = [{"service": "Compute Engine", "cost_usd": 120.0, "provider": "gcp"}]
+        cost_data = [
+            {"service": "Compute Engine", "cost_usd": 120.0, "provider": "gcp"}
+        ]
 
-        result_one = calculator.calculate_from_costs(cost_data, region="us-west-1", provider="gcp")
-        result_two = calculator.calculate_from_costs(cost_data, region="us-west-1", provider="gcp")
+        result_one = calculator.calculate_from_costs(
+            cost_data, region="us-west-1", provider="gcp"
+        )
+        result_two = calculator.calculate_from_costs(
+            cost_data, region="us-west-1", provider="gcp"
+        )
 
         metadata_one = result_one["methodology_metadata"]
         metadata_two = result_two["methodology_metadata"]
@@ -391,8 +360,14 @@ class TestCarbonCalculatorMetrics:
 
         assert metadata_one["methodology_version"] == "valdrix-carbon-v2.0"
         assert metadata_one["provider"] == "gcp"
-        assert metadata_one["factors_checksum_sha256"] == metadata_two["factors_checksum_sha256"]
-        assert metadata_one["calculation_input_checksum_sha256"] == metadata_two["calculation_input_checksum_sha256"]
+        assert (
+            metadata_one["factors_checksum_sha256"]
+            == metadata_two["factors_checksum_sha256"]
+        )
+        assert (
+            metadata_one["calculation_input_checksum_sha256"]
+            == metadata_two["calculation_input_checksum_sha256"]
+        )
 
     def test_scope2_and_scope3_breakdown(self):
         """Test that Scope 2 and Scope 3 emissions are calculated correctly."""
@@ -402,18 +377,14 @@ class TestCarbonCalculatorMetrics:
                 "Groups": [
                     {
                         "Keys": ["Amazon Elastic Compute Cloud - Compute"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "100.00"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "100.00"}},
                     }
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="us-east-1")
-        
+
         # Total = Scope 2 + Scope 3
         total = result["scope2_co2_kg"] + result["scope3_co2_kg"]
         assert abs(total - result["total_co2_kg"]) < 0.01  # Account for rounding
@@ -426,18 +397,14 @@ class TestCarbonCalculatorMetrics:
                 "Groups": [
                     {
                         "Keys": ["Amazon Elastic Compute Cloud - Compute"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "100.00"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "100.00"}},
                     }
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="us-east-1")
-        
+
         # Carbon efficiency = (total_co2_kg * 1000) / total_cost_usd
         expected_score = (result["total_co2_kg"] * 1000) / result["total_cost_usd"]
         assert abs(result["carbon_efficiency_score"] - expected_score) < 0.1
@@ -449,9 +416,9 @@ class TestCarbonCalculatorMetrics:
         result = calculator._finalize_calculation(
             Decimal("0"),
             Decimal("10"),  # 10 kWh uses energy
-            "us-east-1"
+            "us-east-1",
         )
-        
+
         # Should return high sentinel value
         assert result["carbon_efficiency_score"] == 9999.9
 
@@ -463,7 +430,7 @@ class TestCarbonCalculatorEquivalencies:
         """Test miles driven equivalency calculation."""
         calculator = CarbonCalculator()
         equivalencies = calculator._calculate_equivalencies(100.0)  # 100 kg CO2
-        
+
         # 100 kg * 1000 g/kg / 404 g/mile ≈ 247.5 miles
         assert "miles_driven" in equivalencies
         assert 240 < equivalencies["miles_driven"] < 255
@@ -472,7 +439,7 @@ class TestCarbonCalculatorEquivalencies:
         """Test trees needed for year equivalency."""
         calculator = CarbonCalculator()
         equivalencies = calculator._calculate_equivalencies(100.0)
-        
+
         # 100 kg / 22 kg/tree ≈ 4.5 trees
         assert "trees_needed_for_year" in equivalencies
         assert 4 < equivalencies["trees_needed_for_year"] < 5
@@ -481,7 +448,7 @@ class TestCarbonCalculatorEquivalencies:
         """Test smartphone charges equivalency."""
         calculator = CarbonCalculator()
         equivalencies = calculator._calculate_equivalencies(34.0)  # 34 kg CO2
-        
+
         # 34 kg * 1000 g/kg / 3.4 g/charge = 10000 charges
         assert "smartphone_charges" in equivalencies
         assert equivalencies["smartphone_charges"] == 10000
@@ -490,7 +457,7 @@ class TestCarbonCalculatorEquivalencies:
         """Test percent of home usage per month equivalency."""
         calculator = CarbonCalculator()
         equivalencies = calculator._calculate_equivalencies(180.0)  # Half home monthly
-        
+
         # (180 kg / 360 kg) * 100 = 50%
         assert "percent_of_home_month" in equivalencies
         assert equivalencies["percent_of_home_month"] == 50.0
@@ -503,7 +470,7 @@ class TestCarbonCalculatorRecommendations:
         """Test region recommendations from high-carbon region."""
         calculator = CarbonCalculator()
         recommendations = calculator.get_green_region_recommendations("ap-south-1")
-        
+
         assert len(recommendations) <= 5
         assert all("region" in r for r in recommendations)
         assert all("carbon_intensity" in r for r in recommendations)
@@ -514,7 +481,7 @@ class TestCarbonCalculatorRecommendations:
         calculator = CarbonCalculator()
         current_intensity = REGION_CARBON_INTENSITY["ap-south-1"]
         recommendations = calculator.get_green_region_recommendations("ap-south-1")
-        
+
         for rec in recommendations:
             assert rec["carbon_intensity"] < current_intensity
 
@@ -522,7 +489,7 @@ class TestCarbonCalculatorRecommendations:
         """Test recommendations from already low-carbon region."""
         calculator = CarbonCalculator()
         recommendations = calculator.get_green_region_recommendations("us-west-2")
-        
+
         # Should have fewer or zero recommendations
         assert len(recommendations) <= 5
 
@@ -530,7 +497,7 @@ class TestCarbonCalculatorRecommendations:
         """Test that savings percent is calculated correctly."""
         calculator = CarbonCalculator()
         recommendations = calculator.get_green_region_recommendations("us-east-1")
-        
+
         us_east_1_intensity = REGION_CARBON_INTENSITY["us-east-1"]
         for rec in recommendations:
             expected_savings = (1 - rec["carbon_intensity"] / us_east_1_intensity) * 100
@@ -544,7 +511,7 @@ class TestCarbonCalculatorForecasting:
         """Test baseline emissions forecast."""
         calculator = CarbonCalculator()
         forecast = calculator.forecast_emissions(10.0, days=30, region_trend_factor=1.0)
-        
+
         assert forecast["forecast_days"] == 30
         assert forecast["baseline_co2_kg"] == 300.0
         assert forecast["projected_co2_kg"] == 300.0
@@ -555,12 +522,12 @@ class TestCarbonCalculatorForecasting:
         forecast = calculator.forecast_emissions(
             current_daily_co2_kg=10.0,
             days=30,
-            region_trend_factor=0.99  # 1% improvement
+            region_trend_factor=0.99,  # 1% improvement
         )
-        
+
         baseline = 10.0 * 30
         projected = baseline * 0.99
-        
+
         assert forecast["baseline_co2_kg"] == baseline
         assert forecast["projected_co2_kg"] == projected
 
@@ -570,19 +537,19 @@ class TestCarbonCalculatorForecasting:
         forecast = calculator.forecast_emissions(
             current_daily_co2_kg=10.0,
             days=30,
-            region_trend_factor=1.02  # 2% degradation
+            region_trend_factor=1.02,  # 2% degradation
         )
-        
+
         baseline = 10.0 * 30
         projected = baseline * 1.02
-        
+
         assert forecast["projected_co2_kg"] == projected
 
     def test_forecast_includes_description(self):
         """Test forecast includes descriptive text."""
         calculator = CarbonCalculator()
         forecast = calculator.forecast_emissions(5.0, days=60)
-        
+
         assert "description" in forecast
         assert "60" in forecast["description"]
 
@@ -598,18 +565,14 @@ class TestCarbonCalculatorEdgeCases:
                 "Groups": [
                     {
                         "Keys": ["Amazon Elastic Compute Cloud - Compute"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "-50.00"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "-50.00"}},
                     }
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="us-east-1")
-        
+
         # Negative shouldn't be processed
         assert result["total_cost_usd"] <= 0
 
@@ -621,31 +584,27 @@ class TestCarbonCalculatorEdgeCases:
                 "Groups": [
                     {
                         "Keys": ["Amazon Elastic Compute Cloud - Compute"],
-                        "Metrics": {
-                            "UnblendedCost": {
-                                "Amount": "100.00"
-                            }
-                        }
+                        "Metrics": {"UnblendedCost": {"Amount": "100.00"}},
                     }
                 ]
             }
         ]
-        
+
         result = calculator.calculate_from_costs(cost_data, region="unknown-region-1")
-        
+
         assert result["carbon_intensity_gco2_kwh"] == REGION_CARBON_INTENSITY["default"]
 
     def test_pue_multiplier_applied(self):
         """Test that PUE multiplier is applied to energy calculations."""
         calculator = CarbonCalculator()
-        
+
         # Create fixed calculation
         result = calculator._finalize_calculation(
             Decimal("0"),
             Decimal("100"),  # 100 kWh
-            "us-east-1"
+            "us-east-1",
         )
-        
+
         # Energy should be multiplied by PUE (1.2)
         # 100 kWh * 1.2 = 120 kWh effective
         assert result["estimated_energy_kwh"] == round(100 * CLOUD_PUE, 3)
@@ -654,11 +613,12 @@ class TestCarbonCalculatorEdgeCases:
         """Test that embodied emissions (Scope 3) are included."""
         calculator = CarbonCalculator()
         result = calculator._finalize_calculation(
-            Decimal("0"),
-            Decimal("100"),
-            "us-east-1"
+            Decimal("0"), Decimal("100"), "us-east-1"
         )
-        
+
         assert result["scope3_co2_kg"] > 0
         assert result["includes_embodied_emissions"] is True
-        assert result["methodology"] == "Valdrix 2026 (CCF + multi-cloud provider factors v2.0)"
+        assert (
+            result["methodology"]
+            == "Valdrix 2026 (CCF + multi-cloud provider factors v2.0)"
+        )

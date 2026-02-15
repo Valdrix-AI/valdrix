@@ -9,6 +9,7 @@ from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
 
+
 class TestCloudConnectionsDeep:
     @pytest.fixture
     def mock_db(self):
@@ -19,17 +20,21 @@ class TestCloudConnectionsDeep:
         service = AWSConnectionService(mock_db)
         conn_id = uuid4()
         tenant_id = uuid4()
-        
+
         # Mock DB results
-        mock_conn = AWSConnection(id=conn_id, tenant_id=tenant_id, status="pending", region="us-east-1")
+        mock_conn = AWSConnection(
+            id=conn_id, tenant_id=tenant_id, status="pending", region="us-east-1"
+        )
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
-        
-        with patch("app.shared.connections.aws.MultiTenantAWSAdapter") as mock_adapter_class:
+
+        with patch(
+            "app.shared.connections.aws.MultiTenantAWSAdapter"
+        ) as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
             mock_adapter.verify_connection = AsyncMock(return_value=True)
-            
+
             res = await service.verify_connection(conn_id, tenant_id)
             assert res["status"] == "success"
             assert mock_conn.status == "active"
@@ -41,7 +46,7 @@ class TestCloudConnectionsDeep:
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
         mock_db.execute.return_value = mock_result
-        
+
         with pytest.raises(ResourceNotFoundError):
             await service.verify_connection(uuid4(), uuid4())
 
@@ -52,11 +57,13 @@ class TestCloudConnectionsDeep:
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
-        
-        with patch("app.shared.connections.aws.MultiTenantAWSAdapter") as mock_adapter_class:
+
+        with patch(
+            "app.shared.connections.aws.MultiTenantAWSAdapter"
+        ) as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
             mock_adapter.verify_connection = AsyncMock(return_value=False)
-            
+
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "failed"
             assert mock_conn.status == "error"
@@ -68,11 +75,15 @@ class TestCloudConnectionsDeep:
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
-        
-        with patch("app.shared.connections.aws.MultiTenantAWSAdapter") as mock_adapter_class:
+
+        with patch(
+            "app.shared.connections.aws.MultiTenantAWSAdapter"
+        ) as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
-            mock_adapter.verify_connection.side_effect = AdapterError("IAM Error", code="AUTH_FAILED")
-            
+            mock_adapter.verify_connection.side_effect = AdapterError(
+                "IAM Error", code="AUTH_FAILED"
+            )
+
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "error"
             assert res["code"] == "AUTH_FAILED"
@@ -84,11 +95,13 @@ class TestCloudConnectionsDeep:
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
-        
-        with patch("app.shared.connections.aws.MultiTenantAWSAdapter") as mock_adapter_class:
+
+        with patch(
+            "app.shared.connections.aws.MultiTenantAWSAdapter"
+        ) as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
             mock_adapter.verify_connection.side_effect = Exception("System Crash")
-            
+
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "error"
             assert "unexpected error" in res["message"].lower()
@@ -100,11 +113,11 @@ class TestCloudConnectionsDeep:
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
-        
+
         with patch("app.shared.connections.azure.AzureAdapter") as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
             mock_adapter.verify_connection = AsyncMock(return_value=True)
-            
+
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "success"
             assert mock_conn.is_active is True
@@ -125,11 +138,11 @@ class TestCloudConnectionsDeep:
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
-        
+
         with patch("app.shared.connections.azure.AzureAdapter") as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
             mock_adapter.verify_connection = AsyncMock(return_value=False)
-            
+
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "failed"
 
@@ -140,11 +153,11 @@ class TestCloudConnectionsDeep:
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
-        
+
         with patch("app.shared.connections.gcp.GCPAdapter") as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
             mock_adapter.verify_connection = AsyncMock(return_value=True)
-            
+
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "success"
             assert mock_conn.is_active is True
@@ -165,14 +178,14 @@ class TestCloudConnectionsDeep:
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
-        
+
         with patch("app.shared.connections.gcp.GCPAdapter") as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
             mock_adapter.verify_connection = AsyncMock(return_value=False)
-            
+
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "failed"
-            
+
     def test_aws_setup_templates(self):
         templates = AWSConnectionService.get_setup_templates("ext-123")
         assert templates["external_id"] == "ext-123"
@@ -183,8 +196,10 @@ class TestCloudConnectionsDeep:
     async def test_azure_list_connections(self, mock_db):
         service = AzureConnectionService(mock_db)
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [AzureConnection(id=uuid4())]
+        mock_result.scalars.return_value.all.return_value = [
+            AzureConnection(id=uuid4())
+        ]
         mock_db.execute.return_value = mock_result
-        
+
         conns = await service.list_connections(uuid4())
         assert len(conns) == 1

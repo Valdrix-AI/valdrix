@@ -10,7 +10,9 @@ async def test_gcp_idle_instances_scan_uses_billing_records():
     plugin = IdleVmsPlugin()
     expected = [{"resource_id": "vm-1", "monthly_cost": 55.0}]
 
-    with patch("app.shared.analysis.gcp_usage_analyzer.GCPUsageAnalyzer") as analyzer_cls:
+    with patch(
+        "app.shared.analysis.gcp_usage_analyzer.GCPUsageAnalyzer"
+    ) as analyzer_cls:
         analyzer = analyzer_cls.return_value
         analyzer.find_idle_vms.return_value = expected
 

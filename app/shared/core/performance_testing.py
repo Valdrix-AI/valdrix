@@ -4,6 +4,7 @@ Load Testing and Performance Benchmarking Utilities
 Provides tools for load testing APIs, benchmarking database queries,
 and measuring system performance under various conditions.
 """
+
 import asyncio
 import time
 import statistics
@@ -16,7 +17,9 @@ import httpx
 
 from app.shared.core.config import get_settings
 from app.shared.core.ops_metrics import (
-    API_REQUEST_DURATION, API_REQUESTS_TOTAL, API_ERRORS_TOTAL
+    API_REQUEST_DURATION,
+    API_REQUESTS_TOTAL,
+    API_ERRORS_TOTAL,
 )
 
 logger = structlog.get_logger()
@@ -26,9 +29,10 @@ settings = get_settings()
 @dataclass
 class LoadTestConfig:
     """Configuration for load testing."""
+
     duration_seconds: int = 60  # How long to run the test
-    concurrent_users: int = 10   # Number of concurrent users
-    ramp_up_seconds: int = 10    # Time to ramp up to full concurrency
+    concurrent_users: int = 10  # Number of concurrent users
+    ramp_up_seconds: int = 10  # Time to ramp up to full concurrency
     target_url: str = "http://localhost:8000"
     endpoints: List[str] = field(default_factory=lambda: ["/health"])
     request_timeout: float = 30.0
@@ -38,6 +42,7 @@ class LoadTestConfig:
 @dataclass
 class LoadTestResult:
     """Results from a load test."""
+
     total_requests: int = 0
     successful_requests: int = 0
     failed_requests: int = 0
@@ -49,7 +54,7 @@ class LoadTestResult:
     median_response_time: float = 0.0
     p95_response_time: float = 0.0
     p99_response_time: float = 0.0
-    min_response_time: float = float('inf')
+    min_response_time: float = float("inf")
     max_response_time: float = 0.0
 
 
@@ -67,7 +72,7 @@ class LoadTester:
             "starting_load_test",
             duration=self.config.duration_seconds,
             concurrent_users=self.config.concurrent_users,
-            endpoints=self.config.endpoints
+            endpoints=self.config.endpoints,
         )
 
         self._running = True
@@ -95,7 +100,7 @@ class LoadTester:
             failed_requests=self.results.failed_requests,
             throughput_rps=self.results.throughput_rps,
             avg_response_time=self.results.avg_response_time,
-            p95_response_time=self.results.p95_response_time
+            p95_response_time=self.results.p95_response_time,
         )
 
         return self.results
@@ -103,18 +108,21 @@ class LoadTester:
     async def _simulate_user(self, user_id: int, test_start_time: float) -> None:
         """Simulate a single user making requests."""
         async with httpx.AsyncClient(
-            timeout=self.config.request_timeout,
-            headers=self.config.headers
+            timeout=self.config.request_timeout, headers=self.config.headers
         ) as client:
-
             # Ramp up delay
             if self.config.ramp_up_seconds > 0:
-                delay = (user_id / self.config.concurrent_users) * self.config.ramp_up_seconds
+                delay = (
+                    user_id / self.config.concurrent_users
+                ) * self.config.ramp_up_seconds
                 await asyncio.sleep(delay)
 
             time.time()
 
-            while self._running and (time.time() - test_start_time) < self.config.duration_seconds:
+            while (
+                self._running
+                and (time.time() - test_start_time) < self.config.duration_seconds
+            ):
                 for endpoint in self.config.endpoints:
                     if not self._running:
                         break
@@ -135,27 +143,32 @@ class LoadTester:
                             self.results.successful_requests += 1
                         else:
                             self.results.failed_requests += 1
-                            self.results.errors.append(f"HTTP {response.status_code}: {response.text[:100]}")
+                            self.results.errors.append(
+                                f"HTTP {response.status_code}: {response.text[:100]}"
+                            )
 
                         API_REQUESTS_TOTAL.labels(
                             method="GET",
                             endpoint=endpoint,
-                            status_code=response.status_code
+                            status_code=response.status_code,
                         ).inc()
                         API_REQUEST_DURATION.labels(
-                            method="GET",
-                            endpoint=endpoint
+                            method="GET", endpoint=endpoint
                         ).observe(response_time)
                         if response.status_code >= 400:
                             API_ERRORS_TOTAL.labels(
                                 path=endpoint,
                                 method="GET",
-                                status_code=response.status_code
+                                status_code=response.status_code,
                             ).inc()
 
                         # Update min/max
-                        self.results.min_response_time = min(self.results.min_response_time, response_time)
-                        self.results.max_response_time = max(self.results.max_response_time, response_time)
+                        self.results.min_response_time = min(
+                            self.results.min_response_time, response_time
+                        )
+                        self.results.max_response_time = max(
+                            self.results.max_response_time, response_time
+                        )
 
                     except Exception as e:
                         response_time = time.time() - request_start
@@ -163,18 +176,13 @@ class LoadTester:
                         self.results.failed_requests += 1
                         self.results.errors.append(str(e))
                         API_REQUESTS_TOTAL.labels(
-                            method="GET",
-                            endpoint=endpoint,
-                            status_code="exception"
+                            method="GET", endpoint=endpoint, status_code="exception"
                         ).inc()
                         API_REQUEST_DURATION.labels(
-                            method="GET",
-                            endpoint=endpoint
+                            method="GET", endpoint=endpoint
                         ).observe(response_time)
                         API_ERRORS_TOTAL.labels(
-                            path=endpoint,
-                            method="GET",
-                            status_code="exception"
+                            path=endpoint, method="GET", status_code="exception"
                         ).inc()
 
                     # Small delay between requests to avoid overwhelming
@@ -186,16 +194,24 @@ class LoadTester:
             return
 
         self.results.throughput_rps = self.results.total_requests / total_duration
-        self.results.avg_response_time = self.results.total_response_time / self.results.total_requests
+        self.results.avg_response_time = (
+            self.results.total_response_time / self.results.total_requests
+        )
 
         if self.results.response_times:
-            self.results.median_response_time = statistics.median(self.results.response_times)
+            self.results.median_response_time = statistics.median(
+                self.results.response_times
+            )
             if len(self.results.response_times) >= 20:
-                self.results.p95_response_time = statistics.quantiles(self.results.response_times, n=20)[18]  # 95th percentile
+                self.results.p95_response_time = statistics.quantiles(
+                    self.results.response_times, n=20
+                )[18]  # 95th percentile
             else:
                 self.results.p95_response_time = self.results.median_response_time
             if len(self.results.response_times) >= 100:
-                self.results.p99_response_time = statistics.quantiles(self.results.response_times, n=100)[98]  # 99th percentile
+                self.results.p99_response_time = statistics.quantiles(
+                    self.results.response_times, n=100
+                )[98]  # 99th percentile
             else:
                 self.results.p99_response_time = self.results.p95_response_time
 
@@ -207,12 +223,13 @@ class LoadTester:
 @dataclass
 class BenchmarkResult:
     """Results from a benchmark test."""
+
     name: str
     iterations: int = 0
     total_time: float = 0.0
     avg_time: float = 0.0
     median_time: float = 0.0
-    min_time: float = float('inf')
+    min_time: float = float("inf")
     max_time: float = 0.0
     throughput: float = 0.0  # operations per second
 
@@ -230,7 +247,7 @@ class PerformanceBenchmark:
         *args: Any,
         iterations: int = 100,
         warmup_iterations: int = 10,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> BenchmarkResult:
         """Benchmark an async function."""
         # Warmup
@@ -258,7 +275,7 @@ class PerformanceBenchmark:
             median_time=statistics.median(times),
             min_time=min(times),
             max_time=max(times),
-            throughput=iterations / total_time
+            throughput=iterations / total_time,
         )
 
         self.results.append(result)
@@ -269,7 +286,7 @@ class PerformanceBenchmark:
             iterations=result.iterations,
             avg_time=result.avg_time,
             median_time=result.median_time,
-            throughput=result.throughput
+            throughput=result.throughput,
         )
 
         return result
@@ -280,9 +297,10 @@ class PerformanceBenchmark:
         *args: Any,
         iterations: int = 100,
         warmup_iterations: int = 10,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> BenchmarkResult:
         """Benchmark a sync function using a thread pool."""
+
         def run_warmup() -> None:
             for _ in range(warmup_iterations):
                 func(*args, **kwargs)
@@ -317,7 +335,7 @@ class PerformanceBenchmark:
             median_time=statistics.median(times),
             min_time=min(times),
             max_time=max(times),
-            throughput=iterations / total_time
+            throughput=iterations / total_time,
         )
 
         self.results.append(result)
@@ -339,16 +357,19 @@ class PerformanceBenchmark:
                     "max_time": r.max_time,
                 }
                 for r in self.results
-            ]
+            ],
         }
 
 
 # Pre-configured benchmark scenarios
-async def benchmark_health_endpoint(base_url: str = "http://localhost:8000") -> BenchmarkResult:
+async def benchmark_health_endpoint(
+    base_url: str = "http://localhost:8000",
+) -> BenchmarkResult:
     """Benchmark the health endpoint."""
     benchmark = PerformanceBenchmark("health_endpoint")
 
     async with httpx.AsyncClient() as client:
+
         async def health_check() -> None:
             response = await client.get(f"{base_url}/health")
             response.raise_for_status()
@@ -383,7 +404,8 @@ class PerformanceRegressionDetector:
         """Load baseline performance data."""
         try:
             import json
-            with open(self.baseline_file, 'r') as f:
+
+            with open(self.baseline_file, "r") as f:
                 data = json.load(f)
                 for item in data.get("results", []):
                     result = BenchmarkResult(**item)
@@ -397,13 +419,16 @@ class PerformanceRegressionDetector:
         """Save current results as new baselines."""
         try:
             import json
-            with open(self.baseline_file, 'w') as f:
+
+            with open(self.baseline_file, "w") as f:
                 json.dump(benchmark_summary, f, indent=2, default=str)
             logger.info("baselines_saved", file=self.baseline_file)
         except Exception as e:
             logger.error("failed_to_save_baselines", error=str(e))
 
-    def detect_regressions(self, current_results: List[BenchmarkResult]) -> List[Dict[str, Any]]:
+    def detect_regressions(
+        self, current_results: List[BenchmarkResult]
+    ) -> List[Dict[str, Any]]:
         """Detect performance regressions compared to baselines."""
         regressions = []
 
@@ -416,24 +441,29 @@ class PerformanceRegressionDetector:
             regression_threshold = 1.20
 
             if result.avg_time > baseline.avg_time * regression_threshold:
-                regressions.append({
-                    "benchmark": result.name,
-                    "regression_type": "average_time",
-                    "baseline": baseline.avg_time,
-                    "current": result.avg_time,
-                    "degradation": (result.avg_time / baseline.avg_time - 1) * 100,
-                    "threshold_percent": (regression_threshold - 1) * 100
-                })
+                regressions.append(
+                    {
+                        "benchmark": result.name,
+                        "regression_type": "average_time",
+                        "baseline": baseline.avg_time,
+                        "current": result.avg_time,
+                        "degradation": (result.avg_time / baseline.avg_time - 1) * 100,
+                        "threshold_percent": (regression_threshold - 1) * 100,
+                    }
+                )
 
             if result.median_time > baseline.median_time * regression_threshold:
-                regressions.append({
-                    "benchmark": result.name,
-                    "regression_type": "median_time",
-                    "baseline": baseline.median_time,
-                    "current": result.median_time,
-                    "degradation": (result.median_time / baseline.median_time - 1) * 100,
-                    "threshold_percent": (regression_threshold - 1) * 100
-                })
+                regressions.append(
+                    {
+                        "benchmark": result.name,
+                        "regression_type": "median_time",
+                        "baseline": baseline.median_time,
+                        "current": result.median_time,
+                        "degradation": (result.median_time / baseline.median_time - 1)
+                        * 100,
+                        "threshold_percent": (regression_threshold - 1) * 100,
+                    }
+                )
 
         return regressions
 
@@ -443,7 +473,7 @@ def generate_k6_script(config: LoadTestConfig) -> str:
     """Generate a K6 load testing script."""
     endpoints_str = "\n".join([f'    "{endpoint}",' for endpoint in config.endpoints])
 
-    script = f'''
+    script = f"""
 import http from 'k6/http';
 import {{ check, sleep }} from 'k6';
 
@@ -472,7 +502,7 @@ export default function () {{
 
     sleep(0.1);
 }}
-'''
+"""
     return script
 
 
@@ -480,14 +510,14 @@ export default function () {{
 async def run_api_load_test(
     target_url: str = "http://localhost:8000",
     duration: int = 30,
-    concurrent_users: int = 5
+    concurrent_users: int = 5,
 ) -> LoadTestResult:
     """Run a basic API load test."""
     config = LoadTestConfig(
         duration_seconds=duration,
         concurrent_users=concurrent_users,
         target_url=target_url,
-        endpoints=["/health", "/api/v1/zombies"]  # Test key endpoints
+        endpoints=["/health", "/api/v1/zombies"],  # Test key endpoints
     )
 
     tester = LoadTester(config)
@@ -521,17 +551,19 @@ async def run_comprehensive_performance_test() -> Dict[str, Any]:
     regressions = detector.detect_regressions(all_results)
 
     summary = benchmark.get_summary()
-    summary.update({
-        "load_test": {
-            "total_requests": load_result.total_requests,
-            "successful_requests": load_result.successful_requests,
-            "throughput_rps": load_result.throughput_rps,
-            "avg_response_time": load_result.avg_response_time,
-            "p95_response_time": load_result.p95_response_time,
-        },
-        "regressions_detected": regressions,
-        "k6_script_available": True,
-    })
+    summary.update(
+        {
+            "load_test": {
+                "total_requests": load_result.total_requests,
+                "successful_requests": load_result.successful_requests,
+                "throughput_rps": load_result.throughput_rps,
+                "avg_response_time": load_result.avg_response_time,
+                "p95_response_time": load_result.p95_response_time,
+            },
+            "regressions_detected": regressions,
+            "k6_script_available": True,
+        }
+    )
 
     # Save new baselines if no regressions
     if not regressions:
@@ -540,7 +572,7 @@ async def run_comprehensive_performance_test() -> Dict[str, Any]:
     logger.info(
         "comprehensive_performance_test_completed",
         load_test_requests=load_result.total_requests,
-        regressions_found=len(regressions)
+        regressions_found=len(regressions),
     )
 
     return summary

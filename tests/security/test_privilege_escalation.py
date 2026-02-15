@@ -18,7 +18,7 @@ MEMBER_A = CurrentUser(
     email="member-a@example.com",
     tenant_id=TENANT_A,
     role="member",
-    tier="pro"
+    tier="pro",
 )
 
 ADMIN_A = CurrentUser(
@@ -26,7 +26,7 @@ ADMIN_A = CurrentUser(
     email="admin-a@example.com",
     tenant_id=TENANT_A,
     role="admin",
-    tier="pro"
+    tier="pro",
 )
 
 OWNER_A = CurrentUser(
@@ -34,7 +34,7 @@ OWNER_A = CurrentUser(
     email="owner-a@example.com",
     tenant_id=TENANT_A,
     role="owner",
-    tier="pro"
+    tier="pro",
 )
 
 MEMBER_B = CurrentUser(
@@ -42,57 +42,68 @@ MEMBER_B = CurrentUser(
     email="member-b@example.com",
     tenant_id=TENANT_B,
     role="member",
-    tier="pro"
+    tier="pro",
 )
+
 
 def mock_user(user: CurrentUser):
     return user
 
+
 @pytest.mark.asyncio
 async def test_member_cannot_process_jobs(ac: AsyncClient):
     """Verify that a user with 'member' role cannot trigger job processing."""
+
     def override_member_a(request: Request):
         request.state.tenant_id = MEMBER_A.tenant_id
         request.state.user_id = MEMBER_A.id
         request.state.tier = MEMBER_A.tier
         return MEMBER_A
+
     app.dependency_overrides[get_current_user] = override_member_a
-    
+
     response = await ac.post("/api/v1/jobs/process")
-    
+
     assert response.status_code == 403
     app.dependency_overrides.pop(get_current_user, None)
+
 
 @pytest.mark.asyncio
 async def test_admin_can_process_jobs(ac: AsyncClient):
     """Verify that an admin CAN trigger job processing."""
+
     def override_admin_a(request: Request):
         request.state.tenant_id = ADMIN_A.tenant_id
         request.state.user_id = ADMIN_A.id
         request.state.tier = ADMIN_A.tier
         return ADMIN_A
+
     app.dependency_overrides[get_current_user] = override_admin_a
-    
+
     response = await ac.post("/api/v1/jobs/process")
-    
+
     # Might be 200 or 500 depending on DB, but should NOT be 403
     assert response.status_code != 403
     app.dependency_overrides.pop(get_current_user, None)
 
+
 @pytest.mark.asyncio
 async def test_owner_bypasses_role_check(ac: AsyncClient):
     """Verify that an owner can access admin endpoints."""
+
     def override_owner_a(request: Request):
         request.state.tenant_id = OWNER_A.tenant_id
         request.state.user_id = OWNER_A.id
         request.state.tier = OWNER_A.tier
         return OWNER_A
+
     app.dependency_overrides[get_current_user] = override_owner_a
-    
-    response = await ac.get("/api/v1/jobs/status") # Status is admin-only (GET)
-    
+
+    response = await ac.get("/api/v1/jobs/status")  # Status is admin-only (GET)
+
     assert response.status_code != 403
     app.dependency_overrides.pop(get_current_user, None)
+
 
 @pytest.mark.asyncio
 async def test_cross_tenant_isolation(ac: AsyncClient, db: AsyncSession):
@@ -110,7 +121,7 @@ async def test_cross_tenant_isolation(ac: AsyncClient, db: AsyncSession):
         job_type="zombie_scan",
         status=JobStatus.PENDING,
         scheduled_for=datetime.now(timezone.utc),
-        created_at=datetime.now(timezone.utc)
+        created_at=datetime.now(timezone.utc),
     )
     db.add(job_b)
     await db.commit()
@@ -121,36 +132,39 @@ async def test_cross_tenant_isolation(ac: AsyncClient, db: AsyncSession):
         request.state.user_id = MEMBER_A.id
         request.state.tier = MEMBER_A.tier
         return MEMBER_A
-    
+
     app.dependency_overrides[get_current_user] = override_member_a
-    
+
     response = await ac.get("/api/v1/jobs/list")
-    
+
     assert response.status_code == 200
     jobs = response.json()
-    
+
     # User A should NOT see Job B
     job_ids = [j["id"] for j in jobs]
     assert str(job_b.id) not in job_ids
     app.dependency_overrides.pop(get_current_user, None)
 
+
 @pytest.mark.asyncio
 async def test_member_cannot_enqueue_restricted_jobs(ac: AsyncClient):
     """Verify that valid users cannot enqueue system-level jobs (SEC-N1)."""
+
     def override_member_a(request: Request):
         request.state.tenant_id = MEMBER_A.tenant_id
         request.state.user_id = MEMBER_A.id
         request.state.tier = MEMBER_A.tier
         return MEMBER_A
+
     app.dependency_overrides[get_current_user] = override_member_a
-    
+
     payload = {
-        "job_type": "recurring_billing", # Internal only
-        "payload": {}
+        "job_type": "recurring_billing",  # Internal only
+        "payload": {},
     }
-    
+
     resp = await ac.post("/api/v1/jobs/enqueue", json=payload)
-    
+
     # Changed to 403 because role check (RequireRole) or endpoint validation happens before Pydantic.
     # The endpoint explicitly raises 403 for unauthorized job types.
     assert resp.status_code == 403

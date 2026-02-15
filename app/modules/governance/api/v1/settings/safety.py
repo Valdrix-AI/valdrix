@@ -22,8 +22,10 @@ router = APIRouter(tags=["Safety"])
 # Pydantic Schemas
 # ============================================================
 
+
 class SafetyStatusResponse(BaseModel):
     """Response for safety/circuit breaker status."""
+
     circuit_state: str  # "closed", "open", "half_open"
     failure_count: int
     daily_savings_used: float
@@ -36,6 +38,7 @@ class SafetyStatusResponse(BaseModel):
 # API Endpoints
 # ============================================================
 
+
 @router.get("/safety", response_model=SafetyStatusResponse)
 @rate_limit("20/minute")
 async def get_safety_status(
@@ -45,7 +48,7 @@ async def get_safety_status(
 ) -> SafetyStatusResponse:
     """
     Get circuit breaker and safety status for the current tenant.
-    
+
     Shows:
     - Circuit state (closed=ok, open=blocked, half_open=testing)
     - Daily savings budget usage
@@ -53,26 +56,26 @@ async def get_safety_status(
     """
     from app.shared.remediation.circuit_breaker import get_circuit_breaker
     from app.shared.core.config import get_settings
-    
+
     settings = get_settings()
-    
+
     try:
         circuit_breaker = await get_circuit_breaker(str(current_user.tenant_id))
-        
+
         state = await circuit_breaker.state.get("state", "closed")
         failure_count = await circuit_breaker.state.get("failure_count", 0)
         daily_savings = await circuit_breaker.state.get("daily_savings", 0.0)
         last_failure = await circuit_breaker.state.get("last_failure_at", None)
-        
+
         can_execute = await circuit_breaker.can_execute()
-        
+
         return SafetyStatusResponse(
             circuit_state=state,
             failure_count=failure_count,
             daily_savings_used=daily_savings,
             daily_savings_limit=settings.CIRCUIT_BREAKER_MAX_DAILY_SAVINGS,
             last_failure_at=last_failure,
-            can_execute=can_execute
+            can_execute=can_execute,
         )
     except Exception as e:
         logger.error("safety_status_failed", error=str(e))
@@ -83,7 +86,7 @@ async def get_safety_status(
             daily_savings_used=0.0,
             daily_savings_limit=settings.CIRCUIT_BREAKER_MAX_DAILY_SAVINGS,
             last_failure_at=None,
-            can_execute=False
+            can_execute=False,
         )
 
 
@@ -96,34 +99,38 @@ async def reset_circuit_breaker(
 ) -> dict[str, str]:
     """
     Manually reset circuit breaker to closed state (admin-only).
-    
+
     Use with caution - this allows remediations to proceed.
     """
-    
+
     from app.shared.remediation.circuit_breaker import get_circuit_breaker
-    
+
     try:
         circuit_breaker = await get_circuit_breaker(str(current_user.tenant_id))
         await circuit_breaker.reset()
-        
+
         logger.info(
             "circuit_breaker_reset",
             tenant_id=str(current_user.tenant_id),
-            by_user=str(current_user.id)
+            by_user=str(current_user.id),
         )
 
         audit_log(
             "remediation.safety_reset",
             str(current_user.id),
             str(current_user.tenant_id),
-            {"action": "manual_circuit_reset", "status": "closed"}
+            {"action": "manual_circuit_reset", "status": "closed"},
         )
-        
+
         return {"status": "reset", "message": "Circuit breaker reset to closed state"}
     except Exception as e:
         # Item 9: Provide actionable error message for reset failures
-        logger.error("circuit_breaker_reset_failed", error=str(e), tenant_id=str(current_user.tenant_id))
+        logger.error(
+            "circuit_breaker_reset_failed",
+            error=str(e),
+            tenant_id=str(current_user.tenant_id),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reset circuit breaker: {str(e)}. Please check Redis connectivity or contact support."
+            detail=f"Failed to reset circuit breaker: {str(e)}. Please check Redis connectivity or contact support.",
         ) from e

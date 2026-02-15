@@ -11,17 +11,106 @@
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import AuthGate from '$lib/components/AuthGate.svelte';
+	import { PUBLIC_API_URL } from '$env/static/public';
+	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
 
 	let { data } = $props();
 
-	let period = $derived(data.period);
-	let leaderboard = $derived(data.leaderboard);
-	let error = $derived(data.error || '');
-	let loading = $state(false); // Can be used for navigation transitions if desired
+	const LEADERBOARD_TIMEOUT_MS = 8000;
+
+	type LeaderboardEntry = {
+		rank: number;
+		user_email: string;
+		savings_usd: number;
+		remediation_count: number;
+	};
+
+	type LeaderboardPayload = {
+		period: string;
+		entries: LeaderboardEntry[];
+		total_team_savings: number;
+	};
+
+	let period = $derived(data.period || '30d');
+	let leaderboard = $state<LeaderboardPayload>({
+		period: 'Last 30 Days',
+		entries: [],
+		total_team_savings: 0
+	});
+	let error = $state('');
+	let loading = $state(false);
+	let leaderboardRequestId = 0;
+
+	function toAppPath(path: string): string {
+		const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+		const normalizedBase = base === '/' ? '' : base;
+		return `${normalizedBase}${normalizedPath}`;
+	}
+
+	function resetLeaderboardState() {
+		leaderboard = {
+			period: 'Last 30 Days',
+			entries: [],
+			total_team_savings: 0
+		};
+	}
+
+	async function loadLeaderboard(
+		accessToken: string | undefined,
+		hasUser: boolean,
+		currentPeriod: string
+	) {
+		const requestId = ++leaderboardRequestId;
+		if (!hasUser || !accessToken) {
+			resetLeaderboardState();
+			error = '';
+			loading = false;
+			return;
+		}
+
+		loading = true;
+		error = '';
+
+		try {
+			const res = await fetchWithTimeout(
+				fetch,
+				`${PUBLIC_API_URL}/leaderboards?period=${currentPeriod}`,
+				{
+					headers: {
+						Authorization: `Bearer ${accessToken}`
+					}
+				},
+				LEADERBOARD_TIMEOUT_MS
+			);
+
+			if (requestId !== leaderboardRequestId) return;
+
+			if (!res.ok) {
+				resetLeaderboardState();
+				error = `Failed to load leaderboard (HTTP ${res.status})`;
+				return;
+			}
+
+			leaderboard = (await res.json()) as LeaderboardPayload;
+		} catch (err) {
+			if (requestId !== leaderboardRequestId) return;
+			resetLeaderboardState();
+			error =
+				err instanceof TimeoutError
+					? 'Leaderboard request timed out. Please try again.'
+					: 'Network error loading leaderboard';
+		} finally {
+			if (requestId === leaderboardRequestId) loading = false;
+		}
+	}
 
 	function handlePeriodChange(e: Event) {
 		const target = e.target as HTMLSelectElement;
-		goto(`${base}/leaderboards?period=${target.value}`, { keepFocus: true, noScroll: true });
+		goto(`${toAppPath('/leaderboards')}?period=${target.value}`, {
+			keepFocus: true,
+			noScroll: true
+		});
 	}
 
 	function getMedal(rank: number): string {
@@ -35,6 +124,12 @@
 		const [name] = email.split('@');
 		return name;
 	}
+
+	$effect(() => {
+		const accessToken = data.session?.access_token;
+		const hasUser = !!data.user;
+		void loadLeaderboard(accessToken, hasUser, period);
+	});
 </script>
 
 <svelte:head>
@@ -64,94 +159,92 @@
 		{/if}
 	</div>
 
-	{#if !data.user}
-		<div class="card text-center py-12">
-			<p class="text-ink-400">
-				Please <a href="{base}/auth/login" class="text-accent-400 hover:underline">sign in</a> to view
-				leaderboards.
-			</p>
-		</div>
-	{:else if loading}
-		<div class="card">
-			<div class="skeleton h-8 w-48 mb-4"></div>
-			{#each [1, 2, 3] as i (i)}
-				<div class="skeleton h-16 w-full mb-2"></div>
-			{/each}
-		</div>
-	{:else if error}
-		<div class="card border-danger-500/50 bg-danger-500/10">
-			<p class="text-danger-400">{error}</p>
-		</div>
-	{:else}
-		<!-- Total Team Savings Card -->
-		<div class="card card-stat stagger-enter bg-gradient-to-r from-accent-500/20 to-success-500/20">
-			<div class="text-center">
-				<p class="text-sm text-ink-400 mb-1">{leaderboard.period}</p>
-				<p class="text-4xl font-bold text-success-400">
-					${leaderboard.total_team_savings.toLocaleString(undefined, {
-						minimumFractionDigits: 2,
-						maximumFractionDigits: 2
-					})}
-				</p>
-				<p class="text-ink-400 mt-1">Total Team Savings</p>
+	<AuthGate authenticated={!!data.user} action="view leaderboards">
+		{#if loading}
+			<div class="card">
+				<div class="skeleton h-8 w-48 mb-4"></div>
+				{#each [1, 2, 3] as i (i)}
+					<div class="skeleton h-16 w-full mb-2"></div>
+				{/each}
 			</div>
-		</div>
-
-		<!-- Leaderboard -->
-		{#if leaderboard.entries.length === 0}
-			<div class="card text-center py-12">
-				<span class="text-5xl mb-4 block">🚀</span>
-				<h3 class="text-xl font-semibold mb-2">No savings yet!</h3>
-				<p class="text-ink-400">
-					Start approving remediation actions to see your team on the leaderboard.
-				</p>
-				<p class="text-ink-500 text-sm mt-2">
-					Tip: Check the Dashboard for zombie resources to clean up.
-				</p>
+		{:else if error}
+			<div class="card border-danger-500/50 bg-danger-500/10">
+				<p class="text-danger-400">{error}</p>
 			</div>
 		{:else}
-			<div class="card stagger-enter" style="animation-delay: 50ms;">
-				<h2 class="text-lg font-semibold mb-5">Top Savers</h2>
-
-				<div class="leaderboard-list">
-					{#each leaderboard.entries as entry, i (entry.user_email)}
-						<div
-							class="leaderboard-entry"
-							class:top-3={entry.rank <= 3}
-							style="animation-delay: {i * 50}ms;"
-						>
-							<div class="rank">
-								<span class="medal">{getMedal(entry.rank)}</span>
-							</div>
-
-							<div class="user-info">
-								<span class="username">{formatEmail(entry.user_email)}</span>
-								<span class="remediation-count">{entry.remediation_count} actions</span>
-							</div>
-
-							<div class="savings">
-								<span class="savings-amount"
-									>${entry.savings_usd.toLocaleString(undefined, {
-										minimumFractionDigits: 2,
-										maximumFractionDigits: 2
-									})}</span
-								>
-								<span class="savings-label">saved</span>
-							</div>
-						</div>
-					{/each}
+			<!-- Total Team Savings Card -->
+			<div
+				class="card card-stat stagger-enter bg-gradient-to-r from-accent-500/20 to-success-500/20"
+			>
+				<div class="text-center">
+					<p class="text-sm text-ink-400 mb-1">{leaderboard.period}</p>
+					<p class="text-4xl font-bold text-success-400">
+						${leaderboard.total_team_savings.toLocaleString(undefined, {
+							minimumFractionDigits: 2,
+							maximumFractionDigits: 2
+						})}
+					</p>
+					<p class="text-ink-400 mt-1">Total Team Savings</p>
 				</div>
 			</div>
-		{/if}
 
-		<!-- Encouragement Section -->
-		<div class="card stagger-enter text-center py-8" style="animation-delay: 100ms;">
-			<h3 class="text-lg font-semibold mb-2">💡 Pro Tip</h3>
-			<p class="text-ink-400">
-				Approve zombie cleanup recommendations to climb the leaderboard and save your company money!
-			</p>
-		</div>
-	{/if}
+			<!-- Leaderboard -->
+			{#if leaderboard.entries.length === 0}
+				<div class="card text-center py-12">
+					<span class="text-5xl mb-4 block">🚀</span>
+					<h3 class="text-xl font-semibold mb-2">No savings yet!</h3>
+					<p class="text-ink-400">
+						Start approving remediation actions to see your team on the leaderboard.
+					</p>
+					<p class="text-ink-500 text-sm mt-2">
+						Tip: Check the Dashboard for zombie resources to clean up.
+					</p>
+				</div>
+			{:else}
+				<div class="card stagger-enter" style="animation-delay: 50ms;">
+					<h2 class="text-lg font-semibold mb-5">Top Savers</h2>
+
+					<div class="leaderboard-list">
+						{#each leaderboard.entries as entry, i (entry.user_email)}
+							<div
+								class="leaderboard-entry"
+								class:top-3={entry.rank <= 3}
+								style="animation-delay: {i * 50}ms;"
+							>
+								<div class="rank">
+									<span class="medal">{getMedal(entry.rank)}</span>
+								</div>
+
+								<div class="user-info">
+									<span class="username">{formatEmail(entry.user_email)}</span>
+									<span class="remediation-count">{entry.remediation_count} actions</span>
+								</div>
+
+								<div class="savings">
+									<span class="savings-amount"
+										>${entry.savings_usd.toLocaleString(undefined, {
+											minimumFractionDigits: 2,
+											maximumFractionDigits: 2
+										})}</span
+									>
+									<span class="savings-label">saved</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Encouragement Section -->
+			<div class="card stagger-enter text-center py-8" style="animation-delay: 100ms;">
+				<h3 class="text-lg font-semibold mb-2">💡 Pro Tip</h3>
+				<p class="text-ink-400">
+					Approve zombie cleanup recommendations to climb the leaderboard and save your company
+					money!
+				</p>
+			</div>
+		{/if}
+	</AuthGate>
 </div>
 
 <style>
@@ -160,9 +253,6 @@
 	}
 	.text-ink-500 {
 		color: var(--color-ink-500);
-	}
-	.text-accent-400 {
-		color: var(--color-accent-400);
 	}
 	.text-success-400 {
 		color: var(--color-success-400);

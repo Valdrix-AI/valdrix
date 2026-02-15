@@ -126,9 +126,9 @@ class CarbonBudgetService:
 
         # Check if last_alert_sent exists and was today for THIS status
         # BE-CARBON-12: Status-aware rate limiting
-        last_alert = getattr(settings, 'last_alert_sent', None)
-        last_status = getattr(settings, 'last_alert_status', None)
-        
+        last_alert = getattr(settings, "last_alert_sent", None)
+        last_status = getattr(settings, "last_alert_status", None)
+
         if last_alert and last_status == alert_status:
             # Normalize to UTC date to avoid local-time boundary drift.
             if getattr(last_alert, "tzinfo", None) is not None:
@@ -137,9 +137,11 @@ class CarbonBudgetService:
                 last_alert_date = last_alert.date()
             today_utc = datetime.now(timezone.utc).date()
             if last_alert_date == today_utc:
-                logger.info("carbon_alert_rate_limited", 
-                            tenant_id=str(tenant_id), 
-                            status=alert_status)
+                logger.info(
+                    "carbon_alert_rate_limited",
+                    tenant_id=str(tenant_id),
+                    status=alert_status,
+                )
                 return False
 
         return True
@@ -153,7 +155,7 @@ class CarbonBudgetService:
             .where(CarbonSettings.tenant_id == tenant_id)
             .values(
                 last_alert_sent=datetime.now(timezone.utc),
-                last_alert_status=alert_status
+                last_alert_status=alert_status,
             )
         )
         await self.db.commit()
@@ -177,6 +179,7 @@ class CarbonBudgetService:
 
         # Item 13: Audit log for budget alert
         from app.shared.core.logging import audit_log
+
         audit_log(
             event="carbon_budget_alert",
             user_id="system",
@@ -184,8 +187,8 @@ class CarbonBudgetService:
             details={
                 "status": budget_status["alert_status"],
                 "usage_kg": budget_status["current_usage_kg"],
-                "budget_kg": budget_status["budget_kg"]
-            }
+                "budget_kg": budget_status["budget_kg"],
+            },
         )
 
         app_settings = get_settings()
@@ -193,40 +196,37 @@ class CarbonBudgetService:
 
         # Fetch notification settings once to avoid UnboundLocalError and redundant queries
         from app.models.notification_settings import NotificationSettings
+
         notif_result = await self.db.execute(
-            select(NotificationSettings).where(NotificationSettings.tenant_id == tenant_id)
+            select(NotificationSettings).where(
+                NotificationSettings.tenant_id == tenant_id
+            )
         )
         notif_settings = notif_result.scalar_one_or_none()
 
-        if app_settings.SLACK_BOT_TOKEN:
+        # Check if this type of Slack alert is enabled
+        is_exceeded = budget_status["alert_status"] == "exceeded"
+        is_warning = budget_status["alert_status"] == "warning"
 
-            # Check if this type of alert is enabled
-            is_exceeded = budget_status["alert_status"] == "exceeded"
-            is_warning = budget_status["alert_status"] == "warning"
-            
-            allowed = True
-            if notif_settings:
-                if is_exceeded and not notif_settings.alert_on_carbon_budget_exceeded:
-                    allowed = False
-                elif is_warning and not notif_settings.alert_on_carbon_budget_warning:
-                    allowed = False
-                
-                if not notif_settings.slack_enabled:
-                    allowed = False
+        allowed = True
+        if notif_settings:
+            if is_exceeded and not notif_settings.alert_on_carbon_budget_exceeded:
+                allowed = False
+            elif is_warning and not notif_settings.alert_on_carbon_budget_warning:
+                allowed = False
 
-            if allowed and (app_settings.SLACK_CHANNEL_ID or (notif_settings and notif_settings.slack_channel_override)):
-                try:
-                    from app.modules.notifications.domain import SlackService
-                    channel = (notif_settings.slack_channel_override if notif_settings and notif_settings.slack_channel_override
-                              else app_settings.SLACK_CHANNEL_ID)
-                    if channel is None:
-                        raise ValueError("Slack channel is not configured")
-    
-                    slack = SlackService(app_settings.SLACK_BOT_TOKEN, channel)
-    
+            if not notif_settings.slack_enabled:
+                allowed = False
+
+        if allowed:
+            try:
+                from app.modules.notifications.domain import get_tenant_slack_service
+
+                slack = await get_tenant_slack_service(self.db, tenant_id)
+                if slack:
                     status = budget_status["alert_status"]
                     severity = "critical" if status == "exceeded" else "warning"
-    
+
                     await slack.send_alert(
                         title=f"Carbon Budget {'Exceeded' if status == 'exceeded' else 'Warning'}!",
                         message=(
@@ -234,15 +234,22 @@ class CarbonBudgetService:
                             f"📊 Usage: *{budget_status['current_usage_kg']:.2f} kg* / "
                             f"{budget_status['budget_kg']:.2f} kg ({budget_status['usage_percent']:.1f}%)\n\n"
                             f"💡 *Recommendations:*\n"
-                            + "\n".join(f"• {r}" for r in budget_status["recommendations"][:3])
+                            + "\n".join(
+                                f"• {r}" for r in budget_status["recommendations"][:3]
+                            )
                         ),
                         severity=severity,
                     )
                     sent_any = True
                     logger.info("carbon_slack_alert_sent", tenant_id=str(tenant_id))
-    
-                except Exception as e:
-                    logger.error("carbon_slack_alert_failed", error=str(e))
+                else:
+                    logger.info(
+                        "carbon_slack_alert_skipped_not_configured",
+                        tenant_id=str(tenant_id),
+                    )
+
+            except Exception as e:
+                logger.error("carbon_slack_alert_failed", error=str(e))
 
         # Send email notification if enabled
         result = await self.db.execute(
@@ -250,13 +257,17 @@ class CarbonBudgetService:
         )
         carbon_settings = result.scalar_one_or_none()
 
-        if carbon_settings and carbon_settings.email_enabled and carbon_settings.email_recipients:
+        if (
+            carbon_settings
+            and carbon_settings.email_enabled
+            and carbon_settings.email_recipients
+        ):
             # Check if email is enabled for this type of alert
             is_exceeded = budget_status["alert_status"] == "exceeded"
             is_warning = budget_status["alert_status"] == "warning"
-            
+
             email_allowed = True
-            if notif_settings: # Reuse from above if available
+            if notif_settings:  # Reuse from above if available
                 if is_exceeded and not notif_settings.alert_on_carbon_budget_exceeded:
                     email_allowed = False
                 elif is_warning and not notif_settings.alert_on_carbon_budget_warning:
@@ -264,25 +275,38 @@ class CarbonBudgetService:
 
             if email_allowed:
                 try:
-                    from app.modules.notifications.domain.email_service import EmailService
-    
+                    from app.modules.notifications.domain.email_service import (
+                        EmailService,
+                    )
+
                     # Get SMTP config from app settings
-                    if (hasattr(app_settings, 'SMTP_HOST') and app_settings.SMTP_HOST):
+                    if hasattr(app_settings, "SMTP_HOST") and app_settings.SMTP_HOST:
                         email_service = EmailService(
                             smtp_host=app_settings.SMTP_HOST,
-                            smtp_port=getattr(app_settings, 'SMTP_PORT', 587),
-                            smtp_user=getattr(app_settings, 'SMTP_USER', ''),
-                            smtp_password=getattr(app_settings, 'SMTP_PASSWORD', ''),
-                            from_email=getattr(app_settings, 'SMTP_FROM', 'alerts@valdrix.io'),
+                            smtp_port=getattr(app_settings, "SMTP_PORT", 587),
+                            smtp_user=getattr(app_settings, "SMTP_USER", ""),
+                            smtp_password=getattr(app_settings, "SMTP_PASSWORD", ""),
+                            from_email=getattr(
+                                app_settings, "SMTP_FROM", "alerts@valdrix.io"
+                            ),
                         )
-    
-                        recipients = [e.strip() for e in carbon_settings.email_recipients.split(',')]
+
+                        recipients = [
+                            e.strip()
+                            for e in carbon_settings.email_recipients.split(",")
+                        ]
                         await email_service.send_carbon_alert(recipients, budget_status)
                         sent_any = True
-                        logger.info("carbon_email_alert_sent", tenant_id=str(tenant_id), recipients=recipients)
+                        logger.info(
+                            "carbon_email_alert_sent",
+                            tenant_id=str(tenant_id),
+                            recipients=recipients,
+                        )
                     else:
-                        logger.warning("email_alert_skipped", reason="SMTP not configured")
-    
+                        logger.warning(
+                            "email_alert_skipped", reason="SMTP not configured"
+                        )
+
                 except Exception as e:
                     logger.error("carbon_email_alert_failed", error=str(e))
 

@@ -32,14 +32,18 @@ async def test_verify_connection_success():
 
     mock_client.resource_groups.list = list_groups
 
-    with patch.object(adapter, "_get_resource_client", AsyncMock(return_value=mock_client)):
+    with patch.object(
+        adapter, "_get_resource_client", AsyncMock(return_value=mock_client)
+    ):
         assert await adapter.verify_connection() is True
 
 
 @pytest.mark.asyncio
 async def test_verify_connection_failure():
     adapter = AzureAdapter(_connection())
-    with patch.object(adapter, "_get_resource_client", AsyncMock(side_effect=RuntimeError("boom"))):
+    with patch.object(
+        adapter, "_get_resource_client", AsyncMock(side_effect=RuntimeError("boom"))
+    ):
         assert await adapter.verify_connection() is False
 
 
@@ -111,8 +115,12 @@ async def test_discover_resources_filters_by_type_and_region():
 
     mock_client.resources.list = list_resources
 
-    with patch.object(adapter, "_get_resource_client", AsyncMock(return_value=mock_client)):
-        results = await adapter.discover_resources(resource_type="compute", region="eastus")
+    with patch.object(
+        adapter, "_get_resource_client", AsyncMock(return_value=mock_client)
+    ):
+        results = await adapter.discover_resources(
+            resource_type="compute", region="eastus"
+        )
 
     assert len(results) == 1
     assert results[0]["name"] == "vm-1"
@@ -121,6 +129,8 @@ async def test_discover_resources_filters_by_type_and_region():
 @pytest.mark.asyncio
 async def test_discover_resources_exception_returns_empty():
     adapter = AzureAdapter(_connection())
-    with patch.object(adapter, "_get_resource_client", AsyncMock(side_effect=RuntimeError("boom"))):
+    with patch.object(
+        adapter, "_get_resource_client", AsyncMock(side_effect=RuntimeError("boom"))
+    ):
         results = await adapter.discover_resources(resource_type="compute")
     assert results == []

@@ -2,16 +2,22 @@ import asyncio
 from sqlalchemy import text
 from app.shared.db.session import async_session_maker
 
+
 async def check():
     try:
         async with async_session_maker() as db:
             # Check if audit_logs exists
-            res = await db.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'audit_logs')"))
+            res = await db.execute(
+                text(
+                    "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'audit_logs')"
+                )
+            )
             exists = res.scalar()
             print(f"Table 'audit_logs' exists: {exists}")
-            
+
             if exists:
-                res = await db.execute(text("""
+                res = await db.execute(
+                    text("""
                     SELECT nmsp_parent.nspname AS parent_schema,
                            rel_parent.relname AS parent_table,
                            nmsp_child.nspname AS child_schema,
@@ -22,7 +28,8 @@ async def check():
                     JOIN pg_namespace nmsp_parent ON rel_parent.relnamespace = nmsp_parent.oid
                     JOIN pg_namespace nmsp_child ON rel_child.relnamespace = nmsp_child.oid
                     WHERE rel_parent.relname = 'audit_logs';
-                """))
+                """)
+                )
                 partitions = res.fetchall()
                 if not partitions:
                     print("No partitions found for audit_logs")
@@ -33,5 +40,6 @@ async def check():
     except Exception as e:
         print(f"Error: {e}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(check())

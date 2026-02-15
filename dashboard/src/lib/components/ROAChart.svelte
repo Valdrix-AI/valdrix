@@ -5,13 +5,11 @@
 	 * Proves "Compound Value" to investors.
 	 */
 	import { onMount, onDestroy } from 'svelte';
-	import { Chart, registerables } from 'chart.js';
 	import { Activity, TrendingUp } from '@lucide/svelte';
-
-	Chart.register(...registerables);
+	import { loadChartJs } from '$lib/chartjs';
 
 	let canvas: HTMLCanvasElement;
-	let chart: Chart | null = null;
+	let chart: import('chart.js').Chart | null = null;
 
 	const labels = [
 		'Jan',
@@ -33,12 +31,14 @@
 		1200, 2500, 3900, 5400, 7100, 9000, 11200, 13700, 16500, 19600, 23000, 26800
 	];
 
-	function createChart() {
+	async function createChart() {
 		if (!canvas) return;
+		if (typeof window === 'undefined') return;
 
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
+		const { Chart } = await loadChartJs();
 		if (chart) chart.destroy();
 
 		chart = new Chart(ctx, {
@@ -92,7 +92,9 @@
 		});
 	}
 
-	onMount(() => createChart());
+	onMount(() => {
+		void createChart();
+	});
 	onDestroy(() => {
 		if (chart) chart.destroy();
 	});

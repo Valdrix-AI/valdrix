@@ -26,6 +26,7 @@ def test_get_sync_client_returns_none_without_config():
         mock_settings.return_value.UPSTASH_REDIS_URL = None
         mock_settings.return_value.UPSTASH_REDIS_TOKEN = None
         from app.shared.core.cache import _get_sync_client
+
         assert _get_sync_client() is None
 
 
@@ -37,7 +38,9 @@ async def test_cached_query_tenant_aware_false_does_not_use_tenant():
     async def handler(db, tenant_id, extra=None):
         return {"ok": True, "extra": extra}
 
-    with patch.object(cache, "_make_cache_key", wraps=cache._make_cache_key) as mock_key:
+    with patch.object(
+        cache, "_make_cache_key", wraps=cache._make_cache_key
+    ) as mock_key:
         wrapped = cache.cached_query(tenant_aware=False)(handler)
         await wrapped("db", "tenant-1", extra="x")
 

@@ -48,7 +48,9 @@ def db() -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_activeops_get_creates_default_when_missing(user: CurrentUser, db: MagicMock) -> None:
+async def test_activeops_get_creates_default_when_missing(
+    user: CurrentUser, db: MagicMock
+) -> None:
     db.execute.return_value = _scalar_result(None)
     response = await activeops.get_activeops_settings(user, db)
     assert response.auto_pilot_enabled is False
@@ -61,7 +63,9 @@ async def test_activeops_update_branches(user: CurrentUser, db: MagicMock) -> No
     existing = SimpleNamespace(auto_pilot_enabled=False, min_confidence_threshold=0.95)
     db.execute.return_value = _scalar_result(existing)
 
-    update = activeops.ActiveOpsSettingsUpdate(auto_pilot_enabled=True, min_confidence_threshold=0.8)
+    update = activeops.ActiveOpsSettingsUpdate(
+        auto_pilot_enabled=True, min_confidence_threshold=0.8
+    )
     with patch.object(activeops, "audit_log"):
         response = await activeops.update_activeops_settings(update, user, db)
 
@@ -118,7 +122,9 @@ async def test_carbon_get_and_update_branches(user: CurrentUser, db: MagicMock) 
 
 
 @pytest.mark.asyncio
-async def test_notification_get_and_update_branches(user: CurrentUser, db: MagicMock) -> None:
+async def test_notification_get_and_update_branches(
+    user: CurrentUser, db: MagicMock
+) -> None:
     db.execute.return_value = _scalar_result(None)
     created = await notifications.get_notification_settings(user, db)
     assert created.digest_schedule == "daily"
@@ -152,7 +158,9 @@ async def test_notification_get_and_update_branches(user: CurrentUser, db: Magic
 
     db.execute.return_value = _scalar_result(None)
     with patch.object(notifications, "audit_log"):
-        created_again = await notifications.update_notification_settings(update, user, db)
+        created_again = await notifications.update_notification_settings(
+            update, user, db
+        )
     assert created_again.slack_channel_override == "#ops"
 
 
@@ -161,41 +169,52 @@ async def test_test_slack_notification_error_and_success_paths(
     user: CurrentUser,
     db: MagicMock,
 ) -> None:
-    missing_cfg = SimpleNamespace(SLACK_BOT_TOKEN=None, SLACK_CHANNEL_ID=None)
-    with patch("app.shared.core.config.get_settings", return_value=missing_cfg):
-        with pytest.raises(HTTPException) as exc:
-            await notifications.test_slack_notification(user, db)
+    with patch.object(notifications, "_record_acceptance_evidence", new=AsyncMock()):
+        with patch(
+            "app.modules.notifications.domain.get_tenant_slack_service",
+            new=AsyncMock(return_value=None),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await notifications.test_slack_notification(user, db)
     assert exc.value.status_code == 400
 
-    good_cfg = SimpleNamespace(SLACK_BOT_TOKEN="xoxb-token", SLACK_CHANNEL_ID="#default")
-    db.execute.return_value = _scalar_result(SimpleNamespace(slack_channel_override="#override"))
-
-    with patch("app.shared.core.config.get_settings", return_value=good_cfg), patch(
-        "app.modules.notifications.domain.SlackService.send_alert",
-        new=AsyncMock(return_value=False),
-    ):
-        with pytest.raises(HTTPException) as exc:
-            await notifications.test_slack_notification(user, db)
+    slack = AsyncMock()
+    slack.send_alert = AsyncMock(return_value=False)
+    with patch.object(notifications, "_record_acceptance_evidence", new=AsyncMock()):
+        with patch(
+            "app.modules.notifications.domain.get_tenant_slack_service",
+            new=AsyncMock(return_value=slack),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await notifications.test_slack_notification(user, db)
     assert exc.value.status_code == 500
 
-    with patch("app.shared.core.config.get_settings", return_value=good_cfg), patch(
-        "app.modules.notifications.domain.SlackService.send_alert",
-        new=AsyncMock(return_value=True),
-    ):
-        ok = await notifications.test_slack_notification(user, db)
+    slack = AsyncMock()
+    slack.send_alert = AsyncMock(return_value=True)
+    with patch.object(notifications, "_record_acceptance_evidence", new=AsyncMock()):
+        with patch(
+            "app.modules.notifications.domain.get_tenant_slack_service",
+            new=AsyncMock(return_value=slack),
+        ):
+            ok = await notifications.test_slack_notification(user, db)
     assert ok["status"] == "success"
 
-    with patch("app.shared.core.config.get_settings", return_value=good_cfg), patch(
-        "app.modules.notifications.domain.SlackService",
-        side_effect=RuntimeError("slack init failed"),
-    ):
-        with pytest.raises(HTTPException) as exc:
-            await notifications.test_slack_notification(user, db)
+    slack = AsyncMock()
+    slack.send_alert = AsyncMock(side_effect=RuntimeError("slack init failed"))
+    with patch.object(notifications, "_record_acceptance_evidence", new=AsyncMock()):
+        with patch(
+            "app.modules.notifications.domain.get_tenant_slack_service",
+            new=AsyncMock(return_value=slack),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await notifications.test_slack_notification(user, db)
     assert exc.value.status_code == 500
 
 
 @pytest.mark.asyncio
-async def test_llm_get_update_and_models_paths(user: CurrentUser, db: MagicMock) -> None:
+async def test_llm_get_update_and_models_paths(
+    user: CurrentUser, db: MagicMock
+) -> None:
     db.execute.return_value = _scalar_result(None)
     created = await llm.get_llm_settings(user, db)
     assert created.preferred_provider == "groq"
@@ -241,7 +260,10 @@ async def test_llm_get_update_and_models_paths(user: CurrentUser, db: MagicMock)
         created_again = await llm.update_llm_settings(update_max, user, db)
     assert created_again.preferred_provider == "groq"
 
-    with patch("app.shared.llm.pricing_data.LLM_PRICING", {"groq": {"m1": {}, "m2": {}}, "openai": {"o1": {}}}):
+    with patch(
+        "app.shared.llm.pricing_data.LLM_PRICING",
+        {"groq": {"m1": {}, "m2": {}}, "openai": {"o1": {}}},
+    ):
         models = await llm.get_llm_models()
     assert models["groq"] == ["m1", "m2"]
     assert models["openai"] == ["o1"]

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import Page from './+page.svelte';
+import type { PageData } from './$types';
 
 const { postMock } = vi.hoisted(() => ({
 	postMock: vi.fn()
@@ -28,7 +29,7 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 function setupPostMocks() {
-	postMock.mockImplementation(async (url: string, body?: unknown) => {
+	postMock.mockImplementation(async (url: string) => {
 		if (url.endsWith('/settings/onboard')) {
 			return jsonResponse({ ok: true });
 		}
@@ -70,12 +71,13 @@ function setupPostMocks() {
 }
 
 function renderPage() {
+	const data = {
+		user: { id: 'user-id', tenant_id: 'tenant-id' },
+		session: { access_token: 'token' },
+		subscription: { tier: 'pro', status: 'active' }
+	} as unknown as PageData;
 	return render(Page, {
-		data: {
-			user: { id: 'user-id', tenant_id: 'tenant-id' } as any,
-			session: { access_token: 'token' } as any,
-			subscription: { tier: 'pro', status: 'active' }
-		}
+		data
 	});
 }
 
@@ -141,14 +143,12 @@ describe('onboarding cloud+ flow', () => {
 
 		await waitFor(() => {
 			expect(
-				postMock.mock.calls.some(
-					(call) => String(call[0]).endsWith('/settings/connections/saas')
-				)
+				postMock.mock.calls.some((call) => String(call[0]).endsWith('/settings/connections/saas'))
 			).toBe(true);
 		});
 
-		const createCall = postMock.mock.calls.find(
-			(call) => String(call[0]).endsWith('/settings/connections/saas')
+		const createCall = postMock.mock.calls.find((call) =>
+			String(call[0]).endsWith('/settings/connections/saas')
 		);
 		expect(createCall).toBeTruthy();
 		const payload = createCall?.[1] as Record<string, unknown>;

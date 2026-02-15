@@ -30,21 +30,18 @@ GRAVITON_EQUIVALENTS = {
     "m6i.large": ("m7g.large", 35),
     "m6i.xlarge": ("m7g.xlarge", 35),
     "m6i.2xlarge": ("m7g.2xlarge", 35),
-
     # Compute Optimized
     "c5.large": ("c7g.large", 40),
     "c5.xlarge": ("c7g.xlarge", 40),
     "c5.2xlarge": ("c7g.2xlarge", 40),
     "c6i.large": ("c7g.large", 35),
     "c6i.xlarge": ("c7g.xlarge", 35),
-
     # Memory Optimized
     "r5.large": ("r7g.large", 40),
     "r5.xlarge": ("r7g.xlarge", 40),
     "r5.2xlarge": ("r7g.2xlarge", 40),
     "r6i.large": ("r7g.large", 35),
     "r6i.xlarge": ("r7g.xlarge", 35),
-
     # Burstable
     "t3.micro": ("t4g.micro", 40),
     "t3.small": ("t4g.small", 40),
@@ -140,13 +137,17 @@ class GravitonAnalyzer:
                             instance_id = instance.get("InstanceId", "")
 
                             # Check if already on Graviton
-                            if any(g in instance_type for g in ["g.", "7g.", "6g.", "4g."]):
+                            if any(
+                                g in instance_type for g in ["g.", "7g.", "6g.", "4g."]
+                            ):
                                 graviton_instances += 1
                                 continue
 
                             # Check if migration candidate exists
                             if instance_type in GRAVITON_EQUIVALENTS:
-                                graviton_type, savings_percent = GRAVITON_EQUIVALENTS[instance_type]
+                                graviton_type, savings_percent = GRAVITON_EQUIVALENTS[
+                                    instance_type
+                                ]
 
                                 # Get instance name from tags
                                 name = ""
@@ -155,15 +156,17 @@ class GravitonAnalyzer:
                                         name = tag.get("Value", "")
                                         break
 
-                                candidates.append({
-                                    "instance_id": instance_id,
-                                    "name": name,
-                                    "current_type": instance_type,
-                                    "recommended_type": graviton_type,
-                                    "energy_savings_percent": savings_percent,
-                                    "carbon_reduction_percent": savings_percent,  # ~1:1 with energy
-                                    "migration_complexity": "low",  # Most are compatible
-                                })
+                                candidates.append(
+                                    {
+                                        "instance_id": instance_id,
+                                        "name": name,
+                                        "current_type": instance_type,
+                                        "recommended_type": graviton_type,
+                                        "energy_savings_percent": savings_percent,
+                                        "carbon_reduction_percent": savings_percent,  # ~1:1 with energy
+                                        "migration_complexity": "low",  # Most are compatible
+                                    }
+                                )
 
             # Calculate summary
             result = {
@@ -172,8 +175,10 @@ class GravitonAnalyzer:
                 "migration_candidates": len(candidates),
                 "candidates": candidates,
                 "potential_energy_reduction_percent": (
-                    sum(c["energy_savings_percent"] for c in candidates) / len(candidates)
-                    if candidates else 0
+                    sum(c["energy_savings_percent"] for c in candidates)
+                    / len(candidates)
+                    if candidates
+                    else 0
                 ),
                 "compatible_workloads": COMPATIBLE_WORKLOADS,
                 "requires_validation": REQUIRES_VALIDATION,

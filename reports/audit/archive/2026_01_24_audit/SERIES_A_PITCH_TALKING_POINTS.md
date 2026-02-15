@@ -58,7 +58,7 @@
 
 1. **Tag-based allocation** (working now): If your S3 buckets are tagged with 'Team=Marketing', we attribute that cost to Marketing. 70% of enterprise customers tag their resources.
 
-2. **Allocation rules engine** (in development): For shared resources (NAT Gateway used by 5 teams, RDS database shared across teams), we're building rules that let customers define 'NAT Gateway costs split 60% Team A, 40% Team B'. This ships in Q1."
+2. **Allocation rules engine** (in development): For shared resources (NAT Gateway used by 5 teams, RDS database shared across teams), we're building rules that let customers define 'NAT Gateway costs split 60% Team A, 40% Team B'. This is in active development."
 
 ### The Demo
 
@@ -90,7 +90,7 @@
 
 We use Prophet (industry standard for time-series) plus historical anomaly detection. For stable workloads, we predict within ±5%. For volatile workloads, it's ±15-20%.
 
-We're building volatility modeling to improve this. By Q2, we'll show confidence bands instead of a single prediction."
+We're building volatility modeling to improve this. Next: show confidence bands instead of a single prediction."
 
 ### The Demo
 
@@ -214,9 +214,9 @@ Every database session sets `app.current_tenant_id`, so if Tenant A's connection
 
 "Two areas we're actively working on:
 
-1. **Attribution rules engine**: We have the schema, not the engine. Shipping in Q1. This will unlock multi-team chargeback scenarios.
+1. **Attribution rules engine**: We have the schema, not the engine. This is in active development. This will unlock multi-team chargeback scenarios.
 
-2. **Distributed scheduler**: Currently single-instance (APScheduler). At high availability, we need Celery + Redis. Planned for Q2."
+2. **Distributed scheduler**: Currently single-instance (APScheduler). At high availability, we need Celery + Redis. Planned next."
 
 ### The Caveat
 
@@ -323,7 +323,7 @@ Every database session sets `app.current_tenant_id`, so if Tenant A's connection
 | "How do you scale?"              | "Partitioned tables, safeguards in place, roadmap for 10×"        |
 | "What about security?"           | "RLS + code-level filters, zero cross-tenant incidents"           |
 | "Why not acquire Cloudability?"  | "Different market segment, we're product-first"                   |
-| "What's your tech debt?"         | "Attribution engine (Q1), distributed scheduler (Q2)"             |
+| "What's your tech debt?"         | "Attribution engine, distributed scheduler"                       |
 | "Forecast accuracy?"             | "85% on stable workloads, 70% on volatile. We're improving."      |
 | "What if X breaks?"              | "Runbooks exist, monitoring is active, team knows how to recover" |
 | "Team staying post-acquisition?" | "Yes, [specific commitment]. We built this, we're staying."       |
@@ -342,7 +342,7 @@ Every database session sets `app.current_tenant_id`, so if Tenant A's connection
    - Instead: "We help customers understand untagged costs"
 
 4. **Pretending Problems Don't Exist**: "Scheduler is distributed"
-   - Instead: "Scheduler is single-instance, moving to Celery in Q2"
+   - Instead: "Scheduler is single-instance, moving to Celery next"
 
 5. **Changing the Subject**: [Investor asks hard question] → "Let me show you something cool"
    - Instead: Answer directly, then add context
@@ -355,7 +355,7 @@ Every database session sets `app.current_tenant_id`, so if Tenant A's connection
 
 2. **Learning from Failures**: "We had a multi-tenant isolation scare, here's how we fixed it"
 
-3. **Roadmap Clarity**: "We're shipping X in Q1, Y in Q2, because customers asked for it"
+3. **Roadmap Clarity**: "We're shipping X next, Y after, because customers asked for it"
 
 4. **Unit Economics**: "Here's our CAC, payback period, NRR"
 

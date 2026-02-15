@@ -7,10 +7,12 @@ Provides:
 - POST /billing/webhook - Handle Paystack webhooks
 """
 
+import asyncio
 from typing import Annotated, Optional, Dict, Any, List
 from urllib.parse import urlparse, urljoin, urlunparse
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from pydantic import BaseModel
 import structlog
 
@@ -39,7 +41,9 @@ def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
 
     # Treat relative callback paths as frontend-local redirects.
     if callback.startswith("/"):
-        callback = urljoin(settings.FRONTEND_URL.rstrip("/") + "/", callback.lstrip("/"))
+        callback = urljoin(
+            settings.FRONTEND_URL.rstrip("/") + "/", callback.lstrip("/")
+        )
 
     parsed = urlparse(callback)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -48,7 +52,9 @@ def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
         raise HTTPException(400, "callback_url must not include credentials")
 
     if settings.ENVIRONMENT in {"production", "staging"} and parsed.scheme != "https":
-        raise HTTPException(400, "callback_url must use HTTPS in production environments")
+        raise HTTPException(
+            400, "callback_url must use HTTPS in production environments"
+        )
 
     allowed_hosts: set[str] = set()
     if settings.FRONTEND_URL:
@@ -68,9 +74,11 @@ def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
     sanitized = parsed._replace(fragment="")
     return urlunparse(sanitized)
 
+
 class ExchangeRateUpdate(BaseModel):
     rate: float
     provider: str = "manual"
+
 
 class PricingPlanUpdate(BaseModel):
     price_usd: float
@@ -90,6 +98,19 @@ class SubscriptionResponse(BaseModel):
     next_payment_date: Optional[str] = None
 
 
+class ConnectionUsageItem(BaseModel):
+    connected: int
+    limit: int | None
+    remaining: int | None
+    utilization_percent: float | None
+
+
+class BillingUsageResponse(BaseModel):
+    tier: str
+    connections: Dict[str, ConnectionUsageItem]
+    generated_at: str
+
+
 @router.get("/plans")
 async def get_public_plans(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
     """
@@ -100,23 +121,27 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)) -> List[Dict[str,
     from app.models.pricing import PricingPlan
     from sqlalchemy import select
     from app.shared.core.pricing import TIER_CONFIG, PricingTier
-    
+
     # 1. Try fetching from DB
     try:
         result = await db.execute(select(PricingPlan).where(PricingPlan.is_active))
         db_plans = result.scalars().all()
         if db_plans:
-            return [{
-                "id": p.id,
-                "name": p.name,
-                "price_monthly": float(p.price_usd),
-                "price_annual": float(p.price_usd) * 10, # Standard 2-months-free fallback
-                "period": "/mo",
-                "description": p.description,
-                "features": p.display_features,
-                "cta": p.cta_text,
-                "popular": p.is_popular
-            } for p in db_plans]
+            return [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "price_monthly": float(p.price_usd),
+                    "price_annual": float(p.price_usd)
+                    * 10,  # Standard 2-months-free fallback
+                    "period": "/mo",
+                    "description": p.description,
+                    "features": p.display_features,
+                    "cta": p.cta_text,
+                    "popular": p.is_popular,
+                }
+                for p in db_plans
+            ]
     except Exception as e:
         logger.warning("failed_to_fetch_plans_from_db", error=str(e))
 
@@ -136,19 +161,21 @@ async def get_public_plans(db: AsyncSession = Depends(get_db)) -> List[Dict[str,
                 continue
             monthly = price_cfg["monthly"]
             annual = price_cfg["annual"]
-            
-            public_plans.append({
-                "id": tier.value,
-                "name": config.get("name", tier.value.capitalize()),
-                "price_monthly": monthly,
-                "price_annual": annual,
-                "period": "/mo",
-                "description": config.get("description", ""),
-                "features": config.get("display_features", []),
-                "cta": config.get("cta", "Get Started"),
-                "popular": tier == PricingTier.GROWTH
-            })
-            
+
+            public_plans.append(
+                {
+                    "id": tier.value,
+                    "name": config.get("name", tier.value.capitalize()),
+                    "price_monthly": monthly,
+                    "price_annual": annual,
+                    "period": "/mo",
+                    "description": config.get("description", ""),
+                    "features": config.get("display_features", []),
+                    "cta": config.get("cta", "Get Started"),
+                    "popular": tier == PricingTier.GROWTH,
+                }
+            )
+
     return public_plans
 
 
@@ -161,7 +188,9 @@ async def get_subscription(
 ) -> SubscriptionResponse:
     """Get current subscription status for tenant."""
     try:
-        from app.modules.billing.domain.billing.paystack_billing import TenantSubscription
+        from app.modules.billing.domain.billing.paystack_billing import (
+            TenantSubscription,
+        )
         from sqlalchemy import select
 
         result = await db.execute(
@@ -177,7 +206,9 @@ async def get_subscription(
         return SubscriptionResponse(
             tier=sub.tier,
             status=sub.status,
-            next_payment_date=sub.next_payment_date.isoformat() if sub.next_payment_date else None
+            next_payment_date=sub.next_payment_date.isoformat()
+            if sub.next_payment_date
+            else None,
         )
     except HTTPException:
         raise
@@ -197,16 +228,100 @@ async def get_features(
     Central authority for frontend and backend gating.
     """
     from app.shared.core.pricing import PricingTier, get_tier_config
-    
+
     user_tier = getattr(user, "tier", PricingTier.FREE_TRIAL)
     config = get_tier_config(user_tier)
-    
+
     return {
         "tier": user_tier,
         "features": list(config.get("features", [])),
-        "limits": config.get("limits", {})
+        "limits": config.get("limits", {}),
     }
 
+
+@router.get("/usage", response_model=BillingUsageResponse)
+@auth_limit
+async def get_billing_usage(
+    request: Request,
+    user: Annotated[CurrentUser, Depends(requires_role("member"))],
+    db: AsyncSession = Depends(get_db),
+) -> BillingUsageResponse:
+    """
+    Tier-aligned usage overview for billing/packaging UX.
+
+    This surfaces how close a tenant is to connection limits (AWS/Azure/GCP/SaaS/License),
+    so upgrades are explainable and enforceable.
+    """
+    from datetime import datetime, timezone
+    from app.models.aws_connection import AWSConnection
+    from app.models.azure_connection import AzureConnection
+    from app.models.gcp_connection import GCPConnection
+    from app.models.saas_connection import SaaSConnection
+    from app.models.license_connection import LicenseConnection
+    from app.shared.core.pricing import PricingTier, get_tier_limit
+
+    tier = getattr(user, "tier", PricingTier.FREE_TRIAL)
+
+    async def _count(model: Any) -> int:
+        res = await db.execute(
+            select(func.count())
+            .select_from(model)
+            .where(model.tenant_id == user.tenant_id)
+        )
+        return int(res.scalar_one() or 0)
+
+    def _usage_item(connected: int, limit_value: Any) -> ConnectionUsageItem:
+        if limit_value is None:
+            return ConnectionUsageItem(
+                connected=connected,
+                limit=None,
+                remaining=None,
+                utilization_percent=None,
+            )
+        try:
+            limit_int = int(limit_value)
+        except (TypeError, ValueError):
+            limit_int = 0
+        if limit_int <= 0:
+            return ConnectionUsageItem(
+                connected=connected,
+                limit=limit_int,
+                remaining=0,
+                utilization_percent=None,
+            )
+        remaining = max(limit_int - connected, 0)
+        utilization = round((connected / limit_int) * 100, 1) if limit_int > 0 else None
+        return ConnectionUsageItem(
+            connected=connected,
+            limit=limit_int,
+            remaining=remaining,
+            utilization_percent=utilization,
+        )
+
+    aws_count, azure_count, gcp_count, saas_count, license_count = await asyncio.gather(
+        _count(AWSConnection),
+        _count(AzureConnection),
+        _count(GCPConnection),
+        _count(SaaSConnection),
+        _count(LicenseConnection),
+    )
+
+    connections: Dict[str, ConnectionUsageItem] = {
+        "aws": _usage_item(aws_count, get_tier_limit(tier, "max_aws_accounts")),
+        "azure": _usage_item(azure_count, get_tier_limit(tier, "max_azure_tenants")),
+        "gcp": _usage_item(gcp_count, get_tier_limit(tier, "max_gcp_projects")),
+        "saas": _usage_item(saas_count, get_tier_limit(tier, "max_saas_connections")),
+        "license": _usage_item(
+            license_count, get_tier_limit(tier, "max_license_connections")
+        ),
+    }
+
+    now = datetime.now(timezone.utc)
+    return BillingUsageResponse(
+        tier=tier.value if hasattr(tier, "value") else str(tier),
+        connections=connections,
+        generated_at=now.isoformat(),
+    )
 
 
 @router.post("/checkout")
@@ -232,9 +347,9 @@ async def create_checkout(
             raise HTTPException(400, f"Invalid tier: {checkout_req.tier}")
 
         billing = BillingService(db)
-        
+
         callback = _build_checkout_callback_url(checkout_req.callback_url)
-        
+
         if not user.tenant_id:
             raise HTTPException(400, "User has no tenant")
 
@@ -243,7 +358,7 @@ async def create_checkout(
             tier=tier,
             email=user.email,
             callback_url=callback,
-            billing_cycle=checkout_req.billing_cycle
+            billing_cycle=checkout_req.billing_cycle,
         )
 
         return {"checkout_url": result["url"], "reference": result["reference"]}
@@ -286,7 +401,7 @@ async def cancel_subscription(
 async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> Any:
     """
     Handle Paystack webhook events with durable processing.
-    
+
     Webhooks are stored in background_jobs before processing,
     enabling automatic retry on failure.
     """
@@ -300,7 +415,7 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
         # Check X-Forwarded-For (if behind proxy) or client host
         host = request.client.host if request.client else "unknown"
         client_ip = request.headers.get("x-forwarded-for", host).split(",")[0].strip()
-        
+
         if settings.ENVIRONMENT == "production" and client_ip not in PAYSTACK_IPS:
             logger.warning("unauthorized_webhook_origin", ip=client_ip)
             raise HTTPException(403, "Unauthorized origin IP")
@@ -335,7 +450,7 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
             payload=data,
             reference=reference,
             signature=signature,
-            raw_payload=raw_payload
+            raw_payload=raw_payload,
         )
 
         if job is None:
@@ -350,7 +465,7 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
             logger.warning(
                 "webhook_processing_failed_will_retry",
                 job_id=str(job.id),
-                error=str(process_error)
+                error=str(process_error),
             )
             # Job is already stored, will be retried by JobProcessor
             return {"status": "queued", "job_id": str(job.id)}
@@ -364,13 +479,15 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
         logger.error("webhook_failed", error=str(e))
         raise HTTPException(500, "Webhook processing failed") from e
 
+
 # ==================== Admin Endpoints ====================
+
 
 @router.post("/admin/rates")
 async def update_exchange_rate(
     request: ExchangeRateUpdate,
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Manually update exchange rate."""
     from app.models.pricing import ExchangeRate
@@ -379,8 +496,7 @@ async def update_exchange_rate(
 
     result = await db.execute(
         select(ExchangeRate).where(
-            ExchangeRate.from_currency == "USD",
-            ExchangeRate.to_currency == "NGN"
+            ExchangeRate.from_currency == "USD", ExchangeRate.to_currency == "NGN"
         )
     )
     rate_obj = result.scalar_one_or_none()
@@ -390,20 +506,23 @@ async def update_exchange_rate(
         rate_obj.provider = request.provider
         rate_obj.last_updated = datetime.now(timezone.utc)
     else:
-        db.add(ExchangeRate(
-            from_currency="USD",
-            to_currency="NGN",
-            rate=request.rate,
-            provider=request.provider
-        ))
-    
+        db.add(
+            ExchangeRate(
+                from_currency="USD",
+                to_currency="NGN",
+                rate=request.rate,
+                provider=request.provider,
+            )
+        )
+
     await db.commit()
     return {"status": "success", "rate": request.rate}
+
 
 @router.get("/admin/rates")
 async def get_exchange_rate(
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Get current exchange rate."""
     from app.models.pricing import ExchangeRate
@@ -411,29 +530,29 @@ async def get_exchange_rate(
 
     result = await db.execute(
         select(ExchangeRate).where(
-            ExchangeRate.from_currency == "USD",
-            ExchangeRate.to_currency == "NGN"
+            ExchangeRate.from_currency == "USD", ExchangeRate.to_currency == "NGN"
         )
     )
     rate_obj = result.scalar_one_or_none()
-    
+
     if not rate_obj:
         return {"rate": 1450.0, "provider": "fallback"}
-        
+
     return {
         "rate": float(rate_obj.rate),
         "provider": rate_obj.provider,
-        "last_updated": rate_obj.last_updated.isoformat()
+        "last_updated": rate_obj.last_updated.isoformat(),
     }
+
 
 @router.post("/admin/plans/{plan_id}")
 @auth_limit
 async def update_pricing_plan(
     request: Request,
-    plan_id: str, # Note: plan_id is a slug (e.g., 'starter'), not a UUID
+    plan_id: str,  # Note: plan_id is a slug (e.g., 'starter'), not a UUID
     plan_req: PricingPlanUpdate,
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, str]:
     """Update pricing plan details."""
     from app.models.pricing import PricingPlan
@@ -450,6 +569,6 @@ async def update_pricing_plan(
         plan.features = plan_req.features
     if plan_req.limits:
         plan.limits = plan_req.limits
-    
+
     await db.commit()
     return {"status": "success", "plan_id": plan_id}

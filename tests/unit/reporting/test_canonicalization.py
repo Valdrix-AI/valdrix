@@ -1,4 +1,7 @@
-from app.modules.reporting.domain.canonicalization import MAPPING_VERSION, map_canonical_charge_category
+from app.modules.reporting.domain.canonicalization import (
+    MAPPING_VERSION,
+    map_canonical_charge_category,
+)
 
 
 def test_map_canonical_charge_category_maps_known_compute_service() -> None:

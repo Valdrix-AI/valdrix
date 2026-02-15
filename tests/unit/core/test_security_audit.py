@@ -4,9 +4,13 @@ import base64
 from unittest.mock import patch
 from cryptography.fernet import Fernet, MultiFernet
 from app.shared.core.security import (
-    EncryptionKeyManager, encrypt_string, decrypt_string, 
-    generate_blind_index, generate_new_key
+    EncryptionKeyManager,
+    encrypt_string,
+    decrypt_string,
+    generate_blind_index,
+    generate_new_key,
 )
+
 
 @pytest.fixture
 def mock_settings():
@@ -18,10 +22,18 @@ def mock_settings():
         mock.return_value.BLIND_INDEX_KEY = "blind-index-secret"
         yield mock.return_value
 
+
 @pytest.fixture(autouse=True)
 def set_env():
-    with patch.dict(os.environ, {"KDF_SALT": base64.b64encode(os.urandom(32)).decode(), "ENVIRONMENT": "development"}):
+    with patch.dict(
+        os.environ,
+        {
+            "KDF_SALT": base64.b64encode(os.urandom(32)).decode(),
+            "ENVIRONMENT": "development",
+        },
+    ):
         yield
+
 
 class TestEncryptionKeyManager:
     def test_generate_salt(self):
@@ -43,7 +55,9 @@ class TestEncryptionKeyManager:
         with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=True):
             if "KDF_SALT" in os.environ:
                 del os.environ["KDF_SALT"]
-            with pytest.raises(ValueError, match="CRITICAL: KDF_SALT environment variable not set"):
+            with pytest.raises(
+                ValueError, match="CRITICAL: KDF_SALT environment variable not set"
+            ):
                 EncryptionKeyManager.get_or_create_salt()
 
     def test_derive_key(self):
@@ -52,7 +66,7 @@ class TestEncryptionKeyManager:
         key1 = EncryptionKeyManager.derive_key(master, salt, key_version=1)
         key2 = EncryptionKeyManager.derive_key(master, salt, key_version=1)
         key3 = EncryptionKeyManager.derive_key(master, salt, key_version=2)
-        
+
         assert key1 == key2
         assert key1 != key3
         # Should be base64 urlsafe
@@ -70,85 +84,103 @@ class TestEncryptionKeyManager:
         mf = EncryptionKeyManager.create_multi_fernet(primary, salt=salt)
         assert isinstance(mf, MultiFernet)
 
+
 def test_encrypt_decrypt_roundtrip(mock_settings):
     original = "secret-message-123"
-    
+
     # Generic context
     encrypted = encrypt_string(original, context="generic")
     assert encrypted != original
     decrypted = decrypt_string(encrypted, context="generic")
     assert decrypted == original
 
+
 def test_context_specific_encryption(mock_settings):
     original = "sensitive"
-    
+
     # Different keys for different contexts should produce different ciphertexts (even if primary keys were same, KDF uses versioning/context if we added it, but here it uses different setting keys)
     enc_api = encrypt_string(original, context="api_key")
     enc_pii = encrypt_string(original, context="pii")
-    
+
     assert enc_api != enc_pii
-    
+
     # Cross-decryption should fail (different keys)
     assert decrypt_string(enc_api, context="pii") is None
     assert decrypt_string(enc_pii, context="api_key") is None
+
 
 def test_generate_blind_index(mock_settings):
     val = "  User@Example.com  "
     idx1 = generate_blind_index(val)
     idx2 = generate_blind_index("user@example.com")
     idx3 = generate_blind_index("other@example.com")
-    
+
     assert idx1 == idx2
     assert idx1 != idx3
-    assert len(idx1) == 64 # SHA256 hex
+    assert len(idx1) == 64  # SHA256 hex
+
 
 def test_generate_new_key():
     key = generate_new_key()
     # Should be valid Fernet key
     Fernet(key.encode())
 
+
 def test_decrypt_invalid_input():
     assert decrypt_string(None) is None
     assert decrypt_string("") is None
     assert decrypt_string("invalid-base64-or-fernet") is None
 
+
 def test_fallback_keys_support(mock_settings):
     fallback_key = Fernet.generate_key().decode()
     mock_settings.ENCRYPTION_FALLBACK_KEYS = [fallback_key]
-    
+
     original = "fallback-secret"
     # Encrypt with primary
     token = encrypt_string(original)
-    
+
     # Decrypt should work
     assert decrypt_string(token) == original
-    
+
     # Encrypt with fallback key (simulating previously encrypted data)
-    fer_fallback = EncryptionKeyManager.create_fernet_for_key(fallback_key, EncryptionKeyManager.get_or_create_salt())
+    fer_fallback = EncryptionKeyManager.create_fernet_for_key(
+        fallback_key, EncryptionKeyManager.get_or_create_salt()
+    )
     fallback_token = fer_fallback.encrypt(original.encode()).decode()
-    
+
     # Decrypt with MultiFernet (which includes fallback key) should work
     assert decrypt_string(fallback_token) == original
 
+
 def test_internal_fernet_helpers(mock_settings):
-    from app.shared.core.security import _get_api_key_fernet, _get_pii_fernet, _get_multi_fernet
-    
+    from app.shared.core.security import (
+        _get_api_key_fernet,
+        _get_pii_fernet,
+        _get_multi_fernet,
+    )
+
     assert isinstance(_get_api_key_fernet(), MultiFernet)
     assert isinstance(_get_pii_fernet(), MultiFernet)
     assert isinstance(_get_multi_fernet(None), MultiFernet)
 
+
 def test_blind_index_edge_cases(mock_settings):
     assert generate_blind_index("") is None
-    
+
     mock_settings.BLIND_INDEX_KEY = None
     mock_settings.ENCRYPTION_KEY = None
     assert generate_blind_index("val") is None
+
 
 def test_kdf_invalid_salt():
     with pytest.raises(ValueError, match="Invalid KDF salt format"):
         EncryptionKeyManager.derive_key("master", "not-base64-!!!")
 
+
 def test_create_multi_fernet_invalid_key():
     # If a key is invalid, it should be skipped but not crash the whole thing
-    mf = EncryptionKeyManager.create_multi_fernet("invalid-key", fallback_keys=("valid-but-not-really",))
+    mf = EncryptionKeyManager.create_multi_fernet(
+        "invalid-key", fallback_keys=("valid-but-not-really",)
+    )
     assert isinstance(mf, MultiFernet)

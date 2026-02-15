@@ -17,7 +17,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12"
-  NODE_VERSION: "20"
+  NODE_VERSION: "24"
   PNPM_VERSION: "9"
 
 jobs:
@@ -90,6 +90,55 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+  # JOB 1B: DASHBOARD QUALITY (2026 Frontend Standards)
+  dashboard-quality:
+    name: Dashboard Lint / Typecheck / Unit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('dashboard/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install Dashboard Dependencies
+        working-directory: ./dashboard
+        run: pnpm install --frozen-lockfile
+
+      - name: Dashboard Lint
+        working-directory: ./dashboard
+        run: pnpm run lint
+
+      - name: Dashboard Typecheck
+        working-directory: ./dashboard
+        run: pnpm run check
+
+      - name: Dashboard Unit Tests
+        working-directory: ./dashboard
+        run: pnpm run test:unit -- --run
+
+      - name: Dashboard Build (Vite/SvelteKit)
+        working-directory: ./dashboard
+        run: pnpm run build
+
+      - name: Dashboard Bundle Budgets
+        working-directory: ./dashboard
+        run: pnpm run check:bundle
+
   # JOB 2: CARBON EMISSIONS (GreenOps 2.0)
   emissions:
     name: Carbon Footprint Report
@@ -149,17 +198,22 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
 
-      - name: Install Security Tools
-        run: pip install bandit safety
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Install Dependencies
+        run: uv sync --group dev
 
       - name: Run Bandit (SAST)
         # B101: Assert used in tests; B104: Bind to all interfaces (Docker)
-        run: bandit -r app -ll -ii -s B101,B104
+        run: uv run bandit -r app -ll -ii -s B101,B104
 
       - name: Run Safety (Dependencies)
-        run: safety check
+        run: uv run safety check
 
       - name: TruffleHog Secret Scan
         uses: trufflesecurity/trufflehog@v3.93.0
@@ -278,30 +332,13 @@ jobs:
         working-directory: ./dashboard
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Start Backend Server
-        env:
-          AWS_ACCESS_KEY_ID: "testing"
-          AWS_SECRET_ACCESS_KEY: "testing"
-          AWS_DEFAULT_REGION: "us-east-1"
-          GROQ_API_KEY: "testing"
-          DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
-          SUPABASE_JWT_SECRET: "test-jwt-secret-for-ci"
-        run: |
-          uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
-          sleep 5  # Wait for server to start
-
-      - name: Start Dashboard Dev Server
-        working-directory: ./dashboard
-        run: |
-          pnpm run dev &
-          sleep 10  # Wait for Vite to start
-
       - name: Run E2E Tests
         working-directory: ./dashboard
         run: pnpm exec playwright test e2e/critical-paths.spec.ts --reporter=html
         env:
-          DASHBOARD_URL: http://localhost:5173
-          API_URL: http://localhost:8000
+          # Playwright webServer config boots `vite preview` on 4173
+          DASHBOARD_URL: http://localhost:4173
+          API_URL: http://127.0.0.1:8000
           
       - name: Upload E2E Test Report
         uses: actions/upload-artifact@v4

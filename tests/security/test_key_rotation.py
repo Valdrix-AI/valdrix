@@ -3,6 +3,7 @@ from cryptography.fernet import Fernet
 from app.shared.core.security import encrypt_string, decrypt_string
 from unittest.mock import patch, MagicMock
 
+
 @pytest.mark.asyncio
 async def test_key_rotation_compatibility():
     """
@@ -27,23 +28,23 @@ async def test_key_rotation_compatibility():
     with patch("app.shared.core.security.get_settings", return_value=mock_settings):
         # Initial encryption with key_alpha
         encrypted_alpha = encrypt_string(original_text)
-        
+
         # 4. Rotate: Beta as primary, Alpha as fallback (ENCRYPTION_FALLBACK_KEYS)
         mock_settings.ENCRYPTION_KEY = key_beta
         mock_settings.ENCRYPTION_FALLBACK_KEYS = [key_alpha]
-        
+
         # 5. Attempt decryption (should succeed because Alpha is in ENCRYPTION_FALLBACK_KEYS)
         decrypted = decrypt_string(encrypted_alpha)
         assert decrypted == original_text
-        
+
         # 6. Encrypt new data with Beta
         encrypted_beta = encrypt_string("New Secret")
-        
+
         # 7. Verify decryption with primary key Beta
         assert decrypt_string(encrypted_beta) == "New Secret"
-        
+
         # 8. Remove Alpha from fallbacks
         mock_settings.ENCRYPTION_FALLBACK_KEYS = []
-        
+
         # 9. Decryption of Alpha data should now fail (return None)
         assert decrypt_string(encrypted_alpha) is None

@@ -21,4 +21,3 @@ def test_billing_namespace_exports_core_interfaces() -> None:
     assert CheckoutRequest is not None
     assert PricingPlanUpdate is not None
     assert SubscriptionResponse is not None
-

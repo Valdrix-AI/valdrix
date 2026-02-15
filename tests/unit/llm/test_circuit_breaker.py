@@ -2,6 +2,7 @@
 Production-quality tests for LLM Circuit Breaker.
 Tests cover fault isolation, recovery logic, monitoring, and resilience patterns.
 """
+
 import pytest
 import os
 import time
@@ -13,7 +14,7 @@ from app.shared.llm.circuit_breaker import (
     ProviderCircuit,
     CircuitState,
     CircuitOpenError,
-    get_circuit_breaker
+    get_circuit_breaker,
 )
 
 
@@ -40,7 +41,7 @@ class TestProviderCircuit:
             name="custom-provider",
             failure_threshold=5,
             success_threshold=3,
-            recovery_timeout=120
+            recovery_timeout=120,
         )
 
         assert circuit.name == "custom-provider"
@@ -61,9 +62,7 @@ class TestLLMCircuitBreaker:
     def breaker_custom_thresholds(self):
         """Test circuit breaker with custom thresholds."""
         return LLMCircuitBreaker(
-            failure_threshold=2,
-            success_threshold=1,
-            recovery_timeout=30
+            failure_threshold=2, success_threshold=1, recovery_timeout=30
         )
 
     def test_initialization(self, breaker):
@@ -117,7 +116,9 @@ class TestLLMCircuitBreaker:
 
         # Mock old failure time
         circuit = breaker._get_circuit("provider")
-        circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(seconds=61)  # Past recovery timeout
+        circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(
+            seconds=61
+        )  # Past recovery timeout
 
         # Should transition to half-open and be available
         assert breaker.is_available("provider")
@@ -431,11 +432,15 @@ class TestCircuitBreakerIntegration:
         assert circuit.state == CircuitState.OPEN
 
         # Just before timeout - should still be unavailable
-        circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(seconds=breaker.recovery_timeout - 0.1)
+        circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(
+            seconds=breaker.recovery_timeout - 0.1
+        )
         assert not breaker.is_available(provider)
 
         # At timeout - should become available
-        circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(seconds=breaker.recovery_timeout)
+        circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(
+            seconds=breaker.recovery_timeout
+        )
         assert breaker.is_available(provider)
         assert circuit.state == CircuitState.HALF_OPEN
 
@@ -443,7 +448,7 @@ class TestCircuitBreakerIntegration:
         """Test that logging is properly integrated."""
         provider = "test-provider"
 
-        with patch('app.shared.llm.circuit_breaker.logger') as mock_logger:
+        with patch("app.shared.llm.circuit_breaker.logger") as mock_logger:
             # Test failure logging
             breaker.record_failure(provider, "test error")
 
@@ -469,6 +474,7 @@ class TestCircuitBreakerSingleton:
         """Test get_circuit_breaker creates singleton instance."""
         # Reset global instance
         import app.shared.llm.circuit_breaker as cb_module
+
         cb_module._circuit_breaker = None
 
         breaker = get_circuit_breaker()
@@ -480,6 +486,7 @@ class TestCircuitBreakerSingleton:
         """Test get_circuit_breaker returns same singleton instance."""
         # Reset global instance
         import app.shared.llm.circuit_breaker as cb_module
+
         cb_module._circuit_breaker = None
 
         breaker1 = get_circuit_breaker()
@@ -515,7 +522,7 @@ class TestCircuitBreakerProductionQuality:
             "azure",
             "provider-with-dashes",
             "provider_with_underscores",
-            "ProviderWithCaps"
+            "ProviderWithCaps",
         ]
 
         for provider in test_providers:
@@ -584,4 +591,5 @@ class TestCircuitBreakerProductionQuality:
 
 class SpecificTestError(Exception):
     """Custom exception for testing."""
+
     pass

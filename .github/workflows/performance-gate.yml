@@ -1,0 +1,99 @@
+name: Performance Gate (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Base URL of the environment to test (for example: https://staging.valdrix.ai)"
+        required: true
+        default: "http://127.0.0.1:8000"
+      profile:
+        description: "Endpoint profile"
+        required: true
+        type: choice
+        options:
+          - health
+          - dashboard
+          - ops
+          - scale
+          - soak
+        default: "dashboard"
+      duration:
+        description: "Duration (seconds)"
+        required: true
+        default: "30"
+      users:
+        description: "Concurrent users"
+        required: true
+        default: "10"
+      ramp:
+        description: "Ramp-up (seconds)"
+        required: true
+        default: "5"
+      p95_target:
+        description: "Fail if p95 exceeds this (seconds)"
+        required: true
+        default: "2.0"
+      max_error_rate:
+        description: "Fail if error-rate exceeds this (percent)"
+        required: true
+        default: "1.0"
+      min_throughput:
+        description: "Fail if throughput is below this (requests/sec)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  gate:
+    name: Run Load-Test Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Install Dependencies
+        run: uv sync --dev
+
+      - name: Run Load Test (Enforced Thresholds)
+        env:
+          # Optional: provide a tenant-scoped bearer token for authenticated routes.
+          # If absent, the runner will still test unauthenticated endpoints (health).
+          VALDRIX_TOKEN: ${{ secrets.VALDRIX_TOKEN }}
+        run: |
+          set -euo pipefail
+          OUT="reports/performance/perf_gate_${{ github.run_id }}.json"
+          mkdir -p "$(dirname "$OUT")"
+
+          ARGS=(--url "${{ inputs.url }}" --profile "${{ inputs.profile }}" --duration "${{ inputs.duration }}" --users "${{ inputs.users }}" --ramp "${{ inputs.ramp }}" --out "$OUT")
+          ARGS+=(--p95-target "${{ inputs.p95_target }}" --max-error-rate "${{ inputs.max_error_rate }}" --enforce-thresholds)
+          if [ -n "${{ inputs.min_throughput }}" ]; then
+            ARGS+=(--min-throughput "${{ inputs.min_throughput }}")
+          fi
+
+          uv run python scripts/load_test_api.py "${ARGS[@]}"
+
+      - name: Upload Performance Evidence Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-gate-evidence
+          path: reports/performance/perf_gate_${{ github.run_id }}.json
+          retention-days: 14
+

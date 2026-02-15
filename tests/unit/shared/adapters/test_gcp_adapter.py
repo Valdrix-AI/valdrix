@@ -36,7 +36,10 @@ def test_invalid_project_id_raises():
 
 def test_credentials_invalid_json_returns_none():
     conn = _connection(service_account_json="{bad-json}")
-    with patch("app.shared.adapters.gcp.service_account.Credentials.from_service_account_info", side_effect=ValueError("bad")):
+    with patch(
+        "app.shared.adapters.gcp.service_account.Credentials.from_service_account_info",
+        side_effect=ValueError("bad"),
+    ):
         adapter = GCPAdapter(conn)
     assert adapter._credentials is None
 
@@ -73,11 +76,13 @@ async def test_get_cost_and_usage_missing_export_returns_empty():
 
 @pytest.mark.asyncio
 async def test_get_cost_and_usage_invalid_table_path():
-    adapter = GCPAdapter(_connection(
-        billing_project_id="proj-12345",
-        billing_dataset="bad-dataset!",
-        billing_table="table",
-    ))
+    adapter = GCPAdapter(
+        _connection(
+            billing_project_id="proj-12345",
+            billing_dataset="bad-dataset!",
+            billing_table="table",
+        )
+    )
     with patch.object(adapter, "_get_bq_client", return_value=MagicMock()):
         with pytest.raises(ValueError):
             await adapter.get_cost_and_usage(
@@ -88,11 +93,13 @@ async def test_get_cost_and_usage_invalid_table_path():
 
 @pytest.mark.asyncio
 async def test_get_cost_and_usage_query_error():
-    adapter = GCPAdapter(_connection(
-        billing_project_id="proj-12345",
-        billing_dataset="dataset",
-        billing_table="table",
-    ))
+    adapter = GCPAdapter(
+        _connection(
+            billing_project_id="proj-12345",
+            billing_dataset="dataset",
+            billing_table="table",
+        )
+    )
     client = MagicMock()
     client.query.side_effect = RuntimeError("query failed")
     with patch.object(adapter, "_get_bq_client", return_value=client):
@@ -110,7 +117,7 @@ async def test_discover_resources_success():
     asset = SimpleNamespace(
         name="projects/proj-12345/assets/1",
         asset_type="compute.googleapis.com/Instance",
-        resource=SimpleNamespace(data={"foo": "bar"})
+        resource=SimpleNamespace(data={"foo": "bar"}),
     )
     asset_client.list_assets.return_value = [asset]
     with patch.object(adapter, "_get_asset_client", return_value=asset_client):

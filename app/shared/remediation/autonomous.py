@@ -14,11 +14,13 @@ from app.shared.core.constants import SYSTEM_USER_ID
 
 logger = structlog.get_logger()
 
+
 class AutonomousRemediationEngine:
     """
     Engine for autonomous remediation (ActiveOps).
     Bridges to RemediationService for execution.
     """
+
     def __init__(self, db: AsyncSession, tenant_id: str | UUID):
         self.db = db
         self.tenant_id = UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
@@ -26,18 +28,18 @@ class AutonomousRemediationEngine:
         self.auto_pilot_enabled = False  # Default to Dry Run
 
     async def _process_candidate(
-        self, 
+        self,
         service: RemediationService,
         resource_id: str,
         resource_type: str,
         action: Any,
         savings: float,
         confidence: float,
-        reason: str
+        reason: str,
     ) -> bool:
         """Processes a single remediation candidate."""
         # BE-OP-Autonomous: High-Confidence Auto-Execution (Phase 8)
-        
+
         # 1. Create the request (Drafting)
         request = await service.create_request(
             tenant_id=self.tenant_id,
@@ -46,23 +48,36 @@ class AutonomousRemediationEngine:
             resource_type=resource_type,
             action=action,
             estimated_savings=savings,
-            explainability_notes=f"Autonomous candidate: {reason} (Confidence: {confidence})"
+            explainability_notes=f"Autonomous candidate: {reason} (Confidence: {confidence})",
         )
-        
+
         # 2. Auto-Pilot Logic
         if self.auto_pilot_enabled and confidence >= 0.95:
-            logger.info("autonomous_auto_executing", tenant_id=str(self.tenant_id), resource_id=resource_id)
+            logger.info(
+                "autonomous_auto_executing",
+                tenant_id=str(self.tenant_id),
+                resource_id=resource_id,
+            )
             # System takes control
-            await service.approve(request.id, self.tenant_id, reviewer_id=SYSTEM_USER_ID, notes="Auto-Pilot execution")
+            await service.approve(
+                request.id,
+                self.tenant_id,
+                reviewer_id=SYSTEM_USER_ID,
+                notes="Auto-Pilot execution",
+            )
             await service.execute(request.id, self.tenant_id)
             return True
-            
+
         return False
 
     async def execute_automatic(self, recommendations: Iterable[dict[str, Any]]) -> int:
         """Automatically process remediation candidates and return auto-executed count."""
         recs = [rec for rec in recommendations if isinstance(rec, dict)]
-        logger.info("autonomous_execution_started", tenant_id=str(self.tenant_id), count=len(recs))
+        logger.info(
+            "autonomous_execution_started",
+            tenant_id=str(self.tenant_id),
+            count=len(recs),
+        )
 
         auto_executed = 0
         for rec in recs:
@@ -71,7 +86,9 @@ class AutonomousRemediationEngine:
             if not action or not resource_id:
                 continue
 
-            resource_type = str(rec.get("resource_type") or rec.get("type") or "unknown")
+            resource_type = str(
+                rec.get("resource_type") or rec.get("type") or "unknown"
+            )
             confidence = self._as_float(rec.get("confidence_score"), default=0.8)
             savings = self._as_float(
                 rec.get("monthly_waste", rec.get("monthly_cost")),
