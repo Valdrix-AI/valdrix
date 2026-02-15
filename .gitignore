@@ -2,10 +2,10 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+/useLanding.md
 # C extensions
 *.so
-
+ref.md
 # Distribution / packaging
 .Python
 build/
@@ -224,3 +224,12 @@ test_output*.txt
 test_results.txt
 analyzer_error.txt
 health_test_output.txt
+
+# Performance evidence artifacts (generated locally/CI)
+reports/performance/*.json
+reports/performance/*.csv
+reports/performance/*.log
+
+# Acceptance evidence artifacts (generated locally/CI)
+reports/acceptance/**
+!reports/acceptance/.gitkeep

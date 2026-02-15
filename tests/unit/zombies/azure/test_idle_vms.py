@@ -10,14 +10,18 @@ async def test_azure_idle_vms_scan_uses_cost_records():
     plugin = IdleVmsPlugin()
     expected = [{"resource_id": "vm-1", "monthly_cost": 100.0}]
 
-    with patch("app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer") as analyzer_cls:
+    with patch(
+        "app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer"
+    ) as analyzer_cls:
         analyzer = analyzer_cls.return_value
         analyzer.find_idle_vms.return_value = expected
 
         zombies = await plugin.scan(
             "sub-123",
             credentials=object(),
-            cost_records=[{"ResourceId": "/subscriptions/sub-123/virtualMachines/vm-1"}],
+            cost_records=[
+                {"ResourceId": "/subscriptions/sub-123/virtualMachines/vm-1"}
+            ],
         )
 
     assert zombies == expected
@@ -33,7 +37,9 @@ async def test_azure_idle_vms_fallback_detects_running_gpu_vm():
         name="gpu-vm",
         location="eastus",
         hardware_profile=SimpleNamespace(vm_size="Standard_NC6"),
-        instance_view=SimpleNamespace(statuses=[SimpleNamespace(code="PowerState/running")]),
+        instance_view=SimpleNamespace(
+            statuses=[SimpleNamespace(code="PowerState/running")]
+        ),
     )
 
     class AsyncIter:
@@ -52,7 +58,10 @@ async def test_azure_idle_vms_fallback_detects_running_gpu_vm():
         virtual_machines=SimpleNamespace(list_all=lambda: AsyncIter([vm]))
     )
 
-    with patch("app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient", return_value=client):
+    with patch(
+        "app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient",
+        return_value=client,
+    ):
         zombies = await plugin.scan("sub-123", credentials=object())
 
     assert len(zombies) == 1

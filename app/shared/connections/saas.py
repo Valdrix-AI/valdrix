@@ -20,7 +20,9 @@ class SaaSConnectionService:
         )
         return list(result.scalars().all())
 
-    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict[str, Any]:
+    async def verify_connection(
+        self, connection_id: UUID, tenant_id: UUID
+    ) -> dict[str, Any]:
         result = await self.db.execute(
             select(SaaSConnection).where(
                 SaaSConnection.id == connection_id,
@@ -35,9 +37,10 @@ class SaaSConnectionService:
         success = await adapter.verify_connection()
         connection.last_synced_at = datetime.now(timezone.utc)
         connection.is_active = success
-        connection.error_message = None if success else "Failed to validate SaaS spend feed."
+        failure_message = adapter.last_error or "Failed to validate SaaS connector."
+        connection.error_message = None if success else failure_message
         await self.db.commit()
 
         if success:
             return {"status": "success", "message": "SaaS connection verified."}
-        return {"status": "failed", "message": "Failed to validate SaaS spend feed."}
+        return {"status": "failed", "message": failure_message}

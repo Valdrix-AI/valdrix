@@ -13,5 +13,5 @@ __all__ = [
     "SaaSConnectionService",
     "LicenseConnectionService",
     "OrganizationsDiscoveryService",
-    "OIDCService"
+    "OIDCService",
 ]

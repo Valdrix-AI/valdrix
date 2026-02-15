@@ -2,6 +2,7 @@ import uuid
 from enum import Enum
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable, Union, cast
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
     from app.modules.governance.domain.security.auth import CurrentUser
@@ -15,6 +16,7 @@ logger = structlog.get_logger()
 
 class PricingTier(str, Enum):
     """Available subscription tiers."""
+
     FREE_TRIAL = "free_trial"
     STARTER = "starter"
     GROWTH = "growth"
@@ -24,6 +26,7 @@ class PricingTier(str, Enum):
 
 class FeatureFlag(str, Enum):
     """Feature flags for tier gating."""
+
     DASHBOARDS = "dashboards"
     COST_TRACKING = "cost_tracking"
     ALERTS = "alerts"
@@ -39,6 +42,7 @@ class FeatureFlag(str, Enum):
     API_ACCESS = "api_access"
     FORECASTING = "forecasting"
     SSO = "sso"
+    SCIM = "scim"
     DEDICATED_SUPPORT = "dedicated_support"
     AUDIT_LOGS = "audit_logs"
     HOURLY_SCANS = "hourly_scans"
@@ -49,6 +53,7 @@ class FeatureFlag(str, Enum):
     UNIT_ECONOMICS = "unit_economics"
     INGESTION_SLA = "ingestion_sla"
     INGESTION_BACKFILL = "ingestion_backfill"
+    ANOMALY_DETECTION = "anomaly_detection"
     CHARGEBACK = "chargeback"
     RECONCILIATION = "reconciliation"
     CLOSE_WORKFLOW = "close_workflow"
@@ -56,6 +61,11 @@ class FeatureFlag(str, Enum):
     CLOUD_PLUS_CONNECTORS = "cloud_plus_connectors"
     COMPLIANCE_EXPORTS = "compliance_exports"
     SAVINGS_PROOF = "savings_proof"
+    COMMITMENT_OPTIMIZATION = "commitment_optimization"
+    POLICY_PREVIEW = "policy_preview"
+    POLICY_CONFIGURATION = "policy_configuration"
+    ESCALATION_WORKFLOW = "escalation_workflow"
+    INCIDENT_INTEGRATIONS = "incident_integrations"
 
 
 # Tier configuration - USD pricing
@@ -75,6 +85,12 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
         },
         "limits": {
             "max_aws_accounts": 1,
+            "max_azure_tenants": 0,
+            "max_gcp_projects": 0,
+            "max_saas_connections": 0,
+            "max_license_connections": 0,
+            "max_platform_connections": 0,
+            "max_hybrid_connections": 0,
             "ai_insights_per_month": 0,
             "scan_frequency_hours": 24,
             "zombie_scans_per_day": 5,
@@ -90,25 +106,18 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "Daily zombie scanning + basic alerts",
             "Unit economics monitor + ingestion SLA",
             "Entry-tier limits",
-        ]
+        ],
     },
     PricingTier.STARTER: {
         "name": "Starter",
-        "price_usd": {
-            "monthly": 29,
-            "annual": 290
-        },
-        "paystack_amount_kobo": {
-            "monthly": 4125000,
-            "annual": 41250000
-        },
+        "price_usd": {"monthly": 29, "annual": 290},
+        "paystack_amount_kobo": {"monthly": 4125000, "annual": 41250000},
         "features": {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
             FeatureFlag.ALERTS,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
-            FeatureFlag.MULTI_CLOUD,
             FeatureFlag.MULTI_REGION,
             FeatureFlag.CARBON_TRACKING,
             FeatureFlag.GREENOPS,
@@ -117,8 +126,12 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
         },
         "limits": {
             "max_aws_accounts": 5,
-            "max_azure_tenants": 2,
-            "max_gcp_projects": 3,
+            "max_azure_tenants": 0,
+            "max_gcp_projects": 0,
+            "max_saas_connections": 0,
+            "max_license_connections": 0,
+            "max_platform_connections": 0,
+            "max_hybrid_connections": 0,
             "ai_insights_per_month": 10,
             "llm_analyses_per_day": 0,
             "max_backfill_days": 0,
@@ -134,17 +147,14 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "Unit economics KPIs + ingestion SLA monitor",
             "Multi-region analysis",
             "90-day data retention",
-        ]
+        ],
     },
     PricingTier.GROWTH: {
         "name": "Growth",
-        "price_usd": {
-            "monthly": 79,
-            "annual": 790
-        },
+        "price_usd": {"monthly": 79, "annual": 790},
         "paystack_amount_kobo": {
-            "monthly": 11250000,    # ₦112,500
-            "annual": 112500000     # ₦1,125,000
+            "monthly": 11250000,  # ₦112,500
+            "annual": 112500000,  # ₦1,125,000
         },
         "features": {
             FeatureFlag.DASHBOARDS,
@@ -163,12 +173,20 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             FeatureFlag.CHARGEBACK,
             FeatureFlag.INGESTION_SLA,
             FeatureFlag.INGESTION_BACKFILL,
+            FeatureFlag.ANOMALY_DETECTION,
             FeatureFlag.UNIT_ECONOMICS,
+            FeatureFlag.POLICY_PREVIEW,
+            FeatureFlag.ESCALATION_WORKFLOW,
+            FeatureFlag.COMMITMENT_OPTIMIZATION,
         },
         "limits": {
             "max_aws_accounts": 20,
             "max_azure_tenants": 10,
             "max_gcp_projects": 15,
+            "max_saas_connections": 0,
+            "max_license_connections": 0,
+            "max_platform_connections": 0,
+            "max_hybrid_connections": 0,
             "llm_analyses_per_day": 20,
             "max_backfill_days": 180,
             "retention_days": 365,
@@ -183,17 +201,14 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "Custom remediation guides",
             "Full multi-cloud support",
             "1-year data retention",
-        ]
+        ],
     },
     PricingTier.PRO: {
         "name": "Pro",
-        "price_usd": {
-            "monthly": 199,
-            "annual": 1990
-        },
+        "price_usd": {"monthly": 199, "annual": 1990},
         "paystack_amount_kobo": {
-            "monthly": 28500000,    # ₦285,000
-            "annual": 285000000     # ₦2,850,000
+            "monthly": 28500000,  # ₦285,000
+            "annual": 285000000,  # ₦2,850,000
         },
         "features": {
             FeatureFlag.DASHBOARDS,
@@ -220,6 +235,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             FeatureFlag.CHARGEBACK,
             FeatureFlag.INGESTION_SLA,
             FeatureFlag.INGESTION_BACKFILL,
+            FeatureFlag.ANOMALY_DETECTION,
             FeatureFlag.UNIT_ECONOMICS,
             FeatureFlag.RECONCILIATION,
             FeatureFlag.CLOSE_WORKFLOW,
@@ -227,9 +243,20 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             FeatureFlag.CLOUD_PLUS_CONNECTORS,
             FeatureFlag.COMPLIANCE_EXPORTS,
             FeatureFlag.SAVINGS_PROOF,
+            FeatureFlag.COMMITMENT_OPTIMIZATION,
+            FeatureFlag.POLICY_PREVIEW,
+            FeatureFlag.POLICY_CONFIGURATION,
+            FeatureFlag.ESCALATION_WORKFLOW,
+            FeatureFlag.INCIDENT_INTEGRATIONS,
         },
         "limits": {
             "max_aws_accounts": 25,
+            "max_azure_tenants": 25,
+            "max_gcp_projects": 25,
+            "max_saas_connections": 10,
+            "max_license_connections": 10,
+            "max_platform_connections": 10,
+            "max_hybrid_connections": 10,
             "ai_insights_per_month": 100,
             "llm_analyses_per_day": 100,
             "max_backfill_days": 730,
@@ -246,7 +273,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "Dedicated support engineer",
             "Compliance exports and audit evidence",
             "Custom GitOps remediation",
-        ]
+        ],
     },
     PricingTier.ENTERPRISE: {
         "name": "Enterprise",
@@ -254,6 +281,12 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
         "features": set(FeatureFlag),
         "limits": {
             "max_aws_accounts": 999,
+            "max_azure_tenants": 999,
+            "max_gcp_projects": 999,
+            "max_saas_connections": 999,
+            "max_license_connections": 999,
+            "max_platform_connections": 999,
+            "max_hybrid_connections": 999,
             "ai_insights_per_month": 999,
             "scan_frequency_hours": 1,
             "retention_days": None,
@@ -268,7 +301,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "On-premise deployment options",
             "White-labeling support",
             "24/7/365 multi-region support",
-        ]
+        ],
     },
 }
 
@@ -292,7 +325,11 @@ def normalize_tier(tier: PricingTier | str | None) -> PricingTier:
 def get_tier_config(tier: PricingTier | str) -> dict[str, Any]:
     """Get configuration for a tier."""
     resolved = normalize_tier(tier)
-    fallback = TIER_CONFIG.get(PricingTier.FREE_TRIAL) or TIER_CONFIG.get(PricingTier.STARTER) or {}
+    fallback = (
+        TIER_CONFIG.get(PricingTier.FREE_TRIAL)
+        or TIER_CONFIG.get(PricingTier.STARTER)
+        or {}
+    )
     return TIER_CONFIG.get(resolved, fallback)
 
 
@@ -304,12 +341,14 @@ def is_feature_enabled(tier: PricingTier | str, feature: str | FeatureFlag) -> b
             feature = FeatureFlag(feature)
         except ValueError:
             return False
-            
+
     config = get_tier_config(tier)
     return feature in config.get("features", set())
 
+
 # Aliases for test compatibility
 has_feature = is_feature_enabled
+
 
 def get_tier_limit(tier: PricingTier | str, limit_name: str) -> Any:
     """Get a limit value for a tier (None = unlimited)."""
@@ -325,6 +364,7 @@ def get_tier_limit(tier: PricingTier | str, limit_name: str) -> Any:
         return int(raw_limit)
     return raw_limit
 
+
 # Aliases for test compatibility
 get_limit = get_tier_limit
 
@@ -335,6 +375,7 @@ def requires_tier(
     """
     Decorator to require specific tiers for an endpoint.
     """
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -342,20 +383,22 @@ def requires_tier(
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required"
+                    detail="Authentication required",
                 )
-            
+
             user_tier = normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
-            
+
             if user_tier not in allowed_tiers:
                 tier_names = [t.value for t in allowed_tiers]
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"This feature requires {' or '.join(tier_names)} tier. Please upgrade."
+                    detail=f"This feature requires {' or '.join(tier_names)} tier. Please upgrade.",
                 )
-            
+
             return await func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -365,6 +408,7 @@ def requires_feature(
     """
     Decorator to require a specific feature for an endpoint.
     """
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -372,45 +416,55 @@ def requires_feature(
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required"
+                    detail="Authentication required",
                 )
-            
+
             user_tier = normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
-            
+
             if not is_feature_enabled(user_tier, feature_name):
-                fn = feature_name.value if isinstance(feature_name, FeatureFlag) else feature_name
+                fn = (
+                    feature_name.value
+                    if isinstance(feature_name, FeatureFlag)
+                    else feature_name
+                )
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Feature '{fn}' is not available on your current plan. Please upgrade."
+                    detail=f"Feature '{fn}' is not available on your current plan. Please upgrade.",
                 )
-            
+
             return await func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
-async def get_tenant_tier(tenant_id: Union[str, uuid.UUID], db: "AsyncSession") -> PricingTier:
+async def get_tenant_tier(
+    tenant_id: Union[str, uuid.UUID], db: "AsyncSession"
+) -> PricingTier:
     """Get the pricing tier for a tenant."""
     from sqlalchemy import select
     from app.models.tenant import Tenant
-    
+
     if isinstance(tenant_id, str):
         try:
             tenant_id = uuid.UUID(tenant_id)
         except (ValueError, AttributeError):
             # If not a valid UUID string, we can't look it up.
             return PricingTier.FREE_TRIAL
-    
+
     try:
         result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = result.scalar_one_or_none()
-        
+
         if not tenant:
             return PricingTier.FREE_TRIAL
         try:
             return PricingTier(tenant.plan)
         except ValueError:
-            logger.error("invalid_tenant_plan", tenant_id=str(tenant_id), plan=tenant.plan)
+            logger.error(
+                "invalid_tenant_plan", tenant_id=str(tenant_id), plan=tenant.plan
+            )
             return PricingTier.FREE_TRIAL
     except Exception as e:
         logger.error("get_tenant_tier_failed", tenant_id=str(tenant_id), error=str(e))
@@ -420,12 +474,13 @@ async def get_tenant_tier(tenant_id: Union[str, uuid.UUID], db: "AsyncSession") 
 class TierGuard:
     """
     Context manager and helper for tier-based feature gating.
-    
+
     Usage:
         async with TierGuard(user, db) as guard:
             if guard.has(FeatureFlag.AI_INSIGHTS):
                 ...
     """
+
     def __init__(self, user: "CurrentUser", db: "AsyncSession"):
         self.user = user
         self.db = db
@@ -449,5 +504,5 @@ class TierGuard:
         if not self.has(feature):
             raise HTTPException(
                 status_code=403,
-                detail=f"Feature '{feature.value}' requires a plan upgrade."
+                detail=f"Feature '{feature.value}' requires a plan upgrade.",
             )

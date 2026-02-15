@@ -37,7 +37,11 @@ class RegionDiscovery:
         if not self.credentials:
             return {}
         if not isinstance(self.credentials, dict):
-            logger.warning("aws_credentials_invalid_type", context=context, type=type(self.credentials).__name__)
+            logger.warning(
+                "aws_credentials_invalid_type",
+                context=context,
+                type=type(self.credentials).__name__,
+            )
             return None
 
         ak = self.credentials.get("AccessKeyId")
@@ -49,7 +53,7 @@ class RegionDiscovery:
                 "invalid_aws_credentials_keys",
                 context=context,
                 has_ak=bool(ak),
-                has_sk=bool(sk)
+                has_sk=bool(sk),
             )
             return None
 
@@ -76,7 +80,9 @@ class RegionDiscovery:
             if client_kwargs is None:
                 return self._get_fallback_regions()
 
-            async with self.session.client("ec2", region_name="us-east-1", **client_kwargs) as ec2:
+            async with self.session.client(
+                "ec2", region_name="us-east-1", **client_kwargs
+            ) as ec2:
                 response = await ec2.describe_regions(AllRegions=False)
                 regions = [
                     r.get("RegionName")
@@ -85,10 +91,16 @@ class RegionDiscovery:
                 ]
 
                 if not regions:
-                    logger.warning("regions_discovered_empty", source="ec2_describe_regions")
+                    logger.warning(
+                        "regions_discovered_empty", source="ec2_describe_regions"
+                    )
                     return self._get_fallback_regions()
 
-                logger.info("regions_discovered", count=len(regions), source="ec2_describe_regions")
+                logger.info(
+                    "regions_discovered",
+                    count=len(regions),
+                    source="ec2_describe_regions",
+                )
                 self._cached_enabled_regions = regions
                 return regions
 
@@ -122,14 +134,16 @@ class RegionDiscovery:
             end_date = date.today()
             start_date = end_date - timedelta(days=days)
 
-            async with self.session.client("ce", region_name="us-east-1", **client_kwargs) as ce:
+            async with self.session.client(
+                "ce", region_name="us-east-1", **client_kwargs
+            ) as ce:
                 response = await ce.get_dimension_values(
                     TimePeriod={
                         "Start": start_date.isoformat(),
-                        "End": end_date.isoformat()
+                        "End": end_date.isoformat(),
                     },
                     Dimension="REGION",
-                    Context="COST_AND_USAGE"
+                    Context="COST_AND_USAGE",
                 )
 
                 regions = [
@@ -138,10 +152,12 @@ class RegionDiscovery:
                     if dv.get("Value")
                 ]
 
-                logger.info("hot_regions_discovered",
-                           count=len(regions),
-                           days=days,
-                           source="cost_explorer")
+                logger.info(
+                    "hot_regions_discovered",
+                    count=len(regions),
+                    days=days,
+                    source="cost_explorer",
+                )
 
                 if not regions:
                     logger.warning("hot_regions_discovered_empty", days=days)

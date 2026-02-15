@@ -1,6 +1,7 @@
 """
 Tests for EmailService - SMTP Notifications
 """
+
 import pytest
 from unittest.mock import patch
 from datetime import datetime, timezone
@@ -14,12 +15,13 @@ def email_service():
         smtp_port=1025,
         smtp_user="user",
         smtp_password="password",
-        from_email="noreply@v.io"
+        from_email="noreply@v.io",
     )
 
 
 def test_escape_html():
     from app.modules.notifications.domain.email_service import escape_html
+
     assert escape_html("<script>") == "&lt;script&gt;"
 
 
@@ -28,17 +30,17 @@ async def test_send_carbon_alert_success(email_service):
     """Test sending carbon alert email."""
     with patch("smtplib.SMTP") as mock_smtp_cls:
         mock_smtp = mock_smtp_cls.return_value.__enter__.return_value
-        
+
         budget_status = {
             "tier": "growth",
             "current_usage": 1500,
             "budget_limit": 1000,
             "utilization": 150.0,
-            "is_exceeded": True
+            "is_exceeded": True,
         }
-        
+
         res = await email_service.send_carbon_alert(["to@v.io"], budget_status)
-        
+
         assert res is True
         mock_smtp.sendmail.assert_called_once()
         mock_smtp.login.assert_called_once_with("user", "password")
@@ -50,7 +52,7 @@ async def test_send_carbon_alert_failure(email_service):
     with patch("smtplib.SMTP") as mock_smtp_cls:
         mock_smtp = mock_smtp_cls.return_value.__enter__.return_value
         mock_smtp.sendmail.side_effect = Exception("smtp fail")
-        
+
         res = await email_service.send_carbon_alert(["to@v.io"], {"tier": "starter"})
         assert res is False
 
@@ -60,7 +62,7 @@ async def test_send_dunning_notification(email_service):
     """Test dunning notification email."""
     with patch("smtplib.SMTP") as mock_smtp_cls:
         mock_smtp = mock_smtp_cls.return_value.__enter__.return_value
-        
+
         res = await email_service.send_dunning_notification(
             "to@v.io", 1, 3, datetime.now(timezone.utc), "growth"
         )

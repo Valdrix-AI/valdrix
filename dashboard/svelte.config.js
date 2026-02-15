@@ -12,9 +12,11 @@ const config = {
 		adapter: adapter(),
 		csp: {
 			directives: {
+				'default-src': ['self'],
 				'script-src': ['self', 'https://*.supabase.co'],
 				'style-src': ['self', 'unsafe-inline'], // Tailwind needs this
 				'img-src': ['self', 'data:', 'https://*.supabase.co'],
+				'font-src': ['self', 'data:'],
 				'connect-src': [
 					'self',
 					'https://*.supabase.co',
@@ -22,7 +24,9 @@ const config = {
 					'https://*.valdrix.ai'
 				],
 				'object-src': ['none'],
-				'base-uri': ['self']
+				'base-uri': ['self'],
+				'form-action': ['self'],
+				'frame-ancestors': ['none']
 			}
 		}
 	}

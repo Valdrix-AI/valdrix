@@ -46,7 +46,9 @@ class IdleSaaSSubscriptionsPlugin(ZombiePlugin):
             if not isinstance(entry, dict):
                 continue
 
-            service = str(entry.get("service") or entry.get("vendor") or "SaaS Subscription")
+            service = str(
+                entry.get("service") or entry.get("vendor") or "SaaS Subscription"
+            )
             resource_id = str(
                 entry.get("subscription_id")
                 or entry.get("account_id")
@@ -62,14 +64,26 @@ class IdleSaaSSubscriptionsPlugin(ZombiePlugin):
             if monthly_cost <= 0:
                 continue
 
-            purchased_seats = _to_int(entry.get("purchased_seats") or entry.get("total_seats"))
-            active_seats = _to_int(entry.get("active_seats") or entry.get("used_seats") or entry.get("active_users"))
+            purchased_seats = _to_int(
+                entry.get("purchased_seats") or entry.get("total_seats")
+            )
+            active_seats = _to_int(
+                entry.get("active_seats")
+                or entry.get("used_seats")
+                or entry.get("active_users")
+            )
             status = str(entry.get("status") or "").strip().lower()
-            inactive_days = _to_int(entry.get("inactive_days") or entry.get("last_activity_days"))
+            inactive_days = _to_int(
+                entry.get("inactive_days") or entry.get("last_activity_days")
+            )
 
             waste = 0.0
             reason = ""
-            if purchased_seats and active_seats is not None and purchased_seats > active_seats:
+            if (
+                purchased_seats
+                and active_seats is not None
+                and purchased_seats > active_seats
+            ):
                 unused = purchased_seats - active_seats
                 waste = monthly_cost * (unused / purchased_seats)
                 reason = f"{unused} unused seats out of {purchased_seats}"

@@ -3,6 +3,7 @@ import uuid
 from unittest.mock import MagicMock
 from app.shared.db.session import set_session_tenant_id, get_db
 
+
 @pytest.mark.asyncio
 async def test_get_db_yields_session():
     """Test that get_db successfully yields an AsyncSession."""
@@ -13,15 +14,17 @@ async def test_get_db_yields_session():
         assert "rls_context_set" in db.info
         break
 
+
 @pytest.mark.asyncio
 async def test_set_session_tenant_id_tracks_info(db_session):
     """Test that set_session_tenant_id updates info on session and connection."""
     tenant_id = uuid.uuid4()
     await set_session_tenant_id(db_session, tenant_id)
     assert db_session.info["rls_context_set"] is True
-    
+
     conn = await db_session.connection()
     assert conn.info["rls_context_set"] is True
+
 
 @pytest.mark.asyncio
 async def test_get_db_with_request_context_missing_tenant():
@@ -32,6 +35,7 @@ async def test_get_db_with_request_context_missing_tenant():
         # rls_context_set should be False
         assert db.info["rls_context_set"] is False
         break
+
 
 def test_ssl_mode_verification():
     """Verify SSL mode logic doesn't crash (logic test via imports/mocking)."""

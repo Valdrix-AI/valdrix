@@ -25,7 +25,10 @@ async def test_run_without_db_uses_session_maker():
     async def fake_session_maker():
         yield session
 
-    with patch("app.modules.governance.domain.jobs.cur_ingestion.async_session_maker", fake_session_maker):
+    with patch(
+        "app.modules.governance.domain.jobs.cur_ingestion.async_session_maker",
+        fake_session_maker,
+    ):
         job = CURIngestionJob()
         with patch.object(job, "_execute", new_callable=AsyncMock) as mock_execute:
             await job.run(connection_id="conn-2", tenant_id="tenant-2")
@@ -35,8 +38,12 @@ async def test_run_without_db_uses_session_maker():
 
 @pytest.mark.asyncio
 async def test_execute_calls_ingest_for_each_connection():
-    conn1 = SimpleNamespace(id="1", aws_account_id="111", region="us-east-1", cur_bucket_name=None)
-    conn2 = SimpleNamespace(id="2", aws_account_id="222", region="us-west-2", cur_bucket_name=None)
+    conn1 = SimpleNamespace(
+        id="1", aws_account_id="111", region="us-east-1", cur_bucket_name=None
+    )
+    conn2 = SimpleNamespace(
+        id="2", aws_account_id="222", region="us-west-2", cur_bucket_name=None
+    )
 
     result = MagicMock()
     result.scalars.return_value.all.return_value = [conn1, conn2]
@@ -45,15 +52,21 @@ async def test_execute_calls_ingest_for_each_connection():
     db.execute = AsyncMock(return_value=result)
 
     job = CURIngestionJob(db=db)
-    with patch.object(job, "ingest_for_connection", new_callable=AsyncMock) as mock_ingest:
+    with patch.object(
+        job, "ingest_for_connection", new_callable=AsyncMock
+    ) as mock_ingest:
         await job._execute(tenant_id="tenant-1")
         assert mock_ingest.await_count == 2
 
 
 @pytest.mark.asyncio
 async def test_execute_logs_errors_and_continues():
-    conn1 = SimpleNamespace(id="1", aws_account_id="111", region="us-east-1", cur_bucket_name=None)
-    conn2 = SimpleNamespace(id="2", aws_account_id="222", region="us-west-2", cur_bucket_name=None)
+    conn1 = SimpleNamespace(
+        id="1", aws_account_id="111", region="us-east-1", cur_bucket_name=None
+    )
+    conn2 = SimpleNamespace(
+        id="2", aws_account_id="222", region="us-west-2", cur_bucket_name=None
+    )
 
     result = MagicMock()
     result.scalars.return_value.all.return_value = [conn1, conn2]
@@ -62,8 +75,12 @@ async def test_execute_logs_errors_and_continues():
     db.execute = AsyncMock(return_value=result)
 
     job = CURIngestionJob(db=db)
-    with patch.object(job, "ingest_for_connection", new_callable=AsyncMock) as mock_ingest, \
-         patch("app.modules.governance.domain.jobs.cur_ingestion.logger") as mock_logger:
+    with (
+        patch.object(
+            job, "ingest_for_connection", new_callable=AsyncMock
+        ) as mock_ingest,
+        patch("app.modules.governance.domain.jobs.cur_ingestion.logger") as mock_logger,
+    ):
         mock_ingest.side_effect = [RuntimeError("boom"), None]
 
         await job._execute(tenant_id="tenant-1")
@@ -92,7 +109,9 @@ async def test_ingest_uses_configured_bucket():
     )
     job = CURIngestionJob()
 
-    with patch("app.modules.governance.domain.jobs.cur_ingestion.logger") as mock_logger:
+    with patch(
+        "app.modules.governance.domain.jobs.cur_ingestion.logger"
+    ) as mock_logger:
         await job.ingest_for_connection(conn)
 
         mock_logger.info.assert_called_once_with(

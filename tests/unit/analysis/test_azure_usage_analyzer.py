@@ -2,6 +2,7 @@
 Production-quality tests for Azure Usage Analyzer.
 Tests cover security, performance, edge cases, and real-world scenarios.
 """
+
 from app.shared.analysis.azure_usage_analyzer import AzureUsageAnalyzer
 
 
@@ -17,7 +18,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "10.50",
                 "UsageQuantity": "168.0",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -25,7 +26,10 @@ class TestAzureUsageAnalyzer:
 
         assert analyzer.records == cost_records
         assert len(analyzer._resource_costs) == 1
-        assert "/subscriptions/123/resourcegroups/test/providers/microsoft.compute/virtualmachines/vm1" in analyzer._resource_costs
+        assert (
+            "/subscriptions/123/resourcegroups/test/providers/microsoft.compute/virtualmachines/vm1"
+            in analyzer._resource_costs
+        )
 
     def test_initialization_with_empty_data(self):
         """Test analyzer handles empty cost records gracefully."""
@@ -38,7 +42,7 @@ class TestAzureUsageAnalyzer:
         """Test analyzer handles records without ResourceId."""
         cost_records = [
             {"ServiceName": "Virtual Machines", "PreTaxCost": "10.0"},
-            {"ResourceId": "", "ServiceName": "Storage", "PreTaxCost": "5.0"}
+            {"ResourceId": "", "ServiceName": "Storage", "PreTaxCost": "5.0"},
         ]
 
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -51,12 +55,12 @@ class TestAzureUsageAnalyzer:
         cost_records = [
             {
                 "ResourceId": "/subscriptions/123/resourceGroups/Test/providers/Microsoft.Compute/virtualMachines/VM1",
-                "PreTaxCost": "10.0"
+                "PreTaxCost": "10.0",
             },
             {
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm1",
-                "PreTaxCost": "15.0"
-            }
+                "PreTaxCost": "15.0",
+            },
         ]
 
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -75,7 +79,7 @@ class TestAzureUsageAnalyzer:
                 "PreTaxCost": "75.0",  # High compute cost
                 "UsageQuantity": "168.0",
                 "MeterCategory": "Virtual Machine",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -84,7 +88,10 @@ class TestAzureUsageAnalyzer:
 
         assert len(idle_vms) == 1
         vm = idle_vms[0]
-        assert vm["resource_id"] == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/idle-vm"
+        assert (
+            vm["resource_id"]
+            == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/idle-vm"
+        )
         assert vm["resource_name"] == "idle-vm"
         assert vm["resource_type"] == "Virtual Machine"
         assert vm["monthly_cost"] == 321.43  # 75 * (30/7) ≈ 321.43
@@ -99,7 +106,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "150.0",
                 "MeterCategory": "Virtual Machine",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -119,7 +126,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "100.0",
                 "MeterCategory": "Virtual Machine",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             {
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/active-vm",
@@ -128,8 +135,8 @@ class TestAzureUsageAnalyzer:
                 "UsageQuantity": "50.0",  # High disk usage
                 "MeterCategory": "Storage",
                 "MeterName": "Disk Operations",
-                "UsageDate": "2024-01-01"
-            }
+                "UsageDate": "2024-01-01",
+            },
         ]
 
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -145,7 +152,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "10.0",  # Below default 50.0 threshold
                 "MeterCategory": "Virtual Machine",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -163,7 +170,7 @@ class TestAzureUsageAnalyzer:
                 "PreTaxCost": "25.0",
                 "MeterCategory": "Storage",
                 "MeterName": "Disk Storage",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -172,7 +179,10 @@ class TestAzureUsageAnalyzer:
 
         assert len(unattached_disks) == 1
         disk = unattached_disks[0]
-        assert disk["resource_id"] == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/disks/unattached-disk"
+        assert (
+            disk["resource_id"]
+            == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/disks/unattached-disk"
+        )
         assert disk["resource_name"] == "unattached-disk"
         assert disk["resource_type"] == "Managed Disk"
         assert disk["monthly_cost"] == 750.0  # 25 * 30
@@ -186,15 +196,15 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "Storage",
                 "PreTaxCost": "15.0",
                 "MeterCategory": "Storage",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             {
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm1",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "50.0",
                 "AttachedResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/disks/attached-disk",  # Attached
-                "UsageDate": "2024-01-01"
-            }
+                "UsageDate": "2024-01-01",
+            },
         ]
 
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -210,7 +220,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "SQL Database",
                 "PreTaxCost": "20.0",
                 "MeterName": "Basic Compute Hours",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -219,7 +229,10 @@ class TestAzureUsageAnalyzer:
 
         assert len(idle_dbs) == 1
         db = idle_dbs[0]
-        assert db["resource_id"] == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Sql/servers/sqlserver/databases/idle-db"
+        assert (
+            db["resource_id"]
+            == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Sql/servers/sqlserver/databases/idle-db"
+        )
         assert db["resource_name"] == "idle-db"
         assert db["resource_type"] == "Azure SQL Database"
         assert db["monthly_cost"] == 85.71  # 20 * (30/7) ≈ 85.71
@@ -234,7 +247,7 @@ class TestAzureUsageAnalyzer:
                 "PreTaxCost": "30.0",
                 "MeterName": "DTU Usage",
                 "UsageQuantity": "50.0",  # High DTU usage
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -251,7 +264,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "Kubernetes Services",
                 "PreTaxCost": "40.0",
                 "MeterName": "Uptime SLA Hours",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -260,7 +273,10 @@ class TestAzureUsageAnalyzer:
 
         assert len(idle_clusters) == 1
         cluster = idle_clusters[0]
-        assert cluster["resource_id"] == "/subscriptions/123/resourceGroups/test/providers/Microsoft.ContainerService/managedClusters/idle-aks"
+        assert (
+            cluster["resource_id"]
+            == "/subscriptions/123/resourceGroups/test/providers/Microsoft.ContainerService/managedClusters/idle-aks"
+        )
         assert cluster["resource_name"] == "idle-aks"
         assert cluster["resource_type"] == "AKS Cluster"
         assert cluster["monthly_cost"] == 171.43  # 40 * (30/7) ≈ 171.43
@@ -274,7 +290,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "Kubernetes Services",
                 "PreTaxCost": "100.0",
                 "MeterName": "Agent Pool Uptime Hours",  # Node costs
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -291,7 +307,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "IP Addresses",
                 "PreTaxCost": "3.0",
                 "MeterName": "IP Address Hours",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -300,7 +316,10 @@ class TestAzureUsageAnalyzer:
 
         assert len(orphan_ips) == 1
         ip = orphan_ips[0]
-        assert ip["resource_id"] == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Network/publicIPAddresses/orphan-ip"
+        assert (
+            ip["resource_id"]
+            == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Network/publicIPAddresses/orphan-ip"
+        )
         assert ip["resource_name"] == "orphan-ip"
         assert ip["resource_type"] == "Public IP Address"
         assert ip["monthly_cost"] == 90.0  # 3 * 30
@@ -314,7 +333,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "App Service",
                 "PreTaxCost": "25.0",
                 "MeterName": "Basic Plan Hours",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -323,7 +342,10 @@ class TestAzureUsageAnalyzer:
 
         assert len(unused_plans) == 1
         plan = unused_plans[0]
-        assert plan["resource_id"] == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Web/serverfarms/unused-plan"
+        assert (
+            plan["resource_id"]
+            == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Web/serverfarms/unused-plan"
+        )
         assert plan["resource_name"] == "unused-plan"
         assert plan["resource_type"] == "App Service Plan"
         assert plan["monthly_cost"] == 750.0  # 25 * 30
@@ -338,7 +360,7 @@ class TestAzureUsageAnalyzer:
                 "PreTaxCost": "30.0",
                 "MeterName": "App Service Compute Hours",
                 "UsageQuantity": "100.0",  # App usage
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -354,7 +376,7 @@ class TestAzureUsageAnalyzer:
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Network/networkInterfaces/nic1",
                 "ServiceName": "Network",
                 "PreTaxCost": "0.0",  # NICs are free
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -371,7 +393,7 @@ class TestAzureUsageAnalyzer:
                 "ServiceName": "Storage",
                 "PreTaxCost": "8.0",
                 "MeterCategory": "Snapshots",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -380,7 +402,10 @@ class TestAzureUsageAnalyzer:
 
         assert len(old_snapshots) == 1
         snapshot = old_snapshots[0]
-        assert snapshot["resource_id"] == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/snapshots/old-snapshot"
+        assert (
+            snapshot["resource_id"]
+            == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/snapshots/old-snapshot"
+        )
         assert snapshot["resource_name"] == "old-snapshot"
         assert snapshot["resource_type"] == "Disk Snapshot"
         assert snapshot["monthly_cost"] == 240.0  # 8 * 30
@@ -397,13 +422,13 @@ class TestAzureUsageAnalyzerProductionQuality:
             {
                 "ResourceId": "<script>alert('xss')</script>",
                 "ServiceName": "Virtual Machines",
-                "PreTaxCost": "10.0"
+                "PreTaxCost": "10.0",
             },
             {
                 "ResourceId": "../../../etc/passwd",
                 "ServiceName": "Storage",
-                "PreTaxCost": "5.0"
-            }
+                "PreTaxCost": "5.0",
+            },
         ]
 
         analyzer = AzureUsageAnalyzer(malicious_records)
@@ -423,12 +448,14 @@ class TestAzureUsageAnalyzerProductionQuality:
         # Create large dataset (1000 records)
         cost_records = []
         for i in range(1000):
-            cost_records.append({
-                "ResourceId": f"/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm{i}",
-                "ServiceName": "Virtual Machines",
-                "PreTaxCost": "100.0",
-                "UsageDate": "2024-01-01"
-            })
+            cost_records.append(
+                {
+                    "ResourceId": f"/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm{i}",
+                    "ServiceName": "Virtual Machines",
+                    "PreTaxCost": "100.0",
+                    "UsageDate": "2024-01-01",
+                }
+            )
 
         start_time = time.time()
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -436,7 +463,9 @@ class TestAzureUsageAnalyzerProductionQuality:
         end_time = time.time()
 
         # Should complete within reasonable time
-        assert end_time - start_time < 2.0, f"Analysis too slow: {end_time - start_time:.3f}s"
+        assert end_time - start_time < 2.0, (
+            f"Analysis too slow: {end_time - start_time:.3f}s"
+        )
         assert len(idle_vms) == 1000  # All VMs should be flagged as idle
 
     def test_cost_calculation_precision(self):
@@ -446,7 +475,7 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm1",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "60.123456789",  # High precision cost above threshold
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -467,14 +496,14 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ResourceId": "/subscriptions/123/resourceGroups/Test/providers/Microsoft.Compute/virtualMachines/VM1",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "60.0",  # Above threshold
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             {
                 "ResourceId": "/SUBSCRIPTIONS/123/RESOURCEGROUPS/TEST/PROVIDERS/MICROSOFT.COMPUTE/VIRTUALMACHINES/vm1",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "45.0",  # Below threshold, should not be flagged
-                "UsageDate": "2024-01-01"
-            }
+                "UsageDate": "2024-01-01",
+            },
         ]
 
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -492,20 +521,20 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm1",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": None,  # Missing cost
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             {
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm2",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "",  # Empty string
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             {
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm3",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "invalid",  # Invalid cost
-                "UsageDate": "2024-01-01"
-            }
+                "UsageDate": "2024-01-01",
+            },
         ]
 
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -524,7 +553,7 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "UsageDate": "2024-01-01",
                 "MeterCategory": None,
                 "MeterName": "",
-                "UsageQuantity": None
+                "UsageQuantity": None,
             }
         ]
 
@@ -534,7 +563,10 @@ class TestAzureUsageAnalyzerProductionQuality:
         # Should not crash with None/empty values
         assert len(idle_vms) == 1
         vm = idle_vms[0]
-        assert vm["resource_id"] == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm1"
+        assert (
+            vm["resource_id"]
+            == "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm1"
+        )
 
     def test_boundary_conditions_zero_and_negative_costs(self):
         """Test boundary conditions with zero and negative costs."""
@@ -543,14 +575,14 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/zero-cost-vm",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "0.0",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             {
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/negative-cost-vm",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "-5.0",  # Negative cost
-                "UsageDate": "2024-01-01"
-            }
+                "UsageDate": "2024-01-01",
+            },
         ]
 
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -568,7 +600,7 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm1",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "60.0",  # Above threshold
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             # Disk records
             {
@@ -576,7 +608,7 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ServiceName": "Storage",
                 "PreTaxCost": "10.0",
                 "MeterCategory": "Storage",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             # SQL records
             {
@@ -584,8 +616,8 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ServiceName": "SQL Database",
                 "PreTaxCost": "70.0",
                 "MeterName": "Basic Compute Hours",
-                "UsageDate": "2024-01-01"
-            }
+                "UsageDate": "2024-01-01",
+            },
         ]
 
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -608,7 +640,7 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm1",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "50.0",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -655,7 +687,7 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "PreTaxCost": "85.20",
                 "MeterCategory": "Virtual Machine",
                 "UsageQuantity": "744.0",  # 31 days
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             {
                 "ResourceId": "/subscriptions/123/resourceGroups/prod/providers/Microsoft.Compute/virtualMachines/web-server",
@@ -664,7 +696,7 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "MeterCategory": "Storage",
                 "MeterName": "Disk Operations",
                 "UsageQuantity": "15000.0",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             # Idle development VM
             {
@@ -673,7 +705,7 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "PreTaxCost": "65.80",
                 "MeterCategory": "Virtual Machine",
                 "UsageQuantity": "744.0",
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             },
             # Unattached disk
             {
@@ -681,8 +713,8 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ServiceName": "Storage",
                 "PreTaxCost": "60.0",
                 "MeterCategory": "Storage",
-                "UsageDate": "2024-01-01"
-            }
+                "UsageDate": "2024-01-01",
+            },
         ]
 
         analyzer = AzureUsageAnalyzer(cost_records)
@@ -705,7 +737,7 @@ class TestAzureUsageAnalyzerProductionQuality:
                 "ResourceId": "/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm1",
                 "ServiceName": "Virtual Machines",
                 "PreTaxCost": "60.0",  # Daily cost above threshold
-                "UsageDate": "2024-01-01"
+                "UsageDate": "2024-01-01",
             }
         ]
 
@@ -732,15 +764,19 @@ class TestAzureUsageAnalyzerProductionQuality:
         # Create very large dataset (10000 records)
         cost_records = []
         for i in range(10000):
-            cost_records.append({
-                "ResourceId": f"/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm{i}",
-                "ServiceName": "Virtual Machines",
-                "PreTaxCost": "1.0",
-                "UsageDate": "2024-01-01"
-            })
+            cost_records.append(
+                {
+                    "ResourceId": f"/subscriptions/123/resourceGroups/test/providers/Microsoft.Compute/virtualMachines/vm{i}",
+                    "ServiceName": "Virtual Machines",
+                    "PreTaxCost": "1.0",
+                    "UsageDate": "2024-01-01",
+                }
+            )
 
         analyzer = AzureUsageAnalyzer(cost_records)
-        idle_vms = analyzer.find_idle_vms(cost_threshold=0.5)  # Lower threshold for this test
+        idle_vms = analyzer.find_idle_vms(
+            cost_threshold=0.5
+        )  # Lower threshold for this test
 
         # Check memory usage after processing
         final_memory = process.memory_info().rss / 1024 / 1024  # MB

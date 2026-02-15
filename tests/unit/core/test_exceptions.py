@@ -1,10 +1,17 @@
 """
 Tests for app/shared/core/exceptions.py - Custom exception classes
 """
+
 from app.shared.core.exceptions import (
     ValdrixException,
-    AdapterError, AuthError, ConfigurationError, ResourceNotFoundError,
-    BillingError, AIAnalysisError, BudgetExceededError, KillSwitchTriggeredError
+    AdapterError,
+    AuthError,
+    ConfigurationError,
+    ResourceNotFoundError,
+    BillingError,
+    AIAnalysisError,
+    BudgetExceededError,
+    KillSwitchTriggeredError,
 )
 
 
@@ -17,9 +24,9 @@ class TestValdrixException:
             message="Test error message",
             code="TEST_ERROR",
             status_code=400,
-            details={"field": "value"}
+            details={"field": "value"},
         )
-        
+
         assert exc.message == "Test error message"
         assert exc.code == "TEST_ERROR"
         assert exc.status_code == 400
@@ -28,7 +35,7 @@ class TestValdrixException:
     def test_valdrix_exception_creation_minimal(self):
         """Test creating a ValdrixException with minimal parameters."""
         exc = ValdrixException(message="Simple error")
-        
+
         assert exc.message == "Simple error"
         assert exc.code == "internal_error"  # Default
         assert exc.status_code == 500  # Default
@@ -36,12 +43,8 @@ class TestValdrixException:
 
     def test_valdrix_exception_str_representation(self):
         """Test string representation of ValdrixException."""
-        exc = ValdrixException(
-            message="Test error",
-            code="TEST_CODE",
-            status_code=422
-        )
-        
+        exc = ValdrixException(message="Test error", code="TEST_CODE", status_code=422)
+
         str_repr = str(exc)
         assert "Test error" in str_repr
         assert "TEST_CODE" in str_repr
@@ -50,28 +53,20 @@ class TestValdrixException:
     def test_valdrix_exception_inheritance(self):
         """Test that ValdrixException inherits from Exception."""
         exc = ValdrixException(message="Test")
-        
+
         assert isinstance(exc, Exception)
         assert isinstance(exc, ValdrixException)
 
     def test_valdrix_exception_with_none_details(self):
         """Test ValdrixException with None details."""
-        exc = ValdrixException(
-            message="Test",
-            code="TEST",
-            details=None
-        )
-        
+        exc = ValdrixException(message="Test", code="TEST", details=None)
+
         assert exc.details == {}  # None details becomes empty dict
 
     def test_valdrix_exception_with_empty_details(self):
         """Test ValdrixException with empty details dict."""
-        exc = ValdrixException(
-            message="Test",
-            code="TEST",
-            details={}
-        )
-        
+        exc = ValdrixException(message="Test", code="TEST", details={})
+
         assert exc.details == {}
 
     def test_valdrix_exception_status_code_validation(self):
@@ -79,8 +74,7 @@ class TestValdrixException:
         # Test various valid status codes
         for status in [200, 400, 401, 403, 404, 422, 500, 502, 503]:
             exc = ValdrixException(
-                message=f"Error with status {status}",
-                status_code=status
+                message=f"Error with status {status}", status_code=status
             )
             assert exc.status_code == status
 
@@ -95,15 +89,16 @@ class TestValdrixException:
             (None, 500),  # Default code
             ("", "internal_error"),  # Empty code becomes default
         ]
-        
+
         for code, expected_status in test_cases:
             exc = ValdrixException(
                 message=f"Test with code: {code}",
                 code=code or "internal_error",
-                status_code=expected_status
+                status_code=expected_status,
             )
             assert exc.code == (code or "internal_error")
             assert exc.status_code == expected_status
+
 
 # Additional exception tests
 
@@ -115,7 +110,7 @@ class TestCustomExceptions:
         """Test that AdapterError sanitizes sensitive info."""
         raw_msg = "AWS Error: RequestId: 12345678-1234-1234-1234-1234567890ab failed. access_key=AKIA123 with signature=XYZ"
         exc = AdapterError(raw_msg)
-        
+
         assert "12345678-1234-1234-1234-1234567890ab" not in str(exc)
         assert "[REDACTED_ID]" in str(exc)
         assert "access_key=[REDACTED]" in str(exc)
@@ -126,7 +121,7 @@ class TestCustomExceptions:
         """Test that common cloud errors are simplified."""
         exc1 = AdapterError("Some AccessDenied error from AWS")
         assert "Permission denied" in str(exc1)
-        
+
         exc2 = AdapterError("ThrottlingException: Rate exceeded")
         assert "rate limit exceeded" in str(exc2)
 

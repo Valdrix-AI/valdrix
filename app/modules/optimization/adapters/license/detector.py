@@ -29,10 +29,20 @@ class LicenseZombieDetector(BaseZombieDetector):
 
     def _initialize_plugins(self) -> None:
         plugins = registry.get_plugins_for_provider("license")
-        self.plugins = [p for p in plugins if p.category_key in self.ALLOWED_PLUGIN_CATEGORIES]
-        skipped = sorted({p.category_key for p in plugins if p.category_key not in self.ALLOWED_PLUGIN_CATEGORIES})
+        self.plugins = [
+            p for p in plugins if p.category_key in self.ALLOWED_PLUGIN_CATEGORIES
+        ]
+        skipped = sorted(
+            {
+                p.category_key
+                for p in plugins
+                if p.category_key not in self.ALLOWED_PLUGIN_CATEGORIES
+            }
+        )
         if skipped:
-            logger.warning("license_detector_skipping_noncanonical_plugins", categories=skipped)
+            logger.warning(
+                "license_detector_skipping_noncanonical_plugins", categories=skipped
+            )
 
     async def _execute_plugin_scan(self, plugin: ZombiePlugin) -> List[Dict[str, Any]]:
         cost_feed = (

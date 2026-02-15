@@ -2,6 +2,7 @@
 Production-quality tests for carbon_data.py - Carbon intensity metrics with comprehensive coverage.
 Includes edge cases, error handling, realistic scenarios, and production-like testing patterns.
 """
+
 import pytest
 from decimal import Decimal, InvalidOperation
 from unittest.mock import patch
@@ -25,7 +26,9 @@ def test_region_carbon_intensity_comprehensive_data():
     # Verify all values are realistic carbon intensities (gCO2e per USD)
     for region, intensity in REGION_CARBON_INTENSITY.items():
         assert isinstance(intensity, (int, float))
-        assert 0 < intensity < 2000, f"Region {region} has unrealistic carbon intensity: {intensity}"
+        assert 0 < intensity < 2000, (
+            f"Region {region} has unrealistic carbon intensity: {intensity}"
+        )
 
         # Specific region validations
         if region == "us-east-1":
@@ -47,9 +50,10 @@ def test_region_carbon_intensity_keys_production_format():
         assert len(region) >= 5, f"Region {region} name too short"
 
         # Should contain geographic indicator
-        geographic_indicators = ['us-', 'eu-', 'af-', 'ap-', 'ca-', 'sa-', 'me-']
-        assert any(indicator in region for indicator in geographic_indicators), \
+        geographic_indicators = ["us-", "eu-", "af-", "ap-", "ca-", "sa-", "me-"]
+        assert any(indicator in region for indicator in geographic_indicators), (
             f"Region {region} doesn't follow AWS naming convention"
+        )
 
 
 def test_default_carbon_intensity_production_ready():
@@ -58,13 +62,15 @@ def test_default_carbon_intensity_production_ready():
     assert DEFAULT_CARBON_INTENSITY > 0
 
     # Should be reasonable global average
-    assert 200 <= DEFAULT_CARBON_INTENSITY <= 600, \
+    assert 200 <= DEFAULT_CARBON_INTENSITY <= 600, (
         f"Default intensity {DEFAULT_CARBON_INTENSITY} is unrealistic"
+    )
 
     # Should match global entry if it exists
     if "global" in REGION_CARBON_INTENSITY:
-        assert abs(DEFAULT_CARBON_INTENSITY - REGION_CARBON_INTENSITY["global"]) < 1, \
+        assert abs(DEFAULT_CARBON_INTENSITY - REGION_CARBON_INTENSITY["global"]) < 1, (
             "Default should match global average"
+        )
 
 
 def test_carbon_intensity_range_production_scenarios():
@@ -76,8 +82,9 @@ def test_carbon_intensity_range_production_scenarios():
     max_value = max(values)
 
     # Carbon optimization should be possible (at least 2x difference)
-    assert max_value / min_value >= 2.0, \
-        f"Carbon intensity variation ({max_value/min_value:.1f}x) insufficient for optimization"
+    assert max_value / min_value >= 2.0, (
+        f"Carbon intensity variation ({max_value / min_value:.1f}x) insufficient for optimization"
+    )
 
     # Should include both clean and dirty regions
     clean_regions = [v for v in values if v < 200]  # Low carbon
@@ -120,7 +127,9 @@ def test_calculate_carbon_footprint_basic():
     region = "us-east-1"
 
     footprint = calculate_carbon_footprint(cost, region)
-    expected = cost * Decimal(str(REGION_CARBON_INTENSITY["us-east-1"])) / Decimal("1000")  # Convert g to kg
+    expected = (
+        cost * Decimal(str(REGION_CARBON_INTENSITY["us-east-1"])) / Decimal("1000")
+    )  # Convert g to kg
 
     assert footprint == expected
     assert isinstance(footprint, Decimal)
@@ -140,7 +149,9 @@ def test_calculate_carbon_footprint_edge_cases():
     footprint = calculate_carbon_footprint(large_cost, "us-east-1")
     assert footprint > 0
     # intensity is 412.0 g/USD. For 1,000,000 USD, that's 412,000,000 g = 412,000 kg.
-    assert footprint == large_cost * Decimal(str(REGION_CARBON_INTENSITY["us-east-1"])) / Decimal("1000")
+    assert footprint == large_cost * Decimal(
+        str(REGION_CARBON_INTENSITY["us-east-1"])
+    ) / Decimal("1000")
 
     # Unknown region
     footprint = calculate_carbon_footprint(Decimal("100"), "unknown-region")
@@ -221,7 +232,9 @@ def test_carbon_data_environmental_impact():
 
     # Should show meaningful reduction opportunity
     reduction_percent = (dirty_footprint - clean_footprint) / dirty_footprint * 100
-    assert reduction_percent > 20, f"Carbon reduction opportunity too small: {reduction_percent:.1f}%"
+    assert reduction_percent > 20, (
+        f"Carbon reduction opportunity too small: {reduction_percent:.1f}%"
+    )
 
 
 def test_carbon_data_error_handling():
@@ -254,7 +267,9 @@ def test_get_carbon_reduction_opportunity_invalid_cost():
 
 
 def test_get_carbon_reduction_opportunity_negative_cost():
-    assert get_carbon_reduction_opportunity(Decimal("-1")) == {"error": "Cost cannot be negative"}
+    assert get_carbon_reduction_opportunity(Decimal("-1")) == {
+        "error": "Cost cannot be negative"
+    }
 
 
 def test_estimate_carbon_for_service_success():
@@ -291,4 +306,6 @@ def test_carbon_data_performance():
     end_time = time.time()
 
     # Should be fast enough for production use
-    assert end_time - start_time < 0.2, f"Calculation too slow: {end_time - start_time:.3f}s"
+    assert end_time - start_time < 0.2, (
+        f"Calculation too slow: {end_time - start_time:.3f}s"
+    )

@@ -2,7 +2,7 @@
 Circuit Breaker for LLM Providers - Per-Provider Isolation
 
 Prevents cascading failures by isolating LLM provider failures.
-When one provider fails repeatedly, the circuit "opens" and requests 
+When one provider fails repeatedly, the circuit "opens" and requests
 are routed to the next provider immediately.
 
 Pattern: Half-Open Circuit Breaker
@@ -12,7 +12,7 @@ Pattern: Half-Open Circuit Breaker
 
 Usage:
     breaker = LLMCircuitBreaker()
-    
+
     try:
         with breaker.protect("groq"):
             response = await groq_client.chat(...)
@@ -33,48 +33,49 @@ logger = structlog.get_logger()
 
 
 class CircuitState(str, Enum):
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing, skip requests
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, skip requests
     HALF_OPEN = "half_open"  # Testing if recovered
 
 
 @dataclass
 class ProviderCircuit:
     """State for a single provider's circuit breaker."""
+
     name: str
     state: CircuitState = CircuitState.CLOSED
     failure_count: int = 0
     success_count: int = 0
     last_failure_time: Optional[datetime] = None
     last_success_time: Optional[datetime] = None
-    
+
     # Thresholds
-    failure_threshold: int = 3      # Failures to open circuit
-    success_threshold: int = 2      # Successes to close circuit
-    recovery_timeout: int = 60      # Seconds before half-open
+    failure_threshold: int = 3  # Failures to open circuit
+    success_threshold: int = 2  # Successes to close circuit
+    recovery_timeout: int = 60  # Seconds before half-open
 
 
 class LLMCircuitBreaker:
     """
     Per-provider circuit breaker for LLM resilience.
-    
+
     Isolates failures so that:
     - Groq failing doesn't affect Gemini
     - Each provider has independent failure tracking
     - Automatic recovery testing after timeout
     """
-    
+
     def __init__(
         self,
         failure_threshold: int = 3,
         success_threshold: int = 2,
-        recovery_timeout: int = 60
+        recovery_timeout: int = 60,
     ):
         self.failure_threshold = failure_threshold
         self.success_threshold = success_threshold
         self.recovery_timeout = recovery_timeout
         self._circuits: Dict[str, ProviderCircuit] = {}
-    
+
     def _get_circuit(self, provider: str) -> ProviderCircuit:
         """Get or create circuit for provider."""
         if provider not in self._circuits:
@@ -82,18 +83,18 @@ class LLMCircuitBreaker:
                 name=provider,
                 failure_threshold=self.failure_threshold,
                 success_threshold=self.success_threshold,
-                recovery_timeout=self.recovery_timeout
+                recovery_timeout=self.recovery_timeout,
             )
         return self._circuits[provider]
-    
+
     def is_available(self, provider: str) -> bool:
         """Check if provider is available for requests."""
         circuit = self._get_circuit(provider)
         now = datetime.now(timezone.utc)
-        
+
         if circuit.state == CircuitState.CLOSED:
             return True
-        
+
         if circuit.state == CircuitState.OPEN:
             # Check if recovery timeout has passed
             if circuit.last_failure_time:
@@ -104,23 +105,23 @@ class LLMCircuitBreaker:
                     logger.info(
                         "circuit_half_open",
                         provider=provider,
-                        message="Testing recovery"
+                        message="Testing recovery",
                     )
                     return True
             return False
-        
+
         if circuit.state == CircuitState.HALF_OPEN:
             # Allow one request to test recovery
             return True
-        
+
         return False
-    
+
     def record_success(self, provider: str) -> None:
         """Record successful request to provider."""
         circuit = self._get_circuit(provider)
         circuit.success_count += 1
         circuit.last_success_time = datetime.now(timezone.utc)
-        
+
         if circuit.state == CircuitState.HALF_OPEN:
             if circuit.success_count >= circuit.success_threshold:
                 # Recovery confirmed, close circuit
@@ -128,39 +129,35 @@ class LLMCircuitBreaker:
                 circuit.failure_count = 0
                 circuit.success_count = 0
                 logger.info(
-                    "circuit_closed",
-                    provider=provider,
-                    message="Provider recovered"
+                    "circuit_closed", provider=provider, message="Provider recovered"
                 )
-        
+
         elif circuit.state == CircuitState.CLOSED:
             # Reset failure count on success
             circuit.failure_count = 0
-    
+
     def record_failure(self, provider: str, error: Optional[str] = None) -> None:
         """Record failed request to provider."""
         circuit = self._get_circuit(provider)
         circuit.failure_count += 1
         circuit.last_failure_time = datetime.now(timezone.utc)
         circuit.success_count = 0  # Reset success count
-        
+
         logger.warning(
             "llm_provider_failure",
             provider=provider,
             failure_count=circuit.failure_count,
             threshold=circuit.failure_threshold,
-            error=error
+            error=error,
         )
-        
+
         if circuit.state == CircuitState.HALF_OPEN:
             # Failed during recovery test, reopen circuit
             circuit.state = CircuitState.OPEN
             logger.warning(
-                "circuit_reopened",
-                provider=provider,
-                message="Recovery failed"
+                "circuit_reopened", provider=provider, message="Recovery failed"
             )
-        
+
         elif circuit.state == CircuitState.CLOSED:
             if circuit.failure_count >= circuit.failure_threshold:
                 # Too many failures, open circuit
@@ -169,27 +166,27 @@ class LLMCircuitBreaker:
                     "circuit_opened",
                     provider=provider,
                     failure_count=circuit.failure_count,
-                    message="Provider marked unavailable"
+                    message="Provider marked unavailable",
                 )
-    
+
     @contextmanager
     def protect(self, provider: str) -> Any:
         """
         Context manager for protected provider calls.
-        
+
         Usage:
             with breaker.protect("groq"):
                 response = await client.chat(...)
         """
         if not self.is_available(provider):
             raise CircuitOpenError(f"Circuit open for {provider}")
-        
+
         try:
             yield
         except Exception as e:
             self.record_failure(provider, str(e))
             raise
-    
+
     def get_status(self) -> Dict[str, dict[str, Any]]:
         """Get status of all circuits for monitoring."""
         return {
@@ -197,12 +194,16 @@ class LLMCircuitBreaker:
                 "state": circuit.state.value,
                 "failure_count": circuit.failure_count,
                 "success_count": circuit.success_count,
-                "last_failure": circuit.last_failure_time.isoformat() if circuit.last_failure_time else None,
-                "last_success": circuit.last_success_time.isoformat() if circuit.last_success_time else None,
+                "last_failure": circuit.last_failure_time.isoformat()
+                if circuit.last_failure_time
+                else None,
+                "last_success": circuit.last_success_time.isoformat()
+                if circuit.last_success_time
+                else None,
             }
             for name, circuit in self._circuits.items()
         }
-    
+
     def reset(self, provider: str) -> None:
         """Manually reset a circuit (for admin use)."""
         if provider in self._circuits:
@@ -210,13 +211,14 @@ class LLMCircuitBreaker:
                 name=provider,
                 failure_threshold=self.failure_threshold,
                 success_threshold=self.success_threshold,
-                recovery_timeout=self.recovery_timeout
+                recovery_timeout=self.recovery_timeout,
             )
             logger.info("circuit_reset", provider=provider)
 
 
 class CircuitOpenError(Exception):
     """Raised when circuit is open and request should be skipped."""
+
     pass
 
 

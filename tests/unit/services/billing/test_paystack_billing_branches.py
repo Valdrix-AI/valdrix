@@ -26,17 +26,28 @@ def mock_db() -> MagicMock:
     db = MagicMock()
     db.execute = AsyncMock()
     db.commit = AsyncMock()
+    db.flush = AsyncMock()
     db.add = MagicMock()
     return db
 
 
 @pytest.fixture
 def configured_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(billing_mod.settings, "PAYSTACK_SECRET_KEY", "sk_test_key", raising=False)
-    monkeypatch.setattr(billing_mod.settings, "PAYSTACK_PLAN_STARTER", "PLN_STARTER", raising=False)
-    monkeypatch.setattr(billing_mod.settings, "PAYSTACK_PLAN_GROWTH", "PLN_GROWTH", raising=False)
-    monkeypatch.setattr(billing_mod.settings, "PAYSTACK_PLAN_PRO", "PLN_PRO", raising=False)
-    monkeypatch.setattr(billing_mod.settings, "PAYSTACK_PLAN_ENTERPRISE", "PLN_ENT", raising=False)
+    monkeypatch.setattr(
+        billing_mod.settings, "PAYSTACK_SECRET_KEY", "sk_test_key", raising=False
+    )
+    monkeypatch.setattr(
+        billing_mod.settings, "PAYSTACK_PLAN_STARTER", "PLN_STARTER", raising=False
+    )
+    monkeypatch.setattr(
+        billing_mod.settings, "PAYSTACK_PLAN_GROWTH", "PLN_GROWTH", raising=False
+    )
+    monkeypatch.setattr(
+        billing_mod.settings, "PAYSTACK_PLAN_PRO", "PLN_PRO", raising=False
+    )
+    monkeypatch.setattr(
+        billing_mod.settings, "PAYSTACK_PLAN_ENTERPRISE", "PLN_ENT", raising=False
+    )
 
 
 def test_email_hash_normalizes_and_truncates() -> None:
@@ -48,7 +59,9 @@ def test_email_hash_normalizes_and_truncates() -> None:
 
 
 @pytest.mark.asyncio
-async def test_paystack_request_rejects_non_dict_payload(configured_settings: None) -> None:
+async def test_paystack_request_rejects_non_dict_payload(
+    configured_settings: None,
+) -> None:
     client = PaystackClient()
     mock_response = MagicMock()
     mock_response.raise_for_status.return_value = None
@@ -60,9 +73,13 @@ async def test_paystack_request_rejects_non_dict_payload(configured_settings: No
 
 
 @pytest.mark.asyncio
-async def test_initialize_transaction_includes_plan_code(configured_settings: None) -> None:
+async def test_initialize_transaction_includes_plan_code(
+    configured_settings: None,
+) -> None:
     client = PaystackClient()
-    with patch.object(client, "_request", new=AsyncMock(return_value={"status": True})) as mock_req:
+    with patch.object(
+        client, "_request", new=AsyncMock(return_value={"status": True})
+    ) as mock_req:
         await client.initialize_transaction(
             email="user@example.com",
             amount_kobo=1000,
@@ -75,9 +92,13 @@ async def test_initialize_transaction_includes_plan_code(configured_settings: No
 
 
 @pytest.mark.asyncio
-async def test_client_wrapper_methods_delegate_request(configured_settings: None) -> None:
+async def test_client_wrapper_methods_delegate_request(
+    configured_settings: None,
+) -> None:
     client = PaystackClient()
-    with patch.object(client, "_request", new=AsyncMock(return_value={"status": True})) as mock_req:
+    with patch.object(
+        client, "_request", new=AsyncMock(return_value={"status": True})
+    ) as mock_req:
         await client.charge_authorization("u@example.com", 100, "AUTH", {"x": 1})
         await client.verify_transaction("REF123")
         await client.fetch_subscription("SUB123")
@@ -97,11 +118,14 @@ async def test_billing_service_init_handles_invalid_amount_config(
 ) -> None:
     invalid_config = {
         PricingTier.STARTER: {"paystack_amount_kobo": "bad-type"},
-        PricingTier.GROWTH: {"paystack_amount_kobo": {"monthly": "bad", "annual": 1200}},
+        PricingTier.GROWTH: {
+            "paystack_amount_kobo": {"monthly": "bad", "annual": 1200}
+        },
     }
-    with patch("app.shared.core.pricing.TIER_CONFIG", invalid_config), patch.object(
-        billing_mod.logger, "warning"
-    ) as mock_warning:
+    with (
+        patch("app.shared.core.pricing.TIER_CONFIG", invalid_config),
+        patch.object(billing_mod.logger, "warning") as mock_warning,
+    ):
         service = BillingService(mock_db)
     assert service.plan_amounts == {}
     assert mock_warning.called
@@ -129,15 +153,29 @@ async def test_create_checkout_session_logs_and_reraises(
     mock_db: MagicMock,
     configured_settings: None,
 ) -> None:
-    with patch("app.modules.billing.domain.billing.paystack_billing.PaystackClient") as mock_client_cls:
-        mock_client_cls.return_value.initialize_transaction = AsyncMock(side_effect=RuntimeError("boom"))
+    with patch(
+        "app.modules.billing.domain.billing.paystack_billing.PaystackClient"
+    ) as mock_client_cls:
+        mock_client_cls.return_value.initialize_transaction = AsyncMock(
+            side_effect=RuntimeError("boom")
+        )
         service = BillingService(mock_db)
-    with patch("app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate", new=AsyncMock(return_value=1500.0)), patch(
-        "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn", return_value=150000
-    ), patch.object(billing_mod.logger, "error") as mock_error:
+    with (
+        patch(
+            "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate",
+            new=AsyncMock(return_value=1500.0),
+        ),
+        patch(
+            "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn",
+            return_value=150000,
+        ),
+        patch.object(billing_mod.logger, "error") as mock_error,
+    ):
         mock_db.execute.return_value = _scalar_result(None)
         with pytest.raises(RuntimeError, match="boom"):
-            await service.create_checkout_session(uuid4(), PricingTier.STARTER, "u@e.com", "https://callback")
+            await service.create_checkout_session(
+                uuid4(), PricingTier.STARTER, "u@e.com", "https://callback"
+            )
     assert mock_error.called
 
 
@@ -147,8 +185,13 @@ async def test_charge_renewal_returns_false_when_auth_decryption_fails(
     configured_settings: None,
 ) -> None:
     service = BillingService(mock_db)
-    sub = MagicMock(paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value)
-    with patch("app.modules.billing.domain.billing.paystack_billing.decrypt_string", return_value=None):
+    sub = MagicMock(
+        paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value
+    )
+    with patch(
+        "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+        return_value=None,
+    ):
         assert await service.charge_renewal(sub) is False
 
 
@@ -160,7 +203,10 @@ async def test_charge_renewal_invalid_tier_value_returns_false(
     service = BillingService(mock_db)
     sub = MagicMock(paystack_auth_code="enc", tenant_id=uuid4(), tier="not-a-tier")
     mock_db.execute.return_value = _scalar_result(None)
-    with patch("app.modules.billing.domain.billing.paystack_billing.decrypt_string", return_value="AUTH"):
+    with patch(
+        "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+        return_value="AUTH",
+    ):
         assert await service.charge_renewal(sub) is False
 
 
@@ -170,10 +216,16 @@ async def test_charge_renewal_missing_tier_config_returns_false(
     configured_settings: None,
 ) -> None:
     service = BillingService(mock_db)
-    sub = MagicMock(paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value)
+    sub = MagicMock(
+        paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value
+    )
     mock_db.execute.return_value = _scalar_result(None)
-    with patch("app.modules.billing.domain.billing.paystack_billing.decrypt_string", return_value="AUTH"), patch(
-        "app.shared.core.pricing.TIER_CONFIG", {}
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            return_value="AUTH",
+        ),
+        patch("app.shared.core.pricing.TIER_CONFIG", {}),
     ):
         assert await service.charge_renewal(sub) is False
 
@@ -184,13 +236,27 @@ async def test_charge_renewal_missing_user_returns_false(
     configured_settings: None,
 ) -> None:
     service = BillingService(mock_db)
-    sub = MagicMock(paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value)
-    mock_db.execute.side_effect = [_scalar_result(MagicMock(price_usd=10.0)), _scalar_result(None)]
+    sub = MagicMock(
+        paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value
+    )
+    mock_db.execute.side_effect = [
+        _scalar_result(MagicMock(price_usd=10.0)),
+        _scalar_result(None),
+    ]
 
-    with patch("app.modules.billing.domain.billing.paystack_billing.decrypt_string", return_value="AUTH"), patch(
-        "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate", new=AsyncMock(return_value=1500.0)
-    ), patch(
-        "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn", return_value=150000
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            return_value="AUTH",
+        ),
+        patch(
+            "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate",
+            new=AsyncMock(return_value=1500.0),
+        ),
+        patch(
+            "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn",
+            return_value=150000,
+        ),
     ):
         assert await service.charge_renewal(sub) is False
 
@@ -201,15 +267,30 @@ async def test_charge_renewal_email_decrypt_failure_returns_false(
     configured_settings: None,
 ) -> None:
     service = BillingService(mock_db)
-    sub = MagicMock(paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value)
+    sub = MagicMock(
+        paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value
+    )
     mock_user = MagicMock(email="enc-email")
-    mock_db.execute.side_effect = [_scalar_result(MagicMock(price_usd=10.0)), _scalar_result(mock_user)]
+    mock_db.execute.side_effect = [
+        _scalar_result(MagicMock(price_usd=10.0)),
+        _scalar_result(mock_user),
+    ]
 
-    with patch("app.modules.billing.domain.billing.paystack_billing.decrypt_string", return_value="AUTH"), patch(
-        "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate", new=AsyncMock(return_value=1500.0)
-    ), patch(
-        "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn", return_value=150000
-    ), patch("app.shared.core.security.decrypt_string", return_value=None):
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            return_value="AUTH",
+        ),
+        patch(
+            "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate",
+            new=AsyncMock(return_value=1500.0),
+        ),
+        patch(
+            "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn",
+            return_value=150000,
+        ),
+        patch("app.shared.core.security.decrypt_string", return_value=None),
+    ):
         assert await service.charge_renewal(sub) is False
 
 
@@ -219,18 +300,36 @@ async def test_charge_renewal_charge_exception_returns_false(
     configured_settings: None,
 ) -> None:
     service = BillingService(mock_db)
-    sub = MagicMock(paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value)
+    sub = MagicMock(
+        paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value
+    )
     mock_user = MagicMock(email="enc-email")
-    mock_db.execute.side_effect = [_scalar_result(MagicMock(price_usd=10.0)), _scalar_result(mock_user)]
+    mock_db.execute.side_effect = [
+        _scalar_result(MagicMock(price_usd=10.0)),
+        _scalar_result(mock_user),
+    ]
 
-    with patch("app.modules.billing.domain.billing.paystack_billing.decrypt_string", return_value="AUTH"), patch(
-        "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate", new=AsyncMock(return_value=1500.0)
-    ), patch(
-        "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn", return_value=150000
-    ), patch(
-        "app.shared.core.security.decrypt_string", return_value="user@example.com"
-    ), patch.object(
-        service.client, "charge_authorization", new=AsyncMock(side_effect=RuntimeError("paystack down"))
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            return_value="AUTH",
+        ),
+        patch(
+            "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate",
+            new=AsyncMock(return_value=1500.0),
+        ),
+        patch(
+            "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn",
+            return_value=150000,
+        ),
+        patch(
+            "app.shared.core.security.decrypt_string", return_value="user@example.com"
+        ),
+        patch.object(
+            service.client,
+            "charge_authorization",
+            new=AsyncMock(side_effect=RuntimeError("paystack down")),
+        ),
     ):
         assert await service.charge_renewal(sub) is False
 
@@ -254,7 +353,11 @@ async def test_cancel_subscription_reraises_disable_failure(
     service = BillingService(mock_db)
     sub = MagicMock(paystack_subscription_code="SUB", paystack_email_token="TOK")
     mock_db.execute.return_value = _scalar_result(sub)
-    with patch.object(service.client, "disable_subscription", new=AsyncMock(side_effect=RuntimeError("disable failed"))):
+    with patch.object(
+        service.client,
+        "disable_subscription",
+        new=AsyncMock(side_effect=RuntimeError("disable failed")),
+    ):
         with pytest.raises(RuntimeError, match="disable failed"):
             await service.cancel_subscription(uuid4())
 
@@ -267,7 +370,9 @@ def test_verify_signature_missing_signature_or_secret(
     handler = WebhookHandler(mock_db)
     payload = b'{"event":"x"}'
     assert handler.verify_signature(payload, "") is False
-    monkeypatch.setattr(billing_mod.settings, "PAYSTACK_SECRET_KEY", None, raising=False)
+    monkeypatch.setattr(
+        billing_mod.settings, "PAYSTACK_SECRET_KEY", None, raising=False
+    )
     assert handler.verify_signature(payload, "abc123") is False
 
 
@@ -331,10 +436,17 @@ async def test_handle_charge_success_email_fallback_paths(
     user = MagicMock(tenant_id=tenant_id)
     existing_sub = MagicMock(tier=PricingTier.STARTER.value)
 
-    with patch("app.shared.core.security.generate_blind_index", return_value="BIDX"), patch(
-        "app.modules.billing.domain.billing.paystack_billing.encrypt_string", return_value="enc-auth"
+    with (
+        patch("app.shared.core.security.generate_blind_index", return_value="BIDX"),
+        patch(
+            "app.modules.billing.domain.billing.paystack_billing.encrypt_string",
+            return_value="enc-auth",
+        ),
     ):
-        mock_db.execute.side_effect = [_scalar_result(user), _scalar_result(existing_sub)]
+        mock_db.execute.side_effect = [
+            _scalar_result(user),
+            _scalar_result(existing_sub),
+        ]
         await handler._handle_charge_success(
             {
                 "metadata": {},
@@ -373,7 +485,10 @@ async def test_handle_charge_success_creates_subscription_without_auth(
             "authorization": {},
         }
     )
-    mock_db.add.assert_called_once()
+    added_objects = [call.args[0] for call in mock_db.add.call_args_list]
+    assert any(isinstance(obj, billing_mod.TenantSubscription) for obj in added_objects)
+    # Billing webhooks should also emit an immutable audit log event.
+    assert any(obj.__class__.__name__ == "AuditLog" for obj in added_objects)
 
 
 @pytest.mark.asyncio
@@ -388,7 +503,9 @@ async def test_subscription_disable_and_invoice_failed_edge_paths(
     await handler._handle_subscription_disable({"subscription_code": "SUB-NONE"})
 
     mock_db.execute.reset_mock()
-    await handler._handle_invoice_failed({"invoice_code": "INV1", "customer": {"customer_code": "CUS"}})
+    await handler._handle_invoice_failed(
+        {"invoice_code": "INV1", "customer": {"customer_code": "CUS"}}
+    )
     mock_db.execute.assert_not_awaited()
 
     mock_db.execute.return_value = _scalar_result(None)

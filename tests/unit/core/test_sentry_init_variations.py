@@ -40,7 +40,9 @@ def test_init_sentry_production_sampling_and_release():
 def test_init_sentry_default_env_and_sampling():
     _prepare_sentry_mocks()
     with patch.object(sentry_module, "SENTRY_AVAILABLE", True):
-        with patch.dict(os.environ, {"SENTRY_DSN": "https://test@sentry.io/1"}, clear=True):
+        with patch.dict(
+            os.environ, {"SENTRY_DSN": "https://test@sentry.io/1"}, clear=True
+        ):
             assert init_sentry() is True
 
     _, kwargs = sentry_module.sentry_sdk.init.call_args
@@ -48,10 +50,16 @@ def test_init_sentry_default_env_and_sampling():
     assert kwargs["release"] == "valdrix@0.1.0"
     assert kwargs["traces_sample_rate"] == 1.0
     assert kwargs["profiles_sample_rate"] == 1.0
+
+
 def test_init_sentry_integrations_wired():
-    fastapi_integration, sqlalchemy_integration, logging_integration = _prepare_sentry_mocks()
+    fastapi_integration, sqlalchemy_integration, logging_integration = (
+        _prepare_sentry_mocks()
+    )
     with patch.object(sentry_module, "SENTRY_AVAILABLE", True):
-        with patch.dict(os.environ, {"SENTRY_DSN": "https://test@sentry.io/1"}, clear=True):
+        with patch.dict(
+            os.environ, {"SENTRY_DSN": "https://test@sentry.io/1"}, clear=True
+        ):
             assert init_sentry() is True
 
     fastapi_integration.assert_called_once_with(transaction_style="endpoint")

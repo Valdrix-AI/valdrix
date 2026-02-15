@@ -28,23 +28,20 @@ logger = structlog.get_logger()
 # Source: Electricity Maps, EPA eGRID, and provider sustainability reports.
 REGION_CARBON_INTENSITY = {
     # Low carbon (renewables/nuclear)
-    "us-west-2": 21,      # Oregon - hydro
-    "eu-north-1": 28,     # Stockholm - hydro/nuclear
-    "ca-central-1": 35,   # Montreal - hydro
-    "eu-west-1": 316,     # Ireland - wind/gas mix
-
+    "us-west-2": 21,  # Oregon - hydro
+    "eu-north-1": 28,  # Stockholm - hydro/nuclear
+    "ca-central-1": 35,  # Montreal - hydro
+    "eu-west-1": 316,  # Ireland - wind/gas mix
     # Medium carbon
-    "us-west-1": 218,     # N. California
-    "eu-west-2": 225,     # London
+    "us-west-1": 218,  # N. California
+    "eu-west-2": 225,  # London
     "eu-central-1": 338,  # Frankfurt
-
     # High carbon (coal/gas heavy)
-    "us-east-1": 379,     # N. Virginia
-    "us-east-2": 440,     # Ohio
+    "us-east-1": 379,  # N. Virginia
+    "us-east-2": 440,  # Ohio
     "ap-southeast-1": 408,  # Singapore
-    "ap-south-1": 708,    # Mumbai
+    "ap-south-1": 708,  # Mumbai
     "ap-northeast-1": 506,  # Tokyo
-
     # Default for unknown regions
     "default": 400,
 }
@@ -107,9 +104,78 @@ CLOUD_PUE = 1.2
 # Embodied emissions factor (kgCO2e per kWh of compute)
 EMBODIED_EMISSIONS_FACTOR = 0.025
 CARBON_FACTOR_SOURCE = "Electricity Maps + EPA eGRID + provider sustainability reports"
-CARBON_FACTOR_VERSION = "2025-Q4"
+CARBON_FACTOR_VERSION = "2025-12-01"
 CARBON_FACTOR_TIMESTAMP = "2025-12-01"
 CARBON_METHODOLOGY_VERSION = "valdrix-carbon-v2.0"
+
+
+def build_carbon_factor_payload() -> Dict[str, Any]:
+    """
+    Build the canonical carbon factor payload used for:
+    - DB-backed factor set staging/activation
+    - audit evidence (carbon assurance snapshots)
+    - methodology metadata checksums
+
+    Important: this payload must NOT include request-specific context like provider/tenant.
+    """
+    return {
+        "region_carbon_intensity": REGION_CARBON_INTENSITY,
+        "service_energy_factors_by_provider": SERVICE_ENERGY_FACTORS_BY_PROVIDER,
+        "cloud_pue": float(CLOUD_PUE),
+        "embodied_emissions_factor": float(EMBODIED_EMISSIONS_FACTOR),
+        "factor_source": CARBON_FACTOR_SOURCE,
+        "factor_version": CARBON_FACTOR_VERSION,
+        "factor_timestamp": CARBON_FACTOR_TIMESTAMP,
+        "methodology_version": CARBON_METHODOLOGY_VERSION,
+    }
+
+
+def compute_carbon_factor_checksum(payload: Dict[str, Any]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def carbon_assurance_snapshot(
+    factor_payload: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """
+    Return an auditable snapshot of the carbon methodology and factor versions.
+
+    This is used for procurement/compliance evidence capture (reproducibility).
+    """
+    payload = (
+        factor_payload
+        if isinstance(factor_payload, dict) and factor_payload
+        else build_carbon_factor_payload()
+    )
+    checksum = compute_carbon_factor_checksum(payload)
+
+    return {
+        "methodology_version": str(
+            payload.get("methodology_version") or CARBON_METHODOLOGY_VERSION
+        ),
+        "factor_source": str(payload.get("factor_source") or CARBON_FACTOR_SOURCE),
+        "factor_version": str(payload.get("factor_version") or CARBON_FACTOR_VERSION),
+        "factor_timestamp": str(
+            payload.get("factor_timestamp") or CARBON_FACTOR_TIMESTAMP
+        ),
+        "constants": {
+            "cloud_pue": float(payload.get("cloud_pue") or CLOUD_PUE),
+            "embodied_emissions_factor_kg_per_kwh": float(
+                payload.get("embodied_emissions_factor") or EMBODIED_EMISSIONS_FACTOR
+            ),
+        },
+        "region_intensity": {
+            "count": len(payload.get("region_carbon_intensity") or {}),
+            "default_gco2_kwh": int(
+                (payload.get("region_carbon_intensity") or {}).get("default", 400)
+            ),
+        },
+        "providers": sorted(
+            (payload.get("service_energy_factors_by_provider") or {}).keys()
+        ),
+        "factors_checksum_sha256": checksum,
+    }
 
 
 class CarbonCalculator:
@@ -125,15 +191,44 @@ class CarbonCalculator:
     6. Calculate carbon efficiency score (gCO2e per $1)
     """
 
-    @staticmethod
-    def _normalize_provider(provider: str | None) -> str:
+    def __init__(self, factor_payload: Dict[str, Any] | None = None) -> None:
+        payload = (
+            factor_payload
+            if isinstance(factor_payload, dict) and factor_payload
+            else build_carbon_factor_payload()
+        )
+        self._factor_payload = payload
+        self._region_intensity = (
+            payload.get("region_carbon_intensity") or REGION_CARBON_INTENSITY
+        )
+        self._energy_factors = (
+            payload.get("service_energy_factors_by_provider")
+            or SERVICE_ENERGY_FACTORS_BY_PROVIDER
+        )
+        self._cloud_pue = Decimal(str(payload.get("cloud_pue") or CLOUD_PUE))
+        self._embodied_emissions_factor = Decimal(
+            str(payload.get("embodied_emissions_factor") or EMBODIED_EMISSIONS_FACTOR)
+        )
+        self._factor_source = str(payload.get("factor_source") or CARBON_FACTOR_SOURCE)
+        self._factor_version = str(
+            payload.get("factor_version") or CARBON_FACTOR_VERSION
+        )
+        self._factor_timestamp = str(
+            payload.get("factor_timestamp") or CARBON_FACTOR_TIMESTAMP
+        )
+        self._methodology_version = str(
+            payload.get("methodology_version") or CARBON_METHODOLOGY_VERSION
+        )
+        self._factors_checksum = compute_carbon_factor_checksum(payload)
+
+    def _normalize_provider(self, provider: str | None) -> str:
         provider_key = (provider or "aws").strip().lower()
-        return provider_key if provider_key in SERVICE_ENERGY_FACTORS_BY_PROVIDER else "generic"
+        return provider_key if provider_key in self._energy_factors else "generic"
 
     def _resolve_energy_factor(self, provider: str, service: str | None) -> Decimal:
         provider_key = self._normalize_provider(provider)
         service_key = str(service or "default")
-        factor_map = SERVICE_ENERGY_FACTORS_BY_PROVIDER[provider_key]
+        factor_map = self._energy_factors[provider_key]
 
         if service_key in factor_map:
             return Decimal(str(factor_map[service_key]))
@@ -142,7 +237,9 @@ class CarbonCalculator:
         if service_key in AWS_SERVICE_ENERGY_FACTORS:
             return Decimal(str(AWS_SERVICE_ENERGY_FACTORS[service_key]))
 
-        return Decimal(str(factor_map.get("default", GENERIC_SERVICE_ENERGY_FACTORS["default"])))
+        return Decimal(
+            str(factor_map.get("default", GENERIC_SERVICE_ENERGY_FACTORS["default"]))
+        )
 
     def calculate_from_costs(
         self,
@@ -167,7 +264,9 @@ class CarbonCalculator:
                         )
                         if cost_amount > 0:
                             total_cost_usd += cost_amount
-                            energy_factor = self._resolve_energy_factor(provider, service)
+                            energy_factor = self._resolve_energy_factor(
+                                provider, service
+                            )
                             total_energy_kwh += cost_amount * energy_factor
                 elif "cost_usd" in record:
                     # Normalized adapter payload (AWS/Azure/GCP/SaaS/license).
@@ -176,7 +275,9 @@ class CarbonCalculator:
                         total_cost_usd += cost_amount
                         service = str(record.get("service") or "default")
                         row_provider = str(record.get("provider") or provider)
-                        energy_factor = self._resolve_energy_factor(row_provider, service)
+                        energy_factor = self._resolve_energy_factor(
+                            row_provider, service
+                        )
                         total_energy_kwh += cost_amount * energy_factor
                 else:
                     cost_amount = Decimal(
@@ -192,7 +293,9 @@ class CarbonCalculator:
                 logger.warning("carbon_calc_skip_record", error=str(exc))
                 continue
 
-        return self._finalize_calculation(total_cost_usd, total_energy_kwh, region, provider)
+        return self._finalize_calculation(
+            total_cost_usd, total_energy_kwh, region, provider
+        )
 
     def calculate_from_records(
         self,
@@ -216,13 +319,19 @@ class CarbonCalculator:
                 if "EC2" in record.service and "vCPU-Hours" in str(record.usage_type):
                     total_energy_kwh += record.amount_raw * Decimal("0.010")
                 else:
-                    energy_factor = self._resolve_energy_factor(record_provider, record.service)
+                    energy_factor = self._resolve_energy_factor(
+                        record_provider, record.service
+                    )
                     total_energy_kwh += record.cost_usd * energy_factor
             else:
-                energy_factor = self._resolve_energy_factor(record_provider, record.service)
+                energy_factor = self._resolve_energy_factor(
+                    record_provider, record.service
+                )
                 total_energy_kwh += record.cost_usd * energy_factor
 
-        return self._finalize_calculation(total_cost_usd, total_energy_kwh, region, provider)
+        return self._finalize_calculation(
+            total_cost_usd, total_energy_kwh, region, provider
+        )
 
     def _finalize_calculation(
         self,
@@ -232,14 +341,18 @@ class CarbonCalculator:
         provider: str = "aws",
     ) -> Dict[str, Any]:
         """Shared logic for emissions calculation and result formatting."""
-        total_energy_with_pue = total_energy_kwh * Decimal(str(CLOUD_PUE))
+        total_energy_with_pue = total_energy_kwh * self._cloud_pue
 
-        carbon_intensity = REGION_CARBON_INTENSITY.get(region, REGION_CARBON_INTENSITY["default"])
+        carbon_intensity = int(
+            self._region_intensity.get(
+                region, self._region_intensity.get("default", 400)
+            )
+        )
 
         scope2_co2_grams = total_energy_with_pue * Decimal(str(carbon_intensity))
         scope2_co2_kg = scope2_co2_grams / Decimal("1000")
 
-        scope3_co2_kg = total_energy_with_pue * Decimal(str(EMBODIED_EMISSIONS_FACTOR))
+        scope3_co2_kg = total_energy_with_pue * self._embodied_emissions_factor
         total_co2_kg = scope2_co2_kg + scope3_co2_kg
 
         carbon_efficiency_score = 0.0
@@ -276,7 +389,9 @@ class CarbonCalculator:
             "forecast_30d": self.forecast_emissions(
                 float(total_co2_kg) / 30 if total_co2_kg > 0 else 0
             ),
-            "green_region_recommendations": self.get_green_region_recommendations(region),
+            "green_region_recommendations": self.get_green_region_recommendations(
+                region
+            ),
         }
 
         logger.info(
@@ -299,21 +414,7 @@ class CarbonCalculator:
         total_energy_kwh: Decimal,
     ) -> Dict[str, Any]:
         normalized_provider = self._normalize_provider(provider)
-
-        factor_payload = {
-            "region_carbon_intensity": REGION_CARBON_INTENSITY,
-            "service_energy_factors_by_provider": SERVICE_ENERGY_FACTORS_BY_PROVIDER,
-            "provider": normalized_provider,
-            "cloud_pue": CLOUD_PUE,
-            "embodied_emissions_factor": EMBODIED_EMISSIONS_FACTOR,
-            "factor_source": CARBON_FACTOR_SOURCE,
-            "factor_version": CARBON_FACTOR_VERSION,
-            "factor_timestamp": CARBON_FACTOR_TIMESTAMP,
-            "methodology_version": CARBON_METHODOLOGY_VERSION,
-        }
-        factors_checksum = hashlib.sha256(
-            json.dumps(factor_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
+        factors_checksum = self._factors_checksum
 
         input_checksum = hashlib.sha256(
             json.dumps(
@@ -330,18 +431,20 @@ class CarbonCalculator:
         ).hexdigest()
 
         return {
-            "methodology_version": CARBON_METHODOLOGY_VERSION,
-            "factor_source": CARBON_FACTOR_SOURCE,
-            "factor_version": CARBON_FACTOR_VERSION,
-            "factor_timestamp": CARBON_FACTOR_TIMESTAMP,
+            "methodology_version": self._methodology_version,
+            "factor_source": self._factor_source,
+            "factor_version": self._factor_version,
+            "factor_timestamp": self._factor_timestamp,
             "provider": normalized_provider,
             "region_factor": {
                 "region": region,
                 "carbon_intensity_gco2_kwh": carbon_intensity,
             },
             "constants": {
-                "cloud_pue": CLOUD_PUE,
-                "embodied_emissions_factor_kg_per_kwh": EMBODIED_EMISSIONS_FACTOR,
+                "cloud_pue": float(self._cloud_pue),
+                "embodied_emissions_factor_kg_per_kwh": float(
+                    self._embodied_emissions_factor
+                ),
             },
             "factors_checksum_sha256": factors_checksum,
             "calculation_input_checksum_sha256": input_checksum,
@@ -356,12 +459,20 @@ class CarbonCalculator:
             "percent_of_home_month": round((co2_kg / 360) * 100, 2),
         }
 
-    def get_green_region_recommendations(self, current_region: str) -> List[Dict[str, Any]]:
+    def get_green_region_recommendations(
+        self, current_region: str
+    ) -> List[Dict[str, Any]]:
         """Recommend lower-carbon regions for workload placement."""
-        current_intensity = REGION_CARBON_INTENSITY.get(current_region, REGION_CARBON_INTENSITY["default"])
+        current_intensity = int(
+            self._region_intensity.get(
+                current_region, self._region_intensity.get("default", 400)
+            )
+        )
 
         recommendations = []
-        for region, intensity in sorted(REGION_CARBON_INTENSITY.items(), key=lambda x: x[1]):
+        for region, intensity in sorted(
+            self._region_intensity.items(), key=lambda x: x[1]
+        ):
             if region == "default":
                 continue
             if intensity < current_intensity and current_intensity > 0:

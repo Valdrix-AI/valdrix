@@ -2,6 +2,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+
 async def maybe_await(value: Any) -> Any:
     """Await `value` if it's awaitable, otherwise return it directly.
 

@@ -5,7 +5,15 @@ Manages carbon budget and sustainability settings for tenants.
 """
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator, EmailStr, TypeAdapter
+from pydantic import (
+    BaseModel,
+    Field,
+    ConfigDict,
+    field_validator,
+    model_validator,
+    EmailStr,
+    TypeAdapter,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
@@ -23,8 +31,10 @@ router = APIRouter(tags=["Carbon"])
 # Pydantic Schemas
 # ============================================================
 
+
 class CarbonSettingsResponse(BaseModel):
     """Response for carbon settings."""
+
     carbon_budget_kg: float
     alert_threshold_percent: int
     default_region: str
@@ -36,11 +46,20 @@ class CarbonSettingsResponse(BaseModel):
 
 class CarbonSettingsUpdate(BaseModel):
     """Request to update carbon settings."""
+
     carbon_budget_kg: float = Field(100.0, ge=0, description="Monthly CO2 budget in kg")
-    alert_threshold_percent: int = Field(80, ge=0, le=100, description="Warning threshold %")
-    default_region: str = Field("us-east-1", description="Default AWS region for carbon intensity")
-    email_enabled: bool = Field(False, description="Enable email notifications for carbon alerts")
-    email_recipients: str | None = Field(None, description="Comma-separated email addresses")
+    alert_threshold_percent: int = Field(
+        80, ge=0, le=100, description="Warning threshold %"
+    )
+    default_region: str = Field(
+        "us-east-1", description="Default AWS region for carbon intensity"
+    )
+    email_enabled: bool = Field(
+        False, description="Enable email notifications for carbon alerts"
+    )
+    email_recipients: str | None = Field(
+        None, description="Comma-separated email addresses"
+    )
 
     @field_validator("email_recipients")
     @classmethod
@@ -66,6 +85,7 @@ class CarbonSettingsUpdate(BaseModel):
 # API Endpoints
 # ============================================================
 
+
 @router.get("/carbon", response_model=CarbonSettingsResponse)
 async def get_carbon_settings(
     current_user: CurrentUser = Depends(get_current_user),
@@ -77,9 +97,7 @@ async def get_carbon_settings(
     Creates default settings if none exist.
     """
     result = await db.execute(
-        select(CarbonSettings).where(
-            CarbonSettings.tenant_id == current_user.tenant_id
-        )
+        select(CarbonSettings).where(CarbonSettings.tenant_id == current_user.tenant_id)
     )
     settings = result.scalar_one_or_none()
 
@@ -123,18 +141,13 @@ async def update_carbon_settings(
     Creates settings if none exist.
     """
     result = await db.execute(
-        select(CarbonSettings).where(
-            CarbonSettings.tenant_id == current_user.tenant_id
-        )
+        select(CarbonSettings).where(CarbonSettings.tenant_id == current_user.tenant_id)
     )
     settings = result.scalar_one_or_none()
 
     if not settings:
         # Create new settings
-        settings = CarbonSettings(
-            tenant_id=current_user.tenant_id,
-            **data.model_dump()
-        )
+        settings = CarbonSettings(tenant_id=current_user.tenant_id, **data.model_dump())
         db.add(settings)
     else:
         updates = data.model_dump()
@@ -158,7 +171,10 @@ async def update_carbon_settings(
         "settings.carbon_updated",
         str(current_user.id),
         str(current_user.tenant_id),
-        {"budget_kg": float(settings.carbon_budget_kg), "region": settings.default_region}
+        {
+            "budget_kg": float(settings.carbon_budget_kg),
+            "region": settings.default_region,
+        },
     )
 
     return CarbonSettingsResponse(

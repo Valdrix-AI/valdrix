@@ -24,8 +24,10 @@ async def test_execute_with_retry_succeeds_after_retries():
             raise Exception("fail")
         return "ok"
 
-    with patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep, \
-         patch("app.shared.core.retry.random.random", return_value=0.5):
+    with (
+        patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+        patch("app.shared.core.retry.random.random", return_value=0.5),
+    ):
         result = await manager.execute_with_retry(flaky)
 
     assert result == "ok"
@@ -96,8 +98,10 @@ async def test_execute_with_deadlock_retry_retries():
             raise Exception("deadlock detected")
         return "ok"
 
-    with patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep, \
-         patch("app.shared.core.retry.random.uniform", return_value=0.0):
+    with (
+        patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+        patch("app.shared.core.retry.random.uniform", return_value=0.0),
+    ):
         result = await execute_with_deadlock_retry(flaky)
 
     assert result == "ok"

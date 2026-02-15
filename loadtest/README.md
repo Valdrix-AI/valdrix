@@ -33,6 +33,9 @@ BASE_URL=https://api.valdrix.ai k6 run loadtest/k6-test.js
 
 ### Installation
 ```bash
+# With uv (project standard)
+uv add --dev locust
+# Or standalone
 pip install locust
 ```
 

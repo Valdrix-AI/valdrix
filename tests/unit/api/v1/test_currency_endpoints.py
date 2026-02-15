@@ -25,8 +25,16 @@ async def test_get_all_rates(async_client: AsyncClient, app):
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
-        with patch("app.modules.reporting.api.v1.currency.get_settings", return_value=mock_settings), \
-             patch("app.modules.reporting.api.v1.currency.get_exchange_rate", new=AsyncMock()) as mock_rate:
+        with (
+            patch(
+                "app.modules.reporting.api.v1.currency.get_settings",
+                return_value=mock_settings,
+            ),
+            patch(
+                "app.modules.reporting.api.v1.currency.get_exchange_rate",
+                new=AsyncMock(),
+            ) as mock_rate,
+        ):
             mock_rate.side_effect = [1.0, 1500.0]
             response = await async_client.get("/api/v1/currency/rates")
             assert response.status_code == 200
@@ -51,9 +59,19 @@ async def test_convert_currency(async_client: AsyncClient, app):
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
-        with patch("app.shared.core.currency.convert_usd", new=AsyncMock(return_value=1500.0)) as mock_convert, \
-             patch("app.shared.core.currency.format_currency", new=AsyncMock(return_value="₦1,500.00")) as mock_format:
-            response = await async_client.get("/api/v1/currency/convert", params={"amount": 1.0, "to": "NGN"})
+        with (
+            patch(
+                "app.shared.core.currency.convert_usd",
+                new=AsyncMock(return_value=1500.0),
+            ) as mock_convert,
+            patch(
+                "app.shared.core.currency.format_currency",
+                new=AsyncMock(return_value="₦1,500.00"),
+            ) as mock_format,
+        ):
+            response = await async_client.get(
+                "/api/v1/currency/convert", params={"amount": 1.0, "to": "NGN"}
+            )
             assert response.status_code == 200
             data = response.json()
             assert data["converted_amount"] == 1500.0

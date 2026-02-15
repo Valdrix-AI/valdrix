@@ -18,31 +18,47 @@ from decimal import Decimal
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Integer, Boolean, ForeignKey, Enum as SQLEnum, Numeric, Index, DateTime, func, Uuid as PG_UUID
+from sqlalchemy import (
+    String,
+    Integer,
+    Boolean,
+    ForeignKey,
+    Enum as SQLEnum,
+    Numeric,
+    Index,
+    DateTime,
+    func,
+    Uuid as PG_UUID,
+)
+
 # from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from app.shared.db.base import Base
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from app.models.tenant import Tenant, User
 
 
 class RemediationStatus(str, Enum):
     """Status of a remediation request."""
-    PENDING = "pending"           # Awaiting approval
-    APPROVED = "approved"         # Approved, ready to execute
-    EXECUTING = "executing"       # Currently being executed
-    SCHEDULED = "scheduled"       # Scheduled for future execution (grace period)
-    COMPLETED = "completed"       # Successfully executed
-    FAILED = "failed"             # Execution failed
-    REJECTED = "rejected"         # Human rejected the request
-    CANCELLED = "cancelled"       # User cancelled before approval
+
+    PENDING = "pending"  # Awaiting approval
+    PENDING_APPROVAL = "pending_approval"  # Escalated and awaiting stronger approval
+    APPROVED = "approved"  # Approved, ready to execute
+    EXECUTING = "executing"  # Currently being executed
+    SCHEDULED = "scheduled"  # Scheduled for future execution (grace period)
+    COMPLETED = "completed"  # Successfully executed
+    FAILED = "failed"  # Execution failed
+    REJECTED = "rejected"  # Human rejected the request
+    CANCELLED = "cancelled"  # User cancelled before approval
 
 
 class RemediationAction(str, Enum):
     """Types of remediation actions."""
+
     DELETE_VOLUME = "delete_volume"
     DELETE_SNAPSHOT = "delete_snapshot"
     RELEASE_ELASTIC_IP = "release_elastic_ip"
@@ -70,7 +86,7 @@ class RemediationRequest(Base):
 
     __tablename__ = "remediation_requests"
     __table_args__ = (
-        Index('ix_remediation_tenant_resource', 'tenant_id', 'resource_id'),
+        Index("ix_remediation_tenant_resource", "tenant_id", "resource_id"),
     )
 
     # Primary Key
@@ -87,12 +103,18 @@ class RemediationRequest(Base):
     # Resource identification
     resource_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     resource_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    provider: Mapped[str] = mapped_column(String(20), nullable=False, default="aws") # aws, azure, gcp
-    connection_id: Mapped[Optional[UUID]] = mapped_column(PG_UUID(), nullable=True)     # ID of the specific cloud connection
+    provider: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="aws"
+    )  # aws, azure, gcp
+    connection_id: Mapped[Optional[UUID]] = mapped_column(
+        PG_UUID(), nullable=True
+    )  # ID of the specific cloud connection
     region: Mapped[str] = mapped_column(String(20), nullable=False, default="us-east-1")
 
     # Action details
-    action: Mapped[RemediationAction] = mapped_column(SQLEnum(RemediationAction), nullable=False)
+    action: Mapped[RemediationAction] = mapped_column(
+        SQLEnum(RemediationAction), nullable=False
+    )
     status: Mapped[RemediationStatus] = mapped_column(
         SQLEnum(RemediationStatus),
         nullable=False,
@@ -101,17 +123,27 @@ class RemediationRequest(Base):
     )
 
     # Financial impact
-    estimated_monthly_savings: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
+    estimated_monthly_savings: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
 
     # AI Explainability
-    confidence_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(3, 2), nullable=True) # 0.00 to 1.00
-    explainability_notes: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True) # AI Reasoning
+    confidence_score: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(3, 2), nullable=True
+    )  # 0.00 to 1.00
+    explainability_notes: Mapped[Optional[str]] = mapped_column(
+        String(1000), nullable=True
+    )  # AI Reasoning
 
     # Backup options (for safe delete)
     create_backup: Mapped[bool] = mapped_column(Boolean, default=False)
     backup_retention_days: Mapped[int] = mapped_column(Integer, default=30)
-    backup_resource_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # ID of created backup
-    backup_cost_estimate: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 4), nullable=True)  # Monthly cost of backup
+    backup_resource_id: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True
+    )  # ID of created backup
+    backup_cost_estimate: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 4), nullable=True
+    )  # Monthly cost of backup
 
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PG_UUID(),
@@ -129,17 +161,36 @@ class RemediationRequest(Base):
 
     # Execution details
     execution_error: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    scheduled_execution_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
-    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    scheduled_execution_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    escalation_required: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+    escalation_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    escalated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    executed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant")
-    requested_by: Mapped["User"] = relationship("User", foreign_keys=[requested_by_user_id])
-    reviewed_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[reviewed_by_user_id])
+    requested_by: Mapped["User"] = relationship(
+        "User", foreign_keys=[requested_by_user_id]
+    )
+    reviewed_by: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[reviewed_by_user_id]
+    )
 
     def __repr__(self) -> str:
         return f"<RemediationRequest {self.resource_id} [{self.status.value}]>"

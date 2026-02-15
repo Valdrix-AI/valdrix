@@ -1,7 +1,7 @@
 """
 AWS Cost and Usage Report (CUR) Ingestion Service
 
-Ingests granular, high-fidelity Parquet files from S3 to provide 
+Ingests granular, high-fidelity Parquet files from S3 to provide
 tag-based attribution and source-of-truth cost data.
 """
 
@@ -21,6 +21,7 @@ from app.schemas.costs import CloudUsageSummary, CostRecord
 
 logger = structlog.get_logger()
 
+
 class AWSCURAdapter(CostAdapter):
     """
     Ingests AWS CUR (Cost and Usage Report) data from S3.
@@ -30,7 +31,10 @@ class AWSCURAdapter(CostAdapter):
         self.connection = connection
         self.session = aioboto3.Session()
         # Use dynamic bucket name from automated setup, fallback to connection-derived if needed
-        self.bucket_name = connection.cur_bucket_name or f"valdrix-cur-{connection.aws_account_id}-{connection.region}"
+        self.bucket_name = (
+            connection.cur_bucket_name
+            or f"valdrix-cur-{connection.aws_account_id}-{connection.region}"
+        )
 
     async def verify_connection(self) -> bool:
         """Verify S3 access."""
@@ -46,7 +50,9 @@ class AWSCURAdapter(CostAdapter):
                 await s3.head_bucket(Bucket=self.bucket_name)
             return True
         except Exception as e:
-            logger.error("cur_bucket_verify_failed", bucket=self.bucket_name, error=str(e))
+            logger.error(
+                "cur_bucket_verify_failed", bucket=self.bucket_name, error=str(e)
+            )
             return False
 
     async def setup_cur_automation(self) -> Dict[str, Any]:
@@ -54,7 +60,7 @@ class AWSCURAdapter(CostAdapter):
         Automates the creation of an S3 bucket and CUR report definition.
         """
         creds = await self._get_credentials()
-        
+
         async with self.session.client(
             "s3",
             region_name=self.connection.region,
@@ -65,6 +71,7 @@ class AWSCURAdapter(CostAdapter):
             try:
                 # 1. Check if bucket exists
                 from botocore.exceptions import ClientError
+
                 bucket_exists = True
                 try:
                     await s3.head_bucket(Bucket=self.bucket_name)
@@ -81,7 +88,9 @@ class AWSCURAdapter(CostAdapter):
                     else:
                         await s3.create_bucket(
                             Bucket=self.bucket_name,
-                            CreateBucketConfiguration={'LocationConstraint': self.connection.region}
+                            CreateBucketConfiguration={
+                                "LocationConstraint": self.connection.region
+                            },
                         )
 
                 # 3. Put bucket policy
@@ -97,20 +106,22 @@ class AWSCURAdapter(CostAdapter):
                             "Condition": {
                                 "StringEquals": {
                                     "aws:SourceAccount": self.connection.aws_account_id,
-                                    "aws:SourceArn": f"arn:aws:cur:us-east-1:{self.connection.aws_account_id}:definition/*"
+                                    "aws:SourceArn": f"arn:aws:cur:us-east-1:{self.connection.aws_account_id}:definition/*",
                                 }
-                            }
+                            },
                         },
                         {
                             "Sid": "AllowCURGetBucketAcl",
                             "Effect": "Allow",
                             "Principal": {"Service": "billingreports.amazonaws.com"},
                             "Action": "s3:GetBucketAcl",
-                            "Resource": f"arn:aws:s3:::{self.bucket_name}"
-                        }
-                    ]
+                            "Resource": f"arn:aws:s3:::{self.bucket_name}",
+                        },
+                    ],
                 }
-                await s3.put_bucket_policy(Bucket=self.bucket_name, Policy=json.dumps(policy))
+                await s3.put_bucket_policy(
+                    Bucket=self.bucket_name, Policy=json.dumps(policy)
+                )
 
             except Exception as e:
                 logger.error("s3_setup_failed", error=str(e))
@@ -118,7 +129,7 @@ class AWSCURAdapter(CostAdapter):
 
         async with self.session.client(
             "cur",
-            region_name="us-east-1", # CUR is global but uses us-east-1 endpoint
+            region_name="us-east-1",  # CUR is global but uses us-east-1 endpoint
             aws_access_key_id=creds["AccessKeyId"],
             aws_secret_access_key=creds["SecretAccessKey"],
             aws_session_token=creds["SessionToken"],
@@ -128,33 +139,30 @@ class AWSCURAdapter(CostAdapter):
                 report_name = f"valdrix-cur-{self.connection.aws_account_id}"
                 await cur.put_report_definition(
                     ReportDefinition={
-                        'ReportName': report_name,
-                        'TimeUnit': 'HOURLY',
-                        'Format': 'Parquet',
-                        'Compression': 'GZIP',
-                        'AdditionalSchemaElements': ['RESOURCES'],
-                        'S3Bucket': self.bucket_name,
-                        'S3Prefix': 'cur',
-                        'S3Region': self.connection.region,
-                        'ReportVersioning': 'OVERWRITE_REPORT',
-                        'RefreshClosedReports': True
+                        "ReportName": report_name,
+                        "TimeUnit": "HOURLY",
+                        "Format": "Parquet",
+                        "Compression": "GZIP",
+                        "AdditionalSchemaElements": ["RESOURCES"],
+                        "S3Bucket": self.bucket_name,
+                        "S3Prefix": "cur",
+                        "S3Region": self.connection.region,
+                        "ReportVersioning": "OVERWRITE_REPORT",
+                        "RefreshClosedReports": True,
                     }
                 )
-                
+
                 return {
                     "status": "success",
                     "bucket_name": self.bucket_name,
-                    "report_name": report_name
+                    "report_name": report_name,
                 }
             except Exception as e:
                 logger.error("cur_setup_failed", error=str(e))
                 return {"status": "error", "message": f"CUR setup failed: {str(e)}"}
 
     async def get_cost_and_usage(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        granularity: str = "DAILY"
+        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> List[Dict[str, Any]]:
         """Normalized cost interface."""
         summary = await self.ingest_latest_parquet()
@@ -170,10 +178,7 @@ class AWSCURAdapter(CostAdapter):
         return []
 
     async def stream_cost_and_usage(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        granularity: str = "DAILY"
+        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> Any:
         """
         Stream cost data from CUR Parquet files.
@@ -194,10 +199,7 @@ class AWSCURAdapter(CostAdapter):
             }
 
     async def get_costs(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        granularity: str = "DAILY"
+        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> CloudUsageSummary:
         """Standardized interface for CUR ingestion."""
         # For now, CUR ingestion returns the latest file which usually covers a month.
@@ -209,7 +211,7 @@ class AWSCURAdapter(CostAdapter):
         Discovers and ingests the latest Parquet file from the CUR bucket.
         """
         creds = await self._get_credentials()
-        
+
         async with self.session.client(
             "s3",
             region_name=self.connection.region,
@@ -221,7 +223,9 @@ class AWSCURAdapter(CostAdapter):
                 # 1. List objects in the bucket to find the latest Parquet
                 paginator = s3.get_paginator("list_objects_v2")
                 parquet_objects: List[Dict[str, Any]] = []
-                async for page in paginator.paginate(Bucket=self.bucket_name, Prefix="cur/"):
+                async for page in paginator.paginate(
+                    Bucket=self.bucket_name, Prefix="cur/"
+                ):
                     for obj in page.get("Contents", []):
                         key = obj.get("Key", "")
                         if key.lower().endswith(".parquet"):
@@ -232,26 +236,34 @@ class AWSCURAdapter(CostAdapter):
                     return self._empty_summary()
 
                 # Sort by last modified
-                files = sorted(parquet_objects, key=lambda x: x.get("LastModified") or datetime.min, reverse=True)
+                files = sorted(
+                    parquet_objects,
+                    key=lambda x: x.get("LastModified") or datetime.min,
+                    reverse=True,
+                )
                 latest_file = files[0]["Key"]
 
                 logger.info("ingesting_cur_file", key=latest_file)
 
                 # 3. Stream download to temporary file (avoids OOM for large files)
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".parquet") as tmp:
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=".parquet"
+                ) as tmp:
                     tmp_path = tmp.name
                     try:
-                        obj = await s3.get_object(Bucket=self.bucket_name, Key=latest_file)
+                        obj = await s3.get_object(
+                            Bucket=self.bucket_name, Key=latest_file
+                        )
                         async with obj["Body"] as stream:
                             while True:
-                                chunk = await stream.read(1024 * 1024 * 8) # 8MB chunks
+                                chunk = await stream.read(1024 * 1024 * 8)  # 8MB chunks
                                 if not chunk:
                                     break
                                 tmp.write(chunk)
-                        
+
                         # 4. Streamed Ingestion with PyArrow (Chunked Processing)
                         return self._process_parquet_streamingly(tmp_path)
-                        
+
                     finally:
                         if os.path.exists(tmp_path):
                             os.remove(tmp_path)
@@ -266,25 +278,35 @@ class AWSCURAdapter(CostAdapter):
         Aggregates metrics on the fly.
         """
         parquet_file = pq.ParquetFile(file_path)
-        
+
         # Initialize Summary
         total_cost_usd = Decimal("0")
         by_service: dict[str, Decimal] = {}
         by_region: dict[str, Decimal] = {}
         by_tag: dict[str, dict[str, Decimal]] = {}
-        all_records: list[CostRecord] = [] # Still keeping records for now, but could be limited if needed
-        
+        all_records: list[
+            CostRecord
+        ] = []  # Still keeping records for now, but could be limited if needed
+
         min_date = None
         max_date = None
 
         # AWS CUR Column Aliases
         CUR_COLUMNS = {
-            "date": ["lineItem/UsageStartDate", "identity/TimeInterval", "line_item_usage_start_date"],
+            "date": [
+                "lineItem/UsageStartDate",
+                "identity/TimeInterval",
+                "line_item_usage_start_date",
+            ],
             "cost": ["lineItem/UnblendedCost", "line_item_unblended_cost"],
             "currency": ["lineItem/CurrencyCode", "line_item_currency_code"],
-            "service": ["lineItem/ProductCode", "line_item_product_code", "product/ProductName"],
+            "service": [
+                "lineItem/ProductCode",
+                "line_item_product_code",
+                "product/ProductName",
+            ],
             "region": ["product/region", "lineItem/AvailabilityZone"],
-            "usage_type": ["lineItem/UsageType"]
+            "usage_type": ["lineItem/UsageType"],
         }
 
         # Iterate through row groups
@@ -299,12 +321,17 @@ class AWSCURAdapter(CostAdapter):
 
             if df_chunk.empty:
                 continue
-            
+
             # Resolve columns for this chunk
-            col_map = {k: next((c for c in v if c in df_chunk.columns), None) for k, v in CUR_COLUMNS.items()}
+            col_map = {
+                k: next((c for c in v if c in df_chunk.columns), None)
+                for k, v in CUR_COLUMNS.items()
+            }
             missing = [key for key in ("date", "cost") if not col_map.get(key)]
             if missing:
-                logger.warning("cur_missing_required_columns", missing=missing, row_group=i)
+                logger.warning(
+                    "cur_missing_required_columns", missing=missing, row_group=i
+                )
                 continue
 
             # Update date range
@@ -322,7 +349,7 @@ class AWSCURAdapter(CostAdapter):
                     if parse_errors <= 3:
                         logger.warning("cur_row_parse_failed", error=str(e))
                     continue
-                
+
                 # Safety valve: For massive files, we limit the records list to prevent OOM
                 if len(all_records) < 100000:
                     all_records.append(record)
@@ -331,9 +358,13 @@ class AWSCURAdapter(CostAdapter):
                 total_cost_usd += record.amount
                 service_key = record.service or "unknown"
                 region_key = record.region or "unknown"
-                by_service[service_key] = by_service.get(service_key, Decimal("0")) + record.amount
-                by_region[region_key] = by_region.get(region_key, Decimal("0")) + record.amount
-                
+                by_service[service_key] = (
+                    by_service.get(service_key, Decimal("0")) + record.amount
+                )
+                by_region[region_key] = (
+                    by_region.get(region_key, Decimal("0")) + record.amount
+                )
+
                 for tk, tv in record.tags.items():
                     if tk not in by_tag:
                         by_tag[tk] = {}
@@ -348,7 +379,7 @@ class AWSCURAdapter(CostAdapter):
             records=all_records,
             by_service=by_service,
             by_region=by_region,
-            by_tag=by_tag
+            by_tag=by_tag,
         )
 
     def _parse_row(self, row: pd.Series, col_map: Dict[str, str | None]) -> CostRecord:
@@ -367,19 +398,27 @@ class AWSCURAdapter(CostAdapter):
 
         currency_key = col_map.get("currency")
         currency_val = row.get(currency_key, "USD") if currency_key else "USD"
-        currency = "USD" if pd.isna(currency_val) or currency_val == "" else str(currency_val)
+        currency = (
+            "USD" if pd.isna(currency_val) or currency_val == "" else str(currency_val)
+        )
 
         service_key = col_map.get("service")
         service_val = row.get(service_key, "Unknown") if service_key else "Unknown"
-        service = "Unknown" if pd.isna(service_val) or service_val == "" else str(service_val)
+        service = (
+            "Unknown" if pd.isna(service_val) or service_val == "" else str(service_val)
+        )
 
         region_key = col_map.get("region")
         region_val = row.get(region_key, "Global") if region_key else "Global"
-        region = "Global" if pd.isna(region_val) or region_val == "" else str(region_val)
+        region = (
+            "Global" if pd.isna(region_val) or region_val == "" else str(region_val)
+        )
 
         usage_key = col_map.get("usage_type")
         usage_val = row.get(usage_key, "Unknown") if usage_key else "Unknown"
-        usage_type = "Unknown" if pd.isna(usage_val) or usage_val == "" else str(usage_val)
+        usage_type = (
+            "Unknown" if pd.isna(usage_val) or usage_val == "" else str(usage_val)
+        )
 
         tags = self._extract_tags(row)
 
@@ -401,7 +440,7 @@ class AWSCURAdapter(CostAdapter):
             service=service,
             region=region,
             usage_type=usage_type,
-            tags=tags
+            tags=tags,
         )
 
     def _extract_tags(self, row: pd.Series) -> Dict[str, str]:
@@ -420,6 +459,7 @@ class AWSCURAdapter(CostAdapter):
         """Helper to get credentials from existing adapter logic or shared util."""
         # For simplicity, we assume the credentials logic is shared or we re-implement
         from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+
         adapter = MultiTenantAWSAdapter(self.connection)
         credentials = await adapter.get_credentials()
         return cast(dict[str, str], credentials)
@@ -433,9 +473,8 @@ class AWSCURAdapter(CostAdapter):
             total_cost=Decimal("0"),
             records=[],
             by_service={},
-            by_region={}
+            by_region={},
         )
-
 
     async def get_resource_usage(
         self, service_name: str, resource_id: str | None = None

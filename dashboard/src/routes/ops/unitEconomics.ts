@@ -7,7 +7,10 @@ export function toIsoDate(value: Date): string {
 	return value.toISOString().slice(0, 10);
 }
 
-export function defaultDateWindow(days: number, now: Date = new Date()): { start: string; end: string } {
+export function defaultDateWindow(
+	days: number,
+	now: Date = new Date()
+): { start: string; end: string } {
 	const end = new Date(now);
 	end.setUTCHours(0, 0, 0, 0);
 

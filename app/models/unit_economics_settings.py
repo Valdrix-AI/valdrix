@@ -28,12 +28,20 @@ class UnitEconomicsSettings(Base):
         nullable=False,
     )
 
-    default_request_volume: Mapped[float] = mapped_column(Numeric(18, 4), default=1000.0)
-    default_workload_volume: Mapped[float] = mapped_column(Numeric(18, 4), default=100.0)
+    default_request_volume: Mapped[float] = mapped_column(
+        Numeric(18, 4), default=1000.0
+    )
+    default_workload_volume: Mapped[float] = mapped_column(
+        Numeric(18, 4), default=100.0
+    )
     default_customer_volume: Mapped[float] = mapped_column(Numeric(18, 4), default=50.0)
-    anomaly_threshold_percent: Mapped[float] = mapped_column(Numeric(8, 2), default=20.0)
+    anomaly_threshold_percent: Mapped[float] = mapped_column(
+        Numeric(8, 2), default=20.0
+    )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

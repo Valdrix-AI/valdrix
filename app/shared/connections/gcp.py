@@ -6,15 +6,17 @@ from app.models.gcp_connection import GCPConnection
 from app.shared.adapters.gcp import GCPAdapter
 from app.shared.core.exceptions import ResourceNotFoundError
 
+
 class GCPConnectionService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def verify_connection(self, connection_id: UUID, tenant_id: UUID) -> dict[str, Any]:
+    async def verify_connection(
+        self, connection_id: UUID, tenant_id: UUID
+    ) -> dict[str, Any]:
         result = await self.db.execute(
             select(GCPConnection).where(
-                GCPConnection.id == connection_id,
-                GCPConnection.tenant_id == tenant_id
+                GCPConnection.id == connection_id, GCPConnection.tenant_id == tenant_id
             )
         )
         connection = result.scalar_one_or_none()
@@ -28,4 +30,7 @@ class GCPConnectionService:
             await self.db.commit()
             return {"status": "success", "message": "GCP connection verified."}
         else:
-            return {"status": "failed", "message": "Failed to authenticate with GCP. Check Service Account JSON."}
+            return {
+                "status": "failed",
+                "message": "Failed to authenticate with GCP. Check Service Account JSON.",
+            }

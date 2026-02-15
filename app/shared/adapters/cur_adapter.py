@@ -47,7 +47,7 @@ class CURAdapter(CostAdapter):
         bucket_name: str,
         report_prefix: str,
         credentials: Dict[str, str],
-        region: str = "us-east-1"
+        region: str = "us-east-1",
     ):
         self.bucket_name = bucket_name
         self.report_prefix = report_prefix
@@ -73,34 +73,38 @@ class CURAdapter(CostAdapter):
             cur_files = await self._list_cur_files(start_date, end_date)
 
             if not cur_files:
-                logger.warning("no_cur_files_found",
-                             bucket=self.bucket_name,
-                             prefix=self.report_prefix,
-                             start=start_date.isoformat(),
-                             end=end_date.isoformat())
+                logger.warning(
+                    "no_cur_files_found",
+                    bucket=self.bucket_name,
+                    prefix=self.report_prefix,
+                    start=start_date.isoformat(),
+                    end=end_date.isoformat(),
+                )
                 return []
 
             # Step 2: Parse and aggregate
             # NOTE: Full Parquet parsing requires pyarrow dependency.
-            logger.info("cur_files_found",
-                       count=len(cur_files),
-                       bucket=self.bucket_name)
+            logger.info(
+                "cur_files_found", count=len(cur_files), bucket=self.bucket_name
+            )
 
-            return await self._parse_cur_files(cur_files, start_date, end_date, group_by_service)
+            return await self._parse_cur_files(
+                cur_files, start_date, end_date, group_by_service
+            )
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
             logger.error("cur_fetch_failed", error=str(e), code=error_code)
             return [{"Error": str(e), "Code": error_code}]
 
-    async def _list_cur_files(
-        self,
-        start_date: date,
-        end_date: date
-    ) -> List[str]:
+    async def _list_cur_files(self, start_date: date, end_date: date) -> List[str]:
         """List CUR Parquet files in S3 for the date range."""
         if start_date > end_date:
-            logger.warning("cur_invalid_date_range", start=start_date.isoformat(), end=end_date.isoformat())
+            logger.warning(
+                "cur_invalid_date_range",
+                start=start_date.isoformat(),
+                end=end_date.isoformat(),
+            )
             return []
 
         files: List[str] = []
@@ -129,11 +133,15 @@ class CURAdapter(CostAdapter):
                     paginator = s3.get_paginator("list_objects_v2")
                     manifest_candidates = []
                     parquet_keys = []
-                    async for page in paginator.paginate(Bucket=self.bucket_name, Prefix=prefix):
+                    async for page in paginator.paginate(
+                        Bucket=self.bucket_name, Prefix=prefix
+                    ):
                         for obj in page.get("Contents", []):
                             key = obj["Key"]
                             if key.lower().endswith("manifest.json"):
-                                manifest_candidates.append((obj.get("LastModified"), key))
+                                manifest_candidates.append(
+                                    (obj.get("LastModified"), key)
+                                )
                             elif key.endswith(".parquet"):
                                 parquet_keys.append(key)
 
@@ -141,13 +149,19 @@ class CURAdapter(CostAdapter):
                         manifest_candidates.sort(key=lambda x: x[0] or datetime.min)
                         _, manifest_key = manifest_candidates[-1]
                         try:
-                            response = await s3.get_object(Bucket=self.bucket_name, Key=manifest_key)
+                            response = await s3.get_object(
+                                Bucket=self.bucket_name, Key=manifest_key
+                            )
                             manifest_body = await response["Body"].read()
                             manifest = json.loads(manifest_body)
                             report_keys = manifest.get("reportKeys", [])
                             add_keys([k for k in report_keys if k.endswith(".parquet")])
                         except Exception as e:
-                            logger.warning("cur_manifest_parse_failed", manifest=manifest_key, error=str(e))
+                            logger.warning(
+                                "cur_manifest_parse_failed",
+                                manifest=manifest_key,
+                                error=str(e),
+                            )
                             add_keys(parquet_keys)
                     else:
                         add_keys(parquet_keys)
@@ -165,24 +179,22 @@ class CURAdapter(CostAdapter):
         return files
 
     async def _parse_cur_files(
-        self,
-        files: List[str],
-        start_date: date,
-        end_date: date,
-        group_by_service: bool
+        self, files: List[str], start_date: date, end_date: date, group_by_service: bool
     ) -> List[Dict[str, Any]]:
         """
         Parses Parquet CUR files from S3 and aggregates costs.
-        
+
         Requires pandas and pyarrow.
         """
-        combined_grouped = None # Initialize as None, will create from first chunk
-        
+        combined_grouped = None  # Initialize as None, will create from first chunk
+
         try:
             import pandas as pd
             import pyarrow.parquet as pq
         except ImportError:
-            logger.error("cur_parsing_missing_dependency", msg="pandas/pyarrow not installed")
+            logger.error(
+                "cur_parsing_missing_dependency", msg="pandas/pyarrow not installed"
+            )
             return []
 
         async with self.session.client(
@@ -195,79 +207,105 @@ class CURAdapter(CostAdapter):
             for file_key in files:
                 try:
                     logger.debug("processing_cur_file", file=file_key)
-                    response = await s3.get_object(Bucket=self.bucket_name, Key=file_key)
-                    
+                    response = await s3.get_object(
+                        Bucket=self.bucket_name, Key=file_key
+                    )
+
                     async with response["Body"] as stream:
                         content = await stream.read()
-                        
+
                         from io import BytesIO
-                        
-                        cols = ["line_item_usage_start_date", "line_item_product_code", "line_item_blended_cost"]
+
+                        cols = [
+                            "line_item_usage_start_date",
+                            "line_item_product_code",
+                            "line_item_blended_cost",
+                        ]
                         table = pq.read_table(BytesIO(content), columns=cols)
                         df = table.to_pandas()
-                        
+
                         if "line_item_usage_start_date" in df.columns:
-                            df["date"] = pd.to_datetime(df["line_item_usage_start_date"]).dt.date
-                            df = df[(df["date"] >= start_date) & (df["date"] <= end_date)]
-                        
+                            df["date"] = pd.to_datetime(
+                                df["line_item_usage_start_date"]
+                            ).dt.date
+                            df = df[
+                                (df["date"] >= start_date) & (df["date"] <= end_date)
+                            ]
+
                         if df.empty:
                             continue
 
                         # Aggregate this chunk immediately
                         if group_by_service:
-                            chunk_grouped = df.groupby(["date", "line_item_product_code"])["line_item_blended_cost"].sum().reset_index()
+                            chunk_grouped = (
+                                df.groupby(["date", "line_item_product_code"])[
+                                    "line_item_blended_cost"
+                                ]
+                                .sum()
+                                .reset_index()
+                            )
                         else:
-                            chunk_grouped = df.groupby("date")["line_item_blended_cost"].sum().reset_index()
-                        
+                            chunk_grouped = (
+                                df.groupby("date")["line_item_blended_cost"]
+                                .sum()
+                                .reset_index()
+                            )
+
                         # Merge with combined results
                         if combined_grouped is None:
                             combined_grouped = chunk_grouped
                         else:
-                            combined_grouped = pd.concat([combined_grouped, chunk_grouped], ignore_index=True)
-                            
+                            combined_grouped = pd.concat(
+                                [combined_grouped, chunk_grouped], ignore_index=True
+                            )
+
                             # Re-aggregate to keep memory footprint low
                             if group_by_service:
-                                combined_grouped = combined_grouped.groupby(["date", "line_item_product_code"])["line_item_blended_cost"].sum().reset_index()
+                                combined_grouped = (
+                                    combined_grouped.groupby(
+                                        ["date", "line_item_product_code"]
+                                    )["line_item_blended_cost"]
+                                    .sum()
+                                    .reset_index()
+                                )
                             else:
-                                combined_grouped = combined_grouped.groupby("date")["line_item_blended_cost"].sum().reset_index()
-                                
+                                combined_grouped = (
+                                    combined_grouped.groupby("date")[
+                                        "line_item_blended_cost"
+                                    ]
+                                    .sum()
+                                    .reset_index()
+                                )
+
                 except Exception as e:
                     logger.error("cur_file_parse_error", file=file_key, error=str(e))
                     continue
-                
+
         if combined_grouped is None or combined_grouped.empty:
             return []
-            
+
         results = []
         for _, row in combined_grouped.iterrows():
             item = {
                 "date": row["date"].isoformat(),
-                "cost": float(row["line_item_blended_cost"])
+                "cost": float(row["line_item_blended_cost"]),
             }
             if group_by_service and "line_item_product_code" in row:
                 item["service"] = row["line_item_product_code"]
             results.append(item)
-            
+
         return results
 
     async def get_gross_usage(
-        self,
-        start_date: date,
-        end_date: date
+        self, start_date: date, end_date: date
     ) -> List[Dict[str, Any]]:
         """Get usage-only costs grouped by service."""
         return await self.get_daily_costs(
-            start_date,
-            end_date,
-            usage_only=True,
-            group_by_service=True
+            start_date, end_date, usage_only=True, group_by_service=True
         )
 
     async def get_cost_and_usage(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        granularity: str = "DAILY"
+        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> List[Dict[str, Any]]:
         """Standard interface for cost data."""
         # Convert datetime to date for get_daily_costs.
@@ -276,10 +314,7 @@ class CURAdapter(CostAdapter):
         return await self.get_daily_costs(s_date, e_date)
 
     async def stream_cost_and_usage(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        granularity: str = "DAILY"
+        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> AsyncGenerator[dict[str, Any], None]:
         """
         Stream normalized cost data from CUR files.
@@ -340,7 +375,9 @@ class CURAdapter(CostAdapter):
                 await s3.head_bucket(Bucket=self.bucket_name)
                 return True
             except ClientError as e:
-                logger.error("cur_bucket_verify_failed", bucket=self.bucket_name, error=str(e))
+                logger.error(
+                    "cur_bucket_verify_failed", bucket=self.bucket_name, error=str(e)
+                )
                 return False
 
 
@@ -356,7 +393,7 @@ class CURConfig:
         bucket_name: str,
         report_prefix: str,
         report_name: str,
-        format: str = "Parquet"  # Parquet or CSV
+        format: str = "Parquet",  # Parquet or CSV
     ):
         self.bucket_name = bucket_name
         self.report_prefix = report_prefix
@@ -369,5 +406,5 @@ class CURConfig:
             bucket_name=data["bucket_name"],
             report_prefix=data["report_prefix"],
             report_name=data["report_name"],
-            format=data.get("format", "Parquet")
+            format=data.get("format", "Parquet"),
         )

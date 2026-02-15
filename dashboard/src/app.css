@@ -115,6 +115,12 @@ body {
 	line-height: 1.6;
 }
 
+/* Accessible focus ring for plain links (buttons/nav items define their own). */
+a:focus-visible {
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
+}
+
 /* ===== MOTION SYSTEM ===== */
 /* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
@@ -495,6 +501,7 @@ body {
 
 /* ===== LAYOUT: Nav Items ===== */
 .nav-item {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: var(--space-3);
@@ -506,6 +513,13 @@ body {
 	border-radius: var(--radius-md);
 	margin: var(--space-1) var(--space-3);
 	transition: all var(--duration-fast) var(--ease-out);
+}
+
+.nav-item:focus-visible {
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
+	background: var(--color-ink-800);
+	color: var(--color-ink-100);
 }
 
 .nav-item:hover {
@@ -526,6 +540,29 @@ body {
 	height: 24px;
 	background: var(--color-accent-500);
 	border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* ===== A11Y: Skip Link ===== */
+.skip-link {
+	position: absolute;
+	top: var(--space-3);
+	left: var(--space-3);
+	z-index: 1000;
+	padding: var(--space-2) var(--space-3);
+	border-radius: var(--radius-md);
+	background: var(--color-ink-50);
+	color: var(--color-ink-950);
+	text-decoration: none;
+	box-shadow: var(--shadow-md);
+	transform: translateY(-150%);
+	transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+	transform: translateY(0);
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
 }
 
 /* ===== UTILITIES ===== */

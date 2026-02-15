@@ -1,89 +1,87 @@
-**12-Month Roadmap (Starting February 11, 2026)**
+# Valdrix Roadmap (Internal)
 
-**Assumptions**
-1. Goal: move from strong cloud optimization product to enterprise Cloud+ FinOps platform.
-2. Team: 2 squads minimum (Data Platform, FinOps Intelligence) + shared frontend.
-3. Cadence: monthly releases, quarterly outcome targets.
+Last updated: **February 15, 2026**
 
-**Q1 2026 (Feb-Mar): Data Trust Foundation**
-1. Epic: Canonical billing ledger + FOCUS-ready normalization.
-Acceptance criteria:
-- Add canonical fields and mappings in ingestion model (`app/models/cloud.py`) and adapters (`app/shared/adapters/*`).
-- 99%+ of ingested rows map to canonical charge categories; unmapped rows are explicitly flagged.
-- Cost APIs expose data quality metadata (`app/modules/reporting/api/v1/costs.py`).
+Progress archive (shipped work + evidence):
+- `reports/roadmap/ROADMAP_PROGRESS_2026-02-15.md`
+- `reports/roadmap/ROADMAP_PROGRESS_2026-02-14.md`
+- `reports/roadmap/ROADMAP_PROGRESS_2026-02-13.md`
 
-2. Epic: Reconciliation v1 (real discrepancy detection, not placeholder summary).
-Acceptance criteria:
-- Replace placeholder logic in `app/modules/reporting/domain/reconciliation.py` with source-vs-source delta checks.
-- Daily/monthly reconciliation report includes discrepancy %, impacted services, and confidence.
-- Alerting fires when variance exceeds defined threshold (for example 1%).
+## Delivery Guardrails (Always)
+1. Deterministic-first core: allocation, anomaly detection, reconciliation, and savings math remain rule/model based; LLM is used for summarization/explanation/remediation guidance only.
+2. Ingestion contracts: all connectors must be scheduled, idempotent, and schema-versioned with explicit replay/backfill behavior.
+3. Unified normalized model: all sources (cloud + Cloud+) emit one internal shape: provider, account/subscription/project, service, resource_id, usage_amount, usage_unit, cost, currency, timestamp, tags/labels.
+4. Operational loop: every detection path supports ownership + action (ticket/workflow/policy/notification), not dashboards-only.
+5. Persona separation: Engineering, Finance, Platform, and Leadership get role-appropriate views and APIs.
+6. Acceptance evidence: each epic closes only when code/tests pass and repeatable acceptance evidence is captured.
 
-3. Epic: Commitment optimization v1.
-Acceptance criteria:
-- Remove heuristic baseline logic from `app/modules/optimization/domain/service.py` and `app/modules/optimization/domain/strategies/compute_savings.py`.
-- Recommendations include break-even, confidence, and expected savings range.
-- Backtest harness shows prediction error within agreed tolerance on historical data.
+## Sprint Standard (How We Ship)
+1. Pick one sprint goal with crisp acceptance criteria.
+2. Review existing implementation patterns first (avoid duplication).
+3. Implement end-to-end (API + domain + persistence) with security, performance, and tenancy isolation in mind.
+4. Add targeted tests for happy paths and failure paths.
+5. Run the focused tests for the changed modules.
+6. Capture acceptance evidence (Ops automation where possible) and record pointers in the progress archive.
 
-**Q2 2026 (Apr-Jun): Financial Productization**
-1. Epic: Chargeback/showback product APIs + workflows.
-Acceptance criteria:
-- Rule CRUD + simulation endpoints for allocation published (extending `app/modules/reporting/domain/attribution_engine.py`).
-- Monthly allocation outputs by team/product/environment.
-- Pilot tenants reach >=90% allocation coverage of spend.
+## 12-Month Roadmap (High-Level)
 
-2. Epic: Unit economics layer.
-Acceptance criteria:
-- Support configurable unit-cost KPIs (cost per request, cost per workload, cost per customer).
-- New reporting endpoints and dashboard views for unit cost trends.
-- Unit-cost anomalies detected and routed through existing alerting path.
+### Q1 2026: Data Trust Foundation
+1. Canonical billing ledger + FOCUS-ready normalization.
+2. Reconciliation v1 (real discrepancy detection, not placeholder summaries).
+3. Commitment optimization v1 (break-even, confidence, expected savings range).
+4. Ingestion source parity baseline (AWS CUR, Azure exports, GCP BigQuery billing export, SaaS/license feeds) with replay/backfill and SLIs.
 
-3. Epic: Ingestion completeness and backfill.
-Acceptance criteria:
-- Date-range backfill and replay for CUR/azure/gcp adapters.
-- Idempotent rerun behavior verified for overlapping ingestion windows.
-- Ingestion SLAs defined and monitored.
+### Q2 2026: Financial Productization
+1. Chargeback/showback product APIs + workflows (rules + simulation + coverage KPIs).
+2. Unit economics layer (configurable unit-cost KPIs + anomaly routing).
+3. Ingestion completeness and backfill (idempotent overlap windows, SLAs, monitoring).
+4. Deterministic anomaly detection v1.
+5. Waste/rightsizing detection v1.
+6. Architectural inefficiency detection v1.
 
-**Q3 2026 (Jul-Sep): Enterprise Close + Cloud+ Expansion**
-1. Epic: Reconciliation v2 with close workflow.
-Acceptance criteria:
-- Month-end close package generation (JSON/CSV + audit trail) is reproducible.
-- Preliminary vs final lifecycle is operationally enforced.
-- Restatement history is queryable and exportable.
+### Q3 2026: Enterprise Close + Cloud+ Expansion
+1. Reconciliation v2 close workflow (JSON/CSV + audit trail, preliminary vs final lifecycle).
+2. Cloud+ scope expansion (SaaS/license/platform/hybrid connectors through the same pipeline).
+3. Carbon assurance v2 (factor versioning, auditability, reproducibility).
+4. Governance/policy workflows (allow|warn|block|escalate + approval flow).
+5. Integrations/action automation (Slack/Teams, Jira, GitHub/GitLab/CI webhooks).
 
-2. Epic: Cloud+ scope expansion.
-Acceptance criteria:
-- Add at least 2 non-IaaS spend connectors (SaaS/license or similar) through adapter architecture (`app/shared/adapters/factory.py`).
-- Unified reporting combines cloud + non-cloud costs.
-- Same attribution/reconciliation flow works on Cloud+ sources.
+### Q4 2026: Scale, Procurement, and Proof
+1. Enterprise packaging hardening (SSO/SCIM, compliance exports, isolation verification).
+2. Performance and reliability scale-up (10x ingestion volume, p95 dashboard targets, job SLOs).
+3. Commercial proof system (savings realized vs opportunity + close package + procurement bundle).
+4. Cloud+ domain expansion beyond IaaS/SaaS basics (platform + hybrid).
+5. Persona-specific product experience hardening.
 
-3. Epic: Carbon assurance v2.
-Acceptance criteria:
-- Carbon outputs in `app/modules/reporting/domain/calculator.py` include factor source/version/timestamp metadata.
-- Methodology versioning and reproducibility checks are implemented.
-- Carbon reports are auditable for enterprise compliance reviews.
+## Latest Sprint Shipped
+Full detail and evidence pointers live in `reports/roadmap/ROADMAP_PROGRESS_2026-02-15.md`.
 
-**Q4 2026 (Oct-Dec): Scale, Procurement, and Proof**
-1. Epic: Enterprise packaging hardening.
-Acceptance criteria:
-- Full SSO/SCIM onboarding flow production-ready.
-- Compliance export pack (controls, evidence, audit logs) generated on demand.
-- Security/tenant isolation verification passes at enterprise test depth.
+Highlights:
+- Enterprise close workflow v3 (invoice-linked reconciliation) + Ops dashboard workflow UX.
+- Enterprise identity hardening (SSO enforcement diagnostics, SCIM token flows, SCIM group mappings).
+- Performance scale evidence capture (load-test p95/error-rate + ingestion persistence benchmarks) + compliance pack inclusion.
+- Reliability evidence capture (job SLO + backlog snapshot) + compliance pack inclusion.
+- Commercial proof automation (leadership KPI exports + quarterly templates + realized savings evidence).
+- Commercial proof drilldowns (savings proof by strategy type + remediation action) + compliance pack export.
+- Workflow integrations v2 (Microsoft Teams tenant-scoped notifications + evidence capture + settings UI).
+- Real SSO federation v1 (tenant-scoped Supabase SSO bootstrap via domain/provider_id + callback flow + identity settings UI/API).
 
-2. Epic: Performance and reliability scale-up.
-Acceptance criteria:
-- 10x ingestion volume load tests pass.
-- Dashboard/reporting p95 latency meets target under load.
-- Scheduled job reliability meets quarterly SLO.
+## Next Sprint Candidates (Pick 1)
+1. Pick a new sprint goal (SSO federation v2 hardening shipped).
 
-3. Epic: Commercial proof system.
-Acceptance criteria:
-- Standardized “savings realized vs opportunity” report per tenant.
-- Design partner cohort validates measurable realized savings over 90 days.
-- Close/reconciliation + realized savings evidence supports procurement cycles.
-
-**Dependencies (critical path)**
-1. Q1 ledger/reconciliation must land before Q2 chargeback and unit economics.
-2. Q2 ingestion/backfill must land before Q3 close workflow and Cloud+ unification.
-3. Q3 enterprise-grade trust outputs must land before Q4 procurement proof motions.
-
-If you want, I can convert this into a sprint-ready backlog with issue titles, story points, and owner mapping per epic.
+## Sprint Status (Current)
+- Enterprise close workflow v3: implemented (invoice-linked reconciliation).
+- Enterprise identity hardening v2: implemented (SCIM group mappings + Schemas endpoint + dashboard editor).
+- Enterprise identity interop v3: implemented (SCIM Groups resources + membership-driven entitlement recompute).
+- Enterprise identity interop v4: implemented (SCIM compatibility matrix + conformance tests).
+- Enterprise identity interop v5: implemented (IdP reference configs + operator SCIM smoke test runner + audit-grade evidence capture + compliance pack inclusion).
+- Performance and reliability scale-up v3: implemented (load-test evidence + ingestion persistence benchmarks + job SLO evidence).
+- Performance and reliability scale-up v4: implemented (end-to-end ingestion soak evidence + partitioning validation + partition maintenance runbook + evidence bundle capture).
+- Commercial proof system v3: implemented (savings proof drilldowns + quarterly templates + compliance pack exports).
+- Cloud+ expansion (platform + hybrid native pulls) v1: implemented (ledger HTTP connectors + scheduled ingestion parity + tests).
+- Cloud+ vendor-native connectors v2: implemented (Datadog + New Relic priced-usage platform pulls; OpenStack CloudKitty + VMware vCenter hybrid pulls; connector secrets + UI + tests).
+- Persona-specific UX hardening v1: implemented (persona-first nav + persistent “show all” + tier gating polish).
+- Performance CI gate v1: implemented (manual GitHub Action workflow dispatch using the load-test runner with thresholds).
+- Workflow integrations v2: implemented (Teams channel support + policy notification actions + test endpoint + acceptance evidence + compliance export metadata).
+- Real SSO federation v1: implemented (tenant-scoped discovery API + federated login start/callback + identity settings federation controls).
+- Real SSO federation v2 hardening: implemented (operator validation endpoint + audit-grade evidence capture endpoints + smoke test runner + docs/tests).

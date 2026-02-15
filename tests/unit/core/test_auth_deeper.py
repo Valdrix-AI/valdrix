@@ -26,17 +26,25 @@ async def test_get_current_user_from_jwt_missing_email():
 async def test_get_current_user_sets_request_state_and_rls():
     user_id = uuid4()
     tenant_id = uuid4()
-    mock_user = MagicMock(id=user_id, tenant_id=tenant_id, email="u@e.com", role="admin")
+    mock_user = MagicMock(
+        id=user_id, tenant_id=tenant_id, email="u@e.com", role="admin"
+    )
     mock_request = MagicMock(spec=Request)
-    mock_credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="token")
+    mock_credentials = HTTPAuthorizationCredentials(
+        scheme="Bearer", credentials="token"
+    )
 
     mock_db = AsyncMock()
     result = MagicMock()
     result.one_or_none.return_value = (mock_user, "starter")
     mock_db.execute.return_value = result
 
-    with patch("app.shared.core.auth.decode_jwt", return_value={"sub": str(user_id)}), \
-         patch("app.shared.core.auth.set_session_tenant_id", new=AsyncMock()) as mock_set:
+    with (
+        patch("app.shared.core.auth.decode_jwt", return_value={"sub": str(user_id)}),
+        patch(
+            "app.shared.core.auth.set_session_tenant_id", new=AsyncMock()
+        ) as mock_set,
+    ):
         user = await get_current_user(mock_request, mock_credentials, mock_db)
 
     assert user.tenant_id == tenant_id

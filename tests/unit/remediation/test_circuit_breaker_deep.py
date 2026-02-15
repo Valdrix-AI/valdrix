@@ -3,8 +3,14 @@ import time
 import json
 from unittest.mock import AsyncMock
 from unittest.mock import patch
-from app.shared.remediation.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState, get_circuit_breaker
+from app.shared.remediation.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitState,
+    get_circuit_breaker,
+)
 from app.shared.remediation import circuit_breaker as cb_module
+
 
 class TestCircuitBreakerDeep:
     @pytest.fixture
@@ -21,10 +27,10 @@ class TestCircuitBreakerDeep:
     async def test_circuit_breaker_failure_threshold(self):
         config = CircuitBreakerConfig(failure_threshold=2, recovery_timeout_seconds=60)
         cb = CircuitBreaker("tenant-1", config=config)
-        
+
         await cb.record_failure("error 1")
         assert await cb.get_state() == CircuitState.CLOSED
-        
+
         await cb.record_failure("error 2")
         assert await cb.get_state() == CircuitState.OPEN
         assert await cb.can_execute() is False
@@ -33,14 +39,14 @@ class TestCircuitBreakerDeep:
     async def test_circuit_breaker_recovery_timeout(self):
         config = CircuitBreakerConfig(failure_threshold=1, recovery_timeout_seconds=0.1)
         cb = CircuitBreaker("tenant-1", config=config)
-        
+
         await cb.record_failure("trip")
         assert await cb.get_state() == CircuitState.OPEN
         assert await cb.can_execute() is False
-        
+
         # Wait for recovery timeout
         time.sleep(0.15)
-        
+
         assert await cb.can_execute() is True
         assert await cb.get_state() == CircuitState.HALF_OPEN
 
@@ -48,10 +54,10 @@ class TestCircuitBreakerDeep:
     async def test_circuit_breaker_half_open_success_reset(self):
         config = CircuitBreakerConfig(failure_threshold=1)
         cb = CircuitBreaker("tenant-1", config=config)
-        
+
         await cb.record_failure("trip")
         await cb.state.set("state", CircuitState.HALF_OPEN.value)
-        
+
         await cb.record_success(savings=10.0)
         assert await cb.get_state() == CircuitState.CLOSED
         status = await cb.get_status()
@@ -61,7 +67,7 @@ class TestCircuitBreakerDeep:
     async def test_circuit_breaker_budget_exceeded(self):
         config = CircuitBreakerConfig(max_daily_savings_usd=50.0)
         cb = CircuitBreaker("tenant-1", config=config)
-        
+
         await cb.record_success(savings=40.0)
         assert await cb.can_execute(estimated_savings=20.0) is False
         assert await cb.can_execute(estimated_savings=5.0) is True
@@ -69,12 +75,12 @@ class TestCircuitBreakerDeep:
     @pytest.mark.asyncio
     async def test_circuit_breaker_redis_persistence(self, mock_redis):
         cb = CircuitBreaker("tenant-1", redis_client=mock_redis)
-        
+
         mock_redis.get.return_value = json.dumps("open")
         mock_redis.incr.return_value = 1
-        
+
         assert await cb.get_state() == CircuitState.OPEN
-        
+
         await cb.record_failure("redis fail")
         assert mock_redis.incr.called
         assert mock_redis.set.called

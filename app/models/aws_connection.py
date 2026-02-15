@@ -22,7 +22,15 @@ from uuid import UUID, uuid4
 import secrets
 from typing import TYPE_CHECKING
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, UniqueConstraint, Uuid as PG_UUID
+from sqlalchemy import (
+    String,
+    ForeignKey,
+    DateTime,
+    Text,
+    Boolean,
+    UniqueConstraint,
+    Uuid as PG_UUID,
+)
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 # from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
@@ -39,6 +47,7 @@ from app.shared.core.config import get_settings
 settings = get_settings()
 _encryption_key = settings.ENCRYPTION_KEY
 
+
 class AWSConnection(Base):
     """
     Represents a user's AWS account connection to Valdrix.
@@ -52,7 +61,7 @@ class AWSConnection(Base):
 
     __tablename__ = "aws_connections"
     __table_args__ = (
-        UniqueConstraint('tenant_id', 'aws_account_id', name='uq_tenant_aws_account'),
+        UniqueConstraint("tenant_id", "aws_account_id", name="uq_tenant_aws_account"),
     )
 
     # Primary key
@@ -75,7 +84,7 @@ class AWSConnection(Base):
     # ENCRYPTED at rest
     role_arn: Mapped[str] = mapped_column(
         StringEncryptedType(String(2048), _encryption_key, AesEngine, "pkcs5"),
-        nullable=False
+        nullable=False,
     )
 
     # external_id: Unique identifier for confused deputy prevention
@@ -84,24 +93,32 @@ class AWSConnection(Base):
     external_id: Mapped[str] = mapped_column(
         StringEncryptedType(String(64), _encryption_key, AesEngine, "pkcs5"),
         nullable=False,
-        default=lambda: f"vx-{secrets.token_hex(16)}"
+        default=lambda: f"vx-{secrets.token_hex(16)}",
     )
 
     # region: Default AWS region for Cost Explorer queries
-    region: Mapped[str] = mapped_column(String(20), nullable=False, default="us-east-1", index=True)
+    region: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="us-east-1", index=True
+    )
 
     # Connection Status
     # pending: User registered but not verified
     # active: Connection verified and working
     # error: Last verification failed
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
-    
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", index=True
+    )
+
     # AWS Organizations Support
-    is_management_account: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_management_account: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
     organization_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # Timestamps for tracking
-    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Error message if status is "error"
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -111,10 +128,12 @@ class AWSConnection(Base):
     cur_status: Mapped[str] = mapped_column(String(20), nullable=False, default="none")
     cur_bucket_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cur_report_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    
+
     # Health Tracking
     # Updated by JobProcessor when costs are successfully ingested
-    last_ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_ingested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # created_at and updated_at inherited from Base
 

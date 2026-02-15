@@ -2,6 +2,7 @@
 Attribution Engine for rule-based cost allocation.
 BE-FIN-ATTR-1: Implements the missing allocation engine identified in the Principal Engineer Review.
 """
+
 from typing import Any, Dict, List, Optional
 from decimal import Decimal
 from datetime import datetime, timezone, date
@@ -52,16 +53,22 @@ class AttributionEngine:
 
         elif normalized_type == "PERCENTAGE":
             if not entries:
-                errors.append("PERCENTAGE allocation requires at least one split entry.")
+                errors.append(
+                    "PERCENTAGE allocation requires at least one split entry."
+                )
             total_percentage = Decimal("0")
             for split in entries:
                 if not split.get("bucket"):
-                    errors.append("Each PERCENTAGE split requires a non-empty 'bucket'.")
+                    errors.append(
+                        "Each PERCENTAGE split requires a non-empty 'bucket'."
+                    )
                 percentage_raw = split.get("percentage")
                 try:
                     percentage = Decimal(str(percentage_raw))
                 except Exception:
-                    errors.append("Each PERCENTAGE split requires numeric 'percentage'.")
+                    errors.append(
+                        "Each PERCENTAGE split requires numeric 'percentage'."
+                    )
                     continue
                 if percentage < 0:
                     errors.append("PERCENTAGE split cannot be negative.")
@@ -94,16 +101,22 @@ class AttributionEngine:
             return [allocation]
         return []
 
-    async def list_rules(self, tenant_id: uuid.UUID, include_inactive: bool = False) -> List[AttributionRule]:
+    async def list_rules(
+        self, tenant_id: uuid.UUID, include_inactive: bool = False
+    ) -> List[AttributionRule]:
         """List tenant attribution rules ordered by priority."""
         query = select(AttributionRule).where(AttributionRule.tenant_id == tenant_id)
         if not include_inactive:
             query = query.where(AttributionRule.is_active)
-        query = query.order_by(AttributionRule.priority.asc(), AttributionRule.name.asc())
+        query = query.order_by(
+            AttributionRule.priority.asc(), AttributionRule.name.asc()
+        )
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def get_rule(self, tenant_id: uuid.UUID, rule_id: uuid.UUID) -> Optional[AttributionRule]:
+    async def get_rule(
+        self, tenant_id: uuid.UUID, rule_id: uuid.UUID
+    ) -> Optional[AttributionRule]:
         """Fetch one attribution rule scoped to tenant."""
         query = (
             select(AttributionRule)
@@ -154,7 +167,14 @@ class AttributionEngine:
         if "rule_type" in updates and isinstance(updates["rule_type"], str):
             updates["rule_type"] = self.normalize_rule_type(updates["rule_type"])
 
-        for field in ("name", "priority", "rule_type", "conditions", "allocation", "is_active"):
+        for field in (
+            "name",
+            "priority",
+            "rule_type",
+            "conditions",
+            "allocation",
+            "is_active",
+        ):
             if field in updates and updates[field] is not None:
                 setattr(rule, field, updates[field])
 
@@ -185,7 +205,9 @@ class AttributionEngine:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    def match_conditions(self, cost_record: CostRecord, conditions: Dict[str, Any]) -> bool:
+    def match_conditions(
+        self, cost_record: CostRecord, conditions: Dict[str, Any]
+    ) -> bool:
         """
         Check if a cost record matches the rule conditions.
         Supports matching on: service, region, account_id, tags.
@@ -211,10 +233,16 @@ class AttributionEngine:
             if isinstance(direct_tags, dict):
                 cost_tags = direct_tags
             else:
-                metadata = cost_record.ingestion_metadata if isinstance(cost_record.ingestion_metadata, dict) else {}
+                metadata = (
+                    cost_record.ingestion_metadata
+                    if isinstance(cost_record.ingestion_metadata, dict)
+                    else {}
+                )
                 raw_tags = metadata.get("tags", {})
                 cost_tags = raw_tags if isinstance(raw_tags, dict) else {}
-            condition_tags = conditions["tags"] if isinstance(conditions["tags"], dict) else {}
+            condition_tags = (
+                conditions["tags"] if isinstance(conditions["tags"], dict) else {}
+            )
             for tag_key, tag_value in condition_tags.items():
                 if cost_tags.get(tag_key) != tag_value:
                     return False
@@ -223,9 +251,7 @@ class AttributionEngine:
         return True
 
     async def apply_rules(
-        self,
-        cost_record: CostRecord,
-        rules: List[AttributionRule]
+        self, cost_record: CostRecord, rules: List[AttributionRule]
     ) -> List[CostAllocation]:
         """
         Apply attribution rules to a cost record and return CostAllocation records.
@@ -241,9 +267,16 @@ class AttributionEngine:
             if rule.rule_type == "DIRECT":
                 # Direct allocation to a single bucket
                 direct_allocation_raw: Any = rule.allocation
-                if isinstance(direct_allocation_raw, list) and len(direct_allocation_raw) > 0:
+                if (
+                    isinstance(direct_allocation_raw, list)
+                    and len(direct_allocation_raw) > 0
+                ):
                     first_entry = direct_allocation_raw[0]
-                    bucket = first_entry.get("bucket", "Unallocated") if isinstance(first_entry, dict) else "Unallocated"
+                    bucket = (
+                        first_entry.get("bucket", "Unallocated")
+                        if isinstance(first_entry, dict)
+                        else "Unallocated"
+                    )
                 elif isinstance(direct_allocation_raw, dict):
                     bucket = direct_allocation_raw.get("bucket", "Unallocated")
                 else:
@@ -256,7 +289,7 @@ class AttributionEngine:
                     allocated_to=bucket,
                     amount=cost_record.cost_usd,
                     percentage=Decimal("100.00"),
-                    timestamp=datetime.now(timezone.utc)
+                    timestamp=datetime.now(timezone.utc),
                 )
                 allocations.append(allocation)
 
@@ -265,7 +298,11 @@ class AttributionEngine:
                 percentage_allocation_raw: Any = rule.allocation
                 percentage_splits: list[dict[str, Any]]
                 if isinstance(percentage_allocation_raw, list):
-                    percentage_splits = [item for item in percentage_allocation_raw if isinstance(item, dict)]
+                    percentage_splits = [
+                        item
+                        for item in percentage_allocation_raw
+                        if isinstance(item, dict)
+                    ]
                 elif isinstance(percentage_allocation_raw, dict):
                     percentage_splits = [percentage_allocation_raw]
                 else:
@@ -285,7 +322,7 @@ class AttributionEngine:
                         allocated_to=bucket,
                         amount=split_amount,
                         percentage=pct,
-                        timestamp=datetime.now(timezone.utc)
+                        timestamp=datetime.now(timezone.utc),
                     )
                     allocations.append(allocation)
 
@@ -294,7 +331,7 @@ class AttributionEngine:
                     logger.warning(
                         "attribution_percentage_mismatch",
                         rule_id=str(rule.id),
-                        total=float(total_percentage)
+                        total=float(total_percentage),
                     )
 
             elif rule.rule_type == "FIXED":
@@ -302,7 +339,9 @@ class AttributionEngine:
                 fixed_allocation_raw: Any = rule.allocation
                 fixed_splits: list[dict[str, Any]]
                 if isinstance(fixed_allocation_raw, list):
-                    fixed_splits = [item for item in fixed_allocation_raw if isinstance(item, dict)]
+                    fixed_splits = [
+                        item for item in fixed_allocation_raw if isinstance(item, dict)
+                    ]
                 elif isinstance(fixed_allocation_raw, dict):
                     fixed_splits = [fixed_allocation_raw]
                 else:
@@ -321,7 +360,7 @@ class AttributionEngine:
                         allocated_to=bucket,
                         amount=fixed_amount,
                         percentage=None,
-                        timestamp=datetime.now(timezone.utc)
+                        timestamp=datetime.now(timezone.utc),
                     )
                     allocations.append(allocation)
 
@@ -335,7 +374,7 @@ class AttributionEngine:
                         allocated_to="Unallocated",
                         amount=remaining,
                         percentage=None,
-                        timestamp=datetime.now(timezone.utc)
+                        timestamp=datetime.now(timezone.utc),
                     )
                     allocations.append(allocation)
 
@@ -352,16 +391,14 @@ class AttributionEngine:
                     allocated_to="Unallocated",
                     amount=cost_record.cost_usd,
                     percentage=Decimal("100.00"),
-                    timestamp=datetime.now(timezone.utc)
+                    timestamp=datetime.now(timezone.utc),
                 )
             )
 
         return allocations
 
     async def process_cost_record(
-        self,
-        cost_record: CostRecord,
-        tenant_id: uuid.UUID
+        self, cost_record: CostRecord, tenant_id: uuid.UUID
     ) -> List[CostAllocation]:
         """
         Full pipeline: Get rules for tenant, apply to cost record, persist allocations.
@@ -378,16 +415,13 @@ class AttributionEngine:
         logger.info(
             "attribution_applied",
             cost_record_id=str(cost_record.id),
-            allocations_count=len(allocations)
+            allocations_count=len(allocations),
         )
 
         return allocations
 
     async def apply_rules_to_tenant(
-        self,
-        tenant_id: uuid.UUID,
-        start_date: date,
-        end_date: date
+        self, tenant_id: uuid.UUID, start_date: date, end_date: date
     ) -> Dict[str, int]:
         """
         Batch apply attribution rules to all cost records for a tenant within a date range.
@@ -404,7 +438,9 @@ class AttributionEngine:
         records = result.scalars().all()
 
         if not records:
-            logger.info("no_cost_records_found_for_attribution", tenant_id=str(tenant_id))
+            logger.info(
+                "no_cost_records_found_for_attribution", tenant_id=str(tenant_id)
+            )
             return {"records_processed": 0, "allocations_created": 0}
 
         # 2. Get active rules
@@ -433,14 +469,17 @@ class AttributionEngine:
             records_processed=len(records),
             allocations_created=allocations_created,
         )
-        return {"records_processed": len(records), "allocations_created": allocations_created}
+        return {
+            "records_processed": len(records),
+            "allocations_created": allocations_created,
+        }
 
     async def get_allocation_summary(
         self,
         tenant_id: uuid.UUID,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        bucket: Optional[str] = None
+        bucket: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Get aggregated allocation summary by bucket for a tenant.
@@ -451,11 +490,13 @@ class AttributionEngine:
             select(
                 CostAllocation.allocated_to,
                 func.sum(CostAllocation.amount).label("total_amount"),
-                func.count(CostAllocation.id).label("record_count")
+                func.count(CostAllocation.id).label("record_count"),
             )
-            .join(CostRecord, 
-                  (CostAllocation.cost_record_id == CostRecord.id) & 
-                  (CostAllocation.recorded_at == CostRecord.recorded_at))
+            .join(
+                CostRecord,
+                (CostAllocation.cost_record_id == CostRecord.id)
+                & (CostAllocation.recorded_at == CostRecord.recorded_at),
+            )
             .where(CostRecord.tenant_id == tenant_id)
             .group_by(CostAllocation.allocated_to)
             .order_by(func.sum(CostAllocation.amount).desc())
@@ -476,54 +517,139 @@ class AttributionEngine:
                 {
                     "name": row.allocated_to,
                     "total_amount": float(row.total_amount),
-                    "record_count": row.record_count
+                    "record_count": row.record_count,
                 }
                 for row in rows
             ],
-            "total": sum(float(row.total_amount) for row in rows)
+            "total": sum(float(row.total_amount) for row in rows),
         }
 
         return summary
 
-    async def get_unallocated_analysis(
+    async def get_allocation_coverage(
         self,
         tenant_id: uuid.UUID,
-        start_date: date,
-        end_date: date
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        target_percentage: float = 90.0,
+    ) -> Dict[str, Any]:
+        """
+        Compute allocation coverage KPI for a tenant and date window.
+
+        Coverage = allocated_cost / total_cost * 100
+        """
+        from sqlalchemy import func
+
+        total_query = select(
+            func.coalesce(func.sum(CostRecord.cost_usd), 0).label("total_cost"),
+            func.count(CostRecord.id).label("total_records"),
+        ).where(CostRecord.tenant_id == tenant_id)
+        if start_date:
+            total_query = total_query.where(CostRecord.recorded_at >= start_date)
+        if end_date:
+            total_query = total_query.where(CostRecord.recorded_at <= end_date)
+
+        total_result = await self.db.execute(total_query)
+        total_row = total_result.one()
+        total_cost = float(total_row.total_cost or 0)
+        total_records = int(total_row.total_records or 0)
+
+        allocated_query = (
+            select(
+                func.coalesce(func.sum(CostAllocation.amount), 0).label(
+                    "allocated_cost"
+                ),
+                func.count(CostAllocation.id).label("allocation_rows"),
+                func.count(func.distinct(CostAllocation.cost_record_id)).label(
+                    "allocated_records"
+                ),
+            )
+            .join(
+                CostRecord,
+                (CostAllocation.cost_record_id == CostRecord.id)
+                & (CostAllocation.recorded_at == CostRecord.recorded_at),
+            )
+            .where(CostRecord.tenant_id == tenant_id)
+        )
+        if start_date:
+            allocated_query = allocated_query.where(
+                CostRecord.recorded_at >= start_date
+            )
+        if end_date:
+            allocated_query = allocated_query.where(CostRecord.recorded_at <= end_date)
+
+        allocated_result = await self.db.execute(allocated_query)
+        allocated_row = allocated_result.one()
+        raw_allocated_cost = float(allocated_row.allocated_cost or 0)
+        allocated_cost = min(raw_allocated_cost, total_cost) if total_cost > 0 else 0.0
+        over_allocated_cost = max(raw_allocated_cost - total_cost, 0.0)
+        coverage_percentage = (
+            (allocated_cost / total_cost * 100.0) if total_cost > 0 else 0.0
+        )
+
+        return {
+            "target_percentage": target_percentage,
+            "coverage_percentage": round(coverage_percentage, 2),
+            "meets_target": coverage_percentage >= target_percentage
+            if total_cost > 0
+            else False,
+            "status": (
+                "no_data"
+                if total_cost <= 0
+                else ("ok" if coverage_percentage >= target_percentage else "warning")
+            ),
+            "total_cost": round(total_cost, 6),
+            "allocated_cost": round(allocated_cost, 6),
+            "unallocated_cost": round(max(total_cost - allocated_cost, 0.0), 6),
+            "over_allocated_cost": round(over_allocated_cost, 6),
+            "total_records": total_records,
+            "allocated_records": int(allocated_row.allocated_records or 0),
+            "allocation_rows": int(allocated_row.allocation_rows or 0),
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+        }
+
+    async def get_unallocated_analysis(
+        self, tenant_id: uuid.UUID, start_date: date, end_date: date
     ) -> List[Dict[str, Any]]:
         """
         Identify top services contributing to unallocated spend.
         Provides recommendations for attribution rules.
         """
         from sqlalchemy import func
-        
+
         query = (
             select(
                 CostRecord.service,
                 func.sum(CostRecord.cost_usd).label("total_unallocated"),
-                func.count(CostRecord.id).label("record_count")
+                func.count(CostRecord.id).label("record_count"),
             )
             .where(CostRecord.tenant_id == tenant_id)
             .where(CostRecord.recorded_at >= start_date)
             .where(CostRecord.recorded_at <= end_date)
-            .where((CostRecord.allocated_to.is_(None)) | (CostRecord.allocated_to == "Unallocated"))
+            .where(
+                (CostRecord.allocated_to.is_(None))
+                | (CostRecord.allocated_to == "Unallocated")
+            )
             .group_by(CostRecord.service)
             .order_by(func.sum(CostRecord.cost_usd).desc())
             .limit(5)
         )
-        
+
         result = await self.db.execute(query)
         rows = result.all()
-        
+
         analysis = []
         for row in rows:
-            analysis.append({
-                "service": row.service,
-                "amount": float(row.total_unallocated),
-                "count": row.record_count,
-                "recommendation": f"Create a DIRECT rule for service '{row.service}' to a specific team bucket."
-            })
-            
+            analysis.append(
+                {
+                    "service": row.service,
+                    "amount": float(row.total_unallocated),
+                    "count": row.record_count,
+                    "recommendation": f"Create a DIRECT rule for service '{row.service}' to a specific team bucket.",
+                }
+            )
+
         return analysis
 
     async def simulate_rule(
@@ -571,10 +697,13 @@ class AttributionEngine:
             matched_cost += record.cost_usd
             allocations = await self.apply_rules(record, [simulated_rule])
             for alloc in allocations:
-                projected_by_bucket[alloc.allocated_to] = projected_by_bucket.get(
-                    alloc.allocated_to,
-                    Decimal("0"),
-                ) + alloc.amount
+                projected_by_bucket[alloc.allocated_to] = (
+                    projected_by_bucket.get(
+                        alloc.allocated_to,
+                        Decimal("0"),
+                    )
+                    + alloc.amount
+                )
 
         allocation_rows = [
             {"bucket": bucket, "amount": float(amount)}
@@ -586,7 +715,9 @@ class AttributionEngine:
         ]
 
         sampled_records = len(records)
-        match_rate = round((matched_records / sampled_records), 4) if sampled_records else 0.0
+        match_rate = (
+            round((matched_records / sampled_records), 4) if sampled_records else 0.0
+        )
         projected_total = float(sum(projected_by_bucket.values(), Decimal("0")))
 
         return {

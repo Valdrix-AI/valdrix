@@ -2,6 +2,7 @@
 Production-quality tests for CUR Usage Analyzer.
 Tests cover security, performance, edge cases, and real-world scenarios.
 """
+
 from app.shared.analysis.cur_usage_analyzer import CURUsageAnalyzer
 
 
@@ -17,7 +18,7 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_amount": "168.0",
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "1.68",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             }
         ]
 
@@ -40,7 +41,7 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_amount": "24.0",  # Only 1 day out of 7
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "0.24",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             }
         ]
 
@@ -67,7 +68,7 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_amount": "120.0",  # 5 days out of 7 = 85% usage
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "1.20",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             }
         ]
 
@@ -86,7 +87,7 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_amount": "20.0",
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "0.20",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             },
             # Active instance (normal usage)
             {
@@ -95,7 +96,7 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_amount": "140.0",
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "2.10",
-                "product_instance_type": "t3.small"
+                "product_instance_type": "t3.small",
             },
             # Another idle instance
             {
@@ -104,8 +105,8 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_amount": "10.0",
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "0.40",
-                "product_instance_type": "t3.large"
-            }
+                "product_instance_type": "t3.large",
+            },
         ]
 
         analyzer = CURUsageAnalyzer(cur_records)
@@ -123,7 +124,7 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_type": "EBS:VolumeUsage.gp3",
                 "line_item_usage_amount": "20.0",  # 20 GB
                 "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "2.00"
+                "line_item_unblended_cost": "2.00",
             }
             # No EBS:VolumeIOUsage records = zero I/O operations
         ]
@@ -148,15 +149,15 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_type": "EBS:VolumeUsage.gp3",
                 "line_item_usage_amount": "50.0",
                 "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "5.00"
+                "line_item_unblended_cost": "5.00",
             },
             {
                 "line_item_resource_id": "vol-1234567890abcdef0",
                 "line_item_usage_type": "EBS:VolumeIOUsage.gp3",
                 "line_item_usage_amount": "1000.0",  # I/O operations
                 "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "0.10"
-            }
+                "line_item_unblended_cost": "0.10",
+            },
         ]
 
         analyzer = CURUsageAnalyzer(cur_records)
@@ -174,7 +175,7 @@ class TestCURUsageAnalyzer:
                 "line_item_product_code": "AmazonRDS",
                 "line_item_unblended_cost": "2.88",
                 "product_instance_type": "db.t3.micro",
-                "product_database_engine": "mysql"
+                "product_database_engine": "mysql",
             }
         ]
 
@@ -201,7 +202,7 @@ class TestCURUsageAnalyzer:
                 "line_item_product_code": "AmazonRDS",
                 "line_item_unblended_cost": "18.00",
                 "product_instance_type": "db.t3.small",
-                "product_database_engine": "postgres"
+                "product_database_engine": "postgres",
             }
         ]
 
@@ -219,7 +220,7 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_amount": "12.0",  # 12 hours out of 168 = 7% usage
                 "line_item_product_code": "AmazonRedshift",
                 "line_item_unblended_cost": "6.72",
-                "product_instance_type": "dc2.large"
+                "product_instance_type": "dc2.large",
             }
         ]
 
@@ -243,15 +244,15 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_type": "NatGateway-Hours",
                 "line_item_usage_amount": "168.0",  # Full week
                 "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "16.80"
+                "line_item_unblended_cost": "16.80",
             },
             {
                 "line_item_resource_id": "nat-12345",
                 "line_item_usage_type": "NatGateway-Bytes",
                 "line_item_usage_amount": "0.5",  # 0.5 GB processed
                 "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "0.05"
-            }
+                "line_item_unblended_cost": "0.05",
+            },
         ]
 
         analyzer = CURUsageAnalyzer(cur_records)
@@ -274,7 +275,7 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_amount": "8.0",  # 8 hours out of 168 = 4.8% usage
                 "line_item_product_code": "AmazonSageMaker",
                 "line_item_unblended_cost": "0.80",
-                "product_instance_type": "ml.t2.medium"
+                "product_instance_type": "ml.t2.medium",
             }
         ]
 
@@ -300,7 +301,7 @@ class TestCURUsageAnalyzer:
                 "line_item_product_code": "AmazonElastiCache",
                 "line_item_unblended_cost": "0.32",
                 "product_instance_type": "cache.t3.micro",
-                "product_cache_engine": "redis"
+                "product_cache_engine": "redis",
             }
         ]
 
@@ -325,7 +326,7 @@ class TestCURUsageAnalyzer:
                 "line_item_usage_type": "EKS Cluster",
                 "line_item_usage_amount": "168.0",
                 "line_item_product_code": "AmazonEKS",
-                "line_item_unblended_cost": "67.20"  # > $50 threshold
+                "line_item_unblended_cost": "67.20",  # > $50 threshold
             }
         ]
 
@@ -353,15 +354,15 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_type": "BoxUsage:t3.micro",
                 "line_item_usage_amount": "168.0",
                 "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "1.68"
+                "line_item_unblended_cost": "1.68",
             },
             {
                 "line_item_resource_id": "../../../etc/passwd",
                 "line_item_usage_type": "BoxUsage:t3.micro",
                 "line_item_usage_amount": "0.0",
                 "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "0.00"
-            }
+                "line_item_unblended_cost": "0.00",
+            },
         ]
 
         analyzer = CURUsageAnalyzer(malicious_records)
@@ -381,14 +382,16 @@ class TestCURUsageAnalyzerProductionQuality:
         # Create large dataset (2000 records)
         cur_records = []
         for i in range(1000):  # 1000 instances
-            cur_records.append({
-                "line_item_resource_id": f"i-{i:04d}",
-                "line_item_usage_type": "BoxUsage:t3.micro",
-                "line_item_usage_amount": "1.0",  # Very low usage
-                "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "0.01",
-                "product_instance_type": "t3.micro"
-            })
+            cur_records.append(
+                {
+                    "line_item_resource_id": f"i-{i:04d}",
+                    "line_item_usage_type": "BoxUsage:t3.micro",
+                    "line_item_usage_amount": "1.0",  # Very low usage
+                    "line_item_product_code": "AmazonEC2",
+                    "line_item_unblended_cost": "0.01",
+                    "product_instance_type": "t3.micro",
+                }
+            )
 
         start_time = time.time()
         analyzer = CURUsageAnalyzer(cur_records)
@@ -396,7 +399,9 @@ class TestCURUsageAnalyzerProductionQuality:
         end_time = time.time()
 
         # Should complete within reasonable time
-        assert end_time - start_time < 3.0, f"Analysis too slow: {end_time - start_time:.3f}s"
+        assert end_time - start_time < 3.0, (
+            f"Analysis too slow: {end_time - start_time:.3f}s"
+        )
         assert len(idle_instances) == 1000  # All instances should be flagged as idle
 
     def test_cost_calculation_precision(self):
@@ -408,7 +413,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "24.0",
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "1.123456789",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             }
         ]
 
@@ -432,7 +437,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "24.0",
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "1.68",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             },
             # RDS database
             {
@@ -441,7 +446,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "24.0",
                 "line_item_product_code": "AmazonRDS",
                 "line_item_unblended_cost": "20.16",
-                "product_instance_type": "db.t3.micro"
+                "product_instance_type": "db.t3.micro",
             },
             # Non-matching product
             {
@@ -449,8 +454,8 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_type": "SomeUsage",
                 "line_item_usage_amount": "100.0",
                 "line_item_product_code": "AmazonS3",  # Not in our analysis
-                "line_item_unblended_cost": "5.00"
-            }
+                "line_item_unblended_cost": "5.00",
+            },
         ]
 
         analyzer = CURUsageAnalyzer(cur_records)
@@ -471,7 +476,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": None,  # Missing usage
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "invalid",  # Invalid cost
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             },
             {
                 "line_item_resource_id": "i-67890",
@@ -479,8 +484,8 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "",  # Empty usage
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "",  # Empty cost
-                "product_instance_type": "t3.micro"
-            }
+                "product_instance_type": "t3.micro",
+            },
         ]
 
         analyzer = CURUsageAnalyzer(cur_records)
@@ -519,7 +524,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "0.0",  # Zero usage
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "0.00",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             },
             {
                 "line_item_resource_id": "i-negative",
@@ -527,8 +532,8 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "-10.0",  # Negative usage (invalid)
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "-1.00",  # Negative cost (invalid)
-                "product_instance_type": "t3.micro"
-            }
+                "product_instance_type": "t3.micro",
+            },
         ]
 
         analyzer = CURUsageAnalyzer(cur_records)
@@ -546,7 +551,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "6.0",
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "1.00",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             }
         ]
 
@@ -576,7 +581,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "10.0",
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "0.10",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             }
         ]
 
@@ -622,7 +627,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "140.0",  # ~83% usage (140/168)
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "23.52",
-                "product_instance_type": "t3.medium"
+                "product_instance_type": "t3.medium",
             },
             # Idle EC2 instance (staging)
             {
@@ -631,7 +636,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "24.0",  # ~14% usage (24/168)
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "12.00",
-                "product_instance_type": "t3.large"
+                "product_instance_type": "t3.large",
             },
             # Active RDS database
             {
@@ -641,7 +646,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_product_code": "AmazonRDS",
                 "line_item_unblended_cost": "50.40",
                 "product_instance_type": "db.t3.small",
-                "product_database_engine": "postgres"
+                "product_database_engine": "postgres",
             },
             # Idle RDS database
             {
@@ -651,7 +656,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_product_code": "AmazonRDS",
                 "line_item_unblended_cost": "2.02",
                 "product_instance_type": "db.t3.micro",
-                "product_database_engine": "mysql"
+                "product_database_engine": "mysql",
             },
             # Unused EBS volume
             {
@@ -659,8 +664,8 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_type": "EBS:VolumeUsage.gp3",
                 "line_item_usage_amount": "100.0",  # 100GB
                 "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "10.00"
-            }
+                "line_item_unblended_cost": "10.00",
+            },
         ]
 
         analyzer = CURUsageAnalyzer(cur_records)
@@ -690,7 +695,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "24.0",
                 "line_item_product_code": "AmazonEC2",
                 "line_item_unblended_cost": "1.68",
-                "product_instance_type": "t3.micro"
+                "product_instance_type": "t3.micro",
             },
             {
                 "line_item_resource_id": "db-rds",
@@ -698,7 +703,7 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "24.0",
                 "line_item_product_code": "AmazonRDS",
                 "line_item_unblended_cost": "20.16",
-                "product_instance_type": "db.t3.micro"
+                "product_instance_type": "db.t3.micro",
             },
             {
                 "line_item_resource_id": "cluster-redshift",
@@ -706,8 +711,8 @@ class TestCURUsageAnalyzerProductionQuality:
                 "line_item_usage_amount": "12.0",
                 "line_item_product_code": "AmazonRedshift",
                 "line_item_unblended_cost": "94.08",
-                "product_instance_type": "dc2.large"
-            }
+                "product_instance_type": "dc2.large",
+            },
         ]
 
         analyzer = CURUsageAnalyzer(cur_records)
@@ -738,24 +743,28 @@ class TestCURUsageAnalyzerProductionQuality:
         # Create very large dataset (5000 records across multiple services)
         cur_records = []
         for i in range(2000):  # 2000 EC2 instances
-            cur_records.append({
-                "line_item_resource_id": f"i-{i:04d}",
-                "line_item_usage_type": "BoxUsage:t3.micro",
-                "line_item_usage_amount": "1.0",
-                "line_item_product_code": "AmazonEC2",
-                "line_item_unblended_cost": "0.01",
-                "product_instance_type": "t3.micro"
-            })
+            cur_records.append(
+                {
+                    "line_item_resource_id": f"i-{i:04d}",
+                    "line_item_usage_type": "BoxUsage:t3.micro",
+                    "line_item_usage_amount": "1.0",
+                    "line_item_product_code": "AmazonEC2",
+                    "line_item_unblended_cost": "0.01",
+                    "product_instance_type": "t3.micro",
+                }
+            )
 
         for i in range(1000):  # 1000 RDS databases
-            cur_records.append({
-                "line_item_resource_id": f"db-{i:04d}",
-                "line_item_usage_type": "InstanceUsage:db.t3.micro",
-                "line_item_usage_amount": "1.0",
-                "line_item_product_code": "AmazonRDS",
-                "line_item_unblended_cost": "0.12",
-                "product_instance_type": "db.t3.micro"
-            })
+            cur_records.append(
+                {
+                    "line_item_resource_id": f"db-{i:04d}",
+                    "line_item_usage_type": "InstanceUsage:db.t3.micro",
+                    "line_item_usage_amount": "1.0",
+                    "line_item_product_code": "AmazonRDS",
+                    "line_item_unblended_cost": "0.12",
+                    "product_instance_type": "db.t3.micro",
+                }
+            )
 
         analyzer = CURUsageAnalyzer(cur_records)
 

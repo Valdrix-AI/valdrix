@@ -59,7 +59,9 @@ class EmailService:
             server.login(self.smtp_user, self.smtp_password)
             server.sendmail(self.from_email, recipients, message.as_string())
 
-    async def _send_message(self, message: MIMEMultipart, recipients: List[str]) -> None:
+    async def _send_message(
+        self, message: MIMEMultipart, recipients: List[str]
+    ) -> None:
         await anyio.to_thread.run_sync(self._send_message_sync, message, recipients)
 
     async def send_carbon_alert(
@@ -115,7 +117,9 @@ class EmailService:
 
         recommendations = budget_status.get("recommendations", [])
         # BE-NOTIF-1: Escape user-provided content
-        recs_html = "".join(f"<li>{escape_html(rec)}</li>" for rec in recommendations[:3])
+        recs_html = "".join(
+            f"<li>{escape_html(rec)}</li>" for rec in recommendations[:3]
+        )
 
         return f"""
 <!DOCTYPE html>
@@ -142,11 +146,11 @@ class EmailService:
 
             <div class="metric">
                 <h3>Monthly Carbon Usage</h3>
-                <p><strong>{budget_status.get('current_usage_kg', 0):.2f} kg</strong> of {budget_status.get('budget_kg', 100):.0f} kg budget</p>
+                <p><strong>{budget_status.get("current_usage_kg", 0):.2f} kg</strong> of {budget_status.get("budget_kg", 100):.0f} kg budget</p>
                 <div class="progress">
-                    <div class="progress-bar" style="width: {min(budget_status.get('usage_percent', 0), 100)}%"></div>
+                    <div class="progress-bar" style="width: {min(budget_status.get("usage_percent", 0), 100)}%"></div>
                 </div>
-                <p>{budget_status.get('usage_percent', 0):.1f}% used</p>
+                <p>{budget_status.get("usage_percent", 0):.1f}% used</p>
             </div>
 
             <div class="metric">
@@ -175,10 +179,10 @@ class EmailService:
         """
         Send payment failed notification for dunning workflow.
         """
-        
+
         try:
             subject = f"⚠️ Valdrix: Payment Failed ({attempt}/{max_attempts})"
-            
+
             html_body = f"""
 <!DOCTYPE html>
 <html>
@@ -202,7 +206,7 @@ class EmailService:
             
             <p class="warning">Attempt {attempt} of {max_attempts}</p>
             
-            <p>We will automatically retry your payment on <strong>{next_retry_date.strftime('%B %d, %Y')}</strong>.</p>
+            <p>We will automatically retry your payment on <strong>{next_retry_date.strftime("%B %d, %Y")}</strong>.</p>
             
             <p>To avoid service interruption, please ensure your payment method is updated:</p>
             
@@ -239,7 +243,7 @@ class EmailService:
         """Send payment recovered confirmation."""
         try:
             subject = "✅ Valdrix: Payment Successful - Account Reactivated"
-            
+
             html_body = """
 <!DOCTYPE html>
 <html>
@@ -292,7 +296,7 @@ class EmailService:
         """Send account downgraded notice."""
         try:
             subject = "🔻 Valdrix: Account Downgraded to Free Tier"
-            
+
             html_body = """
 <!DOCTYPE html>
 <html>

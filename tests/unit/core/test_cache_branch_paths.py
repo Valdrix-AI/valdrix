@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -54,8 +54,9 @@ async def test_query_cache_set_cached_result_noop_when_disabled() -> None:
 
 
 def test_get_async_client_returns_none_without_config() -> None:
-    with patch("app.shared.core.cache.get_settings") as get_settings, patch(
-        "app.shared.core.cache._async_client", new=None
+    with (
+        patch("app.shared.core.cache.get_settings") as get_settings,
+        patch("app.shared.core.cache._async_client", new=None),
     ):
         get_settings.return_value.UPSTASH_REDIS_URL = None
         get_settings.return_value.UPSTASH_REDIS_TOKEN = None
@@ -63,9 +64,11 @@ def test_get_async_client_returns_none_without_config() -> None:
 
 
 def test_get_async_client_singleton_creation() -> None:
-    with patch("app.shared.core.cache.get_settings") as get_settings, patch(
-        "app.shared.core.cache._async_client", new=None
-    ), patch("app.shared.core.cache.AsyncRedis") as async_redis_cls:
+    with (
+        patch("app.shared.core.cache.get_settings") as get_settings,
+        patch("app.shared.core.cache._async_client", new=None),
+        patch("app.shared.core.cache.AsyncRedis") as async_redis_cls,
+    ):
         get_settings.return_value.UPSTASH_REDIS_URL = "redis://example"
         get_settings.return_value.UPSTASH_REDIS_TOKEN = "token"
         c1 = _get_async_client()

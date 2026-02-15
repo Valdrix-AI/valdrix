@@ -15,7 +15,17 @@ from uuid import uuid4, UUID
 from datetime import datetime
 from typing import TYPE_CHECKING
 from decimal import Decimal
-from sqlalchemy import String, Integer, Numeric, ForeignKey, Boolean, DateTime, func, Uuid as PG_UUID
+from sqlalchemy import (
+    String,
+    Integer,
+    Numeric,
+    ForeignKey,
+    Boolean,
+    DateTime,
+    func,
+    Uuid as PG_UUID,
+)
+
 # from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.hybrid import hybrid_property
@@ -75,19 +85,18 @@ class LLMUsage(Base):
 
     # Request Type: What was this LLM call for?
     request_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    
+
     # Trace ID for debugging/auditing
-    operation_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    operation_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
 
     # is_byok: True if the user's personal API key was used
     is_byok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Timestamp when this usage record was created
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        index=True
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
     )
 
     # Relationship: Access the tenant object
@@ -96,7 +105,6 @@ class LLMUsage(Base):
     def __repr__(self) -> str:
         """String representation for debugging."""
         return f"<LLMUsage {self.model} ${self.cost_usd:.6f}>"
-
 
 
 class LLMBudget(Base):
@@ -125,23 +133,39 @@ class LLMBudget(Base):
     )
 
     # Monthly limit in USD (e.g., $10.00)
-    monthly_limit_usd: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=10.00)
+    monthly_limit_usd: Mapped[float] = mapped_column(
+        Numeric(10, 2), nullable=False, default=10.00
+    )
 
     # Alert threshold percentage (e.g., 80 = alert at 80% usage)
-    alert_threshold_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=80)
+    alert_threshold_percent: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=80
+    )
 
     # Hard limit: If True, block LLM requests when budget exceeded
     hard_limit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # AI Strategy: Per-tenant model and provider selection
-    preferred_provider: Mapped[str] = mapped_column(String(50), nullable=False, default="groq")
-    preferred_model: Mapped[str] = mapped_column(String(100), nullable=False, default="llama-3.3-70b-versatile")
+    preferred_provider: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="groq"
+    )
+    preferred_model: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="llama-3.3-70b-versatile"
+    )
 
     # Underlying columns for API Key Overrides (storing encrypted data)
-    _openai_api_key: Mapped[str | None] = mapped_column("openai_api_key", String(512), nullable=True)
-    _claude_api_key: Mapped[str | None] = mapped_column("claude_api_key", String(512), nullable=True)
-    _google_api_key: Mapped[str | None] = mapped_column("google_api_key", String(512), nullable=True)
-    _groq_api_key: Mapped[str | None] = mapped_column("groq_api_key", String(512), nullable=True)
+    _openai_api_key: Mapped[str | None] = mapped_column(
+        "openai_api_key", String(512), nullable=True
+    )
+    _claude_api_key: Mapped[str | None] = mapped_column(
+        "claude_api_key", String(512), nullable=True
+    )
+    _google_api_key: Mapped[str | None] = mapped_column(
+        "google_api_key", String(512), nullable=True
+    )
+    _groq_api_key: Mapped[str | None] = mapped_column(
+        "groq_api_key", String(512), nullable=True
+    )
 
     # Hybrid properties for transparent encryption/decryption
     @hybrid_property
@@ -177,7 +201,9 @@ class LLMBudget(Base):
         self._groq_api_key = encrypt_string(value) if value else None
 
     # Track when alert was sent (avoid spam)
-    alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    alert_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationship
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="llm_budget")

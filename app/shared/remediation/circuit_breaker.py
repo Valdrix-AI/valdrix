@@ -13,13 +13,16 @@ from app.shared.core.config import get_settings
 logger = structlog.get_logger()
 settings = get_settings()
 
+
 class CircuitState(str, Enum):
     CLOSED = "closed"
     OPEN = "open"
     HALF_OPEN = "half_open"
 
+
 # Alias for backward compatibility
 CircuitBreakerStateEnum = CircuitState
+
 
 @dataclass
 class CircuitBreakerConfig:
@@ -33,11 +36,13 @@ class CircuitBreakerConfig:
         return cls(
             failure_threshold=s.CIRCUIT_BREAKER_FAILURE_THRESHOLD,
             recovery_timeout_seconds=s.CIRCUIT_BREAKER_RECOVERY_SECONDS,
-            max_daily_savings_usd=s.CIRCUIT_BREAKER_MAX_DAILY_SAVINGS
+            max_daily_savings_usd=s.CIRCUIT_BREAKER_MAX_DAILY_SAVINGS,
         )
 
+
 class CircuitBreakerState:
-    """ Handles state persistence for Circuit Breaker, with Redis fallback to Memory. """
+    """Handles state persistence for Circuit Breaker, with Redis fallback to Memory."""
+
     def __init__(self, tenant_id: str, redis_client: Any = None) -> None:
         self.tenant_id = tenant_id
         self.redis = redis_client
@@ -65,7 +70,7 @@ class CircuitBreakerState:
     async def incr(self, key: str) -> int:
         if self.redis:
             return cast(int, await self.redis.incr(self.prefix + key))
-        
+
         current = cast(int, self._memory_state.get(key, 0))
         new_val = current + 1
         self._memory_state[key] = new_val
@@ -77,11 +82,13 @@ class CircuitBreakerState:
         else:
             self._memory_state.pop(key, None)
 
+
 class CircuitBreaker:
     """
     Advanced Circuit Breaker with tenant isolation and optional Redis persistence.
     Protects remediation actions from cascading failures.
     """
+
     def __init__(
         self,
         tenant_id: str,
@@ -106,26 +113,31 @@ class CircuitBreaker:
 
     async def can_execute(self, estimated_savings: float = 0.0) -> bool:
         state = await self.get_state()
-        
+
         if state == CircuitState.OPEN.value or state == CircuitState.OPEN:
             last_fail = await self.state.get("last_failure_at")
-            if last_fail and (time.time() - last_fail) > self.config.recovery_timeout_seconds:
+            if (
+                last_fail
+                and (time.time() - last_fail) > self.config.recovery_timeout_seconds
+            ):
                 # Transition to HALF_OPEN
                 await self.state.set("state", CircuitState.HALF_OPEN.value)
                 logger.info("circuit_breaker_half_open", tenant_id=self.tenant_id)
                 return True
             return False
-            
+
         # Check daily budget
         await self._reset_daily_budget_if_needed()
         daily_savings = await self.state.get("daily_savings_usd", 0.0)
         if (daily_savings + estimated_savings) > self.config.max_daily_savings_usd:
-            logger.warning("circuit_breaker_budget_exceeded", 
-                          tenant_id=self.tenant_id, 
-                          current=daily_savings, 
-                          limit=self.config.max_daily_savings_usd)
+            logger.warning(
+                "circuit_breaker_budget_exceeded",
+                tenant_id=self.tenant_id,
+                current=daily_savings,
+                limit=self.config.max_daily_savings_usd,
+            )
             return False
-            
+
         return True
 
     async def record_success(self, savings: float = 0.0) -> None:
@@ -133,10 +145,10 @@ class CircuitBreaker:
         if state == CircuitState.HALF_OPEN:
             await self.reset()
             logger.info("circuit_breaker_recovered", tenant_id=self.tenant_id)
-        
+
         # Reset failure count
         await self.state.set("failure_count", 0)
-        
+
         # Track savings (daily budget)
         await self._reset_daily_budget_if_needed()
         current_savings = await self.state.get("daily_savings_usd", 0.0)
@@ -146,16 +158,18 @@ class CircuitBreaker:
         count = await self.state.incr("failure_count")
         await self.state.set("last_failure_at", time.time())
         await self.state.set("last_error", error)
-        
+
         if count >= self.config.failure_threshold:
             await self.state.set("state", CircuitState.OPEN.value)
-            logger.error("circuit_breaker_opened", 
-                         tenant_id=self.tenant_id, 
-                         failure_count=count, 
-                         error=error)
+            logger.error(
+                "circuit_breaker_opened",
+                tenant_id=self.tenant_id,
+                failure_count=count,
+                error=error,
+            )
 
     async def reset(self) -> None:
-        """ Manually reset the circuit breaker. """
+        """Manually reset the circuit breaker."""
         await self.state.set("state", CircuitState.CLOSED.value)
         await self.state.set("failure_count", 0)
         await self.state.delete("last_failure_at")
@@ -168,15 +182,17 @@ class CircuitBreaker:
             "failure_count": await self.state.get("failure_count", 0),
             "daily_savings_usd": await self.state.get("daily_savings_usd", 0.0),
             "can_execute": await self.can_execute(),
-            "last_error": await self.state.get("last_error")
+            "last_error": await self.state.get("last_error"),
         }
+
 
 # Multi-tenant cache
 _tenant_breakers: "OrderedDict[str, CircuitBreaker]" = OrderedDict()
 _tenant_breakers_lock = asyncio.Lock()
 
+
 async def get_circuit_breaker(tenant_id: str) -> CircuitBreaker:
-    """ Get or create a circuit breaker for a tenant. """
+    """Get or create a circuit breaker for a tenant."""
     async with _tenant_breakers_lock:
         if tenant_id in _tenant_breakers:
             _tenant_breakers.move_to_end(tenant_id)

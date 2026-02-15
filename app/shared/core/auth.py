@@ -9,15 +9,17 @@ from pydantic import BaseModel
 import structlog
 from app.shared.core.config import get_settings
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
 from app.shared.db.session import get_db, set_session_tenant_id
-from app.models.tenant import User, UserRole, Tenant
+from app.models.tenant import User, UserRole, UserPersona, Tenant
 from app.shared.core.pricing import PricingTier, normalize_tier
 
 logger = structlog.get_logger()
 
 security = HTTPBearer(auto_error=False)
+
 
 def _hash_email(email: str | None) -> str | None:
     if not email:
@@ -25,7 +27,10 @@ def _hash_email(email: str | None) -> str | None:
     normalized = email.strip().lower()
     return hashlib.sha256(normalized.encode()).hexdigest()[:12]
 
-def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+
+def create_access_token(
+    data: dict[str, Any], expires_delta: Optional[timedelta] = None
+) -> str:
     """
     Generate a new JWT token signed with the application secret.
     """
@@ -34,16 +39,16 @@ def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta]
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=60) # Default 1 hour
-    
+        expire = datetime.now(timezone.utc) + timedelta(minutes=60)  # Default 1 hour
+
     # Ensure standard claims
     if "aud" not in to_encode:
         to_encode["aud"] = "authenticated"
     if "iss" not in to_encode:
         to_encode["iss"] = "supabase"
-        
+
     to_encode.update({"exp": expire})
-    
+
     encoded_jwt = jwt.encode(to_encode, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
     return encoded_jwt
 
@@ -52,11 +57,13 @@ class CurrentUser(BaseModel):
     """
     Represents the authenticated user from the JWT.
     """
+
     id: UUID
     email: str
     tenant_id: Optional[UUID] = None
     role: UserRole = UserRole.MEMBER
     tier: PricingTier = PricingTier.FREE_TRIAL
+    persona: UserPersona = UserPersona.ENGINEERING
 
 
 def decode_jwt(token: str) -> dict[str, Any]:
@@ -101,8 +108,10 @@ def decode_jwt(token: str) -> dict[str, Any]:
             detail="Invalid token",
         )
 
+
 async def get_current_user_from_jwt(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> CurrentUser:
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> CurrentUser:
     """
     JWT-only auth. No DB lookup. For onboarding."""
     if credentials is None:
@@ -125,10 +134,11 @@ async def get_current_user_from_jwt(
     logger.info("user_authenticated", user_id=user_id, email_hash=_hash_email(email))
     return CurrentUser(id=UUID(user_id), email=email)
 
+
 async def get_current_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security), 
-    db: AsyncSession = Depends(get_db)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
     """
     JWT + DB lookup. For protected routes
@@ -142,71 +152,183 @@ async def get_current_user(
 
     payload = decode_jwt(credentials.credentials)
     user_id = payload.get("sub")
+    email = payload.get("email")
 
-    if not user_id:
+    if not user_id or not email:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
 
     try:
-        # Fetch user and tenant from DB
-        result = await db.execute(
-            select(User, Tenant.plan)
-            .join(Tenant, User.tenant_id == Tenant.id)
-            .where(User.id == UUID(user_id))
-        )
-        row = result.one_or_none()
+        # Fetch a minimal auth row for the user. Do NOT load the full User ORM entity here:
+        # - It couples auth to every newly added column (schema drift during deploy/migration windows).
+        # - It forces decryption work (email) even though the JWT already includes the email claim.
+        user_uuid = UUID(user_id)
+
+        def _looks_like_schema_mismatch(exc: Exception) -> bool:
+            msg = str(exc).lower()
+            # asyncpg / psycopg both include "does not exist" for missing columns/tables/types.
+            return "does not exist" in msg and any(
+                token in msg for token in ("column", "relation", "type")
+            )
+
+        async def _fetch_auth_row(include_optional: bool) -> Any:
+            cols: list[Any] = [User.id, User.tenant_id, User.role]
+            if include_optional:
+                # These columns may not exist yet if a deploy happened before migrations ran.
+                cols.extend([User.persona, User.is_active])
+            cols.append(Tenant.plan)
+            stmt = (
+                select(*cols)
+                .join(Tenant, User.tenant_id == Tenant.id)
+                .where(User.id == user_uuid)
+            )
+            return (await db.execute(stmt)).one_or_none()
+
+        try:
+            # We use a nested transaction (savepoint) for the first probe.
+            # If it fails due to a schema mismatch, SQLAlchemy/asyncpg will abort
+            # only the nested transaction, leaving the main session healthy for the retry.
+            async with db.begin_nested():
+                row = await _fetch_auth_row(include_optional=True)
+            has_optional_cols = True
+        except (DBAPIError, Exception) as exc:
+            if _looks_like_schema_mismatch(exc):
+                logger.warning(
+                    "auth_schema_mismatch_optional_cols_retrying", error=str(exc)
+                )
+                row = await _fetch_auth_row(include_optional=False)
+                has_optional_cols = False
+            else:
+                raise
 
         # Handle not found
         if row is None:
             logger.error("auth_user_not_found_in_db", user_id=user_id)
             raise HTTPException(403, "User not found. Complete Onboarding first.")
 
-        user, plan = row
+        # Row shape depends on whether optional columns were selected.
+        # With optional cols: (id, tenant_id, role, persona, is_active, plan)
+        # Without optional cols: (id, tenant_id, role, plan)
+        if has_optional_cols:
+            _uid, tenant_id, role_value, persona_value, is_active_value, plan = row
+        else:
+            _uid, tenant_id, role_value, plan = row
+            persona_value = None
+            is_active_value = None
+
         tier = normalize_tier(plan)
+        persona_value = persona_value or UserPersona.ENGINEERING.value
+        try:
+            persona = UserPersona(persona_value)
+        except Exception:
+            logger.warning(
+                "auth_invalid_user_persona",
+                user_id=str(user_uuid),
+                persona=persona_value,
+            )
+            persona = UserPersona.ENGINEERING
+
+        # SCIM deprovisioning / user disable safety.
+        if is_active_value is not None and not bool(is_active_value):
+            logger.warning("auth_user_disabled", user_id=str(user_uuid))
+            raise HTTPException(status_code=403, detail="User account is disabled.")
 
         # Store in request state for downstream rate limiting and RLS
-        request.state.tenant_id = user.tenant_id
-        request.state.user_id = user.id
+        request.state.tenant_id = tenant_id
+        request.state.user_id = user_uuid
         request.state.tier = tier  # BE-LLM-4: Enable tier-aware rate limiting
 
-        # Propagate RLS context to the database session
-        await set_session_tenant_id(db, user.tenant_id)
+        # Propagate RLS context to the database session ASAP, before any tenant-scoped reads.
+        await set_session_tenant_id(db, tenant_id)
+
+        # Tenant-scoped SSO enforcement (implemented as domain allowlisting).
+        # If configured, restrict access to approved email domains.
+        try:
+            from app.models.tenant_identity_settings import TenantIdentitySettings
+
+            identity_settings = (
+                await db.execute(
+                    select(TenantIdentitySettings).where(
+                        TenantIdentitySettings.tenant_id == tenant_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if identity_settings and bool(
+                getattr(identity_settings, "sso_enabled", False)
+            ):
+                allowed_domains = [
+                    str(domain).strip().lower()
+                    for domain in (
+                        getattr(identity_settings, "allowed_email_domains", None) or []
+                    )
+                    if str(domain).strip()
+                ]
+                if allowed_domains:
+                    email_value = str(email or "")
+                    email_domain = (
+                        email_value.split("@")[-1].strip().lower()
+                        if "@" in email_value
+                        else ""
+                    )
+                    if not email_domain or email_domain not in allowed_domains:
+                        logger.warning(
+                            "auth_domain_not_allowed",
+                            user_id=str(user_uuid),
+                            tenant_id=str(tenant_id),
+                            email_domain=email_domain,
+                        )
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Access denied: email domain is not allowed for this tenant.",
+                        )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            app_settings = get_settings()
+            # Fail closed only in production to avoid silently bypassing tenant SSO enforcement.
+            if app_settings.is_production:
+                logger.error(
+                    "auth_identity_policy_check_failed",
+                    tenant_id=str(tenant_id),
+                    error=str(exc),
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail="Identity policy enforcement failed. Please contact support.",
+                )
+            logger.warning("auth_identity_policy_check_skipped", error=str(exc))
 
         logger.info(
             "user_authenticated",
-            user_id=str(user.id),
-            email_hash=_hash_email(user.email),
-            role=user.role,
-            tier=tier.value
+            user_id=str(user_uuid),
+            email_hash=_hash_email(str(email)),
+            role=str(role_value),
+            tier=tier.value,
         )
 
         return CurrentUser(
-            id=user.id,
-            email=user.email,
-            tenant_id=user.tenant_id,
-            role=user.role,
-            tier=tier
+            id=user_uuid,
+            email=str(email),
+            tenant_id=tenant_id,
+            role=role_value,
+            tier=tier,
+            persona=persona,
         )
     except HTTPException:
         # Re-raise known HTTP exceptions (like 403 User not found)
         raise
     except Exception as e:
-        logger.error("auth_failed_unexpectedly", error=str(e))
+        # Avoid leaking internal DB/schema details to clients, but log enough context for operators.
+        logger.exception("auth_failed_unexpectedly", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Authentication failed due to an internal server error"
+            detail="Authentication failed due to an internal server error",
         )
 
 
-
-
-
-
-
-
-@lru_cache()
+@lru_cache(maxsize=128)
 def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
     """
     FastAPI dependency for RBAC.
@@ -221,6 +343,7 @@ def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
     - admin: configuration and remediation
     - member: read-only cost viewing
     """
+
     def role_checker(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         # Owner bypasses all role checks
         if user.role == UserRole.OWNER:
@@ -228,11 +351,7 @@ def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
 
         # Check hierarchy
         # owner > admin > member
-        role_hierarchy = {
-            UserRole.OWNER: 100, 
-            UserRole.ADMIN: 50, 
-            UserRole.MEMBER: 10
-        }
+        role_hierarchy = {UserRole.OWNER: 100, UserRole.ADMIN: 50, UserRole.MEMBER: 10}
 
         user_level = role_hierarchy.get(user.role, 0)
         required_level = role_hierarchy.get(UserRole(required_role), 10)
@@ -242,16 +361,17 @@ def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
                 "insufficient_permissions",
                 user_id=str(user.id),
                 user_role=user.role,
-                required_role=required_role
+                required_role=required_role,
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Insufficient permissions. Required role: {required_role}"
+                detail=f"Insufficient permissions. Required role: {required_role}",
             )
 
         return user
 
     return role_checker
+
 
 def require_tenant_access(user: CurrentUser = Depends(get_current_user)) -> UUID:
     """
@@ -263,8 +383,6 @@ def require_tenant_access(user: CurrentUser = Depends(get_current_user)) -> UUID
         logger.error("tenant_id_missing_in_user_context", user_id=str(user.id))
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant context required. Please complete onboarding."
+            detail="Tenant context required. Please complete onboarding.",
         )
     return user.tenant_id
-
-

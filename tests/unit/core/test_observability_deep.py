@@ -16,20 +16,21 @@ from app.shared.core.sentry import (  # noqa: E402
     _before_send,
     capture_message,
     set_user,
-    set_tenant_context
+    set_tenant_context,
 )
 from app.shared.core.tracing import (  # noqa: E402
-    set_correlation_id
+    set_correlation_id,
 )
+
 
 class TestObservabilityDeep:
     """Deep tests for sentry.py and tracing.py to reach 100% coverage."""
 
     def setup_method(self):
         # Ensure sentry_sdk and integrations are defined in the module's globals
-        if not hasattr(sentry_module, 'sentry_sdk') or sentry_module.sentry_sdk is None:
+        if not hasattr(sentry_module, "sentry_sdk") or sentry_module.sentry_sdk is None:
             sentry_module.sentry_sdk = mock_sentry_sdk
-        
+
         # Inject integrations into the module namespace to avoid NameError
         sentry_module.FastApiIntegration = MagicMock
         sentry_module.SqlalchemyIntegration = MagicMock
@@ -43,8 +44,11 @@ class TestObservabilityDeep:
 
     def test_init_sentry_success(self):
         """Test sentry init success with DSN."""
-        with patch.dict(os.environ, {"SENTRY_DSN": "https://test@sentry.io/1", "ENVIRONMENT": "production"}):
-            with patch.object(sentry_module.sentry_sdk, 'init') as mock_init:
+        with patch.dict(
+            os.environ,
+            {"SENTRY_DSN": "https://test@sentry.io/1", "ENVIRONMENT": "production"},
+        ):
+            with patch.object(sentry_module.sentry_sdk, "init") as mock_init:
                 init_sentry()
                 assert mock_init.called
 
@@ -56,27 +60,30 @@ class TestObservabilityDeep:
     def test_before_send_enrich_trace(self):
         """Test Sentry filter enriches events with trace ID."""
         event = {"request": {"url": "http://localhost/api/v1/data"}}
-        with patch("app.shared.core.tracing.get_current_trace_id", return_value="test-trace-123"):
+        with patch(
+            "app.shared.core.tracing.get_current_trace_id",
+            return_value="test-trace-123",
+        ):
             result = _before_send(event, None)
             assert result["tags"]["trace_id"] == "test-trace-123"
 
     def test_capture_message_sentry(self):
         """Test capture_message sends event to Sentry."""
         # Use patch.object to ensure we're patching the exact object the module is using
-        with patch.object(sentry_module.sentry_sdk, 'capture_message') as mock_capture:
+        with patch.object(sentry_module.sentry_sdk, "capture_message") as mock_capture:
             capture_message("test message", level="error")
             assert mock_capture.called
 
     def test_set_user_sentry(self):
         """Test set_user updates Sentry context."""
-        with patch.object(sentry_module.sentry_sdk, 'set_user') as mock_set:
+        with patch.object(sentry_module.sentry_sdk, "set_user") as mock_set:
             set_user("u1", "t1", "test@example.com")
             assert mock_set.called
             assert mock_set.call_args[0][0]["id"] == "u1"
 
     def test_set_tenant_context_sentry(self):
         """Test set_tenant_context updates Sentry tags."""
-        with patch.object(sentry_module.sentry_sdk, 'set_tag') as mock_set:
+        with patch.object(sentry_module.sentry_sdk, "set_tag") as mock_set:
             set_tenant_context("t1", "Tenant Name")
             assert mock_set.called
 

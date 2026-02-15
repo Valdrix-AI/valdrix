@@ -4,6 +4,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from app.shared.llm.providers.base import BaseProvider
 from app.shared.core.config import get_settings
 
+
 class GroqProvider(BaseProvider):
     def create_model(
         self, model: Optional[str] = None, api_key: Optional[str] = None

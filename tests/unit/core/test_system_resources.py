@@ -8,7 +8,9 @@ from app.shared.core.system_resources import (
 
 
 def test_safe_cpu_percent_non_blocking():
-    with patch("app.shared.core.system_resources.psutil.cpu_percent", return_value=12.5) as mock_cpu:
+    with patch(
+        "app.shared.core.system_resources.psutil.cpu_percent", return_value=12.5
+    ) as mock_cpu:
         value = safe_cpu_percent()
 
     assert value == 12.5
@@ -16,7 +18,9 @@ def test_safe_cpu_percent_non_blocking():
 
 
 def test_safe_virtual_memory_calls_psutil():
-    with patch("app.shared.core.system_resources.psutil.virtual_memory", return_value="mem") as mock_vm:
+    with patch(
+        "app.shared.core.system_resources.psutil.virtual_memory", return_value="mem"
+    ) as mock_vm:
         value = safe_virtual_memory()
 
     assert value == "mem"
@@ -24,7 +28,9 @@ def test_safe_virtual_memory_calls_psutil():
 
 
 def test_safe_disk_usage_calls_psutil():
-    with patch("app.shared.core.system_resources.psutil.disk_usage", return_value="disk") as mock_disk:
+    with patch(
+        "app.shared.core.system_resources.psutil.disk_usage", return_value="disk"
+    ) as mock_disk:
         value = safe_disk_usage("/")
 
     assert value == "disk"

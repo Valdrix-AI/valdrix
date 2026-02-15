@@ -13,7 +13,7 @@ REGION_CARBON_INTENSITY: Dict[str, float] = {
     "us-west-2": 150.0,
     "eu-central-1": 55.0,
     "af-south-1": 620.0,
-    "global": 300.0
+    "global": 300.0,
 }
 
 DEFAULT_CARBON_INTENSITY = 300.0
@@ -46,7 +46,9 @@ def get_region_intensity(region: Union[str, None]) -> float:
         return DEFAULT_CARBON_INTENSITY
 
 
-def calculate_carbon_footprint(cost: Union[Decimal, float, int], region: Union[str, None]) -> Decimal:
+def calculate_carbon_footprint(
+    cost: Union[Decimal, float, int], region: Union[str, None]
+) -> Decimal:
     """
     Calculate carbon footprint for a given cost and region.
 
@@ -102,7 +104,9 @@ def validate_region_data() -> bool:
     return has_clean and has_dirty
 
 
-def get_carbon_reduction_opportunity(cost: Union[Decimal, float, int]) -> Dict[str, Union[str, float]]:
+def get_carbon_reduction_opportunity(
+    cost: Union[Decimal, float, int],
+) -> Dict[str, Union[str, float]]:
     """
     Calculate potential carbon reduction by moving to cleaner regions.
 
@@ -140,13 +144,18 @@ def get_carbon_reduction_opportunity(cost: Union[Decimal, float, int]) -> Dict[s
         "dirtiest_region": dirtiest[0],
         "cleanest_region": cleanest[0],
         "monthly_reduction_kg": float(reduction),
-        "reduction_percentage": float((reduction / dirty_footprint) * 100) if dirty_footprint > 0 else 0,
-        "cost": float(cost_decimal)
+        "reduction_percentage": float((reduction / dirty_footprint) * 100)
+        if dirty_footprint > 0
+        else 0,
+        "cost": float(cost_decimal),
     }
 
 
-def estimate_carbon_for_service(service: str, monthly_cost: Union[Decimal, float, int],
-                               region: Union[str, None] = None) -> Dict[str, Union[str, float]]:
+def estimate_carbon_for_service(
+    service: str,
+    monthly_cost: Union[Decimal, float, int],
+    region: Union[str, None] = None,
+) -> Dict[str, Union[str, float]]:
     """
     Estimate carbon footprint for a specific cloud service.
 
@@ -166,7 +175,7 @@ def estimate_carbon_for_service(service: str, monthly_cost: Union[Decimal, float
             "monthly_cost_usd": float(monthly_cost),
             "monthly_carbon_kg": float(footprint),
             "annual_carbon_kg": float(footprint * 12),
-            "intensity_g_per_usd": get_region_intensity(region)
+            "intensity_g_per_usd": get_region_intensity(region),
         }
     except (ValueError, TypeError) as e:
         return {"error": str(e)}

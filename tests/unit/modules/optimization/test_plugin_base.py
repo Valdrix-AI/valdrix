@@ -8,7 +8,9 @@ class _TestPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "test"
 
-    async def scan(self, session, region, credentials=None, config=None, inventory=None):
+    async def scan(
+        self, session, region, credentials=None, config=None, inventory=None
+    ):
         return []
 
 
@@ -29,7 +31,7 @@ def test_get_client_includes_endpoint_credentials_and_config():
             service_name="ec2",
             region="us-east-1",
             credentials=credentials,
-            config="cfg"
+            config="cfg",
         )
 
     session.client.assert_called_once()

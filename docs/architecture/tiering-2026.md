@@ -13,14 +13,14 @@ Package capabilities so entry tiers are affordable, advanced FinOps workflows ar
   - `zombie_scan`
   - `greenops`
   - `carbon_tracking`
-  - `multi_cloud`
   - `multi_region`
-- Q2 value layer:
+- Operational KPIs:
   - `unit_economics`
   - `ingestion_sla`
 
 ### Growth
 - Includes Starter, plus advanced optimization and financial workflows:
+  - `multi_cloud`
   - `llm_analysis`
   - `chargeback`
   - `ingestion_backfill`
@@ -45,11 +45,8 @@ Package capabilities so entry tiers are affordable, advanced FinOps workflows ar
   - `cloud_plus_connectors`
   - custom and contractual deployment options
 
-## Roadmap alignment
-- Q1 foundations (canonicalization, reconciliation v1, commitment logic): platform-wide trust baseline.
-- Q2 productization (chargeback, unit economics, ingestion completeness): split between Starter and Growth.
-- Q3 close + Cloud+ (reconciliation v2, close workflow, Cloud+ connectors, carbon assurance): Pro/Enterprise.
-- Q4 procurement proof (compliance exports, savings proof, enterprise hardening): Pro/Enterprise, with deeper capabilities in Enterprise.
+## Delivery tracking
+Delivery milestones live in `roadmap.md`. Keep this document time-agnostic and aligned with current entitlements in `app/shared/core/pricing.py`.
 
 ## Enforcement principle
 - Every premium capability must be gated in backend API dependencies.

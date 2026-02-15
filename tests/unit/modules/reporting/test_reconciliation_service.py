@@ -72,15 +72,38 @@ async def test_reconciliation_detects_cross_source_discrepancy_and_alerts():
     db = MagicMock()
     result = MagicMock()
     result.all.return_value = [
-        SimpleNamespace(service="Compute", source_adapter="cost_explorer", total_cost=105.0, record_count=10),
-        SimpleNamespace(service="Compute", source_adapter="cur_parquet", total_cost=100.0, record_count=10),
-        SimpleNamespace(service="Storage", source_adapter="cost_explorer", total_cost=50.0, record_count=3),
-        SimpleNamespace(service="Storage", source_adapter="cur_parquet", total_cost=50.0, record_count=3),
+        SimpleNamespace(
+            service="Compute",
+            source_adapter="cost_explorer",
+            total_cost=105.0,
+            record_count=10,
+        ),
+        SimpleNamespace(
+            service="Compute",
+            source_adapter="cur_parquet",
+            total_cost=100.0,
+            record_count=10,
+        ),
+        SimpleNamespace(
+            service="Storage",
+            source_adapter="cost_explorer",
+            total_cost=50.0,
+            record_count=3,
+        ),
+        SimpleNamespace(
+            service="Storage",
+            source_adapter="cur_parquet",
+            total_cost=50.0,
+            record_count=3,
+        ),
     ]
     db.execute = AsyncMock(return_value=result)
 
     service = CostReconciliationService(db)
-    with patch("app.shared.core.notifications.NotificationDispatcher.send_alert", new=AsyncMock()) as mock_alert:
+    with patch(
+        "app.shared.core.notifications.NotificationDispatcher.send_alert",
+        new=AsyncMock(),
+    ) as mock_alert:
         summary = await service.compare_explorer_vs_cur(
             tenant_id=uuid4(),
             start_date=date(2024, 4, 1),
@@ -102,7 +125,9 @@ async def test_reconciliation_no_comparable_data_keeps_compatibility_totals():
     db = MagicMock()
     result = MagicMock()
     result.all.return_value = [
-        SimpleNamespace(service="Compute", source_adapter="unknown", total_cost=20.0, record_count=2),
+        SimpleNamespace(
+            service="Compute", source_adapter="unknown", total_cost=20.0, record_count=2
+        ),
     ]
     db.execute = AsyncMock(return_value=result)
 

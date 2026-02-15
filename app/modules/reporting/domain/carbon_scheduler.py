@@ -27,6 +27,7 @@ logger = structlog.get_logger()
 
 class CarbonIntensity(str, Enum):
     """Carbon intensity levels."""
+
     VERY_LOW = "very_low"  # < 100 gCO2/kWh
     LOW = "low"  # 100-200 gCO2/kWh
     MEDIUM = "medium"  # 200-400 gCO2/kWh
@@ -37,10 +38,11 @@ class CarbonIntensity(str, Enum):
 @dataclass
 class RegionCarbonProfile:
     """Carbon profile for an AWS region."""
+
     region: str
     renewable_percentage: float
-    carbon_intensity_low: float      # Typical low in gCO2/kWh
-    carbon_intensity_high: float     # Typical high in gCO2/kWh
+    carbon_intensity_low: float  # Typical low in gCO2/kWh
+    carbon_intensity_high: float  # Typical high in gCO2/kWh
     best_hours_utc: List[int]  # Hours when carbon is typically lowest
     peak_solar_hour_utc: Optional[int] = None
     peak_wind_hour_utc: Optional[int] = None
@@ -49,14 +51,30 @@ class RegionCarbonProfile:
 # Static data based on 2026 research
 # Intensities are gCO2eq/kWh (Average Carbon Intensity - Industry Standard)
 REGION_CARBON_PROFILES = {
-    "eu-north-1": RegionCarbonProfile("eu-north-1", 95, 30, 45, [0, 1, 2, 3, 4, 5, 22, 23], None, 2), # Sweden (Wind/Hydro)
-    "eu-west-1": RegionCarbonProfile("eu-west-1", 60, 150, 280, [1, 2, 3, 4, 11, 12, 13], 12, 3), # Ireland (Solar/Wind)
-    "ca-central-1": RegionCarbonProfile("ca-central-1", 80, 40, 60, [0, 1, 2, 3, 4, 5], None, None), # Quebec (Hydro stable)
-    "us-west-2": RegionCarbonProfile("us-west-2", 70, 80, 120, [2, 3, 4, 5, 12, 13], 13, 4), # Oregon (Hydro/Solar)
-    "us-east-1": RegionCarbonProfile("us-east-1", 25, 320, 420, [12, 13, 14, 15], 13, None), # Virginia (Gas/Solar mix)
-    "ap-northeast-1": RegionCarbonProfile("ap-northeast-1", 20, 400, 550, [2, 3, 4], 3, None), # Tokyo
-    "ap-south-1": RegionCarbonProfile("ap-south-1", 15, 600, 850, [6, 7, 8, 9], 7, None), # Mumbai (Strong solar)
-    "af-south-1": RegionCarbonProfile("af-south-1", 10, 700, 950, [6, 7, 8, 9], 7, None), # Cape Town (Coal heavy, some solar)
+    "eu-north-1": RegionCarbonProfile(
+        "eu-north-1", 95, 30, 45, [0, 1, 2, 3, 4, 5, 22, 23], None, 2
+    ),  # Sweden (Wind/Hydro)
+    "eu-west-1": RegionCarbonProfile(
+        "eu-west-1", 60, 150, 280, [1, 2, 3, 4, 11, 12, 13], 12, 3
+    ),  # Ireland (Solar/Wind)
+    "ca-central-1": RegionCarbonProfile(
+        "ca-central-1", 80, 40, 60, [0, 1, 2, 3, 4, 5], None, None
+    ),  # Quebec (Hydro stable)
+    "us-west-2": RegionCarbonProfile(
+        "us-west-2", 70, 80, 120, [2, 3, 4, 5, 12, 13], 13, 4
+    ),  # Oregon (Hydro/Solar)
+    "us-east-1": RegionCarbonProfile(
+        "us-east-1", 25, 320, 420, [12, 13, 14, 15], 13, None
+    ),  # Virginia (Gas/Solar mix)
+    "ap-northeast-1": RegionCarbonProfile(
+        "ap-northeast-1", 20, 400, 550, [2, 3, 4], 3, None
+    ),  # Tokyo
+    "ap-south-1": RegionCarbonProfile(
+        "ap-south-1", 15, 600, 850, [6, 7, 8, 9], 7, None
+    ),  # Mumbai (Strong solar)
+    "af-south-1": RegionCarbonProfile(
+        "af-south-1", 10, 700, 950, [6, 7, 8, 9], 7, None
+    ),  # Cape Town (Coal heavy, some solar)
 }
 
 # BE-CARBON-1: Data freshness tracking
@@ -67,14 +85,14 @@ _CARBON_DATA_MAX_AGE_DAYS = 30  # Data older than this should trigger a warning
 # Representative coordinates for WattTime forecasting by AWS region
 # Keep in sync with REGION_CARBON_PROFILES coverage.
 WATTTIME_REGION_COORDS = {
-    "us-east-1": (38.03, -78.48),    # Virginia, USA
-    "us-west-2": (45.52, -122.67),   # Oregon, USA
-    "ca-central-1": (45.50, -73.56), # Quebec, Canada
-    "eu-west-1": (53.34, -6.26),     # Dublin, Ireland
-    "eu-north-1": (59.32, 18.06),    # Stockholm, Sweden
-    "ap-northeast-1": (35.68, 139.69), # Tokyo, Japan
-    "ap-south-1": (19.07, 72.88),    # Mumbai, India
-    "af-south-1": (-33.92, 18.42),   # Cape Town, South Africa
+    "us-east-1": (38.03, -78.48),  # Virginia, USA
+    "us-west-2": (45.52, -122.67),  # Oregon, USA
+    "ca-central-1": (45.50, -73.56),  # Quebec, Canada
+    "eu-west-1": (53.34, -6.26),  # Dublin, Ireland
+    "eu-north-1": (59.32, 18.06),  # Stockholm, Sweden
+    "ap-northeast-1": (35.68, 139.69),  # Tokyo, Japan
+    "ap-south-1": (19.07, 72.88),  # Mumbai, India
+    "af-south-1": (-33.92, 18.42),  # Cape Town, South Africa
 }
 
 
@@ -86,15 +104,17 @@ def validate_carbon_data_freshness() -> bool:
     """
     now = datetime.now(timezone.utc)
     age = (now - _CARBON_DATA_LAST_UPDATED).days
-    
+
     if age > _CARBON_DATA_MAX_AGE_DAYS:
         error_msg = f"Carbon intensity data is {age} days old (max: {_CARBON_DATA_MAX_AGE_DAYS}). Update REGION_CARBON_PROFILES."
-        logger.error("carbon_data_stale", 
-                     last_updated=_CARBON_DATA_LAST_UPDATED.isoformat(),
-                     age_days=age,
-                     max_age_days=_CARBON_DATA_MAX_AGE_DAYS)
+        logger.error(
+            "carbon_data_stale",
+            last_updated=_CARBON_DATA_LAST_UPDATED.isoformat(),
+            age_days=age,
+            max_age_days=_CARBON_DATA_MAX_AGE_DAYS,
+        )
         raise ValueError(error_msg)
-    
+
     return True
 
 
@@ -118,9 +138,9 @@ class CarbonAwareScheduler:
     """
 
     def __init__(
-        self, 
+        self,
         wattime_key: Optional[str] = None,
-        electricitymaps_key: Optional[str] = None
+        electricitymaps_key: Optional[str] = None,
     ):
         self.wattime_key = wattime_key
         self.electricitymaps_key = electricitymaps_key
@@ -139,7 +159,7 @@ class CarbonAwareScheduler:
         # For now, we simulate current intensity based on current UTC hour
         now_hour = datetime.now(timezone.utc).hour
         intensity = self._simulate_intensity(profile, now_hour)
-        
+
         if intensity < 100:
             return CarbonIntensity.VERY_LOW
         elif intensity < 200:
@@ -154,27 +174,37 @@ class CarbonAwareScheduler:
     def _simulate_intensity(self, profile: RegionCarbonProfile, hour_utc: int) -> float:
         """Simulates carbon intensity for a specific hour using a sine wave for solar/wind."""
         import math
+
         # Baseline is halfway between low and high
         base = (profile.carbon_intensity_low + profile.carbon_intensity_high) / 2
         amplitude = (profile.carbon_intensity_high - profile.carbon_intensity_low) / 2
-        
+
         # Solar effect (lowest at peak solar hour)
         solar_factor = 0.0
         if profile.peak_solar_hour_utc is not None:
             # Lowest intensity at peak solar
-            solar_factor = math.cos(math.pi * (hour_utc - profile.peak_solar_hour_utc) / 12)
-        
+            solar_factor = math.cos(
+                math.pi * (hour_utc - profile.peak_solar_hour_utc) / 12
+            )
+
         # Wind effect (simulated as another wave if applicable)
         wind_factor = 0.0
         if profile.peak_wind_hour_utc is not None:
-            wind_factor = math.cos(math.pi * (hour_utc - profile.peak_wind_hour_utc) / 6)
-             
+            wind_factor = math.cos(
+                math.pi * (hour_utc - profile.peak_wind_hour_utc) / 6
+            )
+
         # Combined simulated intensity
         # We subtract the factors because higher renewable = lower carbon intensity
         adjustment = (solar_factor * 0.7 + wind_factor * 0.3) * amplitude
-        return max(profile.carbon_intensity_low, min(profile.carbon_intensity_high, base - adjustment))
+        return max(
+            profile.carbon_intensity_low,
+            min(profile.carbon_intensity_high, base - adjustment),
+        )
 
-    async def get_intensity_forecast(self, region: str, hours: int = 24) -> List[Dict[str, Any]]:
+    async def get_intensity_forecast(
+        self, region: str, hours: int = 24
+    ) -> List[Dict[str, Any]]:
         """
         Generates a carbon intensity forecast.
         Simulation: Provides Average Carbon Intensity (gCO2eq/kWh).
@@ -190,26 +220,29 @@ class CarbonAwareScheduler:
 
         if self.wattime_key:
             return await self._fetch_wattime_forecast(region, hours)
-        
+
         if self.electricitymaps_key:
             return await self._fetch_emap_forecast(region, hours)
 
         forecast = []
         from datetime import timedelta
+
         now = datetime.now(timezone.utc)
         base_time = now.replace(minute=0, second=0, microsecond=0)
-        
+
         for i in range(hours):
             target_time = base_time + timedelta(hours=i)
             target_hour = target_time.hour
             intensity = self._simulate_intensity(profile, target_hour)
-            
-            forecast.append({
-                "hour_utc": target_hour,
-                "timestamp": target_time.isoformat(),
-                "intensity_gco2_kwh": round(intensity, 1),
-                "level": self._intensity_to_level(intensity)
-            })
+
+            forecast.append(
+                {
+                    "hour_utc": target_hour,
+                    "timestamp": target_time.isoformat(),
+                    "intensity_gco2_kwh": round(intensity, 1),
+                    "level": self._intensity_to_level(intensity),
+                }
+            )
         return forecast
 
     def _intensity_to_level(self, intensity: float) -> str:
@@ -227,11 +260,7 @@ class CarbonAwareScheduler:
         """Returns the average intensity for a profile."""
         return (profile.carbon_intensity_low + profile.carbon_intensity_high) / 2
 
-
-    def get_lowest_carbon_region(
-        self,
-        candidate_regions: List[str]
-    ) -> str:
+    def get_lowest_carbon_region(self, candidate_regions: List[str]) -> str:
         """
         Find the lowest carbon region from candidates.
 
@@ -244,23 +273,20 @@ class CarbonAwareScheduler:
 
         ranked = sorted(
             candidate_regions,
-            key=lambda r: self._get_avg_intensity(REGION_CARBON_PROFILES.get(
-                r,
-                RegionCarbonProfile(r, 20, 400, 600, [])
-            ))
+            key=lambda r: self._get_avg_intensity(
+                REGION_CARBON_PROFILES.get(r, RegionCarbonProfile(r, 20, 400, 600, []))
+            ),
         )
 
         best = ranked[0]
-        logger.info("lowest_carbon_region_selected",
-                   region=best,
-                   candidates=candidate_regions)
+        logger.info(
+            "lowest_carbon_region_selected", region=best, candidates=candidate_regions
+        )
 
         return best
 
     async def get_optimal_execution_time(
-        self,
-        region: str,
-        max_delay_hours: int = 24
+        self, region: str, max_delay_hours: int = 24
     ) -> Optional[datetime]:
         """
         Find optimal time to execute workload for lowest carbon.
@@ -276,32 +302,32 @@ class CarbonAwareScheduler:
 
         # Find next best hour within window
         from datetime import timedelta
-        
+
         # Start looking from current hour
         for hour_offset in range(max_delay_hours):
             target_time = now + timedelta(hours=hour_offset)
             candidate_hour = target_time.hour
-            
+
             if candidate_hour in profile.best_hours_utc:
                 # Normalize to the beginning of that hour
                 optimal = target_time.replace(minute=0, second=0, microsecond=0)
-                
+
                 # Ensure we don't return a time in the past
                 if optimal < now:
                     continue
-                
-                logger.info("carbon_optimal_time",
-                           region=region,
-                           optimal_hour=candidate_hour,
-                           delay_hours=hour_offset)
+
+                logger.info(
+                    "carbon_optimal_time",
+                    region=region,
+                    optimal_hour=candidate_hour,
+                    delay_hours=hour_offset,
+                )
                 return optimal
 
         return None  # No optimal time in window
 
     async def should_defer_workload(
-        self,
-        region: str,
-        workload_type: str = "batch"
+        self, region: str, workload_type: str = "batch"
     ) -> bool:
         """
         Check if workload should be deferred to lower-carbon time.
@@ -323,10 +349,7 @@ class CarbonAwareScheduler:
         return intensity == CarbonIntensity.VERY_HIGH
 
     def estimate_carbon_savings(
-        self,
-        region_from: str,
-        region_to: str,
-        compute_hours: float
+        self, region_from: str, region_to: str, compute_hours: float
     ) -> Dict[str, float]:
         """
         Estimate carbon savings from region migration.
@@ -335,12 +358,10 @@ class CarbonAwareScheduler:
             Dict with gCO2 saved and percentage reduction
         """
         from_profile = REGION_CARBON_PROFILES.get(
-            region_from,
-            RegionCarbonProfile(region_from, 20, 400, 600, [])
+            region_from, RegionCarbonProfile(region_from, 20, 400, 600, [])
         )
         to_profile = REGION_CARBON_PROFILES.get(
-            region_to,
-            RegionCarbonProfile(region_to, 20, 400, 600, [])
+            region_to, RegionCarbonProfile(region_to, 20, 400, 600, [])
         )
 
         # Assuming 0.5 kWh per compute hour (rough estimate)
@@ -354,11 +375,17 @@ class CarbonAwareScheduler:
             "from_gco2": round(from_carbon, 2),
             "to_gco2": round(to_carbon, 2),
             "saved_gco2": round(saved, 2),
-            "reduction_percent": round((saved / from_carbon) * 100, 1) if from_carbon > 0 else 0
+            "reduction_percent": round((saved / from_carbon) * 100, 1)
+            if from_carbon > 0
+            else 0,
         }
-    async def _fetch_wattime_forecast(self, region: str, hours: int) -> List[Dict[str, Any]]:
+
+    async def _fetch_wattime_forecast(
+        self, region: str, hours: int
+    ) -> List[Dict[str, Any]]:
         """Fetch real-time MOER data from WattTime."""
         import httpx
+
         try:
             async with httpx.AsyncClient() as client:
                 # WattTime uses a login endpoint for a token, then GET /v2/forecast
@@ -367,39 +394,66 @@ class CarbonAwareScheduler:
                     logger.warning("wattime_region_unmapped", region=region)
                     return []
 
-                payload = {"latitude": coords[0], "longitude": coords[1], "horizon": hours}
-                
+                payload = {
+                    "latitude": coords[0],
+                    "longitude": coords[1],
+                    "horizon": hours,
+                }
+
                 response = await client.get(
                     "https://api2.watttime.org/v2/forecast",
                     params=payload,
-                    headers={"Authorization": f"Bearer {self.wattime_key}"}
+                    headers={"Authorization": f"Bearer {self.wattime_key}"},
                 )
                 response.raise_for_status()
                 data = response.json()
-                return [{"timestamp": d["point_time"], "intensity_gco2_kwh": d["value"], "level": self._intensity_to_level(d["value"])} for d in data.get("data", [])]
+                return [
+                    {
+                        "timestamp": d["point_time"],
+                        "intensity_gco2_kwh": d["value"],
+                        "level": self._intensity_to_level(d["value"]),
+                    }
+                    for d in data.get("data", [])
+                ]
         except Exception as e:
             logger.error("wattime_api_failed", error=str(e), region=region)
             return []
 
-    async def _fetch_emap_forecast(self, region: str, hours: int) -> List[Dict[str, Any]]:
+    async def _fetch_emap_forecast(
+        self, region: str, hours: int
+    ) -> List[Dict[str, Any]]:
         """Fetch average intensity from Electricity Maps."""
         import httpx
+
         try:
             async with httpx.AsyncClient() as client:
                 # Maps region to Electricity Maps zone (e.g., US-VA, DE, FR)
-                zone = "US-VA" # Default
+                zone = "US-VA"  # Default
                 if region.startswith("eu-"):
-                    zone = region.split("-")[1].upper() # Rough guess (e.g., eu-west-1 -> WEST)
-                
-                headers = {"auth-token": self.electricitymaps_key} if self.electricitymaps_key else {}
+                    zone = region.split("-")[
+                        1
+                    ].upper()  # Rough guess (e.g., eu-west-1 -> WEST)
+
+                headers = (
+                    {"auth-token": self.electricitymaps_key}
+                    if self.electricitymaps_key
+                    else {}
+                )
                 response = await client.get(
                     "https://api.electricitymap.org/v3/carbon-intensity/forecast",
                     params={"zone": zone, "horizon": hours},
-                    headers=headers
+                    headers=headers,
                 )
                 response.raise_for_status()
                 data = response.json()
-                return [{"timestamp": d["datetime"], "intensity_gco2_kwh": d["carbonIntensity"], "level": self._intensity_to_level(d["carbonIntensity"])} for d in data.get("forecast", [])]
+                return [
+                    {
+                        "timestamp": d["datetime"],
+                        "intensity_gco2_kwh": d["carbonIntensity"],
+                        "level": self._intensity_to_level(d["carbonIntensity"]),
+                    }
+                    for d in data.get("forecast", [])
+                ]
         except Exception as e:
             logger.error("emap_api_failed", error=str(e), region=region)
             return []

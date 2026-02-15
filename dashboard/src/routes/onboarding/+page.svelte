@@ -2,6 +2,28 @@
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
 	import { api } from '$lib/api';
+	import AuthGate from '$lib/components/AuthGate.svelte';
+	import { base } from '$app/paths';
+	import { PUBLIC_API_URL } from '$env/static/public';
+
+	type CloudPlusAuthMethod = 'manual' | 'api_key' | 'oauth' | 'csv';
+	type CloudPlusProvider = 'saas' | 'license';
+
+	interface NativeConnectorMeta {
+		vendor: string;
+		display_name: string;
+		recommended_auth_method: CloudPlusAuthMethod;
+		supported_auth_methods: CloudPlusAuthMethod[];
+		required_connector_config_fields: string[];
+		optional_connector_config_fields: string[];
+	}
+
+	interface ManualFeedSchema {
+		required_fields: string[];
+		optional_fields: string[];
+	}
+
+	const CLOUD_PLUS_AUTH_METHODS: CloudPlusAuthMethod[] = ['manual', 'api_key', 'oauth', 'csv'];
 
 	let { data } = $props();
 
@@ -32,18 +54,23 @@
 	// SaaS / License specific
 	let cloudPlusName = $state('');
 	let cloudPlusVendor = $state('');
-	let cloudPlusAuthMethod: 'manual' | 'api_key' | 'oauth' | 'csv' = $state('manual');
+	let cloudPlusAuthMethod: CloudPlusAuthMethod = $state('manual');
 	let cloudPlusApiKey = $state('');
 	let cloudPlusFeedInput = $state('[]');
+	let cloudPlusConnectorConfigInput = $state('{}');
+	let cloudPlusNativeConnectors = $state<NativeConnectorMeta[]>([]);
+	let cloudPlusManualFeedSchema = $state<ManualFeedSchema>({
+		required_fields: [],
+		optional_fields: []
+	});
+	let cloudPlusRequiredConfigValues = $state<Record<string, string>>({});
+	let cloudPlusConfigProvider = $state<CloudPlusProvider | null>(null);
 
 	let isLoading = $state(false);
 	let isVerifying = $state(false);
 	let error = $state('');
 	let success = $state(false);
 	let copied = $state(false);
-
-	import { base } from '$app/paths';
-	import { PUBLIC_API_URL } from '$env/static/public';
 
 	const API_URL = PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -71,6 +98,184 @@
 			case 'license':
 				return 'License';
 		}
+	}
+
+	function toCloudPlusAuthMethod(
+		value: unknown,
+		fallback: CloudPlusAuthMethod = 'manual'
+	): CloudPlusAuthMethod {
+		if (typeof value !== 'string') {
+			return fallback;
+		}
+		const normalized = value.trim().toLowerCase();
+		if (
+			normalized === 'manual' ||
+			normalized === 'api_key' ||
+			normalized === 'oauth' ||
+			normalized === 'csv'
+		) {
+			return normalized;
+		}
+		return fallback;
+	}
+
+	function parseStringArray(value: unknown): string[] {
+		if (!Array.isArray(value)) {
+			return [];
+		}
+		return value
+			.filter((item): item is string => typeof item === 'string')
+			.map((item) => item.trim())
+			.filter((item) => item.length > 0);
+	}
+
+	function normalizeNativeConnectors(value: unknown): NativeConnectorMeta[] {
+		if (!Array.isArray(value)) {
+			return [];
+		}
+
+		return value
+			.map((raw) => {
+				if (!raw || typeof raw !== 'object') {
+					return null;
+				}
+				const item = raw as Record<string, unknown>;
+				const vendor = typeof item.vendor === 'string' ? item.vendor.trim().toLowerCase() : '';
+				if (!vendor) {
+					return null;
+				}
+				const displayName =
+					typeof item.display_name === 'string' && item.display_name.trim().length > 0
+						? item.display_name.trim()
+						: vendor;
+				const supportedAuthMethodsRaw = parseStringArray(item.supported_auth_methods).map(
+					(authMethod) => toCloudPlusAuthMethod(authMethod)
+				);
+				const supportedAuthMethods: CloudPlusAuthMethod[] = supportedAuthMethodsRaw.length
+					? supportedAuthMethodsRaw
+					: ['manual'];
+
+				return {
+					vendor,
+					display_name: displayName,
+					recommended_auth_method: toCloudPlusAuthMethod(
+						item.recommended_auth_method,
+						supportedAuthMethods[0] ?? 'manual'
+					),
+					supported_auth_methods: supportedAuthMethods,
+					required_connector_config_fields: parseStringArray(item.required_connector_config_fields),
+					optional_connector_config_fields: parseStringArray(item.optional_connector_config_fields)
+				} satisfies NativeConnectorMeta;
+			})
+			.filter((item): item is NativeConnectorMeta => item !== null);
+	}
+
+	function parseManualFeedSchema(value: unknown): ManualFeedSchema {
+		if (!value || typeof value !== 'object') {
+			return { required_fields: [], optional_fields: [] };
+		}
+		const schema = value as Record<string, unknown>;
+		return {
+			required_fields: parseStringArray(schema.required_fields),
+			optional_fields: parseStringArray(schema.optional_fields)
+		};
+	}
+
+	function parseConnectorConfigInputSafely(): Record<string, unknown> {
+		if (!cloudPlusConnectorConfigInput.trim()) {
+			return {};
+		}
+		try {
+			const parsed = JSON.parse(cloudPlusConnectorConfigInput);
+			if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+				return {};
+			}
+			return parsed as Record<string, unknown>;
+		} catch {
+			return {};
+		}
+	}
+
+	function getSelectedNativeConnector(): NativeConnectorMeta | null {
+		const vendor = cloudPlusVendor.trim().toLowerCase();
+		if (!vendor) {
+			return null;
+		}
+		return cloudPlusNativeConnectors.find((connector) => connector.vendor === vendor) ?? null;
+	}
+
+	function getAvailableCloudPlusAuthMethods(): CloudPlusAuthMethod[] {
+		const connector = getSelectedNativeConnector();
+		if (!connector) {
+			return CLOUD_PLUS_AUTH_METHODS;
+		}
+		return connector.supported_auth_methods.length
+			? connector.supported_auth_methods
+			: CLOUD_PLUS_AUTH_METHODS;
+	}
+
+	function applyCloudPlusVendorDefaults(forceRecommendedAuth: boolean = false): void {
+		const connector = getSelectedNativeConnector();
+		if (!connector) {
+			cloudPlusRequiredConfigValues = {};
+			return;
+		}
+
+		const supportedAuthMethods = connector.supported_auth_methods.length
+			? connector.supported_auth_methods
+			: CLOUD_PLUS_AUTH_METHODS;
+		if (forceRecommendedAuth || !supportedAuthMethods.includes(cloudPlusAuthMethod)) {
+			cloudPlusAuthMethod = supportedAuthMethods.includes(connector.recommended_auth_method)
+				? connector.recommended_auth_method
+				: (supportedAuthMethods[0] ?? 'manual');
+		}
+
+		const existingConfig = parseConnectorConfigInputSafely();
+		const requiredFields = connector.required_connector_config_fields;
+		const nextValues: Record<string, string> = {};
+		for (const field of requiredFields) {
+			const currentValue = cloudPlusRequiredConfigValues[field];
+			if (typeof currentValue === 'string' && currentValue.trim().length > 0) {
+				nextValues[field] = currentValue;
+				continue;
+			}
+			const configuredValue = existingConfig[field];
+			nextValues[field] =
+				configuredValue === undefined || configuredValue === null ? '' : String(configuredValue);
+		}
+		cloudPlusRequiredConfigValues = nextValues;
+	}
+
+	function handleCloudPlusVendorInputChanged(): void {
+		cloudPlusVendor = cloudPlusVendor.trim().toLowerCase();
+		applyCloudPlusVendorDefaults(false);
+	}
+
+	function chooseNativeCloudPlusVendor(vendor: string): void {
+		cloudPlusVendor = vendor.trim().toLowerCase();
+		applyCloudPlusVendorDefaults(true);
+	}
+
+	function handleCloudPlusAuthMethodChanged(): void {
+		const supportedAuthMethods = getAvailableCloudPlusAuthMethods();
+		if (!supportedAuthMethods.includes(cloudPlusAuthMethod)) {
+			cloudPlusAuthMethod = supportedAuthMethods[0] ?? 'manual';
+		}
+		if (cloudPlusAuthMethod !== 'api_key' && cloudPlusAuthMethod !== 'oauth') {
+			cloudPlusApiKey = '';
+		}
+	}
+
+	function isCloudPlusNativeAuthMethod(): boolean {
+		return cloudPlusAuthMethod === 'api_key' || cloudPlusAuthMethod === 'oauth';
+	}
+
+	function setRequiredConfigField(field: string, value: string): void {
+		cloudPlusRequiredConfigValues = { ...cloudPlusRequiredConfigValues, [field]: value };
+	}
+
+	function getRequiredConfigFieldValue(field: string): string {
+		return cloudPlusRequiredConfigValues[field] ?? '';
 	}
 
 	// Get access token from server-loaded session (avoids getSession warning)
@@ -144,18 +349,39 @@
 				throw new Error(errData.detail || 'Failed to fetch setup data');
 			}
 
-			const data = await res.json();
+			const responseData = await res.json();
 			if (selectedProvider === 'aws') {
-				externalId = data.external_id;
-				magicLink = data.magic_link;
-				cloudformationYaml = data.cloudformation_yaml;
-				terraformHcl = data.terraform_hcl;
+				externalId = responseData.external_id;
+				magicLink = responseData.magic_link;
+				cloudformationYaml = responseData.cloudformation_yaml;
+				terraformHcl = responseData.terraform_hcl;
 			} else if (selectedProvider === 'azure' || selectedProvider === 'gcp') {
-				cloudShellSnippet = data.snippet;
+				cloudShellSnippet = responseData.snippet;
 			} else {
-				cloudShellSnippet = data.snippet;
-				cloudPlusSampleFeed = data.sample_feed || '[]';
-				cloudPlusFeedInput = data.sample_feed || '[]';
+				const providerDefaults: Record<CloudPlusProvider, { vendor: string; config: string }> = {
+					saas: { vendor: 'stripe', config: '{}' },
+					license: { vendor: 'microsoft_365', config: '{"default_seat_price_usd": 36}' }
+				};
+				const providerKey = selectedProvider as CloudPlusProvider;
+				const defaults = providerDefaults[providerKey];
+				const providerSwitched = cloudPlusConfigProvider !== providerKey;
+				cloudPlusConfigProvider = providerKey;
+
+				cloudShellSnippet = responseData.snippet;
+				cloudPlusSampleFeed = responseData.sample_feed || '[]';
+				cloudPlusFeedInput = responseData.sample_feed || '[]';
+				cloudPlusNativeConnectors = normalizeNativeConnectors(responseData.native_connectors);
+				cloudPlusManualFeedSchema = parseManualFeedSchema(responseData.manual_feed_schema);
+				if (providerSwitched || !cloudPlusVendor.trim()) {
+					cloudPlusVendor = cloudPlusNativeConnectors[0]?.vendor || defaults.vendor;
+				} else {
+					cloudPlusVendor = cloudPlusVendor.trim().toLowerCase();
+				}
+				if (providerSwitched || !cloudPlusConnectorConfigInput.trim()) {
+					cloudPlusConnectorConfigInput = defaults.config;
+					cloudPlusRequiredConfigValues = {};
+				}
+				applyCloudPlusVendorDefaults(true);
 			}
 		} catch (e) {
 			const err = e as Error;
@@ -170,7 +396,10 @@
 			error = `${getProviderLabel(selectedProvider)} onboarding requires Growth tier or higher.`;
 			return;
 		}
-		if ((selectedProvider === 'saas' || selectedProvider === 'license') && !canUseCloudPlusFeatures()) {
+		if (
+			(selectedProvider === 'saas' || selectedProvider === 'license') &&
+			!canUseCloudPlusFeatures()
+		) {
 			error = `${getProviderLabel(selectedProvider)} onboarding requires Pro tier or higher.`;
 			return;
 		}
@@ -218,6 +447,43 @@
 			throw new Error('Feed JSON must be an array of records.');
 		}
 		return parsed as Array<Record<string, unknown>>;
+	}
+
+	function parseCloudPlusConnectorConfig(): Record<string, unknown> {
+		let parsed: unknown = {};
+		if (cloudPlusConnectorConfigInput.trim()) {
+			try {
+				parsed = JSON.parse(cloudPlusConnectorConfigInput);
+			} catch {
+				throw new Error('Connector config JSON must be valid.');
+			}
+			if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+				throw new Error('Connector config JSON must be an object.');
+			}
+		}
+
+		const connectorConfig: Record<string, unknown> = {
+			...(parsed as Record<string, unknown>)
+		};
+		const selectedConnector = getSelectedNativeConnector();
+		if (!selectedConnector || !isCloudPlusNativeAuthMethod()) {
+			return connectorConfig;
+		}
+
+		for (const field of selectedConnector.required_connector_config_fields) {
+			const fieldValue = getRequiredConfigFieldValue(field).trim();
+			if (!fieldValue) {
+				throw new Error(
+					`connector_config.${field} is required for ${selectedConnector.display_name}.`
+				);
+			}
+			if (field.toLowerCase().includes('url') && !/^https?:\/\//i.test(fieldValue)) {
+				throw new Error(`connector_config.${field} must be an http(s) URL.`);
+			}
+			connectorConfig[field] = fieldValue;
+		}
+
+		return connectorConfig;
 	}
 
 	async function proceedToVerify() {
@@ -344,8 +610,11 @@
 				error = 'Please enter a vendor name (minimum 2 characters).';
 				return;
 			}
-			if (cloudPlusAuthMethod === 'api_key' && !cloudPlusApiKey.trim()) {
-				error = 'API key is required when auth method is API key.';
+			if (
+				(cloudPlusAuthMethod === 'api_key' || cloudPlusAuthMethod === 'oauth') &&
+				!cloudPlusApiKey.trim()
+			) {
+				error = 'API key / OAuth token is required for this auth method.';
 				return;
 			}
 			isVerifying = true;
@@ -355,21 +624,24 @@
 					throw new Error('Please log in first');
 				}
 				const feed = parseCloudPlusFeed();
+				const connectorConfig = parseCloudPlusConnectorConfig();
 				const createPath = selectedProvider === 'saas' ? 'saas' : 'license';
 				const payload =
 					selectedProvider === 'saas'
 						? {
 								name: cloudPlusName.trim(),
-								vendor: cloudPlusVendor.trim(),
+								vendor: cloudPlusVendor.trim().toLowerCase(),
 								auth_method: cloudPlusAuthMethod,
 								api_key: cloudPlusApiKey.trim() || null,
+								connector_config: connectorConfig,
 								spend_feed: feed
 							}
 						: {
 								name: cloudPlusName.trim(),
-								vendor: cloudPlusVendor.trim(),
+								vendor: cloudPlusVendor.trim().toLowerCase(),
 								auth_method: cloudPlusAuthMethod,
 								api_key: cloudPlusApiKey.trim() || null,
+								connector_config: connectorConfig,
 								license_feed: feed
 							};
 
@@ -480,635 +752,722 @@
 	}
 </script>
 
-<div class="onboarding-container">
-	<h1>🔗 Connect Cloud & Cloud+ Providers</h1>
+<svelte:head>
+	<title>Onboarding | Valdrix</title>
+</svelte:head>
 
-	<!-- Progress indicator -->
-	<div class="progress-steps">
-		<div class="step" class:active={currentStep === 0} class:complete={currentStep > 0}>
-			1. Choose Cloud
-		</div>
-		<div class="step" class:active={currentStep === 1} class:complete={currentStep > 1}>
-			2. Configure
-		</div>
-		<div class="step" class:active={currentStep === 2} class:complete={currentStep > 2}>
-			3. Verify
-		</div>
-		<div class="step" class:active={currentStep === 3}>4. Done!</div>
-	</div>
+<AuthGate authenticated={!!data.user} action="connect providers">
+	<div class="onboarding-container">
+		<h1>🔗 Connect Cloud & Cloud+ Providers</h1>
 
-	{#if isLoading}
-		<div class="loading-overlay">
-			<div class="spinner mb-4"></div>
-			<p class="text-sm text-ink-300">Fetching configuration details...</p>
-		</div>
-	{/if}
-
-	{#if error}
-		<div class="error-banner">{error}</div>
-	{/if}
-
-	<!-- Step 0: Select Provider -->
-	{#if currentStep === 0}
-		<div class="step-content">
-			<h2>Choose Your Cloud Provider</h2>
-			<p class="text-muted mb-8">
-				Valdrix uses read-only access to analyze your infrastructure and find waste.
-			</p>
-
-			<div class="provider-grid">
-				<button
-					class="provider-card"
-					class:selected={selectedProvider === 'aws'}
-					onclick={() => (selectedProvider = 'aws')}
-				>
-					<div class="logo-circle">
-						<CloudLogo provider="aws" size={32} />
-					</div>
-					<h3>Amazon Web Services</h3>
-					<p>Standard across all tiers</p>
-				</button>
-
-				<button
-					class="provider-card"
-					class:selected={selectedProvider === 'azure'}
-					onclick={() => (selectedProvider = 'azure')}
-				>
-					<div class="logo-circle">
-						<CloudLogo provider="azure" size={32} />
-					</div>
-					<h3>Microsoft Azure</h3>
-					<span class="badge">Growth Tier+</span>
-				</button>
-
-				<button
-					class="provider-card"
-					class:selected={selectedProvider === 'gcp'}
-					onclick={() => (selectedProvider = 'gcp')}
-				>
-					<div class="logo-circle">
-						<CloudLogo provider="gcp" size={32} />
-					</div>
-					<h3>Google Cloud</h3>
-					<span class="badge">Growth Tier+</span>
-				</button>
-
-				<button
-					class="provider-card"
-					class:selected={selectedProvider === 'saas'}
-					onclick={() => (selectedProvider = 'saas')}
-				>
-					<div class="logo-circle">
-						<CloudLogo provider="saas" size={32} />
-					</div>
-					<h3>SaaS Spend Connector</h3>
-					<span class="badge">Pro Tier+</span>
-				</button>
-
-				<button
-					class="provider-card"
-					class:selected={selectedProvider === 'license'}
-					onclick={() => (selectedProvider = 'license')}
-				>
-					<div class="logo-circle">
-						<CloudLogo provider="license" size={32} />
-					</div>
-					<h3>License / ITAM Connector</h3>
-					<span class="badge">Pro Tier+</span>
-				</button>
+		<!-- Progress indicator -->
+		<div class="progress-steps">
+			<div class="step" class:active={currentStep === 0} class:complete={currentStep > 0}>
+				1. Choose Cloud
 			</div>
-
-			{#if (selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()}
-				<a href="{base}/billing" class="primary-btn mt-8">Upgrade to Growth →</a>
-			{:else if (selectedProvider === 'saas' || selectedProvider === 'license') &&
-				!canUseCloudPlusFeatures()}
-				<a href="{base}/billing" class="primary-btn mt-8">Upgrade to Pro →</a>
-			{:else}
-				<button class="primary-btn mt-8" onclick={handleContinueToSetup}>Continue to Setup →</button>
-			{/if}
+			<div class="step" class:active={currentStep === 1} class:complete={currentStep > 1}>
+				2. Configure
+			</div>
+			<div class="step" class:active={currentStep === 2} class:complete={currentStep > 2}>
+				3. Verify
+			</div>
+			<div class="step" class:active={currentStep === 3}>4. Done!</div>
 		</div>
-	{/if}
 
-	<!-- Step 1: Configuration -->
-	{#if currentStep === 1}
-		<div class="step-content">
-			{#if selectedProvider === 'aws'}
-				<h2>Step 2: Connect AWS Account</h2>
-				<p class="mb-6">We've generated a secure IAM role template for your account.</p>
+		{#if isLoading}
+			<div class="loading-overlay">
+				<div class="spinner mb-4"></div>
+				<p class="text-sm text-ink-300">Fetching configuration details...</p>
+			</div>
+		{/if}
 
-				{#if magicLink}
-					<!-- Innovation: Magic Link -->
-					<div
-						class="magic-link-box p-6 bg-accent-950/20 border border-accent-500/30 rounded-2xl mb-8 flex flex-col items-center gap-4"
+		{#if error}
+			<div class="error-banner">{error}</div>
+		{/if}
+
+		<!-- Step 0: Select Provider -->
+		{#if currentStep === 0}
+			<div class="step-content">
+				<h2>Choose Your Cloud Provider</h2>
+				<p class="text-muted mb-8">
+					Valdrix uses read-only access to analyze your infrastructure and find waste.
+				</p>
+
+				<div class="provider-grid">
+					<button
+						class="provider-card"
+						class:selected={selectedProvider === 'aws'}
+						onclick={() => (selectedProvider = 'aws')}
 					>
-						<div class="text-3xl">🧩</div>
-						<div class="text-center">
-							<h4 class="font-bold text-lg mb-1">Recommended: 1-Click Setup</h4>
-							<p class="text-sm text-ink-400">
-								Launch a CloudFormation stack with all parameters pre-filled.
-							</p>
+						<div class="logo-circle">
+							<CloudLogo provider="aws" size={32} />
 						</div>
-						<a
-							href={magicLink}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="primary-btn !w-auto px-8 py-3 bg-accent-500 hover:bg-accent-600"
-						>
-							⚡ Launch AWS Stack
-						</a>
-					</div>
+						<h3>Amazon Web Services</h3>
+						<p>Standard across all tiers</p>
+					</button>
 
-					<div class="divider text-xs text-ink-500 mb-6 flex items-center gap-4">
-						<div class="h-px flex-1 bg-ink-800"></div>
-						OR USE MANUAL TEMPLATES
-						<div class="h-px flex-1 bg-ink-800"></div>
-					</div>
+					<button
+						class="provider-card"
+						class:selected={selectedProvider === 'azure'}
+						onclick={() => (selectedProvider = 'azure')}
+					>
+						<div class="logo-circle">
+							<CloudLogo provider="azure" size={32} />
+						</div>
+						<h3>Microsoft Azure</h3>
+						<span class="badge">Growth Tier+</span>
+					</button>
+
+					<button
+						class="provider-card"
+						class:selected={selectedProvider === 'gcp'}
+						onclick={() => (selectedProvider = 'gcp')}
+					>
+						<div class="logo-circle">
+							<CloudLogo provider="gcp" size={32} />
+						</div>
+						<h3>Google Cloud</h3>
+						<span class="badge">Growth Tier+</span>
+					</button>
+
+					<button
+						class="provider-card"
+						class:selected={selectedProvider === 'saas'}
+						onclick={() => (selectedProvider = 'saas')}
+					>
+						<div class="logo-circle">
+							<CloudLogo provider="saas" size={32} />
+						</div>
+						<h3>SaaS Spend Connector</h3>
+						<span class="badge">Pro Tier+</span>
+					</button>
+
+					<button
+						class="provider-card"
+						class:selected={selectedProvider === 'license'}
+						onclick={() => (selectedProvider = 'license')}
+					>
+						<div class="logo-circle">
+							<CloudLogo provider="license" size={32} />
+						</div>
+						<h3>License / ITAM Connector</h3>
+						<span class="badge">Pro Tier+</span>
+					</button>
+				</div>
+
+				{#if (selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()}
+					<a href={`${base}/billing`} class="primary-btn mt-8">Upgrade to Growth →</a>
+				{:else if (selectedProvider === 'saas' || selectedProvider === 'license') && !canUseCloudPlusFeatures()}
+					<a href={`${base}/billing`} class="primary-btn mt-8">Upgrade to Pro →</a>
+				{:else}
+					<button class="primary-btn mt-8" onclick={handleContinueToSetup}
+						>Continue to Setup →</button
+					>
 				{/if}
+			</div>
+		{/if}
 
-				<!-- Manual Templates (Old Flow) -->
-				<div class="tab-selector">
-					<button
-						class="tab"
-						class:active={selectedTab === 'cloudformation'}
-						onclick={() => (selectedTab = 'cloudformation')}
-					>
-						☁️ CloudFormation
-					</button>
-					<button
-						class="tab"
-						class:active={selectedTab === 'terraform'}
-						onclick={() => (selectedTab = 'terraform')}
-					>
-						🏗️ Terraform
-					</button>
-				</div>
+		<!-- Step 1: Configuration -->
+		{#if currentStep === 1}
+			<div class="step-content">
+				{#if selectedProvider === 'aws'}
+					<h2>Step 2: Connect AWS Account</h2>
+					<p class="mb-6">We've generated a secure IAM role template for your account.</p>
 
-				<div class="manual-guide mb-8">
-					<h4 class="font-bold text-ink-100 flex items-center gap-2 mb-4">
-						<span class="text-accent-500">🛡️</span> Security & Deployment Guide
-					</h4>
-
-					<div class="space-y-3">
+					{#if magicLink}
+						<!-- Innovation: Magic Link -->
 						<div
-							class="flex items-start gap-4 p-4 bg-ink-900 border border-ink-800 rounded-xl transition-all hover:border-ink-700"
+							class="magic-link-box p-6 bg-accent-950/20 border border-accent-500/30 rounded-2xl mb-8 flex flex-col items-center gap-4"
 						>
-							<div
-								class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-500/10 flex items-center justify-center text-accent-500 font-bold"
+							<div class="text-3xl">🧩</div>
+							<div class="text-center">
+								<h4 class="font-bold text-lg mb-1">Recommended: 1-Click Setup</h4>
+								<p class="text-sm text-ink-400">
+									Launch a CloudFormation stack with all parameters pre-filled.
+								</p>
+							</div>
+							<a
+								href={magicLink}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="primary-btn !w-auto px-8 py-3 bg-accent-500 hover:bg-accent-600"
 							>
-								1
-							</div>
-							<div>
-								<p class="text-sm font-semibold text-ink-100 mb-1">
-									Acquire Infrastructure Template
-								</p>
-								<p class="text-xs text-ink-400">
-									Select either CloudFormation or Terraform below. Use the <strong>Copy</strong> or
-									<strong>Download</strong> buttons to save the configuration file to your local machine.
-								</p>
-							</div>
+								⚡ Launch AWS Stack
+							</a>
 						</div>
 
-						<div
-							class="flex items-start gap-4 p-4 bg-ink-900 border border-ink-800 rounded-xl transition-all hover:border-ink-700"
+						<div class="divider text-xs text-ink-500 mb-6 flex items-center gap-4">
+							<div class="h-px flex-1 bg-ink-800"></div>
+							OR USE MANUAL TEMPLATES
+							<div class="h-px flex-1 bg-ink-800"></div>
+						</div>
+					{/if}
+
+					<!-- Manual Templates (Old Flow) -->
+					<div class="tab-selector">
+						<button
+							class="tab"
+							class:active={selectedTab === 'cloudformation'}
+							onclick={() => (selectedTab = 'cloudformation')}
 						>
+							☁️ CloudFormation
+						</button>
+						<button
+							class="tab"
+							class:active={selectedTab === 'terraform'}
+							onclick={() => (selectedTab = 'terraform')}
+						>
+							🏗️ Terraform
+						</button>
+					</div>
+
+					<div class="manual-guide mb-8">
+						<h4 class="font-bold text-ink-100 flex items-center gap-2 mb-4">
+							<span class="text-accent-500">🛡️</span> Security & Deployment Guide
+						</h4>
+
+						<div class="space-y-3">
 							<div
-								class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-500/10 flex items-center justify-center text-accent-500 font-bold"
+								class="flex items-start gap-4 p-4 bg-ink-900 border border-ink-800 rounded-xl transition-all hover:border-ink-700"
 							>
-								2
+								<div
+									class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-500/10 flex items-center justify-center text-accent-500 font-bold"
+								>
+									1
+								</div>
+								<div>
+									<p class="text-sm font-semibold text-ink-100 mb-1">
+										Acquire Infrastructure Template
+									</p>
+									<p class="text-xs text-ink-400">
+										Select either CloudFormation or Terraform below. Use the <strong>Copy</strong>
+										or
+										<strong>Download</strong> buttons to save the configuration file to your local machine.
+									</p>
+								</div>
 							</div>
-							<div>
-								<p class="text-sm font-semibold text-ink-100 mb-1">Provision Resources in AWS</p>
-								<p class="text-xs text-ink-400">
-									Navigate to the <a
-										href="https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template"
-										target="_blank"
-										rel="noopener noreferrer"
-										class="text-accent-400 hover:text-accent-300 underline underline-offset-4 decoration-accent-500/30"
-										>AWS CloudFormation Console</a
-									>. Select <strong>Create Stack</strong> and choose
-									<strong>Upload a template file</strong> to begin the deployment.
-								</p>
-							</div>
-						</div>
 
-						<div
-							class="flex items-start gap-4 p-4 bg-ink-900 border border-ink-800 rounded-xl transition-all hover:border-ink-700"
-						>
 							<div
-								class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-500/10 flex items-center justify-center text-accent-500 font-bold"
+								class="flex items-start gap-4 p-4 bg-ink-900 border border-ink-800 rounded-xl transition-all hover:border-ink-700"
 							>
-								3
+								<div
+									class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-500/10 flex items-center justify-center text-accent-500 font-bold"
+								>
+									2
+								</div>
+								<div>
+									<p class="text-sm font-semibold text-ink-100 mb-1">Provision Resources in AWS</p>
+									<p class="text-xs text-ink-400">
+										Navigate to the <a
+											href="https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/template"
+											target="_blank"
+											rel="noopener noreferrer"
+											class="text-accent-400 hover:text-accent-300 underline underline-offset-4 decoration-accent-500/30"
+											>AWS CloudFormation Console</a
+										>. Select <strong>Create Stack</strong> and choose
+										<strong>Upload a template file</strong> to begin the deployment.
+									</p>
+								</div>
 							</div>
-							<div>
-								<p class="text-sm font-semibold text-ink-100 mb-1">
-									Finalize Deployment & Capture ARN
-								</p>
-								<p class="text-xs text-ink-400">
-									Follow the AWS wizard. Once the stack status is <strong>CREATE_COMPLETE</strong>,
-									navigate to the <strong>Outputs</strong> tab to find and copy your new
-									<strong>RoleArn</strong>.
-								</p>
-							</div>
-						</div>
 
-						<div
-							class="flex items-start gap-4 p-4 bg-ink-900 border border-ink-800 rounded-xl transition-all hover:border-ink-700"
-						>
 							<div
-								class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-500/10 flex items-center justify-center text-accent-500 font-bold"
+								class="flex items-start gap-4 p-4 bg-ink-900 border border-ink-800 rounded-xl transition-all hover:border-ink-700"
 							>
-								4
+								<div
+									class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-500/10 flex items-center justify-center text-accent-500 font-bold"
+								>
+									3
+								</div>
+								<div>
+									<p class="text-sm font-semibold text-ink-100 mb-1">
+										Finalize Deployment & Capture ARN
+									</p>
+									<p class="text-xs text-ink-400">
+										Follow the AWS wizard. Once the stack status is <strong>CREATE_COMPLETE</strong
+										>, navigate to the <strong>Outputs</strong> tab to find and copy your new
+										<strong>RoleArn</strong>.
+									</p>
+								</div>
 							</div>
-							<div>
-								<p class="text-sm font-semibold text-ink-100 mb-1">Verify Connection</p>
-								<p class="text-xs text-ink-400">
-									Return to this page and paste the captured <strong>RoleArn</strong> into the verification
-									field in Step 3 to activate your connection.
-								</p>
+
+							<div
+								class="flex items-start gap-4 p-4 bg-ink-900 border border-ink-800 rounded-xl transition-all hover:border-ink-700"
+							>
+								<div
+									class="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-500/10 flex items-center justify-center text-accent-500 font-bold"
+								>
+									4
+								</div>
+								<div>
+									<p class="text-sm font-semibold text-ink-100 mb-1">Verify Connection</p>
+									<p class="text-xs text-ink-400">
+										Return to this page and paste the captured <strong>RoleArn</strong> into the verification
+										field in Step 3 to activate your connection.
+									</p>
+								</div>
 							</div>
 						</div>
 					</div>
-				</div>
 
-				<div class="code-container">
-					<div class="code-header">
-						<span>{selectedTab === 'cloudformation' ? 'valdrix-role.yaml' : 'valdrix-role.tf'}</span
-						>
-						<div class="code-actions">
-							<button class="icon-btn" onclick={copyTemplate}>{copied ? '✅' : '📋 Copy'}</button>
-							<button class="icon-btn" onclick={downloadTemplate}>📥</button>
-						</div>
-					</div>
-					<pre class="code-block">{selectedTab === 'cloudformation'
-							? cloudformationYaml
-							: terraformHcl}</pre>
-				</div>
-
-				<div class="divider text-xs text-ink-500 my-8 flex items-center gap-4">
-					<div class="h-px flex-1 bg-ink-800"></div>
-					STEP 3: VERIFY CONNECTION
-					<div class="h-px flex-1 bg-ink-800"></div>
-				</div>
-
-				<div class="verification-section p-6 bg-ink-900 border border-ink-800 rounded-2xl mb-8">
-					<div class="form-group">
-						<label for="accountId">AWS Account ID (12 digits)</label>
-						<input
-							type="text"
-							id="accountId"
-							bind:value={awsAccountId}
-							placeholder="123456789012"
-							maxlength="12"
-							class="input"
-						/>
-					</div>
-
-					<div class="form-group">
-						<label for="roleArn">Role ARN (from CloudFormation Outputs)</label>
-						<input
-							type="text"
-							id="roleArn"
-							bind:value={roleArn}
-							placeholder="arn:aws:iam::123456789012:role/ValdrixReadOnly"
-							class="input"
-						/>
-					</div>
-
-					<div
-						class="form-group pt-4 border-t border-ink-800 relative mt-4"
-						class:opacity-50={!['growth', 'pro', 'enterprise'].includes(
-							data?.subscription?.tier
-						)}
-					>
-						<label class="flex items-center justify-between gap-3 cursor-pointer">
-							<div class="flex items-center gap-3">
-								<input
-									type="checkbox"
-									bind:checked={isManagementAccount}
-									class="toggle"
-									disabled={!['growth', 'pro', 'enterprise'].includes(
-										data?.subscription?.tier
-									)}
-								/>
-								<span class="font-bold">Register as Management Account</span>
+					<div class="code-container">
+						<div class="code-header">
+							<span
+								>{selectedTab === 'cloudformation' ? 'valdrix-role.yaml' : 'valdrix-role.tf'}</span
+							>
+							<div class="code-actions">
+								<button class="icon-btn" onclick={copyTemplate}>{copied ? '✅' : '📋 Copy'}</button>
+								<button class="icon-btn" onclick={downloadTemplate}>📥</button>
 							</div>
-							{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
-								<span class="badge badge-warning text-[10px]">Growth Tier +</span>
-							{/if}
-						</label>
-						<p class="text-xs text-ink-500 mt-2">
-							Enable this if this account is the Management Account of an AWS Organization. Valdrix
-							will automatically discover and help you link member accounts.
-						</p>
+						</div>
+						<pre class="code-block">{selectedTab === 'cloudformation'
+								? cloudformationYaml
+								: terraformHcl}</pre>
 					</div>
 
-					{#if isManagementAccount}
-						<div class="form-group stagger-enter mt-4">
-							<label for="org_id">Organization ID (Optional)</label>
+					<div class="divider text-xs text-ink-500 my-8 flex items-center gap-4">
+						<div class="h-px flex-1 bg-ink-800"></div>
+						STEP 3: VERIFY CONNECTION
+						<div class="h-px flex-1 bg-ink-800"></div>
+					</div>
+
+					<div class="verification-section p-6 bg-ink-900 border border-ink-800 rounded-2xl mb-8">
+						<div class="form-group">
+							<label for="accountId">AWS Account ID (12 digits)</label>
 							<input
 								type="text"
-								id="org_id"
-								bind:value={organizationId}
-								placeholder="o-xxxxxxxxxx"
+								id="accountId"
+								bind:value={awsAccountId}
+								placeholder="123456789012"
+								maxlength="12"
 								class="input"
 							/>
 						</div>
-					{/if}
-				</div>
-			{:else if selectedProvider === 'azure'}
-				<!-- ... existing azure code ... -->
-				<h2>Step 2: Connect Microsoft Azure</h2>
-				<p class="mb-6">
-					Connect using <strong>Workload Identity Federation</strong> (Zero-Secret).
-				</p>
 
-				<div class="space-y-4 mb-8">
-					<div class="form-group">
-						<label for="azTenant">Azure Tenant ID</label>
-						<input
-							type="text"
-							id="azTenant"
-							bind:value={azureTenantId}
-							placeholder="00000000-0000-0000-0000-000000000000"
-						/>
-					</div>
-					<div class="form-group">
-						<label for="azSub">Subscription ID</label>
-						<input
-							type="text"
-							id="azSub"
-							bind:value={azureSubscriptionId}
-							placeholder="00000000-0000-0000-0000-000000000000"
-						/>
-					</div>
-					<div class="form-group">
-						<label for="azClient">Application (Client) ID</label>
-						<input
-							type="text"
-							id="azClient"
-							bind:value={azureClientId}
-							placeholder="00000000-0000-0000-0000-000000000000"
-						/>
-					</div>
-				</div>
-
-				<div class="info-box mb-6">
-					<h4 class="text-sm font-bold mb-2">🚀 Magic Snippet</h4>
-					<p class="text-xs text-ink-400 mb-3">
-						Copy and paste this into your Azure Cloud Shell to establish trust.
-					</p>
-					<div class="bg-black/50 p-3 rounded font-mono text-xs break-all text-green-400">
-						{cloudShellSnippet ||
-							'# Establishing Workload Identity Trust... (Wait for initialization)'}
-					</div>
-				</div>
-			{:else if selectedProvider === 'gcp'}
-				<h2>Step 2: Connect Google Cloud</h2>
-				<p class="mb-6">Connect using <strong>Identity Federation</strong>.</p>
-
-				<div class="form-group mb-5">
-					<label for="gcpProject">GCP Project ID</label>
-					<input
-						type="text"
-						id="gcpProject"
-						bind:value={gcpProjectId}
-						placeholder="my-awesome-project"
-					/>
-				</div>
-
-				<div class="p-4 rounded-xl bg-ink-900 border border-ink-800 mb-8">
-					<h4 class="text-xs font-bold text-accent-400 uppercase tracking-wider mb-4">
-						BigQuery Cost Export (Required for FinOps)
-					</h4>
-					<div class="space-y-4">
 						<div class="form-group">
-							<label for="gcpBillingProject">Billing Data Project ID (Optional)</label>
+							<label for="roleArn">Role ARN (from CloudFormation Outputs)</label>
 							<input
 								type="text"
-								id="gcpBillingProject"
-								bind:value={gcpBillingProjectId}
-								placeholder={gcpProjectId || 'GCP Project ID'}
+								id="roleArn"
+								bind:value={roleArn}
+								placeholder="arn:aws:iam::123456789012:role/ValdrixReadOnly"
+								class="input"
 							/>
-							<p class="text-[10px] text-ink-500">
-								Project where the BigQuery dataset resides (defaults to the project ID above).
+						</div>
+
+						<div
+							class="form-group pt-4 border-t border-ink-800 relative mt-4"
+							class:opacity-50={!['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
+						>
+							<label class="flex items-center justify-between gap-3 cursor-pointer">
+								<div class="flex items-center gap-3">
+									<input
+										type="checkbox"
+										bind:checked={isManagementAccount}
+										class="toggle"
+										disabled={!['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
+									/>
+									<span class="font-bold">Register as Management Account</span>
+								</div>
+								{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
+									<span class="badge badge-warning text-[10px]">Growth Tier +</span>
+								{/if}
+							</label>
+							<p class="text-xs text-ink-500 mt-2">
+								Enable this if this account is the Management Account of an AWS Organization.
+								Valdrix will automatically discover and help you link member accounts.
 							</p>
 						</div>
-						<div class="form-group">
-							<label for="gcpBillingDataset">BigQuery Dataset ID</label>
-							<input
-								type="text"
-								id="gcpBillingDataset"
-								bind:value={gcpBillingDataset}
-								placeholder="billing_dataset"
-							/>
-						</div>
-						<div class="form-group">
-							<label for="gcpBillingTable">BigQuery Table ID</label>
-							<input
-								type="text"
-								id="gcpBillingTable"
-								bind:value={gcpBillingTable}
-								placeholder="gcp_billing_export_resource_v1_..."
-							/>
-						</div>
-					</div>
-				</div>
 
-				<div class="info-box mb-6">
-					<h4 class="text-sm font-bold mb-2">🚀 Magic Snippet</h4>
-					<p class="text-xs text-ink-400 mb-3">Run this gcloud command in your GCP Console.</p>
-					<div class="bg-black/50 p-3 rounded font-mono text-xs break-all text-yellow-400">
-						{cloudShellSnippet ||
-							'# Establishing Workload Identity Trust... (Wait for initialization)'}
-					</div>
-				</div>
-			{:else if selectedProvider === 'saas' || selectedProvider === 'license'}
-				<h2>Step 2: Connect {selectedProvider === 'saas' ? 'SaaS' : 'License / ITAM'} Spend</h2>
-				<p class="mb-6">
-					Configure a Cloud+ connector using API key or manual/CSV feed ingestion.
-				</p>
-
-				<div class="space-y-4 mb-8">
-					<div class="form-group">
-						<label for="cloudPlusName">Connection Name</label>
-						<input
-							type="text"
-							id="cloudPlusName"
-							bind:value={cloudPlusName}
-							placeholder={selectedProvider === 'saas' ? 'Salesforce Spend Feed' : 'Microsoft 365 Seats'}
-						/>
-					</div>
-					<div class="form-group">
-						<label for="cloudPlusVendor">Vendor</label>
-						<input
-							type="text"
-							id="cloudPlusVendor"
-							bind:value={cloudPlusVendor}
-							placeholder={selectedProvider === 'saas' ? 'salesforce' : 'microsoft'}
-						/>
-					</div>
-					<div class="form-group">
-						<label for="cloudPlusAuthMethod">Auth Method</label>
-						<select id="cloudPlusAuthMethod" bind:value={cloudPlusAuthMethod}>
-							<option value="manual">manual</option>
-							<option value="api_key">api_key</option>
-							<option value="oauth">oauth</option>
-							<option value="csv">csv</option>
-						</select>
-					</div>
-					{#if cloudPlusAuthMethod === 'api_key'}
-						<div class="form-group">
-							<label for="cloudPlusApiKey">API Key</label>
-							<input
-								type="password"
-								id="cloudPlusApiKey"
-								bind:value={cloudPlusApiKey}
-								placeholder="Paste vendor API key"
-							/>
-						</div>
-					{/if}
-				</div>
-
-				<div class="info-box mb-6">
-					<h4 class="text-sm font-bold mb-2">📘 Setup Snippet</h4>
-					<p class="text-xs text-ink-400 mb-3">
-						Use this as your setup guide and feed template.
-					</p>
-					<div class="bg-black/50 p-3 rounded font-mono text-xs whitespace-pre-wrap break-all text-accent-300">
-						{cloudShellSnippet || '# Cloud+ setup snippet is loading...'}
-					</div>
-				</div>
-
-				<div class="info-box mb-6">
-					<h4 class="text-sm font-bold mb-2">🧾 Feed JSON (Optional)</h4>
-					<p class="text-xs text-ink-400 mb-3">
-						Provide an initial feed payload to validate ingestion immediately.
-					</p>
-					<textarea
-						rows="10"
-						class="input font-mono text-xs"
-						bind:value={cloudPlusFeedInput}
-						placeholder={cloudPlusSampleFeed || '[]'}
-					></textarea>
-				</div>
-			{/if}
-
-			<div class="flex gap-4 mt-8">
-				<button class="secondary-btn !w-auto px-6" onclick={() => (currentStep = 0)}>← Back</button>
-				{#if selectedProvider === 'aws'}
-					<button class="primary-btn !flex-1" onclick={verifyConnection} disabled={isVerifying}>
-						{isVerifying ? '⏳ Verifying...' : '✅ Verify Connection'}
-					</button>
-				{:else}
-					<button class="primary-btn !flex-1" onclick={proceedToVerify} disabled={isVerifying}>
-						{#if isVerifying}
-							⏳ Verifying...
-						{:else if selectedProvider === 'saas' || selectedProvider === 'license'}
-							✅ Create & Verify Connector
-						{:else}
-							Next: Verify Connection →
+						{#if isManagementAccount}
+							<div class="form-group stagger-enter mt-4">
+								<label for="org_id">Organization ID (Optional)</label>
+								<input
+									type="text"
+									id="org_id"
+									bind:value={organizationId}
+									placeholder="o-xxxxxxxxxx"
+									class="input"
+								/>
+							</div>
 						{/if}
-					</button>
-				{/if}
-			</div>
-		</div>
-	{/if}
-
-	<!-- Step 2: Verify -->
-	{#if currentStep === 2}
-		<div class="step-content">
-			<h2>Step 2: Verify Your Connection</h2>
-			<p>Enter the details from your AWS CloudFormation stack outputs.</p>
-
-			<div class="form-group">
-				<label for="accountId">AWS Account ID (12 digits)</label>
-				<input
-					type="text"
-					id="accountId"
-					bind:value={awsAccountId}
-					placeholder="123456789012"
-					maxlength="12"
-				/>
-			</div>
-
-			<div class="form-group">
-				<label for="roleArn">Role ARN (from CloudFormation Outputs)</label>
-				<input
-					type="text"
-					id="roleArn"
-					bind:value={roleArn}
-					placeholder="arn:aws:iam::123456789012:role/ValdrixReadOnly"
-				/>
-			</div>
-
-			<div
-				class="form-group pt-4 border-t border-ink-800 relative"
-				class:opacity-50={!['growth', 'pro', 'enterprise'].includes(
-					data?.subscription?.tier
-				)}
-			>
-				<label class="flex items-center justify-between gap-3 cursor-pointer">
-					<div class="flex items-center gap-3">
-						<input
-							type="checkbox"
-							bind:checked={isManagementAccount}
-							class="toggle"
-							disabled={!['growth', 'pro', 'enterprise'].includes(
-								data?.subscription?.tier
-							)}
-						/>
-						<span class="font-bold">Register as Management Account</span>
 					</div>
-					{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
-						<span class="badge badge-warning text-[10px]">Growth Tier +</span>
-					{/if}
-				</label>
-				<p class="text-xs text-ink-500 mt-2">
-					Enable this if this account is the Management Account of an AWS Organization. Valdrix will
-					automatically discover and help you link member accounts.
-				</p>
-				{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
-					<p class="text-[10px] text-accent-400 mt-1">
-						⚡ Multi-account discovery requires Growth tier or higher.
+				{:else if selectedProvider === 'azure'}
+					<!-- ... existing azure code ... -->
+					<h2>Step 2: Connect Microsoft Azure</h2>
+					<p class="mb-6">
+						Connect using <strong>Workload Identity Federation</strong> (Zero-Secret).
 					</p>
-				{/if}
-			</div>
 
-			{#if isManagementAccount}
-				<div class="form-group stagger-enter">
-					<label for="org_id">Organization ID (Optional)</label>
+					<div class="space-y-4 mb-8">
+						<div class="form-group">
+							<label for="azTenant">Azure Tenant ID</label>
+							<input
+								type="text"
+								id="azTenant"
+								bind:value={azureTenantId}
+								placeholder="00000000-0000-0000-0000-000000000000"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="azSub">Subscription ID</label>
+							<input
+								type="text"
+								id="azSub"
+								bind:value={azureSubscriptionId}
+								placeholder="00000000-0000-0000-0000-000000000000"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="azClient">Application (Client) ID</label>
+							<input
+								type="text"
+								id="azClient"
+								bind:value={azureClientId}
+								placeholder="00000000-0000-0000-0000-000000000000"
+							/>
+						</div>
+					</div>
+
+					<div class="info-box mb-6">
+						<h4 class="text-sm font-bold mb-2">🚀 Magic Snippet</h4>
+						<p class="text-xs text-ink-400 mb-3">
+							Copy and paste this into your Azure Cloud Shell to establish trust.
+						</p>
+						<div class="bg-black/50 p-3 rounded font-mono text-xs break-all text-green-400">
+							{cloudShellSnippet ||
+								'# Establishing Workload Identity Trust... (Wait for initialization)'}
+						</div>
+					</div>
+				{:else if selectedProvider === 'gcp'}
+					<h2>Step 2: Connect Google Cloud</h2>
+					<p class="mb-6">Connect using <strong>Identity Federation</strong>.</p>
+
+					<div class="form-group mb-5">
+						<label for="gcpProject">GCP Project ID</label>
+						<input
+							type="text"
+							id="gcpProject"
+							bind:value={gcpProjectId}
+							placeholder="my-awesome-project"
+						/>
+					</div>
+
+					<div class="p-4 rounded-xl bg-ink-900 border border-ink-800 mb-8">
+						<h4 class="text-xs font-bold text-accent-400 uppercase tracking-wider mb-4">
+							BigQuery Cost Export (Required for FinOps)
+						</h4>
+						<div class="space-y-4">
+							<div class="form-group">
+								<label for="gcpBillingProject">Billing Data Project ID (Optional)</label>
+								<input
+									type="text"
+									id="gcpBillingProject"
+									bind:value={gcpBillingProjectId}
+									placeholder={gcpProjectId || 'GCP Project ID'}
+								/>
+								<p class="text-[10px] text-ink-500">
+									Project where the BigQuery dataset resides (defaults to the project ID above).
+								</p>
+							</div>
+							<div class="form-group">
+								<label for="gcpBillingDataset">BigQuery Dataset ID</label>
+								<input
+									type="text"
+									id="gcpBillingDataset"
+									bind:value={gcpBillingDataset}
+									placeholder="billing_dataset"
+								/>
+							</div>
+							<div class="form-group">
+								<label for="gcpBillingTable">BigQuery Table ID</label>
+								<input
+									type="text"
+									id="gcpBillingTable"
+									bind:value={gcpBillingTable}
+									placeholder="gcp_billing_export_resource_v1_..."
+								/>
+							</div>
+						</div>
+					</div>
+
+					<div class="info-box mb-6">
+						<h4 class="text-sm font-bold mb-2">🚀 Magic Snippet</h4>
+						<p class="text-xs text-ink-400 mb-3">Run this gcloud command in your GCP Console.</p>
+						<div class="bg-black/50 p-3 rounded font-mono text-xs break-all text-yellow-400">
+							{cloudShellSnippet ||
+								'# Establishing Workload Identity Trust... (Wait for initialization)'}
+						</div>
+					</div>
+				{:else if selectedProvider === 'saas' || selectedProvider === 'license'}
+					<h2>Step 2: Connect {selectedProvider === 'saas' ? 'SaaS' : 'License / ITAM'} Spend</h2>
+					<p class="mb-6">
+						Configure a Cloud+ connector using API key or manual/CSV feed ingestion.
+					</p>
+
+					<div class="space-y-4 mb-8">
+						{#if cloudPlusNativeConnectors.length > 0}
+							<div class="info-box mb-4">
+								<h4 class="text-sm font-bold mb-2">🔌 Native Connectors</h4>
+								<p class="text-xs text-ink-400 mb-3">
+									Choose a supported vendor to auto-configure recommended auth and required fields.
+								</p>
+								<div class="flex flex-wrap gap-2">
+									{#each cloudPlusNativeConnectors as connector (connector.vendor)}
+										<button
+											type="button"
+											class="secondary-btn !w-auto px-3 py-1.5 text-xs"
+											class:opacity-70={cloudPlusVendor.trim().toLowerCase() !== connector.vendor}
+											onclick={() => chooseNativeCloudPlusVendor(connector.vendor)}
+										>
+											{connector.display_name}
+										</button>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						<div class="form-group">
+							<label for="cloudPlusName">Connection Name</label>
+							<input
+								type="text"
+								id="cloudPlusName"
+								bind:value={cloudPlusName}
+								placeholder={selectedProvider === 'saas'
+									? 'Salesforce Spend Feed'
+									: 'Microsoft 365 Seats'}
+							/>
+						</div>
+						<div class="form-group">
+							<label for="cloudPlusVendor">Vendor</label>
+							<input
+								type="text"
+								id="cloudPlusVendor"
+								bind:value={cloudPlusVendor}
+								onchange={handleCloudPlusVendorInputChanged}
+								placeholder={selectedProvider === 'saas' ? 'salesforce' : 'microsoft'}
+							/>
+						</div>
+						<div class="form-group">
+							<label for="cloudPlusAuthMethod">Auth Method</label>
+							<select
+								id="cloudPlusAuthMethod"
+								bind:value={cloudPlusAuthMethod}
+								onchange={handleCloudPlusAuthMethodChanged}
+							>
+								{#each getAvailableCloudPlusAuthMethods() as authMethod (authMethod)}
+									<option value={authMethod}>{authMethod}</option>
+								{/each}
+							</select>
+						</div>
+						{#if cloudPlusAuthMethod === 'api_key' || cloudPlusAuthMethod === 'oauth'}
+							<div class="form-group">
+								<label for="cloudPlusApiKey">API Key / OAuth Token</label>
+								<input
+									type="password"
+									id="cloudPlusApiKey"
+									bind:value={cloudPlusApiKey}
+									placeholder="Paste vendor API key or OAuth access token"
+								/>
+							</div>
+						{/if}
+
+						{#if isCloudPlusNativeAuthMethod() && getSelectedNativeConnector()?.required_connector_config_fields?.length}
+							<div class="info-box">
+								<h4 class="text-sm font-bold mb-2">⚙️ Required Connector Fields</h4>
+								<p class="text-xs text-ink-400 mb-3">
+									These fields are required for {getSelectedNativeConnector()?.display_name} native mode.
+								</p>
+								<div class="space-y-3">
+									{#each getSelectedNativeConnector()?.required_connector_config_fields ?? [] as field (field)}
+										<div class="form-group">
+											<label for={`cfg-${field}`}>connector_config.{field}</label>
+											<input
+												type="text"
+												id={`cfg-${field}`}
+												value={getRequiredConfigFieldValue(field)}
+												oninput={(event) =>
+													setRequiredConfigField(
+														field,
+														(event.currentTarget as HTMLInputElement).value
+													)}
+												placeholder={field === 'instance_url'
+													? 'https://your-org.my.salesforce.com'
+													: `Enter ${field}`}
+											/>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					</div>
+
+					<div class="info-box mb-6">
+						<h4 class="text-sm font-bold mb-2">📘 Setup Snippet</h4>
+						<p class="text-xs text-ink-400 mb-3">Use this as your setup guide and feed template.</p>
+						<div
+							class="bg-black/50 p-3 rounded font-mono text-xs whitespace-pre-wrap break-all text-accent-300"
+						>
+							{cloudShellSnippet || '# Cloud+ setup snippet is loading...'}
+						</div>
+					</div>
+
+					<div class="info-box mb-6">
+						<h4 class="text-sm font-bold mb-2">🧩 Connector Config JSON (Optional)</h4>
+						<p class="text-xs text-ink-400 mb-3">
+							Add non-secret vendor options to <code>connector_config</code> (required fields above are
+							merged automatically).
+						</p>
+						{#if getSelectedNativeConnector()?.optional_connector_config_fields?.length}
+							<p class="text-[11px] text-ink-500 mb-3">
+								Optional keys: {getSelectedNativeConnector()?.optional_connector_config_fields.join(
+									', '
+								)}
+							</p>
+						{/if}
+						<textarea
+							rows="5"
+							class="input font-mono text-xs"
+							bind:value={cloudPlusConnectorConfigInput}
+							placeholder={selectedProvider === 'license' ? '{"default_seat_price_usd": 36}' : '{}'}
+						></textarea>
+					</div>
+
+					<div class="info-box mb-6">
+						<h4 class="text-sm font-bold mb-2">🧾 Feed JSON (Optional)</h4>
+						<p class="text-xs text-ink-400 mb-3">
+							Provide an initial feed payload to validate ingestion immediately.
+						</p>
+						{#if cloudPlusManualFeedSchema.required_fields.length > 0}
+							<p class="text-[11px] text-ink-500 mb-3">
+								Required feed keys: {cloudPlusManualFeedSchema.required_fields.join(', ')}
+							</p>
+						{/if}
+						<textarea
+							rows="10"
+							class="input font-mono text-xs"
+							bind:value={cloudPlusFeedInput}
+							placeholder={cloudPlusSampleFeed || '[]'}
+						></textarea>
+					</div>
+				{/if}
+
+				<div class="flex gap-4 mt-8">
+					<button class="secondary-btn !w-auto px-6" onclick={() => (currentStep = 0)}
+						>← Back</button
+					>
+					{#if selectedProvider === 'aws'}
+						<button class="primary-btn !flex-1" onclick={verifyConnection} disabled={isVerifying}>
+							{isVerifying ? '⏳ Verifying...' : '✅ Verify Connection'}
+						</button>
+					{:else}
+						<button class="primary-btn !flex-1" onclick={proceedToVerify} disabled={isVerifying}>
+							{#if isVerifying}
+								⏳ Verifying...
+							{:else if selectedProvider === 'saas' || selectedProvider === 'license'}
+								✅ Create & Verify Connector
+							{:else}
+								Next: Verify Connection →
+							{/if}
+						</button>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
+		<!-- Step 2: Verify -->
+		{#if currentStep === 2}
+			<div class="step-content">
+				<h2>Step 2: Verify Your Connection</h2>
+				<p>Enter the details from your AWS CloudFormation stack outputs.</p>
+
+				<div class="form-group">
+					<label for="accountId">AWS Account ID (12 digits)</label>
 					<input
 						type="text"
-						id="org_id"
-						bind:value={organizationId}
-						placeholder="o-xxxxxxxxxx"
-						class="input"
+						id="accountId"
+						bind:value={awsAccountId}
+						placeholder="123456789012"
+						maxlength="12"
 					/>
 				</div>
-			{/if}
 
-			<button class="primary-btn" onclick={verifyConnection} disabled={isVerifying}>
-				{isVerifying ? '⏳ Verifying...' : '✅ Verify Connection'}
-			</button>
+				<div class="form-group">
+					<label for="roleArn">Role ARN (from CloudFormation Outputs)</label>
+					<input
+						type="text"
+						id="roleArn"
+						bind:value={roleArn}
+						placeholder="arn:aws:iam::123456789012:role/ValdrixReadOnly"
+					/>
+				</div>
 
-			<button class="secondary-btn" onclick={() => (currentStep = 1)}> ← Back to Template </button>
-		</div>
-	{/if}
+				<div
+					class="form-group pt-4 border-t border-ink-800 relative"
+					class:opacity-50={!['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
+				>
+					<label class="flex items-center justify-between gap-3 cursor-pointer">
+						<div class="flex items-center gap-3">
+							<input
+								type="checkbox"
+								bind:checked={isManagementAccount}
+								class="toggle"
+								disabled={!['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
+							/>
+							<span class="font-bold">Register as Management Account</span>
+						</div>
+						{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
+							<span class="badge badge-warning text-[10px]">Growth Tier +</span>
+						{/if}
+					</label>
+					<p class="text-xs text-ink-500 mt-2">
+						Enable this if this account is the Management Account of an AWS Organization. Valdrix
+						will automatically discover and help you link member accounts.
+					</p>
+					{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
+						<p class="text-[10px] text-accent-400 mt-1">
+							⚡ Multi-account discovery requires Growth tier or higher.
+						</p>
+					{/if}
+				</div>
 
-	<!-- Step 3: Success -->
-	{#if currentStep === 3 && success}
-		<div class="step-content success">
-			<div class="success-icon">🎉</div>
-			<h2>Connection Successful!</h2>
-			<p>
-				Valdrix can now analyze your {getProviderLabel(selectedProvider)} spend and include it in Cloud+
-				optimization workflows.
-			</p>
+				{#if isManagementAccount}
+					<div class="form-group stagger-enter">
+						<label for="org_id">Organization ID (Optional)</label>
+						<input
+							type="text"
+							id="org_id"
+							bind:value={organizationId}
+							placeholder="o-xxxxxxxxxx"
+							class="input"
+						/>
+					</div>
+				{/if}
 
-			<a href="{base}/" class="primary-btn"> Go to Dashboard → </a>
-		</div>
-	{/if}
-</div>
+				<button class="primary-btn" onclick={verifyConnection} disabled={isVerifying}>
+					{isVerifying ? '⏳ Verifying...' : '✅ Verify Connection'}
+				</button>
+
+				<button class="secondary-btn" onclick={() => (currentStep = 1)}>
+					← Back to Template
+				</button>
+			</div>
+		{/if}
+
+		<!-- Step 3: Success -->
+		{#if currentStep === 3 && success}
+			<div class="step-content success">
+				<div class="success-icon">🎉</div>
+				<h2>Connection Successful!</h2>
+				<p>
+					Valdrix can now analyze your {getProviderLabel(selectedProvider)} spend and include it in Cloud+
+					optimization workflows.
+				</p>
+
+				<a href={`${base}/`} class="primary-btn"> Go to Dashboard → </a>
+			</div>
+		{/if}
+	</div>
+</AuthGate>
 
 <style>
 	.onboarding-container {

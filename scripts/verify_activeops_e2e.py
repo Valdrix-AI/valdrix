@@ -8,15 +8,16 @@ from app.models.remediation import RemediationRequest, RemediationAction
 from app.models.tenant import Tenant, User
 from app.modules.optimization.domain import RemediationService
 
+
 async def verify_active_ops():
     print("🚀 Starting ActiveOps Dry-Run Verification...")
-    
+
     async with async_session_maker() as db:
         # 1. Ensure a tenant exists
         print("🏢 Ensuring test tenant exists...")
         result = await db.execute(select(Tenant).limit(1))
         tenant = result.scalar_one_or_none()
-        
+
         if not tenant:
             tenant = Tenant(name="E2E Test Tenant", plan="pro")
             db.add(tenant)
@@ -24,29 +25,36 @@ async def verify_active_ops():
             print(f"✨ Created test tenant: {tenant.id}")
         else:
             print(f"✅ Using existing tenant: {tenant.id}")
-            
+
         tenant_id = tenant.id
-        
+
         # 2. Ensure a user exists for this tenant
-        result = await db.execute(select(User).where(User.tenant_id == tenant_id).limit(1))
+        result = await db.execute(
+            select(User).where(User.tenant_id == tenant_id).limit(1)
+        )
         user = result.scalar_one_or_none()
-        
+
         if not user:
-            user = User(id=uuid4(), tenant_id=tenant_id, email="e2e@example.com", role="admin")
+            user = User(
+                id=uuid4(), tenant_id=tenant_id, email="e2e@example.com", role="admin"
+            )
             db.add(user)
             await db.flush()
             print(f"✨ Created test user: {user.id}")
         else:
             print(f"✅ Using existing user: {user.id}")
-            
+
         user_id = user.id
-        
+
         # 3. Simulate finding a zombie with Provider Integration
         print("🔍 Creating remediation request via mock provider...")
-        
+
         # P-8: Resource Ownership Verification - Create mock AWS connection
         from app.models.aws_connection import AWSConnection
-        result = await db.execute(select(AWSConnection).where(AWSConnection.tenant_id == tenant_id).limit(1))
+
+        result = await db.execute(
+            select(AWSConnection).where(AWSConnection.tenant_id == tenant_id).limit(1)
+        )
         connection = result.scalar_one_or_none()
         if not connection:
             connection = AWSConnection(
@@ -55,22 +63,24 @@ async def verify_active_ops():
                 role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
                 external_id="e2e-external-id",
                 region="us-east-1",
-                status="active"
+                status="active",
             )
             db.add(connection)
             await db.flush()
             print(f"✨ Created mock AWS connection: {connection.id}")
-        
+
         # Mock credentials for the service
         mock_creds = {
             "AccessKeyId": "ASIA_MOCK_ID",
             "SecretAccessKey": "MOCK_SECRET",
             "SessionToken": "MOCK_TOKEN",
-            "Expiration": "2099-01-01T00:00:00Z"
+            "Expiration": "2099-01-01T00:00:00Z",
         }
-        
-        rem_service = RemediationService(db=db, region="us-east-1", credentials=mock_creds)
-        
+
+        rem_service = RemediationService(
+            db=db, region="us-east-1", credentials=mock_creds
+        )
+
         req = await rem_service.create_request(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -79,19 +89,21 @@ async def verify_active_ops():
             action=RemediationAction.TERMINATE_INSTANCE,
             estimated_savings=15.75,
             provider="aws",
-            connection_id=connection.id # REQUIRED for provider verification (BE-SEC-02)
+            connection_id=connection.id,  # REQUIRED for provider verification (BE-SEC-02)
         )
-        
+
         await db.commit()
         print(f"✅ Created remediation request: {req.id}")
-        
+
         # 4. Verify in DB
-        result = await db.execute(select(RemediationRequest).where(RemediationRequest.id == req.id))
+        result = await db.execute(
+            select(RemediationRequest).where(RemediationRequest.id == req.id)
+        )
         persisted = result.scalar_one_or_none()
-        
+
         assert persisted is not None
         assert persisted.status.value == "pending"
-        
+
         print(f"📊 Verified status: {persisted.status.value}")
         print("🏆 ActiveOps Verification PASSED.")
 

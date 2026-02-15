@@ -1,7 +1,6 @@
 from functools import lru_cache
 from typing import Optional
-
-import secrets
+import base64
 import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
@@ -11,11 +10,9 @@ from app.shared.core.constants import AWS_SUPPORTED_REGIONS, LLMProvider
 @lru_cache
 def get_settings() -> "Settings":
     """Returns a singleton instance of the application settings."""
-    settings = Settings()
-    if not settings.CSRF_SECRET_KEY and not settings.is_production:
-        # Generate a random key for non-production if missing
-        settings.CSRF_SECRET_KEY = secrets.token_hex(32)
-    return settings
+    # Production-grade: do not generate security-sensitive secrets at runtime.
+    # Require explicit configuration via environment / .env for all non-test runs.
+    return Settings()
 
 
 class Settings(BaseSettings):
@@ -23,6 +20,7 @@ class Settings(BaseSettings):
     Main configuration for Valdrix AI.
     Uses Pydantic-Settings for environment variable parsing from .env.
     """
+
     APP_NAME: str = "Valdrix"
     VERSION: str = "0.1.0"
     DEBUG: bool = False
@@ -30,9 +28,9 @@ class Settings(BaseSettings):
     # is_production property ensures strict security for 'production'
     ENVIRONMENT: str = "development"
     API_URL: str = "http://localhost:8000"  # Base URL for OIDC and Magic Links
-    OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None # Added for D5: Telemetry Sink
-    OTEL_EXPORTER_OTLP_INSECURE: bool = False # SEC-07: Secure Tracing
-    CSRF_SECRET_KEY: str = "dev_secret_key_change_me_in_prod" # SEC-01: CSRF
+    OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None  # Added for D5: Telemetry Sink
+    OTEL_EXPORTER_OTLP_INSECURE: bool = False  # SEC-07: Secure Tracing
+    CSRF_SECRET_KEY: Optional[str] = None  # SEC-01: CSRF
     TESTING: bool = False
     RATELIMIT_ENABLED: bool = True
     AUTOPILOT_BYPASS_GRACE_PERIOD: bool = False
@@ -43,81 +41,184 @@ class Settings(BaseSettings):
     SSE_MAX_CONNECTIONS_PER_TENANT: int = 5
     SSE_POLL_INTERVAL_SECONDS: int = 3
 
-    @model_validator(mode='after')
-    def validate_security_config(self) -> 'Settings':
+    @model_validator(mode="after")
+    def validate_security_config(self) -> "Settings":
         """Ensure critical production keys are present and valid."""
         if self.TESTING:
             return self
 
-            
+        # Always require secrets that impact correctness/security, even in development.
+        # This avoids insecure defaults and prevents encryption instability across restarts.
+        if not self.CSRF_SECRET_KEY or len(self.CSRF_SECRET_KEY) < 32:
+            raise ValueError(
+                "CSRF_SECRET_KEY must be set to a secure value (>= 32 chars)."
+            )
+        if not self.ENCRYPTION_KEY or len(self.ENCRYPTION_KEY) < 32:
+            raise ValueError("ENCRYPTION_KEY must be at least 32 characters.")
+        if not self.KDF_SALT:
+            raise ValueError("KDF_SALT must be set (base64-encoded random 32 bytes).")
+        try:
+            decoded_salt = base64.b64decode(self.KDF_SALT)
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError("KDF_SALT must be valid base64.") from exc
+        if len(decoded_salt) != 32:
+            raise ValueError("KDF_SALT must decode to exactly 32 bytes.")
+        if not self.SUPABASE_JWT_SECRET or len(self.SUPABASE_JWT_SECRET) < 32:
+            raise ValueError("SUPABASE_JWT_SECRET must be at least 32 characters.")
+
         if self.is_production:
+            # Explicitly reject known placeholder secrets. These can accidentally be shipped
+            # into production via copy/paste and will pass length checks otherwise.
+            insecure_secret_values = {
+                "dev_secret_key_change_me_in_prod",
+                "dev_supabase_secret_change_me_in_prod",
+            }
+
             # SEC-01: CSRF key must be changed
-            if not self.CSRF_SECRET_KEY or self.CSRF_SECRET_KEY == "dev_secret_key_change_me_in_prod":
+            if (
+                not self.CSRF_SECRET_KEY
+                or len(self.CSRF_SECRET_KEY) < 32
+                or self.CSRF_SECRET_KEY in insecure_secret_values
+            ):
                 raise ValueError(
                     "SECURITY ERROR: CSRF_SECRET_KEY must be set to a secure unique value in production! "
-                    "The default development key is not allowed."
+                    "It must be explicitly configured."
                 )
-            
+
             # SEC-02: Encryption Key must be secure
             if not self.ENCRYPTION_KEY or len(self.ENCRYPTION_KEY) < 32:
-                raise ValueError("ENCRYPTION_KEY must be at least 32 characters in production.")
-            
+                raise ValueError(
+                    "ENCRYPTION_KEY must be at least 32 characters in production."
+                )
+
             # PRODUCTION FIX #6: KDF_SALT must be set in production
             if not self.KDF_SALT:
-                raise ValueError("CRITICAL: KDF_SALT environment variable must be set in production. See DEPLOYMENT_FIXES_GUIDE.md Section 6.")
-            
+                raise ValueError(
+                    "CRITICAL: KDF_SALT environment variable must be set in production. See DEPLOYMENT_FIXES_GUIDE.md Section 6."
+                )
+
             # SEC-03: DB and Auth
             if not self.DATABASE_URL:
                 raise ValueError("DATABASE_URL is required in production.")
-            if not self.SUPABASE_JWT_SECRET or len(self.SUPABASE_JWT_SECRET) < 32:
-                raise ValueError("SUPABASE_JWT_SECRET must be at least 32 characters in production.")
+            if (
+                not self.SUPABASE_JWT_SECRET
+                or len(self.SUPABASE_JWT_SECRET) < 32
+                or self.SUPABASE_JWT_SECRET in insecure_secret_values
+            ):
+                raise ValueError(
+                    "SUPABASE_JWT_SECRET must be at least 32 characters in production."
+                )
 
             # SEC-04: Database SSL Mode
             if self.DB_SSL_MODE not in ["require", "verify-ca", "verify-full"]:
-                raise ValueError(f"SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production. Current: {self.DB_SSL_MODE}")
-            
-            if self.DB_SSL_MODE in ["verify-ca", "verify-full"] and not self.DB_SSL_CA_CERT_PATH:
-                raise ValueError(f"SECURITY ERROR: DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE is '{self.DB_SSL_MODE}'.")
+                raise ValueError(
+                    f"SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production. Current: {self.DB_SSL_MODE}"
+                )
 
-            # SEC-P0: Paystack Billing Hardening
-            if not self.PAYSTACK_SECRET_KEY or self.PAYSTACK_SECRET_KEY.startswith("sk_test"):
-                # If we are in prod, we MUST use live keys.
-                # However, allow sk_test ONLY if explicitly in staging (which we treat as non-prod for this check or handle separately)
-                if self.ENVIRONMENT == "production":
-                    raise ValueError("SECURITY ERROR: PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production.")
-            
-            if not self.PAYSTACK_PUBLIC_KEY and self.ENVIRONMENT == "production":
-                raise ValueError("SECURITY ERROR: PAYSTACK_PUBLIC_KEY is missing in production.")
+            if (
+                self.DB_SSL_MODE in ["verify-ca", "verify-full"]
+                and not self.DB_SSL_CA_CERT_PATH
+            ):
+                raise ValueError(
+                    f"SECURITY ERROR: DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE is '{self.DB_SSL_MODE}'."
+                )
 
             # SEC-P1: LLM Key Hardening
             # If a provider is set, its key MUST be present in production
             if self.LLM_PROVIDER == "openai" and not self.OPENAI_API_KEY:
-                raise ValueError("SECURITY ERROR: OPENAI_API_KEY is missing in production.")
+                raise ValueError(
+                    "SECURITY ERROR: OPENAI_API_KEY is missing in production."
+                )
             if self.LLM_PROVIDER == "claude" and not self.CLAUDE_API_KEY:
-                raise ValueError("SECURITY ERROR: CLAUDE_API_KEY is missing in production.")
+                raise ValueError(
+                    "SECURITY ERROR: CLAUDE_API_KEY is missing in production."
+                )
             if self.LLM_PROVIDER == "google" and not self.GOOGLE_API_KEY:
-                raise ValueError("SECURITY ERROR: GOOGLE_API_KEY is missing in production.")
+                raise ValueError(
+                    "SECURITY ERROR: GOOGLE_API_KEY is missing in production."
+                )
             if self.LLM_PROVIDER == "groq" and not self.GROQ_API_KEY:
-                raise ValueError("SECURITY ERROR: GROQ_API_KEY is missing in production.")
+                raise ValueError(
+                    "SECURITY ERROR: GROQ_API_KEY is missing in production."
+                )
 
+            # SEC-P0: Paystack Billing Hardening
+            if not self.PAYSTACK_SECRET_KEY or self.PAYSTACK_SECRET_KEY.startswith(
+                "sk_test"
+            ):
+                # If we are in prod, we MUST use live keys.
+                # However, allow sk_test ONLY if explicitly in staging (which we treat as non-prod for this check or handle separately)
+                if self.ENVIRONMENT == "production":
+                    raise ValueError(
+                        "SECURITY ERROR: PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production."
+                    )
+
+            if not self.PAYSTACK_PUBLIC_KEY and self.ENVIRONMENT == "production":
+                raise ValueError(
+                    "SECURITY ERROR: PAYSTACK_PUBLIC_KEY is missing in production."
+                )
+
+        if self.SAAS_STRICT_INTEGRATIONS:
+            env_integration_values = {
+                "SLACK_CHANNEL_ID": self.SLACK_CHANNEL_ID,
+                "JIRA_BASE_URL": self.JIRA_BASE_URL,
+                "JIRA_EMAIL": self.JIRA_EMAIL,
+                "JIRA_API_TOKEN": self.JIRA_API_TOKEN,
+                "JIRA_PROJECT_KEY": self.JIRA_PROJECT_KEY,
+                "GITHUB_ACTIONS_ENABLED": self.GITHUB_ACTIONS_ENABLED,
+                "GITHUB_ACTIONS_OWNER": self.GITHUB_ACTIONS_OWNER,
+                "GITHUB_ACTIONS_REPO": self.GITHUB_ACTIONS_REPO,
+                "GITHUB_ACTIONS_WORKFLOW_ID": self.GITHUB_ACTIONS_WORKFLOW_ID,
+                "GITHUB_ACTIONS_TOKEN": self.GITHUB_ACTIONS_TOKEN,
+                "GITLAB_CI_ENABLED": self.GITLAB_CI_ENABLED,
+                "GITLAB_CI_PROJECT_ID": self.GITLAB_CI_PROJECT_ID,
+                "GITLAB_CI_TRIGGER_TOKEN": self.GITLAB_CI_TRIGGER_TOKEN,
+                "GENERIC_CI_WEBHOOK_ENABLED": self.GENERIC_CI_WEBHOOK_ENABLED,
+                "GENERIC_CI_WEBHOOK_URL": self.GENERIC_CI_WEBHOOK_URL,
+                "GENERIC_CI_WEBHOOK_BEARER_TOKEN": self.GENERIC_CI_WEBHOOK_BEARER_TOKEN,
+            }
+            configured_keys = [
+                key for key, value in env_integration_values.items() if bool(value)
+            ]
+            if configured_keys:
+                strict_msg = (
+                    "SAAS_STRICT_INTEGRATIONS is enabled, but env-based integration settings are configured. "
+                    "Configure Slack/Jira/workflows in tenant notification settings instead."
+                )
+                if self.is_production:
+                    raise ValueError(
+                        "SECURITY ERROR: SAAS_STRICT_INTEGRATIONS forbids env-based integration settings "
+                        f"in production. Configured keys: {', '.join(configured_keys)}"
+                    )
+                structlog.get_logger().warning(
+                    "saas_strict_integrations_env_config_detected",
+                    configured_keys=configured_keys,
+                    msg=strict_msg,
+                )
 
         # SEC-05: Admin API Key validation for staging/production
         if self.ENVIRONMENT in ["production", "staging"]:
             if not self.ADMIN_API_KEY:
-                raise ValueError(f"SECURITY ERROR: ADMIN_API_KEY must be configured in {self.ENVIRONMENT} environment.")
-            
+                raise ValueError(
+                    f"SECURITY ERROR: ADMIN_API_KEY must be configured in {self.ENVIRONMENT} environment."
+                )
+
             if self.ENVIRONMENT == "production" and len(self.ADMIN_API_KEY) < 32:
-                raise ValueError("SECURITY ERROR: ADMIN_API_KEY must be at least 32 characters in production for security.")
-            
+                raise ValueError(
+                    "SECURITY ERROR: ADMIN_API_KEY must be at least 32 characters in production for security."
+                )
+
             # SEC-A1: CORS origins should not include localhost in production
-            localhost_origins = [o for o in self.CORS_ORIGINS if 'localhost' in o or '127.0.0.1' in o]
+            localhost_origins = [
+                o for o in self.CORS_ORIGINS if "localhost" in o or "127.0.0.1" in o
+            ]
             if localhost_origins:
                 structlog.get_logger().warning(
                     "cors_localhost_in_production",
                     origins=localhost_origins,
-                    msg="CORS_ORIGINS contains localhost URLs in production mode"
+                    msg="CORS_ORIGINS contains localhost URLs in production mode",
                 )
-            
+
             # SEC-A2: API_URL/FRONTEND_URL should be HTTPS in production
             for attr_name in ["API_URL", "FRONTEND_URL"]:
                 val = getattr(self, attr_name)
@@ -125,18 +226,18 @@ class Settings(BaseSettings):
                     structlog.get_logger().warning(
                         f"{attr_name.lower()}_not_https",
                         **{attr_name.lower(): val},
-                        msg=f"{attr_name} should use HTTPS in production"
+                        msg=f"{attr_name} should use HTTPS in production",
                     )
-        
+
         # LLM Provider keys (validated in all modes if provider selected)
         provider_keys = {
             LLMProvider.OPENAI: self.OPENAI_API_KEY,
             LLMProvider.CLAUDE: self.CLAUDE_API_KEY,
             LLMProvider.ANTHROPIC: self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY,
             LLMProvider.GOOGLE: self.GOOGLE_API_KEY,
-            LLMProvider.GROQ: self.GROQ_API_KEY
+            LLMProvider.GROQ: self.GROQ_API_KEY,
         }
-        
+
         provider_enum: LLMProvider | None = None
         try:
             provider_enum = LLMProvider(self.LLM_PROVIDER)
@@ -144,40 +245,47 @@ class Settings(BaseSettings):
             provider_enum = None
         if provider_enum and not provider_keys[provider_enum]:
             if self.is_production:
-                raise ValueError(f"LLM_PROVIDER is set to '{self.LLM_PROVIDER}' but corresponding API key is missing.")
-        
+                raise ValueError(
+                    f"LLM_PROVIDER is set to '{self.LLM_PROVIDER}' but corresponding API key is missing."
+                )
+
         # Redis fallback: construct REDIS_URL if missing but HOST/PORT are present
-        if not self.REDIS_URL and hasattr(self, 'REDIS_HOST') and hasattr(self, 'REDIS_PORT'):
+        if (
+            not self.REDIS_URL
+            and hasattr(self, "REDIS_HOST")
+            and hasattr(self, "REDIS_PORT")
+        ):
             # These are defined as attributes below, so they will be available if set via env
-            host = getattr(self, 'REDIS_HOST', None)
-            port = getattr(self, 'REDIS_PORT', None)
+            host = getattr(self, "REDIS_HOST", None)
+            port = getattr(self, "REDIS_PORT", None)
             if host and port:
                 self.REDIS_URL = f"redis://{host}:{port}"
-                
-        return self
 
+        return self
 
     # AWS Credentials
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_DEFAULT_REGION: str = "us-east-1"
-    AWS_ENDPOINT_URL: Optional[str] = None  # Added for local testing (MotoServer/LocalStack)
-    
+    AWS_ENDPOINT_URL: Optional[str] = (
+        None  # Added for local testing (MotoServer/LocalStack)
+    )
+
     # CloudFormation Template (Configurable for S3/GitHub)
     CLOUDFORMATION_TEMPLATE_URL: str = "https://raw.githubusercontent.com/valdrix/valdrix/main/cloudformation/valdrix-role.yaml"
-    
+
     # Reload trigger: 2026-01-14
 
     # Security
-    CORS_ORIGINS: list[str] = [] # Empty by default - restricted in prod
+    CORS_ORIGINS: list[str] = []  # Empty by default - restricted in prod
     FRONTEND_URL: str = "http://localhost:5173"  # Used for billing callbacks
     OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL: str = "gpt-4o" # High performance for complex analysis
+    OPENAI_MODEL: str = "gpt-4o"  # High performance for complex analysis
 
     # Claude/Anthropic Credentials
     CLAUDE_API_KEY: Optional[str] = None
     CLAUDE_MODEL: str = "claude-3-7-sonnet"
-    ANTHROPIC_API_KEY: Optional[str] = None # Added for Phase 28 compatibility
+    ANTHROPIC_API_KEY: Optional[str] = None  # Added for Phase 28 compatibility
 
     # Google Gemini Credentials
     GOOGLE_API_KEY: Optional[str] = None
@@ -188,8 +296,8 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # LLM Provider
-    LLM_PROVIDER: str = "groq" # Options: openai, claude, google, groq
-    ENABLE_DELTA_ANALYSIS: bool = True # Innovation 1: Reduce token usage by 90%
+    LLM_PROVIDER: str = "groq"  # Options: openai, claude, google, groq
+    ENABLE_DELTA_ANALYSIS: bool = True  # Innovation 1: Reduce token usage by 90%
     DELTA_ANALYSIS_DAYS: int = 3
 
     # Scheduler
@@ -200,22 +308,70 @@ class Settings(BaseSettings):
     ADMIN_API_KEY: Optional[str] = None
 
     # Database
-    DATABASE_URL: Optional[str] = None # Required in prod, optional in dev/test
+    DATABASE_URL: Optional[str] = None  # Required in prod, optional in dev/test
     DB_SSL_MODE: str = "require"  # Options: disable, require, verify-ca, verify-full
-    DB_SSL_CA_CERT_PATH: Optional[str] = None  # Path to CA cert for verify-ca/verify-full modes
+    DB_SSL_CA_CERT_PATH: Optional[str] = (
+        None  # Path to CA cert for verify-ca/verify-full modes
+    )
     DB_POOL_SIZE: int = 20  # Standard for Supabase/Neon free tiers
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 3600
     DB_ECHO: bool = False
+    # Tests default to in-memory sqlite to avoid accidental side-effects on real databases.
+    # Set true to allow tests to use DATABASE_URL (e.g., integration tests against Postgres).
+    ALLOW_TEST_DATABASE_URL: bool = False
+    # Enable RLS enforcement listener in tests when running against Postgres.
+    ENFORCE_RLS_IN_TESTS: bool = False
 
     # Supabase Auth
     SUPABASE_URL: Optional[str] = None
-    SUPABASE_JWT_SECRET: str = "dev_supabase_secret_change_me_in_prod" # Required for auth middleware
+    SUPABASE_JWT_SECRET: Optional[str] = None  # Required for auth middleware
 
     # Notifications
+    SAAS_STRICT_INTEGRATIONS: bool = False
     SLACK_BOT_TOKEN: Optional[str] = None
     SLACK_CHANNEL_ID: Optional[str] = None
+    JIRA_BASE_URL: Optional[str] = None
+    JIRA_EMAIL: Optional[str] = None
+    JIRA_API_TOKEN: Optional[str] = None
+    JIRA_PROJECT_KEY: Optional[str] = None
+    JIRA_ISSUE_TYPE: str = "Task"
+    JIRA_TIMEOUT_SECONDS: float = 10.0
+    WORKFLOW_DISPATCH_TIMEOUT_SECONDS: float = 10.0
+    WORKFLOW_EVIDENCE_BASE_URL: Optional[str] = None
+    TEAMS_TIMEOUT_SECONDS: float = 10.0
+    # Teams incoming webhooks are validated with SSRF controls and a domain allowlist.
+    # This defaults to common Microsoft endpoints and can be overridden via env for self-host.
+    TEAMS_WEBHOOK_ALLOWED_DOMAINS: list[str] = [
+        "office.com",
+        "office365.com",
+        "webhook.office.com",
+        "logic.azure.com",
+        "powerautomate.com",
+    ]
+    TEAMS_WEBHOOK_REQUIRE_HTTPS: bool = True
+    TEAMS_WEBHOOK_BLOCK_PRIVATE_IPS: bool = True
+
+    # GitHub Actions workflow dispatch
+    GITHUB_ACTIONS_ENABLED: bool = False
+    GITHUB_ACTIONS_OWNER: Optional[str] = None
+    GITHUB_ACTIONS_REPO: Optional[str] = None
+    GITHUB_ACTIONS_WORKFLOW_ID: Optional[str] = None
+    GITHUB_ACTIONS_REF: str = "main"
+    GITHUB_ACTIONS_TOKEN: Optional[str] = None
+
+    # GitLab CI trigger
+    GITLAB_CI_ENABLED: bool = False
+    GITLAB_CI_BASE_URL: str = "https://gitlab.com"
+    GITLAB_CI_PROJECT_ID: Optional[str] = None
+    GITLAB_CI_REF: str = "main"
+    GITLAB_CI_TRIGGER_TOKEN: Optional[str] = None
+
+    # Generic CI webhook trigger
+    GENERIC_CI_WEBHOOK_ENABLED: bool = False
+    GENERIC_CI_WEBHOOK_URL: Optional[str] = None
+    GENERIC_CI_WEBHOOK_BEARER_TOKEN: Optional[str] = None
 
     # SMTP Email (for carbon alerts)
     SMTP_HOST: Optional[str] = None
@@ -223,7 +379,7 @@ class Settings(BaseSettings):
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM: str = "alerts@valdrix.ai"
-    
+
     # GreenOps & Carbon APIs
     WATT_TIME_API_KEY: Optional[str] = None
     ELECTRICITY_MAPS_API_KEY: Optional[str] = None
@@ -236,14 +392,13 @@ class Settings(BaseSettings):
     GCP_OIDC_SCOPE: str = "https://www.googleapis.com/auth/cloud-platform"
     GCP_OIDC_VERIFY_TIMEOUT_SECONDS: int = 10
 
-
     # Encryption & Secret Rotation
     ENCRYPTION_KEY: Optional[str] = None
     PII_ENCRYPTION_KEY: Optional[str] = None
     API_KEY_ENCRYPTION_KEY: Optional[str] = None
     ENCRYPTION_FALLBACK_KEYS: list[str] = []
-    BLIND_INDEX_KEY: Optional[str] = None # SEC-06: Separation of keys
-    
+    BLIND_INDEX_KEY: Optional[str] = None  # SEC-06: Separation of keys
+
     # KDF Settings for password-to-key derivation (SEC-06)
     # PRODUCTION FIX #6: Per-environment encryption salt (not hardcoded)
     # Set via environment variable: export KDF_SALT="<base64-encoded-random-32-bytes>"
@@ -251,12 +406,11 @@ class Settings(BaseSettings):
     KDF_SALT: Optional[str] = None
     KDF_ITERATIONS: int = 100000
 
-
     # Cache (Redis for production, in-memory for dev)
     REDIS_URL: Optional[str] = None  # e.g., redis://localhost:6379
-    REDIS_HOST: Optional[str] = None # Added for K8s compatibility
+    REDIS_HOST: Optional[str] = None  # Added for K8s compatibility
     REDIS_PORT: Optional[str] = "6379"
-    
+
     # Upstash Redis (Serverless - Free tier: 10K commands/day)
     UPSTASH_REDIS_URL: Optional[str] = None  # e.g., https://xxx.upstash.io
     UPSTASH_REDIS_TOKEN: Optional[str] = None
@@ -264,8 +418,8 @@ class Settings(BaseSettings):
     # Paystack Billing (Nigeria Support)
     PAYSTACK_SECRET_KEY: Optional[str] = None
     PAYSTACK_PUBLIC_KEY: Optional[str] = None
-    EXCHANGERATE_API_KEY: Optional[str] = None # Added for dynamic currency
-    FALLBACK_NGN_RATE: float = 1450.0 # SEC: Centralized financial fallback
+    EXCHANGERATE_API_KEY: Optional[str] = None  # Added for dynamic currency
+    FALLBACK_NGN_RATE: float = 1450.0  # SEC: Centralized financial fallback
     # Monthly plans
     PAYSTACK_PLAN_STARTER: Optional[str] = None
     PAYSTACK_PLAN_GROWTH: Optional[str] = None
@@ -282,12 +436,12 @@ class Settings(BaseSettings):
     CIRCUIT_BREAKER_RECOVERY_SECONDS: int = 300
     CIRCUIT_BREAKER_MAX_DAILY_SAVINGS: float = 1000.0
     CIRCUIT_BREAKER_CACHE_SIZE: int = 1000
-    
+
     # REMEDIATION KILL SWITCH: Stop all deletions if daily cost impact hits $500
     REMEDIATION_KILL_SWITCH_THRESHOLD: float = 500.0
     REMEDIATION_KILL_SWITCH_SCOPE: str = "tenant"  # tenant or global
     ENFORCE_REMEDIATION_DRY_RUN: bool = False
-    
+
     # Multi-Currency & Localization (Phase 12)
     SUPPORTED_CURRENCIES: list[str] = ["USD", "NGN", "EUR", "GBP"]
     EXCHANGE_RATE_SYNC_INTERVAL_HOURS: int = 24
@@ -300,10 +454,7 @@ class Settings(BaseSettings):
     ZOMBIE_PLUGIN_TIMEOUT_SECONDS: int = 30
     ZOMBIE_REGION_TIMEOUT_SECONDS: int = 120
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_ignore_empty=True
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
 
     @property
     def is_production(self) -> bool:

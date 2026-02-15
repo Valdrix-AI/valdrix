@@ -13,10 +13,12 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { base } from '$app/paths';
+	import { PUBLIC_API_URL } from '$env/static/public';
 
 	let email = $state('');
 	let password = $state('');
 	let loading = $state(false);
+	let ssoLoading = $state(false);
 	let error = $state('');
 	let success = $state('');
 	let mode: 'login' | 'signup' = $state('login');
@@ -27,7 +29,25 @@
 		if ($page.url.searchParams.get('mode') === 'signup') {
 			mode = 'signup';
 		}
+		const oauthError = $page.url.searchParams.get('error');
+		if (oauthError) {
+			error = oauthError;
+		}
 	});
+
+	type SsoDiscoveryResponse = {
+		available: boolean;
+		mode: 'domain' | 'provider_id' | null;
+		domain: string | null;
+		provider_id: string | null;
+		reason: string | null;
+	};
+
+	function normalizeDomain(value: string): string {
+		const normalized = value.trim().toLowerCase();
+		if (!normalized.includes('@')) return '';
+		return normalized.split('@')[1]?.trim().toLowerCase().replace(/^\.+|\.+$/g, '') ?? '';
+	}
 
 	async function handleSubmit() {
 		loading = true;
@@ -60,6 +80,64 @@
 			error = err.message;
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function handleSsoSubmit() {
+		ssoLoading = true;
+		error = '';
+		success = '';
+		try {
+			if (!email.trim()) {
+				throw new Error('Enter your work email to continue with SSO.');
+			}
+
+			const res = await fetch(`${PUBLIC_API_URL}/public/sso/discovery`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email: email.trim().toLowerCase() })
+			});
+			if (!res.ok) {
+				throw new Error('Unable to discover SSO configuration. Try again.');
+			}
+			const discovery = (await res.json()) as SsoDiscoveryResponse;
+			if (!discovery.available || !discovery.mode) {
+				throw new Error(
+					discovery.reason === 'sso_not_configured_for_domain'
+						? 'No SSO configuration was found for your domain.'
+						: 'SSO is not ready for this domain. Contact your admin.'
+				);
+			}
+
+			const redirectTo = `${window.location.origin}${base}/auth/callback`;
+			if (discovery.mode === 'provider_id') {
+				if (!discovery.provider_id) {
+					throw new Error('SSO provider configuration is incomplete.');
+				}
+				const { data, error: authError } = await supabase.auth.signInWithSSO({
+					providerId: discovery.provider_id,
+					options: { redirectTo }
+				});
+				if (authError) throw authError;
+				if (data?.url) window.location.assign(data.url);
+				return;
+			}
+
+			const domain = discovery.domain || normalizeDomain(email);
+			if (!domain) {
+				throw new Error('Unable to determine your SSO domain.');
+			}
+			const { data, error: authError } = await supabase.auth.signInWithSSO({
+				domain,
+				options: { redirectTo }
+			});
+			if (authError) throw authError;
+			if (data?.url) window.location.assign(data.url);
+		} catch (e) {
+			const err = e as Error;
+			error = err.message;
+		} finally {
+			ssoLoading = false;
 		}
 	}
 </script>
@@ -150,6 +228,27 @@
 					{/if}
 				</button>
 			</form>
+
+			<div class="my-4 flex items-center gap-3 text-xs text-ink-500">
+				<div class="h-px flex-1 bg-ink-800/70"></div>
+				<span>or</span>
+				<div class="h-px flex-1 bg-ink-800/70"></div>
+			</div>
+
+			<button
+				type="button"
+				class="btn btn-secondary w-full py-2.5"
+				disabled={ssoLoading}
+				onclick={() => void handleSsoSubmit()}
+				aria-label="Continue with SSO"
+			>
+				{#if ssoLoading}
+					<span class="spinner" aria-hidden="true"></span>
+					<span>Redirecting to IdP...</span>
+				{:else}
+					Continue with SSO
+				{/if}
+			</button>
 
 			<!-- Toggle Mode -->
 			<p class="mt-6 text-center text-sm text-ink-400">

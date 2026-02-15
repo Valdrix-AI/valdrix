@@ -36,7 +36,9 @@ def _safe_json_loads(raw_payload: Any, *, key: str) -> Any | None:
         try:
             raw_payload = raw_payload.decode("utf-8")
         except UnicodeDecodeError as exc:
-            logger.warning("cost_cache_payload_invalid_encoding", key=key, error=str(exc))
+            logger.warning(
+                "cost_cache_payload_invalid_encoding", key=key, error=str(exc)
+            )
             return None
 
     if not isinstance(raw_payload, str):
@@ -142,12 +144,13 @@ class RedisCache(CacheBackend):
         if self._client is None and self.redis_url:
             try:
                 import redis.asyncio as aioredis
+
                 self._client = aioredis.from_url(  # type: ignore[no-untyped-call]
                     self.redis_url,
                     encoding="utf-8",
                     decode_responses=True,
                     socket_connect_timeout=5,
-                    socket_timeout=5
+                    socket_timeout=5,
                 )
                 self._connected = True
                 logger.info("redis_connected", url=self.redis_url.split("@")[-1])
@@ -257,10 +260,7 @@ class CostCache:
 
     # Daily Costs
     async def get_daily_costs(
-        self,
-        tenant_id: str,
-        start_date: date,
-        end_date: date
+        self, tenant_id: str, start_date: date, end_date: date
     ) -> Optional[list[dict[str, Any]]]:
         """Get cached daily costs if available."""
         key = self._generate_key("costs", tenant_id, start_date, end_date)
@@ -278,7 +278,7 @@ class CostCache:
         tenant_id: str,
         start_date: date,
         end_date: date,
-        costs: list[dict[str, Any]]
+        costs: list[dict[str, Any]],
     ) -> None:
         """Cache daily costs."""
         key = self._generate_key("costs", tenant_id, start_date, end_date)
@@ -287,9 +287,7 @@ class CostCache:
 
     # Zombie Scans
     async def get_zombie_scan(
-        self,
-        tenant_id: str,
-        region: str
+        self, tenant_id: str, region: str
     ) -> Optional[dict[str, Any]]:
         """Get cached zombie scan if available."""
         key = self._generate_key("zombies", tenant_id, region)
@@ -301,10 +299,7 @@ class CostCache:
         return None
 
     async def set_zombie_scan(
-        self,
-        tenant_id: str,
-        region: str,
-        zombies: dict[str, Any]
+        self, tenant_id: str, region: str, zombies: dict[str, Any]
     ) -> None:
         """Cache zombie scan results."""
         key = self._generate_key("zombies", tenant_id, region)
@@ -312,9 +307,7 @@ class CostCache:
 
     # LLM Analysis
     async def get_analysis(
-        self,
-        tenant_id: str,
-        analysis_hash: str
+        self, tenant_id: str, analysis_hash: str
     ) -> Optional[dict[str, Any]]:
         """Get cached LLM analysis if available."""
         key = self._generate_key("analysis", tenant_id, analysis_hash)
@@ -326,10 +319,7 @@ class CostCache:
         return None
 
     async def set_analysis(
-        self,
-        tenant_id: str,
-        analysis_hash: str,
-        result: dict[str, Any]
+        self, tenant_id: str, analysis_hash: str, result: dict[str, Any]
     ) -> None:
         """Cache LLM analysis results."""
         key = self._generate_key("analysis", tenant_id, analysis_hash)
@@ -366,7 +356,7 @@ class CostCache:
             "healthy": healthy,
             "backend": backend_type,
             "ttl_costs": self.TTL_DAILY_COSTS,
-            "ttl_zombies": self.TTL_ZOMBIES
+            "ttl_zombies": self.TTL_ZOMBIES,
         }
 
 

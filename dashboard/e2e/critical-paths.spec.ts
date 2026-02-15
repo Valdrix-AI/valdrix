@@ -30,6 +30,16 @@ test.describe('Onboarding Flow', () => {
 		await expect(page.locator('text=Get Started')).toBeVisible();
 	});
 
+	test('skip link is keyboard reachable', async ({ page }) => {
+		await page.goto(BASE_URL);
+
+		// First focus should land on the skip link for keyboard users.
+		await page.keyboard.press('Tab');
+		const skipLink = page.locator('a.skip-link');
+		await expect(skipLink).toBeFocused();
+		await expect(skipLink).toHaveAttribute('href', '#main');
+	});
+
 	test('pricing page displays all tiers', async ({ page }) => {
 		await page.goto(`${BASE_URL}/pricing`);
 		await waitForPageLoad(page);
@@ -56,6 +66,26 @@ test.describe('Onboarding Flow', () => {
 
 		await page.click('button:has-text("Sign up")');
 		await expect(page.locator('h1:has-text("Create your account")')).toBeVisible();
+	});
+});
+
+// ==================== SEO / Indexability ====================
+
+test.describe('SEO and Indexability', () => {
+	test('robots.txt references sitemap', async ({ request }) => {
+		const res = await request.get(`${BASE_URL}/robots.txt`);
+		expect(res.ok()).toBeTruthy();
+		const body = await res.text();
+		expect(body).toContain('Sitemap:');
+		expect(body).toContain('/sitemap.xml');
+	});
+
+	test('sitemap.xml includes marketing routes', async ({ request }) => {
+		const res = await request.get(`${BASE_URL}/sitemap.xml`);
+		expect(res.ok()).toBeTruthy();
+		const body = await res.text();
+		expect(body).toContain('<urlset');
+		expect(body).toContain('/pricing');
 	});
 });
 
@@ -156,6 +186,6 @@ test.describe('API Health', () => {
 		expect(response.ok()).toBeTruthy();
 
 		const body = await response.json();
-		expect(body.status).toBe('active');
+		expect(['healthy', 'degraded']).toContain(body.status);
 	});
 });

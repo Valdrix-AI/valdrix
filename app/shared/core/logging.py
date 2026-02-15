@@ -4,14 +4,20 @@ import logging
 from typing import Any, cast
 from app.shared.core.config import get_settings
 
-def pii_redactor(_logger: Any, _method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+
+def pii_redactor(
+    _logger: Any, _method_name: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
     """
     Recursively redact common PII and sensitive fields from logs.
     Ensures GDPR/SOC2 compliance by preventing leakage into telemetry.
     """
     import re
+
     email_regex = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
-    phone_regex = re.compile(r"(?<!\w)(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,4}\d{2,4}(?!\w)")
+    phone_regex = re.compile(
+        r"(?<!\w)(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,4}\d{2,4}(?!\w)"
+    )
     pii_fields = {
         "password",
         "token",
@@ -48,6 +54,7 @@ def pii_redactor(_logger: Any, _method_name: str, event_dict: dict[str, Any]) ->
         if not isinstance(text, str):
             return text
         text = email_regex.sub("[EMAIL_REDACTED]", text)
+
         # Redact only plausible phone numbers (avoid timestamps/UUID fragments).
         def _replace_phone(match: re.Match[str]) -> str:
             candidate = match.group(0)
@@ -79,25 +86,29 @@ def pii_redactor(_logger: Any, _method_name: str, event_dict: dict[str, Any]) ->
     return {}
 
 
-def add_otel_trace_id(_logger: Any, _method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+def add_otel_trace_id(
+    _logger: Any, _method_name: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
     """Integrate OTel Trace IDs into structured logs."""
     from app.shared.core.tracing import get_current_trace_id
+
     trace_id = get_current_trace_id()
     if trace_id:
         event_dict["trace_id"] = trace_id
     return event_dict
+
 
 def setup_logging() -> None:
     settings = get_settings()
 
     # 1. Configure the common processors (Middleware Pipeline for Logs)
     base_processors = [
-        structlog.contextvars.merge_contextvars, # Support async context
-        structlog.processors.add_log_level,      # Add "level": "info"
-        structlog.processors.TimeStamper(fmt="iso"), # Add "timestamp": "2026..."
+        structlog.contextvars.merge_contextvars,  # Support async context
+        structlog.processors.add_log_level,  # Add "level": "info"
+        structlog.processors.TimeStamper(fmt="iso"),  # Add "timestamp": "2026..."
         structlog.processors.StackInfoRenderer(),
-        add_otel_trace_id,                       # Observability: Add Trace IDs
-        pii_redactor,                            # Security: Redact PII before rendering
+        add_otel_trace_id,  # Observability: Add Trace IDs
+        pii_redactor,  # Security: Redact PII before rendering
     ]
 
     # 2. Choose the renderer based on environment
@@ -110,11 +121,10 @@ def setup_logging() -> None:
         processors = base_processors + [structlog.processors.dict_tracebacks, renderer]
         min_level = logging.INFO
 
-
     # 3. Configure the logger or apply the configuration
     structlog.configure(
         processors=cast(Any, processors),
-        logger_factory=structlog.PrintLoggerFactory(),
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
         cache_logger_on_first_use=True,
     )
 
@@ -122,7 +132,7 @@ def setup_logging() -> None:
     # This ensure even library logs get formatted as JSON.
     logging.basicConfig(
         format="%(message)s",
-        stream=sys.stdout,
+        stream=sys.stderr,
         # filename="debug.log",
         level=min_level,
     )

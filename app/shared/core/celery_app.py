@@ -12,7 +12,7 @@ celery_app = Celery(
     "valdrix_worker",
     broker=broker_url,
     backend=backend_url,
-    include=["app.tasks.scheduler_tasks"]
+    include=["app.tasks.scheduler_tasks"],
 )
 
 # Configuration
@@ -24,11 +24,11 @@ celery_app.conf.update(
     enable_utc=True,
     # Worker settings
     worker_prefetch_multiplier=1,  # Prevent worker from hogging tasks (fair dispatch)
-    task_acks_late=True,           # Retry if worker crashes mid-task
+    task_acks_late=True,  # Retry if worker crashes mid-task
     task_reject_on_worker_lost=True,
     # Connection settings - CRITICAL: prevents indefinite blocking during startup
-    broker_connection_timeout=5,    # 5 second timeout for broker connection
-    broker_connection_retry=True,   # Enable retries
+    broker_connection_timeout=5,  # 5 second timeout for broker connection
+    broker_connection_retry=True,  # Enable retries
     broker_connection_max_retries=3,  # Max 3 retries
     broker_connection_retry_on_startup=True,  # Retry briefly on startup instead of failing immediately
 )

@@ -4,11 +4,26 @@ import types
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-from app.modules.optimization.adapters.azure.plugins.compute import IdleVmsPlugin, IdleGpuVmsPlugin
-from app.modules.optimization.adapters.azure.plugins.containers import IdleAksClusterPlugin, UnusedAppServicePlansPlugin
-from app.modules.optimization.adapters.azure.plugins.database import IdleSqlDatabasesPlugin
-from app.modules.optimization.adapters.azure.plugins.network import OrphanPublicIpsPlugin, OrphanNicsPlugin, OrphanNsgsPlugin
-from app.modules.optimization.adapters.azure.plugins.storage import UnattachedDisksPlugin, OldSnapshotsPlugin
+from app.modules.optimization.adapters.azure.plugins.compute import (
+    IdleVmsPlugin,
+    IdleGpuVmsPlugin,
+)
+from app.modules.optimization.adapters.azure.plugins.containers import (
+    IdleAksClusterPlugin,
+    UnusedAppServicePlansPlugin,
+)
+from app.modules.optimization.adapters.azure.plugins.database import (
+    IdleSqlDatabasesPlugin,
+)
+from app.modules.optimization.adapters.azure.plugins.network import (
+    OrphanPublicIpsPlugin,
+    OrphanNicsPlugin,
+    OrphanNsgsPlugin,
+)
+from app.modules.optimization.adapters.azure.plugins.storage import (
+    UnattachedDisksPlugin,
+    OldSnapshotsPlugin,
+)
 
 
 async def async_iter(items):
@@ -27,8 +42,12 @@ def _register_azure_module(monkeypatch, module_name, **attrs):
 @pytest.mark.asyncio
 async def test_idle_vms_cost_records():
     plugin = IdleVmsPlugin()
-    with patch("app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer") as mock_analyzer:
-        mock_analyzer.return_value.find_idle_vms.return_value = [{"resource_id": "vm-1"}]
+    with patch(
+        "app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer"
+    ) as mock_analyzer:
+        mock_analyzer.return_value.find_idle_vms.return_value = [
+            {"resource_id": "vm-1"}
+        ]
         zombies = await plugin.scan(subscription_id="sub-1", cost_records=[{"x": 1}])
         assert zombies[0]["resource_id"] == "vm-1"
 
@@ -49,7 +68,10 @@ async def test_idle_vms_gpu_fallback():
     client = MagicMock()
     client.virtual_machines.list_all.return_value = async_iter([vm])
 
-    with patch("app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient", return_value=client):
+    with patch(
+        "app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient",
+        return_value=client,
+    ):
         zombies = await plugin.scan(subscription_id="sub-1", credentials=MagicMock())
         assert len(zombies) == 1
         assert zombies[0]["resource_id"] == "vm-1"
@@ -58,7 +80,9 @@ async def test_idle_vms_gpu_fallback():
 @pytest.mark.asyncio
 async def test_idle_gpu_vms_filters_gpu():
     plugin = IdleGpuVmsPlugin()
-    with patch("app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer") as mock_analyzer:
+    with patch(
+        "app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer"
+    ) as mock_analyzer:
         mock_analyzer.return_value.find_idle_vms.return_value = [
             {"resource_id": "vm-gpu", "resource_type": "Virtual Machine (GPU)"},
             {"resource_id": "vm-cpu", "resource_type": "Virtual Machine"},
@@ -71,8 +95,12 @@ async def test_idle_gpu_vms_filters_gpu():
 @pytest.mark.asyncio
 async def test_idle_aks_cluster_cost_records():
     plugin = IdleAksClusterPlugin()
-    with patch("app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer") as mock_analyzer:
-        mock_analyzer.return_value.find_idle_aks_clusters.return_value = [{"resource_id": "aks-1"}]
+    with patch(
+        "app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer"
+    ) as mock_analyzer:
+        mock_analyzer.return_value.find_idle_aks_clusters.return_value = [
+            {"resource_id": "aks-1"}
+        ]
         zombies = await plugin.scan(subscription_id="sub-1", cost_records=[{"x": 1}])
         assert zombies[0]["resource_id"] == "aks-1"
 
@@ -80,8 +108,12 @@ async def test_idle_aks_cluster_cost_records():
 @pytest.mark.asyncio
 async def test_unused_app_service_plans_cost_records():
     plugin = UnusedAppServicePlansPlugin()
-    with patch("app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer") as mock_analyzer:
-        mock_analyzer.return_value.find_unused_app_service_plans.return_value = [{"resource_id": "plan-1"}]
+    with patch(
+        "app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer"
+    ) as mock_analyzer:
+        mock_analyzer.return_value.find_unused_app_service_plans.return_value = [
+            {"resource_id": "plan-1"}
+        ]
         zombies = await plugin.scan(subscription_id="sub-1", cost_records=[{"x": 1}])
         assert zombies[0]["resource_id"] == "plan-1"
 
@@ -110,7 +142,9 @@ async def test_unused_app_service_plans_fallback(monkeypatch):
     web_mod.aio = web_aio
 
     azure_mod = sys.modules.get("azure") or _register_azure_module(monkeypatch, "azure")
-    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(monkeypatch, "azure.mgmt")
+    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(
+        monkeypatch, "azure.mgmt"
+    )
     setattr(mgmt_mod, "web", web_mod)
     setattr(azure_mod, "mgmt", mgmt_mod)
 
@@ -122,8 +156,12 @@ async def test_unused_app_service_plans_fallback(monkeypatch):
 @pytest.mark.asyncio
 async def test_idle_sql_databases_cost_records():
     plugin = IdleSqlDatabasesPlugin()
-    with patch("app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer") as mock_analyzer:
-        mock_analyzer.return_value.find_idle_sql_databases.return_value = [{"resource_id": "db-1"}]
+    with patch(
+        "app.shared.analysis.azure_usage_analyzer.AzureUsageAnalyzer"
+    ) as mock_analyzer:
+        mock_analyzer.return_value.find_idle_sql_databases.return_value = [
+            {"resource_id": "db-1"}
+        ]
         zombies = await plugin.scan(subscription_id="sub-1", cost_records=[{"x": 1}])
         assert zombies[0]["resource_id"] == "db-1"
 
@@ -133,7 +171,9 @@ async def test_idle_sql_databases_fallback(monkeypatch):
     plugin = IdleSqlDatabasesPlugin()
 
     server = MagicMock()
-    server.id = "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Sql/servers/s1"
+    server.id = (
+        "/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Sql/servers/s1"
+    )
     server.name = "s1"
     db = MagicMock()
     db.id = "db-1"
@@ -153,7 +193,9 @@ async def test_idle_sql_databases_fallback(monkeypatch):
     sql_mod.aio = sql_aio
 
     azure_mod = sys.modules.get("azure") or _register_azure_module(monkeypatch, "azure")
-    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(monkeypatch, "azure.mgmt")
+    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(
+        monkeypatch, "azure.mgmt"
+    )
     setattr(mgmt_mod, "sql", sql_mod)
     setattr(azure_mod, "mgmt", mgmt_mod)
 
@@ -190,14 +232,23 @@ async def test_orphan_network_resources_fallback():
     client.network_interfaces.list_all.return_value = async_iter([nic])
     client.network_security_groups.list_all.return_value = async_iter([nsg])
 
-    with patch("app.modules.optimization.adapters.azure.plugins.network.NetworkManagementClient", return_value=client):
-        zombies = await OrphanPublicIpsPlugin().scan(subscription_id="sub-1", credentials=MagicMock())
+    with patch(
+        "app.modules.optimization.adapters.azure.plugins.network.NetworkManagementClient",
+        return_value=client,
+    ):
+        zombies = await OrphanPublicIpsPlugin().scan(
+            subscription_id="sub-1", credentials=MagicMock()
+        )
         assert len(zombies) == 1
 
-        zombies = await OrphanNicsPlugin().scan(subscription_id="sub-1", credentials=MagicMock())
+        zombies = await OrphanNicsPlugin().scan(
+            subscription_id="sub-1", credentials=MagicMock()
+        )
         assert len(zombies) == 1
 
-        zombies = await OrphanNsgsPlugin().scan(subscription_id="sub-1", credentials=MagicMock())
+        zombies = await OrphanNsgsPlugin().scan(
+            subscription_id="sub-1", credentials=MagicMock()
+        )
         assert len(zombies) == 1
 
 
@@ -224,7 +275,9 @@ async def test_idle_aks_cluster_fallback(monkeypatch):
     cs_mod.aio = cs_aio
 
     azure_mod = sys.modules.get("azure") or _register_azure_module(monkeypatch, "azure")
-    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(monkeypatch, "azure.mgmt")
+    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(
+        monkeypatch, "azure.mgmt"
+    )
     setattr(mgmt_mod, "containerservice", cs_mod)
     setattr(azure_mod, "mgmt", mgmt_mod)
 
@@ -254,20 +307,36 @@ async def test_unattached_disks_and_old_snapshots_fallback():
     client.disks.list.return_value = async_iter([disk])
     client.snapshots.list.return_value = async_iter([snapshot])
 
-    with patch("app.modules.optimization.adapters.azure.plugins.storage.ComputeManagementClient", return_value=client):
-        zombies = await UnattachedDisksPlugin().scan(subscription_id="sub-1", credentials=MagicMock())
+    with patch(
+        "app.modules.optimization.adapters.azure.plugins.storage.ComputeManagementClient",
+        return_value=client,
+    ):
+        zombies = await UnattachedDisksPlugin().scan(
+            subscription_id="sub-1", credentials=MagicMock()
+        )
         assert len(zombies) == 1
 
-        zombies = await OldSnapshotsPlugin().scan(subscription_id="sub-1", credentials=MagicMock())
+        zombies = await OldSnapshotsPlugin().scan(
+            subscription_id="sub-1", credentials=MagicMock()
+        )
         assert len(zombies) == 1
 
 
 @pytest.mark.asyncio
 async def test_azure_fallbacks_handle_errors(monkeypatch):
     # Compute fallback error (idle vms)
-    with patch("app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient", side_effect=RuntimeError("boom")), \
-         patch("app.modules.optimization.adapters.azure.plugins.compute.logger") as mock_logger:
-        zombies = await IdleVmsPlugin().scan(subscription_id="sub-1", credentials=MagicMock())
+    with (
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient",
+            side_effect=RuntimeError("boom"),
+        ),
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.compute.logger"
+        ) as mock_logger,
+    ):
+        zombies = await IdleVmsPlugin().scan(
+            subscription_id="sub-1", credentials=MagicMock()
+        )
         assert zombies == []
         mock_logger.warning.assert_called_once()
 
@@ -284,12 +353,18 @@ async def test_azure_fallbacks_handle_errors(monkeypatch):
     cs_mod.aio = cs_aio
 
     azure_mod = sys.modules.get("azure") or _register_azure_module(monkeypatch, "azure")
-    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(monkeypatch, "azure.mgmt")
+    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(
+        monkeypatch, "azure.mgmt"
+    )
     setattr(mgmt_mod, "containerservice", cs_mod)
     setattr(azure_mod, "mgmt", mgmt_mod)
 
-    with patch("app.modules.optimization.adapters.azure.plugins.containers.logger") as mock_logger:
-        zombies = await IdleAksClusterPlugin().scan(subscription_id="sub-1", credentials=MagicMock())
+    with patch(
+        "app.modules.optimization.adapters.azure.plugins.containers.logger"
+    ) as mock_logger:
+        zombies = await IdleAksClusterPlugin().scan(
+            subscription_id="sub-1", credentials=MagicMock()
+        )
         assert zombies == []
         mock_logger.warning.assert_called_once()
 
@@ -304,22 +379,65 @@ async def test_azure_fallbacks_handle_errors(monkeypatch):
     setattr(mgmt_mod, "sql", sql_mod)
     setattr(azure_mod, "mgmt", mgmt_mod)
 
-    with patch("app.modules.optimization.adapters.azure.plugins.database.logger") as mock_logger:
-        zombies = await IdleSqlDatabasesPlugin().scan(subscription_id="sub-1", credentials=MagicMock())
+    with patch(
+        "app.modules.optimization.adapters.azure.plugins.database.logger"
+    ) as mock_logger:
+        zombies = await IdleSqlDatabasesPlugin().scan(
+            subscription_id="sub-1", credentials=MagicMock()
+        )
         assert zombies == []
         mock_logger.warning.assert_called_once()
 
     # Network fallback error
-    with patch("app.modules.optimization.adapters.azure.plugins.network.NetworkManagementClient", side_effect=RuntimeError("boom")), \
-         patch("app.modules.optimization.adapters.azure.plugins.network.logger") as mock_logger:
-        assert await OrphanPublicIpsPlugin().scan(subscription_id="sub-1", credentials=MagicMock()) == []
-        assert await OrphanNicsPlugin().scan(subscription_id="sub-1", credentials=MagicMock()) == []
-        assert await OrphanNsgsPlugin().scan(subscription_id="sub-1", credentials=MagicMock()) == []
+    with (
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.network.NetworkManagementClient",
+            side_effect=RuntimeError("boom"),
+        ),
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.network.logger"
+        ) as mock_logger,
+    ):
+        assert (
+            await OrphanPublicIpsPlugin().scan(
+                subscription_id="sub-1", credentials=MagicMock()
+            )
+            == []
+        )
+        assert (
+            await OrphanNicsPlugin().scan(
+                subscription_id="sub-1", credentials=MagicMock()
+            )
+            == []
+        )
+        assert (
+            await OrphanNsgsPlugin().scan(
+                subscription_id="sub-1", credentials=MagicMock()
+            )
+            == []
+        )
         assert mock_logger.warning.call_count == 3
 
     # Storage fallback error
-    with patch("app.modules.optimization.adapters.azure.plugins.storage.ComputeManagementClient", side_effect=RuntimeError("boom")), \
-         patch("app.modules.optimization.adapters.azure.plugins.storage.logger") as mock_logger:
-        assert await UnattachedDisksPlugin().scan(subscription_id="sub-1", credentials=MagicMock()) == []
-        assert await OldSnapshotsPlugin().scan(subscription_id="sub-1", credentials=MagicMock()) == []
+    with (
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.storage.ComputeManagementClient",
+            side_effect=RuntimeError("boom"),
+        ),
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.storage.logger"
+        ) as mock_logger,
+    ):
+        assert (
+            await UnattachedDisksPlugin().scan(
+                subscription_id="sub-1", credentials=MagicMock()
+            )
+            == []
+        )
+        assert (
+            await OldSnapshotsPlugin().scan(
+                subscription_id="sub-1", credentials=MagicMock()
+            )
+            == []
+        )
         assert mock_logger.warning.call_count == 2

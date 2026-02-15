@@ -21,13 +21,14 @@ PROVIDER = "exchangerate-api" if EXCHANGE_RATE_API_KEY else "open.er-api"
 # Only update existing currencies if present; otherwise use a safe default list.
 DEFAULT_CURRENCIES = {"NGN", "EUR", "GBP"}
 
+
 async def update_exchange_rates():
     """
     Fetches latest exchange rates and updates the database.
     Standardizes BE-FIN-01: Automated Exchange Rate Management.
     """
     logger.info("exchange_rate_update_starting")
-    
+
     try:
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -42,7 +43,7 @@ async def update_exchange_rates():
         rates = data.get("conversion_rates") or data.get("rates") or {}
         if not rates:
             raise RuntimeError("Exchange rate API returned no rates")
-        
+
         async with async_session_maker() as session:
             # Determine which currencies to update
             result = await session.execute(select(ExchangeRate))
@@ -59,11 +60,11 @@ async def update_exchange_rates():
 
                 stmt = select(ExchangeRate).where(
                     ExchangeRate.from_currency == "USD",
-                    ExchangeRate.to_currency == currency
+                    ExchangeRate.to_currency == currency,
                 )
                 result = await session.execute(stmt)
                 db_rate = result.scalar_one_or_none()
-                
+
                 if db_rate:
                     logger.info("updating_existing_rate", currency=currency, rate=rate)
                     db_rate.rate = rate
@@ -75,15 +76,16 @@ async def update_exchange_rates():
                         from_currency="USD",
                         to_currency=currency,
                         rate=rate,
-                        provider=PROVIDER
+                        provider=PROVIDER,
                     )
                     session.add(new_rate)
-            
+
             await session.commit()
             logger.info("exchange_rate_update_complete")
-            
+
     except Exception as e:
         logger.error("exchange_rate_update_failed", error=str(e))
+
 
 if __name__ == "__main__":
     asyncio.run(update_exchange_rates())

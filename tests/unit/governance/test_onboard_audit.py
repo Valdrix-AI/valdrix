@@ -5,10 +5,24 @@ from fastapi import HTTPException
 
 # Import all models to register them in SQLAlchemy mapper
 from app.models import (  # noqa: F401
-    cloud, llm, tenant, gcp_connection, aws_connection, azure_connection, 
-    remediation, notification_settings, background_job, attribution,
-    anomaly_marker, carbon_settings, cost_audit, discovered_account,
-    optimization, pricing, remediation_settings, security
+    cloud,
+    llm,
+    tenant,
+    gcp_connection,
+    aws_connection,
+    azure_connection,
+    remediation,
+    notification_settings,
+    background_job,
+    attribution,
+    anomaly_marker,
+    carbon_settings,
+    cost_audit,
+    discovered_account,
+    optimization,
+    pricing,
+    remediation_settings,
+    security,
 )
 
 from app.modules.governance.api.v1.settings.onboard import onboard, OnboardRequest
@@ -25,13 +39,12 @@ def mock_db():
     db.add = MagicMock()
     return db
 
+
 @pytest.fixture
 def current_user():
     # Simplest valid CurrentUser
-    return CurrentUser(
-        id=uuid4(), 
-        email="owner@example.com"
-    )
+    return CurrentUser(id=uuid4(), email="owner@example.com")
+
 
 @pytest.mark.asyncio
 async def test_onboard_success(mock_db, current_user):
@@ -39,22 +52,22 @@ async def test_onboard_success(mock_db, current_user):
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
-    
+
     # Mock tenant_id to be returned by tenant.id
     expected_tenant_id = uuid4()
-    
-    # We need to ensure that the Tenant object created inside onboard() 
+
+    # We need to ensure that the Tenant object created inside onboard()
     # has its ID set after flush.
     async def mock_flush():
         # Find the Tenant object in mock_db.add calls
         for call in mock_db.add.call_args_list:
             args, _ = call
             obj = args[0]
-            if hasattr(obj, "name") and not hasattr(obj, "email"): # It's a Tenant
+            if hasattr(obj, "name") and not hasattr(obj, "email"):  # It's a Tenant
                 obj.id = expected_tenant_id
-    
+
     mock_db.flush = AsyncMock(side_effect=mock_flush)
-    
+
     req = OnboardRequest(tenant_name="Acme Corp")
 
     scope = {
@@ -68,18 +81,18 @@ async def test_onboard_success(mock_db, current_user):
         "scheme": "http",
     }
     from fastapi import Request
+
     request_obj = Request(scope=scope)
-    
+
     with patch("app.modules.governance.api.v1.settings.onboard.audit_log"):
         with patch("app.shared.core.rate_limit.get_limiter") as mock_limiter:
             mock_limiter.return_value.limit.return_value = lambda x: x
-            
+
             response = await onboard(request_obj, req, current_user, mock_db)
-            
+
             assert response.status == "onboarded"
             assert response.tenant_id == expected_tenant_id
             mock_db.commit.assert_awaited_once()
-
 
 
 @pytest.mark.asyncio
@@ -88,39 +101,60 @@ async def test_onboard_already_exists(mock_db, current_user):
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = MagicMock(spec=User)
     mock_db.execute.return_value = mock_result
-    
+
     req = OnboardRequest(tenant_name="Acme Corp")
     from fastapi import Request
-    request_obj = Request(scope={
-        "type": "http", "method": "POST", "path": "/onboard", "raw_path": b"/onboard", "query_string": b"", "headers": [], "server": ("testserver", 80), "scheme": "http"
-    })
-    
+
+    request_obj = Request(
+        scope={
+            "type": "http",
+            "method": "POST",
+            "path": "/onboard",
+            "raw_path": b"/onboard",
+            "query_string": b"",
+            "headers": [],
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+
     with patch("app.shared.core.rate_limit.get_limiter") as mock_limiter:
         mock_limiter.return_value.limit.return_value = lambda x: x
         with pytest.raises(HTTPException) as exc:
             await onboard(request_obj, req, current_user, mock_db)
-    
+
     assert exc.value.status_code == 400
     assert "Already onboarded" in exc.value.detail
+
 
 @pytest.mark.asyncio
 async def test_onboard_invalid_name(mock_db, current_user):
     req = OnboardRequest(tenant_name="Acme Corp")
-    req.tenant_name = "ab" 
-    
+    req.tenant_name = "ab"
+
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
-    
+
     from fastapi import Request
-    request_obj = Request(scope={
-        "type": "http", "method": "POST", "path": "/onboard", "raw_path": b"/onboard", "query_string": b"", "headers": [], "server": ("testserver", 80), "scheme": "http"
-    })
+
+    request_obj = Request(
+        scope={
+            "type": "http",
+            "method": "POST",
+            "path": "/onboard",
+            "raw_path": b"/onboard",
+            "query_string": b"",
+            "headers": [],
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
 
     with patch("app.shared.core.rate_limit.get_limiter") as mock_limiter:
         mock_limiter.return_value.limit.return_value = lambda x: x
         with pytest.raises(HTTPException) as exc:
             await onboard(request_obj, req, current_user, mock_db)
-    
+
     assert exc.value.status_code == 400
     assert "at least 3 characters" in exc.value.detail

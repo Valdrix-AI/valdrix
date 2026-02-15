@@ -3,6 +3,7 @@ Azure Zombie Detection Plugins.
 
 All plugins use Cost Management export data for zero-cost detection.
 """
+
 from .compute import IdleVmsPlugin, IdleGpuVmsPlugin
 from .storage import UnattachedDisksPlugin, OldSnapshotsPlugin
 from .network import OrphanPublicIpsPlugin, OrphanNicsPlugin, OrphanNsgsPlugin

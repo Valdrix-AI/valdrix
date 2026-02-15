@@ -210,7 +210,7 @@ After hardening, monitor these daily:
 - **Cost:** ~$30-50K (engineering time)
 - **Outcome:** Production-ready, defensible system
 - **Risk:** Still HIGH (first 6 months in production)
-- **Customer Launch:** Q2 2026
+- **Customer Launch:** After hardening (60-90 days)
 
 ### **Option B: MVP Launch with Caveats**
 - **Timeline:** 2 weeks

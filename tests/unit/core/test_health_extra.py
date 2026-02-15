@@ -17,7 +17,9 @@ async def test_check_all_formats_expected_keys():
             "system_resources": {"status": "healthy"},
         },
     }
-    with patch.object(service, "comprehensive_health_check", AsyncMock(return_value=health)):
+    with patch.object(
+        service, "comprehensive_health_check", AsyncMock(return_value=health)
+    ):
         result = await service.check_all()
 
     assert result["database"]["status"] == "up"
@@ -59,15 +61,21 @@ async def test_check_aws_status_codes():
         async def get(self, _url):
             return FakeResponse(self._code)
 
-    with patch("app.shared.core.health.httpx.AsyncClient", return_value=FakeClient(200)):
+    with patch(
+        "app.shared.core.health.httpx.AsyncClient", return_value=FakeClient(200)
+    ):
         ok, _ = await service.check_aws()
         assert ok is True
 
-    with patch("app.shared.core.health.httpx.AsyncClient", return_value=FakeClient(404)):
+    with patch(
+        "app.shared.core.health.httpx.AsyncClient", return_value=FakeClient(404)
+    ):
         ok, _ = await service.check_aws()
         assert ok is True
 
-    with patch("app.shared.core.health.httpx.AsyncClient", return_value=FakeClient(503)):
+    with patch(
+        "app.shared.core.health.httpx.AsyncClient", return_value=FakeClient(503)
+    ):
         ok, details = await service.check_aws()
         assert ok is False
         assert "STS returned 503" in details["error"]

@@ -11,5 +11,7 @@ def test_security_metrics_labelnames():
 def test_security_metrics_can_increment():
     sm.CSRF_ERRORS.labels(path="/", method="GET").inc()
     sm.RATE_LIMIT_EXCEEDED.labels(path="/", method="GET", tier="starter").inc()
-    sm.REMEDIATION_TOTAL.labels(status="success", resource_type="ec2", action="stop").inc()
+    sm.REMEDIATION_TOTAL.labels(
+        status="success", resource_type="ec2", action="stop"
+    ).inc()
     sm.AUTH_FAILURES.labels(reason="invalid_token").inc()

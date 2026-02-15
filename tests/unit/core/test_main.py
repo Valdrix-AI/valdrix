@@ -40,6 +40,7 @@ async def lite_client() -> AsyncClient:
         yield ac
     valdrix_app.dependency_overrides.pop(get_db, None)
 
+
 @pytest.mark.asyncio
 async def test_root_endpoint(lite_client: AsyncClient):
     """Test root endpoint returns status ok."""
@@ -47,12 +48,14 @@ async def test_root_endpoint(lite_client: AsyncClient):
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
+
 @pytest.mark.asyncio
 async def test_health_live(lite_client: AsyncClient):
     """Test Liveness probe."""
     response = await lite_client.get("/health/live")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
+
 
 @pytest.mark.asyncio
 async def test_health_detailed(lite_client: AsyncClient):
@@ -62,11 +65,12 @@ async def test_health_detailed(lite_client: AsyncClient):
             "status": "healthy",
             "database": {"status": "up"},
             "redis": {"status": "up"},
-            "aws": {"status": "up"}
+            "aws": {"status": "up"},
         }
         response = await lite_client.get("/health")
         assert response.status_code == 200
         assert response.json()["status"] == "healthy"
+
 
 @pytest.mark.asyncio
 async def test_not_found(lite_client: AsyncClient):
@@ -89,6 +93,22 @@ def _make_request(path: str = "/boom", method: str = "GET") -> Request:
     return Request(scope)
 
 
+def _make_request_with_headers(
+    path: str, method: str, headers: list[tuple[bytes, bytes]]
+) -> Request:
+    scope = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "headers": headers,
+        "query_string": b"",
+        "server": ("test", 80),
+        "client": ("testclient", 1234),
+        "scheme": "http",
+    }
+    return Request(scope)
+
+
 @pytest.mark.asyncio
 async def test_valdrix_exception_handler_records_metrics():
     request = _make_request(path="/fail", method="POST")
@@ -96,7 +116,9 @@ async def test_valdrix_exception_handler_records_metrics():
 
     with patch("app.main.API_ERRORS_TOTAL") as mock_metric:
         response = await valdrix_exception_handler(request, exc)
-        mock_metric.labels.assert_called_once_with(path="/fail", method="POST", status_code=418)
+        mock_metric.labels.assert_called_once_with(
+            path="/fail", method="POST", status_code=418
+        )
         mock_metric.labels.return_value.inc.assert_called_once()
 
         assert response.status_code == 418
@@ -111,7 +133,9 @@ async def test_http_exception_handler_records_metrics():
 
     with patch("app.main.API_ERRORS_TOTAL") as mock_metric:
         response = await http_exception_handler(request, exc)
-        mock_metric.labels.assert_called_once_with(path="/missing", method="GET", status_code=404)
+        mock_metric.labels.assert_called_once_with(
+            path="/missing", method="GET", status_code=404
+        )
         mock_metric.labels.return_value.inc.assert_called_once()
 
         assert response.status_code == 404
@@ -124,12 +148,16 @@ async def test_csrf_exception_handler_records_metrics():
     request = _make_request(path="/csrf", method="PUT")
     exc = CsrfProtectError(403, "csrf blocked")
 
-    with patch("app.main.CSRF_ERRORS") as mock_csrf, \
-         patch("app.main.API_ERRORS_TOTAL") as mock_api:
+    with (
+        patch("app.main.CSRF_ERRORS") as mock_csrf,
+        patch("app.main.API_ERRORS_TOTAL") as mock_api,
+    ):
         response = await csrf_protect_exception_handler(request, exc)
         mock_csrf.labels.assert_called_once_with(path="/csrf", method="PUT")
         mock_csrf.labels.return_value.inc.assert_called_once()
-        mock_api.labels.assert_called_once_with(path="/csrf", method="PUT", status_code=403)
+        mock_api.labels.assert_called_once_with(
+            path="/csrf", method="PUT", status_code=403
+        )
         mock_api.labels.return_value.inc.assert_called_once()
 
         assert response.status_code == 403
@@ -138,13 +166,114 @@ async def test_csrf_exception_handler_records_metrics():
 
 
 @pytest.mark.asyncio
+async def test_csrf_middleware_skips_bearer_token_requests():
+    """
+    Bearer-token authenticated API calls should not require CSRF cookies/headers.
+    CSRF is only meaningful for cookie/session-auth flows.
+    """
+    from starlette.responses import Response
+    from app.main import csrf_protect_middleware
+
+    request = _make_request_with_headers(
+        path="/api/v1/settings/notifications",
+        method="PUT",
+        headers=[(b"authorization", b"Bearer test-token")],
+    )
+
+    async def call_next(_request: Request) -> Response:
+        return Response("ok", status_code=200)
+
+    original_testing = settings.TESTING
+    settings.TESTING = False
+    try:
+        # If CSRF runs here, it will attempt to validate and fail (no cookies).
+        # We want the bearer header to short-circuit CSRF entirely.
+        with patch(
+            "app.main.CsrfProtect", side_effect=AssertionError("CSRF should be skipped")
+        ):
+            response = await csrf_protect_middleware(request, call_next)
+        assert response.status_code == 200
+    finally:
+        settings.TESTING = original_testing
+
+
+@pytest.mark.asyncio
+async def test_csrf_middleware_skips_when_no_cookie_header_present():
+    """
+    CSRF is only meaningful for cookie-based auth flows.
+    If no Cookie header is present, CSRF validation should not run.
+    """
+    from starlette.responses import Response
+    from app.main import csrf_protect_middleware
+
+    request = _make_request_with_headers(
+        path="/api/v1/settings/notifications",
+        method="PUT",
+        headers=[],
+    )
+
+    async def call_next(_request: Request) -> Response:
+        return Response("ok", status_code=200)
+
+    original_testing = settings.TESTING
+    settings.TESTING = False
+    try:
+        with patch(
+            "app.main.CsrfProtect", side_effect=AssertionError("CSRF should be skipped")
+        ):
+            response = await csrf_protect_middleware(request, call_next)
+        assert response.status_code == 200
+    finally:
+        settings.TESTING = original_testing
+
+
+@pytest.mark.asyncio
+async def test_csrf_middleware_enforces_when_cookie_present_and_no_bearer():
+    """
+    If cookies are present (cookie-auth flow) and there's no bearer auth,
+    CSRF validation should run and block requests missing tokens.
+    """
+    from app.main import csrf_protect_middleware
+
+    request = _make_request_with_headers(
+        path="/api/v1/settings/notifications",
+        method="PUT",
+        headers=[(b"cookie", b"session=fake; fastapi-csrf-token=fake")],
+    )
+
+    async def call_next(_request: Request):  # pragma: no cover
+        raise AssertionError("call_next should not be reached if CSRF blocks")
+
+    class _FakeCsrf:
+        async def validate_csrf(self, _request: Request) -> None:
+            raise CsrfProtectError(400, "Missing csrf header")
+
+    import app.main as main_mod
+
+    original_testing = main_mod.settings.TESTING
+    main_mod.settings.TESTING = False
+    try:
+        with patch("app.main.CsrfProtect", return_value=_FakeCsrf()):
+            response = await csrf_protect_middleware(request, call_next)
+        assert response.status_code == 400
+        body = json.loads(response.body)
+        assert body["code"] == "csrf_error"
+    finally:
+        main_mod.settings.TESTING = original_testing
+
+
+@pytest.mark.asyncio
 async def test_validation_exception_handler_records_metrics():
     request = _make_request(path="/validate", method="POST")
-    exc = RequestValidationError([{"loc": ("body", "x"), "msg": "bad", "type": "value_error"}])
+    exc = RequestValidationError(
+        [{"loc": ("body", "x"), "msg": "bad", "type": "value_error"}]
+    )
 
     with patch("app.main.API_ERRORS_TOTAL") as mock_metric:
         response = await validation_exception_handler(request, exc)
-        mock_metric.labels.assert_called_once_with(path="/validate", method="POST", status_code=422)
+        mock_metric.labels.assert_called_once_with(
+            path="/validate", method="POST", status_code=422
+        )
         mock_metric.labels.return_value.inc.assert_called_once()
         assert response.status_code == 422
 
@@ -156,7 +285,9 @@ async def test_value_error_handler_records_metrics():
 
     with patch("app.main.API_ERRORS_TOTAL") as mock_metric:
         response = await value_error_handler(request, exc)
-        mock_metric.labels.assert_called_once_with(path="/value", method="PUT", status_code=400)
+        mock_metric.labels.assert_called_once_with(
+            path="/value", method="PUT", status_code=400
+        )
         mock_metric.labels.return_value.inc.assert_called_once()
         assert response.status_code == 400
 
@@ -168,7 +299,9 @@ async def test_generic_exception_handler_records_metrics():
 
     with patch("app.main.API_ERRORS_TOTAL") as mock_metric:
         response = await generic_exception_handler(request, exc)
-        mock_metric.labels.assert_called_once_with(path="/generic", method="GET", status_code=500)
+        mock_metric.labels.assert_called_once_with(
+            path="/generic", method="GET", status_code=500
+        )
         mock_metric.labels.return_value.inc.assert_called_once()
         assert response.status_code == 500
 
@@ -183,15 +316,22 @@ async def test_rate_limit_handler_records_metrics():
 
     def fake_handler(_request, _exc):
         from starlette.responses import JSONResponse
+
         return JSONResponse(status_code=429, content={"detail": "rate limit"})
 
-    with patch("app.main.original_handler", new=fake_handler), \
-         patch("app.main.RATE_LIMIT_EXCEEDED") as mock_rate, \
-         patch("app.main.API_ERRORS_TOTAL") as mock_api:
+    with (
+        patch("app.main.original_handler", new=fake_handler),
+        patch("app.main.RATE_LIMIT_EXCEEDED") as mock_rate,
+        patch("app.main.API_ERRORS_TOTAL") as mock_api,
+    ):
         response = await custom_rate_limit_handler(request, exc)
-        mock_rate.labels.assert_called_once_with(path="/rate", method="GET", tier="unknown")
+        mock_rate.labels.assert_called_once_with(
+            path="/rate", method="GET", tier="unknown"
+        )
         mock_rate.labels.return_value.inc.assert_called_once()
-        mock_api.labels.assert_called_once_with(path="/rate", method="GET", status_code=429)
+        mock_api.labels.assert_called_once_with(
+            path="/rate", method="GET", status_code=429
+        )
         mock_api.labels.return_value.inc.assert_called_once()
         assert response.status_code == 429
 
@@ -199,15 +339,17 @@ async def test_rate_limit_handler_records_metrics():
 @pytest.mark.asyncio
 async def test_validation_exception_handler_sanitizes_non_serializable_values():
     request = _make_request(path="/validate", method="POST")
-    exc = RequestValidationError([
-        {
-            "loc": ("body", "x"),
-            "msg": "bad",
-            "type": "value_error",
-            "ctx": {"error": ValueError("nope")},
-            "input": object(),
-        }
-    ])
+    exc = RequestValidationError(
+        [
+            {
+                "loc": ("body", "x"),
+                "msg": "bad",
+                "type": "value_error",
+                "ctx": {"error": ValueError("nope")},
+                "input": object(),
+            }
+        ]
+    )
 
     response = await validation_exception_handler(request, exc)
     assert response.status_code == 422
@@ -234,7 +376,9 @@ def test_load_emissions_tracker_imports_codecarbon_when_available():
         pass
 
     module.EmissionsTracker = DummyTracker
-    with patch("app.main._is_test_mode", return_value=False), \
-         patch.dict("sys.modules", {"codecarbon": module}):
+    with (
+        patch("app.main._is_test_mode", return_value=False),
+        patch.dict("sys.modules", {"codecarbon": module}),
+    ):
         tracker = _load_emissions_tracker()
     assert tracker is DummyTracker

@@ -17,8 +17,6 @@ from app.shared.llm.budget_manager import LLMBudgetManager, BudgetStatus
 __all__ = ["UsageTracker", "BudgetStatus", "LLMBudgetManager"]
 
 
-
-
 logger = structlog.get_logger()
 
 
@@ -29,6 +27,7 @@ def count_tokens(text: str, model: str = "gpt-4") -> int:
     """
     try:
         import tiktoken
+
         # Map model names to tiktoken encodings
         encoding_map = {
             "gpt-4": "cl100k_base",
@@ -80,7 +79,9 @@ class UsageTracker:
         """
         DELEGATED: Use LLMBudgetManager.estimate_cost
         """
-        return LLMBudgetManager.estimate_cost(input_tokens, output_tokens, model, provider)
+        return LLMBudgetManager.estimate_cost(
+            input_tokens, output_tokens, model, provider
+        )
 
     async def record(
         self,
@@ -91,7 +92,7 @@ class UsageTracker:
         output_tokens: int,
         is_byok: bool = False,
         request_type: str = "unknown",
-        operation_id: str | None = None
+        operation_id: str | None = None,
     ) -> None:
         """
         DELEGATED: Use LLMBudgetManager.record_usage
@@ -104,7 +105,7 @@ class UsageTracker:
             completion_tokens=output_tokens,
             provider=provider,
             operation_id=operation_id,
-            request_type=request_type
+            request_type=request_type,
         )
 
     async def authorize_request(
@@ -113,12 +114,13 @@ class UsageTracker:
         provider: str,
         model: str,
         input_text: str,
-        max_output_tokens: int = 1000
+        max_output_tokens: int = 1000,
     ) -> bool:
         """
         DELEGATED: Use LLMBudgetManager.check_and_reserve
         """
         from .usage_tracker import count_tokens
+
         input_tokens = count_tokens(input_text, model)
         await LLMBudgetManager.check_and_reserve(
             tenant_id=tenant_id,
@@ -126,7 +128,7 @@ class UsageTracker:
             provider=provider,
             model=model,
             prompt_tokens=input_tokens,
-            completion_tokens=max_output_tokens
+            completion_tokens=max_output_tokens,
         )
         return True
 
@@ -144,8 +146,8 @@ class UsageTracker:
         result = await self.db.execute(
             select(func.sum(LLMUsage.cost_usd))
             .where(LLMUsage.tenant_id == tenant_id)
-            .where(extract('year', LLMUsage.created_at) == now.year)
-            .where(extract('month', LLMUsage.created_at) == now.month)
+            .where(extract("year", LLMUsage.created_at) == now.year)
+            .where(extract("month", LLMUsage.created_at) == now.month)
         )
 
         total = result.scalar() or Decimal("0")

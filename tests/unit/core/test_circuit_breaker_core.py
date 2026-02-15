@@ -60,7 +60,9 @@ async def test_open_circuit_rejects_without_reset():
 
 @pytest.mark.asyncio
 async def test_half_open_closes_after_success_threshold():
-    config = CircuitBreakerConfig(name="test", failure_threshold=1, success_threshold=2, timeout=0.0)
+    config = CircuitBreakerConfig(
+        name="test", failure_threshold=1, success_threshold=2, timeout=0.0
+    )
     breaker = CircuitBreaker(config)
 
     async def fail():
@@ -88,7 +90,9 @@ async def test_half_open_closes_after_success_threshold():
 
 @pytest.mark.asyncio
 async def test_half_open_failure_reopens():
-    config = CircuitBreakerConfig(name="test", failure_threshold=1, success_threshold=2, timeout=0.0)
+    config = CircuitBreakerConfig(
+        name="test", failure_threshold=1, success_threshold=2, timeout=0.0
+    )
     breaker = CircuitBreaker(config)
 
     async def fail():
@@ -109,7 +113,9 @@ async def test_half_open_failure_reopens():
 
 @pytest.mark.asyncio
 async def test_half_open_allows_single_probe():
-    config = CircuitBreakerConfig(name="test", failure_threshold=1, success_threshold=1, timeout=0.0)
+    config = CircuitBreakerConfig(
+        name="test", failure_threshold=1, success_threshold=1, timeout=0.0
+    )
     breaker = CircuitBreaker(config)
 
     async def fail():

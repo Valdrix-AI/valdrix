@@ -11,11 +11,18 @@ from app.shared.core.pricing import PricingTier
 
 
 @pytest.mark.asyncio
-async def test_costs_endpoint_supports_saas_provider_filter(async_client, app, db) -> None:
+async def test_costs_endpoint_supports_saas_provider_filter(
+    async_client, app, db
+) -> None:
     tenant_id = uuid4()
     user_id = uuid4()
     tenant = Tenant(id=tenant_id, name="Cloud Plus Tenant", plan="pro")
-    user = User(id=user_id, email="cloudplus@valdrix.io", tenant_id=tenant_id, role=UserRole.ADMIN)
+    user = User(
+        id=user_id,
+        email="cloudplus@valdrix.io",
+        tenant_id=tenant_id,
+        role=UserRole.ADMIN,
+    )
     db.add_all([tenant, user])
     await db.flush()
 

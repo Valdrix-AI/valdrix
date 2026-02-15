@@ -49,7 +49,7 @@ DEFAULT_RATES = {
         },
         "disk": 0.05 / 730,
         "image": 0.03 / 730,
-    }
+    },
 }
 
 # Regional multipliers (Based on Industry Benchmarks)
@@ -62,7 +62,6 @@ REGION_MULTIPLIERS = {
     "westus": 1.05,
     "us-west-1": 1.08,
     "us-west-2": 1.0,
-    
     # EU Regions
     "eu-west-1": 1.10,
     "eu-west-2": 1.15,
@@ -70,13 +69,11 @@ REGION_MULTIPLIERS = {
     "eu-central-1": 1.12,
     "westeurope": 1.10,
     "northeurope": 1.10,
-    
     # Asia Pacific
     "ap-southeast-1": 1.20,
     "ap-southeast-2": 1.22,
     "ap-northeast-1": 1.25,
     "ap-south-1": 1.15,
-    
     # LATAM & Africa
     "sa-east-1": 1.35,
     "af-south-1": 1.25,

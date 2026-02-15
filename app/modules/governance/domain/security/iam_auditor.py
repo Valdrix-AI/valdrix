@@ -4,6 +4,7 @@ import structlog
 
 logger = structlog.get_logger()
 
+
 class IAMAuditor:
     """
     Audits IAM policies for Least Privilege and Security Best Practices.
@@ -18,7 +19,7 @@ class IAMAuditor:
             aws_access_key_id=credentials.get("aws_access_key_id"),
             aws_secret_access_key=credentials.get("aws_secret_access_key"),
             aws_session_token=credentials.get("aws_session_token"),
-            region_name=region
+            region_name=region,
         )
 
     async def audit_current_role(self) -> Dict[str, Any]:
@@ -48,11 +49,13 @@ class IAMAuditor:
             logger.info("auditing_role", role_name=role_name)
 
             risks = []
-            score = 100 # Start with perfect score
+            score = 100  # Start with perfect score
 
             async with self.session.client("iam") as iam:
                 # Fetch attached policies
-                attached_policies = await iam.list_attached_role_policies(RoleName=role_name)
+                attached_policies = await iam.list_attached_role_policies(
+                    RoleName=role_name
+                )
 
                 # Analyze Attached Policies
                 for policy in attached_policies.get("AttachedPolicies", []):
@@ -60,30 +63,44 @@ class IAMAuditor:
                     policy_info = await iam.get_policy(PolicyArn=policy_arn)
                     version = policy_info["Policy"]["DefaultVersionId"]
 
-                    policy_version = await iam.get_policy_version(PolicyArn=policy_arn, VersionId=version)
+                    policy_version = await iam.get_policy_version(
+                        PolicyArn=policy_arn, VersionId=version
+                    )
                     doc = policy_version["PolicyVersion"]["Document"]
 
                     analysis = self._analyze_policy_document(doc)
                     if analysis["risks"]:
-                        risks.extend([(f"Policy {policy['PolicyName']}: {r}") for r in analysis["risks"]])
-                        score -= (len(analysis["risks"]) * 10)
+                        risks.extend(
+                            [
+                                (f"Policy {policy['PolicyName']}: {r}")
+                                for r in analysis["risks"]
+                            ]
+                        )
+                        score -= len(analysis["risks"]) * 10
 
                 # Analyze Inline Policies
                 inline_policies = await iam.list_role_policies(RoleName=role_name)
                 for policy_name in inline_policies.get("PolicyNames", []):
-                    policy_result = await iam.get_role_policy(RoleName=role_name, PolicyName=policy_name)
+                    policy_result = await iam.get_role_policy(
+                        RoleName=role_name, PolicyName=policy_name
+                    )
                     doc = policy_result["PolicyDocument"]
                     analysis = self._analyze_policy_document(doc)
                     if analysis["risks"]:
-                        risks.extend([(f"Inline Policy {policy_name}: {r}") for r in analysis["risks"]])
-                        score -= (len(analysis["risks"]) * 10)
+                        risks.extend(
+                            [
+                                (f"Inline Policy {policy_name}: {r}")
+                                for r in analysis["risks"]
+                            ]
+                        )
+                        score -= len(analysis["risks"]) * 10
 
             return {
                 "role_name": role_name,
                 "score": max(0, score),
                 "status": "compliant" if score > 80 else "risk",
                 "risks": risks,
-                "zero_trust_aligned": score > 90
+                "zero_trust_aligned": score > 90,
             }
 
         except Exception as e:
@@ -113,7 +130,9 @@ class IAMAuditor:
 
             # Risk 1: Admin Access (* on *)
             if "*" in actions and "*" in resources:
-                risks.append("Critical: Full Administrator Access detected ('*'). Violation of Least Privilege.")
+                risks.append(
+                    "Critical: Full Administrator Access detected ('*'). Violation of Least Privilege."
+                )
 
             # Risk 2: Full Resource Access to sensitive services
             # In 2026, scoping strictly to resources is mandatory.
@@ -121,19 +140,42 @@ class IAMAuditor:
                 # Check if actions are sensitive
                 # Item 18: Enhanced detection for service-specific wildcards e.g. "s3:*" or "ec2:*"
                 sensitive_prefixes = [
-                    "ec2:*", "s3:*", "iam:*", "rds:*", "dynamodb:*", "lambda:*", 
-                    "kms:*", "secretsmanager:*", "sqs:*", "sns:*", "logs:*"
+                    "ec2:*",
+                    "s3:*",
+                    "iam:*",
+                    "rds:*",
+                    "dynamodb:*",
+                    "lambda:*",
+                    "kms:*",
+                    "secretsmanager:*",
+                    "sqs:*",
+                    "sns:*",
+                    "logs:*",
                 ]
                 for action in actions:
                     action_lower = str(action).lower()
                     # Detect full wildcard "*" or service-level wildcard "s3:*" or prefix-level "s3:Get*"
-                    if action == "*" or any(action_lower.startswith(p.replace("*", "").lower()) and "*" in action_lower for p in sensitive_prefixes):
-                        risks.append(f"High: Unscoped allow on sensitive action '{action}'. Should rely on Resource ARNs for Zero Trust.")
+                    if action == "*" or any(
+                        action_lower.startswith(p.replace("*", "").lower())
+                        and "*" in action_lower
+                        for p in sensitive_prefixes
+                    ):
+                        risks.append(
+                            f"High: Unscoped allow on sensitive action '{action}'. Should rely on Resource ARNs for Zero Trust."
+                        )
                         break
-                    
+
                     # Additional check for data-exfiltration or modification wildcards
-                    if any(x in action_lower for x in ["delete", "put", "update", "create"]) and "*" in action_lower:
-                        risks.append(f"Medium: Broad wildcard detected in write action '{action}'. Recommended to scope to ARNs.")
+                    if (
+                        any(
+                            x in action_lower
+                            for x in ["delete", "put", "update", "create"]
+                        )
+                        and "*" in action_lower
+                    ):
+                        risks.append(
+                            f"Medium: Broad wildcard detected in write action '{action}'. Recommended to scope to ARNs."
+                        )
                         break
 
         return {"risks": risks}

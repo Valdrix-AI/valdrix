@@ -49,7 +49,6 @@ class JobStore {
 
 		this.#eventSource.onopen = () => {
 			this.#isConnected = true;
-			console.log('[Jobs SSE] Connected');
 		};
 
 		this.#eventSource.addEventListener('job_update', (event) => {

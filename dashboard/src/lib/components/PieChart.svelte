@@ -4,9 +4,7 @@
 	 * For cost allocation visualization (Allocated vs Unallocated, Team Breakdown)
 	 */
 	import { onDestroy } from 'svelte';
-	import { Chart, registerables } from 'chart.js';
-
-	Chart.register(...registerables);
+	import { loadChartJs } from '$lib/chartjs';
 
 	interface ChartDataItem {
 		label: string;
@@ -29,7 +27,8 @@
 	} = $props();
 
 	let canvas = $state<HTMLCanvasElement | undefined>(undefined);
-	let chart: Chart | null = null;
+	let chart: import('chart.js').Chart | null = null;
+	let chartRequestId = 0;
 
 	const defaultColors = [
 		'#3b82f6', // blue
@@ -48,11 +47,16 @@
 		return itemColor || defaultColors[index % defaultColors.length];
 	}
 
-	function createChart() {
+	async function createChart() {
+		const requestId = ++chartRequestId;
 		if (!canvas || data.length === 0) return;
+		if (typeof window === 'undefined') return;
 
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
+
+		const { Chart } = await loadChartJs();
+		if (requestId !== chartRequestId) return;
 
 		if (chart) {
 			chart.destroy();
@@ -112,7 +116,7 @@
 	// Reactively update chart when data changes
 	$effect(() => {
 		if (data) {
-			createChart();
+			void createChart();
 		}
 	});
 </script>

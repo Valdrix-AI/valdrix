@@ -4,27 +4,35 @@ from uuid import UUID
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.models.optimization import StrategyRecommendation, OptimizationStrategy, CommitmentTerm, PaymentOption
+from app.models.optimization import (
+    StrategyRecommendation,
+    OptimizationStrategy,
+    CommitmentTerm,
+    PaymentOption,
+)
+
 
 class BaseOptimizationStrategy(ABC):
     """
     Abstract Base Class for FinOps Optimization Strategies.
     Implements the Strategy Pattern for different optimization types (RI, SP, Spot, etc.).
     """
-    
+
     def __init__(self, strategy_config: OptimizationStrategy):
         self.strategy_config = strategy_config
         self.config = strategy_config.config
 
     @abstractmethod
-    async def analyze(self, tenant_id: UUID, usage_data: Any) -> List[StrategyRecommendation]:
+    async def analyze(
+        self, tenant_id: UUID, usage_data: Any
+    ) -> List[StrategyRecommendation]:
         """
         Analyze usage data and generate recommendations.
-        
+
         Args:
             tenant_id: The ID of the tenant to analyze.
             usage_data: The usage data to analyze (format depends on implementation).
-            
+
         Returns:
             List of StrategyRecommendation objects (not yet persisted).
         """
@@ -34,11 +42,11 @@ class BaseOptimizationStrategy(ABC):
     def calculate_roi(self, on_demand_cost: float, commitment_cost: float) -> float:
         """
         Calculate Return on Investment (percentage).
-        
+
         Args:
             on_demand_cost: Projected cost without optimization.
             commitment_cost: Projected cost with optimization (including upfront).
-            
+
         Returns:
             ROI percentage (e.g., 25.5 for 25.5%).
         """

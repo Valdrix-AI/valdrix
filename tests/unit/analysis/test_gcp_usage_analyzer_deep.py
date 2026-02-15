@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 
 from app.shared.analysis.gcp_usage_analyzer import GCPUsageAnalyzer
 
+
 class TestGCPUsageAnalyzer:
     def test_find_idle_vms(self):
         records = [
@@ -10,9 +11,9 @@ class TestGCPUsageAnalyzer:
                 "resource_id": "projects/p1/zones/z1/instances/vm-idle",
                 "service": "Compute Engine",
                 "sku_description": "N1 Predefined Instance vCPU",
-                "usage_amount": 0.5, # 0.5 hours over 7 days (168h expected)
+                "usage_amount": 0.5,  # 0.5 hours over 7 days (168h expected)
                 "cost": 10.0,
-                "usage_unit": "hour"
+                "usage_unit": "hour",
             },
             # Active VM
             {
@@ -21,15 +22,15 @@ class TestGCPUsageAnalyzer:
                 "sku_description": "N1 Predefined Instance vCPU",
                 "usage_amount": 160.0,
                 "cost": 50.0,
-                "usage_unit": "hour"
+                "usage_unit": "hour",
             },
             {
                 "resource_id": "projects/p1/zones/z1/instances/vm-active",
                 "service": "Compute Engine",
                 "sku_description": "Network Internet Egress",
-                "usage_amount": 100.0, # 100 GB egress
-                "cost": 1.0
-            }
+                "usage_amount": 100.0,  # 100 GB egress
+                "cost": 1.0,
+            },
         ]
         analyzer = GCPUsageAnalyzer(records)
         results = analyzer.find_idle_vms(days=7)
@@ -45,7 +46,7 @@ class TestGCPUsageAnalyzer:
                 "sku_description": "Storage PD Capacity",
                 "usage_amount": 100.0,
                 "cost": 5.0,
-                "usage_unit": "gibibyte month"
+                "usage_unit": "gibibyte month",
             }
         ]
         analyzer = GCPUsageAnalyzer(records)
@@ -61,7 +62,7 @@ class TestGCPUsageAnalyzer:
                 "service": "Cloud SQL",
                 "sku_description": "Cloud SQL: Core",
                 "usage_amount": 0.1,
-                "cost": 20.0
+                "cost": 20.0,
             }
         ]
         analyzer = GCPUsageAnalyzer(records)
@@ -76,7 +77,7 @@ class TestGCPUsageAnalyzer:
                 "resource_id": "gke-empty",
                 "service": "Kubernetes Engine",
                 "sku_description": "GKE Cluster Management Fee",
-                "cost": 15.0
+                "cost": 15.0,
             }
         ]
         analyzer = GCPUsageAnalyzer(records)
@@ -92,7 +93,7 @@ class TestGCPUsageAnalyzer:
                 "service": "Cloud Functions",
                 "sku_description": "Function Execution",
                 "cost": 2.0,
-                "usage_amount": 0.0 # Zero invocations
+                "usage_amount": 0.0,  # Zero invocations
             }
         ]
         analyzer = GCPUsageAnalyzer(records)
@@ -108,7 +109,7 @@ class TestGCPUsageAnalyzer:
                 "service": "Cloud Run",
                 "sku_description": "Request Count",
                 "cost": 5.0,
-                "usage_amount": 0.0
+                "usage_amount": 0.0,
             }
         ]
         analyzer = GCPUsageAnalyzer(records)
@@ -123,7 +124,7 @@ class TestGCPUsageAnalyzer:
                 "resource_id": "ip-orphan",
                 "service": "Compute Engine",
                 "sku_description": "Static Ip Charge",
-                "cost": 3.0
+                "cost": 3.0,
             }
         ]
         analyzer = GCPUsageAnalyzer(records)
@@ -140,7 +141,7 @@ class TestGCPUsageAnalyzer:
                 "service": "Compute Engine",
                 "sku_description": "Snapshot Storage",
                 "cost": 1.0,
-                "usage_start_time": now - timedelta(days=120)
+                "usage_start_time": now - timedelta(days=120),
             },
             # Recent snapshot (should not match age_days=90)
             {
@@ -148,8 +149,8 @@ class TestGCPUsageAnalyzer:
                 "service": "Compute Engine",
                 "sku_description": "Snapshot Storage",
                 "cost": 1.0,
-                "usage_start_time": now - timedelta(days=10)
-            }
+                "usage_start_time": now - timedelta(days=10),
+            },
         ]
         analyzer = GCPUsageAnalyzer(records)
         results = analyzer.find_old_snapshots(age_days=90)
@@ -165,8 +166,8 @@ class TestGCPUsageAnalyzer:
                 "service": "Compute Engine",
                 "sku_description": "N1 Predefined Instance Core",
                 "cost": 1.0,
-                "usage_amount": 0.1
-            }
+                "usage_amount": 0.1,
+            },
         ]
         analyzer = GCPUsageAnalyzer(records)
         # Hit loops with continue

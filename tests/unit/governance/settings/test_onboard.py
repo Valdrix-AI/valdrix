@@ -8,6 +8,7 @@ from app.main import app
 from app.models.tenant import Tenant, User
 from app.shared.core.auth import get_current_user_from_jwt
 
+
 @pytest.fixture
 def mock_jwt_user():
     user = MagicMock()
@@ -15,39 +16,43 @@ def mock_jwt_user():
     user.email = "newuser@example.com"
     return user
 
+
 @pytest.fixture(autouse=True)
 def override_auth(mock_jwt_user):
     app.dependency_overrides[get_current_user_from_jwt] = lambda: mock_jwt_user
     yield
     app.dependency_overrides.pop(get_current_user_from_jwt, None)
 
+
 @pytest.mark.asyncio
 async def test_onboard_success(async_client: AsyncClient, db_session, mock_jwt_user):
     """Test successful onboarding creates tenant and user."""
-    onboard_data = {
-        "tenant_name": "Test Tenant",
-        "admin_email": "admin@example.com"
-    }
-    
+    onboard_data = {"tenant_name": "Test Tenant", "admin_email": "admin@example.com"}
+
     response = await async_client.post("/api/v1/settings/onboard", json=onboard_data)
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "onboarded"
     tenant_id = data["tenant_id"]
-    
+
     # Verify Tenant
-    result = await db_session.execute(select(Tenant).where(Tenant.id == UUID(tenant_id)))
+    result = await db_session.execute(
+        select(Tenant).where(Tenant.id == UUID(tenant_id))
+    )
     tenant = result.scalar_one()
     assert tenant.name == "Test Tenant"
-    
+
     # Verify User
     result = await db_session.execute(select(User).where(User.id == mock_jwt_user.id))
     db_user = result.scalar_one()
     assert db_user.tenant_id == UUID(tenant_id)
     assert db_user.email == mock_jwt_user.email
 
+
 @pytest.mark.asyncio
-async def test_onboard_already_onboarded(async_client: AsyncClient, db_session, mock_jwt_user):
+async def test_onboard_already_onboarded(
+    async_client: AsyncClient, db_session, mock_jwt_user
+):
     """Test that onboarding fails if user already exists in DB."""
     # Pre-create user
     tenant = Tenant(name="Existing")
@@ -56,11 +61,12 @@ async def test_onboard_already_onboarded(async_client: AsyncClient, db_session, 
     user = User(id=mock_jwt_user.id, email=mock_jwt_user.email, tenant_id=tenant.id)
     db_session.add(user)
     await db_session.commit()
-    
+
     onboard_data = {"tenant_name": "New Tenant"}
     response = await async_client.post("/api/v1/settings/onboard", json=onboard_data)
     assert response.status_code == 400
     assert "Already onboarded" in response.json()["error"]
+
 
 @pytest.mark.asyncio
 async def test_onboard_with_cloud_verification_success(async_client: AsyncClient):
@@ -70,20 +76,25 @@ async def test_onboard_with_cloud_verification_success(async_client: AsyncClient
         "cloud_config": {
             "platform": "aws",
             "role_arn": "arn:aws:iam::123456789012:role/ValdrixRole",
-            "external_id": "ext-123"
-        }
+            "external_id": "ext-123",
+        },
     }
-    
+
     # Mock AdapterFactory and AWSAdapter
-    with patch("app.shared.adapters.factory.AdapterFactory.get_adapter") as mock_get_adapter:
+    with patch(
+        "app.shared.adapters.factory.AdapterFactory.get_adapter"
+    ) as mock_get_adapter:
         mock_adapter = AsyncMock()
         mock_adapter.verify_connection.return_value = True
         mock_get_adapter.return_value = mock_adapter
-        
-        response = await async_client.post("/api/v1/settings/onboard", json=onboard_data)
+
+        response = await async_client.post(
+            "/api/v1/settings/onboard", json=onboard_data
+        )
         assert response.status_code == 200
         assert response.json()["status"] == "onboarded"
         mock_adapter.verify_connection.assert_awaited_once()
+
 
 @pytest.mark.asyncio
 async def test_onboard_with_cloud_verification_failure(async_client: AsyncClient):
@@ -92,36 +103,46 @@ async def test_onboard_with_cloud_verification_failure(async_client: AsyncClient
         "tenant_name": "Bad Cloud Tenant",
         "cloud_config": {
             "platform": "aws",
-            "role_arn": "arn:aws:iam::123456789012:role/BadRole"
-        }
+            "role_arn": "arn:aws:iam::123456789012:role/BadRole",
+        },
     }
-    
-    with patch("app.shared.adapters.factory.AdapterFactory.get_adapter") as mock_get_adapter:
+
+    with patch(
+        "app.shared.adapters.factory.AdapterFactory.get_adapter"
+    ) as mock_get_adapter:
         mock_adapter = AsyncMock()
         mock_adapter.verify_connection.return_value = False
         mock_get_adapter.return_value = mock_adapter
-        
-        response = await async_client.post("/api/v1/settings/onboard", json=onboard_data)
+
+        response = await async_client.post(
+            "/api/v1/settings/onboard", json=onboard_data
+        )
         assert response.status_code == 400
         assert "Cloud connection verification failed" in response.json()["error"]
 
 
 @pytest.mark.asyncio
-async def test_onboard_rejects_http_cloud_credentials_in_production(async_client: AsyncClient):
+async def test_onboard_rejects_http_cloud_credentials_in_production(
+    async_client: AsyncClient,
+):
     onboard_data = {
         "tenant_name": "Secure Tenant",
         "cloud_config": {
             "platform": "aws",
             "role_arn": "arn:aws:iam::123456789012:role/ValdrixRole",
-            "external_id": "ext-123"
-        }
+            "external_id": "ext-123",
+        },
     }
 
-    with patch("app.modules.governance.api.v1.settings.onboard.get_settings") as mock_get_settings:
+    with patch(
+        "app.modules.governance.api.v1.settings.onboard.get_settings"
+    ) as mock_get_settings:
         mock_settings = MagicMock()
         mock_settings.ENVIRONMENT = "production"
         mock_get_settings.return_value = mock_settings
 
-        response = await async_client.post("/api/v1/settings/onboard", json=onboard_data)
+        response = await async_client.post(
+            "/api/v1/settings/onboard", json=onboard_data
+        )
         assert response.status_code == 400
         assert "HTTPS is required" in response.json()["error"]

@@ -8,19 +8,25 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
+
 class CostRecord(BaseModel):
     """Normalized cost entry for a specific date/time and dimension."""
+
     date: datetime = Field(..., description="Timestamp of the usage")
     amount: Decimal = Field(..., description="Cost amount in USD")
-    amount_raw: Optional[Decimal] = Field(None, description="Original cost amount in local currency")
+    amount_raw: Optional[Decimal] = Field(
+        None, description="Original cost amount in local currency"
+    )
     currency: str = "USD"
     service: Optional[str] = None
     region: Optional[str] = None
     usage_type: Optional[str] = None
     tags: Dict[str, str] = Field(default_factory=dict)
 
+
 class CloudUsageSummary(BaseModel):
     """High-level summary of cloud usage over a period."""
+
     model_config = ConfigDict(validate_assignment=True)
 
     tenant_id: str
@@ -29,13 +35,17 @@ class CloudUsageSummary(BaseModel):
     end_date: date
     total_cost: Decimal
     records: List[CostRecord]
-    
+
     # Aggregated views
     by_service: Dict[str, Decimal] = Field(default_factory=dict)
     by_region: Dict[str, Decimal] = Field(default_factory=dict)
-    by_tag: Dict[str, Dict[str, Decimal]] = Field(default_factory=dict) # e.g., {"Project": {"Prod": 10.5, "Dev": 5.2}}
-    
-    metadata: Dict[str, Any] = Field(default_factory=dict) # Added for Phase 21: Truncation flags, etc.
+    by_tag: Dict[str, Dict[str, Decimal]] = Field(
+        default_factory=dict
+    )  # e.g., {"Project": {"Prod": 10.5, "Dev": 5.2}}
+
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict
+    )  # Added for Phase 21: Truncation flags, etc.
 
     @field_validator("tenant_id", mode="before")
     @classmethod
@@ -44,8 +54,10 @@ class CloudUsageSummary(BaseModel):
             return str(value)
         return value
 
+
 class ResourceCandidate(BaseModel):
     """Normalized resource identified for optimization/remediation."""
+
     resource_id: str
     resource_type: str
     region: str

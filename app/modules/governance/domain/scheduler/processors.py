@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import TYPE_CHECKING, Optional, Dict, Any
 import asyncio
+
 if TYPE_CHECKING:
     from app.shared.llm.guardrails import FinOpsAnalysisResult
     from app.models.remediation import RemediationAction
@@ -18,6 +19,7 @@ from app.schemas.costs import CloudUsageSummary, CostRecord
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+
 
 class AnalysisProcessor:
     """Handles the heavy lifting of analyzing a single tenant's cloud usage."""
@@ -66,7 +68,9 @@ class AnalysisProcessor:
                 continue
 
             amount_raw = row.get("amount_raw")
-            amount_raw_decimal = Decimal(str(amount_raw)) if amount_raw is not None else None
+            amount_raw_decimal = (
+                Decimal(str(amount_raw)) if amount_raw is not None else None
+            )
             tags = row.get("tags")
             records.append(
                 CostRecord(
@@ -94,7 +98,9 @@ class AnalysisProcessor:
             records=records,
         )
 
-    async def process_tenant(self, db: AsyncSession, tenant: Tenant, start_date: date, end_date: date) -> None:
+    async def process_tenant(
+        self, db: AsyncSession, tenant: Tenant, start_date: date, end_date: date
+    ) -> None:
         """Process a single tenant's analysis."""
         try:
             logger.info("processing_tenant", tenant_id=str(tenant.id), name=tenant.name)
@@ -181,12 +187,11 @@ class AnalysisProcessor:
                             "azure",
                             "gcp",
                             "saas",
-                            "cloud_plus_saas",
                             "license",
-                            "itam",
-                            "cloud_plus_license",
                         }:
-                            detector_region = calc_region if provider == "aws" else "global"
+                            detector_region = (
+                                calc_region if provider == "aws" else "global"
+                            )
                             try:
                                 detector = ZombieDetectorFactory.get_detector(
                                     conn,
@@ -203,61 +208,96 @@ class AnalysisProcessor:
                                     error=str(zombie_exc),
                                 )
                         else:
-                            logger.info("tenant_zombie_scan_not_supported", tenant_id=str(tenant.id), provider=provider)
+                            logger.info(
+                                "tenant_zombie_scan_not_supported",
+                                tenant_id=str(tenant.id),
+                                provider=provider,
+                            )
 
-                        # 4. Notify if enabled in settings
+                        # 4. Notify if enabled in tenant settings
                         if notif_settings and notif_settings.slack_enabled:
                             if notif_settings.digest_schedule in ["daily", "weekly"]:
-                                if self.settings.SLACK_BOT_TOKEN and self.settings.SLACK_CHANNEL_ID:
-                                    channel = (
-                                        notif_settings.slack_channel_override
-                                        or self.settings.SLACK_CHANNEL_ID
+                                from app.modules.notifications.domain import (
+                                    get_tenant_slack_service,
+                                )
+
+                                slack = await get_tenant_slack_service(db, tenant.id)
+                                if not slack:
+                                    logger.info(
+                                        "tenant_digest_skipped_slack_not_configured",
+                                        tenant_id=str(tenant.id),
                                     )
-
-                                    from app.modules.notifications.domain import SlackService
-                                    slack = SlackService(self.settings.SLACK_BOT_TOKEN, channel)
-
-                                    zombie_count = sum(len(items) for items in zombie_result.values() if isinstance(items, list))
+                                else:
+                                    zombie_count = sum(
+                                        len(items)
+                                        for items in zombie_result.values()
+                                        if isinstance(items, list)
+                                    )
                                     total_cost = float(usage_summary.total_cost)
 
-                                    await slack.send_digest({
-                                        "tenant_name": tenant.name,
-                                        "total_cost": total_cost,
-                                        "carbon_kg": carbon_result.get("total_co2_kg", 0),
-                                        "zombie_count": zombie_count,
-                                        "period": f"{start_date.isoformat()} - {end_date.isoformat()}"
-                                    })
+                                    await slack.send_digest(
+                                        {
+                                            "tenant_name": tenant.name,
+                                            "total_cost": total_cost,
+                                            "carbon_kg": carbon_result.get(
+                                                "total_co2_kg", 0
+                                            ),
+                                            "zombie_count": zombie_count,
+                                            "period": f"{start_date.isoformat()} - {end_date.isoformat()}",
+                                        }
+                                    )
 
                     await asyncio.wait_for(_run_analysis(), timeout=300)
 
                 except asyncio.TimeoutError:
-                    logger.error("tenant_analysis_timeout", tenant_id=str(tenant.id), connection_id=str(conn.id))
+                    logger.error(
+                        "tenant_analysis_timeout",
+                        tenant_id=str(tenant.id),
+                        connection_id=str(conn.id),
+                    )
                 except Exception as e:
-                    logger.error("tenant_connection_failed", tenant_id=str(tenant.id), connection_id=str(conn.id), error=str(e))
+                    logger.error(
+                        "tenant_connection_failed",
+                        tenant_id=str(tenant.id),
+                        connection_id=str(conn.id),
+                        error=str(e),
+                    )
 
             # 3. Savings Autopilot using latest in-memory analysis result.
             if latest_analysis_result:
                 try:
                     from app.shared.llm.guardrails import FinOpsAnalysisResult
+
                     parsed_result = FinOpsAnalysisResult(**latest_analysis_result)
                     savings_processor = SavingsProcessor()
-                    await savings_processor.process_recommendations(db, tenant.id, parsed_result)
+                    await savings_processor.process_recommendations(
+                        db, tenant.id, parsed_result
+                    )
                 except Exception as e:
-                    logger.error("savings_autopilot_failed", tenant_id=str(tenant.id), error=str(e))
+                    logger.error(
+                        "savings_autopilot_failed",
+                        tenant_id=str(tenant.id),
+                        error=str(e),
+                    )
 
         except Exception as e:
-            logger.error("tenant_processing_failed", tenant_id=str(tenant.id), error=str(e))
+            logger.error(
+                "tenant_processing_failed", tenant_id=str(tenant.id), error=str(e)
+            )
+
 
 class SavingsProcessor:
     """Executes high-confidence, low-risk autonomous savings."""
 
-    async def process_recommendations(self, db: AsyncSession, tenant_id: UUID, analysis_result: "FinOpsAnalysisResult") -> None:
+    async def process_recommendations(
+        self, db: AsyncSession, tenant_id: UUID, analysis_result: "FinOpsAnalysisResult"
+    ) -> None:
         """Filters for 'autonomous_ready' items and executes them."""
         from uuid import UUID as PyUUID
         from app.modules.optimization.domain.remediation import RemediationService
         from app.shared.core.config import get_settings
         from app.models.remediation import RemediationAction
-        
+
         remediation = RemediationService(db)
         settings = get_settings()
         # System User ID for autonomous actions
@@ -269,7 +309,7 @@ class SavingsProcessor:
             RemediationAction.RESIZE_INSTANCE,
             RemediationAction.STOP_RDS_INSTANCE,
         }
-        
+
         for rec in analysis_result.recommendations:
             confidence_raw = (rec.confidence or "").strip().lower()
             confidence_score = None
@@ -278,24 +318,32 @@ class SavingsProcessor:
             except ValueError:
                 pass
 
-            is_high_confidence = confidence_raw == "high" or (confidence_score is not None and confidence_score >= 0.9)
+            is_high_confidence = confidence_raw == "high" or (
+                confidence_score is not None and confidence_score >= 0.9
+            )
 
             if rec.autonomous_ready and is_high_confidence:
-                logger.info("executing_autonomous_savings", 
-                            tenant_id=str(tenant_id), 
-                            resource=rec.resource, 
-                            action=rec.action)
-                
+                logger.info(
+                    "executing_autonomous_savings",
+                    tenant_id=str(tenant_id),
+                    resource=rec.resource,
+                    action=rec.action,
+                )
+
                 action_enum = self._map_action_to_enum(rec.action)
                 if not action_enum:
                     logger.warning("unsupported_autonomous_action", action=rec.action)
                     continue
-                
+
                 try:
                     # Clean currency string
                     savings_val = 0.0
                     if rec.estimated_savings:
-                        savings_str = rec.estimated_savings.replace('$', '').replace('/month', '').strip()
+                        savings_str = (
+                            rec.estimated_savings.replace("$", "")
+                            .replace("/month", "")
+                            .strip()
+                        )
                         try:
                             savings_val = float(savings_str)
                         except ValueError:
@@ -308,16 +356,21 @@ class SavingsProcessor:
                         resource_type=rec.resource_type or "unknown",
                         action=action_enum,
                         estimated_savings=savings_val,
-                        explainability_notes=f"Savings Autopilot: {rec.action}. High confidence, low risk."
+                        explainability_notes=f"Savings Autopilot: {rec.action}. High confidence, low risk.",
                     )
-                    
+
                     if action_enum in safe_actions:
                         # Auto-approve & Execute for safe actions only
-                        await remediation.approve(request.id, tenant_id, system_user_id, notes="AUTO_APPROVED: Savings Autopilot")
+                        await remediation.approve(
+                            request.id,
+                            tenant_id,
+                            system_user_id,
+                            notes="AUTO_APPROVED: Savings Autopilot",
+                        )
                         await remediation.execute(
                             request.id,
                             tenant_id,
-                            bypass_grace_period=settings.AUTOPILOT_BYPASS_GRACE_PERIOD
+                            bypass_grace_period=settings.AUTOPILOT_BYPASS_GRACE_PERIOD,
                         )
                     else:
                         # Never auto-execute destructive actions; leave for human review
@@ -325,17 +378,24 @@ class SavingsProcessor:
                             "autonomous_action_requires_review",
                             tenant_id=str(tenant_id),
                             request_id=str(request.id),
-                            action=action_enum.value
+                            action=action_enum.value,
                         )
-                    
-                    logger.info("autonomous_savings_completed", 
-                                tenant_id=str(tenant_id), 
-                                request_id=str(request.id))
+
+                    logger.info(
+                        "autonomous_savings_completed",
+                        tenant_id=str(tenant_id),
+                        request_id=str(request.id),
+                    )
                 except Exception as e:
-                    logger.error("autonomous_savings_execution_failed", resource=rec.resource, error=str(e))
+                    logger.error(
+                        "autonomous_savings_execution_failed",
+                        resource=rec.resource,
+                        error=str(e),
+                    )
 
     def _map_action_to_enum(self, action_str: str) -> "Optional[RemediationAction]":
         from app.models.remediation import RemediationAction
+
         s = action_str.lower()
         if "delete volume" in s:
             return RemediationAction.DELETE_VOLUME

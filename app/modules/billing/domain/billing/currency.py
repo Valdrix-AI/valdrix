@@ -10,12 +10,13 @@ from app.models.pricing import ExchangeRate
 logger = structlog.get_logger()
 settings = get_settings()
 
+
 class ExchangeRateService:
     """
     Handles USD to NGN currency conversion using ExchangeRate-API.
     Uses database as primary cache and Redis as short-term cache.
     """
-    
+
     API_URL = "https://v6.exchangerate-api.com/v6"
     CACHE_TTL_HOURS = 24
 
@@ -37,12 +38,14 @@ class ExchangeRateService:
             result = await self.db.execute(
                 select(ExchangeRate).where(
                     ExchangeRate.from_currency == "USD",
-                    ExchangeRate.to_currency == "NGN"
+                    ExchangeRate.to_currency == "NGN",
                 )
             )
             rate_obj = result.scalar_one_or_none()
-            
-            if rate_obj and rate_obj.last_updated > datetime.now(timezone.utc) - timedelta(hours=self.CACHE_TTL_HOURS):
+
+            if rate_obj and rate_obj.last_updated > datetime.now(
+                timezone.utc
+            ) - timedelta(hours=self.CACHE_TTL_HOURS):
                 return float(rate_obj.rate)
         except Exception as e:
             logger.warning("currency_db_cache_lookup_failed", error=str(e))
@@ -58,10 +61,15 @@ class ExchangeRateService:
 
         # 3. Last Resort Fallback
         if rate_obj:
-            logger.warning("currency_using_stale_db_rate", age=datetime.now(timezone.utc) - rate_obj.last_updated)
+            logger.warning(
+                "currency_using_stale_db_rate",
+                age=datetime.now(timezone.utc) - rate_obj.last_updated,
+            )
             return float(rate_obj.rate)
-            
-        return float(settings.FALLBACK_NGN_RATE)  # Industry estimated baseline if all else fails
+
+        return float(
+            settings.FALLBACK_NGN_RATE
+        )  # Industry estimated baseline if all else fails
 
     async def _fetch_from_api(self) -> float:
         """Fetch latest rate from ExchangeRate-API."""
@@ -70,10 +78,10 @@ class ExchangeRateService:
             response = await client.get(url, timeout=10.0)
             response.raise_for_status()
             data = response.json()
-            
+
             if data.get("result") == "success":
                 return float(data["conversion_rates"]["NGN"])
-            
+
             raise ValueError(f"API returned failure: {data.get('error-type')}")
 
     async def _update_db_cache(self, rate: float) -> None:
@@ -83,11 +91,11 @@ class ExchangeRateService:
             result = await self.db.execute(
                 select(ExchangeRate).where(
                     ExchangeRate.from_currency == "USD",
-                    ExchangeRate.to_currency == "NGN"
+                    ExchangeRate.to_currency == "NGN",
                 )
             )
             rate_obj = result.scalar_one_or_none()
-            
+
             if rate_obj:
                 rate_obj.rate = rate
                 rate_obj.last_updated = datetime.now(timezone.utc)
@@ -96,10 +104,10 @@ class ExchangeRateService:
                     from_currency="USD",
                     to_currency="NGN",
                     rate=rate,
-                    last_updated=datetime.now(timezone.utc)
+                    last_updated=datetime.now(timezone.utc),
                 )
                 self.db.add(new_rate)
-            
+
             await self.db.commit()
             logger.info("currency_db_cache_updated", rate=rate)
         except Exception as e:

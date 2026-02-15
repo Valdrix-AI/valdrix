@@ -4,6 +4,7 @@ Circuit Breaker Pattern Implementation
 Provides fault tolerance for external service calls with automatic recovery.
 Implements the Circuit Breaker pattern to prevent cascade failures.
 """
+
 import asyncio
 import time
 from enum import Enum
@@ -20,24 +21,29 @@ T = TypeVar("T")
 
 class CircuitState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing, requests rejected
+
+    CLOSED = "closed"  # Normal operation
+    OPEN = "open"  # Failing, requests rejected
     HALF_OPEN = "half_open"  # Testing recovery
 
 
 @dataclass
 class CircuitBreakerConfig:
     """Configuration for circuit breaker behavior."""
+
     failure_threshold: int = 5  # Failures before opening
     success_threshold: int = 3  # Successes needed to close
     timeout: float = 60.0  # Recovery timeout in seconds
-    expected_exception: tuple[type[Exception], ...] = (Exception,)  # Exceptions that count as failures
+    expected_exception: tuple[type[Exception], ...] = (
+        Exception,
+    )  # Exceptions that count as failures
     name: str = "default"  # Circuit breaker name for logging
 
 
 @dataclass
 class CircuitBreakerMetrics:
     """Metrics for circuit breaker monitoring."""
+
     total_requests: int = 0
     total_failures: int = 0
     total_successes: int = 0
@@ -92,7 +98,10 @@ class CircuitBreaker:
         self.metrics.last_success_time = time.time()
 
         # Check if we should close the circuit
-        if self.state == CircuitState.HALF_OPEN and self.metrics.consecutive_successes >= self.config.success_threshold:
+        if (
+            self.state == CircuitState.HALF_OPEN
+            and self.metrics.consecutive_successes >= self.config.success_threshold
+        ):
             await self._change_state(CircuitState.CLOSED)
             logger.info("circuit_breaker_closed", name=self.config.name)
 
@@ -105,13 +114,16 @@ class CircuitBreaker:
         self.metrics.last_failure_time = time.time()
 
         # Check if we should open the circuit
-        if self.state == CircuitState.CLOSED and self.metrics.consecutive_failures >= self.config.failure_threshold:
+        if (
+            self.state == CircuitState.CLOSED
+            and self.metrics.consecutive_failures >= self.config.failure_threshold
+        ):
             await self._change_state(CircuitState.OPEN)
             logger.warning(
                 "circuit_breaker_opened",
                 name=self.config.name,
                 consecutive_failures=self.metrics.consecutive_failures,
-                failure_threshold=self.config.failure_threshold
+                failure_threshold=self.config.failure_threshold,
             )
         elif self.state == CircuitState.HALF_OPEN:
             await self._change_state(CircuitState.OPEN)
@@ -129,18 +141,24 @@ class CircuitBreaker:
             old_state=old_state.value,
             new_state=new_state.value,
             total_requests=self.metrics.total_requests,
-            total_failures=self.metrics.total_failures
+            total_failures=self.metrics.total_failures,
         )
 
     def protect(self, func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         """Decorator to protect a function with circuit breaker."""
+
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             probe_lock = None
             async with self._lock:
                 # Check if circuit should attempt reset
-                if self.state == CircuitState.OPEN and await self._should_attempt_reset():
+                if (
+                    self.state == CircuitState.OPEN
+                    and await self._should_attempt_reset()
+                ):
                     await self._change_state(CircuitState.HALF_OPEN)
-                    logger.info("circuit_breaker_attempting_reset", name=self.config.name)
+                    logger.info(
+                        "circuit_breaker_attempting_reset", name=self.config.name
+                    )
 
                 # Reject request if circuit is open
                 if self.state == CircuitState.OPEN:
@@ -152,7 +170,7 @@ class CircuitBreaker:
                             "state": self.state.value,
                             "last_failure": self.metrics.last_failure_time,
                             "timeout": self.config.timeout,
-                        }
+                        },
                     )
 
                 # Allow only one probe while HALF_OPEN
@@ -165,7 +183,7 @@ class CircuitBreaker:
                                 "circuit_name": self.config.name,
                                 "state": self.state.value,
                                 "last_failure": self.metrics.last_failure_time,
-                            }
+                            },
                         )
                     await self._half_open_lock.acquire()
                     probe_lock = self._half_open_lock
@@ -211,7 +229,7 @@ class CircuitBreaker:
                 "failure_threshold": self.config.failure_threshold,
                 "success_threshold": self.config.success_threshold,
                 "timeout": self.config.timeout,
-            }
+            },
         }
 
 
@@ -219,7 +237,9 @@ class CircuitBreaker:
 _circuit_breakers: dict[str, CircuitBreaker] = {}
 
 
-def get_circuit_breaker(name: str, config: Optional[CircuitBreakerConfig] = None) -> CircuitBreaker:
+def get_circuit_breaker(
+    name: str, config: Optional[CircuitBreakerConfig] = None
+) -> CircuitBreaker:
     """Get or create a circuit breaker by name."""
     if name not in _circuit_breakers:
         if config is None:
@@ -242,8 +262,8 @@ EXTERNAL_API_BREAKER = get_circuit_breaker(
         failure_threshold=5,
         success_threshold=2,
         timeout=30.0,
-        expected_exception=(ExternalAPIError, asyncio.TimeoutError, ConnectionError)
-    )
+        expected_exception=(ExternalAPIError, asyncio.TimeoutError, ConnectionError),
+    ),
 )
 
 DATABASE_BREAKER = get_circuit_breaker(
@@ -253,8 +273,8 @@ DATABASE_BREAKER = get_circuit_breaker(
         failure_threshold=3,
         success_threshold=1,
         timeout=15.0,
-        expected_exception=(Exception,)  # Broad exception catching for DB issues
-    )
+        expected_exception=(Exception,),  # Broad exception catching for DB issues
+    ),
 )
 
 CACHE_BREAKER = get_circuit_breaker(
@@ -264,6 +284,6 @@ CACHE_BREAKER = get_circuit_breaker(
         failure_threshold=3,
         success_threshold=2,
         timeout=10.0,
-        expected_exception=(ConnectionError, asyncio.TimeoutError)
-    )
+        expected_exception=(ConnectionError, asyncio.TimeoutError),
+    ),
 )
