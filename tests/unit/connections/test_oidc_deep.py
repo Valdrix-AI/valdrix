@@ -1,5 +1,4 @@
 import pytest
-import os
 from unittest.mock import MagicMock, patch, AsyncMock
 import jwt
 from cryptography.hazmat.primitives import serialization

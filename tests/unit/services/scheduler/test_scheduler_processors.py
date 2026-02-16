@@ -4,7 +4,6 @@ Tests for Scheduler Processors - Analysis and Savings
 No existing tests for these modules.
 """
 
-import pytest
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4

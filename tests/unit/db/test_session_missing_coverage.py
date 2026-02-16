@@ -3,7 +3,6 @@ import pytest
 Targeted tests for app/shared/db/session.py missing coverage line 21
 """
 
-import pytest
 import os
 import uuid
 from unittest.mock import MagicMock, AsyncMock, patch

@@ -9,7 +9,7 @@ import uuid
 
 from app.shared.adapters.aws_cur import AWSCURAdapter
 from app.models.aws_connection import AWSConnection
-from app.schemas.costs import CloudUsageSummary, CostRecord
+from app.schemas.costs import CloudUsageSummary
 
 # Mock data
 MOCK_CUR_DATA = {

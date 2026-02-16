@@ -1,5 +1,4 @@
 import pytest
-from typing import Dict
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 from app.shared.core.cache import CacheService

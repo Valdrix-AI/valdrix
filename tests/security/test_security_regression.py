@@ -31,7 +31,6 @@ async def test_tenant_isolation_regression(ac: AsyncClient, db):
     Verify that tenant A cannot access data from tenant B.
     (P0 Tenant Isolation)
     """
-    from app.shared.core.auth import get_current_user, require_tenant_access
     # Create two tenants
     t1_id, t2_id = uuid4(), uuid4()
     user_b_id = uuid4()
@@ -105,7 +104,6 @@ async def test_bound_pagination_enforcement(ac: AsyncClient, db):
     Verify that pagination limits are strictly enforced.
     (P1 Bound Pagination)
     """
-    from app.shared.core.auth import get_current_user, require_tenant_access
     tenant_id = uuid4()
     db.add(Tenant(id=tenant_id, name="Pagination Test", plan="pro"))
     await db.commit()

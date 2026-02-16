@@ -3,7 +3,6 @@ import pytest
 Comprehensive tests for app.shared.core.auth module.
 """
 
-import pytest
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 from uuid import uuid4

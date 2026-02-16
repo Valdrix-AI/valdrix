@@ -4,7 +4,6 @@ Comprehensive tests for ReportingService module.
 Covers cost ingestion, connection handling, data aggregation, and error scenarios.
 """
 
-import pytest
 
 from unittest.mock import AsyncMock, MagicMock, patch
 import uuid

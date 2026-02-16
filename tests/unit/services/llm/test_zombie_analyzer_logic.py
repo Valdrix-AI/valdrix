@@ -4,7 +4,6 @@ Tests for ZombieAnalyzer Logic - BYOK and Usage Tracking
 """
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 

@@ -1,5 +1,4 @@
 import pytest
-import os
 from unittest.mock import MagicMock, AsyncMock, patch
 from app.shared.db.session import (
     get_db,

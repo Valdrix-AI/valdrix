@@ -1,5 +1,4 @@
 import pytest
-import os
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone

@@ -6,7 +6,6 @@ Aligned with LLMBudgetManager refactor - delegates all budget/recording
 to LLMBudgetManager static methods instead of using deprecated class methods.
 """
 
-import pytest
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4

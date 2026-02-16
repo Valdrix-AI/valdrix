@@ -3,7 +3,6 @@ import pytest
 Tests for app/shared/core/dependencies.py - FastAPI dependencies
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 from fastapi import HTTPException, status

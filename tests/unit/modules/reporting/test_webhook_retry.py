@@ -5,7 +5,6 @@ Covers webhook storage, idempotency, retry logic, duplicate detection, and Payst
 """
 
 import json
-import pytest
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
