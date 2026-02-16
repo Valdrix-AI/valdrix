@@ -9,16 +9,16 @@ from app.models.tenant import Tenant, User
 from app.modules.optimization.domain import RemediationService
 
 
-async def verify_active_ops():
+async def verify_active_ops() -> None:
     print("🚀 Starting ActiveOps Dry-Run Verification...")
 
     async with async_session_maker() as db:
         # 1. Ensure a tenant exists
         print("🏢 Ensuring test tenant exists...")
-        result = await db.execute(select(Tenant).limit(1))
-        tenant = result.scalar_one_or_none()
+        result_tenant = await db.execute(select(Tenant).limit(1))
+        tenant = result_tenant.scalar_one_or_none()
 
-        if not tenant:
+        if tenant is None:
             tenant = Tenant(name="E2E Test Tenant", plan="pro")
             db.add(tenant)
             await db.flush()
@@ -29,12 +29,12 @@ async def verify_active_ops():
         tenant_id = tenant.id
 
         # 2. Ensure a user exists for this tenant
-        result = await db.execute(
+        result_user = await db.execute(
             select(User).where(User.tenant_id == tenant_id).limit(1)
         )
-        user = result.scalar_one_or_none()
+        user = result_user.scalar_one_or_none()
 
-        if not user:
+        if user is None:
             user = User(
                 id=uuid4(), tenant_id=tenant_id, email="e2e@example.com", role="admin"
             )
@@ -52,14 +52,15 @@ async def verify_active_ops():
         # P-8: Resource Ownership Verification - Create mock AWS connection
         from app.models.aws_connection import AWSConnection
 
-        result = await db.execute(
+        result_conn = await db.execute(
             select(AWSConnection).where(AWSConnection.tenant_id == tenant_id).limit(1)
         )
-        connection = result.scalar_one_or_none()
-        if not connection:
+        connection = result_conn.scalar_one_or_none()
+        if connection is None:
             connection = AWSConnection(
                 tenant_id=tenant_id,
-                name="E2E Mock AWS",
+                aws_account_id="123456789012",
+                # name="E2E Mock AWS",  # Removed: Not in model
                 role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
                 external_id="e2e-external-id",
                 region="us-east-1",
@@ -68,6 +69,8 @@ async def verify_active_ops():
             db.add(connection)
             await db.flush()
             print(f"✨ Created mock AWS connection: {connection.id}")
+        else:
+            print(f"✅ Using existing AWS connection: {connection.id}")
 
         # Mock credentials for the service
         mock_creds = {
@@ -96,10 +99,10 @@ async def verify_active_ops():
         print(f"✅ Created remediation request: {req.id}")
 
         # 4. Verify in DB
-        result = await db.execute(
+        result_persisted = await db.execute(
             select(RemediationRequest).where(RemediationRequest.id == req.id)
         )
-        persisted = result.scalar_one_or_none()
+        persisted = result_persisted.scalar_one_or_none()
 
         assert persisted is not None
         assert persisted.status.value == "pending"

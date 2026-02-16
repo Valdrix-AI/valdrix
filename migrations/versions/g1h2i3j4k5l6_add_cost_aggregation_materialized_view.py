@@ -45,13 +45,13 @@ def upgrade() -> None:
     
     # Create unique index for concurrent refresh
     op.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_daily_cost_unique 
+        CREATE UNIQUE INDEX IF NOT EXISTS ix_mv_daily_cost_unique 
         ON mv_daily_cost_aggregates (tenant_id, service, region, cost_date);
     """)
     
     # Create supporting indexes for common query patterns
     op.execute("""
-        CREATE INDEX IF NOT EXISTS idx_mv_daily_cost_tenant_date 
+        CREATE INDEX IF NOT EXISTS ix_mv_daily_cost_tenant_date 
         ON mv_daily_cost_aggregates (tenant_id, cost_date);
     """)
     

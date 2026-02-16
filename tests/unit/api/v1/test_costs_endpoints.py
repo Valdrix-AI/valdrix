@@ -1023,9 +1023,9 @@ async def test_get_acceptance_kpis_includes_ledger_quality_metrics_when_data_exi
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
-        db.add(Tenant(id=tenant_id, name="Acceptance KPI Ledger", plan="pro"))
+        db.add(Tenant(id=tenant_id, name="Acceptance KPI Ledger", plan=PricingTier.PRO.value))
         db.add(
-            User(id=user_id, tenant_id=tenant_id, email=mock_user.email, role="admin")
+            User(id=user_id, tenant_id=tenant_id, email=mock_user.email, role=UserRole.ADMIN)
         )
 
         account_id = uuid.uuid4()
@@ -1461,9 +1461,9 @@ async def test_capture_acceptance_kpis_persists_audit_evidence(
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
-        db.add(Tenant(id=tenant_id, name="KPI Evidence Tenant", plan="pro"))
+        db.add(Tenant(id=tenant_id, name="KPI Evidence Tenant", plan=PricingTier.PRO.value))
         db.add(
-            User(id=user_id, tenant_id=tenant_id, email=mock_user.email, role="admin")
+            User(id=user_id, tenant_id=tenant_id, email=mock_user.email, role=UserRole.ADMIN)
         )
         await db.commit()
 

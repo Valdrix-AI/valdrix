@@ -4,6 +4,8 @@ from datetime import date, timedelta
 from sqlalchemy import text
 from app.main import app
 from app.modules.reporting.domain.aggregator import CostAggregator, STATEMENT_TIMEOUT_MS
+from app.models.tenant import UserRole
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.mark.asyncio
@@ -74,8 +76,8 @@ async def test_large_dataset_async_shift(ac, monkeypatch):
         id=uuid4(),
         email="test@example.com",
         tenant_id=uuid4(),
-        role="member",
-        tier="starter",
+        role=UserRole.MEMBER,
+        tier=PricingTier.STARTER,
     )
     app.dependency_overrides[get_current_user] = lambda: mock_user
     app.dependency_overrides[require_tenant_access] = lambda: mock_user.tenant_id
@@ -105,11 +107,11 @@ async def test_tier_aware_rate_limiting():
 
     mock_request = MagicMock()
 
-    mock_request.state.tier = "starter"
+    mock_request.state.tier = PricingTier.STARTER
     assert get_analysis_limit(mock_request) == "2/hour"
 
-    mock_request.state.tier = "pro"
+    mock_request.state.tier = PricingTier.PRO
     assert get_analysis_limit(mock_request) == "50/hour"
 
-    mock_request.state.tier = "enterprise"
+    mock_request.state.tier = PricingTier.ENTERPRISE
     assert get_analysis_limit(mock_request) == "200/hour"

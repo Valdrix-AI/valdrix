@@ -446,32 +446,38 @@ class AttributionEngine:
         # 2. Get active rules
         rules = await self.get_active_rules(tenant_id)
 
-        # 3. Process each record
-        allocations_created = 0
-        for record in records:
-            # Delete existing allocations for this record to avoid duplicates
+        # 3. Batch delete existing allocations for these records to avoid duplicates
+        record_ids = [r.id for r in records]
+        # Perform in chunks to avoid large IN clause issues in some DBs
+        for i in range(0, len(record_ids), 1000):
+            chunk = record_ids[i : i + 1000]
             await self.db.execute(
-                delete(CostAllocation).where(
-                    CostAllocation.cost_record_id == record.id,
-                    CostAllocation.recorded_at == record.recorded_at,
-                )
+                delete(CostAllocation).where(CostAllocation.cost_record_id.in_(chunk))
             )
 
+        # 4. Process each record and accumulate allocations
+        all_allocations = []
+        for record in records:
             allocations = await self.apply_rules(record, rules)
-            for allocation in allocations:
-                self.db.add(allocation)
-            allocations_created += len(allocations)
+            all_allocations.extend(allocations)
+
+        # 5. Bulk insert allocations
+        if all_allocations:
+            # We use add_all for simplicity with SQLAlchemy async;
+            # for even higher performance with thousands of records,
+            # bulk_insert_mappings would be preferred.
+            self.db.add_all(all_allocations)
 
         await self.db.commit()
         logger.info(
             "batch_attribution_complete",
             tenant_id=str(tenant_id),
             records_processed=len(records),
-            allocations_created=allocations_created,
+            allocations_count=len(all_allocations),
         )
         return {
             "records_processed": len(records),
-            "allocations_created": allocations_created,
+            "allocations_created": len(all_allocations),
         }
 
     async def get_allocation_summary(

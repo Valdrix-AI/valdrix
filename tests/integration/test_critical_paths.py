@@ -6,7 +6,8 @@ Tests end-to-end workflows for zombie detection and remediation.
 import pytest
 from datetime import datetime, timezone, date
 from decimal import Decimal
-from uuid import uuid4
+from uuid import uuid4, UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import MagicMock, patch, AsyncMock
 
 from app.schemas.costs import CloudUsageSummary, CostRecord
@@ -22,7 +23,7 @@ from app.shared.core.exceptions import BudgetExceededError, KillSwitchTriggeredE
 
 
 @pytest.fixture
-def mock_llm():
+def mock_llm() -> MagicMock:
     """Mock LLM for integration tests."""
     llm = MagicMock()
     llm.model_name = "gpt-4"
@@ -30,7 +31,7 @@ def mock_llm():
 
 
 @pytest.fixture
-async def test_tenant(db):
+async def test_tenant(db: AsyncSession) -> Tenant:
     """Create a test tenant for integration tests."""
     tenant = Tenant(id=uuid4(), name="Integration Test Tenant", plan="pro")
     db.add(tenant)
@@ -40,7 +41,7 @@ async def test_tenant(db):
 
 
 @pytest.fixture
-def sample_cloud_usage():
+def sample_cloud_usage() -> CloudUsageSummary:
     """Sample cloud usage data for testing."""
     return CloudUsageSummary(
         tenant_id=str(uuid4()),
@@ -82,8 +83,12 @@ class TestZombieDetectionIntegration:
 
     @pytest.mark.asyncio
     async def test_zombie_detection_end_to_end(
-        self, mock_llm, sample_cloud_usage, test_tenant, db
-    ):
+        self,
+        mock_llm: MagicMock,
+        sample_cloud_usage: CloudUsageSummary,
+        test_tenant: Tenant,
+        db: AsyncSession,
+    ) -> None:
         """Test complete zombie detection workflow from data to analysis."""
         # Update sample data with test tenant
         sample_cloud_usage.tenant_id = str(test_tenant.id)
@@ -175,8 +180,12 @@ class TestZombieDetectionIntegration:
 
     @pytest.mark.asyncio
     async def test_zombie_detection_with_budget_exceeded(
-        self, mock_llm, sample_cloud_usage, test_tenant, db
-    ):
+        self,
+        mock_llm: MagicMock,
+        sample_cloud_usage: CloudUsageSummary,
+        test_tenant: Tenant,
+        db: AsyncSession,
+    ) -> None:
         """Test zombie detection fails gracefully when budget exceeded."""
         sample_cloud_usage.tenant_id = str(test_tenant.id)
         analyzer = FinOpsAnalyzer(mock_llm)
@@ -199,8 +208,11 @@ class TestZombieDetectionIntegration:
 
     @pytest.mark.asyncio
     async def test_zombie_detection_with_cache_hit(
-        self, mock_llm, sample_cloud_usage, test_tenant
-    ):
+        self,
+        mock_llm: MagicMock,
+        sample_cloud_usage: CloudUsageSummary,
+        test_tenant: Tenant,
+    ) -> None:
         """Test zombie detection uses cached results when available."""
         sample_cloud_usage.tenant_id = str(test_tenant.id)
         analyzer = FinOpsAnalyzer(mock_llm)
@@ -226,7 +238,9 @@ class TestRemediationIntegration:
     """Integration tests for remediation workflow."""
 
     @pytest.mark.asyncio
-    async def test_remediation_workflow_end_to_end(self, db, test_tenant):
+    async def test_remediation_workflow_end_to_end(
+        self, db: AsyncSession, test_tenant: Tenant
+    ) -> None:
         """Test complete remediation workflow from request to execution."""
         # Create a remediation request
         remediation_request = RemediationRequest(
@@ -277,7 +291,9 @@ class TestRemediationIntegration:
             )
 
     @pytest.mark.asyncio
-    async def test_remediation_failure_handling(self, db, test_tenant):
+    async def test_remediation_failure_handling(
+        self, db: AsyncSession, test_tenant: Tenant
+    ) -> None:
         """Test remediation handles failures gracefully."""
         # Create a remediation request
         remediation_request = RemediationRequest(
@@ -313,7 +329,9 @@ class TestRemediationIntegration:
             assert remediation_request.status == RemediationStatus.FAILED
 
     @pytest.mark.asyncio
-    async def test_remediation_budget_integration(self, db, test_tenant):
+    async def test_remediation_budget_integration(
+        self, db: AsyncSession, test_tenant: Tenant
+    ) -> None:
         """Test remediation integrates with budget management."""
         remediation_request = RemediationRequest(
             id=uuid4(),
@@ -356,7 +374,9 @@ class TestTenantIsolationIntegration:
     """Integration tests for tenant isolation and security."""
 
     @pytest.mark.asyncio
-    async def test_tenant_data_isolation_in_analysis(self, mock_llm, db):
+    async def test_tenant_data_isolation_in_analysis(
+        self, mock_llm: MagicMock, db: AsyncSession
+    ) -> None:
         """Test that tenant data is properly isolated during analysis."""
         # Create two tenants
         tenant1 = Tenant(id=uuid4(), name="Tenant 1", plan="pro")
@@ -448,7 +468,7 @@ class TestTenantIsolationIntegration:
             assert "i-tenant2" not in str(result1["anomalies"])
 
     @pytest.mark.asyncio
-    async def test_remediation_tenant_isolation(self, db):
+    async def test_remediation_tenant_isolation(self, db: AsyncSession) -> None:
         """Test that remediation operations are tenant-isolated."""
         # Create two tenants
         tenant1 = Tenant(id=uuid4(), name="Tenant 1", plan="pro")
@@ -509,7 +529,7 @@ class TestPerformanceIntegration:
     """Integration tests for performance and scalability."""
 
     @pytest.mark.asyncio
-    async def test_concurrent_zombie_detection(self, mock_llm):
+    async def test_concurrent_zombie_detection(self, mock_llm: MagicMock) -> None:
         """Test concurrent zombie detection operations."""
         analyzer = FinOpsAnalyzer(mock_llm)
 
@@ -544,7 +564,7 @@ class TestPerformanceIntegration:
         with patch.object(analyzer, "analyze", side_effect=mock_analyze):
             # Run concurrent analyses
             tasks = [
-                analyzer.analyze(usage, tenant_id=usage.tenant_id)
+                analyzer.analyze(usage, tenant_id=UUID(usage.tenant_id))
                 for usage in usage_summaries
             ]
             results = await asyncio.gather(*tasks)
@@ -554,7 +574,7 @@ class TestPerformanceIntegration:
             assert all(result["result"] == "success" for result in results)
 
     @pytest.mark.asyncio
-    async def test_large_dataset_zombie_detection(self, mock_llm):
+    async def test_large_dataset_zombie_detection(self, mock_llm: MagicMock) -> None:
         """Test zombie detection with large datasets."""
         analyzer = FinOpsAnalyzer(mock_llm)
 
@@ -616,7 +636,7 @@ class TestPerformanceIntegration:
 
             # Execute analysis
             result = await analyzer.analyze(
-                large_usage, tenant_id=large_usage.tenant_id
+                large_usage, tenant_id=UUID(large_usage.tenant_id)
             )
 
             end_time = time.time()
@@ -636,8 +656,11 @@ class TestErrorHandlingIntegration:
 
     @pytest.mark.asyncio
     async def test_zombie_detection_llm_failure_fallback(
-        self, mock_llm, sample_cloud_usage, test_tenant
-    ):
+        self,
+        mock_llm: MagicMock,
+        sample_cloud_usage: CloudUsageSummary,
+        test_tenant: Tenant,
+    ) -> None:
         """Test zombie detection falls back gracefully on LLM failures."""
         sample_cloud_usage.tenant_id = test_tenant.id
         analyzer = FinOpsAnalyzer(mock_llm)
@@ -675,7 +698,9 @@ class TestErrorHandlingIntegration:
             mock_process.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_remediation_partial_failure_recovery(self, db, test_tenant):
+    async def test_remediation_partial_failure_recovery(
+        self, db: AsyncSession, test_tenant: Tenant
+    ) -> None:
         """Test remediation recovers from partial failures."""
         # Create multiple remediation requests
         requests = []

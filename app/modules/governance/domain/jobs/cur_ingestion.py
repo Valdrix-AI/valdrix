@@ -94,6 +94,70 @@ class CURIngestionJob:
             bucket=bucket,
         )
 
-    async def _find_latest_cur_key(self, connection: AWSConnection, bucket: str) -> str:
-        # Implementation of S3 listing and manifest parsing
-        raise NotImplementedError("CUR key discovery is not yet implemented")
+    async def _find_latest_cur_key(
+        self, connection: AWSConnection, bucket: str
+    ) -> Optional[str]:
+        """
+        Discovers the latest CUR manifest and returns the primary Parquet data key.
+        Uses a cost-efficient ListObjectsV2/GetObject pattern.
+        """
+        import boto3
+        from botocore.config import Config
+        import json
+
+        # 2026 Standard: Use regional endpoints and non-blocking patterns where possible
+        s3 = boto3.client(
+            "s3",
+            region_name=connection.region,
+            config=Config(retries={"max_attempts": 3, "mode": "standard"}),
+        )
+
+        prefix = connection.cur_prefix or ""
+        report_name = connection.cur_report_name or "valdrix-cur"
+
+        try:
+            # 1. Look for all manifests matching the report name
+            # Pattern: [prefix]/[report_name]/[date-range]/[report_name]-Manifest.json
+            response = s3.list_objects_v2(
+                Bucket=bucket,
+                Prefix=f"{prefix}/{report_name}/" if prefix else f"{report_name}/",
+            )
+
+            if "Contents" not in response:
+                logger.warning("cur_bucket_empty", bucket=bucket)
+                return None
+
+            # Find the latest manifest by LastModified
+            manifests = [
+                obj
+                for obj in response["Contents"]
+                if obj["Key"].endswith("-Manifest.json")
+            ]
+
+            if not manifests:
+                logger.warning(
+                    "cur_manifest_not_found", bucket=bucket, report=report_name
+                )
+                return None
+
+            latest_manifest_obj = max(manifests, key=lambda x: x["LastModified"])
+            manifest_key = latest_manifest_obj["Key"]
+
+            # 2. Extract Parquet keys from the manifest
+            manifest_resp = s3.get_object(Bucket=bucket, Key=manifest_key)
+            manifest_data = json.loads(manifest_resp["Body"].read().decode("utf-8"))
+
+            # CUR Parquet manifests list files in 'reportKeys'
+            report_keys = manifest_data.get("reportKeys", [])
+            if not report_keys:
+                logger.warning("cur_manifest_empty_files", manifest=manifest_key)
+                return None
+
+            # Return the latest file (usually CUR overwrites or versioning applies)
+            # For multi-part, we'd return a list, but simplified here to the newest key.
+            from typing import cast
+            return cast(Optional[str], report_keys[0])
+
+        except Exception as e:
+            logger.error("cur_manifest_discovery_failed", error=str(e), bucket=bucket)
+            raise

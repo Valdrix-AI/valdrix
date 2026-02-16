@@ -129,7 +129,6 @@ class WebhookRetryHandler(BaseJobHandler):
             return await process_paystack_webhook(job, db)
 
         # Generic HTTP webhook retry
-        import httpx
 
         url = payload.get("url")
         data = payload.get("data")
@@ -158,8 +157,10 @@ class WebhookRetryHandler(BaseJobHandler):
             logger.warning("webhook_headers_rejected", error=str(exc))
             raise
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=data, headers=headers, timeout=30)
-            response.raise_for_status()
+        from app.shared.core.http import get_http_client
+
+        client = get_http_client()
+        response = await client.post(url, json=data, headers=headers, timeout=30)
+        response.raise_for_status()
 
         return {"status": "completed", "status_code": response.status_code}

@@ -18,6 +18,17 @@ from app.shared.core.pricing import PricingTier, normalize_tier
 
 logger = structlog.get_logger()
 
+__all__ = [
+    "CurrentUser",
+    "get_current_user",
+    "get_current_user_from_jwt",
+    "requires_role",
+    "require_tenant_access",
+    "UserRole",
+    "UserPersona",
+    "PricingTier",
+]
+
 security = HTTPBearer(auto_error=False)
 
 
@@ -48,6 +59,9 @@ def create_access_token(
         to_encode["iss"] = "supabase"
 
     to_encode.update({"exp": expire})
+
+    if not settings.SUPABASE_JWT_SECRET:
+        raise ValueError("SUPABASE_JWT_SECRET is not configured")
 
     encoded_jwt = jwt.encode(to_encode, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
     return encoded_jwt
@@ -86,6 +100,10 @@ def decode_jwt(token: str) -> dict[str, Any]:
     settings = get_settings()
 
     try:
+        if not settings.SUPABASE_JWT_SECRET:
+            logger.error("jwt_secret_missing_in_decode")
+            raise ValueError("Configuration error: Missing JWT secret")
+
         # Decode with verification
         payload = jwt.decode(
             token,

@@ -24,10 +24,11 @@ from fastapi_csrf_protect.exceptions import CsrfProtectError
 from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
 from types import ModuleType
+from typing import AsyncGenerator
 
 
 @pytest_asyncio.fixture
-async def lite_client() -> AsyncClient:
+async def lite_client() -> AsyncGenerator[AsyncClient, None]:
     """Async client without real DB setup (avoids aiosqlite thread usage)."""
     settings.TESTING = True
 
@@ -122,7 +123,8 @@ async def test_valdrix_exception_handler_records_metrics():
         mock_metric.labels.return_value.inc.assert_called_once()
 
         assert response.status_code == 418
-        body = json.loads(response.body)
+        from typing import cast
+        body = json.loads(cast(bytes, response.body))
         assert body["code"] == "oops"
 
 
@@ -139,7 +141,8 @@ async def test_http_exception_handler_records_metrics():
         mock_metric.labels.return_value.inc.assert_called_once()
 
         assert response.status_code == 404
-        body = json.loads(response.body)
+        from typing import cast
+        body = json.loads(cast(bytes, response.body))
         assert body["code"] == "HTTP_ERROR"
 
 
@@ -161,7 +164,8 @@ async def test_csrf_exception_handler_records_metrics():
         mock_api.labels.return_value.inc.assert_called_once()
 
         assert response.status_code == 403
-        body = json.loads(response.body)
+        from typing import cast
+        body = json.loads(cast(bytes, response.body))
         assert body["code"] == "csrf_error"
 
 
@@ -256,7 +260,8 @@ async def test_csrf_middleware_enforces_when_cookie_present_and_no_bearer():
         with patch("app.main.CsrfProtect", return_value=_FakeCsrf()):
             response = await csrf_protect_middleware(request, call_next)
         assert response.status_code == 400
-        body = json.loads(response.body)
+        from typing import cast
+        body = json.loads(cast(bytes, response.body))
         assert body["code"] == "csrf_error"
     finally:
         main_mod.settings.TESTING = original_testing
@@ -297,7 +302,7 @@ async def test_generic_exception_handler_records_metrics():
     request = _make_request(path="/generic", method="GET")
     exc = RuntimeError("explode")
 
-    with patch("app.main.API_ERRORS_TOTAL") as mock_metric:
+    with patch("app.shared.core.error_governance.API_ERRORS_TOTAL") as mock_metric:
         response = await generic_exception_handler(request, exc)
         mock_metric.labels.assert_called_once_with(
             path="/generic", method="GET", status_code=500
@@ -353,7 +358,8 @@ async def test_validation_exception_handler_sanitizes_non_serializable_values():
 
     response = await validation_exception_handler(request, exc)
     assert response.status_code == 422
-    body = json.loads(response.body)
+    from typing import cast
+    body = json.loads(cast(bytes, response.body))
     details = body["details"][0]
     assert isinstance(details["ctx"]["error"], str)
     assert "nope" in details["ctx"]["error"]
@@ -375,7 +381,7 @@ def test_load_emissions_tracker_imports_codecarbon_when_available():
     class DummyTracker:  # pragma: no cover - simple sentinel
         pass
 
-    module.EmissionsTracker = DummyTracker
+    setattr(module, "EmissionsTracker", DummyTracker)
     with (
         patch("app.main._is_test_mode", return_value=False),
         patch.dict("sys.modules", {"codecarbon": module}),

@@ -18,6 +18,7 @@ def mock_user():
     user.id = uuid.uuid4()
     user.tenant_id = uuid.uuid4()
     user.role = UserRole.MEMBER
+    user.tier = PricingTier.FREE_TRIAL
     return user
 
 
@@ -111,10 +112,13 @@ async def test_create_azure_connection_denied_on_free_tier(
 async def test_create_azure_connection_allowed_on_pro_tier(
     async_client: AsyncClient, db_session, mock_user
 ):
-    """Test Azure connection allowed for Pro tier."""
+    # Ensure tenant is on PRO plan
     tenant = Tenant(
         id=mock_user.tenant_id, name="Pro Tenant", plan=PricingTier.PRO.value
     )
+    # Also set it on the mock_user object used by the dependency override
+    mock_user.tier = PricingTier.PRO
+    
     db_session.add(tenant)
     await db_session.commit()
 

@@ -61,6 +61,7 @@ def test_reconciliation_csv_renderers_and_hash() -> None:
         close_status="ready",
         lifecycle_summary={"total_records": 1},
         reconciliation_summary={"status": "healthy", "discrepancies": []},
+        invoice_reconciliation=None,
         restatement_entries=entries,
     )
     rest_csv = CostReconciliationService._render_restatements_csv(entries)

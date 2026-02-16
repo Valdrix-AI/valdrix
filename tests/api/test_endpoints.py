@@ -9,7 +9,8 @@ from unittest.mock import MagicMock, patch, AsyncMock
 from httpx import AsyncClient
 
 from app.models.tenant import Tenant
-from app.shared.core.auth import CurrentUser
+from app.shared.core.auth import CurrentUser, UserRole
+from app.shared.core.pricing import PricingTier
 
 
 # SEC: Redundant local fixtures removed to avoid shadowing global ones in conftest.py
@@ -897,8 +898,8 @@ class TestAuthorizationAndAuthentication:
     async def test_tenant_isolation_zombie_scan(self, ac: AsyncClient, db):
         """Test that tenant A cannot access tenant B's zombie data."""
         # Create two tenants
-        tenant_a = Tenant(id=uuid4(), name="Tenant A", plan="pro")
-        tenant_b = Tenant(id=uuid4(), name="Tenant B", plan="pro")
+        tenant_a = Tenant(id=uuid4(), name="Tenant A", plan=PricingTier.PRO.value)
+        tenant_b = Tenant(id=uuid4(), name="Tenant B", plan=PricingTier.PRO.value)
         db.add_all([tenant_a, tenant_b])
         await db.commit()
 
@@ -907,15 +908,15 @@ class TestAuthorizationAndAuthentication:
             id=uuid4(),
             email="user@tenantA.com",
             tenant_id=tenant_a.id,
-            role="member",
-            tier="pro",
+            role=UserRole.MEMBER,
+            tier=PricingTier.PRO,
         )
         CurrentUser(
             id=uuid4(),
             email="user@tenantB.com",
             tenant_id=tenant_b.id,
-            role="member",
-            tier="pro",
+            role=UserRole.MEMBER,
+            tier=PricingTier.PRO,
         )
 
         # Mock user A
@@ -956,8 +957,8 @@ class TestAuthorizationAndAuthentication:
             id=uuid4(),
             email="member@test.com",
             tenant_id=uuid4(),
-            role="member",  # Not admin
-            tier="pro",
+            role=UserRole.MEMBER,  # Not admin
+            tier=PricingTier.PRO,
         )
 
         # Mock authentication by overriding the app's dependency

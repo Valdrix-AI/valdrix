@@ -132,6 +132,12 @@ def upgrade() -> None:
             unique=False,
         )
         op.create_index(
+            "ix_cost_audit_logs_composite_record",
+            "cost_audit_logs",
+            ["cost_record_id", "cost_recorded_at"],
+            unique=False,
+        )
+        op.create_index(
             "ix_cost_audit_logs_ingestion_batch_id",
             "cost_audit_logs",
             ["ingestion_batch_id"],

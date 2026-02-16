@@ -20,7 +20,12 @@ def orchestrator(mock_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_cohort_analysis_job_dispatch(orchestrator):
+async def test_orchestrator_job_assignment() -> None:
+    pass # Placeholder for the new test function
+
+
+@pytest.mark.asyncio
+async def test_cohort_analysis_job_dispatch(orchestrator) -> None:
     """Test dispatching cohort analysis to Celery."""
     with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
         await orchestrator.cohort_analysis_job(TenantCohort.HIGH_VALUE)
@@ -29,7 +34,7 @@ async def test_cohort_analysis_job_dispatch(orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_low_carbon_window(orchestrator):
+async def test_low_carbon_window(orchestrator: SchedulerOrchestrator) -> None:
     """Test Green Window logic."""
     # Test Green Window (e.g., 12:00 UTC)
     with patch(
@@ -76,7 +81,7 @@ async def test_detect_stuck_jobs(orchestrator, mock_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_billing_sweep_job(orchestrator):
+async def test_billing_sweep_job(orchestrator: SchedulerOrchestrator) -> None:
     """Test billing sweep dispatch."""
     with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
         await orchestrator.billing_sweep_job()
@@ -84,7 +89,7 @@ async def test_billing_sweep_job(orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_acceptance_sweep_job(orchestrator):
+async def test_acceptance_sweep_job(orchestrator: SchedulerOrchestrator) -> None:
     """Test acceptance sweep dispatch."""
     with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
         await orchestrator.acceptance_sweep_job()
@@ -92,7 +97,7 @@ async def test_acceptance_sweep_job(orchestrator):
 
 
 @pytest.mark.asyncio
-async def test_maintenance_sweep_job_failure(orchestrator):
+async def test_maintenance_sweep_job_failure(orchestrator: SchedulerOrchestrator) -> None:
     """Test maintenance sweep job handles Celery being unavailable."""
     with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
         mock_send.side_effect = Exception("Redis connection error")

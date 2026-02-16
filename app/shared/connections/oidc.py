@@ -148,7 +148,6 @@ class OIDCService:
         project_id: str, tenant_id: str
     ) -> tuple[bool, str | None]:
         """Verify that GCP can exchange our OIDC token for access."""
-        import httpx
 
         settings = get_settings()
         audience = settings.GCP_OIDC_AUDIENCE
@@ -168,14 +167,14 @@ class OIDCService:
                 "subject_token": subject_token,
             }
 
-            async with httpx.AsyncClient(
-                timeout=settings.GCP_OIDC_VERIFY_TIMEOUT_SECONDS
-            ) as client:
-                response = await client.post(
-                    settings.GCP_OIDC_STS_URL,
-                    data=payload,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                )
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            response = await client.post(
+                settings.GCP_OIDC_STS_URL,
+                data=payload,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
 
             if response.status_code >= 400:
                 logger.warning(

@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 import structlog
-import httpx
 
 from app.shared.core.config import get_settings
 from app.shared.core.ops_metrics import (
@@ -107,86 +106,87 @@ class LoadTester:
 
     async def _simulate_user(self, user_id: int, test_start_time: float) -> None:
         """Simulate a single user making requests."""
-        async with httpx.AsyncClient(
-            timeout=self.config.request_timeout, headers=self.config.headers
-        ) as client:
-            # Ramp up delay
-            if self.config.ramp_up_seconds > 0:
-                delay = (
-                    user_id / self.config.concurrent_users
-                ) * self.config.ramp_up_seconds
-                await asyncio.sleep(delay)
+        from app.shared.core.http import get_http_client
 
-            time.time()
+        client = get_http_client()
 
-            while (
-                self._running
-                and (time.time() - test_start_time) < self.config.duration_seconds
-            ):
-                for endpoint in self.config.endpoints:
-                    if not self._running:
-                        break
+        # Ramp up delay
+        if self.config.ramp_up_seconds > 0:
+            delay = (
+                user_id / self.config.concurrent_users
+            ) * self.config.ramp_up_seconds
+            await asyncio.sleep(delay)
 
-                    request_start = time.time()
-                    try:
-                        url = f"{self.config.target_url}{endpoint}"
-                        response = await client.get(url)
+        time.time()
 
-                        response_time = time.time() - request_start
+        while (
+            self._running
+            and (time.time() - test_start_time) < self.config.duration_seconds
+        ):
+            for endpoint in self.config.endpoints:
+                if not self._running:
+                    break
 
-                        # Record metrics
-                        self.results.total_requests += 1
-                        self.results.total_response_time += response_time
-                        self.results.response_times.append(response_time)
+                request_start = time.time()
+                try:
+                    url = f"{self.config.target_url}{endpoint}"
+                    response = await client.get(url)
 
-                        if response.status_code < 400:
-                            self.results.successful_requests += 1
-                        else:
-                            self.results.failed_requests += 1
-                            self.results.errors.append(
-                                f"HTTP {response.status_code}: {response.text[:100]}"
-                            )
+                    response_time = time.time() - request_start
 
-                        API_REQUESTS_TOTAL.labels(
+                    # Record metrics
+                    self.results.total_requests += 1
+                    self.results.total_response_time += response_time
+                    self.results.response_times.append(response_time)
+
+                    if response.status_code < 400:
+                        self.results.successful_requests += 1
+                    else:
+                        self.results.failed_requests += 1
+                        self.results.errors.append(
+                            f"HTTP {response.status_code}: {response.text[:100]}"
+                        )
+
+                    API_REQUESTS_TOTAL.labels(
+                        method="GET",
+                        endpoint=endpoint,
+                        status_code=response.status_code,
+                    ).inc()
+                    API_REQUEST_DURATION.labels(
+                        method="GET", endpoint=endpoint
+                    ).observe(response_time)
+                    if response.status_code >= 400:
+                        API_ERRORS_TOTAL.labels(
+                            path=endpoint,
                             method="GET",
-                            endpoint=endpoint,
                             status_code=response.status_code,
                         ).inc()
-                        API_REQUEST_DURATION.labels(
-                            method="GET", endpoint=endpoint
-                        ).observe(response_time)
-                        if response.status_code >= 400:
-                            API_ERRORS_TOTAL.labels(
-                                path=endpoint,
-                                method="GET",
-                                status_code=response.status_code,
-                            ).inc()
 
-                        # Update min/max
-                        self.results.min_response_time = min(
-                            self.results.min_response_time, response_time
-                        )
-                        self.results.max_response_time = max(
-                            self.results.max_response_time, response_time
-                        )
+                    # Update min/max
+                    self.results.min_response_time = min(
+                        self.results.min_response_time, response_time
+                    )
+                    self.results.max_response_time = max(
+                        self.results.max_response_time, response_time
+                    )
 
-                    except Exception as e:
-                        response_time = time.time() - request_start
-                        self.results.total_requests += 1
-                        self.results.failed_requests += 1
-                        self.results.errors.append(str(e))
-                        API_REQUESTS_TOTAL.labels(
-                            method="GET", endpoint=endpoint, status_code="exception"
-                        ).inc()
-                        API_REQUEST_DURATION.labels(
-                            method="GET", endpoint=endpoint
-                        ).observe(response_time)
-                        API_ERRORS_TOTAL.labels(
-                            path=endpoint, method="GET", status_code="exception"
-                        ).inc()
+                except Exception as e:
+                    response_time = time.time() - request_start
+                    self.results.total_requests += 1
+                    self.results.failed_requests += 1
+                    self.results.errors.append(str(e))
+                    API_REQUESTS_TOTAL.labels(
+                        method="GET", endpoint=endpoint, status_code="exception"
+                    ).inc()
+                    API_REQUEST_DURATION.labels(
+                        method="GET", endpoint=endpoint
+                    ).observe(response_time)
+                    API_ERRORS_TOTAL.labels(
+                        path=endpoint, method="GET", status_code="exception"
+                    ).inc()
 
-                    # Small delay between requests to avoid overwhelming
-                    await asyncio.sleep(0.1)
+                # Small delay between requests to avoid overwhelming
+                await asyncio.sleep(0.1)
 
     def _calculate_metrics(self, total_duration: float) -> None:
         """Calculate final performance metrics."""
@@ -368,11 +368,13 @@ async def benchmark_health_endpoint(
     """Benchmark the health endpoint."""
     benchmark = PerformanceBenchmark("health_endpoint")
 
-    async with httpx.AsyncClient() as client:
+    from app.shared.core.http import get_http_client
 
-        async def health_check() -> None:
-            response = await client.get(f"{base_url}/health")
-            response.raise_for_status()
+    client = get_http_client()
+
+    async def health_check() -> None:
+        response = await client.get(f"{base_url}/health")
+        response.raise_for_status()
 
     return await benchmark.benchmark_async(health_check, iterations=50)
 

@@ -27,8 +27,16 @@ from decimal import Decimal
 import pytest
 import pytest_asyncio
 import tenacity
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator, Generator, Optional
 from datetime import datetime, timezone
+from app.models.tenant import UserRole
+from app.shared.core.pricing import PricingTier
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from fastapi.testclient import TestClient
+    from httpx import AsyncClient
 
 # Import test isolation utilities
 
@@ -123,7 +131,7 @@ async def async_engine():
 
 
 @pytest_asyncio.fixture
-async def db_session(async_engine) -> AsyncGenerator:
+async def db_session(async_engine) -> AsyncGenerator["AsyncSession", None]:
     """Create database tables and provide async session."""
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
     from app.shared.db.base import Base
@@ -165,7 +173,7 @@ def app():
 
 
 @pytest.fixture
-def client(app) -> Generator:
+def client(app) -> Generator["TestClient", None, None]:
     """Sync test client for FastAPI."""
     from fastapi.testclient import TestClient
 
@@ -174,7 +182,7 @@ def client(app) -> Generator:
 
 
 @pytest_asyncio.fixture
-async def async_client(app, db, async_engine) -> AsyncGenerator:
+async def async_client(app, db, async_engine) -> AsyncGenerator["AsyncClient", None]:
     """Async test client for FastAPI. Overrides get_db to share test session."""
     from httpx import AsyncClient, ASGITransport
     from app.shared.db.session import get_db, get_system_db
@@ -219,7 +227,7 @@ async def async_client(app, db, async_engine) -> AsyncGenerator:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            ac.app = app  # SEC: Attach app for dependency overrides in tests
+            setattr(ac, "app", app)  # SEC: Attach app for dependency overrides in tests
             yield ac
 
         # Restore or remove override
@@ -272,8 +280,8 @@ def mock_user(mock_tenant_id, mock_user_id):
         id=mock_user_id,
         email="test@valdrix.io",
         tenant_id=mock_tenant_id,
-        role="admin",
-        tier="pro",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
     )
 
 
@@ -286,8 +294,8 @@ def member_user(mock_tenant_id, mock_user_id):
         id=mock_user_id,
         email="member@valdrix.io",
         tenant_id=mock_tenant_id,
-        role="member",
-        tier="pro",
+        role=UserRole.MEMBER,
+        tier=PricingTier.PRO,
     )
 
 
@@ -410,7 +418,7 @@ def cost_record_factory():
     def _create_cost_record(
         service: str = "Amazon EC2",
         cost: float = 10.0,
-        usage_date: str = None,
+        usage_date: Optional[str] = None,
     ):
         return {
             "service": service,

@@ -36,8 +36,8 @@ async def test_github_dispatch_success_and_failure() -> None:
     client = AsyncMock()
     client.post = AsyncMock(return_value=ok_response)
     with patch(
-        "app.modules.notifications.domain.workflows.httpx.AsyncClient",
-        return_value=_async_client_cm(client),
+        "app.shared.core.http.get_http_client",
+        return_value=client,
     ):
         ok = await dispatcher.dispatch(
             "policy.block",
@@ -48,8 +48,8 @@ async def test_github_dispatch_success_and_failure() -> None:
     bad_response = MagicMock(status_code=401, text="unauthorized")
     client.post = AsyncMock(return_value=bad_response)
     with patch(
-        "app.modules.notifications.domain.workflows.httpx.AsyncClient",
-        return_value=_async_client_cm(client),
+        "app.shared.core.http.get_http_client",
+        return_value=client,
     ):
         ok = await dispatcher.dispatch("policy.block", {"tenant_id": "t1"})
     assert ok is False
@@ -68,8 +68,8 @@ async def test_gitlab_dispatch_success() -> None:
     client = AsyncMock()
     client.post = AsyncMock(return_value=response)
     with patch(
-        "app.modules.notifications.domain.workflows.httpx.AsyncClient",
-        return_value=_async_client_cm(client),
+        "app.shared.core.http.get_http_client",
+        return_value=client,
     ):
         ok = await dispatcher.dispatch(
             "remediation.completed",
@@ -101,8 +101,8 @@ async def test_generic_dispatch_validates_allowlist_and_posts() -> None:
             return_value=settings,
         ),
         patch(
-            "app.modules.notifications.domain.workflows.httpx.AsyncClient",
-            return_value=_async_client_cm(client),
+            "app.shared.core.http.get_http_client",
+            return_value=client,
         ),
     ):
         ok = await dispatcher.dispatch("policy.escalate", {"tenant_id": "t-1"})

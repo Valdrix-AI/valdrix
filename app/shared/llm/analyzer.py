@@ -1,4 +1,5 @@
 # mypy: disable-error-code=import-untyped
+import asyncio
 import yaml
 import os
 import uuid
@@ -23,7 +24,10 @@ from tenacity import (
 
 from app.shared.core.config import get_settings
 from app.shared.llm.usage_tracker import UsageTracker
-from app.modules.notifications.domain import get_slack_service, get_tenant_slack_service
+from app.modules.notifications.domain import (
+    get_slack_service,
+    get_tenant_slack_service,
+)
 from app.shared.core.cache import get_cache_service
 from app.shared.llm.guardrails import LLMGuardrails, FinOpsAnalysisResult
 from app.shared.analysis.forecaster import SymbolicForecaster
@@ -53,28 +57,41 @@ class FinOpsAnalyzer:
     def __init__(self, llm: BaseChatModel, db: Optional[AsyncSession] = None):
         self.llm = llm
         self.db = db
+        # Prompts are now loaded lazily or cached at module level to avoid blocking I/O
+        self.prompt: Optional[ChatPromptTemplate] = None
 
-        system_prompt = self._load_system_prompt()
+    async def _get_prompt(self) -> ChatPromptTemplate:
+        """Loads and caches the prompt template asynchronously."""
+        if self.prompt is not None:
+            return self.prompt
 
+        system_prompt = await self._load_system_prompt_async()
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system_prompt),
                 ("user", "Analyze this cloud cost data:\n{cost_data}"),
             ]
         )
+        return self.prompt
 
-    def _load_system_prompt(self) -> str:
-        """Loads the system prompt from yaml or returns fallback."""
+    async def _load_system_prompt_async(self) -> str:
+        """Loads the system prompt from yaml in a thread pool or returns fallback."""
         prompt_path = os.path.join(os.path.dirname(__file__), "prompts.yaml")
 
         try:
             if os.path.exists(prompt_path):
-                with open(prompt_path, "r") as f:
-                    registry = yaml.safe_load(f)
-                    if isinstance(registry, dict) and "finops_analysis" in registry:
-                        prompt = registry["finops_analysis"].get("system")
-                        if isinstance(prompt, str) and prompt.strip():
-                            return prompt
+                # PRODUCTION: Offload blocking I/O to a thread pool
+                loop = asyncio.get_running_loop()
+
+                def _read_file() -> Any:
+                    with open(prompt_path, "r") as f:
+                        return yaml.safe_load(f)
+
+                registry = await loop.run_in_executor(None, _read_file)
+                if isinstance(registry, dict) and "finops_analysis" in registry:
+                    prompt = registry["finops_analysis"].get("system")
+                    if isinstance(prompt, str) and prompt.strip():
+                        return prompt
         except Exception as e:
             logger.error("failed_to_load_prompts_yaml", error=str(e), path=prompt_path)
 
@@ -479,7 +496,8 @@ class FinOpsAnalyzer:
         if provider != get_settings().LLM_PROVIDER or byok_key:
             current_llm = LLMFactory.create(provider, model=model, api_key=byok_key)
 
-        chain = self.prompt | current_llm
+        prompt_template = await self._get_prompt()
+        chain = prompt_template | current_llm
 
         @retry(
             stop=stop_after_attempt(3),
@@ -527,7 +545,7 @@ class FinOpsAnalyzer:
                         fallback_llm = LLMFactory.create(
                             fallback_provider, model=fallback_model
                         )
-                        fallback_chain = self.prompt | fallback_llm
+                        fallback_chain = prompt_template | fallback_llm
                         logger.info(
                             "trying_fallback_llm",
                             provider=fallback_provider,

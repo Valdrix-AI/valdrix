@@ -11,7 +11,8 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_export_compliance_pack_returns_zip(async_client, app, db, test_tenant):
-    from app.shared.core.auth import CurrentUser, get_current_user
+    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+    from app.shared.core.pricing import PricingTier
     from app.models.notification_settings import NotificationSettings
     from app.models.remediation_settings import RemediationSettings
     from app.models.tenant_identity_settings import TenantIdentitySettings
@@ -24,8 +25,8 @@ async def test_export_compliance_pack_returns_zip(async_client, app, db, test_te
         id=uuid4(),
         email="owner@valdrix.io",
         tenant_id=test_tenant.id,
-        role="owner",
-        tier="pro",
+        role=UserRole.OWNER,
+        tier=PricingTier.PRO,
     )
 
     # Seed a log + settings with secrets; export should redact secrets and include only "has_*" flags.
@@ -155,7 +156,8 @@ async def test_export_compliance_pack_returns_zip(async_client, app, db, test_te
 async def test_export_compliance_pack_can_include_focus_export(
     async_client, app, db, test_tenant
 ):
-    from app.shared.core.auth import CurrentUser, get_current_user
+    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+    from app.shared.core.pricing import PricingTier
     from app.models.aws_connection import AWSConnection
     from app.models.cloud import CloudAccount, CostRecord
     from app.modules.reporting.domain.focus_export import FOCUS_V13_CORE_COLUMNS
@@ -164,8 +166,8 @@ async def test_export_compliance_pack_can_include_focus_export(
         id=uuid4(),
         email="owner-focus@valdrix.io",
         tenant_id=test_tenant.id,
-        role="owner",
-        tier="pro",
+        role=UserRole.OWNER,
+        tier=PricingTier.PRO,
     )
 
     account_id = uuid4()
@@ -242,7 +244,8 @@ async def test_export_compliance_pack_can_include_focus_export(
 async def test_export_compliance_pack_can_include_savings_proof_and_close_package(
     async_client, app, db, test_tenant
 ):
-    from app.shared.core.auth import CurrentUser, get_current_user
+    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+    from app.shared.core.pricing import PricingTier
     from app.models.cloud import CloudAccount, CostRecord
     from app.models.optimization import (
         CommitmentTerm,
@@ -262,8 +265,8 @@ async def test_export_compliance_pack_can_include_savings_proof_and_close_packag
         id=uuid4(),
         email="owner-pack@valdrix.io",
         tenant_id=test_tenant.id,
-        role="owner",
-        tier="pro",
+        role=UserRole.OWNER,
+        tier=PricingTier.PRO,
     )
 
     requester_id = uuid4()
@@ -272,7 +275,7 @@ async def test_export_compliance_pack_can_include_savings_proof_and_close_packag
             id=requester_id,
             tenant_id=test_tenant.id,
             email="requester-pack@valdrix.io",
-            role="owner",
+            role=UserRole.OWNER,
         )
     )
 

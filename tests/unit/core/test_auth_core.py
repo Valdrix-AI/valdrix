@@ -9,6 +9,8 @@ from app.shared.core.auth import (
     requires_role,
     require_tenant_access,
 )
+from app.models.tenant import UserRole
+from app.shared.core.pricing import PricingTier
 from uuid import uuid4
 import jwt
 from datetime import datetime, timezone, timedelta
@@ -69,10 +71,10 @@ async def test_get_current_user_success(mock_settings):
     mock_res_auth.one_or_none.return_value = (
         user_id,
         tenant_id,
-        "admin",
+        UserRole.ADMIN.value,
         "engineering",
         True,
-        "growth",
+        PricingTier.GROWTH.value,
     )
     mock_res_identity = MagicMock()
     mock_res_identity.scalar_one_or_none.return_value = None
@@ -108,17 +110,17 @@ async def test_get_current_user_not_found(mock_settings):
 
 @pytest.mark.asyncio
 async def test_requires_role_hierarchy_success():
-    user = CurrentUser(id=uuid4(), email="a@b.com", role="admin", tier="starter")
-    # req_role="member" should pass for "admin"
-    checker = requires_role("member")
+    user = CurrentUser(id=uuid4(), email="a@b.com", role=UserRole.ADMIN, tier=PricingTier.STARTER)
+    # req_role=UserRole.MEMBER should pass for UserRole.ADMIN
+    checker = requires_role(UserRole.MEMBER)
     res = checker(user)
     assert res == user
 
 
 @pytest.mark.asyncio
 async def test_requires_role_forbidden():
-    user = CurrentUser(id=uuid4(), email="a@b.com", role="member", tier="starter")
-    checker = requires_role("admin")
+    user = CurrentUser(id=uuid4(), email="a@b.com", role=UserRole.MEMBER, tier=PricingTier.STARTER)
+    checker = requires_role(UserRole.ADMIN)
     with pytest.raises(HTTPException) as exc:
         checker(user)
     assert exc.value.status_code == 403
@@ -230,23 +232,22 @@ async def test_get_current_user_db_error(mock_settings):
 
 @pytest.mark.asyncio
 async def test_requires_role_owner_bypass():
-    user = CurrentUser(id=uuid4(), email="owner@b.com", role="owner")
-    checker = requires_role("admin")
+    user = CurrentUser(id=uuid4(), email="owner@b.com", role=UserRole.OWNER)
+    checker = requires_role(UserRole.ADMIN)
     res = checker(user)
     assert res == user
 
 
-@pytest.mark.asyncio
-async def test_requires_role_unknown_role():
+    from typing import Any, cast
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        CurrentUser(id=uuid4(), email="a@b.com", role="unknown")
+        CurrentUser(id=uuid4(), email="a@b.com", role=cast(Any, "unknown"))
 
 
 @pytest.mark.asyncio
 async def test_requires_role_unknown_required_role():
-    user = CurrentUser(id=uuid4(), email="a@b.com", role="member")
+    user = CurrentUser(id=uuid4(), email="a@b.com", role=UserRole.MEMBER)
     # This will raise ValueError when calling UserRole("unknown_required")
     with pytest.raises(ValueError):
         checker = requires_role("unknown_required")

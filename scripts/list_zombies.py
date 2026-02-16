@@ -1,13 +1,13 @@
 import asyncio
 from app.shared.db.session import async_session_maker
 from sqlalchemy import select
-from app.models.remediation import Remediation
+from app.models.remediation import RemediationRequest
 
 
 async def check_zombies():
     async with async_session_maker() as session:
         try:
-            res = await session.execute(select(Remediation))
+            res = await session.execute(select(RemediationRequest))
             zombies = res.scalars().all()
             print(f"Found {len(zombies)} zombies")
             for z in zombies:

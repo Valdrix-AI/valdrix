@@ -361,10 +361,10 @@ class CostPersistenceService:
                         existing.canonical_mapping_version = val[
                             "canonical_mapping_version"
                         ]
-                    incoming_status = str(
+                    incoming_status_val = str(
                         val.get("cost_status") or existing.cost_status or "PRELIMINARY"
                     )
-                    if incoming_status == "FINAL":
+                    if incoming_status_val == "FINAL":
                         existing.cost_status = "FINAL"
                         existing.is_preliminary = False
                     elif str(getattr(existing, "cost_status", "")) == "FINAL":
@@ -372,7 +372,7 @@ class CostPersistenceService:
                         existing.cost_status = "FINAL"
                         existing.is_preliminary = False
                     else:
-                        existing.cost_status = incoming_status
+                        existing.cost_status = incoming_status_val
                         existing.is_preliminary = bool(
                             val.get("is_preliminary", existing.is_preliminary)
                         )

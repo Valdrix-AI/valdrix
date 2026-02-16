@@ -23,21 +23,22 @@ async def test_carbon_factor_stage_activate_and_list(
     async_client, app, db, test_tenant
 ):
     from app.models.tenant import User
-    from app.shared.core.auth import CurrentUser, get_current_user
+    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+    from app.shared.core.pricing import PricingTier
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
         email="admin-carbon-factors@valdrix.io",
         tenant_id=test_tenant.id,
-        role="admin",
-        tier="pro",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
     )
     db.add(
         User(
             id=admin_user.id,
             tenant_id=test_tenant.id,
             email=admin_user.email,
-            role="admin",
+            role=UserRole.ADMIN,
         )
     )
     await db.commit()
@@ -90,21 +91,22 @@ async def test_carbon_factor_stage_activate_and_list(
 @pytest.mark.asyncio
 async def test_carbon_factor_auto_activate_latest(async_client, app, db, test_tenant):
     from app.models.tenant import User
-    from app.shared.core.auth import CurrentUser, get_current_user
+    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+    from app.shared.core.pricing import PricingTier
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
         email="admin-carbon-auto@valdrix.io",
         tenant_id=test_tenant.id,
-        role="admin",
-        tier="pro",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
     )
     db.add(
         User(
             id=admin_user.id,
             tenant_id=test_tenant.id,
             email=admin_user.email,
-            role="admin",
+            role=UserRole.ADMIN,
         )
     )
     await db.commit()

@@ -13,8 +13,8 @@ from app.modules.billing.domain.billing.dunning_service import (
 )
 from app.modules.billing.domain.billing.paystack_billing import (
     SubscriptionStatus,
-    PricingTier,
 )
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.fixture

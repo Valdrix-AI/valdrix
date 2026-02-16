@@ -225,7 +225,7 @@ async def capture_acceptance_evidence(
     close_provider: str = "all",
     close_enforce_finalized: bool = False,
     timeout_seconds: float = 15.0,
-    transport: httpx.BaseTransport | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> tuple[Path, list[CaptureResult]]:
     timestamp = _utc_now_compact()
     bundle_dir = output_root / timestamp
@@ -1044,7 +1044,7 @@ def main() -> int:
     parser.add_argument("--close-enforce-finalized", action="store_true")
     args = parser.parse_args()
 
-    transport: httpx.BaseTransport | None = None
+    transport: httpx.AsyncBaseTransport | None = None
     raw_url = str(args.url or "").strip()
     token = str(args.token or "").strip()
     if args.in_process:

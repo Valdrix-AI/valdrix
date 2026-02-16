@@ -6,7 +6,7 @@ import pytest
 from uuid import uuid4
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
-from app.modules.usage import get_usage_metrics
+from app.modules.reporting.api.v1.usage import get_usage_metrics
 
 
 @pytest.mark.asyncio

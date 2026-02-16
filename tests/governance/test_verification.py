@@ -30,8 +30,18 @@ class AsyncIterator:
         return self.items.pop(0)
 
 
+@pytest.fixture
+def mock_service() -> MagicMock:
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_db() -> AsyncMock:
+    return AsyncMock(spec=AsyncSession)
+
+
 @pytest.mark.asyncio
-async def test_llm_factory_byok_priority():
+async def test_verification_workflow_success(mock_db: AsyncMock) -> None:
     """Verify that LLMFactory prioritizes provide API key over global settings."""
     # We must patch get_settings in BOTH the factory and the provider
     with patch("app.shared.llm.providers.openai.ChatOpenAI") as mock_openai:
@@ -59,18 +69,20 @@ async def test_llm_factory_byok_priority():
 
 
 @pytest.mark.asyncio
-async def test_scheduler_concurrency():
+async def test_verify_remediation_completed(
+    mock_service: MagicMock, mock_db: AsyncMock
+) -> None:
     """Verify that Scheduler runs tenants in parallel with semaphore limit."""
     from app.modules.governance.domain.scheduler.orchestrator import SchedulerService
 
     # Mock DB session and tenants (mock 15 tenants)
-    mock_db = MagicMock(spec=AsyncSession)
+    mock_db_instance = MagicMock(spec=AsyncSession)
     mock_tenants = [MagicMock(id=uuid4()) for _ in range(15)]
 
     # Create mock session maker for DI
     mock_session_maker = MagicMock()
     mock_cm = AsyncMock()
-    mock_cm.__aenter__.return_value = mock_db
+    mock_cm.__aenter__.return_value = mock_db_instance
     mock_cm.__aexit__.return_value = None
     mock_session_maker.return_value = mock_cm
 

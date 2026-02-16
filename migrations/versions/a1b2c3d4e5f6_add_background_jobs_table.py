@@ -21,6 +21,13 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Check if table exists (it might have been created by a hardening migration)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if 'background_jobs' in inspector.get_table_names():
+        print("Table 'background_jobs' already exists, skipping creation.")
+        return
+
     # Create background_jobs table
     op.create_table(
         'background_jobs',
@@ -68,7 +75,7 @@ def upgrade() -> None:
     op.execute("""
         CREATE POLICY background_jobs_tenant_isolation ON background_jobs
         FOR ALL
-        USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+        USING (tenant_id = (SELECT current_setting('app.current_tenant_id', true)::uuid));
     """)
 
 

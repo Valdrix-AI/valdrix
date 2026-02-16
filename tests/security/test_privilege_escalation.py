@@ -4,8 +4,9 @@ from httpx import AsyncClient
 from app.main import app
 from app.shared.core.auth import get_current_user, CurrentUser
 from datetime import datetime, timezone
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, UserRole
 from app.models.background_job import BackgroundJob, JobStatus
+from app.shared.core.pricing import PricingTier
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Request
 
@@ -17,32 +18,32 @@ MEMBER_A = CurrentUser(
     id=uuid4(),
     email="member-a@example.com",
     tenant_id=TENANT_A,
-    role="member",
-    tier="pro",
+    role=UserRole.MEMBER,
+    tier=PricingTier.PRO,
 )
 
 ADMIN_A = CurrentUser(
     id=uuid4(),
     email="admin-a@example.com",
     tenant_id=TENANT_A,
-    role="admin",
-    tier="pro",
+    role=UserRole.ADMIN,
+    tier=PricingTier.PRO,
 )
 
 OWNER_A = CurrentUser(
     id=uuid4(),
     email="owner-a@example.com",
     tenant_id=TENANT_A,
-    role="owner",
-    tier="pro",
+    role=UserRole.OWNER,
+    tier=PricingTier.PRO,
 )
 
 MEMBER_B = CurrentUser(
     id=uuid4(),
     email="member-b@example.com",
     tenant_id=TENANT_B,
-    role="member",
-    tier="pro",
+    role=UserRole.MEMBER,
+    tier=PricingTier.PRO,
 )
 
 

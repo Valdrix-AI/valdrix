@@ -10,6 +10,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import FastAPI, Request
+import hashlib
 import structlog
 from redis.asyncio import Redis, from_url
 
@@ -49,10 +50,6 @@ def context_aware_key(request: Request) -> str:
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
         try:
-            # SEC-02: Hash token for rate limiting instead of decoding
-            # This prevents bypass via forged JWTs with same 'sub' claim
-            import hashlib
-
             token_hash = hashlib.sha256(token.encode()).hexdigest()[:16]
             return f"token:{token_hash}"
         except Exception:

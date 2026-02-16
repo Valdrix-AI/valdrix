@@ -2,7 +2,8 @@ import pytest
 import uuid
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch
-from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+from app.models.tenant import UserRole
+from app.shared.core.auth import CurrentUser, get_current_user
 from types import SimpleNamespace
 
 

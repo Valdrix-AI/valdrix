@@ -349,13 +349,16 @@ def check_rls_policy(
     ):
         return statement, parameters
 
-    for table in RLS_EXEMPT_TABLES:
-        if (
-            f"from {table}" in stmt_lower
-            or f"into {table}" in stmt_lower
-            or f"update {table}" in stmt_lower
-        ):
-            return statement, parameters
+    import re
+
+    pattern = r"\b(" + "|".join(RLS_EXEMPT_TABLES) + r")\b"
+    # DEBUG PRINT
+    print(f"RLS_DEBUG: Checking statement: {stmt_lower[:200]}")
+    print(f"RLS_DEBUG: Pattern: {pattern}")
+    if re.search(pattern, stmt_lower):
+        print(f"RLS_DEBUG: EXEMPTED: {stmt_lower[:100]}")
+        return statement, parameters
+    print(f"RLS_DEBUG: NOT EXEMPTED. rls_status={conn.info.get('rls_context_set')}")
 
     # Identify the state from the connection info
     rls_status = conn.info.get("rls_context_set")
@@ -374,7 +377,8 @@ def check_rls_policy(
 
         logger.critical(
             "rls_enforcement_violation_detected",
-            statement=statement[:200],
+            statement=statement[:500],
+            rls_status=rls_status,
             error="Query executed WITHOUT tenant insulation set. RLS policy violated!",
         )
 

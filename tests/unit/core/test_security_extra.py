@@ -32,5 +32,6 @@ def test_get_multi_fernet_allows_dev_fallback():
     )
 
     with patch("app.shared.core.security.get_settings", return_value=mock_settings):
-        fernet = _get_multi_fernet(None)
-        assert fernet is not None
+        # Strict enforcement: ENCRYPTION_KEY must be set even in dev
+        with pytest.raises(ValueError, match="ENCRYPTION_KEY must be set"):
+            _get_multi_fernet(None)

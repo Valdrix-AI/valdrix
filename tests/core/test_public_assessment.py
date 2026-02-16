@@ -4,7 +4,7 @@ from app.main import app
 
 
 @pytest.mark.asyncio
-async def test_public_assessment_endpoint():
+async def test_public_assessment_endpoint() -> None:
     """Verify that the public assessment endpoint works without auth."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -25,7 +25,7 @@ async def test_public_assessment_endpoint():
 
 
 @pytest.mark.asyncio
-async def test_public_assessment_rate_limiting():
+async def test_public_assessment_rate_limiting() -> None:
     """Verify rate limiting is disabled during testing."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

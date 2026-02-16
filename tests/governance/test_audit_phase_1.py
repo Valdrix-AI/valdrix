@@ -4,7 +4,7 @@ from app.main import app
 
 
 @pytest.mark.asyncio
-async def test_paystack_ip_validation_enforced():
+async def test_paystack_ip_validation_enforced() -> None:
     """
     Verify BE-BILLING-1: Paystack webhook endpoint is protected.
 
@@ -25,7 +25,7 @@ async def test_paystack_ip_validation_enforced():
 
 
 @pytest.mark.asyncio
-async def test_csrf_middleware_behavior():
+async def test_csrf_middleware_behavior() -> None:
     """
     Verify that CSRF middleware is configured and active.
 
@@ -49,7 +49,7 @@ async def test_csrf_middleware_behavior():
 
 
 @pytest.mark.asyncio
-async def test_tenant_isolation_standard_endpoint():
+async def test_tenant_isolation_standard_endpoint() -> None:
     """
     Verify that endpoints use tenant isolation correctly.
 

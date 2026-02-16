@@ -73,7 +73,7 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE POLICY tenant_isolation_provider_invoices ON provider_invoices
-        USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+        USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
         """
     )
 

@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
@@ -18,7 +19,7 @@ You are a FinOps expert. Analyze the cost data and return STRICT JSON ONLY.
 
 
 class TestFinOpsAnalyzerInstantiation:
-    def test_requires_llm(self):
+    def test_requires_llm(self) -> None:
         mock_llm = MagicMock(spec=BaseChatModel)
         analyzer = FinOpsAnalyzer(llm=mock_llm)
         assert analyzer.llm is mock_llm
@@ -27,7 +28,7 @@ class TestFinOpsAnalyzerInstantiation:
 @pytest.mark.asyncio
 class TestAnalyze:
     @pytest.fixture
-    def mock_usage_summary(self):
+    def mock_usage_summary(self) -> CloudUsageSummary:
         tenant_id = str(uuid4())
         return CloudUsageSummary(
             tenant_id=tenant_id,
@@ -41,14 +42,14 @@ class TestAnalyze:
         )
 
     @pytest.fixture
-    def mock_db(self):
+    def mock_db(self) -> AsyncMock:
         db = AsyncMock()
         res = MagicMock()
         res.scalar_one_or_none.return_value = None
         db.execute.return_value = res
         return db
 
-    async def test_invokes_llm_with_cost_data(self, mock_usage_summary, mock_db):
+    async def test_invokes_llm_with_cost_data(self, mock_usage_summary: Any, mock_db: Any) -> None:
         mock_llm = MagicMock(spec=BaseChatModel)
         mock_llm.ainvoke = AsyncMock(
             return_value=AIMessage(
@@ -63,7 +64,7 @@ class TestAnalyze:
             "app.shared.llm.analyzer.LLMBudgetManager.record_usage",
             "app.shared.llm.analyzer.SymbolicForecaster.forecast",
             "app.shared.llm.analyzer.get_cache_service",
-            "app.shared.llm.analyzer.SlackService",
+            "app.shared.llm.analyzer.get_tenant_slack_service",
             "app.shared.llm.analyzer.LLMGuardrails.sanitize_input",
             "app.shared.llm.analyzer.LLMGuardrails.validate_output",
             "app.shared.llm.analyzer.UsageTracker.check_budget",
@@ -101,7 +102,7 @@ class TestAnalyze:
 
             mock_llm.ainvoke.assert_called_once()
 
-    async def test_returns_parsed_result(self, mock_usage_summary, mock_db):
+    async def test_returns_parsed_result(self, mock_usage_summary: Any, mock_db: Any) -> None:
         mock_llm = MagicMock(spec=BaseChatModel)
         mock_response = {
             "insights": [],
@@ -138,7 +139,7 @@ class TestAnalyze:
             assert "insights" in result
             assert result["symbolic_forecast"]["total_forecasted_cost"] == 120
 
-    async def test_handles_markdown_wrapped_json(self, mock_usage_summary, mock_db):
+    async def test_handles_markdown_wrapped_json(self, mock_usage_summary: Any, mock_db: Any) -> None:
         mock_llm = MagicMock(spec=BaseChatModel)
         mock_response = '```json\n{"insights":[],"anomalies":[],"recommendations":[],"summary":"ok"}\n```'
         mock_llm.ainvoke = AsyncMock(return_value=AIMessage(content=mock_response))
@@ -165,7 +166,7 @@ class TestAnalyze:
             )
             assert "insights" in result
 
-    async def test_handles_invalid_json_gracefully(self, mock_usage_summary, mock_db):
+    async def test_handles_invalid_json_gracefully(self, mock_usage_summary: Any, mock_db: Any) -> None:
         mock_llm = MagicMock(spec=BaseChatModel)
         mock_llm.ainvoke = AsyncMock(
             return_value=AIMessage(content="This is not valid JSON at all")
@@ -194,7 +195,7 @@ class TestAnalyze:
             assert result is not None
             assert "llm_raw" in result
 
-    async def test_handles_empty_cost_data(self, mock_usage_summary, mock_db):
+    async def test_handles_empty_cost_data(self, mock_usage_summary: Any, mock_db: Any) -> None:
         mock_llm = MagicMock(spec=BaseChatModel)
         mock_llm.ainvoke = AsyncMock(
             return_value=AIMessage(

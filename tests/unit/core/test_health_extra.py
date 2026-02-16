@@ -62,19 +62,19 @@ async def test_check_aws_status_codes():
             return FakeResponse(self._code)
 
     with patch(
-        "app.shared.core.health.httpx.AsyncClient", return_value=FakeClient(200)
+        "app.shared.core.http.get_http_client", return_value=FakeClient(200)
     ):
         ok, _ = await service.check_aws()
         assert ok is True
 
     with patch(
-        "app.shared.core.health.httpx.AsyncClient", return_value=FakeClient(404)
+        "app.shared.core.http.get_http_client", return_value=FakeClient(404)
     ):
         ok, _ = await service.check_aws()
         assert ok is True
 
     with patch(
-        "app.shared.core.health.httpx.AsyncClient", return_value=FakeClient(503)
+        "app.shared.core.http.get_http_client", return_value=FakeClient(503)
     ):
         ok, details = await service.check_aws()
         assert ok is False

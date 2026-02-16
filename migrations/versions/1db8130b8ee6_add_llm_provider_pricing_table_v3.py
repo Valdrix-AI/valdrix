@@ -78,6 +78,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_strategy_recommendations_tenant_id'), 'strategy_recommendations', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_strategy_recommendations_strategy_id'), 'strategy_recommendations', ['strategy_id'], unique=False)
     op.create_table('cost_allocations',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('cost_record_id', sa.Uuid(), nullable=False),
@@ -95,6 +96,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_cost_allocations_cost_record_id'), 'cost_allocations', ['cost_record_id'], unique=False)
     op.create_index(op.f('ix_cost_allocations_recorded_at'), 'cost_allocations', ['recorded_at'], unique=False)
     op.create_index(op.f('ix_cost_allocations_timestamp'), 'cost_allocations', ['timestamp'], unique=False)
+    op.create_index(op.f('ix_cost_allocations_rule_id'), 'cost_allocations', ['rule_id'], unique=False)
+    op.create_index('ix_cost_allocations_composite_record', 'cost_allocations', ['cost_record_id', 'recorded_at'], unique=False)
     op.drop_index(op.f('cost_records_archive_recorded_at_idx'), table_name='cost_records_archive')
     op.drop_index(op.f('cost_records_archive_service_idx'), table_name='cost_records_archive')
     op.drop_index(op.f('cost_records_archive_tenant_id_idx'), table_name='cost_records_archive')

@@ -128,6 +128,7 @@ class AWSConnection(Base):
     cur_status: Mapped[str] = mapped_column(String(20), nullable=False, default="none")
     cur_bucket_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cur_report_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cur_prefix: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Health Tracking
     # Updated by JobProcessor when costs are successfully ingested

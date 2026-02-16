@@ -47,6 +47,7 @@ async def test_tenant_isolation(ac: AsyncClient, db: AsyncSession):
     token_a = create_access_token(
         {
             "sub": str(user_a.id),
+            "email": user_a.email,
             "tenant_id": str(tenant_a_id),
             "role": UserRole.ADMIN.value,
         }
@@ -93,6 +94,7 @@ async def test_role_enforcement(ac: AsyncClient, db: AsyncSession):
     token = create_access_token(
         {
             "sub": str(member.id),
+            "email": member.email,
             "tenant_id": str(tenant_id),
             "role": UserRole.MEMBER.value,
         }

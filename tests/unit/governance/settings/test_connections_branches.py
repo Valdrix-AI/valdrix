@@ -69,43 +69,32 @@ def test_enforce_growth_tier_rejects_free(user: CurrentUser) -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_growth_tier_cache_hit_denied(
+async def test_check_growth_tier_denied_for_free(
     user: CurrentUser, db: MagicMock
 ) -> None:
-    cache = SimpleNamespace(
-        get=AsyncMock(return_value=PricingTier.FREE_TRIAL.value), set=AsyncMock()
-    )
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        with pytest.raises(HTTPException) as exc:
-            await connections_api.check_growth_tier(user, db)
+    user.tier = PricingTier.FREE_TRIAL
+    with pytest.raises(HTTPException) as exc:
+        connections_api.check_growth_tier(user)
     assert exc.value.status_code == 403
     db.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_check_growth_tier_cache_invalid_and_tenant_missing(
+async def test_check_growth_tier_denied_again(
     user: CurrentUser, db: MagicMock
 ) -> None:
-    cache = SimpleNamespace(get=AsyncMock(return_value="invalid-plan"), set=AsyncMock())
-    db.execute.return_value = _scalar_result(None)
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        with pytest.raises(HTTPException) as exc:
-            await connections_api.check_growth_tier(user, db)
-    assert exc.value.status_code == 404
+    user.tier = PricingTier.FREE_TRIAL
+    with pytest.raises(HTTPException) as exc:
+        connections_api.check_growth_tier(user)
+    assert exc.value.status_code == 403  # GROWTH required
 
 
 @pytest.mark.asyncio
-async def test_check_growth_tier_cache_set_failure_is_non_fatal(
+async def test_check_growth_tier_allows_growth(
     user: CurrentUser, db: MagicMock
 ) -> None:
-    tenant = SimpleNamespace(plan=PricingTier.GROWTH.value)
-    cache = SimpleNamespace(
-        get=AsyncMock(return_value=None),
-        set=AsyncMock(side_effect=RuntimeError("cache down")),
-    )
-    db.execute.return_value = _scalar_result(tenant)
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        await connections_api.check_growth_tier(user, db)
+    user.tier = PricingTier.GROWTH
+    connections_api.check_growth_tier(user)
 
 
 @pytest.mark.asyncio
@@ -196,7 +185,7 @@ async def test_create_azure_connection_duplicate_raises(
         client_secret="secret",
     )
     db.scalar.return_value = SimpleNamespace(id=uuid4())
-    with patch.object(connections_api, "check_growth_tier", new=AsyncMock()):
+    with patch.object(connections_api, "check_growth_tier", new=MagicMock()):
         with pytest.raises(HTTPException) as exc:
             await connections_api.create_azure_connection(
                 MagicMock(), payload, user, db
@@ -225,7 +214,9 @@ async def test_create_gcp_connection_duplicate_raises(
         auth_method="secret",
     )
     db.scalar.return_value = SimpleNamespace(id=uuid4())
-    with patch.object(connections_api, "check_growth_tier", new=AsyncMock()):
+    with patch.object(
+        connections_api, "check_growth_tier", return_value=PricingTier.GROWTH
+    ):
         with pytest.raises(HTTPException) as exc:
             await connections_api.create_gcp_connection(MagicMock(), payload, db, user)
     assert exc.value.status_code == 409
@@ -242,7 +233,9 @@ async def test_create_gcp_connection_workload_identity_failure(
     )
     db.scalar.return_value = None
     with (
-        patch.object(connections_api, "check_growth_tier", new=AsyncMock()),
+        patch.object(
+            connections_api, "check_growth_tier", return_value=PricingTier.GROWTH
+        ),
         patch(
             "app.shared.connections.oidc.OIDCService.verify_gcp_access",
             new=AsyncMock(return_value=(False, "not trusted")),
@@ -268,12 +261,9 @@ async def test_delete_gcp_connection_not_found(
 async def test_check_cloud_plus_tier_denied_for_growth(
     user: CurrentUser, db: MagicMock
 ) -> None:
-    cache = SimpleNamespace(
-        get=AsyncMock(return_value=PricingTier.GROWTH.value), set=AsyncMock()
-    )
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        with pytest.raises(HTTPException) as exc:
-            await connections_api.check_cloud_plus_tier(user, db)
+    user.tier = PricingTier.GROWTH
+    with pytest.raises(HTTPException) as exc:
+        connections_api.check_cloud_plus_tier(user)
     assert exc.value.status_code == 403
 
 
@@ -281,11 +271,8 @@ async def test_check_cloud_plus_tier_denied_for_growth(
 async def test_check_cloud_plus_tier_allows_pro(
     user: CurrentUser, db: MagicMock
 ) -> None:
-    cache = SimpleNamespace(
-        get=AsyncMock(return_value=PricingTier.PRO.value), set=AsyncMock()
-    )
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        await connections_api.check_cloud_plus_tier(user, db)
+    user.tier = PricingTier.PRO
+    connections_api.check_cloud_plus_tier(user)
 
 
 @pytest.mark.asyncio
@@ -299,7 +286,9 @@ async def test_create_saas_connection_duplicate_raises(
         spend_feed=[],
     )
     db.scalar.return_value = uuid4()
-    with patch.object(connections_api, "check_cloud_plus_tier", new=AsyncMock()):
+    with patch.object(
+        connections_api, "check_cloud_plus_tier", return_value=PricingTier.PRO
+    ):
         with pytest.raises(HTTPException) as exc:
             await connections_api.create_saas_connection(MagicMock(), payload, user, db)
     assert exc.value.status_code == 409
@@ -326,7 +315,9 @@ async def test_create_license_connection_duplicate_raises(
         license_feed=[],
     )
     db.scalar.return_value = uuid4()
-    with patch.object(connections_api, "check_cloud_plus_tier", new=AsyncMock()):
+    with patch.object(
+        connections_api, "check_cloud_plus_tier", return_value=PricingTier.PRO
+    ):
         with pytest.raises(HTTPException) as exc:
             await connections_api.create_license_connection(
                 MagicMock(), payload, user, db

@@ -9,15 +9,16 @@ import pytest
 async def test_get_leadership_kpis_json_and_csv_filters_preliminary(
     async_client, app, db, test_tenant
 ):
-    from app.shared.core.auth import CurrentUser, get_current_user
+    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+    from app.shared.core.pricing import PricingTier
     from app.models.cloud import CloudAccount, CostRecord
 
     user = CurrentUser(
         id=uuid.uuid4(),
         email="leadership@valdrix.io",
         tenant_id=test_tenant.id,
-        role="admin",
-        tier="pro",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
     )
     app.dependency_overrides[get_current_user] = lambda: user
     try:
@@ -95,7 +96,8 @@ async def test_get_leadership_kpis_json_and_csv_filters_preliminary(
 async def test_capture_and_list_leadership_kpis_evidence(
     async_client, app, db, test_tenant
 ):
-    from app.shared.core.auth import CurrentUser, get_current_user
+    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+    from app.shared.core.pricing import PricingTier
     from app.models.cloud import CloudAccount, CostRecord
     from app.models.tenant import User
     from app.modules.governance.domain.security.audit_log import (
@@ -108,15 +110,15 @@ async def test_capture_and_list_leadership_kpis_evidence(
         id=uuid.uuid4(),
         email="admin-leadership@valdrix.io",
         tenant_id=test_tenant.id,
-        role="admin",
-        tier="pro",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
     )
     db.add(
         User(
             id=admin_user.id,
             tenant_id=test_tenant.id,
             email=admin_user.email,
-            role="admin",
+            role=UserRole.ADMIN,
         )
     )
     await db.commit()

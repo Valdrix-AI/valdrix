@@ -60,16 +60,18 @@ class JiraService:
         endpoint = f"{self.base_url}/rest/api/3/issue"
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(
-                    endpoint,
-                    json=payload,
-                    auth=httpx.BasicAuth(self.email, self.api_token),
-                    headers={
-                        "Accept": "application/json",
-                        "Content-Type": "application/json",
-                    },
-                )
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            response = await client.post(
+                endpoint,
+                json=payload,
+                auth=httpx.BasicAuth(self.email, self.api_token),
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+            )
             if response.status_code not in {200, 201}:
                 logger.warning(
                     "jira_issue_create_failed",
@@ -90,12 +92,14 @@ class JiraService:
         """
         endpoint = f"{self.base_url}/rest/api/3/myself"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.get(
-                    endpoint,
-                    auth=httpx.BasicAuth(self.email, self.api_token),
-                    headers={"Accept": "application/json"},
-                )
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            response = await client.get(
+                endpoint,
+                auth=httpx.BasicAuth(self.email, self.api_token),
+                headers={"Accept": "application/json"},
+            )
             if response.status_code == 200:
                 return True, response.status_code, None
             logger.warning(

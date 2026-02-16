@@ -533,6 +533,7 @@ async def _resolve_groups_from_refs(
     group_ids: set[UUID] = set()
     group_names_norm: set[str] = set()
 
+    group: ScimGroup | None = None
     for ref in groups:
         display = str(ref.display or "").strip()
         raw_value = str(ref.value or "").strip()

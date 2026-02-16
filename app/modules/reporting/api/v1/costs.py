@@ -20,6 +20,8 @@ from app.modules.reporting.domain.aggregator import (
     CostAggregator,
     LARGE_DATASET_THRESHOLD,
 )
+
+__all__ = ["LARGE_DATASET_THRESHOLD"]
 from app.modules.reporting.domain.anomaly_detection import (
     CostAnomaly,
     CostAnomalyDetectionService,
@@ -1219,15 +1221,15 @@ async def _compute_acceptance_kpis_payload(
         )
         top_unmapped_rows = (await db.execute(top_unmapped_stmt)).all()
         top_unmapped_signatures: list[dict[str, Any]] = []
-        for r in top_unmapped_rows:
-            first_seen = getattr(r, "first_seen", None)
-            last_seen = getattr(r, "last_seen", None)
+        for ur in top_unmapped_rows:
+            first_seen = getattr(ur, "first_seen", None)
+            last_seen = getattr(ur, "last_seen", None)
             top_unmapped_signatures.append(
                 {
-                    "provider": str(getattr(r, "provider", "") or "unknown"),
-                    "service": str(getattr(r, "service", "") or "Unknown"),
-                    "usage_type": str(getattr(r, "usage_type", "") or "Unknown"),
-                    "record_count": int(getattr(r, "record_count", 0) or 0),
+                    "provider": str(getattr(ur, "provider", "") or "unknown"),
+                    "service": str(getattr(ur, "service", "") or "Unknown"),
+                    "usage_type": str(getattr(ur, "usage_type", "") or "Unknown"),
+                    "record_count": int(getattr(ur, "record_count", 0) or 0),
                     "first_seen": first_seen.isoformat() if first_seen else None,
                     "last_seen": last_seen.isoformat() if last_seen else None,
                 }

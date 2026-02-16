@@ -5,26 +5,28 @@ from uuid import uuid4
 from decimal import Decimal
 from app.models.cloud import CloudAccount, CostRecord
 from app.shared.core.auth import CurrentUser, get_current_user
+from app.models.tenant import UserRole
+from app.shared.core.pricing import PricingTier
 from app.shared.db.session import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.main import app
 
 
 @pytest.fixture
-def mock_auth_user():
+def mock_auth_user() -> CurrentUser:
     tenant_id = uuid4()
     user = CurrentUser(
         id=uuid4(),
         email="test@valdrix.ai",
         tenant_id=tenant_id,
-        role="member",
-        permissions=["read", "write"],
-        tier="enterprise",
+        role=UserRole.MEMBER,
+        tier=PricingTier.ENTERPRISE,
     )
     return user
 
 
 @pytest.mark.asyncio
-async def test_cost_aggregation_and_filtering(ac: AsyncClient, db, mock_auth_user):
+async def test_cost_aggregation_and_filtering(ac: AsyncClient, db: AsyncSession, mock_auth_user: CurrentUser) -> None:
     # Setup: Override Auth & DB Dependency
     app.dependency_overrides[get_current_user] = lambda: mock_auth_user
     app.dependency_overrides[get_db] = lambda: db

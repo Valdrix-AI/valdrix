@@ -22,27 +22,31 @@ depends_on = None
 def upgrade() -> None:
     # 1. Anomaly Markers (Needs RLS + Policy)
     op.execute("ALTER TABLE anomaly_markers ENABLE ROW LEVEL SECURITY")
+    op.execute("DROP POLICY IF EXISTS anomaly_markers_isolation_policy ON anomaly_markers")
     op.execute("""
         CREATE POLICY anomaly_markers_isolation_policy ON anomaly_markers
-        USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+        USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
     """)
 
     # 2. Carbon Settings (Needs Policy)
+    op.execute("DROP POLICY IF EXISTS carbon_settings_isolation_policy ON carbon_settings")
     op.execute("""
         CREATE POLICY carbon_settings_isolation_policy ON carbon_settings
-        USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+        USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
     """)
 
     # 3. LLM Budgets (Needs Policy)
+    op.execute("DROP POLICY IF EXISTS llm_budgets_isolation_policy ON llm_budgets")
     op.execute("""
         CREATE POLICY llm_budgets_isolation_policy ON llm_budgets
-        USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+        USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
     """)
 
     # 4. LLM Usage (Needs Policy)
+    op.execute("DROP POLICY IF EXISTS llm_usage_isolation_policy ON llm_usage")
     op.execute("""
         CREATE POLICY llm_usage_isolation_policy ON llm_usage
-        USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+        USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
     """)
 
 

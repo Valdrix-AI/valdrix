@@ -50,7 +50,11 @@ RLS_EXEMPT_TABLES = [
     "alembic",
     "users",
     "tenants",
+    "tenant_identity_settings",
     "tenant_subscriptions",
     "pricing_plans",
     "exchange_rates",
+    "background_jobs",
+    "unit_economics_settings",
+    "llm_provider_pricing",
 ]

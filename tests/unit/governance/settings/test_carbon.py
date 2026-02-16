@@ -5,7 +5,9 @@ from sqlalchemy import select
 from unittest.mock import MagicMock
 from app.main import app
 from app.models.carbon_settings import CarbonSettings
-from app.shared.core.auth import get_current_user, CurrentUser, UserRole
+from app.models.tenant import UserRole
+from app.shared.core.auth import get_current_user, CurrentUser
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.fixture
@@ -14,7 +16,8 @@ async def mock_user():
     user.id = uuid.uuid4()
     user.tenant_id = uuid.uuid4()
     user.email = "admin@example.com"
-    user.role = "admin"
+    user.role = UserRole.ADMIN
+    user.tier = PricingTier.PRO
     return user
 
 

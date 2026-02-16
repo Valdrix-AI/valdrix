@@ -8,6 +8,8 @@ from uuid import uuid4
 import pytest
 
 from app.models.remediation import RemediationAction, RemediationStatus
+from app.models.tenant import UserRole
+from app.shared.core.pricing import PricingTier
 from app.modules.governance.domain.security.remediation_policy import (
     PolicyConfig,
     PolicyDecision,
@@ -183,7 +185,7 @@ async def test_execute_policy_block_notifies_jira_for_pro_incident_tier() -> Non
         ) as mock_notify,
         patch.object(service, "_execute_action", new_callable=AsyncMock),
     ):
-        mock_tier.return_value = "pro"
+        mock_tier.return_value = PricingTier.PRO.value
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 
@@ -276,7 +278,7 @@ async def test_execute_policy_escalate_sets_pending_escalation_state() -> None:
             service, "_execute_action", new_callable=AsyncMock
         ) as mock_execute,
     ):
-        mock_tier.return_value = "growth"
+        mock_tier.return_value = PricingTier.GROWTH.value
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 
@@ -385,7 +387,7 @@ async def test_execute_policy_escalation_is_pending_even_without_escalation_feat
             service, "_execute_action", new_callable=AsyncMock
         ) as mock_execute,
     ):
-        mock_tier.return_value = "free_trial"
+        mock_tier.return_value = PricingTier.FREE_TRIAL.value
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 
@@ -423,7 +425,7 @@ async def test_approve_escalated_requires_owner_role() -> None:
             request.tenant_id,
             request.reviewed_by_user_id,
             notes="ok",
-            reviewer_role="admin",
+            reviewer_role=UserRole.ADMIN,
         )
 
     approved = await service.approve(
@@ -431,7 +433,7 @@ async def test_approve_escalated_requires_owner_role() -> None:
         request.tenant_id,
         request.reviewed_by_user_id,
         notes="approved by owner",
-        reviewer_role="owner",
+        reviewer_role=UserRole.OWNER,
     )
     assert approved.status == RemediationStatus.APPROVED
     assert approved.escalation_required is False

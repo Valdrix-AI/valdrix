@@ -384,37 +384,38 @@ class CarbonAwareScheduler:
         self, region: str, hours: int
     ) -> List[Dict[str, Any]]:
         """Fetch real-time MOER data from WattTime."""
-        import httpx
 
         try:
-            async with httpx.AsyncClient() as client:
-                # WattTime uses a login endpoint for a token, then GET /v2/forecast
-                coords = WATTTIME_REGION_COORDS.get(region)
-                if not coords:
-                    logger.warning("wattime_region_unmapped", region=region)
-                    return []
+            from app.shared.core.http import get_http_client
 
-                payload = {
-                    "latitude": coords[0],
-                    "longitude": coords[1],
-                    "horizon": hours,
+            client = get_http_client()
+            # WattTime uses a login endpoint for a token, then GET /v2/forecast
+            coords = WATTTIME_REGION_COORDS.get(region)
+            if not coords:
+                logger.warning("wattime_region_unmapped", region=region)
+                return []
+
+            payload = {
+                "latitude": coords[0],
+                "longitude": coords[1],
+                "horizon": hours,
+            }
+
+            response = await client.get(
+                "https://api2.watttime.org/v2/forecast",
+                params=payload,
+                headers={"Authorization": f"Bearer {self.wattime_key}"},
+            )
+            response.raise_for_status()
+            data = response.json()
+            return [
+                {
+                    "timestamp": d["point_time"],
+                    "intensity_gco2_kwh": d["value"],
+                    "level": self._intensity_to_level(d["value"]),
                 }
-
-                response = await client.get(
-                    "https://api2.watttime.org/v2/forecast",
-                    params=payload,
-                    headers={"Authorization": f"Bearer {self.wattime_key}"},
-                )
-                response.raise_for_status()
-                data = response.json()
-                return [
-                    {
-                        "timestamp": d["point_time"],
-                        "intensity_gco2_kwh": d["value"],
-                        "level": self._intensity_to_level(d["value"]),
-                    }
-                    for d in data.get("data", [])
-                ]
+                for d in data.get("data", [])
+            ]
         except Exception as e:
             logger.error("wattime_api_failed", error=str(e), region=region)
             return []
@@ -423,37 +424,38 @@ class CarbonAwareScheduler:
         self, region: str, hours: int
     ) -> List[Dict[str, Any]]:
         """Fetch average intensity from Electricity Maps."""
-        import httpx
 
         try:
-            async with httpx.AsyncClient() as client:
-                # Maps region to Electricity Maps zone (e.g., US-VA, DE, FR)
-                zone = "US-VA"  # Default
-                if region.startswith("eu-"):
-                    zone = region.split("-")[
-                        1
-                    ].upper()  # Rough guess (e.g., eu-west-1 -> WEST)
+            from app.shared.core.http import get_http_client
 
-                headers = (
-                    {"auth-token": self.electricitymaps_key}
-                    if self.electricitymaps_key
-                    else {}
-                )
-                response = await client.get(
-                    "https://api.electricitymap.org/v3/carbon-intensity/forecast",
-                    params={"zone": zone, "horizon": hours},
-                    headers=headers,
-                )
-                response.raise_for_status()
-                data = response.json()
-                return [
-                    {
-                        "timestamp": d["datetime"],
-                        "intensity_gco2_kwh": d["carbonIntensity"],
-                        "level": self._intensity_to_level(d["carbonIntensity"]),
-                    }
-                    for d in data.get("forecast", [])
-                ]
+            client = get_http_client()
+            # Maps region to Electricity Maps zone (e.g., US-VA, DE, FR)
+            zone = "US-VA"  # Default
+            if region.startswith("eu-"):
+                zone = region.split("-")[
+                    1
+                ].upper()  # Rough guess (e.g., eu-west-1 -> WEST)
+
+            headers = (
+                {"auth-token": self.electricitymaps_key}
+                if self.electricitymaps_key
+                else {}
+            )
+            response = await client.get(
+                "https://api.electricitymap.org/v3/carbon-intensity/forecast",
+                params={"zone": zone, "horizon": hours},
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return [
+                {
+                    "timestamp": d["datetime"],
+                    "intensity_gco2_kwh": d["carbonIntensity"],
+                    "level": self._intensity_to_level(d["carbonIntensity"]),
+                }
+                for d in data.get("forecast", [])
+            ]
         except Exception as e:
             logger.error("emap_api_failed", error=str(e), region=region)
             return []

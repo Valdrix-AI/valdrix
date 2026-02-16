@@ -101,13 +101,13 @@ def upgrade() -> None:
         op.execute(
             """
             CREATE POLICY scim_groups_isolation_policy ON scim_groups
-            USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+            USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
             """
         )
         op.execute(
             """
             CREATE POLICY scim_group_members_isolation_policy ON scim_group_members
-            USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+            USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
             """
         )
 

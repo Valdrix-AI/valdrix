@@ -99,8 +99,8 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
             return DummyResponse()
 
     monkeypatch.setattr(
-        "app.shared.core.performance_testing.httpx.AsyncClient",
-        lambda **kwargs: DummyClient(),
+        "app.shared.core.http.get_http_client",
+        lambda: DummyClient(),
     )
     sleep_mock = AsyncMock()
     monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
@@ -122,8 +122,8 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
             raise Exception("network down")
 
     monkeypatch.setattr(
-        "app.shared.core.performance_testing.httpx.AsyncClient",
-        lambda **kwargs: ExplodingClient(),
+        "app.shared.core.http.get_http_client",
+        lambda: ExplodingClient(),
     )
     await tester2._simulate_user(0, test_start_time=time.time())
 
@@ -169,8 +169,8 @@ async def test_simulate_user_records_metrics(monkeypatch):
             return DummyResponse(200)
 
     monkeypatch.setattr(
-        "app.shared.core.performance_testing.httpx.AsyncClient",
-        lambda **kwargs: DummyClient(),
+        "app.shared.core.http.get_http_client",
+        lambda: DummyClient(),
     )
     sleep_mock = AsyncMock()
     monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
@@ -224,8 +224,8 @@ async def test_simulate_user_records_exception_metrics(monkeypatch):
             raise Exception("network down")
 
     monkeypatch.setattr(
-        "app.shared.core.performance_testing.httpx.AsyncClient",
-        lambda **kwargs: ExplodingClient(),
+        "app.shared.core.http.get_http_client",
+        lambda: ExplodingClient(),
     )
     sleep_mock = AsyncMock()
     monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
@@ -375,7 +375,7 @@ async def test_benchmark_health_endpoint_uses_httpx():
 
     with (
         patch(
-            "app.shared.core.performance_testing.httpx.AsyncClient",
+            "app.shared.core.http.get_http_client",
             return_value=DummyClient(),
         ),
         patch(

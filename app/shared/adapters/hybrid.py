@@ -361,10 +361,12 @@ class HybridAdapter(BaseAdapter):
                 }
             }
         }
-        async with httpx.AsyncClient(
+        from app.shared.core.http import get_http_client
+
+        client = get_http_client(
             timeout=_NATIVE_TIMEOUT_SECONDS, verify=self._resolve_verify_ssl()
-        ) as client:
-            response = await client.post(auth_url, json=body)
+        )
+        response = await client.post(auth_url, json=body)
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -503,10 +505,12 @@ class HybridAdapter(BaseAdapter):
         base_url = self._resolve_vmware_base_url()
         endpoint = urljoin(base_url.rstrip("/") + "/", "rest/com/vmware/cis/session")
 
-        async with httpx.AsyncClient(
+        from app.shared.core.http import get_http_client
+
+        client = get_http_client(
             timeout=_NATIVE_TIMEOUT_SECONDS, verify=self._resolve_verify_ssl()
-        ) as client:
-            response = await client.post(endpoint, auth=(username, password))
+        )
+        response = await client.post(endpoint, auth=(username, password))
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -769,10 +773,12 @@ class HybridAdapter(BaseAdapter):
         last_error: Exception | None = None
         for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
             try:
-                async with httpx.AsyncClient(
+                from app.shared.core.http import get_http_client
+
+                client = get_http_client(
                     timeout=_NATIVE_TIMEOUT_SECONDS, verify=self._resolve_verify_ssl()
-                ) as client:
-                    response = await client.get(url, headers=headers, params=params)
+                )
+                response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as exc:

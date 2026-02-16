@@ -5,6 +5,9 @@ from uuid import UUID
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+__all__ = ["CostAggregator", "LARGE_DATASET_THRESHOLD"]
+
+# ==================== Performance Bounds ====================
 from app.models.cloud import CostRecord, CloudAccount
 from app.schemas.costs import CloudUsageSummary, CostRecord as SchemaCostRecord
 import structlog
@@ -127,10 +130,16 @@ class CostAggregator:
         full_total_count = total_row.total_count or 0
 
         # Fetch detailed records (limited)
-        stmt = select(CostRecord).where(
-            CostRecord.tenant_id == tenant_id,
-            CostRecord.recorded_at >= start_date,
-            CostRecord.recorded_at <= end_date,
+        from sqlalchemy.orm import selectinload
+
+        stmt = (
+            select(CostRecord)
+            .options(selectinload(CostRecord.account))
+            .where(
+                CostRecord.tenant_id == tenant_id,
+                CostRecord.recorded_at >= start_date,
+                CostRecord.recorded_at <= end_date,
+            )
         )
         if provider:
             stmt = stmt.join(CloudAccount).where(

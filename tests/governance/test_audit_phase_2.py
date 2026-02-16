@@ -5,7 +5,7 @@ from app.shared.llm.factory import LLMFactory
 
 
 @pytest.mark.asyncio
-async def test_zombie_detector_factory_pass_through():
+async def test_zombie_detector_factory_pass_through() -> None:
     """Verify that ZombieDetectorFactory passes the connection object to the detector."""
 
     # Use a subclass to ensure __name__ matches expectation
@@ -25,7 +25,7 @@ async def test_zombie_detector_factory_pass_through():
         assert kwargs.get("connection") == mock_connection
 
 
-def test_llm_factory_key_validation():
+def test_llm_factory_key_validation() -> None:
     """Verify LLM key validation for placeholders and length."""
     # Test valid key
     LLMFactory.validate_api_key("openai", "sk-proj-valid-key-that-is-long-enough-12345")
@@ -43,7 +43,7 @@ def test_llm_factory_key_validation():
         LLMFactory.validate_api_key("openai", None)
 
 
-def test_rate_limiter_hash_usage():
+def test_rate_limiter_hash_usage() -> None:
     """Verify that rate limiter uses hashed tokens to prevent bypass."""
     from app.shared.core.rate_limit import context_aware_key
 
@@ -61,7 +61,7 @@ def test_rate_limiter_hash_usage():
 
 
 @pytest.mark.asyncio
-async def test_aws_detector_boto_config_injection():
+async def test_aws_detector_boto_config_injection() -> None:
     """Verify that AWSZombieDetector injects botocore.Config with timeouts."""
     from app.modules.optimization.domain.aws_provider.detector import AWSZombieDetector
     from botocore.config import Config
@@ -77,4 +77,4 @@ async def test_aws_detector_boto_config_injection():
     assert "config" in kwargs
     config = kwargs["config"]
     assert isinstance(config, Config)
-    assert config.connect_timeout == 30  # Default from settings
+    assert getattr(config, "connect_timeout", None) == 30  # type: ignore[attr-defined]

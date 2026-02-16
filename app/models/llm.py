@@ -13,7 +13,7 @@ Why this matters:
 
 from uuid import uuid4, UUID
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from decimal import Decimal
 from sqlalchemy import (
     String,
@@ -207,6 +207,24 @@ class LLMBudget(Base):
 
     # Relationship
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="llm_budget")
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Handle hybrid properties which aren't valid columns for Base initialization."""
+        openai_key = kwargs.pop("openai_api_key", None)
+        claude_key = kwargs.pop("claude_api_key", None)
+        google_key = kwargs.pop("google_api_key", None)
+        groq_key = kwargs.pop("groq_api_key", None)
+
+        super().__init__(**kwargs)
+
+        if openai_key:
+            self._openai_api_key = encrypt_string(openai_key)
+        if claude_key:
+            self._claude_api_key = encrypt_string(claude_key)
+        if google_key:
+            self._google_api_key = encrypt_string(google_key)
+        if groq_key:
+            self._groq_api_key = encrypt_string(groq_key)
 
     def __repr__(self) -> str:
         return f"<LLMBudget ${self.monthly_limit_usd}/month>"
