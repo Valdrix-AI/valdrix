@@ -119,8 +119,8 @@ class TestHealthServiceMissingCoverage:
         mock_response = MagicMock()
         mock_response.status_code = 404  # Client error but still "reachable"
 
-        with patch("app.shared.core.health.httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+        with patch("app.shared.core.http.get_http_client") as mock_get_client:
+            mock_get_client.return_value.get = AsyncMock(
                 return_value=mock_response
             )
 
@@ -135,8 +135,8 @@ class TestHealthServiceMissingCoverage:
         mock_response = MagicMock()
         mock_response.status_code = 301  # Redirect but still "reachable"
 
-        with patch("app.shared.core.health.httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+        with patch("app.shared.core.http.get_http_client") as mock_get_client:
+            mock_get_client.return_value.get = AsyncMock(
                 return_value=mock_response
             )
 
@@ -317,8 +317,8 @@ class TestHealthServiceMissingCoverage:
         mock_response = MagicMock()
         mock_response.status_code = 500
 
-        with patch("app.shared.core.health.httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+        with patch("app.shared.core.http.get_http_client") as mock_get_client:
+            mock_get_client.return_value.get = AsyncMock(
                 return_value=mock_response
             )
 
@@ -330,8 +330,8 @@ class TestHealthServiceMissingCoverage:
     @pytest.mark.asyncio
     async def test_check_aws_exception(self, health_service):
         """Test AWS health check exception (lines 78-79)."""
-        with patch("app.shared.core.health.httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+        with patch("app.shared.core.http.get_http_client") as mock_get_client:
+            mock_get_client.return_value.get = AsyncMock(
                 side_effect=Exception("Network fail")
             )
 

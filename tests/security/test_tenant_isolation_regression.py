@@ -6,13 +6,14 @@ from sqlalchemy import select
 
 from app.models.aws_connection import AWSConnection
 from app.models.notification_settings import NotificationSettings
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, UserRole
+from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.pricing import PricingTier
 from app.modules.governance.domain.security.audit_log import (
-    AuditEventType,
     AuditLogger,
+    AuditEventType,
     AuditLog,
 )
-from app.shared.core.auth import CurrentUser, UserRole, get_current_user
 
 
 @pytest.mark.asyncio
@@ -49,7 +50,7 @@ async def test_connections_list_is_tenant_scoped(async_client: AsyncClient, db, 
         tenant_id=tenant_a.id,
         email="user-a@valdrix.io",
         role=UserRole.MEMBER,
-        tier="pro",
+        tier=PricingTier.PRO,
     )
     app.dependency_overrides[get_current_user] = lambda: current_user
     try:
@@ -106,7 +107,7 @@ async def test_notification_settings_get_is_tenant_scoped(
         tenant_id=tenant_b.id,
         email="user-b@valdrix.io",
         role=UserRole.MEMBER,
-        tier="pro",
+        tier=PricingTier.PRO,
     )
     app.dependency_overrides[get_current_user] = lambda: current_user
     try:
@@ -159,7 +160,7 @@ async def test_audit_logs_endpoint_is_tenant_scoped(async_client: AsyncClient, d
         tenant_id=tenant_a.id,
         email="admin-a@valdrix.io",
         role=UserRole.ADMIN,
-        tier="pro",
+        tier=PricingTier.PRO,
     )
     app.dependency_overrides[get_current_user] = lambda: current_user
     try:

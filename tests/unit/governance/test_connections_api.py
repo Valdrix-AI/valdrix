@@ -21,7 +21,7 @@ from sqlalchemy import select
 
 @pytest_asyncio.fixture
 async def test_tenant(db):
-    tenant = Tenant(id=uuid4(), name="Test Tenant", plan=PricingTier.FREE_TRIAL.value)
+    tenant = Tenant(id=uuid4(), name="Test Tenant", plan=PricingTier.FREE_TRIAL)
     db.add(tenant)
     await db.commit()
     await db.refresh(tenant)

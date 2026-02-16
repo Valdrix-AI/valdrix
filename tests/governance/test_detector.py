@@ -1,6 +1,7 @@
 from decimal import Decimal
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from typing import Any
+from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
 from app.modules.optimization.domain import ZombieDetector, RemediationService
 from app.models.remediation import (
@@ -13,7 +14,7 @@ from app.models.remediation import (
 
 
 @pytest.mark.asyncio
-async def test_detect_zombies_aggregation():
+async def test_detect_zombies_aggregation() -> None:
     """Verify scan_all aggregates results from plugins."""
     detector = ZombieDetector()
 
@@ -37,7 +38,7 @@ async def test_detect_zombies_aggregation():
 
 
 @pytest.mark.asyncio
-async def test_detect_zombies_partial_failure():
+async def test_detect_zombies_partial_failure() -> None:
     """Verify scan_all continues if one plugin fails."""
     detector = ZombieDetector()
 
@@ -62,7 +63,7 @@ async def test_detect_zombies_partial_failure():
 
 
 @pytest.fixture
-def mock_db():
+def mock_db() -> AsyncMock:
     db = AsyncMock()
     # The result of await db.execute(...) must be a synchronous MagicMock
     result_mock = MagicMock()
@@ -80,12 +81,14 @@ def mock_db():
 
 
 @pytest.fixture
-def service(mock_db):
+def service(mock_db: AsyncMock) -> RemediationService:
     return RemediationService(mock_db)
 
 
 @pytest.mark.asyncio
-async def test_create_remediation_request(service, mock_db):
+async def test_create_remediation_request(
+    service: RemediationService, mock_db: AsyncMock
+) -> None:
     tenant_id = uuid4()
     user_id = uuid4()
 
@@ -105,7 +108,7 @@ async def test_create_remediation_request(service, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_approve_request(service, mock_db):
+async def test_approve_request(service: RemediationService, mock_db: AsyncMock) -> None:
     req = RemediationRequest(
         id=uuid4(), tenant_id=uuid4(), status=RemediationStatus.PENDING
     )
@@ -118,7 +121,9 @@ async def test_approve_request(service, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_execute_request_success(service, mock_db):
+async def test_execute_request_success(
+    service: RemediationService, mock_db: AsyncMock
+) -> None:
     """Test execution of DELETE_VOLUME action."""
     req = RemediationRequest(
         id=uuid4(),
@@ -136,12 +141,12 @@ async def test_execute_request_success(service, mock_db):
     mock_ec2.delete_volume = AsyncMock()
 
     # _get_client returns an async context manager
-    async def mock_get_client(service_name):
+    async def mock_get_client(service_name: str) -> Any:
         class MockContextManager:
-            async def __aenter__(self):
+            async def __aenter__(self) -> AsyncMock:
                 return mock_ec2
 
-            async def __aexit__(self, *args):
+            async def __aexit__(self, *args: Any) -> None:
                 pass
 
         return MockContextManager()

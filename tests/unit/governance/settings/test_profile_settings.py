@@ -4,9 +4,10 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models.tenant import Tenant, User, UserPersona
+from app.models.tenant import UserRole, Tenant, User, UserPersona
 from app.modules.governance.domain.security.audit_log import AuditLog
-from app.shared.core.auth import CurrentUser, UserRole, get_current_user
+from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.mark.asyncio
@@ -18,7 +19,7 @@ async def test_get_profile_returns_persona(async_client: AsyncClient, app):
         tenant_id=tenant_id,
         email="persona@valdrix.io",
         role=UserRole.ADMIN,
-        tier="pro",
+        tier=PricingTier.PRO,
         persona=UserPersona.PLATFORM,
     )
 
@@ -58,7 +59,7 @@ async def test_update_profile_updates_persona(async_client: AsyncClient, db, app
         tenant_id=tenant_id,
         email="persona-update@valdrix.io",
         role=UserRole.ADMIN,
-        tier="pro",
+        tier=PricingTier.PRO,
         persona=UserPersona.ENGINEERING,
     )
 
@@ -105,7 +106,7 @@ async def test_update_profile_rejects_invalid_persona(async_client: AsyncClient,
         tenant_id=uuid.uuid4(),
         email="persona-invalid@valdrix.io",
         role=UserRole.ADMIN,
-        tier="pro",
+        tier=PricingTier.PRO,
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user

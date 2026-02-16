@@ -179,7 +179,7 @@ async def test_process_tenant_saas_path_runs_zombie_detection(mock_db, mock_tena
 
 
 @pytest.mark.asyncio
-async def test_savings_autopilot_execution(mock_db):
+async def test_governance_processor_execution(mock_db: AsyncMock) -> None:
     """Test autonomous savings execution."""
     processor = SavingsProcessor()
     tenant_id = uuid4()

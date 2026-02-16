@@ -19,7 +19,7 @@ class TestAuthLogic:
     def test_jwt_lifecycle(self):
         """Test creating and then decoding a token."""
         user_id = uuid4()
-        data = {"sub": str(user_id), "email": "test@valdrix.io", "role": "admin"}
+        data = {"sub": str(user_id), "email": "test@valdrix.io", "role": UserRole.ADMIN.value}
 
         token = create_access_token(data)
         assert isinstance(token, str)

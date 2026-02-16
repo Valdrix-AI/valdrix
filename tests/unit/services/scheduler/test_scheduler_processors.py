@@ -12,14 +12,12 @@ from app.modules.governance.domain.scheduler.processors import (
     AnalysisProcessor,
     SavingsProcessor,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 @pytest.fixture
-def mock_db():
-    db = MagicMock()
-    db.execute = AsyncMock()
-    db.commit = AsyncMock()
-    return db
+def mock_db() -> AsyncMock:
+    return AsyncMock(spec=AsyncSession)
 
 
 @pytest.fixture
@@ -33,13 +31,13 @@ def mock_tenant():
 class TestAnalysisProcessor:
     """Tests for AnalysisProcessor."""
 
-    def test_init(self):
+    def test_init(self) -> None:
         """Test processor initialization."""
         processor = AnalysisProcessor()
         assert processor.settings is not None
 
     @pytest.mark.asyncio
-    async def test_process_tenant_success(self, mock_db, mock_tenant):
+    async def test_process_tenant_success(self, mock_db: AsyncMock, mock_tenant) -> None:
         """Test processing tenant analysis."""
         processor = AnalysisProcessor()
         conn = MagicMock()

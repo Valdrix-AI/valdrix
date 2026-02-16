@@ -93,7 +93,7 @@ async def test_webhook_retry_execute_generic_success(db):
     )
 
     with (
-        patch("httpx.AsyncClient") as MockClient,
+        patch("app.shared.core.http.get_http_client") as MockGetClient,
         patch(
             "app.modules.governance.domain.jobs.handlers.notifications.get_settings",
             return_value=SimpleNamespace(
@@ -103,8 +103,8 @@ async def test_webhook_retry_execute_generic_success(db):
             ),
         ),
     ):
-        mock_client = MockClient.return_value.__aenter__.return_value
-        mock_client.post.return_value = MagicMock(status_code=200)
+        mock_client = MockGetClient.return_value
+        mock_client.post = AsyncMock(return_value=MagicMock(status_code=200))
 
         result = await handler.execute(job, db)
 

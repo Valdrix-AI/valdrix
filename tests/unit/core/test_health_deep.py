@@ -39,7 +39,7 @@ async def test_check_external_services_exception():
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(side_effect=Exception("boom"))
 
-    with patch("app.shared.core.health.httpx.AsyncClient", return_value=mock_client):
+    with patch("app.shared.core.http.get_http_client", return_value=mock_client):
         result = await service._check_external_services()
 
     assert result["status"] == "degraded"

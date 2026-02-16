@@ -281,10 +281,12 @@ class TestHealthServiceIntegration:
                 mock_get_redis.return_value = mock_redis
 
                 # AWS fails
-                with patch("httpx.AsyncClient") as mock_client:
-                    mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                        side_effect=Exception("Network error")
-                    )
+                with patch("app.shared.core.http.get_http_client") as mock_get_client:
+                    mock_response = MagicMock()
+                    mock_response.status_code = 500
+                    mock_client = AsyncMock()
+                    mock_client.get.return_value = mock_response
+                    mock_get_client.return_value = mock_client
 
                     result = await health_service.check_all()
 
@@ -323,12 +325,12 @@ class TestHealthServiceIntegration:
         original_redis = settings.REDIS_URL
         settings.REDIS_URL = None
         try:
-            with patch("httpx.AsyncClient") as mock_client:
+            with patch("app.shared.core.http.get_http_client") as mock_get_client:
                 mock_response = MagicMock()
                 mock_response.status_code = 200
-                mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                    return_value=mock_response
-                )
+                mock_client = AsyncMock()
+                mock_client.get.return_value = mock_response
+                mock_get_client.return_value = mock_client
 
                 result = await health_service.check_all()
 

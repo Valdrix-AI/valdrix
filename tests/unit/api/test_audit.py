@@ -3,14 +3,14 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import HTTPException
 from uuid import uuid4
 from datetime import datetime, timezone
-from app.modules.audit import (
+from app.modules.governance.api.v1.audit import (
     get_audit_logs,
     get_audit_log_detail,
     export_audit_logs,
     request_data_erasure,
     get_event_types,
 )
-from app.shared.core.auth import CurrentUser
+from app.shared.core.auth import CurrentUser, UserRole
 from app.modules.governance.domain.security.audit_log import AuditLog
 
 
@@ -22,14 +22,14 @@ def mock_db():
 @pytest.fixture
 def admin_user():
     return CurrentUser(
-        id=uuid4(), email="admin@test.com", tenant_id=uuid4(), role="admin"
+        id=uuid4(), email="admin@test.com", tenant_id=uuid4(), role=UserRole.ADMIN
     )
 
 
 @pytest.fixture
 def owner_user():
     return CurrentUser(
-        id=uuid4(), email="owner@test.com", tenant_id=uuid4(), role="owner"
+        id=uuid4(), email="owner@test.com", tenant_id=uuid4(), role=UserRole.OWNER
     )
 
 

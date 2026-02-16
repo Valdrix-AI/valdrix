@@ -32,7 +32,7 @@ def mock_tenant():
 
 class TestAnalysisProcessorExpanded:
     @pytest.mark.asyncio
-    async def test_process_tenant_no_connections(self, mock_db):
+    async def test_process_tenant_no_connections(self, mock_db: AsyncMock) -> None:
         tenant = MagicMock()
         tenant.aws_connections = []
         tenant.azure_connections = []
@@ -46,7 +46,7 @@ class TestAnalysisProcessorExpanded:
             assert result is None
 
     @pytest.mark.asyncio
-    async def test_process_tenant_timeout(self, mock_db, mock_tenant):
+    async def test_process_tenant_timeout(self, mock_db: AsyncMock, mock_tenant: MagicMock) -> None:
         with patch("app.modules.governance.domain.scheduler.processors.get_settings"):
             processor = AnalysisProcessor()
             with (

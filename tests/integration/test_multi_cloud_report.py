@@ -5,7 +5,10 @@ from uuid import uuid4
 from decimal import Decimal
 from app.models.cloud import CloudAccount, CostRecord
 from app.shared.core.auth import CurrentUser, get_current_user
+from app.models.tenant import UserRole
+from app.shared.core.pricing import PricingTier
 from app.shared.db.session import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.main import app
 
 
@@ -16,15 +19,14 @@ def mock_auth_user_multi():
         id=uuid4(),
         email="multi@valdrix.ai",
         tenant_id=tenant_id,
-        role="admin",
-        permissions=["read", "write", "admin"],
-        tier="enterprise",
+        role=UserRole.ADMIN,
+        tier=PricingTier.ENTERPRISE,
     )
     return user
 
 
 @pytest.mark.asyncio
-async def test_multi_cloud_unified_report(ac: AsyncClient, db, mock_auth_user_multi):
+async def test_multi_cloud_unified_report(ac: AsyncClient, db: AsyncSession, mock_auth_user_multi: CurrentUser) -> None:
     """
     Integration Test: Verify Unified Multi-Cloud Reporting.
     Simulates data from AWS, Azure, and GCP and checks aggregation API.

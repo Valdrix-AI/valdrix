@@ -2,12 +2,13 @@ import pytest
 import httpx
 from httpx import AsyncClient
 from uuid import uuid4
-from app.models.tenant import Tenant, User
 from app.models.remediation import (
     RemediationRequest,
     RemediationStatus,
     RemediationAction,
 )
+from app.models.tenant import Tenant, User, UserRole
+from app.shared.core.pricing import PricingTier
 from app.shared.core.auth import CurrentUser, get_current_user, require_tenant_access
 from fastapi import Request
 
@@ -16,7 +17,11 @@ from fastapi import Request
 def mock_user_t1():
     t1_id = uuid4()
     return CurrentUser(
-        id=uuid4(), email="user@tenant1.com", tenant_id=t1_id, role="member", tier="pro"
+        id=uuid4(),
+        email="user@tenant1.com",
+        tenant_id=t1_id,
+        role=UserRole.MEMBER,
+        tier=PricingTier.PRO,
     )
 
 
@@ -57,8 +62,8 @@ async def test_tenant_isolation_regression(ac: AsyncClient, db):
         id=uuid4(),
         email="admin@tenantA.com",
         tenant_id=t1_id,
-        role="member",
-        tier="pro",
+        role=UserRole.MEMBER,
+        tier=PricingTier.PRO,
     )
 
     def override_get_current_user(request: Request):
@@ -108,9 +113,9 @@ async def test_bound_pagination_enforcement(ac: AsyncClient, db):
     def override_get_current_user_pagination(request: Request):
         request.state.tenant_id = tenant_id
         request.state.user_id = user_id
-        request.state.tier = "pro"
+        request.state.tier = PricingTier.PRO
         return CurrentUser(
-            id=user_id, email="p@t.com", tenant_id=tenant_id, role="member", tier="pro"
+            id=user_id, email="p@t.com", tenant_id=tenant_id, role=UserRole.MEMBER, tier=PricingTier.PRO
         )
 
     from app.main import app

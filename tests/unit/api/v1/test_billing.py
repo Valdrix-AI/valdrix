@@ -18,7 +18,7 @@ from app.shared.core.pricing import PricingTier
 
 
 @pytest.fixture
-def mock_db():
+def mock_db() -> AsyncMock:
     db = AsyncMock()
     db.add = MagicMock()
     db.add_all = MagicMock()
@@ -26,7 +26,7 @@ def mock_db():
 
 
 @pytest.fixture
-def mock_user():
+def mock_user() -> MagicMock:
     user = MagicMock()
     user.tenant_id = "tenant-123"
     user.email = "test@example.com"
@@ -35,7 +35,7 @@ def mock_user():
 
 
 @pytest.mark.asyncio
-async def test_get_public_plans_db_success(mock_db):
+async def test_get_public_plans_db_success(mock_db: AsyncMock) -> None:
     mock_plan = PricingPlan(
         id="starter",
         name="Starter",
@@ -58,7 +58,7 @@ async def test_get_public_plans_db_success(mock_db):
 
 
 @pytest.mark.asyncio
-async def test_get_public_plans_fallback_on_error(mock_db):
+async def test_get_public_plans_fallback_on_error(mock_db: AsyncMock) -> None:
     mock_db.execute.side_effect = Exception("DB Fail")
     plans = await get_public_plans(mock_db)
     assert len(plans) > 0
@@ -68,8 +68,11 @@ async def test_get_public_plans_fallback_on_error(mock_db):
 @patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
 @patch("app.modules.billing.api.v1.billing.settings")
 async def test_create_checkout_success(
-    mock_settings, mock_billing_service_class, mock_db, mock_user
-):
+    mock_settings: MagicMock,
+    mock_billing_service_class: MagicMock,
+    mock_db: AsyncMock,
+    mock_user: MagicMock,
+) -> None:
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
     mock_settings.FRONTEND_URL = "https://app.valdrix.io"
     mock_settings.CORS_ORIGINS = ["https://app.valdrix.io"]
@@ -93,8 +96,11 @@ async def test_create_checkout_success(
 @patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
 @patch("app.modules.billing.api.v1.billing.settings")
 async def test_create_checkout_rejects_untrusted_callback(
-    mock_settings, mock_billing_service_class, mock_db, mock_user
-):
+    mock_settings: MagicMock,
+    mock_billing_service_class: MagicMock,
+    mock_db: AsyncMock,
+    mock_user: MagicMock,
+) -> None:
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
     mock_settings.FRONTEND_URL = "https://app.valdrix.io"
     mock_settings.CORS_ORIGINS = ["https://app.valdrix.io"]
@@ -116,8 +122,11 @@ async def test_create_checkout_rejects_untrusted_callback(
 @patch("app.modules.billing.domain.billing.webhook_retry.WebhookRetryService")
 @patch("app.modules.billing.api.v1.billing.settings")
 async def test_handle_webhook_success(
-    mock_settings, mock_retry_class, mock_handler_class, mock_db
-):
+    mock_settings: MagicMock,
+    mock_retry_class: MagicMock,
+    mock_handler_class: MagicMock,
+    mock_db: AsyncMock,
+) -> None:
     mock_settings.ENVIRONMENT = "development"
     request = AsyncMock()
     # Mock headers as MagicMock so .get is synchronous
@@ -148,7 +157,9 @@ async def test_handle_webhook_success(
 
 
 @pytest.mark.asyncio
-async def test_get_subscription_success(mock_db, mock_user):
+async def test_get_subscription_success(
+    mock_db: AsyncMock, mock_user: MagicMock
+) -> None:
     mock_sub = TenantSubscription(
         tenant_id=mock_user.tenant_id, tier="pro", status="active"
     )
@@ -162,7 +173,7 @@ async def test_get_subscription_success(mock_db, mock_user):
 
 
 @pytest.mark.asyncio
-async def test_get_features(mock_user):
+async def test_get_features(mock_user: MagicMock) -> None:
     with patch("app.shared.core.pricing.get_tier_config") as mock_get_config:
         mock_get_config.return_value = {"features": ["f1"], "limits": {}}
         response = await get_features(MagicMock(), mock_user)
@@ -172,8 +183,10 @@ async def test_get_features(mock_user):
 @pytest.mark.asyncio
 @patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
 async def test_cancel_subscription_success(
-    mock_billing_service_class, mock_db, mock_user
-):
+    mock_billing_service_class: MagicMock,
+    mock_db: AsyncMock,
+    mock_user: MagicMock,
+) -> None:
     mock_billing = mock_billing_service_class.return_value
     mock_billing.cancel_subscription = AsyncMock()
     response = await cancel_subscription(mock_user, mock_db)
@@ -181,7 +194,9 @@ async def test_cancel_subscription_success(
 
 
 @pytest.mark.asyncio
-async def test_update_exchange_rate(mock_db, mock_user):
+async def test_update_exchange_rate(
+    mock_db: AsyncMock, mock_user: MagicMock
+) -> None:
     req = MagicMock()
     req.rate = 1500.0
     req.provider = "manual"
@@ -196,7 +211,7 @@ async def test_update_exchange_rate(mock_db, mock_user):
 
 
 @pytest.mark.asyncio
-async def test_get_exchange_rate(mock_db, mock_user):
+async def test_get_exchange_rate(mock_db: AsyncMock, mock_user: MagicMock) -> None:
     from datetime import datetime
 
     mock_rate = ExchangeRate(
@@ -216,7 +231,9 @@ async def test_get_exchange_rate(mock_db, mock_user):
 
 
 @pytest.mark.asyncio
-async def test_update_pricing_plan_success(mock_db, mock_user):
+async def test_update_pricing_plan_success(
+    mock_db: AsyncMock, mock_user: MagicMock
+) -> None:
     plan_req = MagicMock()
     plan_req.price_usd = 99.0
     plan_req.features = {}

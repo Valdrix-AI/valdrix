@@ -39,8 +39,8 @@ async def test_create_issue_success_and_payload_shape() -> None:
     client.post = AsyncMock(return_value=response)
 
     with patch(
-        "app.modules.notifications.domain.jira.httpx.AsyncClient",
-        return_value=_async_client_cm(client),
+        "app.modules.notifications.domain.jira.get_http_client",
+        return_value=client,
     ):
         ok = await service.create_issue(
             summary="x" * 260,
@@ -67,16 +67,16 @@ async def test_create_issue_failure_status_and_exception() -> None:
     client = AsyncMock()
     client.post = AsyncMock(return_value=bad_response)
     with patch(
-        "app.modules.notifications.domain.jira.httpx.AsyncClient",
-        return_value=_async_client_cm(client),
+        "app.modules.notifications.domain.jira.get_http_client",
+        return_value=client,
     ):
         assert await service.create_issue("s", "d") is False
 
     client = AsyncMock()
     client.post = AsyncMock(side_effect=RuntimeError("jira down"))
     with patch(
-        "app.modules.notifications.domain.jira.httpx.AsyncClient",
-        return_value=_async_client_cm(client),
+        "app.modules.notifications.domain.jira.get_http_client",
+        return_value=client,
     ):
         assert await service.create_issue("s", "d") is False
 

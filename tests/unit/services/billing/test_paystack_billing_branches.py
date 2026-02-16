@@ -87,6 +87,7 @@ async def test_initialize_transaction_includes_plan_code(
             callback_url="https://callback.example.com",
             metadata={"tenant_id": "t1"},
         )
+    assert mock_req.await_args is not None
     payload = mock_req.await_args.args[2]
     assert payload["plan"] == "PLN_123"
 

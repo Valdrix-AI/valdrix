@@ -142,9 +142,9 @@ async def test_oidc_verify_gcp():
             new_callable=AsyncMock,
             return_value="id-token",
         ),
-        patch("httpx.AsyncClient") as MockClient,
+        patch("app.shared.core.http.get_http_client") as MockGetClient,
     ):
-        mock_client = MockClient.return_value.__aenter__.return_value
+        mock_client = MockGetClient.return_value
         mock_response = MagicMock(status_code=200)
         mock_response.json.return_value = {"access_token": "access-token"}
         mock_client.post = AsyncMock(return_value=mock_response)

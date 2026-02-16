@@ -177,6 +177,14 @@ async def test_anomaly_detection_execute_no_matches(db):
 
     with (
         patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            new=AsyncMock(return_value=MagicMock(value="growth")),
+        ),
+        patch(
+            "app.shared.core.pricing.is_feature_enabled",
+            return_value=True,
+        ),
+        patch(
             "app.modules.reporting.domain.anomaly_detection.CostAnomalyDetectionService.detect",
             new=AsyncMock(return_value=[]),
         ),
@@ -223,6 +231,14 @@ async def test_anomaly_detection_execute_with_alerts(db):
     mock_item.severity = "high"
 
     with (
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            new=AsyncMock(return_value=MagicMock(value="growth")),
+        ),
+        patch(
+            "app.shared.core.pricing.is_feature_enabled",
+            return_value=True,
+        ),
         patch(
             "app.modules.reporting.domain.anomaly_detection.CostAnomalyDetectionService.detect",
             new=AsyncMock(return_value=[mock_item]),

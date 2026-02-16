@@ -7,7 +7,7 @@ from app.models.remediation import RemediationAction
 
 
 @pytest.mark.asyncio
-async def test_savings_processor_executes_autonomous_ready(db):
+async def test_savings_processor_executes_autonomous_ready(db) -> None:
     """Verify that SavingsProcessor identifies and executes autonomous_ready recommendations."""
     tenant_id = uuid4()
 

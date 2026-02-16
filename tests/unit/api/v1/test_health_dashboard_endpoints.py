@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.modules.health_dashboard import get_investor_health_dashboard
+from app.modules.governance.api.v1.health_dashboard import get_investor_health_dashboard
 from app.modules.governance.api.v1.health_dashboard import (
     AWSConnectionHealth,
     InvestorHealthDashboard,

@@ -1,24 +1,30 @@
 import pytest
 import pytest_asyncio
 import uuid
+from typing import Any
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.azure_connection import AzureConnection
 from app.main import app
 from app.shared.core.auth import get_current_user, CurrentUser
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, UserRole
+from app.shared.core.pricing import PricingTier
 
 # Mocks
 TENANT_ID = uuid.uuid4()
 USER_ID = uuid.uuid4()
 
 MOCK_USER = CurrentUser(
-    id=USER_ID, email="test@example.com", tenant_id=TENANT_ID, role="admin", tier="pro"
+    id=USER_ID,
+    email="test@example.com",
+    tenant_id=TENANT_ID,
+    role=UserRole.ADMIN,
+    tier=PricingTier.PRO,
 )
 
 
 @pytest_asyncio.fixture
-async def mock_auth(db: AsyncSession):
+async def mock_auth(db: AsyncSession) -> Any:
     # Ensure tenant exists to avoid ForeignKeyViolation
     tenant = Tenant(id=TENANT_ID, name="Test Tenant", plan="pro")
     await db.merge(tenant)
@@ -31,8 +37,8 @@ async def mock_auth(db: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_duplicate_azure_connection_fails(
-    ac: AsyncClient, db: AsyncSession, mock_auth
-):
+    ac: AsyncClient, db: AsyncSession, mock_auth: Any
+) -> None:
     """Verify B1: UniqueConstraint on Azure connections."""
     sub_id = "sub-123"
 
@@ -62,7 +68,7 @@ async def test_duplicate_azure_connection_fails(
 
 
 @pytest.mark.asyncio
-async def test_pagination_bounds_m4(ac: AsyncClient, mock_auth):
+async def test_pagination_bounds_m4(ac: AsyncClient, mock_auth: Any) -> None:
     """Verify M4: limit must be >= 1."""
     # Test on audit list
     response = await ac.get("/api/v1/audit/logs?limit=0")
@@ -74,14 +80,14 @@ async def test_pagination_bounds_m4(ac: AsyncClient, mock_auth):
 
 
 @pytest.mark.asyncio
-async def test_audit_logs_reject_sort_by_actor_email(ac: AsyncClient, mock_auth):
+async def test_audit_logs_reject_sort_by_actor_email(ac: AsyncClient, mock_auth: Any) -> None:
     response = await ac.get("/api/v1/audit/logs?sort_by=actor_email")
     assert response.status_code == 400
     assert "actor_email" in response.text.lower()
 
 
 @pytest.mark.asyncio
-async def test_job_type_hardening_m5(ac: AsyncClient, mock_auth):
+async def test_job_type_hardening_m5(ac: AsyncClient, mock_auth: Any) -> None:
     """Verify M5: EnqueueJobRequest uses Literal for job_type."""
     payload = {"job_type": "invalid_type", "payload": {}}
     response = await ac.post("/api/v1/jobs/enqueue", json=payload)
@@ -94,7 +100,7 @@ async def test_job_type_hardening_m5(ac: AsyncClient, mock_auth):
 
 
 @pytest.mark.asyncio
-async def test_startup_validation_critical_keys():
+async def test_startup_validation_critical_keys() -> None:
     """Verify startup validation for critical keys."""
     # This is hard to test in-process, but we can verify the logic in Settings
     from app.shared.core.config import Settings

@@ -1,7 +1,8 @@
 import pytest
 import uuid
 from httpx import AsyncClient
-from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+from app.models.tenant import UserRole
+from app.shared.core.auth import CurrentUser, get_current_user
 
 
 @pytest.mark.asyncio

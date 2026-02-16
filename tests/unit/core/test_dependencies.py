@@ -13,6 +13,7 @@ from app.shared.core.dependencies import (
     requires_feature,
 )
 from app.shared.core.auth import CurrentUser
+from app.models.tenant import UserRole
 from app.shared.core.pricing import PricingTier, FeatureFlag
 
 
@@ -55,8 +56,8 @@ class TestDependencies:
             id=uuid4(),
             email="user@example.com",
             tenant_id=uuid4(),
-            role="member",
-            tier="growth",
+            role=UserRole.MEMBER,
+            tier=PricingTier.GROWTH,
         )
 
         with patch(
@@ -75,8 +76,8 @@ class TestDependencies:
             id=uuid4(),
             email="user@example.com",
             tenant_id=uuid4(),
-            role="member",
-            tier="starter",
+            role=UserRole.MEMBER,
+            tier=PricingTier.STARTER,
         )
 
         with patch(
@@ -96,8 +97,8 @@ class TestDependencies:
             id=uuid4(),
             email="user@example.com",
             tenant_id=uuid4(),
-            role="member",
-            tier="starter",
+            role=UserRole.MEMBER,
+            tier=PricingTier.STARTER,
         )
 
         with patch(
@@ -117,8 +118,8 @@ class TestDependencies:
             id=uuid4(),
             email="user@example.com",
             tenant_id=uuid4(),
-            role="member",
-            tier="starter",  # Use valid tier here, but we'll mock the internal check to simulate invalidity if needed
+            role=UserRole.MEMBER,
+            tier=PricingTier.STARTER,  # Use valid tier here, but we'll mock the internal check to simulate invalidity if needed
             # Or better, if we want to test PricingTier(user_tier) ValueError, we can't use BaseModel validation.
             # But CurrentUser validation happens before this.
             # If we want to test the TRY/EXCEPT block in dependencies.py:
@@ -164,8 +165,8 @@ class TestDependencies:
             id=uuid4(),
             email="admin@example.com",
             tenant_id=uuid4(),
-            role="admin",
-            tier="enterprise",
+            role=UserRole.ADMIN,
+            tier=PricingTier.ENTERPRISE,
         )
 
         with patch(

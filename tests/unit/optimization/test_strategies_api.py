@@ -11,6 +11,7 @@ from app.models.optimization import (
     PaymentOption,
 )
 from app.models.cloud import CloudAccount, CostRecord
+from app.shared.core.pricing import PricingTier
 from app.shared.core.auth import CurrentUser, get_current_user, require_tenant_access
 
 
@@ -18,7 +19,7 @@ from app.shared.core.auth import CurrentUser, get_current_user, require_tenant_a
 async def admin_user(db):
     tenant_id = uuid4()
     user_id = uuid4()
-    tenant = Tenant(id=tenant_id, name="Test Tenant", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Test Tenant", plan=PricingTier.PRO)
     user = User(
         id=user_id, email="admin@test.io", tenant_id=tenant_id, role=UserRole.ADMIN
     )
@@ -29,7 +30,7 @@ async def admin_user(db):
         email=user.email,
         tenant_id=tenant_id,
         role=UserRole.ADMIN,
-        tier="pro",
+        tier=PricingTier.PRO,
     )
 
 
@@ -37,7 +38,7 @@ async def admin_user(db):
 async def member_user(db):
     tenant_id = uuid4()
     user_id = uuid4()
-    tenant = Tenant(id=tenant_id, name="Member Tenant", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Member Tenant", plan=PricingTier.PRO)
     user = User(
         id=user_id, email="member@test.io", tenant_id=tenant_id, role=UserRole.MEMBER
     )
@@ -48,7 +49,7 @@ async def member_user(db):
         email=user.email,
         tenant_id=tenant_id,
         role=UserRole.MEMBER,
-        tier="pro",
+        tier=PricingTier.PRO,
     )
 
 
@@ -219,7 +220,7 @@ async def test_strategies_requires_commitment_optimization_feature(
         email="starter@valdrix.io",
         tenant_id=uuid4(),
         role=UserRole.MEMBER,
-        tier="starter",
+        tier=PricingTier.STARTER,
     )
     app.dependency_overrides[get_current_user] = lambda: starter_user
     app.dependency_overrides[require_tenant_access] = lambda: starter_user.tenant_id
