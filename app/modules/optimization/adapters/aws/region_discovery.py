@@ -163,6 +163,10 @@ class RegionDiscovery:
                     logger.warning("hot_regions_discovered_empty", days=days)
                     return await self.get_enabled_regions()
 
+                if not regions:
+                    logger.warning("hot_regions_discovered_empty", days=days)
+                    return await self.get_enabled_regions()
+
                 self._cached_hot_regions = regions
                 return regions
 

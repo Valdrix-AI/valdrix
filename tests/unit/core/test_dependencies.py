@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for app/shared/core/dependencies.py - FastAPI dependencies
 """

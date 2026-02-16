@@ -1,4 +1,5 @@
 import pytest
+import os
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException

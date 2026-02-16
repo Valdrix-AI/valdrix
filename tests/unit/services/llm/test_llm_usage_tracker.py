@@ -1,4 +1,5 @@
 import pytest
+from typing import Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.shared.llm.usage_tracker import UsageTracker
 from app.shared.llm.budget_manager import BudgetStatus

@@ -264,7 +264,8 @@ class RemediationService(BaseService):
             connection_id=connection_id,
         )
 
-        self.db.add(request)
+        from app.shared.core.async_utils import maybe_await
+        await maybe_await(self.db.add(request))
         await self.db.commit()
         await self.db.refresh(request)
 

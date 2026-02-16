@@ -1,4 +1,5 @@
 import pytest
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import Request, HTTPException
 from app.shared.core.auth import (

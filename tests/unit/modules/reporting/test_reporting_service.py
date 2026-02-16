@@ -1,3 +1,4 @@
+import pytest
 """
 Comprehensive tests for ReportingService module.
 Covers cost ingestion, connection handling, data aggregation, and error scenarios.

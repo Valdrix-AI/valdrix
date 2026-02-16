@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for LLM Logic - Provider Selection and Smart Factory
 """

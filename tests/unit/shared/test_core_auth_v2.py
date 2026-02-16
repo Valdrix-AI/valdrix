@@ -1,3 +1,4 @@
+import pytest
 """
 Comprehensive tests for app.shared.core.auth module.
 """

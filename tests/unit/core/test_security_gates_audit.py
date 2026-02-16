@@ -1,4 +1,5 @@
 import pytest
+import os
 from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 from uuid import uuid4

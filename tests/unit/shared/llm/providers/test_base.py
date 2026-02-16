@@ -1,3 +1,4 @@
+from typing import Dict
 import pytest
 from unittest.mock import MagicMock
 from app.shared.llm.providers.base import BaseProvider

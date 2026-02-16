@@ -50,6 +50,21 @@ async def test_send_alert_no_deduplication_different_msg(slack_service):
 
 
 @pytest.mark.asyncio
+async def test_send_alert_no_deduplication_different_msg(slack_service):
+    """Verifies that different messages with same title are NOT deduped."""
+    slack_service.client.chat_postMessage = AsyncMock()
+    
+    # First send
+    await slack_service.send_alert("Same Title", "Msg 1")
+    
+    # Second send with same title but different message
+    result = await slack_service.send_alert("Same Title", "Msg 2")
+    
+    assert result is True
+    # Should be called TWICE
+    assert slack_service.client.chat_postMessage.call_count == 2
+
+@pytest.mark.asyncio
 async def test_send_with_retry_ratelimited(slack_service):
     # Mock response object that behaves like a SlackResponse (dict + attributes)
     class MockSlackResponse(dict):

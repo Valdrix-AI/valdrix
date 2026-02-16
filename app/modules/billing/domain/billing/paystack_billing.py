@@ -41,6 +41,12 @@ __all__ = [
     "PaystackClient",
 ]
 
+def _email_hash(email: Optional[str]) -> Optional[str]:
+    if not email:
+        return None
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()[:12]
+
+
 
 def _email_hash(email: Optional[str]) -> Optional[str]:
     if not email:

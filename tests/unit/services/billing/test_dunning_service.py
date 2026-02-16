@@ -69,6 +69,18 @@ async def test_process_failed_payment_first_attempt(mock_db, mock_subscription):
             assert mock_subscription.status == SubscriptionStatus.ATTENTION.value
             mock_enqueue.assert_called_once()
 
+@pytest.mark.asyncio
+async def test_process_failed_payment_subscription_missing(mock_db):
+    """Missing subscription returns error without raising."""
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_result
+
+    dunning = DunningService(mock_db)
+    result = await dunning.process_failed_payment(uuid4())
+    assert result["status"] == "error"
+    assert result["reason"] == "subscription_not_found"
+
 
 @pytest.mark.asyncio
 async def test_process_failed_payment_subscription_missing(mock_db):

@@ -1,4 +1,5 @@
 import pytest
+import os
 from unittest.mock import MagicMock, AsyncMock, patch, ANY
 from uuid import uuid4
 from app.shared.llm.analyzer import FinOpsAnalyzer

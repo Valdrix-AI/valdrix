@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for ZombieAnalyzer Logic - BYOK and Usage Tracking
 """

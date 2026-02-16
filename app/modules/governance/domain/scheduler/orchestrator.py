@@ -8,6 +8,7 @@ import structlog
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from typing import Dict, Any
+import httpx
 
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.processors import AnalysisProcessor
@@ -28,6 +29,14 @@ SCHEDULER_LOCK_BASE_ID = 48293021
 
 class SchedulerOrchestrator:
     """Manages APScheduler and job distribution."""
+    REGION_TO_ELECTRICITYMAP_ZONE = {
+        "us-east-1": "US-MIDA-PJM",
+        "us-west-2": "US-NW-BPAT",
+        "eu-west-1": "IE",
+        "eu-central-1": "DE",
+        "ap-southeast-1": "SG",
+        "ap-northeast-1": "JP-TK",
+    }
 
     REGION_TO_ELECTRICITYMAP_ZONE = {
         "us-east-1": "US-MIDA-PJM",

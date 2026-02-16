@@ -1,3 +1,4 @@
+import pytest
 """
 Targeted tests for app/shared/db/session.py missing coverage line 21
 """

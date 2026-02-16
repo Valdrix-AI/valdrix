@@ -103,6 +103,50 @@ async def test_process_pending_jobs_db_error(job_processor):
     assert results["errors"]
 
 
+
+@pytest.mark.asyncio
+async def test_process_pending_jobs_counts_failed(job_processor):
+    job = BackgroundJob(id=uuid4(), job_type="test_job", attempts=0, max_attempts=3)
+    job_processor._fetch_pending_jobs = AsyncMock(return_value=[job])
+
+    async def mark_failed(job):
+        job.status = JobStatus.FAILED.value
+        job.error_message = "boom"
+
+    job_processor._process_single_job = AsyncMock(side_effect=mark_failed)
+
+    results = await job_processor.process_pending_jobs(limit=1)
+
+    assert results["processed"] == 1
+    assert results["succeeded"] == 0
+    assert results["failed"] == 1
+    assert results["errors"][0]["error"] == "boom"
+
+
+@pytest.mark.asyncio
+async def test_process_pending_jobs_config_error(job_processor):
+    job = BackgroundJob(id=uuid4(), job_type="test_job", attempts=0, max_attempts=3)
+    job_processor._fetch_pending_jobs = AsyncMock(return_value=[job])
+    job_processor._process_single_job = AsyncMock(side_effect=KeyError("bad config"))
+
+    results = await job_processor.process_pending_jobs(limit=1)
+
+    assert results["processed"] == 1
+    assert results["failed"] == 1
+    assert results["errors"][0]["type"] == "config"
+
+
+@pytest.mark.asyncio
+async def test_process_pending_jobs_db_error(job_processor):
+    from sqlalchemy.exc import SQLAlchemyError
+
+    job_processor._fetch_pending_jobs = AsyncMock(side_effect=SQLAlchemyError("db error"))
+    results = await job_processor.process_pending_jobs(limit=1)
+
+    assert results["processed"] == 0
+    assert results["failed"] == 0
+    assert results["errors"]
+
 @pytest.mark.asyncio
 async def test_process_single_job_success(job_processor, mock_db_session):
     """Test successful job execution."""

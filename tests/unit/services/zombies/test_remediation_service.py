@@ -185,6 +185,24 @@ async def test_reject_requires_pending_status(remediation_service, db_session):
 
 
 @pytest.mark.asyncio
+async def test_reject_requires_pending_status(remediation_service, db_session):
+    request_id = uuid4()
+    tenant_id = uuid4()
+    reviewer_id = uuid4()
+
+    req = MagicMock(spec=RemediationRequest)
+    req.id = request_id
+    req.tenant_id = tenant_id
+    req.status = RemediationStatus.COMPLETED
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = req
+    db_session.execute.return_value = mock_res
+
+    with pytest.raises(ValueError, match="not pending"):
+        await remediation_service.reject(request_id, tenant_id, reviewer_id)
+
+@pytest.mark.asyncio
 async def test_execute_errors(remediation_service, db_session):
     request_id = uuid4()
     tenant_id = uuid4()

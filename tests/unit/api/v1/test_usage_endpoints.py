@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for Usage Metering API Endpoints
 """

@@ -1,3 +1,4 @@
+import pytest
 """
 Test isolation utilities to prevent test interference
 """

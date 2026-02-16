@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for Scheduler Processors - Analysis and Savings
 No existing tests for these modules.

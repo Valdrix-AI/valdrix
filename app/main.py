@@ -406,6 +406,11 @@ async def custom_rate_limit_handler(request: Request, exc: Exception) -> Respons
         method=request.method,
         status_code=getattr(exc, "status_code", 429),
     ).inc()
+    API_ERRORS_TOTAL.labels(
+        path=request.url.path,
+        method=request.method,
+        status_code=getattr(exc, "status_code", 429)
+    ).inc()
     res = original_handler(request, exc)
     if inspect.isawaitable(res):
         return await res

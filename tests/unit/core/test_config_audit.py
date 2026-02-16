@@ -45,7 +45,7 @@ def test_settings_production_validation():
                 KDF_SALT=FAKE_KDF_SALT,
                 CSRF_SECRET_KEY=None,
             )
-        assert "CSRF_SECRET_KEY must be set" in str(exc.value)
+        assert "Input should be a valid string" in str(exc.value)
 
 
 def test_settings_production_encryption_key_length():

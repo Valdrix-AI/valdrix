@@ -190,6 +190,10 @@ class TestFinOpsAnalyzerAnalysis:
             result = await analyzer.analyze(
                 shared_usage_summary, tenant_id=tenant_id, db=mock_db
             )
+        ],
+        total_cost=Decimal("195.75"),
+        currency="USD"
+    )
 
             assert result == {"result": "success"}
             # mock_budget is not available here, correcting assertion
