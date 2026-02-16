@@ -43,6 +43,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['tenant_id'], ['tenants.id'], name=op.f('fk_cloud_accounts_tenant_id_tenants')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_cloud_accounts'))
     )
+    op.create_index(op.f('ix_cloud_accounts_tenant_id'), 'cloud_accounts', ['tenant_id'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('tenant_id', sa.UUID(), nullable=False),

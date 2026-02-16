@@ -35,14 +35,8 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id', name=op.f('pk_discovered_accounts'))
     )
     op.create_index(op.f('ix_discovered_accounts_management_connection_id'), 'discovered_accounts', ['management_connection_id'], unique=False)
-    op.drop_index(op.f('ix_gcp_connections_tenant_id'), table_name='gcp_connections')
-    op.drop_table('gcp_connections')
-    op.drop_index(op.f('ix_azure_connections_tenant_id'), table_name='azure_connections')
-    op.drop_table('azure_connections')
-    op.drop_index(op.f('ix_jobs_status_scheduled'), table_name='background_jobs', postgresql_where="((status)::text = 'pending'::text)")
-    op.drop_index(op.f('ix_jobs_tenant'), table_name='background_jobs')
-    op.drop_index(op.f('ix_jobs_type'), table_name='background_jobs')
-    op.drop_table('background_jobs')
+    # Note: Destructive drops of background_jobs, gcp_connections, and azure_connections 
+    # removed to maintain schema continuity during re-initialization.
     op.add_column('aws_connections', sa.Column('is_management_account', sa.Boolean(), server_default='false', nullable=True))
     op.add_column('aws_connections', sa.Column('organization_id', sa.String(length=32), nullable=True))
     op.alter_column('aws_connections', 'last_verified_at',

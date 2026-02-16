@@ -19,9 +19,10 @@ def upgrade() -> None:
     """Implement RLS policies for all tenant-related tables."""
     
     # 1. Tenants Table (Self-isolation)
+    # Optimization: Using subquery for current_setting to prevent re-evaluation
     op.execute("""
         CREATE POLICY tenant_isolation_policy ON tenants
-        USING (id = current_setting('app.current_tenant_id', TRUE)::uuid);
+        USING (id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
     """)
 
     # 2. General Tenant-Scoped Tables
@@ -39,9 +40,10 @@ def upgrade() -> None:
     ]
     
     for table in tables:
+        # Optimization: Wrapping current_setting in a SELECT subquery for performance
         op.execute(f"""
             CREATE POLICY {table}_isolation_policy ON {table}
-            USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+            USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
         """)
 
 

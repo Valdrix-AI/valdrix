@@ -102,15 +102,44 @@ def upgrade() -> None:
     
     op.execute("""
         CREATE POLICY audit_logs_isolation_policy ON audit_logs
-        USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+        USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
     """)
     op.execute("""
         CREATE POLICY cost_records_isolation_policy ON cost_records
-        USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+        USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
     """)
 
+    # 6.5 Add missing foreign key index for audit_logs
+    op.create_index("ix_audit_logs_actor_id", "audit_logs", ["actor_id"])
+
     # 7. Cleanup
-    op.execute("DROP TABLE cost_records_old")
+    op.execute("DROP TABLE cost_records_old CASCADE")
+
+    # Recreate materialized view (it was dropped by CASCADE)
+    op.execute("""
+        CREATE MATERIALIZED VIEW IF NOT EXISTS mv_daily_cost_aggregates AS
+        SELECT 
+            tenant_id,
+            service,
+            region,
+            DATE(recorded_at) as cost_date,
+            SUM(cost_usd) as total_cost,
+            COALESCE(SUM(carbon_kg), 0) as total_carbon,
+            COUNT(*) as record_count
+        FROM cost_records
+        GROUP BY tenant_id, service, region, DATE(recorded_at)
+        WITH DATA;
+    """)
+    
+    op.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_daily_cost_unique 
+        ON mv_daily_cost_aggregates (tenant_id, service, region, cost_date);
+    """)
+    
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS idx_mv_daily_cost_tenant_date 
+        ON mv_daily_cost_aggregates (tenant_id, cost_date);
+    """)
 
 
 def downgrade() -> None:

@@ -31,7 +31,7 @@ def _enable_rls_with_policy(table: str, policy_name: str) -> None:
     op.execute(
         f"""
         CREATE POLICY {policy_name} ON {table}
-        USING (tenant_id = current_setting('app.current_tenant_id', TRUE)::uuid);
+        USING (tenant_id = (SELECT current_setting('app.current_tenant_id', TRUE)::uuid));
         """
     )
 

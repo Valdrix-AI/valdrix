@@ -48,6 +48,8 @@ def upgrade() -> None:
     op.create_index(op.f('ix_remediation_requests_resource_id'), 'remediation_requests', ['resource_id'], unique=False)
     op.create_index(op.f('ix_remediation_requests_status'), 'remediation_requests', ['status'], unique=False)
     op.create_index(op.f('ix_remediation_requests_tenant_id'), 'remediation_requests', ['tenant_id'], unique=False)
+    op.create_index(op.f('ix_remediation_requests_requested_by_user_id'), 'remediation_requests', ['requested_by_user_id'], unique=False)
+    op.create_index(op.f('ix_remediation_requests_reviewed_by_user_id'), 'remediation_requests', ['reviewed_by_user_id'], unique=False)
     # ### end Alembic commands ###
 
 

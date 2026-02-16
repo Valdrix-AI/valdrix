@@ -20,34 +20,45 @@ depends_on = None
 
 
 def upgrade() -> None:
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    tables = inspector.get_table_names()
+
     # BE-SCHED-5: Add priority field to background_jobs
-    op.add_column(
-        'background_jobs',
-        sa.Column('priority', sa.Integer(), nullable=False, server_default='0')
-    )
-    op.create_index(
-        'ix_background_jobs_priority',
-        'background_jobs',
-        ['priority'],
-        unique=False
-    )
+    if 'background_jobs' in tables:
+        cols = [c['name'] for c in inspector.get_columns('background_jobs')]
+        if 'priority' not in cols:
+            op.add_column(
+                'background_jobs',
+                sa.Column('priority', sa.Integer(), nullable=False, server_default='0')
+            )
+            op.create_index(
+                'ix_background_jobs_priority',
+                'background_jobs',
+                ['priority'],
+                unique=False
+            )
     
     # BE-CONN-2/3: Add key rotation fields to oidc_keys
-    op.add_column(
-        'oidc_keys',
-        sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True)
-    )
-    op.add_column(
-        'oidc_keys',
-        sa.Column('rotated_at', sa.DateTime(timezone=True), nullable=True)
-    )
-    
-    # Backfill existing keys with 30-day expiration from creation
-    op.execute("""
-        UPDATE oidc_keys 
-        SET expires_at = created_at + INTERVAL '30 days'
-        WHERE expires_at IS NULL
-    """)
+    if 'oidc_keys' in tables:
+        cols = [c['name'] for c in inspector.get_columns('oidc_keys')]
+        if 'expires_at' not in cols:
+            op.add_column(
+                'oidc_keys',
+                sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True)
+            )
+        if 'rotated_at' not in cols:
+            op.add_column(
+                'oidc_keys',
+                sa.Column('rotated_at', sa.DateTime(timezone=True), nullable=True)
+            )
+        
+        # Backfill existing keys with 30-day expiration from creation
+        op.execute("""
+            UPDATE oidc_keys 
+            SET expires_at = created_at + INTERVAL '30 days'
+            WHERE expires_at IS NULL
+        """)
 
 
 def downgrade() -> None:
