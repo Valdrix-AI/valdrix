@@ -221,13 +221,16 @@ class GCPConnectionCreate(BaseModel):
     def _validate_credentials(self):
         import json
         if self.auth_method == "secret" and not self.service_account_json:
-            raise ValueError("service_account_json is required when auth_method is 'secret'")
+            raise ValueError(
+                "service_account_json is required when auth_method is 'secret'"
+            )
         if self.service_account_json:
             try:
                 json.loads(self.service_account_json)
             except Exception as exc:
                 raise ValueError("service_account_json must be valid JSON") from exc
         return self
+
 
 class GCPConnectionResponse(BaseModel):
     id: UUID

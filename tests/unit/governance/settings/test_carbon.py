@@ -10,6 +10,7 @@ from app.shared.core.auth import get_current_user, CurrentUser
 from app.shared.core.pricing import PricingTier
 
 
+
 @pytest.fixture
 async def mock_user():
     user = MagicMock()

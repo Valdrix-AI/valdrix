@@ -91,7 +91,9 @@ class TestCacheDeep:
         assert await service.get_analysis(uuid4()) is None
 
     @pytest.mark.asyncio
-    async def test_invalid_json_payload_returns_none(self, mock_settings, mock_redis_client):
+    async def test_invalid_json_payload_returns_none(
+        self, mock_settings, mock_redis_client
+    ):
         service = CacheService()
         mock_redis_client.get.return_value = "{bad-json"
         assert await service.get_analysis(uuid4()) is None

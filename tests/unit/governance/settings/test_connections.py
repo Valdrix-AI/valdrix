@@ -39,6 +39,7 @@ def disable_cache():
     with patch("app.shared.core.cache.get_cache_service", return_value=cache):
         yield
 
+
 @pytest.fixture(autouse=True)
 def override_auth(mock_user):
     app.dependency_overrides[get_current_user] = lambda: mock_user

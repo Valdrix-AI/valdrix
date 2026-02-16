@@ -6,6 +6,7 @@ from app.models.tenant import UserRole
 from app.shared.core.auth import CurrentUser, get_current_user
 
 
+
 @pytest.mark.asyncio
 async def test_get_activeops_settings_creates_default(
     async_client: AsyncClient, db, mock_user_id, mock_tenant_id, app

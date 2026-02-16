@@ -24,6 +24,7 @@ from upstash_redis import Redis
 from upstash_redis.asyncio import Redis as AsyncRedis
 
 from app.shared.core.config import get_settings
+
 logger = structlog.get_logger()
 
 # Cache TTLs

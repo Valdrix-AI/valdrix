@@ -409,7 +409,7 @@ async def custom_rate_limit_handler(request: Request, exc: Exception) -> Respons
     API_ERRORS_TOTAL.labels(
         path=request.url.path,
         method=request.method,
-        status_code=getattr(exc, "status_code", 429)
+        status_code=getattr(exc, "status_code", 429),
     ).inc()
     res = original_handler(request, exc)
     if inspect.isawaitable(res):
@@ -429,7 +429,6 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     from app.shared.core.error_governance import handle_exception
 
     return handle_exception(request, exc)
-
 
 # Prometheus Gauge for System Health
 SYSTEM_HEALTH = Gauge(

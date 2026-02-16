@@ -163,10 +163,9 @@ async def test_webhook_retry_execute_generic_rejects_non_json_content_type(db):
 @pytest.mark.asyncio
 async def test_webhook_retry_execute_generic_rejects_private_ip(db):
     handler = WebhookRetryHandler()
-    job = BackgroundJob(payload={
-        "url": "https://127.0.0.1/internal",
-        "data": {"foo": "bar"}
-    })
+    job = BackgroundJob(
+        payload={"url": "https://127.0.0.1/internal", "data": {"foo": "bar"}}
+    )
 
     with patch(
         "app.modules.governance.domain.jobs.handlers.notifications.get_settings",
@@ -183,11 +182,13 @@ async def test_webhook_retry_execute_generic_rejects_private_ip(db):
 @pytest.mark.asyncio
 async def test_webhook_retry_execute_generic_rejects_non_json_content_type(db):
     handler = WebhookRetryHandler()
-    job = BackgroundJob(payload={
-        "url": "https://example.com/webhook",
-        "data": {"foo": "bar"},
-        "headers": {"Content-Type": "text/plain"}
-    })
+    job = BackgroundJob(
+        payload={
+            "url": "https://example.com/webhook",
+            "data": {"foo": "bar"},
+            "headers": {"Content-Type": "text/plain"},
+        }
+    )
 
     with patch(
         "app.modules.governance.domain.jobs.handlers.notifications.get_settings",
@@ -199,6 +200,7 @@ async def test_webhook_retry_execute_generic_rejects_non_json_content_type(db):
     ):
         with pytest.raises(ValueError, match="content-type"):
             await handler.execute(job, db)
+
 
 @pytest.mark.asyncio
 async def test_webhook_retry_execute_paystack(db):

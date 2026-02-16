@@ -246,6 +246,7 @@ async def test_requires_role_owner_bypass():
         CurrentUser(id=uuid4(), email="a@b.com", role=cast(Any, "unknown"))
 
 
+
 @pytest.mark.asyncio
 async def test_requires_role_unknown_required_role():
     user = CurrentUser(id=uuid4(), email="a@b.com", role=UserRole.MEMBER)

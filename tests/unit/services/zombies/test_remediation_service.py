@@ -202,6 +202,7 @@ async def test_reject_requires_pending_status(remediation_service, db_session):
     with pytest.raises(ValueError, match="not pending"):
         await remediation_service.reject(request_id, tenant_id, reviewer_id)
 
+
 @pytest.mark.asyncio
 async def test_execute_errors(remediation_service, db_session):
     request_id = uuid4()

@@ -5,6 +5,7 @@ from app.models.tenant import UserRole
 from app.shared.core.auth import CurrentUser, get_current_user
 
 
+
 @pytest.mark.asyncio
 async def test_carbon_settings_lifecycle(
     async_client: AsyncClient, db, mock_user_id, mock_tenant_id, app

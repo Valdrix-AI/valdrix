@@ -69,6 +69,7 @@ async def test_process_failed_payment_first_attempt(mock_db, mock_subscription):
             assert mock_subscription.status == SubscriptionStatus.ATTENTION.value
             mock_enqueue.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_process_failed_payment_subscription_missing(mock_db):
     """Missing subscription returns error without raising."""

@@ -152,17 +152,19 @@ async def test_process_jobs_internal_insecure_secret_rejected(
 
 
 @pytest.mark.asyncio
-async def test_process_jobs_internal_insecure_secret_rejected(async_client: AsyncClient):
+async def test_process_jobs_internal_insecure_secret_rejected(
+    async_client: AsyncClient,
+):
     with patch("app.shared.core.config.get_settings") as mock_get_settings:
         mock_settings = MagicMock()
         mock_settings.INTERNAL_JOB_SECRET = "short-secret"
         mock_get_settings.return_value = mock_settings
 
         response = await async_client.post(
-            "/api/v1/jobs/internal/process",
-            params={"secret": "short-secret"}
+            "/api/v1/jobs/internal/process", params={"secret": "short-secret"}
         )
         assert response.status_code == 503
+
 
 @pytest.mark.asyncio
 async def test_stream_jobs_sse(async_client: AsyncClient):

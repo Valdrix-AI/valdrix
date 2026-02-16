@@ -53,7 +53,7 @@ BACKGROUND_JOB_DURATION = Histogram(
     "valdrix_ops_job_duration_seconds",
     "Duration of background job execution",
     ["job_type", "status"],
-    buckets=(1, 5, 10, 30, 60, 120, 300, 600, 1800)
+    buckets=(1, 5, 10, 30, 60, 120, 300, 600, 1800),
 )
 
 # --- Scan Performance Metrics ---
@@ -85,13 +85,13 @@ SCAN_FAILURE_TOTAL = Counter(
 SCAN_SUCCESS_TOTAL = Counter(
     "valdrix_ops_scan_success_total",
     "Total number of successful scans",
-    ["provider", "region"]
+    ["provider", "region"],
 )
 
 SCAN_FAILURE_TOTAL = Counter(
     "valdrix_ops_scan_failure_total",
     "Total number of failed scans",
-    ["provider", "region", "error_type"]
+    ["provider", "region", "error_type"],
 )
 
 # --- API & Remediation Metrics ---
@@ -136,7 +136,7 @@ REMEDIATION_SUCCESS_TOTAL = Counter(
 REMEDIATION_SUCCESS_TOTAL = Counter(
     "valdrix_ops_remediation_success_total",
     "Total number of successful remediations",
-    ["action", "provider"]
+    ["action", "provider"],
 )
 
 # --- LLM & Financial Metrics ---
@@ -240,89 +240,84 @@ LLM_REQUEST_DURATION = Histogram(
     "valdrix_ops_llm_request_duration_seconds",
     "Duration of LLM API requests",
     ["provider", "model"],
-    buckets=(0.5, 1, 2, 5, 10, 30, 60)
+    buckets=(0.5, 1, 2, 5, 10, 30, 60),
 )
 
 LLM_TOKENS_TOTAL = Counter(
     "valdrix_ops_llm_tokens_total",
     "Total number of LLM tokens processed",
-    ["provider", "model", "token_type"]  # input, output
+    ["provider", "model", "token_type"],  # input, output
 )
 
 # --- Circuit Breaker Metrics ---
 CIRCUIT_BREAKER_STATE = Gauge(
     "valdrix_ops_circuit_breaker_state",
     "Current state of circuit breakers (0=closed, 1=open, 2=half_open)",
-    ["circuit_name"]
+    ["circuit_name"],
 )
 
 CIRCUIT_BREAKER_FAILURES = Counter(
     "valdrix_ops_circuit_breaker_failures_total",
     "Total number of circuit breaker failures",
-    ["circuit_name"]
+    ["circuit_name"],
 )
 
 CIRCUIT_BREAKER_RECOVERIES = Counter(
     "valdrix_ops_circuit_breaker_recoveries_total",
     "Total number of circuit breaker recoveries",
-    ["circuit_name"]
+    ["circuit_name"],
 )
 
 # --- Retry & Resilience Metrics ---
 OPERATION_RETRIES_TOTAL = Counter(
     "valdrix_ops_operation_retries_total",
     "Total number of operation retries",
-    ["operation_type", "attempt"]
+    ["operation_type", "attempt"],
 )
 
 OPERATION_TIMEOUTS_TOTAL = Counter(
     "valdrix_ops_operation_timeouts_total",
     "Total number of operation timeouts",
-    ["operation_type"]
+    ["operation_type"],
 )
 
 # --- Database Metrics ---
 DB_CONNECTIONS_ACTIVE = Gauge(
     "valdrix_ops_db_connections_active",
     "Current number of active database connections",
-    ["pool_name"]
+    ["pool_name"],
 )
 
 DB_CONNECTIONS_IDLE = Gauge(
     "valdrix_ops_db_connections_idle",
     "Current number of idle database connections",
-    ["pool_name"]
+    ["pool_name"],
 )
 
 DB_QUERY_DURATION = Histogram(
     "valdrix_ops_db_query_duration_seconds",
     "Duration of database queries",
     ["operation_type"],
-    buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5)
+    buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5),
 )
 
 DB_DEADLOCKS_TOTAL = Counter(
-    "valdrix_ops_db_deadlocks_total",
-    "Total number of database deadlocks detected"
+    "valdrix_ops_db_deadlocks_total", "Total number of database deadlocks detected"
 )
 
 # --- Cache Metrics ---
 CACHE_HITS_TOTAL = Counter(
-    "valdrix_ops_cache_hits_total",
-    "Total number of cache hits",
-    ["cache_type"]
+    "valdrix_ops_cache_hits_total", "Total number of cache hits", ["cache_type"]
 )
 
 CACHE_MISSES_TOTAL = Counter(
-    "valdrix_ops_cache_misses_total",
-    "Total number of cache misses",
-    ["cache_type"]
+    "valdrix_ops_cache_misses_total", "Total number of cache misses", ["cache_type"]
 )
 
 CACHE_ERRORS_TOTAL = Counter(
     "valdrix_ops_cache_errors_total",
     "Total number of cache errors",
-    ["cache_type", "error_type"]
+    ["cache_type", "error_type"],
 )
 
 # --- RLS & Security Ops ---

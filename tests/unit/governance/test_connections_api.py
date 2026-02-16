@@ -87,14 +87,8 @@ def test_tier_gates_are_enforced(auth_user):
     assert check_cloud_plus_tier(auth_user) == PricingTier.PRO
 
 
-@pytest.mark.asyncio
-async def test_check_growth_tier_cache_hit(auth_user):
-    from app.modules.governance.api.v1.settings.connections import check_growth_tier
-    db = MagicMock()
-    db.execute = AsyncMock()
-    cache = MagicMock()
-    cache.get = AsyncMock(return_value=PricingTier.GROWTH.value)
-    cache.set = AsyncMock()
+    auth_user.tier = PricingTier.PRO
+    assert check_cloud_plus_tier(auth_user) == PricingTier.PRO
 
     with patch("app.shared.core.cache.get_cache_service", return_value=cache):
         await check_growth_tier(auth_user, db)
@@ -453,7 +447,9 @@ async def test_create_azure_connection_invalid_auth_method(
 
 
 @pytest.mark.asyncio
-async def test_create_azure_connection_requires_secret_when_auth_secret(ac, db, override_auth, auth_user):
+async def test_create_azure_connection_requires_secret_when_auth_secret(
+    ac, db, override_auth, auth_user
+):
     tenant = await db.get(Tenant, auth_user.tenant_id)
     tenant.plan = PricingTier.GROWTH.value
     await db.commit()
@@ -464,13 +460,16 @@ async def test_create_azure_connection_requires_secret_when_auth_secret(ac, db, 
         "azure_tenant_id": str(uuid4()),
         "client_id": str(uuid4()),
         "subscription_id": str(uuid4()),
-        "auth_method": "secret"
+        "auth_method": "secret",
     }
     resp = await ac.post("/api/v1/settings/connections/azure", json=payload)
     assert resp.status_code == 422
 
+
 @pytest.mark.asyncio
-async def test_create_azure_connection_invalid_auth_method(ac, db, override_auth, auth_user):
+async def test_create_azure_connection_invalid_auth_method(
+    ac, db, override_auth, auth_user
+):
     tenant = await db.get(Tenant, auth_user.tenant_id)
     tenant.plan = PricingTier.GROWTH.value
     await db.commit()
@@ -482,10 +481,11 @@ async def test_create_azure_connection_invalid_auth_method(ac, db, override_auth
         "client_id": str(uuid4()),
         "subscription_id": str(uuid4()),
         "client_secret": "secret",
-        "auth_method": "token"
+        "auth_method": "token",
     }
     resp = await ac.post("/api/v1/settings/connections/azure", json=payload)
     assert resp.status_code == 422
+
 
 @pytest.mark.asyncio
 async def test_verify_azure_connection(ac, db, override_auth, auth_user):
@@ -561,13 +561,17 @@ async def test_verify_azure_connection_denied_on_free(ac, db, override_auth, aut
 
 
 @pytest.mark.asyncio
-async def test_verify_azure_connection_tenant_isolation(ac, db, override_auth, auth_user):
+async def test_verify_azure_connection_tenant_isolation(
+    ac, db, override_auth, auth_user
+):
     tenant = await db.get(Tenant, auth_user.tenant_id)
     tenant.plan = PricingTier.GROWTH.value
     await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
-    other_tenant = Tenant(id=uuid4(), name="Other Tenant", plan=PricingTier.GROWTH.value)
+    other_tenant = Tenant(
+        id=uuid4(), name="Other Tenant", plan=PricingTier.GROWTH.value
+    )
     db.add(other_tenant)
     await db.commit()
 
@@ -576,7 +580,7 @@ async def test_verify_azure_connection_tenant_isolation(ac, db, override_auth, a
         name="Other Az",
         azure_tenant_id="t",
         client_id="c",
-        subscription_id="s"
+        subscription_id="s",
     )
     db.add(conn)
     await db.commit()
@@ -584,18 +588,26 @@ async def test_verify_azure_connection_tenant_isolation(ac, db, override_auth, a
     resp = await ac.post(f"/api/v1/settings/connections/azure/{conn.id}/verify")
     assert resp.status_code == 404
 
+
 @pytest.mark.asyncio
 async def test_verify_azure_connection_denied_on_free(ac, db, override_auth, auth_user):
     tenant = await db.get(Tenant, auth_user.tenant_id)
     tenant.plan = PricingTier.FREE.value
     await db.commit()
 
-    conn = AzureConnection(tenant_id=auth_user.tenant_id, name="Az", azure_tenant_id="t", client_id="c", subscription_id="s")
+    conn = AzureConnection(
+        tenant_id=auth_user.tenant_id,
+        name="Az",
+        azure_tenant_id="t",
+        client_id="c",
+        subscription_id="s",
+    )
     db.add(conn)
     await db.commit()
 
     resp = await ac.post(f"/api/v1/settings/connections/azure/{conn.id}/verify")
     assert resp.status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_list_azure_connections(ac, db, override_auth, auth_user):
@@ -741,7 +753,9 @@ async def test_verify_gcp_connection_denied_on_free(ac, db, override_auth, auth_
 
 
 @pytest.mark.asyncio
-async def test_create_gcp_connection_requires_json_when_secret(ac, db, override_auth, auth_user):
+async def test_create_gcp_connection_requires_json_when_secret(
+    ac, db, override_auth, auth_user
+):
     tenant = await db.get(Tenant, auth_user.tenant_id)
     tenant.plan = PricingTier.GROWTH.value
     await db.commit()
@@ -750,10 +764,11 @@ async def test_create_gcp_connection_requires_json_when_secret(ac, db, override_
     payload = {
         "name": "GCP Missing JSON",
         "project_id": "test-project-123",
-        "auth_method": "secret"
+        "auth_method": "secret",
     }
     resp = await ac.post("/api/v1/settings/connections/gcp", json=payload)
     assert resp.status_code == 422
+
 
 @pytest.mark.asyncio
 async def test_create_gcp_connection_invalid_json(ac, db, override_auth, auth_user):
@@ -766,14 +781,16 @@ async def test_create_gcp_connection_invalid_json(ac, db, override_auth, auth_us
         "name": "GCP Bad JSON",
         "project_id": "test-project-123",
         "service_account_json": "{bad-json",
-        "auth_method": "secret"
+        "auth_method": "secret",
     }
     resp = await ac.post("/api/v1/settings/connections/gcp", json=payload)
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_create_gcp_connection_workload_identity_verification_failure(ac, db, override_auth, auth_user):
+async def test_create_gcp_connection_workload_identity_verification_failure(
+    ac, db, override_auth, auth_user
+):
     tenant = await db.get(Tenant, auth_user.tenant_id)
     tenant.plan = PricingTier.GROWTH.value
     await db.commit()
@@ -782,13 +799,19 @@ async def test_create_gcp_connection_workload_identity_verification_failure(ac, 
     payload = {
         "name": "GCP WIF",
         "project_id": "wif-project-123",
-        "auth_method": "workload_identity"
+        "auth_method": "workload_identity",
     }
-    with patch("app.shared.connections.oidc.OIDCService.verify_gcp_access", new_callable=AsyncMock) as mock_verify:
+    with patch(
+        "app.shared.connections.oidc.OIDCService.verify_gcp_access",
+        new_callable=AsyncMock,
+    ) as mock_verify:
         mock_verify.return_value = (False, "STS exchange failed")
         resp = await ac.post("/api/v1/settings/connections/gcp", json=payload)
         assert resp.status_code == 400
-        assert "Workload Identity verification failed" in (resp.json().get("error") or resp.json().get("message") or "")
+        assert "Workload Identity verification failed" in (
+            resp.json().get("error") or resp.json().get("message") or ""
+        )
+
 
 @pytest.mark.asyncio
 async def test_verify_gcp_connection_denied_on_free(ac, db, override_auth, auth_user):
@@ -802,6 +825,7 @@ async def test_verify_gcp_connection_denied_on_free(ac, db, override_auth, auth_
 
     resp = await ac.post(f"/api/v1/settings/connections/gcp/{conn.id}/verify")
     assert resp.status_code == 403
+
 
 @pytest.mark.asyncio
 async def test_list_gcp_connections(ac, db, override_auth, auth_user):
@@ -834,14 +858,18 @@ async def test_list_gcp_connections_tenant_isolation(ac, db, override_auth, auth
 
 @pytest.mark.asyncio
 async def test_list_gcp_connections_tenant_isolation(ac, db, override_auth, auth_user):
-    other_tenant = Tenant(id=uuid4(), name="Other Tenant", plan=PricingTier.GROWTH.value)
+    other_tenant = Tenant(
+        id=uuid4(), name="Other Tenant", plan=PricingTier.GROWTH.value
+    )
     db.add(other_tenant)
     await db.commit()
 
-    db.add_all([
-        GCPConnection(tenant_id=auth_user.tenant_id, name="Mine", project_id="p1"),
-        GCPConnection(tenant_id=other_tenant.id, name="Other", project_id="p2"),
-    ])
+    db.add_all(
+        [
+            GCPConnection(tenant_id=auth_user.tenant_id, name="Mine", project_id="p1"),
+            GCPConnection(tenant_id=other_tenant.id, name="Other", project_id="p2"),
+        ]
+    )
     await db.commit()
 
     resp = await ac.get("/api/v1/settings/connections/gcp")
@@ -849,6 +877,7 @@ async def test_list_gcp_connections_tenant_isolation(ac, db, override_auth, auth
     data = resp.json()
     assert len(data) == 1
     assert data[0]["project_id"] == "p1"
+
 
 @pytest.mark.asyncio
 async def test_delete_gcp_connection(ac, db, override_auth, auth_user):
@@ -1286,7 +1315,7 @@ async def test_link_discovered_account_not_authorized(ac, db, override_auth, aut
         role_arn="arn",
         external_id="vx-1010",
         is_management_account=True,
-        status="active"
+        status="active",
     )
     db.add(mgmt)
     await db.commit()
@@ -1295,7 +1324,7 @@ async def test_link_discovered_account_not_authorized(ac, db, override_auth, aut
         management_connection_id=mgmt.id,
         account_id="999999999998",
         name="Foreign Account",
-        status="discovered"
+        status="discovered",
     )
     db.add(disc)
     await db.commit()
@@ -1303,11 +1332,13 @@ async def test_link_discovered_account_not_authorized(ac, db, override_auth, aut
     resp = await ac.post(f"/api/v1/settings/connections/aws/discovered/{disc.id}/link")
     assert resp.status_code == 404
 
+
 @pytest.mark.asyncio
 async def test_list_discovered_accounts_empty(ac, override_auth):
     resp = await ac.get("/api/v1/settings/connections/aws/discovered")
     assert resp.status_code == 200
     assert resp.json() == []
+
 
 @pytest.mark.asyncio
 async def test_list_discovered_accounts_sorted(ac, db, override_auth, auth_user):
@@ -1317,7 +1348,7 @@ async def test_list_discovered_accounts_sorted(ac, db, override_auth, auth_user)
         role_arn="arn",
         external_id="vx-2222",
         is_management_account=True,
-        status="active"
+        status="active",
     )
     db.add(mgmt)
     await db.commit()
@@ -1327,14 +1358,14 @@ async def test_list_discovered_accounts_sorted(ac, db, override_auth, auth_user)
         account_id="111100001111",
         name="Old",
         status="discovered",
-        last_discovered_at=datetime.now(timezone.utc) - timedelta(days=1)
+        last_discovered_at=datetime.now(timezone.utc) - timedelta(days=1),
     )
     newer = DiscoveredAccount(
         management_connection_id=mgmt.id,
         account_id="222200002222",
         name="New",
         status="discovered",
-        last_discovered_at=datetime.now(timezone.utc)
+        last_discovered_at=datetime.now(timezone.utc),
     )
     db.add_all([older, newer])
     await db.commit()
@@ -1343,6 +1374,7 @@ async def test_list_discovered_accounts_sorted(ac, db, override_auth, auth_user)
     assert resp.status_code == 200
     data = resp.json()
     assert data[0]["account_id"] == "222200002222"
+
 
 @pytest.mark.asyncio
 async def test_create_azure_connection_duplicate(ac, db, override_auth, auth_user):

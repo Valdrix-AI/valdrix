@@ -29,6 +29,7 @@ SCHEDULER_LOCK_BASE_ID = 48293021
 
 class SchedulerOrchestrator:
     """Manages APScheduler and job distribution."""
+
     REGION_TO_ELECTRICITYMAP_ZONE = {
         "us-east-1": "US-MIDA-PJM",
         "us-west-2": "US-NW-BPAT",

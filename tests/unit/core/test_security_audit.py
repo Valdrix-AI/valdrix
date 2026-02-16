@@ -26,6 +26,7 @@ def mock_settings() -> Any:
         yield mock
 
 
+
 @pytest.fixture(autouse=True)
 def set_env() -> Any:
     with patch.dict(
