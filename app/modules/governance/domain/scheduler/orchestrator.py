@@ -8,7 +8,6 @@ import structlog
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from typing import Dict, Any
-import httpx
 
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.processors import AnalysisProcessor
@@ -148,16 +147,16 @@ class SchedulerOrchestrator:
             return cached[0]
 
         try:
-            async with httpx.AsyncClient(
-                timeout=settings.CARBON_INTENSITY_API_TIMEOUT_SECONDS
-            ) as client:
-                response = await client.get(
-                    "https://api.electricitymap.org/v3/carbon-intensity/latest",
-                    params={"zone": zone},
-                    headers={"auth-token": api_key},
-                )
-                response.raise_for_status()
-                payload = response.json()
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            response = await client.get(
+                "https://api.electricitymap.org/v3/carbon-intensity/latest",
+                params={"zone": zone},
+                headers={"auth-token": api_key},
+            )
+            response.raise_for_status()
+            payload = response.json()
             intensity = payload.get("carbonIntensity")
             if intensity is None:
                 return None

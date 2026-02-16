@@ -6,7 +6,6 @@ Prioritizes Paystack for NGN rates to ensure alignment with user billing.
 """
 
 import time
-import httpx
 from decimal import Decimal
 from typing import Dict, Optional
 import structlog
@@ -37,24 +36,22 @@ async def fetch_paystack_ngn_rate() -> Optional[Decimal]:
         return None
 
     try:
-        async with httpx.AsyncClient() as client:
-            # Paystack undocumented (but used by SDKs) rate endpoint
-            # Fallback: We can check their balance or recent transfers if needed
-            # For now, we'll try a common approach: simulating a conversion or using the decision API
-            response = await client.get(
-                "https://api.paystack.co/transfer/rate?from=USD&to=NGN",
-                headers={"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"},
-                timeout=10.0,
-            )
+        from app.shared.core.http import get_http_client
 
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") and "data" in data:
-                    rate = data["data"].get("rate")
-                    if rate:
-                        return Decimal(str(rate))
+        client = get_http_client()
+        response = await client.get(
+            "https://api.paystack.co/transfer/rate?from=USD&to=NGN",
+            headers={"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"},
+            timeout=10.0,
+        )
 
-            logger.warning("paystack_rate_fetch_failed", status=response.status_code)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("status") and "data" in data:
+                rate = data["data"].get("rate")
+                if rate:
+                    return Decimal(str(rate))
+        logger.warning("paystack_rate_fetch_failed", status=response.status_code)
     except Exception as e:
         logger.error("paystack_rate_fetch_error", error=str(e))
 
@@ -67,16 +64,17 @@ async def fetch_public_exchange_rates() -> Dict[str, Decimal]:
     Provides a professional fallback for non-Paystack markets.
     """
     try:
-        async with httpx.AsyncClient() as client:
-            # Using a reliable public API for global rates
-            response = await client.get(
-                "https://open.er-api.com/v6/latest/USD", timeout=10.0
-            )
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("result") == "success":
-                    rates = data.get("rates", {})
-                    return {k: Decimal(str(v)) for k, v in rates.items()}
+        from app.shared.core.http import get_http_client
+
+        client = get_http_client()
+        response = await client.get(
+            "https://open.er-api.com/v6/latest/USD", timeout=10.0
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("result") == "success":
+                rates = data.get("rates", {})
+                return {k: Decimal(str(v)) for k, v in rates.items()}
     except Exception as e:
         logger.warning("public_rate_fetch_failed", error=str(e))
     return {}

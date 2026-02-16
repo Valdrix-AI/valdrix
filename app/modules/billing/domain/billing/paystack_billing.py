@@ -78,23 +78,25 @@ class PaystackClient:
         endpoint: str,
         data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.request(
-                    method,
-                    f"{self.BASE_URL}/{endpoint}",
-                    headers=self.headers,
-                    json=data,
-                    timeout=30.0,
-                )
-                response.raise_for_status()
-                payload = response.json()
-                if not isinstance(payload, dict):
-                    raise ValueError("Invalid Paystack response payload type")
-                return payload
-            except httpx.HTTPError as e:
-                logger.error("paystack_api_error", endpoint=endpoint, error=str(e))
-                raise
+        from app.shared.core.http import get_http_client
+
+        client = get_http_client()
+        try:
+            response = await client.request(
+                method,
+                f"{self.BASE_URL}/{endpoint}",
+                headers=self.headers,
+                json=data,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("Invalid Paystack response payload type")
+            return payload
+        except httpx.HTTPError as e:
+            logger.error("paystack_api_error", endpoint=endpoint, error=str(e))
+            raise
 
     async def initialize_transaction(
         self,

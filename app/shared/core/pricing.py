@@ -13,6 +13,20 @@ import structlog
 
 logger = structlog.get_logger()
 
+__all__ = [
+    "PricingTier",
+    "FeatureFlag",
+    "TIER_CONFIG",
+    "normalize_tier",
+    "get_tier_config",
+    "is_feature_enabled",
+    "get_tier_limit",
+    "requires_tier",
+    "requires_feature",
+    "get_tenant_tier",
+    "TierGuard",
+]
+
 
 class PricingTier(str, Enum):
     """Available subscription tiers."""

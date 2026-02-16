@@ -14,7 +14,6 @@ from typing import Any, Protocol
 from urllib.parse import quote, urlparse
 from uuid import UUID
 
-import httpx
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -114,8 +113,10 @@ class GitHubActionsDispatcher:
             "X-GitHub-Api-Version": "2022-11-28",
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(endpoint, json=body, headers=headers)
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            response = await client.post(endpoint, json=body, headers=headers)
             if response.status_code in {200, 201, 204}:
                 return True
             logger.warning(
@@ -153,8 +154,10 @@ class GitLabCIDispatcher:
             "variables[VALDRIX_PAYLOAD_JSON]": _serialize_payload(payload)[:10000],
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(endpoint, data=form)
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            response = await client.post(endpoint, data=form)
             if response.status_code in {200, 201}:
                 return True
             logger.warning(
@@ -202,8 +205,10 @@ class GenericCIWebhookDispatcher:
 
         body = {"event_type": event_type, "payload": payload}
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(self.url, json=body, headers=headers)
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            response = await client.post(self.url, json=body, headers=headers)
             if 200 <= response.status_code < 300:
                 return True
             logger.warning(

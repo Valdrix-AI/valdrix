@@ -101,7 +101,8 @@ class CarbonFactorService:
             )
             .limit(1)
         )
-        return await self.db.scalar(stmt)
+        from typing import cast
+        return cast(CarbonFactorSet | None, await self.db.scalar(stmt))
 
     async def ensure_active(self) -> CarbonFactorSet:
         active = await self.get_active()

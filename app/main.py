@@ -48,30 +48,7 @@ from app.shared.core.rate_limit import (
 )
 
 # Ensure all models are registered with SQLAlchemy
-import app.models.tenant
-import app.models.aws_connection
-import app.models.azure_connection
-import app.models.gcp_connection
-import app.models.saas_connection
-import app.models.license_connection
-import app.models.platform_connection
-import app.models.hybrid_connection
-import app.models.llm
-import app.models.notification_settings
-import app.models.remediation
-import app.models.remediation_settings
-import app.models.background_job
-import app.models.attribution
-import app.models.carbon_settings
-import app.models.cost_audit
-import app.models.discovered_account
-import app.models.pricing
-import app.models.security
-import app.models.anomaly_marker
-import app.models.optimization
-import app.models.unit_economics_settings
-import app.models.tenant_identity_settings
-import app.modules.governance.domain.security.audit_log
+# Ensure all models are registered with SQLAlchemy
 
 
 from app.modules.governance.api.v1.settings.onboard import router as onboard_router
@@ -231,15 +208,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 exc_info=True,
             )
 
+    from app.shared.core.http import init_http_client, close_http_client
+
+    # Initialize Singleton HTTP Client (2026 Pooling Standard)
+    await init_http_client()
+
     yield
 
-    # Teardown: Stop scheduler and tracker
+    # Teardown: Stop all services gracefully
     logger.info("Shutting down...")
+
+    # Close HTTP pool first (prevents new requests while shutting down)
+    await close_http_client()
+
     scheduler.stop()
     if tracker:
         tracker.stop()
 
-    # Item 18: Async Database Engine Cleanup
+    # Final DB Cleanup
     await engine.dispose()
     logger.info("db_engine_disposed")
 
@@ -254,6 +240,8 @@ valdrix_app = FastAPI(
 )
 app: FastAPI = valdrix_app  # noqa: A001  # type: ignore[no-redef] (uvicorn app.main:app)
 router = valdrix_app
+
+__all__ = ["app", "valdrix_app", "lifespan"]
 
 # Initialize Tracing
 setup_tracing(valdrix_app)
@@ -430,35 +418,12 @@ valdrix_app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 @valdrix_app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
-    Handle unhandled exceptions with a standardized response.
-    Item 4 & 10: Prevents leaking stack traces and provides machine-readable error codes.
-    Ensures NO internal variables (env or local) are leaked in the response.
+    Handle unhandled exceptions with standardized 2026 Error Governance.
+    Ensures OTel trace correlation and sanitized responses.
     """
-    from uuid import uuid4
+    from app.shared.core.error_governance import handle_exception
 
-    error_id = str(uuid4())
-
-    # Log the full exception internally (Sentry or local logs)
-    logger.exception(
-        "unhandled_exception",
-        path=request.url.path,
-        method=request.method,
-        error_id=error_id,
-    )
-    API_ERRORS_TOTAL.labels(
-        path=request.url.path, method=request.method, status_code=500
-    ).inc()
-
-    # Standardized response for end users
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Internal Server Error",
-            "code": "INTERNAL_ERROR",
-            "message": "An unexpected error occurred. Please contact support with the error ID.",
-            "error_id": error_id,
-        },
-    )
+    return handle_exception(request, exc)
 
 
 # Prometheus Gauge for System Health

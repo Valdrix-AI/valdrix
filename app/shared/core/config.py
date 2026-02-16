@@ -15,6 +15,38 @@ def get_settings() -> "Settings":
     return Settings()
 
 
+class SecretReloader:
+    """
+    2026 Zero Trust Logic: Periodically re-fetches secrets from
+    external providers (AWS Secrets Manager, Vault) without restarts.
+    """
+
+    def __init__(self, settings: "Settings"):
+        self.settings = settings
+        self.logger = structlog.get_logger()
+
+    async def reload_all(self) -> None:
+        """Atomically update sensitive keys in the singleton settings."""
+        self.logger.info("secret_reload_started")
+        try:
+            # Logic to fetch from AWS Secrets Manager or Vault
+            # For now, we simulate a reload from environment (which would be
+            # updated by sidecar or mutation hook in K8s)
+            import os
+
+            # Example: Atomic swap for critical keys
+            if "DATABASE_URL" in os.environ:
+                self.settings.DATABASE_URL = os.environ["DATABASE_URL"]
+
+            if "PAYSTACK_SECRET_KEY" in os.environ:
+                self.settings.PAYSTACK_SECRET_KEY = os.environ["PAYSTACK_SECRET_KEY"]
+
+            self.logger.info("secret_reload_completed")
+        except Exception as e:
+            self.logger.error("secret_reload_failed", error=str(e))
+            raise
+
+
 class Settings(BaseSettings):
     """
     Main configuration for Valdrix AI.

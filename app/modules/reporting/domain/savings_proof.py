@@ -342,7 +342,7 @@ class SavingsProofService:
 
         # "provider" drilldown is just a reshaped SavingsProofResponse breakdown.
         if dim == "provider":
-            payload = await self.generate(
+            summary = await self.generate(
                 tenant_id=tenant_id,
                 tier=tier,
                 start_date=start_date,
@@ -359,21 +359,21 @@ class SavingsProofService:
                     pending_remediations=int(item.pending_remediations),
                     completed_remediations=int(item.completed_remediations),
                 )
-                for item in payload.breakdown
+                for item in summary.breakdown
             ]
             return SavingsProofDrilldownResponse(
-                start_date=payload.start_date,
-                end_date=payload.end_date,
-                as_of=payload.as_of,
-                tier=payload.tier,
+                start_date=summary.start_date,
+                end_date=summary.end_date,
+                as_of=summary.as_of,
+                tier=summary.tier,
                 provider=normalized_provider,
                 dimension="provider",
-                opportunity_monthly_usd=float(payload.opportunity_monthly_usd),
-                realized_monthly_usd=float(payload.realized_monthly_usd),
+                opportunity_monthly_usd=float(summary.opportunity_monthly_usd),
+                realized_monthly_usd=float(summary.realized_monthly_usd),
                 buckets=buckets,
                 truncated=False,
                 limit=top_limit,
-                notes=payload.notes,
+                notes=summary.notes,
             )
 
         buckets_by_key: dict[str, dict[str, Any]] = {}

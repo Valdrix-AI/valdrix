@@ -89,6 +89,7 @@ class ZombieService(BaseService):
             "idle_serverless_services": [],
             "idle_serverless_functions": [],
             "orphan_network_components": [],
+            "errors": [],
         }
         all_zombies["scanned_connections"] = len(all_connections)
         total_waste = 0.0
@@ -225,6 +226,14 @@ class ZombieService(BaseService):
                             logger.error(
                                 "regional_scan_failed", region=reg, error=str(e)
                             )
+                            all_zombies["errors"].append(
+                                {
+                                    "provider": "aws",
+                                    "region": reg,
+                                    "error": str(e),
+                                    "connection_id": str(conn.id),
+                                }
+                            )
 
                     await asyncio.gather(
                         *(scan_single_region(r) for r in enabled_regions)
@@ -246,6 +255,16 @@ class ZombieService(BaseService):
             except Exception as e:
                 logger.error(
                     "scan_provider_failed", error=str(e), provider=type(conn).__name__
+                )
+                all_zombies["errors"].append(
+                    {
+                        "provider": type(conn)
+                        .__name__.replace("Connection", "")
+                        .lower(),
+                        "region": "global",
+                        "error": str(e),
+                        "connection_id": str(conn.id),
+                    }
                 )
 
         # Execute all scans in parallel with a hard 5-minute timeout for the entire operation

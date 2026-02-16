@@ -233,8 +233,8 @@ class FocusV13ExportService:
         except Exception:
             logger.debug("focus_export_stream_fallback_to_execute")
 
-        result = await self.db.execute(stmt)
-        for cost_record, account in result.all():
+        sync_result = await self.db.execute(stmt)
+        for cost_record, account in sync_result.all():
             yield self._row_to_focus(cost_record, account, contexts)
 
     async def _load_account_contexts(
@@ -392,10 +392,12 @@ class FocusV13ExportService:
         if model is None:
             return
 
-        result = await self.db.execute(
-            select(model.id, model.vendor).where(model.id.in_(account_ids))
+        sync_result = await self.db.execute(
+            select(getattr(model, "id"), getattr(model, "vendor")).where(
+                getattr(model, "id").in_(account_ids)
+            )
         )
-        for conn_id, vendor in result.all():
+        for conn_id, vendor in sync_result.all():
             ctx = contexts.get(conn_id)
             if not ctx:
                 continue

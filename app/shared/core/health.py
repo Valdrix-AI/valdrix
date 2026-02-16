@@ -12,7 +12,6 @@ import structlog
 from typing import Any, Dict, List
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-import httpx
 
 from app.shared.core.config import get_settings
 from app.shared.core.system_resources import (
@@ -81,17 +80,19 @@ class HealthCheckService:
     async def check_aws(self) -> tuple[bool, Dict[str, Any]]:
         """Public method for checking AWS connectivity, return (is_reachable, details)."""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get("https://sts.amazonaws.com")
+            from app.shared.core.http import get_http_client
 
-                if response.status_code < 400:
-                    return True, {"reachable": True}
-                elif response.status_code < 500:
-                    # Client errors (4xx) still mean the service is reachable
-                    return True, {"reachable": True}
-                else:
-                    # Server errors (5xx) mean unreachable
-                    return False, {"error": f"STS returned {response.status_code}"}
+            client = get_http_client()
+            response = await client.get("https://sts.amazonaws.com")
+
+            if response.status_code < 400:
+                return True, {"reachable": True}
+            elif response.status_code < 500:
+                # Client errors (4xx) still mean the service is reachable
+                return True, {"reachable": True}
+            else:
+                # Server errors (5xx) mean unreachable
+                return False, {"error": f"STS returned {response.status_code}"}
 
         except Exception as e:
             return False, {"error": str(e)}
@@ -203,14 +204,15 @@ class HealthCheckService:
         """Check external service connectivity."""
         services_status = {}
 
-        # Check AWS STS
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get("https://sts.amazonaws.com")
-                services_status["aws_sts"] = {
-                    "status": "healthy" if response.status_code < 500 else "unhealthy",
-                    "response_code": response.status_code,
-                }
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            response = await client.get("https://sts.amazonaws.com")
+            services_status["aws_sts"] = {
+                "status": "healthy" if response.status_code < 500 else "unhealthy",
+                "response_code": response.status_code,
+            }
         except Exception as e:
             services_status["aws_sts"] = {"status": "unhealthy", "error": str(e)}
 
@@ -322,6 +324,8 @@ class HealthCheckService:
             from app.models.background_job import BackgroundJob, JobStatus
             from datetime import timedelta
 
+            import sqlalchemy as sa
+
             cutoff_time = datetime.now(timezone.utc) - timedelta(hours=1)
 
             result = await self.db.execute(
@@ -344,13 +348,15 @@ class HealthCheckService:
             result = await self.db.execute(
                 select(
                     func.count().label("total"),
-                    func.sum(BackgroundJob.status == JobStatus.PENDING).label(
-                        "pending"
-                    ),
-                    func.sum(BackgroundJob.status == JobStatus.RUNNING).label(
-                        "running"
-                    ),
-                    func.sum(BackgroundJob.status == JobStatus.FAILED).label("failed"),
+                    func.sum(
+                        sa.cast(BackgroundJob.status == JobStatus.PENDING, sa.Integer)
+                    ).label("pending"),
+                    func.sum(
+                        sa.cast(BackgroundJob.status == JobStatus.RUNNING, sa.Integer)
+                    ).label("running"),
+                    func.sum(
+                        sa.cast(BackgroundJob.status == JobStatus.FAILED, sa.Integer)
+                    ).label("failed"),
                 )
             )
 

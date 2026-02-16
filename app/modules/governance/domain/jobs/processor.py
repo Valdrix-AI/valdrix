@@ -25,6 +25,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.background_job import BackgroundJob, JobStatus
+
+__all__ = ["JobProcessor", "JobStatus", "enqueue_job"]
+
 from app.modules.governance.domain.jobs.handlers import get_handler_factory
 
 logger = structlog.get_logger()

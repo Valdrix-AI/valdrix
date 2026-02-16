@@ -28,6 +28,8 @@ from app.models.remediation import (
     RemediationStatus,
     RemediationAction,
 )
+
+__all__ = ["RemediationService", "RemediationStatus", "RemediationAction"]
 from app.models.remediation_settings import RemediationSettings
 from app.modules.governance.domain.security.audit_log import AuditLogger, AuditEventType
 from app.modules.governance.domain.security.remediation_policy import (

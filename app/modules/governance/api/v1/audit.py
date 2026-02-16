@@ -3557,8 +3557,7 @@ async def export_compliance_pack(
                 )
                 if normalized_realized_provider:
                     realized_stmt = realized_stmt.where(
-                        RealizedSavingsEvent.provider
-                        == normalized_realized_provider
+                        RealizedSavingsEvent.provider == normalized_realized_provider
                     )
 
                 rows = list((await db.execute(realized_stmt)).all())

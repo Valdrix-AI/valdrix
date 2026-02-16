@@ -414,8 +414,10 @@ class SaaSAdapter(BaseAdapter):
         last_error: Exception | None = None
         for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
             try:
-                async with httpx.AsyncClient(timeout=_NATIVE_TIMEOUT_SECONDS) as client:
-                    response = await client.get(url, headers=headers, params=params)
+                from app.shared.core.http import get_http_client
+
+                client = get_http_client()
+                response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 payload = response.json()
                 if not isinstance(payload, dict):

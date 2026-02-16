@@ -1,4 +1,3 @@
-import httpx
 import structlog
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,15 +73,17 @@ class ExchangeRateService:
     async def _fetch_from_api(self) -> float:
         """Fetch latest rate from ExchangeRate-API."""
         url = f"{self.API_URL}/{self.api_key}/latest/USD"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=10.0)
-            response.raise_for_status()
-            data = response.json()
+        from app.shared.core.http import get_http_client
 
-            if data.get("result") == "success":
-                return float(data["conversion_rates"]["NGN"])
+        client = get_http_client()
+        response = await client.get(url, timeout=10.0)
+        response.raise_for_status()
+        data = response.json()
 
-            raise ValueError(f"API returned failure: {data.get('error-type')}")
+        if data.get("result") == "success":
+            return float(data["conversion_rates"]["NGN"])
+
+        raise ValueError(f"API returned failure: {data.get('error-type')}")
 
     async def _update_db_cache(self, rate: float) -> None:
         """Update or insert the exchange rate in the database."""

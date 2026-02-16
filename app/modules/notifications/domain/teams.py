@@ -19,7 +19,6 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
-import httpx
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -206,8 +205,10 @@ class TeamsService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                resp = await client.post(self.webhook_url, json=payload)
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            resp = await client.post(self.webhook_url, json=payload)
             # Teams webhooks typically return 200 OK on success.
             if 200 <= resp.status_code < 300:
                 return True

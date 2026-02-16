@@ -18,6 +18,16 @@ class ValdrixException(Exception):
         self.status_code = status_code
         self.details = details or {}
 
+    def record_to_otel(self) -> None:
+        """Record this exception to the current OpenTelemetry span."""
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        if span.is_recording():
+            span.record_exception(self)
+            span.set_attribute("exception.code", self.code)
+            span.set_status(trace.Status(trace.StatusCode.ERROR, self.message))
+
     def __str__(self) -> str:
         return f"[{self.code}] {self.message} (Status: {self.status_code})"
 
