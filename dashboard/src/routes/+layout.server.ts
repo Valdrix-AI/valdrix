@@ -15,7 +15,7 @@ const PROFILE_TIMEOUT_MS = 4000;
 export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 	const { session, user } = await locals.safeGetSession();
 
-	let subscription = { tier: 'free_trial', status: 'active' };
+	let subscription = { tier: 'free', status: 'active' };
 	let profile: { persona: string; role?: string; tier?: string } | null = null;
 
 	// Fetch subscription tier if user is authenticated
@@ -36,7 +36,6 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 			}
 		} catch (e) {
 			// Default to free if fetch fails
-			console.error('Failed to fetch subscription:', e);
 		}
 
 		// Fetch user profile (persona preference) for persona-aware UX defaults
@@ -55,7 +54,7 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 				profile = await res.json();
 			}
 		} catch (e) {
-			console.error('Failed to fetch profile:', e);
+			// Profile fetch failed
 		}
 	}
 

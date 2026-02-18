@@ -4,7 +4,7 @@
   Features:
   - USD pricing with NGN payment note
   - Highlight Growth as "Most Popular"
-  - 14-day trial CTA
+  - Permanent free tier CTA
   - Feature comparison table
 -->
 
@@ -46,7 +46,7 @@
 			period: '/mo',
 			description: 'For growing teams who need AI-powered cost intelligence.',
 			features: ['Multi-cloud support', 'AI insights', 'GreenOps'],
-			cta: 'Start Free Trial',
+			cta: 'Start with Growth',
 			popular: true
 		},
 		{
@@ -57,7 +57,7 @@
 			period: '/mo',
 			description: 'For teams who want automated optimization and full API access.',
 			features: ['Automated remediation', 'Priority support', 'Full API access'],
-			cta: 'Start Free Trial',
+			cta: 'Start with Pro',
 			popular: false
 		}
 	]);
@@ -127,12 +127,12 @@
 	<title>Pricing | Valdrix</title>
 	<meta
 		name="description"
-		content="Simple, transparent pricing for cloud cost optimization. Start with a 14-day free trial."
+		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier."
 	/>
 	<meta property="og:title" content="Pricing | Valdrix" />
 	<meta
 		property="og:description"
-		content="Simple, transparent pricing for cloud cost optimization. Start with a 14-day free trial."
+		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier."
 	/>
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
@@ -144,7 +144,7 @@
 	<meta name="twitter:title" content="Pricing | Valdrix" />
 	<meta
 		name="twitter:description"
-		content="Simple, transparent pricing for cloud cost optimization. Start with a 14-day free trial."
+		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier."
 	/>
 </svelte:head>
 
@@ -153,7 +153,7 @@
 	<div class="hero-section">
 		<h1 class="hero-title">Simple, Transparent Pricing</h1>
 		<p class="hero-subtitle">
-			Start with a <strong>14-day free trial</strong>. No credit card required.
+			Start with a <strong>permanent free tier</strong>. No credit card required.
 		</p>
 
 		<!-- Cycle Toggle -->
@@ -261,8 +261,8 @@
 
 		<div class="faq-grid">
 			<div class="faq-item">
-				<h3>What happens after my trial ends?</h3>
-				<p>After 14 days, you'll be prompted to choose a paid plan. No automatic charges—ever.</p>
+				<h3>How does the free tier work?</h3>
+				<p>The free tier is permanent with usage limits. Upgrade anytime when you need more scale.</p>
 			</div>
 
 			<div class="faq-item">

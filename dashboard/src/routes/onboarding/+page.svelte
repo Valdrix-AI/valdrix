@@ -72,7 +72,7 @@
 	let success = $state(false);
 	let copied = $state(false);
 
-	const API_URL = PUBLIC_API_URL || 'http://localhost:8000';
+	const API_URL = PUBLIC_API_URL || '';
 
 	const growthAndAbove = ['growth', 'pro', 'enterprise'];
 	const cloudPlusAllowed = ['pro', 'enterprise'];

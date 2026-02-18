@@ -24,7 +24,7 @@
 		remediating = null
 	}: {
 		resources: ZombieFinding[];
-		onRemediate: (finding: ZombieFinding) => Promise<void>;
+		onRemediate: (finding: ZombieFinding) => void | Promise<void>;
 		remediating?: string | null;
 	} = $props();
 

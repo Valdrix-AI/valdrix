@@ -157,7 +157,7 @@
 					{mode === 'login' ? 'Welcome back' : 'Create your account'}
 				</h1>
 				<p class="text-ink-400 text-sm mt-1">
-					{mode === 'login' ? 'Sign in to continue' : 'Start your free trial'}
+					{mode === 'login' ? 'Sign in to continue' : 'Start for free'}
 				</p>
 			</div>
 

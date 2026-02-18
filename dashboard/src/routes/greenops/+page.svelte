@@ -229,7 +229,7 @@
 			<div class="flex items-center justify-center py-20">
 				<div class="animate-spin rounded-full h-8 w-8 border-t-2 border-accent-500"></div>
 			</div>
-		{:else if !['growth', 'pro', 'enterprise', 'free_trial'].includes(data.subscription?.tier)}
+		{:else if !['growth', 'pro', 'enterprise', 'free'].includes(data.subscription?.tier)}
 			<!-- Tier Gating: Show blurred preview with upgrade overlay -->
 			<div class="relative">
 				<!-- Upgrade Overlay -->

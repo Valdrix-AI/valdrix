@@ -42,7 +42,7 @@ describe('IdentitySettingsCard', () => {
 	it('renders upgrade overlay when tier is below pro', async () => {
 		render(IdentitySettingsCard, {
 			accessToken: 'token',
-			tier: 'free_trial'
+			tier: 'free'
 		});
 
 		expect(screen.getByText('Identity (SSO/SCIM)')).toBeTruthy();
