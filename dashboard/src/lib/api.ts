@@ -40,138 +40,133 @@ export async function resilientFetch(
 ): Promise<Response> {
 	const { timeoutMs: timeoutMsOverride, ...optionsRest } = options;
 	const timeoutMs = timeoutMsOverride ?? 30000; // 30 seconds (Requirement FE-M7)
+	const requestOptions: RequestInit = {
+		...optionsRest,
+		credentials: optionsRest.credentials ?? 'include'
+	};
 
-	try {
-		const requestOptions: RequestInit = {
-			...optionsRest,
-			credentials: optionsRest.credentials ?? 'include'
-		};
+	// Automatic CSRF Protection (SEC-01)
+	const method = requestOptions.method?.toUpperCase() || 'GET';
+	if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+		let csrfToken = getCookie('fastapi-csrf-token');
 
-		// Automatic CSRF Protection (SEC-01)
-		const method = requestOptions.method?.toUpperCase() || 'GET';
-		if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
-			let csrfToken = getCookie('fastapi-csrf-token');
-
-			// SEC-06: Prevent CSRF Race Condition with Singleton Promise
-			if (!csrfToken) {
-				if (!csrfPromise) {
-					csrfPromise = (async () => {
-						try {
-							const csrfRes = await fetchWithTimeout(
-								fetch,
-								`${PUBLIC_API_URL}/public/csrf`,
-								{ credentials: requestOptions.credentials },
-								Math.min(5000, timeoutMs)
-							);
-							if (csrfRes.ok) {
-								const data = await csrfRes.json();
-								return data.csrf_token;
-							}
-						} catch (e) {
-							// Silent fail for token pre-fetch
-						} finally {
-							// Allow subsequent retries if some requests still fail
-							setTimeout(() => {
-								csrfPromise = null;
-							}, 1000);
+		// SEC-06: Prevent CSRF Race Condition with Singleton Promise
+		if (!csrfToken) {
+			if (!csrfPromise) {
+				csrfPromise = (async () => {
+					try {
+						const csrfRes = await fetchWithTimeout(
+							fetch,
+							`${PUBLIC_API_URL}/public/csrf`,
+							{ credentials: requestOptions.credentials },
+							Math.min(5000, timeoutMs)
+						);
+						if (csrfRes.ok) {
+							const data = await csrfRes.json();
+							return data.csrf_token;
 						}
-						return undefined;
-					})();
-				}
-				csrfToken = await csrfPromise;
+					} catch {
+						// Silent fail for token pre-fetch
+					} finally {
+						// Allow subsequent retries if some requests still fail
+						setTimeout(() => {
+							csrfPromise = null;
+						}, 1000);
+					}
+					return undefined;
+				})();
 			}
-
-			if (csrfToken) {
-				const headers = new Headers(requestOptions.headers);
-				headers.set('X-CSRF-Token', csrfToken);
-				requestOptions.headers = headers;
-			}
+			csrfToken = await csrfPromise;
 		}
 
-		let response = await fetchWithTimeout(fetch, url, requestOptions, timeoutMs);
-
-		if (response.status === 401) {
-			// FE-M8: Token Refresh Logic
-			const supabase = createSupabaseBrowserClient();
-			const {
-				data: { session }
-			} = await supabase.auth.refreshSession();
-
-			if (session?.access_token) {
-				// Retry once with new token
-				const headers = new Headers(requestOptions.headers);
-				headers.set('Authorization', `Bearer ${session.access_token}`);
-				requestOptions.headers = headers;
-				response = await fetchWithTimeout(fetch, url, requestOptions, timeoutMs);
-			} else {
-				// Session expired
-			}
+		if (csrfToken) {
+			const headers = new Headers(requestOptions.headers);
+			headers.set('X-CSRF-Token', csrfToken);
+			requestOptions.headers = headers;
 		}
-
-		if (response.status === 429) {
-			uiState.showRateLimitWarning();
-		}
-
-		if (response.ok) {
-			// FE-H6: Client-side Tenant Data Validation
-			// Extra layer of safety to ensure no data leakage
-			try {
-				const clone = response.clone();
-				const data = await clone.json();
-				const session = (await createSupabaseBrowserClient().auth.getSession()).data.session;
-				const userTenantId = session?.user?.user_metadata?.tenant_id;
-
-				if (userTenantId && data && typeof data === 'object') {
-					const checkTenant = (obj: Record<string, unknown> | Array<unknown>) => {
-						if (Array.isArray(obj)) {
-							obj.forEach((item) => {
-								if (item && typeof item === 'object') checkTenant(item as Record<string, unknown>);
-							});
-							return;
-						}
-
-						if (obj.tenant_id && userTenantId && obj.tenant_id !== userTenantId) {
-							throw new Error('Security Error: Unauthorized data access');
-						}
-						for (const k in obj) {
-							const val = obj[k];
-							if (val && typeof val === 'object') checkTenant(val as Record<string, unknown>);
-						}
-					};
-					checkTenant(data as Record<string, unknown> | Array<unknown>);
-				}
-			} catch (e: unknown) {
-				if (e instanceof Error && e.message.startsWith('Security Error')) throw e;
-				// Ignore parsing errors for non-JSON responses
-			}
-		}
-
-		if (!response.ok) {
-			if (response.status >= 500) {
-				// FE-H1: Sanitize error messages globally
-				const errorData = await response.json().catch(() => ({}));
-				const safeMessage =
-					errorData.message ||
-					errorData.detail ||
-					'An internal server error occurred. Please contact support.';
-				// We return a new response with safe message for 5xx
-				return new Response(
-					JSON.stringify({
-						error: 'Internal Server Error',
-						message: safeMessage.includes('Traceback')
-							? 'A system error occurred. Our engineers have been notified.'
-							: safeMessage,
-						code: 'SERVER_ERROR'
-					}),
-					{ status: response.status, headers: { 'Content-Type': 'application/json' } }
-				);
-			}
-		}
-
-		return response;
-	} catch (error) {
-		throw error;
 	}
+
+	let response = await fetchWithTimeout(fetch, url, requestOptions, timeoutMs);
+
+	if (response.status === 401) {
+		// FE-M8: Token Refresh Logic
+		const supabase = createSupabaseBrowserClient();
+		const {
+			data: { session }
+		} = await supabase.auth.refreshSession();
+
+		if (session?.access_token) {
+			// Retry once with new token
+			const headers = new Headers(requestOptions.headers);
+			headers.set('Authorization', `Bearer ${session.access_token}`);
+			requestOptions.headers = headers;
+			response = await fetchWithTimeout(fetch, url, requestOptions, timeoutMs);
+		} else {
+			// Session expired
+		}
+	}
+
+	if (response.status === 429) {
+		uiState.showRateLimitWarning();
+	}
+
+	if (response.ok) {
+		// FE-H6: Client-side Tenant Data Validation
+		// Extra layer of safety to ensure no data leakage
+		try {
+			const clone = response.clone();
+			const data = await clone.json();
+			const session = (await createSupabaseBrowserClient().auth.getSession()).data.session;
+			const userTenantId = session?.user?.user_metadata?.tenant_id;
+
+			if (userTenantId && data && typeof data === 'object') {
+				const checkTenant = (obj: Record<string, unknown> | Array<unknown>) => {
+					if (Array.isArray(obj)) {
+						obj.forEach((item) => {
+							if (item && typeof item === 'object') checkTenant(item as Record<string, unknown>);
+						});
+						return;
+					}
+
+					if (obj.tenant_id && userTenantId && obj.tenant_id !== userTenantId) {
+						throw new Error('Security Error: Unauthorized data access');
+					}
+					for (const k in obj) {
+						const val = obj[k];
+						if (val && typeof val === 'object') checkTenant(val as Record<string, unknown>);
+					}
+				};
+				checkTenant(data as Record<string, unknown> | Array<unknown>);
+			}
+		} catch (e: unknown) {
+			if (e instanceof Error && e.message.startsWith('Security Error')) throw e;
+			// Ignore parsing errors for non-JSON responses
+		}
+	}
+
+	if (!response.ok) {
+		if (response.status >= 500) {
+			// FE-H1: Sanitize error messages globally
+			const errorData = await response.json().catch(() => ({}));
+			const safeMessage =
+				errorData.message ||
+				errorData.detail ||
+				'An internal server error occurred. Please contact support.';
+			// We return a new response with safe message for 5xx
+			return new Response(
+				JSON.stringify({
+					error: 'Internal Server Error',
+					message: safeMessage.includes('Traceback')
+						? 'A system error occurred. Our engineers have been notified.'
+						: safeMessage,
+					code: 'SERVER_ERROR'
+				}),
+				{ status: response.status, headers: { 'Content-Type': 'application/json' } }
+			);
+		}
+	}
+
+	return response;
 }
 
 /**

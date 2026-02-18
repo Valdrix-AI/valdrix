@@ -34,7 +34,7 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 			if (res.ok) {
 				subscription = await res.json();
 			}
-		} catch (e) {
+		} catch {
 			// Default to free if fetch fails
 		}
 
@@ -53,7 +53,7 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 			if (res.ok) {
 				profile = await res.json();
 			}
-		} catch (e) {
+		} catch {
 			// Profile fetch failed
 		}
 	}

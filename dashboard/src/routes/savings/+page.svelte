@@ -385,7 +385,9 @@
 					<div class="flex items-center justify-between flex-wrap gap-3 mb-3">
 						<div>
 							<h2 class="text-lg font-semibold">Drilldown</h2>
-							<p class="text-xs text-ink-500">Break down savings proof by category for faster investigation.</p>
+							<p class="text-xs text-ink-500">
+								Break down savings proof by category for faster investigation.
+							</p>
 						</div>
 						<div class="flex items-center gap-2">
 							<select
@@ -420,10 +422,10 @@
 								<p class="text-xs text-ink-500 uppercase tracking-wide">Realized (Monthly)</p>
 								<p class="text-xl font-bold mt-2">{formatUsd(drilldown.realized_monthly_usd)}</p>
 							</div>
-								<div class="rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
-									<p class="text-xs text-ink-500 uppercase tracking-wide">Buckets</p>
-									<p class="text-xl font-bold mt-2">{(drilldown.buckets ?? []).length}</p>
-								</div>
+							<div class="rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
+								<p class="text-xs text-ink-500 uppercase tracking-wide">Buckets</p>
+								<p class="text-xl font-bold mt-2">{(drilldown.buckets ?? []).length}</p>
+							</div>
 							<div class="rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
 								<p class="text-xs text-ink-500 uppercase tracking-wide">Truncated</p>
 								<p class="text-xl font-bold mt-2">{drilldown.truncated ? 'Yes' : 'No'}</p>
@@ -442,13 +444,13 @@
 										<th>Pending</th>
 										<th>Completed</th>
 									</tr>
-									</thead>
-									<tbody>
-										{#each drilldown.buckets ?? [] as row (row.key)}
-											<tr>
-												<td class="font-mono text-xs">{row.key}</td>
-												<td>{formatUsd(row.opportunity_monthly_usd)}</td>
-												<td>{formatUsd(row.realized_monthly_usd)}</td>
+								</thead>
+								<tbody>
+									{#each drilldown.buckets ?? [] as row (row.key)}
+										<tr>
+											<td class="font-mono text-xs">{row.key}</td>
+											<td>{formatUsd(row.opportunity_monthly_usd)}</td>
+											<td>{formatUsd(row.realized_monthly_usd)}</td>
 											<td>{row.open_recommendations}</td>
 											<td>{row.applied_recommendations}</td>
 											<td>{row.pending_remediations}</td>

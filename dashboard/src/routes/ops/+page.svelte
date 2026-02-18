@@ -2276,13 +2276,13 @@
 				</div>
 
 				<div class="flex flex-wrap gap-2">
-						<button
-							class="btn btn-secondary text-xs"
-							disabled={refreshingClosePackage}
-							onclick={() => previewClosePackage()}
-						>
-							{refreshingClosePackage ? 'Refreshing...' : 'Preview Close Status'}
-						</button>
+					<button
+						class="btn btn-secondary text-xs"
+						disabled={refreshingClosePackage}
+						onclick={() => previewClosePackage()}
+					>
+						{refreshingClosePackage ? 'Refreshing...' : 'Preview Close Status'}
+					</button>
 					<button
 						class="btn btn-secondary text-xs"
 						disabled={downloadingCloseJson}
@@ -2316,7 +2316,9 @@
 						</span>
 					</div>
 					{#if closePackage.invoice_reconciliation}
-						<div class="rounded-lg border border-ink-700/60 bg-ink-900/20 px-3 py-2 text-xs space-y-1">
+						<div
+							class="rounded-lg border border-ink-700/60 bg-ink-900/20 px-3 py-2 text-xs space-y-1"
+						>
 							<div class="flex flex-wrap items-center gap-2">
 								<span class="badge badge-default">Invoice Reconciliation</span>
 								<span
@@ -2331,21 +2333,34 @@
 							{#if closePackage.invoice_reconciliation.invoice}
 								<div class="flex flex-wrap gap-3 text-ink-400">
 									<span>
-										Invoice total (USD): <span class="text-ink-200">{formatUsd(closePackage.invoice_reconciliation.invoice.total_amount_usd)}</span>
+										Invoice total (USD): <span class="text-ink-200"
+											>{formatUsd(
+												closePackage.invoice_reconciliation.invoice.total_amount_usd
+											)}</span
+										>
 									</span>
 									<span>
-										Ledger final (USD): <span class="text-ink-200">{formatUsd(closePackage.invoice_reconciliation.ledger_final_cost_usd || 0)}</span>
+										Ledger final (USD): <span class="text-ink-200"
+											>{formatUsd(
+												closePackage.invoice_reconciliation.ledger_final_cost_usd || 0
+											)}</span
+										>
 									</span>
 									<span>
-										Delta: <span class="text-ink-200">{formatUsd(closePackage.invoice_reconciliation.delta_usd || 0)}</span>
+										Delta: <span class="text-ink-200"
+											>{formatUsd(closePackage.invoice_reconciliation.delta_usd || 0)}</span
+										>
 									</span>
 									<span>
-										Delta %: <span class="text-ink-200">{(closePackage.invoice_reconciliation.delta_percent || 0).toFixed(2)}%</span>
+										Delta %: <span class="text-ink-200"
+											>{(closePackage.invoice_reconciliation.delta_percent || 0).toFixed(2)}%</span
+										>
 									</span>
 								</div>
 							{:else}
 								<p class="text-ink-500">
-									No invoice stored for this provider/period yet. Add one below to enable invoice-linked reconciliation.
+									No invoice stored for this provider/period yet. Add one below to enable
+									invoice-linked reconciliation.
 								</p>
 							{/if}
 
@@ -2388,7 +2403,11 @@
 								</label>
 								<label class="text-xs text-ink-400 md:col-span-6">
 									<span class="block mb-1">Notes</span>
-									<input class="input text-xs" placeholder="Optional" bind:value={invoiceForm.notes} />
+									<input
+										class="input text-xs"
+										placeholder="Optional"
+										bind:value={invoiceForm.notes}
+									/>
 								</label>
 								<div class="md:col-span-6 flex flex-wrap items-center gap-2">
 									<button class="btn btn-secondary text-xs" type="submit" disabled={savingInvoice}>

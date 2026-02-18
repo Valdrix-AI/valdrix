@@ -12,9 +12,6 @@
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { assets, base } from '$app/paths';
 	import { AlertTriangle, Clock } from '@lucide/svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
-	import CloudLogo from '$lib/components/CloudLogo.svelte';
-	import { api } from '$lib/api';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
@@ -97,10 +94,6 @@
 			}
 		})()
 	);
-
-	const landingGridX = [...Array(13).keys()];
-	const landingGridY = [...Array(9).keys()];
-
 	// Remediation state
 	let remediationCandidate = $state<RemediationFinding | null>(null);
 	let remediationModalOpen = $state(false);
@@ -198,7 +191,7 @@
 
 {#if !data.user}
 	<!-- Public Landing -->
-		<LandingHero {personaTitle} />
+	<LandingHero />
 {:else}
 	<div class="space-y-8">
 		<!-- Page Header with Date Range Picker -->
@@ -288,12 +281,9 @@
 					<SavingsHero {aiData} />
 
 					<!-- AI Findings Table - Scalable Design -->
-						{#if aiData.resources && aiData.resources.length > 0}
-							<FindingsTable
-								resources={aiData.resources}
-								onRemediate={handleRemediate}
-							/>
-						{/if}
+					{#if aiData.resources && aiData.resources.length > 0}
+						<FindingsTable resources={aiData.resources} onRemediate={handleRemediate} />
+					{/if}
 
 					<!-- General Recommendations -->
 					{#if aiData.general_recommendations && aiData.general_recommendations.length > 0}
@@ -364,38 +354,32 @@
 					<ROAChart />
 					{#if allocation && allocation.buckets && allocation.buckets.length > 0}
 						<AllocationBreakdown data={allocation} />
+					{:else if !tierAtLeast(tier, 'growth')}
+						<UpgradeNotice
+							currentTier={tier}
+							requiredTier="growth"
+							feature="Cost Allocation (chargeback/showback)"
+						/>
 					{:else}
-						{#if !tierAtLeast(tier, 'growth')}
-							<UpgradeNotice
-								currentTier={tier}
-								requiredTier="growth"
-								feature="Cost Allocation (chargeback/showback)"
-							/>
-						{:else}
-							<div class="glass-panel flex flex-col items-center justify-center text-ink-500">
-								<p>Cost Allocation data will appear here once attribution rules are defined.</p>
-							</div>
-						{/if}
+						<div class="glass-panel flex flex-col items-center justify-center text-ink-500">
+							<p>Cost Allocation data will appear here once attribution rules are defined.</p>
+						</div>
 					{/if}
 				</div>
 			{/if}
 
 			<!-- Zombie Resources Table -->
 			{#if persona === 'engineering' && zombieCount > 0}
-				<ZombieTable 
-					zombies={zombies} 
-					zombieCount={zombieCount} 
-					onRemediate={handleRemediate} 
-				/>
+				<ZombieTable {zombies} {zombieCount} onRemediate={handleRemediate} />
 			{/if}
 		{/if}
 	</div>
 {/if}
 
 {#if remediationModalOpen && remediationCandidate}
-	<RemediationModal 
-		bind:isOpen={remediationModalOpen} 
-		finding={remediationCandidate} 
+	<RemediationModal
+		bind:isOpen={remediationModalOpen}
+		finding={remediationCandidate}
 		accessToken={data.session?.access_token}
 		onClose={() => {
 			remediationCandidate = null;

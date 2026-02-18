@@ -19,9 +19,9 @@
 		rule_hits: Array<{ rule_id: string; message?: string }>;
 	};
 
-	let { 
-		isOpen = $bindable(false), 
-		finding, 
+	let {
+		isOpen = $bindable(false),
+		finding,
 		accessToken,
 		onClose
 	} = $props<{
@@ -251,7 +251,8 @@
 					{:else if previewError}
 						<div class="p-4 bg-danger-500/10 border border-danger-500/30 rounded-lg">
 							<p class="text-sm text-danger-400">{previewError}</p>
-							<button class="btn btn-xs btn-outline mt-2" onclick={runPreview}>Retry Preview</button>
+							<button class="btn btn-xs btn-outline mt-2" onclick={runPreview}>Retry Preview</button
+							>
 						</div>
 					{:else if preview}
 						<div
@@ -292,7 +293,9 @@
 				{#if actionSuccess}
 					<div class="p-4 bg-success-500/10 border border-success-500/30 rounded-lg">
 						<p class="text-sm text-success-400 font-semibold">{actionSuccess}</p>
-						<p class="text-xs text-success-400/70 mt-1">This request has been added to the operator queue.</p>
+						<p class="text-xs text-success-400/70 mt-1">
+							This request has been added to the operator queue.
+						</p>
 					</div>
 				{/if}
 			</div>

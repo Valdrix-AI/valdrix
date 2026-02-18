@@ -408,9 +408,9 @@
 				throw new Error(
 					extractErrorMessage(
 						data,
-						(res.status === 403
+						res.status === 403
 							? 'SCIM token rotation requires Enterprise tier and admin access.'
-							: 'Failed to rotate SCIM token')
+							: 'Failed to rotate SCIM token'
 					)
 				);
 			}
@@ -455,7 +455,9 @@
 
 	function removeGroupMapping(index: number) {
 		if (!settings) return;
-		settings.scim_group_mappings = (settings.scim_group_mappings ?? []).filter((_, i) => i !== index);
+		settings.scim_group_mappings = (settings.scim_group_mappings ?? []).filter(
+			(_, i) => i !== index
+		);
 	}
 </script>
 
@@ -568,9 +570,7 @@
 									placeholder="sso_abc123"
 									disabled={!settings.sso_federation_enabled}
 								/>
-								<p class="text-xs text-ink-500 mt-1">
-									Required only for provider_id mode.
-								</p>
+								<p class="text-xs text-ink-500 mt-1">Required only for provider_id mode.</p>
 							</div>
 						{/if}
 					</div>
@@ -611,7 +611,9 @@
 							<p class="text-xs text-ink-500 mt-2">
 								Allowed domains: {diagnostics.sso.allowed_email_domains.length}
 								{#if diagnostics.sso.current_admin_domain}
-									• admin domain: <span class="font-mono">{diagnostics.sso.current_admin_domain}</span>
+									• admin domain: <span class="font-mono"
+										>{diagnostics.sso.current_admin_domain}</span
+									>
 								{/if}
 							</p>
 							<p class="text-xs text-ink-500 mt-1">
@@ -775,7 +777,8 @@
 
 							{#if (settings.scim_group_mappings ?? []).length === 0}
 								<p class="mt-3 text-xs text-ink-500">
-									No mappings configured. Users will default to <span class="font-mono">member</span>.
+									No mappings configured. Users will default to <span class="font-mono">member</span
+									>.
 								</p>
 							{:else}
 								<div class="mt-4 space-y-3">
@@ -798,10 +801,7 @@
 											</div>
 											<div>
 												<label for={`scim-persona-${index}`}>Persona (optional)</label>
-												<select
-													id={`scim-persona-${index}`}
-													bind:value={mapping.persona}
-												>
+												<select id={`scim-persona-${index}`} bind:value={mapping.persona}>
 													<option value={null}>(no default)</option>
 													<option value="engineering">Engineering</option>
 													<option value="finance">Finance</option>

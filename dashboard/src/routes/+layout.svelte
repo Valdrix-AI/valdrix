@@ -107,9 +107,7 @@
 	let allowlist = $derived(allowedNavHrefs(persona, role));
 	let primaryNavItems = $derived(visibleNavItems.filter((item) => allowlist.has(item.href)));
 	let secondaryNavItems = $derived(visibleNavItems.filter((item) => !allowlist.has(item.href)));
-	let activeSecondaryNavItems = $derived(
-		secondaryNavItems.filter((item) => isActive(item.href))
-	);
+	let activeSecondaryNavItems = $derived(secondaryNavItems.filter((item) => isActive(item.href)));
 
 	function toAppPath(path: string): string {
 		const normalizedPath = path.startsWith('/') ? path : `/${path}`;

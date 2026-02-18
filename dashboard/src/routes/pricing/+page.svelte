@@ -262,7 +262,9 @@
 		<div class="faq-grid">
 			<div class="faq-item">
 				<h3>How does the free tier work?</h3>
-				<p>The free tier is permanent with usage limits. Upgrade anytime when you need more scale.</p>
+				<p>
+					The free tier is permanent with usage limits. Upgrade anytime when you need more scale.
+				</p>
 			</div>
 
 			<div class="faq-item">

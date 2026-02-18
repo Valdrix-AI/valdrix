@@ -1,8 +1,6 @@
 <script lang="ts">
-	import { assets, base } from '$app/paths';
+	import { assets, resolve } from '$app/paths';
 	import { page } from '$app/stores';
-
-	let { personaTitle = 'Cloud' } = $props<{ personaTitle?: string }>();
 
 	const landingGridX = [...Array(13).keys()];
 	const landingGridY = [...Array(9).keys()];
@@ -42,12 +40,10 @@
 					</p>
 
 					<div class="landing-cta fade-in-up" style="animation-delay: 320ms;">
-						<a href={`${base}/auth/login`} class="btn btn-primary text-base px-8 py-3 pulse-glow">
+						<a href={resolve('/auth/login')} class="btn btn-primary text-base px-8 py-3 pulse-glow">
 							Get Started Free →
 						</a>
-						<a href="#features" class="btn btn-secondary text-base px-8 py-3">
-							Explore Features
-						</a>
+						<a href="#features" class="btn btn-secondary text-base px-8 py-3"> Explore Features </a>
 						<a href="#how" class="btn btn-ghost text-base px-6 py-3"> How It Works </a>
 					</div>
 
@@ -183,8 +179,8 @@
 			<div class="glass-panel col-span-2">
 				<h3 class="landing-h3">Cost signals that don't rot</h3>
 				<p class="landing-p">
-					Track spend by provider, detect anomalies, and keep a freshness signal so you know when
-					to trust the numbers.
+					Track spend by provider, detect anomalies, and keep a freshness signal so you know when to
+					trust the numbers.
 				</p>
 				<div class="landing-tag-row">
 					<span class="badge badge-accent">Allocation</span>
@@ -196,8 +192,7 @@
 			<div class="glass-panel">
 				<h3 class="landing-h3">Carbon without the guilt trip</h3>
 				<p class="landing-p">
-					Make carbon a first-class constraint alongside cost, and spotlight Graviton
-					optimization.
+					Make carbon a first-class constraint alongside cost, and spotlight Graviton optimization.
 				</p>
 				<p class="landing-mini text-ink-400">GreenOps page included.</p>
 			</div>
@@ -292,7 +287,7 @@
 				</p>
 			</div>
 			<div class="landing-final-cta">
-				<a href={`${base}/auth/login`} class="btn btn-primary text-base px-8 py-3 pulse-glow">
+				<a href={resolve('/auth/login')} class="btn btn-primary text-base px-8 py-3 pulse-glow">
 					Get Started Free →
 				</a>
 				<a href="#features" class="btn btn-secondary text-base px-8 py-3"> Review Features </a>
