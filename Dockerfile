@@ -1,7 +1,8 @@
 # ============================================================
 # STAGE 1: Build dependencies
 # ============================================================
-FROM python:3.12-slim AS builder
+# python:3.12-slim as of 2026-02-17
+FROM python:3.12-slim@sha256:7f08d0e501538350cc6f4cf9b07decfa810ee9a4e0be8451104975f284c71887 AS builder
 
 # Labels for OCI compliance
 LABEL org.opencontainers.image.source="https://github.com/valdrix/valdrix"
@@ -29,7 +30,7 @@ RUN uv pip install --no-cache -r pyproject.toml
 # ============================================================
 # STAGE 2: Runtime (minimal image)
 # ============================================================
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:7f08d0e501538350cc6f4cf9b07decfa810ee9a4e0be8451104975f284c71887 AS runtime
 
 WORKDIR /app
 
@@ -53,7 +54,7 @@ USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
 EXPOSE 8000
 
