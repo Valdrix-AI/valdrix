@@ -18,8 +18,11 @@ EXCHANGE_RATE_API_URL = (
 )
 PROVIDER = "exchangerate-api" if EXCHANGE_RATE_API_KEY else "open.er-api"
 
-# Only update existing currencies if present; otherwise use a safe default list.
-DEFAULT_CURRENCIES = {"NGN", "EUR", "GBP"}
+# Standardized BE-FIN-01: Automated Exchange Rate Management.
+from app.shared.core.config import get_settings
+settings = get_settings()
+
+DEFAULT_CURRENCIES = set(settings.SUPPORTED_CURRENCIES)
 
 
 async def update_exchange_rates():

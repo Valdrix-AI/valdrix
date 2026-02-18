@@ -1,6 +1,7 @@
 import asyncio
 import argparse
-import boto3
+import aioboto3
+import json
 import structlog
 from uuid import UUID
 from typing import Optional
@@ -50,24 +51,19 @@ async def disconnect_aws(connection_id: UUID, dry_run: bool = True):
                 # Extract role name from ARN: arn:aws:iam::123456789012:role/ValdrixRole
                 role_name = role_arn.split("/")[-1]
 
-                iam = boto3.client("iam")
-                # Instead of deleting (destructive), we just remove the Trust Relationship (AssumeRolePolicy)
-                # or attach a 'Deny All' policy for faster cutoff.
-
-                logger.info("applying_deny_all_to_role", role_name=role_name)
-                deny_policy = {
-                    "Version": "2012-10-17",
-                    "Statement": [{"Effect": "Deny", "Action": "*", "Resource": "*"}],
-                }
-                # Inline policy to block everything immediately
-                iam.put_role_policy(
-                    RoleName=role_name,
-                    PolicyName="EmergencyDisconnectDenyAll",
-                    PolicyDocument=asyncio.get_event_loop().run_in_executor(
-                        None, lambda: str(deny_policy)
-                    ),  # Simplified for script
-                )
-                logger.info("deny_all_policy_attached")
+                async with aioboto3.Session().client("iam") as iam:
+                    logger.info("applying_deny_all_to_role", role_name=role_name)
+                    deny_policy = {
+                        "Version": "2012-10-17",
+                        "Statement": [{"Effect": "Deny", "Action": "*", "Resource": "*"}],
+                    }
+                    # Inline policy to block everything immediately
+                    await iam.put_role_policy(
+                        RoleName=role_name,
+                        PolicyName="EmergencyDisconnectDenyAll",
+                        PolicyDocument=json.dumps(deny_policy),
+                    )
+                    logger.info("deny_all_policy_attached")
 
             except Exception as e:
                 logger.error("disconnect_aws_failed", error=str(e))
