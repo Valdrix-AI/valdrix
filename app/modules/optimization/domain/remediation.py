@@ -264,8 +264,7 @@ class RemediationService(BaseService):
             connection_id=connection_id,
         )
 
-        from app.shared.core.async_utils import maybe_await
-        await maybe_await(self.db.add(request))
+        self.db.add(request)
         await self.db.commit()
         await self.db.refresh(request)
 
@@ -283,6 +282,8 @@ class RemediationService(BaseService):
         self, tenant_id: UUID, limit: int = 50, offset: int = 0
     ) -> List[RemediationRequest]:
         """List open remediation requests for a tenant (actionable queue)."""
+        MAX_PAGE_SIZE = 200
+        limit = min(limit, MAX_PAGE_SIZE)
         stmt = (
             self._scoped_query(RemediationRequest, tenant_id)
             .where(
@@ -505,7 +506,7 @@ class RemediationService(BaseService):
                     tenant_id=str(tenant_id),
                     error=str(exc),
                 )
-                tenant_tier = PricingTier.FREE_TRIAL
+                tenant_tier = PricingTier.FREE
             tier_value = (
                 tenant_tier.value
                 if isinstance(tenant_tier, PricingTier)

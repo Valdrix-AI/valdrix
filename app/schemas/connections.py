@@ -45,7 +45,7 @@ class AWSConnectionCreate(BaseModel):
         ..., pattern=r"^vx-[a-f0-9]{32}$", description="External ID from setup step"
     )
     region: str = Field(
-        default="us-east-1", max_length=20, description="AWS region for Cost Explorer"
+        default="us-east-1", max_length=20, description="Default AWS region for resource discovery"
     )
     is_management_account: bool = Field(
         default=False,
@@ -136,20 +136,6 @@ class AzureConnectionCreate(BaseModel):
         return self
 
 
-    @field_validator("auth_method")
-    @classmethod
-    def _validate_auth_method(cls, value: str) -> str:
-        normalized = value.strip().lower()
-        if normalized not in {"secret", "workload_identity"}:
-            raise ValueError("auth_method must be 'secret' or 'workload_identity'")
-        return normalized
-
-    @model_validator(mode="after")
-    def _validate_credentials(self):
-        if self.auth_method == "secret" and not self.client_secret:
-            raise ValueError("client_secret is required when auth_method is 'secret'")
-        return self
-
 class AzureConnectionResponse(BaseModel):
     id: UUID
     name: str
@@ -209,30 +195,8 @@ class GCPConnectionCreate(BaseModel):
         return self
 
 
-    @field_validator("auth_method")
-    @classmethod
-    def _validate_auth_method(cls, value: str) -> str:
-        normalized = value.strip().lower()
-        if normalized not in {"secret", "workload_identity"}:
-            raise ValueError("auth_method must be 'secret' or 'workload_identity'")
-        return normalized
-
-    @model_validator(mode="after")
-    def _validate_credentials(self):
-        import json
-        if self.auth_method == "secret" and not self.service_account_json:
-            raise ValueError(
-                "service_account_json is required when auth_method is 'secret'"
-            )
-        if self.service_account_json:
-            try:
-                json.loads(self.service_account_json)
-            except Exception as exc:
-                raise ValueError("service_account_json must be valid JSON") from exc
-        return self
-
-
 class GCPConnectionResponse(BaseModel):
+
     id: UUID
     name: str
     project_id: str

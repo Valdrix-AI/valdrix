@@ -12,14 +12,12 @@ from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
 # from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
-from app.shared.core.config import get_settings
+from app.models._encryption import get_encryption_key
 from app.shared.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
 
-settings = get_settings()
-_encryption_key = settings.ENCRYPTION_KEY
 
 
 class NotificationSettings(Base):
@@ -54,14 +52,14 @@ class NotificationSettings(Base):
     jira_project_key: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     jira_issue_type: Mapped[str] = mapped_column(String(64), default="Task")
     jira_api_token: Mapped[Optional[str]] = mapped_column(
-        StringEncryptedType(String(1024), _encryption_key, AesEngine, "pkcs5"),
+        StringEncryptedType(String(1024), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
 
     # Microsoft Teams (tenant-scoped channel notifications)
     teams_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     teams_webhook_url: Mapped[Optional[str]] = mapped_column(
-        StringEncryptedType(String(1024), _encryption_key, AesEngine, "pkcs5"),
+        StringEncryptedType(String(1024), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
 
@@ -78,7 +76,7 @@ class NotificationSettings(Base):
     )
     workflow_github_ref: Mapped[str] = mapped_column(String(100), default="main")
     workflow_github_token: Mapped[Optional[str]] = mapped_column(
-        StringEncryptedType(String(1024), _encryption_key, AesEngine, "pkcs5"),
+        StringEncryptedType(String(1024), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
 
@@ -91,7 +89,7 @@ class NotificationSettings(Base):
     )
     workflow_gitlab_ref: Mapped[str] = mapped_column(String(100), default="main")
     workflow_gitlab_trigger_token: Mapped[Optional[str]] = mapped_column(
-        StringEncryptedType(String(1024), _encryption_key, AesEngine, "pkcs5"),
+        StringEncryptedType(String(1024), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
 
@@ -100,7 +98,7 @@ class NotificationSettings(Base):
         String(500), nullable=True
     )
     workflow_webhook_bearer_token: Mapped[Optional[str]] = mapped_column(
-        StringEncryptedType(String(1024), _encryption_key, AesEngine, "pkcs5"),
+        StringEncryptedType(String(1024), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
 

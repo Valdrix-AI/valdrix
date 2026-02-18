@@ -7,13 +7,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.shared.db.base import Base
 from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
-from app.shared.core.config import get_settings
+from app.models._encryption import get_encryption_key
 
 # BE-CONN-2: Default key rotation period
 KEY_ROTATION_DAYS = 30
 
-settings = get_settings()
-_encryption_key = settings.ENCRYPTION_KEY
 
 
 class OIDCKey(Base):
@@ -32,7 +30,7 @@ class OIDCKey(Base):
 
     # Store keys in PEM format (encrypted in production, but here we prioritize persistence)
     private_key_pem: Mapped[str] = mapped_column(
-        StringEncryptedType(Text, _encryption_key, AesEngine, "pkcs5"), nullable=False
+        StringEncryptedType(Text, get_encryption_key, AesEngine, "pkcs5"), nullable=False
     )
     public_key_pem: Mapped[str] = mapped_column(Text, nullable=False)
 

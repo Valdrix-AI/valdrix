@@ -16,14 +16,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
 
-from app.shared.core.config import get_settings
+from app.models._encryption import get_encryption_key
 from app.shared.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
 
-settings = get_settings()
-_encryption_key = settings.ENCRYPTION_KEY
 
 
 class SaaSConnection(Base):
@@ -52,7 +50,7 @@ class SaaSConnection(Base):
         String(20), nullable=False, default="manual", server_default="manual"
     )
     api_key: Mapped[str | None] = mapped_column(
-        StringEncryptedType(String(1024), _encryption_key, AesEngine, "pkcs5"),
+        StringEncryptedType(String(1024), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
     connector_config: Mapped[dict[str, Any]] = mapped_column(

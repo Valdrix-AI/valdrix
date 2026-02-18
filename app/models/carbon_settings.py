@@ -23,13 +23,11 @@ from sqlalchemy.sql import func
 from app.shared.db.base import Base
 from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
-from app.shared.core.config import get_settings
+from app.models._encryption import get_encryption_key
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
 
-settings = get_settings()
-_encryption_key = settings.ENCRYPTION_KEY
 
 
 class CarbonSettings(Base):
@@ -65,7 +63,7 @@ class CarbonSettings(Base):
     # Email notification settings
     email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     email_recipients: Mapped[str | None] = mapped_column(
-        StringEncryptedType(String, _encryption_key, AesEngine, "pkcs5"), nullable=True
+        StringEncryptedType(String, get_encryption_key, AesEngine, "pkcs5"), nullable=True
     )  # Comma-separated
 
     # Alert rate limiting

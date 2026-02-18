@@ -12,7 +12,8 @@ from google.api_core.exceptions import ServiceUnavailable, DeadlineExceeded
 import tenacity
 
 from app.shared.adapters.base import BaseAdapter
-from app.models.gcp_connection import GCPConnection
+from app.shared.core.credentials import GCPCredentials
+from app.shared.core.exceptions import ConfigurationError
 
 logger = structlog.get_logger()
 
@@ -40,22 +41,22 @@ class GCPAdapter(BaseAdapter):
     Standard industry practice for GCP FinOps is to export billing data to BigQuery.
     """
 
-    def __init__(self, connection: GCPConnection):
-        self.connection = connection
+    def __init__(self, credentials: GCPCredentials):
+        self.credentials = credentials
 
         # BE-ADAPT-8: Fail-fast validation of project ID format
-        if not validate_project_id(connection.project_id):
-            error_msg = f"Invalid GCP project ID format: '{connection.project_id}'. Must be 6-30 lowercase letters, digits, or hyphens."
-            logger.error("gcp_invalid_project_id", project_id=connection.project_id)
-            raise ValueError(error_msg)
+        if not validate_project_id(credentials.project_id):
+            error_msg = f"Invalid GCP project ID format: '{credentials.project_id}'. Must be 6-30 lowercase letters, digits, or hyphens."
+            logger.error("gcp_invalid_project_id", project_id=credentials.project_id)
+            raise ConfigurationError(error_msg)
 
         self._credentials: GoogleCredentials | None = self._get_credentials()
 
     def _get_credentials(self) -> GoogleCredentials | None:
         """Initialize GCP credentials from service account JSON or environment."""
-        if self.connection.service_account_json:
+        if self.credentials.service_account_json:
             try:
-                info = json.loads(self.connection.service_account_json)
+                info = json.loads(self.credentials.service_account_json.get_secret_value())
                 return cast(
                     GoogleCredentials,
                     service_account.Credentials.from_service_account_info(info),  # type: ignore[no-untyped-call]
@@ -66,7 +67,7 @@ class GCPAdapter(BaseAdapter):
 
     def _get_bq_client(self) -> bigquery.Client:
         return bigquery.Client(
-            project=self.connection.project_id, credentials=self._credentials
+            project=self.credentials.project_id, credentials=self._credentials
         )
 
     def _get_asset_client(self) -> asset_v1.AssetServiceClient:
@@ -78,7 +79,7 @@ class GCPAdapter(BaseAdapter):
             client = self._get_bq_client()
             # Just a simple check - list datasets in the billing project
             billing_project = (
-                self.connection.billing_project_id or self.connection.project_id
+                self.credentials.billing_project_id or self.credentials.project_id
             )
             list(client.list_datasets(project=billing_project, max_results=1))
             return True
@@ -97,9 +98,9 @@ class GCPAdapter(BaseAdapter):
         Fetch GCP costs from BigQuery billing export.
         Phase 5: Includes CUD credit extraction for amortized cost calculation.
         """
-        if not self.connection.billing_dataset or not self.connection.billing_table:
+        if not self.credentials.billing_dataset or not self.credentials.billing_table:
             logger.warning(
-                "gcp_bq_export_not_configured", project_id=self.connection.project_id
+                "gcp_bq_export_not_configured", project_id=self.credentials.project_id
             )
             return []
 
@@ -107,10 +108,10 @@ class GCPAdapter(BaseAdapter):
 
         # Determine and validate the table path (SEC-06)
         billing_project = (
-            self.connection.billing_project_id or self.connection.project_id
+            self.credentials.billing_project_id or self.credentials.project_id
         )
-        billing_dataset = self.connection.billing_dataset
-        billing_table = self.connection.billing_table
+        billing_dataset = self.credentials.billing_dataset
+        billing_table = self.credentials.billing_table
 
         # Strict validation: GCP resource IDs must be alphanumeric plus hyphens/underscores/dots
         safe_pattern = re.compile(r"^[a-zA-Z0-9.\-_]+$")
@@ -125,7 +126,7 @@ class GCPAdapter(BaseAdapter):
                 dataset=billing_dataset,
                 table=billing_table,
             )
-            raise ValueError(error_msg)
+            raise ConfigurationError(error_msg)
 
         table_path = f"{billing_project}.{billing_dataset}.{billing_table}"
 
@@ -217,11 +218,11 @@ class GCPAdapter(BaseAdapter):
         tracer = get_tracer(__name__)
 
         with tracer.start_as_current_span("gcp_discover_resources") as span:
-            span.set_attribute("project_id", self.connection.project_id)
+            span.set_attribute("project_id", self.credentials.project_id)
             span.set_attribute("resource_type", resource_type)
 
             client = self._get_asset_client()
-            parent = f"projects/{self.connection.project_id}"
+            parent = f"projects/{self.credentials.project_id}"
 
             # Map generic resource types to GCP content types
             asset_types = []
@@ -250,7 +251,7 @@ class GCPAdapter(BaseAdapter):
                             "region": region or "global",
                             "provider": "gcp",
                             "metadata": {
-                                "project_id": self.connection.project_id,
+                                "project_id": self.credentials.project_id,
                                 "data": str(res.data),
                             },
                         }

@@ -16,7 +16,8 @@ from azure.core.exceptions import ServiceRequestError, ServiceResponseError
 import tenacity
 
 from app.shared.adapters.base import BaseAdapter
-from app.models.azure_connection import AzureConnection
+from app.shared.core.credentials import AzureCredentials
+from app.shared.core.exceptions import ConfigurationError
 
 logger = structlog.get_logger()
 
@@ -34,22 +35,22 @@ class AzureAdapter(BaseAdapter):
     Azure Cost Management Adapter using official Azure SDK.
     """
 
-    def __init__(self, connection: AzureConnection):
-        self.connection = connection
+    def __init__(self, credentials: AzureCredentials):
+        self.credentials = credentials
         self._credential: ClientSecretCredential | None = None
         self._cost_client: CostManagementClient | None = None
         self._resource_client: ResourceManagementClient | None = None
 
     async def _get_credentials(self) -> ClientSecretCredential:
         if not self._credential:
-            if not self.connection.client_secret:
-                raise ValueError(
+            if not self.credentials.client_secret:
+                raise ConfigurationError(
                     "Azure client_secret is required for client secret auth"
                 )
             self._credential = ClientSecretCredential(
-                tenant_id=self.connection.azure_tenant_id,
-                client_id=self.connection.client_id,
-                client_secret=self.connection.client_secret,
+                tenant_id=self.credentials.tenant_id,
+                client_id=self.credentials.client_id,
+                client_secret=self.credentials.client_secret.get_secret_value(),
             )
         return self._credential
 
@@ -63,7 +64,7 @@ class AzureAdapter(BaseAdapter):
         if not self._resource_client:
             creds = await self._get_credentials()
             self._resource_client = ResourceManagementClient(
-                credential=creds, subscription_id=self.connection.subscription_id
+                credential=creds, subscription_id=self.credentials.subscription_id
             )
         return self._resource_client
 
@@ -80,7 +81,7 @@ class AzureAdapter(BaseAdapter):
             logger.error(
                 "azure_verify_failed",
                 error=str(e),
-                tenant_id=str(self.connection.azure_tenant_id),
+                tenant_id=str(self.credentials.tenant_id),
             )
             return False
 
@@ -94,7 +95,7 @@ class AzureAdapter(BaseAdapter):
         """Fetch costs using Azure Query API."""
         try:
             client = await self._get_cost_client()
-            scope = f"subscriptions/{self.connection.subscription_id}"
+            scope = f"subscriptions/{self.credentials.subscription_id}"
 
             query_definition = self._build_query_definition(
                 start_date, end_date, granularity, cost_type
@@ -211,7 +212,7 @@ class AzureAdapter(BaseAdapter):
         tracer = get_tracer(__name__)
 
         with tracer.start_as_current_span("azure_discover_resources") as span:
-            span.set_attribute("subscription_id", self.connection.subscription_id)
+            span.set_attribute("subscription_id", self.credentials.subscription_id)
 
             try:
                 client = await self._get_resource_client()

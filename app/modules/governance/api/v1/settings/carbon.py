@@ -80,26 +80,6 @@ class CarbonSettingsUpdate(BaseModel):
             raise ValueError("email_recipients is required when email_enabled is true")
         return self
 
-    @field_validator("email_recipients")
-    @classmethod
-    def _validate_email_recipients(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        emails = [e.strip() for e in value.split(",") if e.strip()]
-        if not emails:
-            return None
-        adapter = TypeAdapter(EmailStr)
-        for email in emails:
-            adapter.validate_python(email)
-        return ", ".join(emails)
-
-    @model_validator(mode="after")
-    def _validate_email_settings(self):
-        if self.email_enabled and not self.email_recipients:
-            raise ValueError("email_recipients is required when email_enabled is true")
-        return self
-
-
 # ============================================================
 # API Endpoints
 # ============================================================

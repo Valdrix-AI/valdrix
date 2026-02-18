@@ -91,7 +91,7 @@ async def scan_zombies(
 
     service = ZombieService(db=db)
     return await service.scan_for_tenant(
-        tenant_id=tenant_id, _user=user, region=region, analyze=analyze
+        tenant_id=tenant_id, region=region, analyze=analyze
     )
 
 
@@ -361,7 +361,9 @@ async def execute_remediation(
             status_code=400,
         )
 
-    adapter = MultiTenantAWSAdapter(connection)
+    from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
+    aws_creds = map_aws_connection_to_credentials(connection)
+    adapter = MultiTenantAWSAdapter(aws_creds)
     credentials = await adapter.get_credentials()
     service = RemediationService(db=db, region=region, credentials=credentials)
 

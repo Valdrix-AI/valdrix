@@ -55,7 +55,7 @@ def _iso_date(value: object) -> date:
 
 def _tenant_tier(plan: str | None) -> PricingTier:
     if not plan:
-        return PricingTier.FREE_TRIAL
+        return PricingTier.FREE
     return normalize_tier(plan)
 
 

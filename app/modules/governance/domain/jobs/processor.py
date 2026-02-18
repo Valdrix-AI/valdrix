@@ -82,8 +82,8 @@ class JobProcessor:
             }
 
             try:
-                # Fetch pending jobs that are due
-                pending_jobs = await self._fetch_pending_jobs(
+                # SEC-HAR-10: Atomic fetch and mark to prevent duplicate processing
+                pending_jobs = await self._fetch_and_lock_batch(
                     limit, tenant_id=tenant_id, job_type=job_type
                 )
 
@@ -133,7 +133,7 @@ class JobProcessor:
 
             return results
 
-    async def _fetch_pending_jobs(
+    async def _fetch_and_lock_batch(
         self,
         limit: int,
         *,
@@ -141,8 +141,8 @@ class JobProcessor:
         job_type: str | None = None,
     ) -> list[BackgroundJob]:
         """
-        Fetch pending jobs that are ready to run.
-        Uses SELECT FOR UPDATE SKIP LOCKED for high-concurrency safety.
+        Atomically fetch and mark jobs as RUNNING to prevent double-processing.
+        Uses SELECT FOR UPDATE SKIP LOCKED.
         """
         now = datetime.now(timezone.utc)
         filters = [
@@ -156,16 +156,33 @@ class JobProcessor:
         if job_type is not None:
             filters.append(BackgroundJob.job_type == job_type)
 
-        result = await self.db.execute(
-            select(BackgroundJob)
-            .where(*filters)
-            # BE-SCHED-5: Order by priority (desc) first, then scheduled_for
-            .order_by(BackgroundJob.priority.desc(), BackgroundJob.scheduled_for)
-            .limit(limit)
-            .with_for_update(skip_locked=True)
-        )
-        found = list(result.scalars().all())
-        return found
+        # 1. Fetch within a transaction
+        async with self.db.begin_nested():
+            result = await self.db.execute(
+                select(BackgroundJob)
+                .where(*filters)
+                .order_by(BackgroundJob.priority.desc(), BackgroundJob.scheduled_for)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+            jobs = list(result.scalars().all())
+            
+            # 2. Immediately mark as RUNNING and update attempt count
+            import socket
+            worker_id = f"{socket.gethostname()}:{id(self)}"
+            
+            for job in jobs:
+                job.status = JobStatus.RUNNING.value
+                job.started_at = now
+                job.attempts += 1
+                # Optional: Add metadata for debugging
+                if job.result is None:
+                    job.result = {}
+                job.result["last_worker"] = worker_id
+
+        # 3. Commit the change from pending to running
+        await self.db.commit()
+        return jobs
 
     async def _process_single_job(self, job: BackgroundJob) -> None:
         """Process a single job with error handling and tracing."""
@@ -216,6 +233,11 @@ class JobProcessor:
                 result = await asyncio.wait_for(
                     handler.execute(job, self.db), timeout=JOB_TIMEOUT_SECONDS
                 )
+
+                # Reset tenant context after job execution to prevent leakage (Finding #S3)
+                if job.tenant_id:
+                    from app.shared.db.session import set_session_tenant_id
+                    await set_session_tenant_id(self.db, None) 
 
             # Mark as completed
             job.status = JobStatus.COMPLETED.value

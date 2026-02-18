@@ -8,6 +8,7 @@ import structlog
 
 from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.feed_utils import as_float, is_number, parse_timestamp
+from app.shared.core.credentials import LicenseCredentials
 from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
@@ -32,26 +33,21 @@ class LicenseAdapter(BaseAdapter):
     - Native vendor pulls (`auth_method=api_key|oauth`) for Microsoft 365
     """
 
-    def __init__(self, connection: Any):
-        self.connection = connection
-        self._last_error: str | None = None
-
-    @property
-    def last_error(self) -> str | None:
-        return self._last_error
+    def __init__(self, credentials: LicenseCredentials):
+        self.credentials = credentials
+        self.last_error = None
 
     @property
     def _vendor(self) -> str:
-        return str(getattr(self.connection, "vendor", "")).strip().lower()
-
+        return self.credentials.vendor.strip().lower()
+    
     @property
     def _auth_method(self) -> str:
-        return str(getattr(self.connection, "auth_method", "manual")).strip().lower()
+        return self.credentials.auth_method.strip().lower()
 
     @property
     def _connector_config(self) -> dict[str, Any]:
-        raw = getattr(self.connection, "connector_config", {})
-        return raw if isinstance(raw, dict) else {}
+        return self.credentials.connector_config
 
     @property
     def _native_vendor(self) -> str | None:
@@ -62,10 +58,10 @@ class LicenseAdapter(BaseAdapter):
         return None
 
     def _resolve_api_key(self) -> str:
-        token = getattr(self.connection, "api_key", None)
-        if not isinstance(token, str) or not token.strip():
+        token = self.credentials.api_key
+        if not token:
             raise ExternalAPIError("Missing API token for license native connector")
-        return token.strip()
+        return token.get_secret_value().strip()
 
     async def verify_connection(self) -> bool:
         self._last_error = None
@@ -89,9 +85,7 @@ class LicenseAdapter(BaseAdapter):
                 )
                 return False
 
-        feed = getattr(self.connection, "license_feed", None) or getattr(
-            self.connection, "cost_feed", None
-        )
+        feed = self.credentials.license_feed
         is_valid = self._validate_manual_feed(feed)
         if not is_valid:
             if self._last_error is None:
@@ -153,11 +147,7 @@ class LicenseAdapter(BaseAdapter):
                     error=str(exc),
                 )
 
-        feed = (
-            getattr(self.connection, "license_feed", None)
-            or getattr(self.connection, "cost_feed", None)
-            or []
-        )
+        feed = self.credentials.license_feed
         if not isinstance(feed, list):
             return
 

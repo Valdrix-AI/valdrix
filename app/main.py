@@ -1,32 +1,24 @@
-import structlog
-import json
 import asyncio
 import inspect
+import json
 import os
 from contextlib import asynccontextmanager
-from typing import (
-    Annotated,
-    Dict,
-    Any,
-    Callable,
-    Awaitable,
-    cast,
-    AsyncGenerator,
-    List,
-    Sequence,
-    TypeVar,
-)
-from fastapi import FastAPI, Depends, Request, HTTPException, Response
-from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
-from fastapi.staticfiles import StaticFiles
+from typing import Annotated, Any, AsyncGenerator, Awaitable, Callable, Dict, List, Sequence, TypeVar, cast
+
+import structlog
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
-from pydantic import BaseModel
-from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Gauge
+from prometheus_fastapi_instrumentator import Instrumentator
+from pydantic import BaseModel
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.shared.core.config import get_settings
 from app.shared.core.logging import setup_logging
@@ -43,8 +35,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.core.exceptions import ValdrixException
 from app.shared.core.rate_limit import (
     setup_rate_limiting,
-    RateLimitExceeded,
-    _rate_limit_exceeded_handler,
 )
 
 # Ensure all models are registered with SQLAlchemy
@@ -88,9 +78,8 @@ settings = get_settings()
 
 
 class CsrfSettings(BaseModel):
-    """Configuration for CSRF protection."""
-
-    secret_key: str = settings.CSRF_SECRET_KEY or ""
+    """Configuration for CSRF protection (Finding #5)."""
+    secret_key: str
     cookie_samesite: str = "lax"
 
 
@@ -100,11 +89,14 @@ F = TypeVar("F", bound=Callable[..., Any])
 _csrf_load_config = cast(Callable[[F], F], CsrfProtect.load_config)
 
 
-# fastapi-csrf-protect uses a decorator with a dynamic callable signature.
-# Static type checkers can't infer it reliably, but runtime behavior is correct.
+# type: ignore[name-defined] - Justification: validator used via decorator signature
 @_csrf_load_config
 def get_csrf_config() -> CsrfSettings:
-    return CsrfSettings()
+    """
+    Lazy initialization of CSRF settings to avoid module-load race conditions
+    with environment configuration (Finding #5).
+    """
+    return CsrfSettings(secret_key=settings.CSRF_SECRET_KEY or "")
 
 
 logger = structlog.get_logger()
@@ -134,6 +126,7 @@ def _load_emissions_tracker() -> Any:
 
 
 EmissionsTracker = _load_emissions_tracker()
+
 
 
 @asynccontextmanager
@@ -201,11 +194,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 )
                 await asyncio.sleep(0.2 * attempt)
         if last_error is not None:
-            # Keep the app running, but surface the risk loudly (Ops should alert on this log/metric).
+            # 2026 PRODUCTION STANDARD: Keep the app running to allow diagnostics,
+            # but surface the risk loudly via structured logging (Finding #C3).
+            # Ops should alert on 'llm_pricing_refresh_failed_startup_final'.
             logger.error(
                 "llm_pricing_refresh_failed_startup_final",
                 error=str(last_error),
                 exc_info=True,
+                remediation="Ensure database connectivity and check LLM_PROVIDER_PRICING table. "
+                "Analysis functionality may use stale pricing until manual refresh.",
             )
 
     from app.shared.core.http import init_http_client, close_http_client
@@ -238,7 +235,9 @@ valdrix_app = FastAPI(
     docs_url=None,
     redoc_url=None,
 )
-app: FastAPI = valdrix_app  # noqa: A001  # type: ignore[no-redef] (uvicorn app.main:app)
+# Justification (Finding #C1): Uvicorn requires 'app' name by default in start parameters.
+# Standard pattern to resolve FastAPI type collision with module-level common variable.
+app: FastAPI = valdrix_app  # noqa: A001  # type: ignore[no-redef]
 router = valdrix_app
 
 __all__ = ["app", "valdrix_app", "lifespan"]
@@ -252,18 +251,8 @@ async def valdrix_exception_handler(
     request: Request, exc: ValdrixException
 ) -> JSONResponse:
     """Handle custom application exceptions."""
-    API_ERRORS_TOTAL.labels(
-        path=request.url.path, method=request.method, status_code=exc.status_code
-    ).inc()
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "status": "error",
-            "message": exc.message,
-            "code": exc.code,
-            "details": exc.details,
-        },
-    )
+    from app.shared.core.error_governance import handle_exception
+    return handle_exception(request, exc)
 
 
 @valdrix_app.exception_handler(CsrfProtectError)
@@ -272,13 +261,8 @@ async def csrf_protect_exception_handler(
 ) -> JSONResponse:
     """Handle CSRF protection exceptions."""
     CSRF_ERRORS.labels(path=request.url.path, method=request.method).inc()
-    API_ERRORS_TOTAL.labels(
-        path=request.url.path, method=request.method, status_code=exc.status_code
-    ).inc()
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"status": "error", "message": exc.message, "code": "csrf_error"},
-    )
+    from app.shared.core.error_governance import handle_exception
+    return handle_exception(request, exc)
 
 
 @valdrix_app.exception_handler(HTTPException)
@@ -341,14 +325,9 @@ async def validation_exception_handler(
 
 @valdrix_app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
-    """Handle business logic ValueErrors."""
-    API_ERRORS_TOTAL.labels(
-        path=request.url.path, method=request.method, status_code=400
-    ).inc()
-    return JSONResponse(
-        status_code=400,
-        content={"error": "Bad Request", "code": "VALUE_ERROR", "message": str(exc)},
-    )
+    """Handle business logic ValueErrors via central governance."""
+    from app.shared.core.error_governance import handle_exception
+    return handle_exception(request, exc)
 
 
 @valdrix_app.exception_handler(ScimError)
@@ -381,7 +360,7 @@ async def redoc_html() -> Any:
     return get_redoc_html(
         openapi_url=valdrix_app.openapi_url or "/openapi.json",
         title=valdrix_app.title + " - ReDoc",
-        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js",  # Redoc still remote for now
+        redoc_js_url="/static/redoc.standalone.js",
         redoc_favicon_url="/static/favicon.png",
     )
 
@@ -400,11 +379,6 @@ async def custom_rate_limit_handler(request: Request, exc: Exception) -> Respons
         path=request.url.path,
         method=request.method,
         tier=getattr(request.state, "tier", "unknown"),
-    ).inc()
-    API_ERRORS_TOTAL.labels(
-        path=request.url.path,
-        method=request.method,
-        status_code=getattr(exc, "status_code", 429),
     ).inc()
     API_ERRORS_TOTAL.labels(
         path=request.url.path,
@@ -487,9 +461,18 @@ valdrix_app.add_middleware(RequestIDMiddleware)
 
 # CORS - added LAST so it processes FIRST
 # This ensures OPTIONS preflight requests are handled before other middleware
+# Security Hardening: allow_credentials=True requires specific origins (no wildcards)
+if settings.CORS_ORIGINS and "*" in settings.CORS_ORIGINS and True:
+    # If credentials allowed, we MUST NOT use wildcard origins in production
+    # This check ensures we default to a safe state if misconfigured.
+    logger.error("insecure_cors_config_detected", msg="allow_credentials=True with '*' origin is forbidden")
+    cors_allowed_origins = [o for o in settings.CORS_ORIGINS if o != "*"]
+else:
+    cors_allowed_origins = settings.CORS_ORIGINS
+
 valdrix_app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"],

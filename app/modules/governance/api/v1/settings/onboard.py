@@ -5,7 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, EmailStr, Field
-from datetime import datetime, timezone
 import structlog
 
 from app.shared.db.session import get_db
@@ -48,14 +47,13 @@ async def onboard(
     if existing.scalar_one_or_none():
         raise HTTPException(400, "Already onboarded")
 
-    # 2. Create Tenant with 14-day trial
+    # 2. Create Tenant on permanent free tier.
     if len(onboard_req.tenant_name) < 3:
         raise HTTPException(400, "Tenant name must be at least 3 characters")
 
     tenant = Tenant(
         name=onboard_req.tenant_name,
-        plan=PricingTier.FREE_TRIAL.value,
-        trial_started_at=datetime.now(timezone.utc),
+        plan=PricingTier.FREE.value,
     )
 
     # 3. Active Credential Validation (Hardening)

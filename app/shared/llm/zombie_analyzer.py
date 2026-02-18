@@ -151,11 +151,26 @@ class ZombieAnalyzer:
         if effective_provider != get_settings().LLM_PROVIDER or byok_key:
             from app.shared.llm.factory import LLMFactory
 
-            current_llm = LLMFactory.create(effective_provider, api_key=byok_key)
+            current_llm = LLMFactory.create(
+                effective_provider,
+                model=effective_model,
+                api_key=byok_key,
+            )
 
         # 3. Sanitize and Format
         sanitized_zombies = await LLMGuardrails.sanitize_input(zombies)
         formatted_data = json.dumps(sanitized_zombies, default=str, indent=2)
+
+        # 3b. Pre-authorize usage against tier/budget guardrails.
+        if tenant_id and db:
+            tracker = UsageTracker(db)
+            await tracker.authorize_request(
+                tenant_id=tenant_id,
+                provider=effective_provider,
+                model=effective_model,
+                input_text=formatted_data,
+                max_output_tokens=1200,
+            )
 
         # 4. Invoke LLM
         chain = self.prompt | current_llm

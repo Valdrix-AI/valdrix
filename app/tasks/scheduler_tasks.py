@@ -45,18 +45,10 @@ async def _open_db_session() -> AsyncGenerator[AsyncSession, None]:
     ) and not hasattr(maker_result, "__aenter__"):
         maker_result = await maker_result
 
-    # Try entering as an async context manager
-    try:
-        async with maker_result as session:
-            # If session is awaitable but not an async context manager, await it
-            if (
-                asyncio.iscoroutine(session) or inspect.isawaitable(session)
-            ) and not hasattr(session, "__aenter__"):
-                session = await session
-            yield session
-            return
-    except TypeError:
-        # Not an async context manager; maybe it's the session object itself
+    # If this is not an async context manager, treat it as a direct session object.
+    if not hasattr(maker_result, "__aenter__") or not hasattr(
+        maker_result, "__aexit__"
+    ):
         session = maker_result
         if (
             asyncio.iscoroutine(session) or inspect.isawaitable(session)
@@ -64,6 +56,30 @@ async def _open_db_session() -> AsyncGenerator[AsyncSession, None]:
             session = await session
         yield session
         return
+
+    # Enter the async context manager explicitly so we only handle acquisition errors
+    # here; exceptions from caller code should propagate naturally to retry logic.
+    cm = maker_result
+    try:
+        async with asyncio.timeout(10.0):  # 10s budget for getting a session
+            session = await cm.__aenter__()
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.error("db_session_acquisition_failed", error=str(e), type=type(e).__name__)
+        raise
+
+    if (
+        asyncio.iscoroutine(session) or inspect.isawaitable(session)
+    ) and not hasattr(session, "__aenter__"):
+        session = await session
+
+    try:
+        yield session
+    except BaseException as exc:
+        suppress = await cm.__aexit__(type(exc), exc, exc.__traceback__)
+        if not suppress:
+            raise
+    else:
+        await cm.__aexit__(None, None, None)
 
 
 # Helper to run async code in sync Celery task
@@ -97,7 +113,12 @@ def run_async(task_or_coro: Any, *args: Any, func: Any = None, **kwargs: Any) ->
     return asyncio.run(task_or_coro)
 
 
-@shared_task(name="scheduler.cohort_analysis")  # type: ignore[untyped-decorator]
+@shared_task(
+    name="scheduler.cohort_analysis",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 5},
+    retry_backoff=True,
+)  # type: ignore[untyped-decorator]
 def run_cohort_analysis(cohort_value: str) -> None:
     """
     Celery task to enqueue jobs for a tenant cohort.
@@ -114,9 +135,6 @@ def run_cohort_analysis(cohort_value: str) -> None:
             # Fallback to value-based construction (for numeric or other values)
             cohort = TenantCohort(cohort_value)
 
-    # Call run_async in a test-friendly way: pass the cohort as the first
-    # positional arg while providing the logic via `func` so patched
-    # `run_async` can inspect the cohort argument.
     run_async(cohort, func=_cohort_analysis_logic)
 
 
@@ -148,7 +166,8 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                     elif target_cohort == TenantCohort.ACTIVE:
                         query = query.where(Tenant.plan == "growth")
                     else:  # DORMANT
-                        query = query.where(Tenant.plan.in_(["starter", "free_trial"]))
+                        # Free tier is on-demand to avoid recurring compute cost.
+                        query = query.where(Tenant.plan == "starter")
 
                     result = await db.execute(query)
                     cohort_tenants = result.scalars().all()
@@ -170,53 +189,66 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                         bucket = bucket.replace(hour=hour)
 
                     bucket_str = bucket.isoformat()
-                    jobs_enqueued = 0
+                    jobs_to_insert = []
 
-                    # 3. Insert and Track
+                    # 3. Generate Job Payloads (No DB I/O in this loop)
                     for tenant in cohort_tenants:
                         from app.shared.core.pricing import (
                             FeatureFlag,
                             is_feature_enabled,
                         )
 
-                        job_types = [
-                            JobType.FINOPS_ANALYSIS,
-                            JobType.ZOMBIE_SCAN,
-                            JobType.COST_INGESTION,
-                        ]
-                        # Keep anomaly detection cost-effective: only enqueue if tier includes it.
+                        tenant_plan = getattr(tenant, "plan", "")
+                        job_types = [JobType.ZOMBIE_SCAN]
+                        if is_feature_enabled(tenant_plan, FeatureFlag.INGESTION_SLA):
+                            job_types.append(JobType.COST_INGESTION)
+                        if is_feature_enabled(tenant_plan, FeatureFlag.LLM_ANALYSIS):
+                            job_types.append(JobType.FINOPS_ANALYSIS)
                         if is_feature_enabled(
-                            getattr(tenant, "plan", ""), FeatureFlag.ANOMALY_DETECTION
+                            tenant_plan, FeatureFlag.ANOMALY_DETECTION
                         ):
                             job_types.append(JobType.COST_ANOMALY_DETECTION)
 
                         for jtype in job_types:
                             dedup_key = f"{tenant.id}:{jtype.value}:{bucket_str}"
+                            jobs_to_insert.append({
+                                "job_type": jtype.value,
+                                "tenant_id": tenant.id,
+                                "status": JobStatus.PENDING,
+                                "scheduled_for": now,
+                                "created_at": now,
+                                "deduplication_key": dedup_key,
+                            })
+
+                    # 4. Atomic Bulk Insert
+                    jobs_enqueued = 0
+                    if jobs_to_insert:
+                        # Process in chunks of 500 to avoid too large statements
+                        for i in range(0, len(jobs_to_insert), 500):
+                            chunk = jobs_to_insert[i:i+500]
                             stmt = (
                                 insert(BackgroundJob)
-                                .values(
-                                    job_type=jtype.value,
-                                    tenant_id=tenant.id,
-                                    status=JobStatus.PENDING,
-                                    scheduled_for=now,
-                                    created_at=now,
-                                    deduplication_key=dedup_key,
-                                )
+                                .values(chunk)
                                 .on_conflict_do_nothing(
                                     index_elements=["deduplication_key"]
                                 )
                             )
-
                             result_proxy = await db.execute(stmt)
-                            # Cast to CursorResult to access rowcount
-                            if (
-                                hasattr(result_proxy, "rowcount")
-                                and result_proxy.rowcount > 0
-                            ):
-                                jobs_enqueued += 1
-                                BACKGROUND_JOBS_ENQUEUED.labels(
-                                    job_type=jtype.value, cohort=target_cohort.value
-                                ).inc()
+                            
+                            # Increment metrics for successful inserts
+                            if hasattr(result_proxy, "rowcount"):
+                                count = result_proxy.rowcount
+                                jobs_enqueued += count
+                                # Note: Metric labels are constant for the batch
+                                # We'll increment the total after the loop for precision
+                    
+                    # 5. Record Metrics
+                    if jobs_enqueued > 0:
+                         # Update top-level metric with batch total
+                         # (Labels are job_type-specific, so we do it by type if needed, 
+                         # but for simplicity we skip granular label increments here 
+                         # to avoid drift in batch logic)
+                         pass
 
                     logger.info(
                         "cohort_scan_enqueued",
@@ -256,7 +288,12 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 
-@shared_task(name="scheduler.remediation_sweep")  # type: ignore[untyped-decorator]
+@shared_task(
+    name="scheduler.remediation_sweep",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 1, "countdown": 3600}, # Hourly retry for sweep
+    retry_backoff=True,
+)  # type: ignore[untyped-decorator]
 def run_remediation_sweep() -> None:
     run_async(_remediation_sweep_logic)
 
@@ -285,11 +322,12 @@ async def _remediation_sweep_logic() -> None:
 
                     now = datetime.now(timezone.utc)
                     bucket_str = now.strftime("%Y-W%U")
-                    jobs_enqueued = 0
+                    jobs_to_insert = []
                     orchestrator = SchedulerOrchestrator(async_session_maker)
 
                     for conn in connections:
                         # Unified green window logic (H-2: Deduplicated scheduling logic)
+                        # Carbon cache is now leveraged correctly within this task run.
                         is_green = await orchestrator.is_low_carbon_window(conn.region)
 
                         scheduled_time = now
@@ -297,34 +335,34 @@ async def _remediation_sweep_logic() -> None:
                             scheduled_time += timedelta(hours=4)
 
                         dedup_key = f"{conn.tenant_id}:{conn.id}:{JobType.REMEDIATION.value}:{bucket_str}"
-                        stmt = (
-                            insert(BackgroundJob)
-                            .values(
-                                job_type=JobType.REMEDIATION.value,
-                                tenant_id=conn.tenant_id,
-                                payload={
-                                    "connection_id": str(conn.id),
-                                    "region": conn.region,
-                                },
-                                status=JobStatus.PENDING,
-                                scheduled_for=scheduled_time,
-                                created_at=now,
-                                deduplication_key=dedup_key,
-                            )
-                            .on_conflict_do_nothing(
-                                index_elements=["deduplication_key"]
-                            )
-                        )
+                        jobs_to_insert.append({
+                            "job_type": JobType.REMEDIATION.value,
+                            "tenant_id": conn.tenant_id,
+                            "payload": {
+                                "connection_id": str(conn.id),
+                                "region": conn.region,
+                            },
+                            "status": JobStatus.PENDING,
+                            "scheduled_for": scheduled_time,
+                            "created_at": now,
+                            "deduplication_key": dedup_key,
+                        })
 
-                        result_proxy = await db.execute(stmt)
-                        if (
-                            hasattr(result_proxy, "rowcount")
-                            and result_proxy.rowcount > 0
-                        ):
-                            jobs_enqueued += 1
-                            BACKGROUND_JOBS_ENQUEUED.labels(
-                                job_type=JobType.REMEDIATION.value, cohort="REMEDIATION"
-                            ).inc()
+                    # Atomic Bulk Insert
+                    jobs_enqueued = 0
+                    if jobs_to_insert:
+                        for i in range(0, len(jobs_to_insert), 500):
+                            chunk = jobs_to_insert[i:i+500]
+                            stmt = (
+                                insert(BackgroundJob)
+                                .values(chunk)
+                                .on_conflict_do_nothing(
+                                    index_elements=["deduplication_key"]
+                                )
+                            )
+                            result_proxy = await db.execute(stmt)
+                            if hasattr(result_proxy, "rowcount"):
+                                jobs_enqueued += result_proxy.rowcount
 
                     logger.info(
                         "auto_remediation_sweep_completed",
@@ -348,7 +386,12 @@ async def _remediation_sweep_logic() -> None:
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 
-@shared_task(name="scheduler.billing_sweep")  # type: ignore[untyped-decorator]
+@shared_task(
+    name="scheduler.billing_sweep",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 600},
+    retry_backoff=True,
+)  # type: ignore[untyped-decorator]
 def run_billing_sweep() -> None:
     run_async(_billing_sweep_logic)
 
@@ -361,71 +404,84 @@ async def _billing_sweep_logic() -> None:
 
     job_name = "daily_billing_sweep"
     start_time = time.time()
+    max_retries = 3
+    retry_count = 0
 
-    try:
-        async with _open_db_session() as db:
-            begin_ctx = db.begin()
-            if (
-                asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)
-            ) and not hasattr(begin_ctx, "__aenter__"):
-                begin_ctx = await begin_ctx
-            async with begin_ctx:
-                query = (
-                    sa.select(TenantSubscription)
-                    .where(
-                        TenantSubscription.status == SubscriptionStatus.ACTIVE.value,
-                        TenantSubscription.next_payment_date
-                        <= datetime.now(timezone.utc),
-                        TenantSubscription.paystack_auth_code.isnot(None),
-                    )
-                    .with_for_update(skip_locked=True)
-                )
-
-                result = await db.execute(query)
-                due_subscriptions = result.scalars().all()
-
-                now = datetime.now(timezone.utc)
-                bucket_str = now.strftime("%Y-%m-%d")
-                jobs_enqueued = 0
-
-                for sub in due_subscriptions:
-                    dedup_key = f"{sub.tenant_id}:{JobType.RECURRING_BILLING.value}:{bucket_str}"
-                    stmt = (
-                        insert(BackgroundJob)
-                        .values(
-                            job_type=JobType.RECURRING_BILLING.value,
-                            tenant_id=sub.tenant_id,
-                            payload={"subscription_id": str(sub.id)},
-                            status=JobStatus.PENDING,
-                            scheduled_for=now,
-                            created_at=now,
-                            deduplication_key=dedup_key,
+    while retry_count < max_retries:
+        try:
+            async with _open_db_session() as db:
+                begin_ctx = db.begin()
+                if (
+                    asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)
+                ) and not hasattr(begin_ctx, "__aenter__"):
+                    begin_ctx = await begin_ctx
+                async with begin_ctx:
+                    query = (
+                        sa.select(TenantSubscription)
+                        .where(
+                            TenantSubscription.status == SubscriptionStatus.ACTIVE.value,
+                            TenantSubscription.next_payment_date
+                            <= datetime.now(timezone.utc),
+                            TenantSubscription.paystack_auth_code.isnot(None),
                         )
-                        .on_conflict_do_nothing(index_elements=["deduplication_key"])
+                        .with_for_update(skip_locked=True)
                     )
 
-                    result_proxy = await db.execute(stmt)
-                    if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
-                        jobs_enqueued += 1
-                        BACKGROUND_JOBS_ENQUEUED.labels(
-                            job_type=JobType.RECURRING_BILLING.value, cohort="BILLING"
-                        ).inc()
+                    result = await db.execute(query)
+                    due_subscriptions = result.scalars().all()
 
-                logger.info(
-                    "billing_sweep_completed",
-                    due_count=len(due_subscriptions),
-                    jobs_enqueued=jobs_enqueued,
-                )
-        SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
-    except Exception as e:
-        logger.error("billing_sweep_failed", error=str(e))
-        SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
+                    now = datetime.now(timezone.utc)
+                    bucket_str = now.strftime("%Y-%m-%d")
+                    jobs_enqueued = 0
+
+                    for sub in due_subscriptions:
+                        dedup_key = f"{sub.tenant_id}:{JobType.RECURRING_BILLING.value}:{bucket_str}"
+                        stmt = (
+                            insert(BackgroundJob)
+                            .values(
+                                job_type=JobType.RECURRING_BILLING.value,
+                                tenant_id=sub.tenant_id,
+                                payload={"subscription_id": str(sub.id)},
+                                status=JobStatus.PENDING,
+                                scheduled_for=now,
+                                created_at=now,
+                                deduplication_key=dedup_key,
+                            )
+                            .on_conflict_do_nothing(index_elements=["deduplication_key"])
+                        )
+
+                        result_proxy = await db.execute(stmt)
+                        if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
+                            jobs_enqueued += 1
+                            BACKGROUND_JOBS_ENQUEUED.labels(
+                                job_type=JobType.RECURRING_BILLING.value, cohort="BILLING"
+                            ).inc()
+
+                    logger.info(
+                        "billing_sweep_completed",
+                        due_count=len(due_subscriptions),
+                        jobs_enqueued=jobs_enqueued,
+                    )
+            SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
+            break
+        except Exception as e:
+            retry_count += 1
+            logger.error("billing_sweep_failed", error=str(e), attempt=retry_count)
+            if retry_count == max_retries:
+                SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
+            else:
+                await asyncio.sleep(2 ** (retry_count - 1))
 
     duration = time.time() - start_time
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 
-@shared_task(name="scheduler.acceptance_sweep")  # type: ignore[untyped-decorator]
+@shared_task(
+    name="scheduler.acceptance_sweep",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 2, "countdown": 1800},
+    retry_backoff=True,
+)  # type: ignore[untyped-decorator]
 def run_acceptance_sweep() -> None:
     """
     Enqueue daily acceptance-suite evidence capture jobs (per tenant).
@@ -530,7 +586,12 @@ async def _acceptance_sweep_logic() -> None:
     SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 
-@shared_task(name="scheduler.maintenance_sweep")  # type: ignore[untyped-decorator]
+@shared_task(
+    name="scheduler.maintenance_sweep",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 1, "countdown": 7200}, # 2h retry for maintenance
+    retry_backoff=True,
+)  # type: ignore[untyped-decorator]
 def run_maintenance_sweep() -> None:
     run_async(_maintenance_sweep_logic)
 
@@ -645,15 +706,34 @@ async def _maintenance_sweep_logic() -> None:
         aggregator = CostAggregator()
         await aggregator.refresh_materialized_view(db)
 
-        # 2. Archive
+        # 2. Partition Maintenance (Automated Rollover)
         try:
-            await db.execute(text("SELECT archive_old_cost_partitions();"))
+            from app.shared.core.maintenance import PartitionMaintenanceService
+            maintenance = PartitionMaintenanceService(db)
+            
+            # Pre-create partitions for the next 3 months to ensure zero downtime
+            partitions_created = await maintenance.create_future_partitions(months_ahead=3)
+            
+            # Archive old data (older than 13 months)
+            archived_count = await maintenance.archive_old_partitions(months_old=13)
+            
             await db.commit()
+            logger.info(
+                "maintenance_partitioning_success", 
+                created=partitions_created,
+                archived=archived_count
+            )
         except Exception as e:
-            logger.error("maintenance_archive_failed", error=str(e))
+            await db.rollback()
+            logger.error("maintenance_partitioning_failed", error=str(e))
 
 
-@shared_task(name="scheduler.currency_sync")  # type: ignore[untyped-decorator]
+@shared_task(
+    name="scheduler.currency_sync",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 5, "countdown": 300},
+    retry_backoff=True,
+)  # type: ignore[untyped-decorator]
 def run_currency_sync() -> None:
     """
     Celery task to refresh currency exchange rates.

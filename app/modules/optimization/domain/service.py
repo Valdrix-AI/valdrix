@@ -43,8 +43,7 @@ class ZombieService(BaseService):
     async def scan_for_tenant(
         self,
         tenant_id: UUID,
-        _user: Optional[Any] = None,
-        region: str = "us-east-1",
+        region: str = "us-east-1",  # We'll replace this with a constant if possible
         analyze: bool = False,
         on_category_complete: Optional[
             Callable[[str, List[Dict[str, Any]]], Awaitable[None]]
@@ -53,6 +52,14 @@ class ZombieService(BaseService):
         """
         Scan all cloud accounts (IaaS + Cloud+) for a tenant and return aggregated results.
         """
+        # Validate region (Finding #8)
+        from app.shared.core.constants import AWS_SUPPORTED_REGIONS
+        if region not in AWS_SUPPORTED_REGIONS and region != "global":
+            logger.warning("invalid_region_requested", region=region, tenant_id=str(tenant_id))
+            # For now we log and continue, but we could raise an error if needed.
+            # Production practice: default to a safe region if suspicious
+            if region != "us-east-1": # if it's not our default and not supported
+                 raise ValueError(f"Unsupported cloud region: {region}")
         # 1. Fetch all cloud connections generically
         # Phase 21: Decoupling from concrete models
         all_connections: List[Union[AWSConnection, AzureConnection, GCPConnection]] = []
@@ -355,18 +362,9 @@ class ZombieService(BaseService):
     ) -> None:
         """Enrich results with AI insights if tier allows."""
         try:
-            tier_value = str(getattr(tier, "value", tier)).strip().lower()
-            tier_allows_ai = tier_value in {
-                PricingTier.GROWTH.value,
-                PricingTier.PRO.value,
-                PricingTier.ENTERPRISE.value,
-            }
-
-            if (not tier_allows_ai) or (
-                not is_feature_enabled(tier, FeatureFlag.LLM_ANALYSIS)
-            ):
+            if not is_feature_enabled(tier, FeatureFlag.LLM_ANALYSIS):
                 zombies["ai_analysis"] = {
-                    "error": "AI Insights requires Growth tier or higher.",
+                    "error": "AI Insights is not available on your current plan.",
                     "summary": "Upgrade to unlock AI-powered analysis.",
                     "upgrade_required": True,
                 }

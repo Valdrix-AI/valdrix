@@ -26,6 +26,7 @@ from app.shared.core.cache import get_cache_service
 from app.shared.core.config import get_settings
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
+from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
 
 router = APIRouter(tags=["GreenOps & Carbon"])
@@ -330,7 +331,9 @@ async def analyze_graviton_opportunities(
         await _store_cached_payload(cache_key, payload, ttl=CARBON_GRAVITON_CACHE_TTL)
         return payload
 
-    adapter = MultiTenantAWSAdapter(connection)
+    from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
+    aws_creds = map_aws_connection_to_credentials(connection)
+    adapter = MultiTenantAWSAdapter(aws_creds)
     credentials = await adapter.get_credentials()
 
     analyzer = GravitonAnalyzer(credentials=credentials, region=region)
@@ -340,6 +343,7 @@ async def analyze_graviton_opportunities(
 
 
 @router.get("/intensity")
+@rate_limit("30/minute")
 async def get_carbon_intensity_forecast(
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
     region: str = Query(default="us-east-1"),

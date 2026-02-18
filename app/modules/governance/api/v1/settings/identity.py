@@ -342,7 +342,7 @@ async def get_identity_diagnostics(
     - SCIM provisioning readiness (token + tier + enablement)
     - Token rotation hygiene signals
     """
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
 
     stmt = select(TenantIdentitySettings).where(
         TenantIdentitySettings.tenant_id == current_user.tenant_id
@@ -500,7 +500,7 @@ async def get_sso_federation_validation(
     the external IdP/provider lifecycle (that is configured in Supabase), but Valdrix
     can validate tenant-scoped settings and compute the expected callback/discovery URLs.
     """
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     settings = get_settings()
 
     stmt = select(TenantIdentitySettings).where(
@@ -668,7 +668,7 @@ async def test_scim_token(
 
     This never returns the stored token. It only verifies whether the submitted token matches the tenant-scoped token.
     """
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     if not is_feature_enabled(tier, FeatureFlag.SCIM):
         raise HTTPException(status_code=403, detail="SCIM requires Enterprise tier.")
 
@@ -704,7 +704,7 @@ async def update_identity_settings(
     """
     Update identity settings for this tenant.
     """
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     if payload.scim_enabled and not is_feature_enabled(tier, FeatureFlag.SCIM):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -917,7 +917,7 @@ async def rotate_scim_token(
 
     This returns the token ONCE. Store it in your IdP immediately.
     """
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     if not is_feature_enabled(tier, FeatureFlag.SCIM):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

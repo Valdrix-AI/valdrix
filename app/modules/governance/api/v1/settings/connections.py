@@ -83,7 +83,7 @@ def check_growth_tier(user: CurrentUser) -> PricingTier:
     We rely on `CurrentUser.tier` (DB-backed per request via `get_current_user`) instead of
     an additional cache + DB lookup. This avoids staleness bugs after upgrades.
     """
-    current_plan = normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
+    current_plan = normalize_tier(getattr(user, "tier", PricingTier.FREE))
     _enforce_growth_tier(current_plan, user)
     return current_plan
 
@@ -92,7 +92,7 @@ def check_cloud_plus_tier(user: CurrentUser) -> PricingTier:
     """
     Ensure Cloud+ connectors are available for the tenant tier.
     """
-    current_plan = normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
+    current_plan = normalize_tier(getattr(user, "tier", PricingTier.FREE))
     if is_feature_enabled(current_plan, FeatureFlag.CLOUD_PLUS_CONNECTORS):
         return current_plan
 
@@ -263,7 +263,7 @@ async def create_aws_connection(
     if existing:
         raise HTTPException(409, f"AWS account {data.aws_account_id} already connected")
 
-    plan = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    plan = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     await _enforce_connection_limit(
         db=db,
         tenant_id=tenant_id,
@@ -403,7 +403,7 @@ async def link_discovered_account(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     tenant_id = _require_tenant_id(current_user)
-    plan = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    plan = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     """Link a discovered account by creating a standard connection."""
     # Double check ownership via management connection in the same query
     stmt = (

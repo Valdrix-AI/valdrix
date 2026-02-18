@@ -57,7 +57,7 @@ async def get_leadership_kpis(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     tenant_id = _require_tenant_id(current_user)
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
 
     try:
         payload = await LeadershipKpiService(db).compute(
@@ -129,7 +129,7 @@ async def capture_leadership_kpis(
     from uuid import uuid4
 
     tenant_id = _require_tenant_id(current_user)
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
 
     try:
         payload = await LeadershipKpiService(db).compute(
@@ -272,7 +272,7 @@ async def get_quarterly_commercial_report(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     tenant_id = _require_tenant_id(current_user)
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
 
     try:
         report = await CommercialProofReportService(db).quarterly_report(
@@ -321,7 +321,7 @@ async def capture_quarterly_commercial_report(
     from uuid import uuid4
 
     tenant_id = _require_tenant_id(current_user)
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
 
     try:
         report = await CommercialProofReportService(db).quarterly_report(

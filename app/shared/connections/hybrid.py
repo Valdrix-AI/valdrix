@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.hybrid_connection import HybridConnection
-from app.shared.adapters.hybrid import HybridAdapter
+from app.shared.adapters.factory import AdapterFactory
 from app.shared.core.exceptions import ResourceNotFoundError
 
 
@@ -33,7 +33,7 @@ class HybridConnectionService:
         if not connection:
             raise ResourceNotFoundError(f"Hybrid Connection {connection_id} not found")
 
-        adapter = HybridAdapter(connection)
+        adapter = AdapterFactory.get_adapter(connection)
         success = await adapter.verify_connection()
         connection.last_synced_at = datetime.now(timezone.utc)
         connection.is_active = success

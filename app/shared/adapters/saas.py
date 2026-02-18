@@ -11,6 +11,7 @@ from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.feed_utils import as_float, is_number, parse_timestamp
 from app.shared.core.currency import convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
+from app.shared.core.credentials import SaaSCredentials
 
 logger = structlog.get_logger()
 
@@ -34,26 +35,23 @@ class SaaSAdapter(BaseAdapter):
     - Native vendor pulls (`auth_method=api_key|oauth`) for Stripe and Salesforce
     """
 
-    def __init__(self, connection: Any):
-        self.connection = connection
-        self._last_error: str | None = None
-
-    @property
-    def last_error(self) -> str | None:
-        return self._last_error
+    def __init__(self, credentials: SaaSCredentials):
+        self.credentials = credentials
+        self.last_error = None
 
     @property
     def _auth_method(self) -> str:
-        return str(getattr(self.connection, "auth_method", "manual")).strip().lower()
+        # SaaSCredentials doesn't explicitly have auth_method yet, 
+        # but extra_config can hold it or we can derive from api_key presence.
+        return str(self.credentials.extra_config.get("auth_method", "manual")).strip().lower()
 
     @property
     def _vendor(self) -> str:
-        return str(getattr(self.connection, "vendor", "")).strip().lower()
+        return self.credentials.platform.strip().lower()
 
     @property
     def _connector_config(self) -> dict[str, Any]:
-        raw = getattr(self.connection, "connector_config", {})
-        return raw if isinstance(raw, dict) else {}
+        return self.credentials.extra_config
 
     @property
     def _native_vendor(self) -> str | None:
@@ -64,13 +62,13 @@ class SaaSAdapter(BaseAdapter):
         return None
 
     def _resolve_api_key(self) -> str:
-        token = getattr(self.connection, "api_key", None)
-        if not isinstance(token, str) or not token.strip():
+        token = self.credentials.api_key.get_secret_value()
+        if not token or not token.strip():
             raise ExternalAPIError("Missing API token for SaaS native connector")
         return token.strip()
 
     async def verify_connection(self) -> bool:
-        self._last_error = None
+        self.last_error = None
         native_vendor = self._native_vendor
         if self._auth_method in {"api_key", "oauth"} and native_vendor is None:
             supported_vendors = ", ".join(sorted(_NATIVE_SUPPORTED_VENDORS))
@@ -90,7 +88,7 @@ class SaaSAdapter(BaseAdapter):
                     await self._verify_salesforce()
                     return True
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
                 logger.warning(
                     "saas_native_verify_failed",
                     vendor=native_vendor,
@@ -98,9 +96,7 @@ class SaaSAdapter(BaseAdapter):
                 )
                 return False
 
-        feed = getattr(self.connection, "spend_feed", None) or getattr(
-            self.connection, "cost_feed", None
-        )
+        feed = self.credentials.extra_config.get("spend_feed") or self.credentials.extra_config.get("cost_feed")
         is_valid = self._validate_manual_feed(feed)
         if not is_valid:
             if self._last_error is None:
@@ -109,7 +105,7 @@ class SaaSAdapter(BaseAdapter):
 
     def _validate_manual_feed(self, feed: Any) -> bool:
         if not isinstance(feed, list) or not feed:
-            self._last_error = "Spend feed must contain at least one record for manual/csv verification."
+            self.last_error = "Spend feed must contain at least one record for manual/csv verification."
             return False
         for idx, entry in enumerate(feed):
             if not isinstance(entry, dict):
@@ -160,7 +156,7 @@ class SaaSAdapter(BaseAdapter):
                         yield row
                     return
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
                 logger.warning(
                     "saas_native_stream_failed_fallback_to_feed",
                     vendor=native_vendor,
@@ -168,8 +164,8 @@ class SaaSAdapter(BaseAdapter):
                 )
 
         feed = (
-            getattr(self.connection, "spend_feed", None)
-            or getattr(self.connection, "cost_feed", None)
+            self.credentials.extra_config.get("spend_feed")
+            or self.credentials.extra_config.get("cost_feed")
             or []
         )
         if not isinstance(feed, list):

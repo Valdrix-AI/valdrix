@@ -46,7 +46,7 @@ class TenantMetrics(BaseModel):
     total_tenants: int
     active_last_24h: int
     active_last_7d: int
-    trial_tenants: int
+    free_tenants: int
     paid_tenants: int
     churn_risk: int  # Inactive paid tenants
 
@@ -165,7 +165,7 @@ async def _get_tenant_metrics(db: AsyncSession, now: datetime) -> TenantMetrics:
     """Calculate tenant growth and activity metrics."""
     day_ago = now - timedelta(hours=24)
     week_ago = now - timedelta(days=7)
-    free_trial_plan = PricingTier.FREE_TRIAL.value
+    free_plan = PricingTier.FREE.value
 
     result = await db.execute(
         select(
@@ -177,14 +177,14 @@ async def _get_tenant_metrics(db: AsyncSession, now: datetime) -> TenantMetrics:
             .filter(Tenant.last_accessed_at >= week_ago)
             .label("active_last_7d"),
             func.count(Tenant.id)
-            .filter(Tenant.plan == free_trial_plan)
-            .label("trial_tenants"),
+            .filter(Tenant.plan == free_plan)
+            .label("free_tenants"),
             func.count(Tenant.id)
-            .filter(Tenant.plan != free_trial_plan)
+            .filter(Tenant.plan != free_plan)
             .label("paid_tenants"),
             func.count(Tenant.id)
             .filter(
-                Tenant.plan != free_trial_plan,
+                Tenant.plan != free_plan,
                 (Tenant.last_accessed_at < week_ago)
                 | (Tenant.last_accessed_at.is_(None)),
             )
@@ -197,7 +197,7 @@ async def _get_tenant_metrics(db: AsyncSession, now: datetime) -> TenantMetrics:
         total_tenants=int(row.total_tenants or 0),
         active_last_24h=int(row.active_last_24h or 0),
         active_last_7d=int(row.active_last_7d or 0),
-        trial_tenants=int(row.trial_tenants or 0),
+        free_tenants=int(row.free_tenants or 0),
         paid_tenants=int(row.paid_tenants or 0),
         churn_risk=int(row.churn_risk or 0),
     )

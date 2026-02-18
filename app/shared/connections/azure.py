@@ -3,7 +3,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.azure_connection import AzureConnection
-from app.shared.adapters.azure import AzureAdapter
+from app.shared.adapters.factory import AdapterFactory
 from app.shared.core.exceptions import ResourceNotFoundError
 
 
@@ -30,7 +30,7 @@ class AzureConnectionService:
         if not connection:
             raise ResourceNotFoundError(f"Azure Connection {connection_id} not found")
 
-        adapter = AzureAdapter(connection)
+        adapter = AdapterFactory.get_adapter(connection)
         success = await adapter.verify_connection()
         if success:
             connection.is_active = True

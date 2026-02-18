@@ -61,11 +61,38 @@ async def get_aws_client(
 
     if connection:
         from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+        from app.shared.core.credentials import AWSCredentials
 
-        adapter = MultiTenantAWSAdapter(connection)
+        creds = AWSCredentials(
+            account_id=connection.aws_account_id,
+            role_arn=connection.role_arn,
+            external_id=connection.external_id,
+            region=connection.region,
+            cur_bucket_name=connection.cur_bucket_name,
+            cur_report_name=connection.cur_report_name,
+            cur_prefix=connection.cur_prefix,
+        )
+        adapter = MultiTenantAWSAdapter(creds)
         creds = await adapter.get_credentials()
         kwargs.update(map_aws_credentials(creds))
     elif credentials:
         kwargs.update(map_aws_credentials(credentials))
 
     return session.client(**kwargs)
+
+def map_aws_connection_to_credentials(connection: AWSConnection) -> Any:
+    """
+    Helper to convert an AWSConnection SQLAlchemy model to AWSCredentials Pydantic model.
+    """
+    from app.shared.core.credentials import AWSCredentials
+
+    return AWSCredentials(
+        account_id=connection.aws_account_id,
+        role_arn=connection.role_arn,
+        external_id=connection.external_id,
+        region=connection.region,
+        tenant_id=connection.tenant_id,
+        cur_bucket_name=connection.cur_bucket_name,
+        cur_report_name=connection.cur_report_name,
+        cur_prefix=connection.cur_prefix,
+    )

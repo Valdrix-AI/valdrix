@@ -96,7 +96,9 @@ class RemediationHandler(BaseJobHandler):
                     "reason": "aws_connection_missing",
                 }
 
-            adapter = MultiTenantAWSAdapter(connection)
+            from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
+            aws_creds = map_aws_connection_to_credentials(connection)
+            adapter = MultiTenantAWSAdapter(aws_creds)
             creds = await adapter.get_credentials()
 
             # Prefer request region for execution correctness; fall back to connection default.
@@ -151,8 +153,9 @@ class RemediationHandler(BaseJobHandler):
         if not connection:
             return {"status": "skipped", "reason": "no_aws_connection"}
 
-        # Get credentials
-        adapter = MultiTenantAWSAdapter(connection)
+        from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
+        aws_creds = map_aws_connection_to_credentials(connection)
+        adapter = MultiTenantAWSAdapter(aws_creds)
         creds = await adapter.get_credentials()
 
         engine = AutonomousRemediationEngine(db, str(tenant_id))

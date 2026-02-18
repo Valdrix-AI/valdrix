@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.license_connection import LicenseConnection
-from app.shared.adapters.license import LicenseAdapter
+from app.shared.adapters.factory import AdapterFactory
 from app.shared.core.exceptions import ResourceNotFoundError
 
 
@@ -33,7 +33,7 @@ class LicenseConnectionService:
         if not connection:
             raise ResourceNotFoundError(f"License Connection {connection_id} not found")
 
-        adapter = LicenseAdapter(connection)
+        adapter = AdapterFactory.get_adapter(connection)
         success = await adapter.verify_connection()
         connection.last_synced_at = datetime.now(timezone.utc)
         connection.is_active = success
