@@ -153,6 +153,20 @@ class LLMBudget(Base):
         String(100), nullable=False, default="llama-3.3-70b-versatile"
     )
 
+    # PRODUCTION: Atomic Budget Tracking (Finding #S2)
+    # monthly_spend_usd: Hard-committed spend for the current billing period
+    monthly_spend_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 8), nullable=False, default=Decimal("0.0")
+    )
+    # pending_reservations_usd: In-flight reservations to prevent double-spending
+    pending_reservations_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 8), nullable=False, default=Decimal("0.0")
+    )
+    # budget_reset_at: Timestamp when the budget was last reset for a new month
+    budget_reset_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
     # Underlying columns for API Key Overrides (storing encrypted data)
     _openai_api_key: Mapped[str | None] = mapped_column(
         "openai_api_key", String(512), nullable=True

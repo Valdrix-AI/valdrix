@@ -58,5 +58,5 @@ def get_tenant_cohort(
     if tenant.plan == "growth":
         return TenantCohort.ACTIVE
 
-    # Starter and Trial with no activity info = DORMANT (weekly scans)
+    # Starter and Free with no activity info = DORMANT (weekly scans)
     return TenantCohort.DORMANT

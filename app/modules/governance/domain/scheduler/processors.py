@@ -124,8 +124,6 @@ class AnalysisProcessor:
 
             for conn in connections:
                 try:
-                    # BE-SCHED-2: Analysis Timeout Protection (SEC-05)
-                    # Use a generous 5-minute timeout per connection to prevent job hangs.
                     async def _run_analysis() -> None:
                         nonlocal latest_analysis_result
                         provider = str(getattr(conn, "provider", "aws")).lower()
@@ -247,9 +245,13 @@ class AnalysisProcessor:
                                         }
                                     )
 
-                    await asyncio.wait_for(_run_analysis(), timeout=300)
+                    # BE-SCHED-2: Analysis Timeout Protection (SEC-05)
+                    # We use a 10-minute timeout per connection to prevent job hangs
+                    # while allowing enough time for large-scale CUR processing.
+                    async with asyncio.timeout(600):
+                        await _run_analysis()
 
-                except asyncio.TimeoutError:
+                except (asyncio.TimeoutError, TimeoutError):
                     logger.error(
                         "tenant_analysis_timeout",
                         tenant_id=str(tenant.id),

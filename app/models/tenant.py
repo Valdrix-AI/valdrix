@@ -19,7 +19,7 @@ from app.shared.core.security import generate_blind_index
 
 from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
-from app.shared.core.config import get_settings
+from app.models._encryption import get_encryption_key
 
 if TYPE_CHECKING:
     from app.models.llm import LLMUsage, LLMBudget
@@ -30,13 +30,6 @@ if TYPE_CHECKING:
     from app.models.hybrid_connection import HybridConnection
     from app.models.notification_settings import NotificationSettings
     from app.models.background_job import BackgroundJob
-
-settings = get_settings()
-_encryption_key = settings.ENCRYPTION_KEY
-
-if not _encryption_key:
-    # Fail-fast at import time to prevent accidental plaintext storage
-    raise RuntimeError("ENCRYPTION_KEY not set. Cannot start securely.")
 
 
 class UserRole(str, Enum):
@@ -66,24 +59,25 @@ class Tenant(Base):
 
     id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(
-        StringEncryptedType(String, _encryption_key, AesEngine, "pkcs5"), index=True
+        StringEncryptedType(String, get_encryption_key, AesEngine, "pkcs5"), index=True
     )
     name_bidx: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     plan: Mapped[str] = mapped_column(
-        String, default="free_trial"
+        String, default="free"
     )  # Updated to use PricingTier in logic
     stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    # Trial tracking
-    trial_started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
 
     # Activity tracking (Phase 7: Lazy Tenant Pattern)
     # Updated on dashboard access for dormancy detection
     last_accessed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # SEC-HAR-12: Soft-delete for data recovery (Finding #H18)
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     # Relationships
     users: Mapped[List["User"]] = relationship(
@@ -130,7 +124,7 @@ class User(Base):
         ForeignKey("tenants.id"), nullable=False, index=True
     )
     email: Mapped[str] = mapped_column(
-        StringEncryptedType(String, _encryption_key, AesEngine, "pkcs5"), index=True
+        StringEncryptedType(String, get_encryption_key, AesEngine, "pkcs5"), index=True
     )
     email_bidx: Mapped[str | None] = mapped_column(
         String(64), index=True, nullable=True
@@ -145,11 +139,18 @@ class User(Base):
 
 
 # SQLAlchemy Listeners to keep Blind Indexes in sync
+# Finding #6: Generate blind indexes efficiently. 
+# In 2026, we keep these synchronous for data integrity during transactions, 
+# but ensure the underlying 'generate_blind_index' is extremely fast (HMAC using optimized C-extensions).
 @event.listens_for(Tenant.name, "set")
 def on_tenant_name_set(target: Tenant, value: str, _old: str, _init: Any) -> None:
-    target.name_bidx = generate_blind_index(value)
+    if value != _old: # Only regenerate if changed
+        # Salt with own ID for cross-tenant isolation (Phase 7 Hardening)
+        target.name_bidx = generate_blind_index(value, tenant_id=target.id)
 
 
 @event.listens_for(User.email, "set")
 def on_user_email_set(target: User, value: str, _old: str, _init: Any) -> None:
-    target.email_bidx = generate_blind_index(value)
+    if value != _old:
+        # Salt with tenant_id for cross-tenant isolation (Phase 7 Hardening)
+        target.email_bidx = generate_blind_index(value, tenant_id=target.tenant_id)

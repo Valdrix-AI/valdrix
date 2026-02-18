@@ -30,7 +30,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
 
-from app.shared.core.config import get_settings
+from app.models._encryption import get_encryption_key
 from app.shared.core.security import generate_secret_blind_index
 from app.shared.db.base import Base
 
@@ -38,8 +38,6 @@ if TYPE_CHECKING:
     from app.models.tenant import Tenant
 
 
-settings = get_settings()
-_encryption_key = settings.ENCRYPTION_KEY
 
 
 class TenantIdentitySettings(Base):
@@ -85,7 +83,7 @@ class TenantIdentitySettings(Base):
     # SCIM provisioning (Enterprise feature)
     scim_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     scim_bearer_token: Mapped[str | None] = mapped_column(
-        StringEncryptedType(String(1024), _encryption_key, AesEngine, "pkcs5"),
+        StringEncryptedType(String(1024), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
     scim_token_bidx: Mapped[str | None] = mapped_column(

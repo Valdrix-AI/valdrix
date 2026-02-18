@@ -21,10 +21,8 @@ from app.shared.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
-from app.shared.core.config import get_settings
+from app.models._encryption import get_encryption_key
 
-settings = get_settings()
-_encryption_key = settings.ENCRYPTION_KEY
 
 
 class GCPConnection(Base):
@@ -55,7 +53,7 @@ class GCPConnection(Base):
 
     # Encrypted Credentials (Full JSON blob) - Optional for Workload Identity
     service_account_json: Mapped[str | None] = mapped_column(
-        StringEncryptedType(Text, _encryption_key, AesEngine, "pkcs5"), nullable=True
+        StringEncryptedType(Text, get_encryption_key, AesEngine, "pkcs5"), nullable=True
     )
 
     # Auth Method: "secret" or "workload_identity"

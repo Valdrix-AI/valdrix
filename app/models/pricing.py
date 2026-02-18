@@ -98,7 +98,7 @@ class TenantSubscription(Base):
     paystack_email_token: Mapped[Optional[str]] = mapped_column(String(255))
     paystack_auth_code: Mapped[Optional[str]] = mapped_column(String(255))
 
-    tier: Mapped[str] = mapped_column(String(20), default="free_trial")
+    tier: Mapped[str] = mapped_column(String(20), default="free")
     status: Mapped[str] = mapped_column(String(20), default="active")
 
     # Billing & Dunning

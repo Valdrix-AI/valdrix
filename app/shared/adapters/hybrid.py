@@ -11,6 +11,7 @@ import structlog
 
 from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.feed_utils import as_float, is_number, parse_timestamp
+from app.shared.core.credentials import HybridCredentials
 from app.shared.core.currency import convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
 
@@ -37,26 +38,21 @@ class HybridAdapter(BaseAdapter):
     systems like VMware/VCF, OpenStack, or CMDB-backed ledgers.
     """
 
-    def __init__(self, connection: Any):
-        self.connection = connection
-        self._last_error: str | None = None
-
-    @property
-    def last_error(self) -> str | None:
-        return self._last_error
+    def __init__(self, credentials: HybridCredentials):
+        self.credentials = credentials
+        self.last_error = None
 
     @property
     def _auth_method(self) -> str:
-        return str(getattr(self.connection, "auth_method", "manual")).strip().lower()
+        return self.credentials.auth_method.strip().lower()
 
     @property
     def _vendor(self) -> str:
-        return str(getattr(self.connection, "vendor", "")).strip().lower()
+        return self.credentials.vendor.strip().lower()
 
     @property
     def _connector_config(self) -> dict[str, Any]:
-        raw = getattr(self.connection, "connector_config", {})
-        return raw if isinstance(raw, dict) else {}
+        return self.credentials.connector_config
 
     @property
     def _native_vendor(self) -> str | None:
@@ -71,16 +67,16 @@ class HybridAdapter(BaseAdapter):
         return None
 
     def _resolve_api_key(self) -> str:
-        token = getattr(self.connection, "api_key", None)
-        if not isinstance(token, str) or not token.strip():
+        token = self.credentials.api_key
+        if not token:
             raise ExternalAPIError("Missing API token for hybrid native connector")
-        return token.strip()
+        return token.get_secret_value().strip()
 
     def _resolve_api_secret(self) -> str:
-        token = getattr(self.connection, "api_secret", None)
-        if not isinstance(token, str) or not token.strip():
+        token = self.credentials.api_secret
+        if not token:
             raise ExternalAPIError("Missing API secret for hybrid native connector")
-        return token.strip()
+        return token.get_secret_value().strip()
 
     def _iter_month_starts(
         self, start_date: datetime, end_date: datetime
@@ -161,7 +157,7 @@ class HybridAdapter(BaseAdapter):
         return True
 
     async def verify_connection(self) -> bool:
-        self._last_error = None
+        self.last_error = None
         native_vendor = self._native_vendor
         if self._auth_method == "api_key" and native_vendor is None:
             supported = ", ".join(sorted(_LEDGER_HTTP_VENDOR_ALIASES))
@@ -183,7 +179,7 @@ class HybridAdapter(BaseAdapter):
                 await self._verify_ledger_http()
                 return True
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
                 logger.warning(
                     "hybrid_native_verify_failed",
                     vendor=native_vendor,
@@ -196,7 +192,7 @@ class HybridAdapter(BaseAdapter):
                 await self._verify_cloudkitty()
                 return True
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
                 logger.warning(
                     "hybrid_native_verify_failed", vendor=native_vendor, error=str(exc)
                 )
@@ -207,15 +203,13 @@ class HybridAdapter(BaseAdapter):
                 await self._verify_vmware()
                 return True
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
                 logger.warning(
                     "hybrid_native_verify_failed", vendor=native_vendor, error=str(exc)
                 )
                 return False
 
-        feed = getattr(self.connection, "spend_feed", None) or getattr(
-            self.connection, "cost_feed", None
-        )
+        feed = self.credentials.spend_feed
         is_valid = self._validate_manual_feed(feed)
         if not is_valid and self._last_error is None:
             self._last_error = "Spend feed is missing or invalid."
@@ -267,7 +261,7 @@ class HybridAdapter(BaseAdapter):
                     yield row
                 return
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
                 logger.warning(
                     "hybrid_native_stream_failed_fallback_to_feed",
                     vendor=native_vendor,
@@ -282,7 +276,7 @@ class HybridAdapter(BaseAdapter):
                     yield row
                 return
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
                 logger.warning(
                     "hybrid_native_stream_failed_fallback_to_feed",
                     vendor=native_vendor,
@@ -297,18 +291,14 @@ class HybridAdapter(BaseAdapter):
                     yield row
                 return
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
                 logger.warning(
                     "hybrid_native_stream_failed_fallback_to_feed",
                     vendor=native_vendor,
                     error=str(exc),
                 )
 
-        feed = (
-            getattr(self.connection, "spend_feed", None)
-            or getattr(self.connection, "cost_feed", None)
-            or []
-        )
+        feed = self.credentials.spend_feed
         if not isinstance(feed, list):
             return
 

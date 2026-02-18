@@ -400,6 +400,8 @@ class CostAggregator:
         start_date: date,
         end_date: date,
         provider: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> Dict[str, Any]:
         """Provides a simplified breakdown for the API."""
         stmt = (
@@ -422,7 +424,7 @@ class CostAggregator:
             ).where(CloudAccount.provider == provider.lower())
 
         # Aggregate limit (Phase 4 safety gate)
-        stmt = stmt.limit(MAX_AGGREGATION_ROWS)
+        stmt = stmt.limit(min(limit, MAX_AGGREGATION_ROWS)).offset(offset)
 
         # Set statement timeout
         from sqlalchemy import text

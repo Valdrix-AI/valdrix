@@ -6,17 +6,15 @@ Leverages aioboto3 for non-blocking I/O.
 
 """
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
-from datetime import date, datetime, timezone
-from decimal import Decimal
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, AsyncGenerator
+from datetime import datetime, timezone
 import aioboto3
 from botocore.config import Config as BotoConfig
 
-from app.schemas.costs import CloudUsageSummary, CostRecord
 import structlog
-from app.models.aws_connection import AWSConnection
 from app.shared.adapters.base import BaseAdapter
 from app.shared.core.config import get_settings
+from app.shared.core.credentials import AWSCredentials
 import tenacity
 from botocore.exceptions import (
     ClientError,
@@ -24,7 +22,8 @@ from botocore.exceptions import (
     ReadTimeoutError,
     EndpointConnectionError,
 )
-from app.shared.core.exceptions import AdapterError
+from app.shared.core.exceptions import AdapterError, ConfigurationError
+from app.models.aws_connection import AWSConnection
 
 if TYPE_CHECKING:
     pass
@@ -36,10 +35,6 @@ logger = structlog.get_logger()
 BOTO_CONFIG = BotoConfig(
     read_timeout=30, connect_timeout=10, retries={"max_attempts": 3, "mode": "adaptive"}
 )
-
-# Safety limit to prevent infinite loops, set to a very high value (300 pages = ~10 years of daily data)
-MAX_COST_EXPLORER_PAGES = 300
-
 
 # BE-ADAPT-2: Global retry decorator for transient AWS connection issues
 def with_aws_retry(func: Any) -> Any:
@@ -113,10 +108,11 @@ class MultiTenantAWSAdapter(BaseAdapter):
     AWS adapter that assumes an IAM role in the customer's account using aioboto3.
     """
 
-    def __init__(self, connection: AWSConnection):
-        self.connection = connection
-        self._credentials: Optional[dict[str, Any]] = None
-        self._credentials_expire_at: Optional[datetime] = None
+    def __init__(self, credentials: AWSCredentials):
+        self.credentials = credentials
+        self.last_error: Optional[str] = None
+        self._temp_credentials: Optional[dict[str, Any]] = None
+        self._temp_credentials_expire_at: Optional[datetime] = None
         self.session = aioboto3.Session()
 
     @with_aws_retry
@@ -125,11 +121,11 @@ class MultiTenantAWSAdapter(BaseAdapter):
         try:
             # BE-ADAPT-1: Regional white-listing
             settings = get_settings()
-            if self.connection.region not in settings.AWS_SUPPORTED_REGIONS:
+            if self.credentials.region not in settings.AWS_SUPPORTED_REGIONS:
                 logger.error(
                     "invalid_aws_region_rejected",
-                    region=self.connection.region,
-                    tenant_id=str(self.connection.tenant_id),
+                    region=self.credentials.region,
+                    account_id=self.credentials.account_id,
                 )
                 return False
 
@@ -142,9 +138,9 @@ class MultiTenantAWSAdapter(BaseAdapter):
     @with_aws_retry
     async def get_credentials(self) -> dict[str, Any]:
         """Get temporary credentials via STS AssumeRole (Native Async)."""
-        if self._credentials and self._credentials_expire_at:
-            if datetime.now(timezone.utc) < self._credentials_expire_at:
-                return self._credentials
+        if self._temp_credentials and self._temp_credentials_expire_at:
+            if datetime.now(timezone.utc) < self._temp_credentials_expire_at:
+                return self._temp_credentials
 
         STS_CONFIG = BotoConfig(
             read_timeout=10, connect_timeout=5, retries={"max_attempts": 2}
@@ -152,21 +148,22 @@ class MultiTenantAWSAdapter(BaseAdapter):
         async with self.session.client("sts", config=STS_CONFIG) as sts_client:
             try:
                 response = await sts_client.assume_role(
-                    RoleArn=self.connection.role_arn,
+                    RoleArn=self.credentials.role_arn,
                     RoleSessionName="ValdrixCostFetch",
-                    ExternalId=self.connection.external_id,
+                    ExternalId=self.credentials.external_id,
                     DurationSeconds=3600,
                 )
 
-                self._credentials = response["Credentials"]
-                self._credentials_expire_at = self._credentials["Expiration"]
+                self._temp_credentials = response["Credentials"]
+                self._temp_credentials_expire_at = self._temp_credentials["Expiration"]
 
                 logger.info(
-                    "sts_assume_role_success",
-                    expires_at=str(self._credentials_expire_at),
+                    "sts_role_assumed",
+                    account_id=self.credentials.account_id,
+                    expires_at=str(self._temp_credentials_expire_at),
                 )
 
-                return self._credentials
+                return self._temp_credentials
 
             except ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "Unknown")
@@ -182,200 +179,28 @@ class MultiTenantAWSAdapter(BaseAdapter):
     async def get_cost_and_usage(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> List[Dict[str, Any]]:
-        """Fetch costs using AWS Cost Explorer and normalize."""
-        # Note: AWS specific usage_only and group_by_service are not in BaseAdapter interface
-        # For base compliance we map to get_daily_costs defaults or we need to expand base
-        # But get_cost_and_usage in BaseAdapter returns List[Dict], get_daily_costs returns CloudUsageSummary
-        # We need to adapt the return type to List[Dict] as per BaseAdapter or update BaseAdapter to return CloudUsageSummary
-        # The BaseAdapter defined earlier returns List[Dict].
-        # But `AWSMultiTenantAdapter.get_daily_costs` returns `CloudUsageSummary`.
-        # I should probably wrap `get_daily_costs` and return the records list.
-
-        s_date = start_date.date() if isinstance(start_date, datetime) else start_date
-        e_date = end_date.date() if isinstance(end_date, datetime) else end_date
-
-        summary = await self.get_daily_costs(
-            start_date=s_date,
-            end_date=e_date,
-            granularity=granularity,
-            group_by_service=True,  # Default to detailed breakdown for ingestion
+        """
+        MultiTenantAWSAdapter no longer supports direct cost fetching via Cost Explorer.
+        Users must configure CUR for cost ingestion.
+        """
+        raise ConfigurationError(
+            "Cost ingestion requires CUR (Cost and Usage Report) configuration. "
+            "MultiTenantAWSAdapter is now restricted to resource discovery. "
+            "Please configure S3-based CUR to enable cost analysis."
         )
 
-        # Convert CostRecord objects to dicts matching BaseAdapter expectation
-        return [
-            {
-                "timestamp": r.date,  # CostRecord has date or timestamp
-                "service": r.service,
-                "region": r.region,
-                "usage_type": r.usage_type,
-                "cost_usd": r.amount,
-                "currency": r.currency,
-                "amount_raw": r.amount_raw,
-                "tags": {},
-            }
-            for r in summary.records
-        ]
-
-    async def get_daily_costs(
-        self,
-        start_date: date,
-        end_date: date,
-        granularity: str = "DAILY",
-        usage_only: bool = False,
-        group_by_service: bool = True,
-    ) -> CloudUsageSummary:
-        """Fetch multi-region costs with OTel tracing."""
-        from app.shared.core.tracing import get_tracer
-
-        tracer = get_tracer(__name__)
-
-        with tracer.start_as_current_span("aws_fetch_costs") as span:
-            span.set_attribute("tenant_id", str(self.connection.tenant_id))
-            span.set_attribute("aws_account", self.connection.aws_account_id)
-
-            # ... existing implementation ...
-            # Convert date to datetime for stream method
-            start_dt = datetime.combine(start_date, datetime.min.time()).replace(
-                tzinfo=timezone.utc
-            )
-            end_dt = datetime.combine(end_date, datetime.min.time()).replace(
-                tzinfo=timezone.utc
-            )
-
-            records = []
-            total_cost = Decimal("0")
-
-            async for record in self.stream_cost_and_usage(
-                start_dt, end_dt, granularity
-            ):
-                records.append(
-                    CostRecord(
-                        date=record["timestamp"],
-                        service=record["service"],
-                        region=record["region"],
-                        amount=record["cost_usd"],
-                        currency=record["currency"],
-                        amount_raw=record["amount_raw"],
-                        usage_type=record["usage_type"],
-                    )
-                )
-                total_cost += record["cost_usd"]
-
-            return CloudUsageSummary(
-                tenant_id=str(self.connection.tenant_id),
-                provider="aws",
-                records=records,
-                total_cost=total_cost,
-                start_date=start_date,
-                end_date=end_date,
-            )
-
-    @with_aws_retry
     async def stream_cost_and_usage(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
-    ) -> Any:
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        Stream cost data from AWS Cost Explorer.
-        Optimized to never hold the full dataset in memory.
+        MultiTenantAWSAdapter no longer supports direct cost fetching.
         """
-        creds = await self.get_credentials()
-
-        async with self.session.client(
-            "ce",
-            region_name=self.connection.region,
-            aws_access_key_id=creds["AccessKeyId"],
-            aws_secret_access_key=creds["SecretAccessKey"],
-            aws_session_token=creds["SessionToken"],
-            config=BOTO_CONFIG,
-        ) as client:
-            try:
-                request_params = {
-                    "TimePeriod": {
-                        "Start": start_date.strftime("%Y-%m-%d"),
-                        "End": end_date.strftime("%Y-%m-%d"),
-                    },
-                    "Granularity": granularity,
-                    "Metrics": ["AmortizedCost"],
-                    "GroupBy": [{"Type": "DIMENSION", "Key": "SERVICE"}],
-                }
-
-                pages_fetched = 0
-                while pages_fetched < MAX_COST_EXPLORER_PAGES:
-                    response = await client.get_cost_and_usage(**request_params)
-
-                    results_by_time = response.get("ResultsByTime", [])
-                    for result in results_by_time:
-                        dt = datetime.fromisoformat(
-                            result["TimePeriod"]["Start"]
-                        ).replace(tzinfo=timezone.utc)
-                        if "Groups" in result:
-                            for group in result["Groups"]:
-                                service_name = group["Keys"][0]
-                                amount = Decimal(
-                                    group["Metrics"]["AmortizedCost"]["Amount"]
-                                )
-                                yield {
-                                    "timestamp": dt,
-                                    "service": service_name,
-                                    "region": self.connection.region,
-                                    "cost_usd": amount,
-                                    "currency": "USD",
-                                    "amount_raw": amount,
-                                    "usage_type": "Usage",
-                                    "source_adapter": "cost_explorer_api",
-                                }
-
-                    pages_fetched += 1
-                    if "NextPageToken" in response:
-                        request_params["NextPageToken"] = response["NextPageToken"]
-                    else:
-                        break
-                if (
-                    pages_fetched >= MAX_COST_EXPLORER_PAGES
-                    and "NextPageToken" in response
-                ):
-                    logger.warning(
-                        "cost_explorer_page_limit_reached",
-                        aws_account=self.connection.aws_account_id,
-                        pages=pages_fetched,
-                    )
-            except ClientError as e:
-                error_code = e.response.get("Error", {}).get("Code", "Unknown")
-                logger.error("multitenant_cost_fetch_failed", error=str(e))
-                raise AdapterError(
-                    message=f"AWS Cost Explorer failure: {str(e)}",
-                    code=error_code,
-                    details={"aws_account": self.connection.aws_account_id},
-                ) from e
-
-    async def get_gross_usage(
-        self, start_date: date, end_date: date
-    ) -> List[Dict[str, Any]]:
-        # Helper that wraps get_daily_costs specifically for gross usage
-        summary = await self.get_daily_costs(
-            start_date, end_date, usage_only=True, group_by_service=True
+        # Yield nothing or raise error? consistent with get_cost_and_usage
+        raise ConfigurationError(
+            "Cost ingestion requires CUR configuration. "
+            "Please configure S3-based CUR to enable cost analysis."
         )
-        return [
-            {
-                "date": r.date,
-                "service": r.service,
-                "region": r.region,
-                "cost_usd": r.amount,
-                "currency": r.currency,
-                "usage_type": r.usage_type,
-            }
-            for r in summary.records
-        ]
-
-    async def get_amortized_costs(
-        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
-    ) -> List[Dict[str, Any]]:
-        """
-        Fetch amortized costs (RI/Savings Plans spread across usage).
-        Phase 2.3: RI & Savings Plan Amortization - AWS already uses AmortizedCost metric.
-        This method provides API parity with Azure and GCP adapters.
-        """
-        return await self.get_cost_and_usage(start_date, end_date, granularity)
+        yield {}  # unreachable, but satisfies AsyncGenerator return type hint
 
     @with_aws_retry
     async def discover_resources(
@@ -386,12 +211,12 @@ class MultiTenantAWSAdapter(BaseAdapter):
         """
         # BE-ADAPT-1: Regional white-listing
         settings = get_settings()
-        target_region = region or self.connection.region
+        target_region = region or self.credentials.region
         if target_region not in settings.AWS_SUPPORTED_REGIONS:
             logger.error(
                 "unsupported_aws_region_skip_scan",
                 region=target_region,
-                tenant_id=str(self.connection.tenant_id),
+                tenant_id=str(self.credentials.tenant_id),
             )
             return []
 
@@ -400,7 +225,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
         tracer = get_tracer(__name__)
 
         with tracer.start_as_current_span("aws_discover_resources") as span:
-            span.set_attribute("tenant_id", str(self.connection.tenant_id))
+            span.set_attribute("tenant_id", str(self.credentials.tenant_id))
             span.set_attribute("resource_type", resource_type)
 
             from app.modules.optimization.domain.registry import registry
@@ -438,7 +263,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
                 )
                 return []
 
-            target_region = region or self.connection.region
+            target_region = region or self.credentials.region
             creds = await self.get_credentials()
 
             try:

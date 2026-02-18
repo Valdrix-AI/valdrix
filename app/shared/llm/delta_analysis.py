@@ -299,7 +299,7 @@ class DeltaAnalysisService:
         """
         Aggregate cost data by resource ID, computing daily averages.
 
-        Handles AWS Cost Explorer format:
+        Handles standardized cost format:
         {
             "TimePeriod": {"Start": "2026-01-01", "End": "2026-01-02"},
             "Groups": [{"Keys": ["service", "resource"], "Metrics": {...}}]

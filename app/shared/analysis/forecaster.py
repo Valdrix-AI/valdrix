@@ -140,38 +140,35 @@ class SymbolicForecaster:
         # Extract forecast window
         result_df = forecast.tail(days)
         forecast_entries = []
-        total_cost = 0.0
+        total_cost = Decimal("0")
 
         for _, row in result_df.iterrows():
-            amount = max(0.0, float(row["yhat"]))
+            amount = Decimal(str(max(0.0, float(row["yhat"]))))
             forecast_entries.append(
                 {
                     "date": row["ds"].date(),
-                    "amount": Decimal(str(round(amount, 2))),
+                    "amount": amount.quantize(Decimal("0.01")),
                     "confidence_lower": Decimal(
-                        str(round(max(0.0, row["yhat_lower"]), 2))
-                    ),
-                    "confidence_upper": Decimal(str(round(row["yhat_upper"], 2))),
+                        str(max(0.0, float(row["yhat_lower"])))
+                    ).quantize(Decimal("0.01")),
+                    "confidence_upper": Decimal(
+                        str(float(row["yhat_upper"]))
+                    ).quantize(Decimal("0.01")),
                 }
             )
             total_cost += amount
 
         # Simple MAPE on training data for accuracy tracking
         try:
-            y_trueList = df[~df["is_outlier"]]["y"].tolist()
-            # Predicted values for training period
-            y_predList = forecast.head(len(df))["yhat"].tolist()
-            mape = (
-                np.mean(
-                    np.abs(
-                        (np.array(y_trueList) - np.array(y_predList))
-                        / np.array(y_trueList)
-                    )
-                )
-                * 100
-                if any(y_trueList)
-                else 0.0
-            )
+            y_true = np.array(df[~df["is_outlier"]]["y"].tolist())
+            y_pred = np.array(forecast.head(len(df))["yhat"].tolist())
+            
+            # Use safety for zero-division
+            mask = y_true != 0
+            if np.any(mask):
+                mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
+            else:
+                mape = 0.0
         except Exception as e:
             logger.debug("mape_calculation_skipped", error=str(e))
             mape = 15.0  # Fallback default
@@ -179,9 +176,9 @@ class SymbolicForecaster:
         return {
             "confidence": "high" if len(df) >= 30 else "medium",
             "forecast": forecast_entries,
-            "total_forecasted_cost": Decimal(str(round(total_cost, 2))),
+            "total_forecasted_cost": total_cost.quantize(Decimal("0.01")),
             "model": "Prophet",
-            "accuracy_mape": round(mape, 2),
+            "accuracy_mape": Decimal(str(round(float(mape), 2))),
         }
 
     @staticmethod
@@ -203,22 +200,20 @@ class SymbolicForecaster:
             trend = beta * (level - last_level) + (1 - beta) * trend
 
         forecast_entries = []
-        total_cost = 0
+        total_cost = Decimal("0")
         last_date = df["ds"].iloc[-1]
 
         # Uncertainty grows over time: +/- 10% * days_out
         for i in range(1, days + 1):
-            amount = max(0.0, level + (i * trend))
-            uncertainty = (0.1 + (i * 0.02)) * amount  # Grows with time
+            amount = Decimal(str(max(0.0, level + (i * trend))))
+            uncertainty = (Decimal("0.1") + (Decimal(str(i)) * Decimal("0.02"))) * amount
 
             forecast_entries.append(
                 {
                     "date": (last_date + timedelta(days=i)).date(),
-                    "amount": Decimal(str(round(amount, 2))),
-                    "confidence_lower": Decimal(
-                        str(round(max(0.0, amount - uncertainty), 2))
-                    ),
-                    "confidence_upper": Decimal(str(round(amount + uncertainty, 2))),
+                    "amount": amount.quantize(Decimal("0.01")),
+                    "confidence_lower": (amount - uncertainty).quantize(Decimal("0.01")),
+                    "confidence_upper": (amount + uncertainty).quantize(Decimal("0.01")),
                 }
             )
             total_cost += amount
@@ -226,9 +221,9 @@ class SymbolicForecaster:
         return {
             "confidence": "low",
             "forecast": forecast_entries,
-            "total_forecasted_cost": Decimal(str(round(total_cost, 2))),
+            "total_forecasted_cost": total_cost.quantize(Decimal("0.01")),
             "model": "Holt-Winters Fallback",
-            "accuracy_mape": 20.0,
+            "accuracy_mape": Decimal("20.00"),
         }
 
     @staticmethod
@@ -272,15 +267,15 @@ class SymbolicForecaster:
         Project future carbon emissions based on cost trends.
         """
         cost_forecast = await SymbolicForecaster.forecast(history, days)
-        intensity = REGION_CARBON_INTENSITY.get(region, DEFAULT_CARBON_INTENSITY)
+        intensity = Decimal(str(REGION_CARBON_INTENSITY.get(region, DEFAULT_CARBON_INTENSITY)))
 
-        total_g = 0.0
+        total_g = Decimal("0")
         for entry in cost_forecast["forecast"]:
-            carbon_g = float(entry["amount"]) * intensity
-            entry["carbon_g"] = carbon_g
+            carbon_g = entry["amount"] * intensity
+            entry["carbon_g"] = carbon_g.quantize(Decimal("0.0001"))
             total_g += carbon_g
 
-        cost_forecast["total_forecasted_co2_kg"] = round(total_g / 1000.0, 4)
+        cost_forecast["total_forecasted_co2_kg"] = (total_g / Decimal("1000")).quantize(Decimal("0.0001"))
         cost_forecast["unit"] = "kg CO2e"
         cost_forecast["region"] = region
 

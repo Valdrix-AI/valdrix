@@ -6,8 +6,17 @@ for AWS, Azure, and GCP.
 """
 
 from typing import Any
+from pydantic import SecretStr
+from app.shared.core.credentials import (
+    AWSCredentials,
+    AzureCredentials,
+    GCPCredentials,
+    SaaSCredentials,
+    LicenseCredentials,
+    PlatformCredentials,
+    HybridCredentials,
+)
 from app.shared.adapters.base import BaseAdapter
-from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.adapters.aws_cur import AWSCURAdapter
 from app.shared.adapters.azure import AzureAdapter
 from app.shared.adapters.gcp import GCPAdapter
@@ -15,6 +24,7 @@ from app.shared.adapters.saas import SaaSAdapter
 from app.shared.adapters.license import LicenseAdapter
 from app.shared.adapters.platform import PlatformAdapter
 from app.shared.adapters.hybrid import HybridAdapter
+from app.shared.core.exceptions import ConfigurationError
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
@@ -32,39 +42,81 @@ class AdapterFactory:
         """
         if isinstance(connection, AWSConnection):
             # Prefer CUR adapter for enterprise accounts if configured
+            aws_creds = AWSCredentials(
+                account_id=connection.aws_account_id,
+                role_arn=connection.role_arn,
+                external_id=connection.external_id,
+                region=connection.region,
+                cur_bucket_name=connection.cur_bucket_name,
+                cur_report_name=connection.cur_report_name,
+                cur_prefix=connection.cur_prefix,
+            )
             if connection.cur_bucket_name and connection.cur_status == "active":
-                return AWSCURAdapter(connection)
-            return MultiTenantAWSAdapter(connection)
+                return AWSCURAdapter(aws_creds)
+            
+            raise ConfigurationError(
+                "AWS Cost Explorer is disabled to prevent unexpected API charges. "
+                "Please configure CUR (Cost and Usage Report) in S3 via Data Exports "
+                "to enable cost ingestion for this account."
+            )
 
         elif isinstance(connection, AzureConnection):
-            return AzureAdapter(connection)
+            azure_creds = AzureCredentials(
+                tenant_id=connection.azure_tenant_id,
+                client_id=connection.client_id,
+                subscription_id=connection.subscription_id,
+                client_secret=SecretStr(connection.client_secret) if connection.client_secret else None,
+                auth_method=connection.auth_method,
+            )
+            return AzureAdapter(azure_creds)
 
         elif isinstance(connection, GCPConnection):
-            return GCPAdapter(connection)
+            gcp_creds = GCPCredentials(
+                project_id=connection.project_id,
+                service_account_json=SecretStr(connection.service_account_json) if connection.service_account_json else None,
+                auth_method=connection.auth_method,
+                billing_project_id=connection.billing_project_id,
+                billing_dataset=connection.billing_dataset,
+                billing_table=connection.billing_table,
+            )
+            return GCPAdapter(gcp_creds)
+
         elif isinstance(connection, SaaSConnection):
-            return SaaSAdapter(connection)
+            saas_creds = SaaSCredentials(
+                platform=connection.vendor,
+                api_key=SecretStr(connection.api_key or ""),
+                extra_config=connection.connector_config or {},
+            )
+            return SaaSAdapter(saas_creds)
+
         elif isinstance(connection, LicenseConnection):
-            return LicenseAdapter(connection)
+            license_creds = LicenseCredentials(
+                vendor=connection.vendor,
+                auth_method=connection.auth_method,
+                api_key=SecretStr(connection.api_key) if connection.api_key else None,
+                connector_config=connection.connector_config or {},
+                license_feed=connection.license_feed or [],
+            )
+            return LicenseAdapter(license_creds)
         elif isinstance(connection, PlatformConnection):
-            return PlatformAdapter(connection)
+            platform_creds = PlatformCredentials(
+                vendor=connection.vendor,
+                auth_method=connection.auth_method,
+                api_key=SecretStr(connection.api_key) if connection.api_key else None,
+                api_secret=SecretStr(connection.api_secret) if connection.api_secret else None,
+                connector_config=connection.connector_config or {},
+                spend_feed=connection.spend_feed or [],
+            )
+            return PlatformAdapter(platform_creds)
         elif isinstance(connection, HybridConnection):
-            return HybridAdapter(connection)
+            hybrid_creds = HybridCredentials(
+                vendor=connection.vendor,
+                auth_method=connection.auth_method,
+                api_key=SecretStr(connection.api_key) if connection.api_key else None,
+                api_secret=SecretStr(connection.api_secret) if connection.api_secret else None,
+                connector_config=connection.connector_config or {},
+                spend_feed=connection.spend_feed or [],
+            )
+            return HybridAdapter(hybrid_creds)
 
-        # Fallback for dynamic types/mocks: route by `provider` attribute.
-        provider = getattr(connection, "provider", "").lower()
-        if provider == "azure":
-            # Assuming connection has necessary fields or casts
-            # This path might need to be removed if strictly typed
-            return AzureAdapter(connection)
-        elif provider == "gcp":
-            return GCPAdapter(connection)
-        elif provider == "saas":
-            return SaaSAdapter(connection)
-        elif provider == "license":
-            return LicenseAdapter(connection)
-        elif provider == "platform":
-            return PlatformAdapter(connection)
-        elif provider == "hybrid":
-            return HybridAdapter(connection)
-
-        raise ValueError(f"Unsupported connection type or provider: {type(connection)}")
+        raise ConfigurationError(f"Unsupported connection type or provider: {type(connection)}")

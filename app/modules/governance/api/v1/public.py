@@ -12,7 +12,7 @@ from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
 from app.shared.core.pricing import PricingTier, normalize_tier
 from app.shared.lead_gen.assessment import FreeAssessmentService
-from app.shared.core.rate_limit import rate_limit
+from app.shared.core.rate_limit import auth_limit, rate_limit
 from app.shared.db.session import get_system_db
 
 router = APIRouter()
@@ -44,6 +44,7 @@ class SsoDiscoveryResponse(BaseModel):
 
 
 @router.get("/csrf")
+@auth_limit
 async def get_csrf_token(request: Request) -> JSONResponse:
     """
     Get a CSRF token to be used in subsequent POST/PUT/DELETE requests.

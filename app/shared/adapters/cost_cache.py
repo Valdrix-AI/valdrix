@@ -1,14 +1,14 @@
 """
 Cost Result Caching - Production Ready
 
-Implements a caching strategy for AWS Cost Explorer results with:
+Implements a caching strategy for cloud cost results with:
 1. Redis backend for production (distributed, persistent)
 2. In-memory fallback for development
 3. Automatic TTL management
 4. Cache invalidation support
 
 Cost Benefits:
-- Reduces API costs ($0.01 per Cost Explorer request)
+- Reduces external ingestion overhead
 - Improves response times (cache hits < 10ms)
 - Enables offline analysis
 """

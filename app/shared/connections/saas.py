@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.saas_connection import SaaSConnection
-from app.shared.adapters.saas import SaaSAdapter
+from app.shared.adapters.factory import AdapterFactory
 from app.shared.core.exceptions import ResourceNotFoundError
 
 
@@ -33,7 +33,7 @@ class SaaSConnectionService:
         if not connection:
             raise ResourceNotFoundError(f"SaaS Connection {connection_id} not found")
 
-        adapter = SaaSAdapter(connection)
+        adapter = AdapterFactory.get_adapter(connection)
         success = await adapter.verify_connection()
         connection.last_synced_at = datetime.now(timezone.utc)
         connection.is_active = success

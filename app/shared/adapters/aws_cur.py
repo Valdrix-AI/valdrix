@@ -10,30 +10,31 @@ import json
 import tempfile
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Optional, Generator, AsyncGenerator
 import aioboto3
 import pandas as pd
 import pyarrow.parquet as pq
 import structlog
-from app.shared.adapters.base import CostAdapter
-from app.models.aws_connection import AWSConnection
+from app.shared.adapters.base import BaseAdapter
+from app.shared.core.exceptions import ConfigurationError
+from app.shared.core.credentials import AWSCredentials
 from app.schemas.costs import CloudUsageSummary, CostRecord
 
 logger = structlog.get_logger()
 
 
-class AWSCURAdapter(CostAdapter):
+class AWSCURAdapter(BaseAdapter):
     """
     Ingests AWS CUR (Cost and Usage Report) data from S3.
     """
 
-    def __init__(self, connection: AWSConnection):
-        self.connection = connection
+    def __init__(self, credentials: AWSCredentials):
+        self.credentials = credentials
         self.session = aioboto3.Session()
         # Use dynamic bucket name from automated setup, fallback to connection-derived if needed
         self.bucket_name = (
-            connection.cur_bucket_name
-            or f"valdrix-cur-{connection.aws_account_id}-{connection.region}"
+            credentials.cur_bucket_name
+            or f"valdrix-cur-{credentials.account_id}-{credentials.region}"
         )
 
     async def verify_connection(self) -> bool:
@@ -42,7 +43,7 @@ class AWSCURAdapter(CostAdapter):
             creds = await self._get_credentials()
             async with self.session.client(
                 "s3",
-                region_name=self.connection.region,
+                region_name=self.credentials.region,
                 aws_access_key_id=creds["AccessKeyId"],
                 aws_secret_access_key=creds["SecretAccessKey"],
                 aws_session_token=creds["SessionToken"],
@@ -63,7 +64,7 @@ class AWSCURAdapter(CostAdapter):
 
         async with self.session.client(
             "s3",
-            region_name=self.connection.region,
+            region_name=self.credentials.region,
             aws_access_key_id=creds["AccessKeyId"],
             aws_secret_access_key=creds["SecretAccessKey"],
             aws_session_token=creds["SessionToken"],
@@ -83,13 +84,13 @@ class AWSCURAdapter(CostAdapter):
 
                 # 2. Create bucket if needed
                 if not bucket_exists:
-                    if self.connection.region == "us-east-1":
+                    if self.credentials.region == "us-east-1":
                         await s3.create_bucket(Bucket=self.bucket_name)
                     else:
                         await s3.create_bucket(
                             Bucket=self.bucket_name,
                             CreateBucketConfiguration={
-                                "LocationConstraint": self.connection.region
+                                "LocationConstraint": self.credentials.region
                             },
                         )
 
@@ -105,8 +106,8 @@ class AWSCURAdapter(CostAdapter):
                             "Resource": f"arn:aws:s3:::{self.bucket_name}/*",
                             "Condition": {
                                 "StringEquals": {
-                                    "aws:SourceAccount": self.connection.aws_account_id,
-                                    "aws:SourceArn": f"arn:aws:cur:us-east-1:{self.connection.aws_account_id}:definition/*",
+                                    "aws:SourceAccount": self.credentials.account_id,
+                                    "aws:SourceArn": f"arn:aws:cur:us-east-1:{self.credentials.account_id}:definition/*",
                                 }
                             },
                         },
@@ -136,7 +137,7 @@ class AWSCURAdapter(CostAdapter):
         ) as cur:
             try:
                 # 4. Create CUR Report Definition
-                report_name = f"valdrix-cur-{self.connection.aws_account_id}"
+                report_name = f"valdrix-cur-{self.credentials.account_id}"
                 await cur.put_report_definition(
                     ReportDefinition={
                         "ReportName": report_name,
@@ -146,7 +147,7 @@ class AWSCURAdapter(CostAdapter):
                         "AdditionalSchemaElements": ["RESOURCES"],
                         "S3Bucket": self.bucket_name,
                         "S3Prefix": "cur",
-                        "S3Region": self.connection.region,
+                        "S3Region": self.credentials.region,
                         "ReportVersioning": "OVERWRITE_REPORT",
                         "RefreshClosedReports": True,
                     }
@@ -164,9 +165,46 @@ class AWSCURAdapter(CostAdapter):
     async def get_cost_and_usage(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> List[Dict[str, Any]]:
-        """Normalized cost interface."""
-        summary = await self.ingest_latest_parquet()
+        """Materialized interface for cost ingestion."""
+        # Convert to date for internal processing
+        s_date = start_date.date() if isinstance(start_date, datetime) else start_date
+        e_date = end_date.date() if isinstance(end_date, datetime) else end_date
+
+        summary = await self.get_daily_costs(s_date, e_date)
         return [r.dict() for r in summary.records]
+
+    async def get_daily_costs(
+        self,
+        start_date: date,
+        end_date: date,
+        usage_only: bool = False,
+        group_by_service: bool = True,
+    ) -> CloudUsageSummary:
+        """
+        Fetch daily costs from CUR files in S3 for a specific date range.
+        Consolidates logic from previous CUR and S3 adapters.
+        """
+        try:
+            # 1. Discover relevant Parquet files
+            report_files = await self._list_cur_files_in_range(start_date, end_date)
+            
+            if not report_files:
+                logger.warning(
+                    "no_cur_files_found_in_range",
+                    bucket=self.bucket_name,
+                    start=start_date.isoformat(),
+                    end=end_date.isoformat(),
+                )
+                return self._empty_summary()
+
+            # 2. Process and aggregate
+            return await self._process_files_in_range(
+                report_files, start_date, end_date
+            )
+
+        except Exception as e:
+            logger.error("cur_daily_costs_failed", error=str(e))
+            raise
 
     async def discover_resources(
         self, resource_type: str, region: str | None = None
@@ -179,103 +217,156 @@ class AWSCURAdapter(CostAdapter):
 
     async def stream_cost_and_usage(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
-    ) -> Any:
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        Stream cost data from CUR Parquet files.
+        Efficiently stream cost data without loading full summary into memory.
         """
-        summary = await self.ingest_latest_parquet()
-        for record in summary.records:
-            # Normalize to dict format expected by stream consumers
-            yield {
-                "timestamp": record.date,
-                "service": record.service,
-                "region": record.region,
-                "cost_usd": record.amount,
-                "currency": record.currency,
-                "amount_raw": record.amount_raw,
-                "usage_type": record.usage_type,
-                "tags": record.tags,
-                "source_adapter": "cur_parquet",
-            }
+        s_date = start_date.date() if isinstance(start_date, datetime) else start_date
+        e_date = end_date.date() if isinstance(end_date, datetime) else end_date
+        
+        report_files = await self._list_cur_files_in_range(s_date, e_date)
+        
+        for file_key in report_files:
+            # We process one file at a time and yield records
+            file_summary = await self._ingest_single_file(file_key, s_date, e_date)
+            for record in file_summary.records:
+                yield {
+                    "timestamp": record.date,
+                    "service": record.service,
+                    "region": record.region,
+                    "cost_usd": record.amount,
+                    "currency": record.currency,
+                    "amount_raw": record.amount_raw,
+                    "usage_type": record.usage_type,
+                    "tags": record.tags,
+                    "source_adapter": "cur_data_export",
+                }
 
-    async def get_costs(
-        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
-    ) -> CloudUsageSummary:
-        """Standardized interface for CUR ingestion."""
-        # For now, CUR ingestion returns the latest file which usually covers a month.
-        # Future: Filter records by start/end date.
-        return await self.ingest_latest_parquet()
-
-    async def ingest_latest_parquet(self) -> CloudUsageSummary:
+    async def _list_cur_files_in_range(self, start_date: date, end_date: date) -> List[str]:
         """
-        Discovers and ingests the latest Parquet file from the CUR bucket.
+        Lists S3 keys for CUR Parquet files representing the date range.
+        Handles the year/month subdirectory structure and manifest files.
         """
         creds = await self._get_credentials()
+        prefix_base = self.credentials.cur_prefix or "cur"
+        files: List[str] = []
+        seen: set[str] = set()
 
         async with self.session.client(
             "s3",
-            region_name=self.connection.region,
+            region_name=self.credentials.region,
             aws_access_key_id=creds["AccessKeyId"],
             aws_secret_access_key=creds["SecretAccessKey"],
             aws_session_token=creds["SessionToken"],
         ) as s3:
-            try:
-                # 1. List objects in the bucket to find the latest Parquet
+            # Traversal logic: Scan each month in the range
+            current = start_date.replace(day=1)
+            while current <= end_date:
+                month_prefix = f"{prefix_base}/{current.year}/{current.month:02d}/"
+                
                 paginator = s3.get_paginator("list_objects_v2")
-                parquet_objects: List[Dict[str, Any]] = []
+                manifest_keys = []
+                parquet_keys = []
+                
                 async for page in paginator.paginate(
-                    Bucket=self.bucket_name, Prefix="cur/"
+                    Bucket=self.bucket_name, Prefix=month_prefix
                 ):
                     for obj in page.get("Contents", []):
-                        key = obj.get("Key", "")
-                        if key.lower().endswith(".parquet"):
-                            parquet_objects.append(obj)
+                        key = obj["Key"]
+                        if key.lower().endswith("manifest.json"):
+                            manifest_keys.append((obj.get("LastModified"), key))
+                        elif key.lower().endswith(".parquet"):
+                            parquet_keys.append(key)
 
-                if not parquet_objects:
-                    logger.warning("no_cur_files_found", bucket=self.bucket_name)
-                    return self._empty_summary()
-
-                # Sort by last modified
-                files = sorted(
-                    parquet_objects,
-                    key=lambda x: x.get("LastModified") or datetime.min,
-                    reverse=True,
-                )
-                latest_file = files[0]["Key"]
-
-                logger.info("ingesting_cur_file", key=latest_file)
-
-                # 3. Stream download to temporary file (avoids OOM for large files)
-                with tempfile.NamedTemporaryFile(
-                    delete=False, suffix=".parquet"
-                ) as tmp:
-                    tmp_path = tmp.name
+                # Prioritize manifest files if found (more reliable set of parts)
+                if manifest_keys:
+                    manifest_keys.sort(key=lambda x: x[0] or datetime.min, reverse=True)
+                    latest_manifest = manifest_keys[0][1]
                     try:
-                        obj = await s3.get_object(
-                            Bucket=self.bucket_name, Key=latest_file
-                        )
-                        async with obj["Body"] as stream:
-                            while True:
-                                chunk = await stream.read(1024 * 1024 * 8)  # 8MB chunks
-                                if not chunk:
-                                    break
-                                tmp.write(chunk)
+                        manifest_obj = await s3.get_object(Bucket=self.bucket_name, Key=latest_manifest)
+                        manifest_data = json.loads(await manifest_obj["Body"].read())
+                        for r_key in manifest_data.get("reportKeys", []):
+                            if r_key.endswith(".parquet") and r_key not in seen:
+                                files.append(r_key)
+                                seen.add(r_key)
+                    except Exception as e:
+                        logger.warning("manifest_parse_failed", key=latest_manifest, error=str(e))
+                        # Fallback to direct listing
+                        for pk in parquet_keys:
+                            if pk not in seen:
+                                files.append(pk)
+                                seen.add(pk)
+                else:
+                    for pk in parquet_keys:
+                        if pk not in seen:
+                            files.append(pk)
+                            seen.add(pk)
 
-                        # 4. Streamed Ingestion with PyArrow (Chunked Processing)
-                        return self._process_parquet_streamingly(tmp_path)
+                # Increment month
+                if current.month == 12:
+                    current = current.replace(year=current.year + 1, month=1)
+                else:
+                    current = current.replace(month=current.month + 1)
+        
+        return files
 
-                    finally:
-                        if os.path.exists(tmp_path):
-                            os.remove(tmp_path)
+    async def _process_files_in_range(
+        self, files: List[str], start_date: date, end_date: date
+    ) -> CloudUsageSummary:
+        """Processes multiple files and aggregates into a single summary."""
+        master_summary = self._empty_summary()
+        master_summary.start_date = start_date
+        master_summary.end_date = end_date
+        
+        for file_key in files:
+            file_summary = await self._ingest_single_file(file_key, start_date, end_date)
+            
+            # Merge aggregations
+            master_summary.total_cost += file_summary.total_cost
+            master_summary.records.extend(file_summary.records[:10000]) # Cap per-file for memory
+            
+            for k, v in file_summary.by_service.items():
+                master_summary.by_service[k] = master_summary.by_service.get(k, Decimal("0")) + v
+            for k, v in file_summary.by_region.items():
+                master_summary.by_region[k] = master_summary.by_region.get(k, Decimal("0")) + v
+                
+            for tk, tag_map in file_summary.by_tag.items():
+                if tk not in master_summary.by_tag:
+                    master_summary.by_tag[tk] = {}
+                for tv, tcost in tag_map.items():
+                    master_summary.by_tag[tk][tv] = master_summary.by_tag[tk].get(tv, Decimal("0")) + tcost
+                    
+        return master_summary
 
-            except Exception as e:
-                logger.error("cur_ingestion_failed", error=str(e))
-                raise
+    async def _ingest_single_file(self, key: str, start_date: date, end_date: date) -> CloudUsageSummary:
+        """Downloads and processes a single Parquet file."""
+        creds = await self._get_credentials()
+        async with self.session.client(
+            "s3",
+            region_name=self.credentials.region,
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        ) as s3:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".parquet") as tmp:
+                tmp_path = tmp.name
+                try:
+                    obj = await s3.get_object(Bucket=self.bucket_name, Key=key)
+                    async with obj["Body"] as stream:
+                        while True:
+                            chunk = await stream.read(1024 * 1024 * 16) # 16MB chunks
+                            if not chunk: break
+                            tmp.write(chunk)
+                    
+                    return self._process_parquet_streamingly(tmp_path, start_date, end_date)
+                finally:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
 
-    def _process_parquet_streamingly(self, file_path: str) -> CloudUsageSummary:
+    def _process_parquet_streamingly(self, file_path: str, start_date: date | None = None, end_date: date | None = None) -> CloudUsageSummary:
         """
         Processes a Parquet file using row groups to keep memory low.
-        Aggregates metrics on the fly.
+        Aggregates metrics on the fly with optional date filtering.
         """
         parquet_file = pq.ParquetFile(file_path)
 
@@ -284,33 +375,21 @@ class AWSCURAdapter(CostAdapter):
         by_service: dict[str, Decimal] = {}
         by_region: dict[str, Decimal] = {}
         by_tag: dict[str, dict[str, Decimal]] = {}
-        all_records: list[
-            CostRecord
-        ] = []  # Still keeping records for now, but could be limited if needed
+        all_records: list[CostRecord] = []
 
-        min_date = None
-        max_date = None
+        min_date_found = None
+        max_date_found = None
 
         # AWS CUR Column Aliases
         CUR_COLUMNS = {
-            "date": [
-                "lineItem/UsageStartDate",
-                "identity/TimeInterval",
-                "line_item_usage_start_date",
-            ],
-            "cost": ["lineItem/UnblendedCost", "line_item_unblended_cost"],
+            "date": ["lineItem/UsageStartDate", "identity/TimeInterval", "line_item_usage_start_date"],
+            "cost": ["lineItem/UnblendedCost", "line_item_unblended_cost", "lineItem/AmortizedCost", "line_item_amortized_cost"],
             "currency": ["lineItem/CurrencyCode", "line_item_currency_code"],
-            "service": [
-                "lineItem/ProductCode",
-                "line_item_product_code",
-                "product/ProductName",
-            ],
-            "region": ["product/region", "lineItem/AvailabilityZone"],
-            "usage_type": ["lineItem/UsageType"],
+            "service": ["lineItem/ProductCode", "line_item_product_code", "product/ProductName"],
+            "region": ["product/region", "lineItem/AvailabilityZone", "product/location"],
+            "usage_type": ["lineItem/UsageType", "line_item_operation"],
         }
 
-        # Iterate through row groups
-        parse_errors = 0
         for i in range(parquet_file.num_row_groups):
             try:
                 table = parquet_file.read_row_group(i)
@@ -319,62 +398,47 @@ class AWSCURAdapter(CostAdapter):
                 logger.warning("cur_row_group_read_failed", error=str(e), row_group=i)
                 continue
 
-            if df_chunk.empty:
-                continue
+            if df_chunk.empty: continue
 
-            # Resolve columns for this chunk
-            col_map = {
-                k: next((c for c in v if c in df_chunk.columns), None)
-                for k, v in CUR_COLUMNS.items()
-            }
-            missing = [key for key in ("date", "cost") if not col_map.get(key)]
-            if missing:
-                logger.warning(
-                    "cur_missing_required_columns", missing=missing, row_group=i
-                )
-                continue
+            col_map = {k: next((c for c in v if c in df_chunk.columns), None) for k, v in CUR_COLUMNS.items()}
+            if not col_map.get("date") or not col_map.get("cost"): continue
 
-            # Update date range
-            chunk_min = pd.to_datetime(df_chunk[col_map["date"]].min()).date()
-            chunk_max = pd.to_datetime(df_chunk[col_map["date"]].max()).date()
-            min_date = min(min_date, chunk_min) if min_date else chunk_min
-            max_date = max(max_date, chunk_max) if max_date else chunk_max
+            # Date Range check for optimization
+            df_chunk[col_map["date"]] = pd.to_datetime(df_chunk[col_map["date"]])
+            chunk_min = df_chunk[col_map["date"]].min().date()
+            chunk_max = df_chunk[col_map["date"]].max().date()
+            
+            if start_date and chunk_max < start_date: continue
+            if end_date and chunk_min > end_date: continue
 
-            # Process rows in chunk
+            min_date_found = min(min_date_found, chunk_min) if min_date_found else chunk_min
+            max_date_found = max(max_date_found, chunk_max) if max_date_found else chunk_max
+
             for _, row in df_chunk.iterrows():
+                row_date = row[col_map["date"]].date()
+                if start_date and row_date < start_date: continue
+                if end_date and row_date > end_date: continue
+
                 try:
                     record = self._parse_row(row, col_map)
-                except Exception as e:
-                    parse_errors += 1
-                    if parse_errors <= 3:
-                        logger.warning("cur_row_parse_failed", error=str(e))
+                    if len(all_records) < 50000: # Safety valve for summary records
+                        all_records.append(record)
+
+                    total_cost_usd += record.amount
+                    by_service[record.service] = by_service.get(record.service, Decimal("0")) + record.amount
+                    by_region[record.region] = by_region.get(record.region, Decimal("0")) + record.amount
+
+                    for tk, tv in record.tags.items():
+                        if tk not in by_tag: by_tag[tk] = {}
+                        by_tag[tk][tv] = by_tag[tk].get(tv, Decimal("0")) + record.amount
+                except Exception:
                     continue
 
-                # Safety valve: For massive files, we limit the records list to prevent OOM
-                if len(all_records) < 100000:
-                    all_records.append(record)
-
-                # Aggregation
-                total_cost_usd += record.amount
-                service_key = record.service or "unknown"
-                region_key = record.region or "unknown"
-                by_service[service_key] = (
-                    by_service.get(service_key, Decimal("0")) + record.amount
-                )
-                by_region[region_key] = (
-                    by_region.get(region_key, Decimal("0")) + record.amount
-                )
-
-                for tk, tv in record.tags.items():
-                    if tk not in by_tag:
-                        by_tag[tk] = {}
-                    by_tag[tk][tv] = by_tag[tk].get(tv, Decimal("0")) + record.amount
-
         return CloudUsageSummary(
-            tenant_id=str(self.connection.tenant_id),
+            tenant_id="anonymous",
             provider="aws",
-            start_date=min_date or date.today(),
-            end_date=max_date or date.today(),
+            start_date=min_date_found or date.today(),
+            end_date=max_date_found or date.today(),
             total_cost=total_cost_usd,
             records=all_records,
             by_service=by_service,
@@ -425,10 +489,10 @@ class AWSCURAdapter(CostAdapter):
         # Use raw datetime to preserve hourly granularity
         date_column = col_map["date"]
         if not date_column:
-            raise ValueError("Missing date column mapping")
+            raise ConfigurationError("Missing date column mapping")
         dt = pd.to_datetime(row[date_column])
         if pd.isna(dt):
-            raise ValueError("Invalid usage start date")
+            raise ConfigurationError("Invalid usage start date")
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
 
@@ -460,13 +524,13 @@ class AWSCURAdapter(CostAdapter):
         # For simplicity, we assume the credentials logic is shared or we re-implement
         from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 
-        adapter = MultiTenantAWSAdapter(self.connection)
+        adapter = MultiTenantAWSAdapter(self.credentials)
         credentials = await adapter.get_credentials()
         return cast(dict[str, str], credentials)
 
     def _empty_summary(self) -> CloudUsageSummary:
         return CloudUsageSummary(
-            tenant_id=str(self.connection.tenant_id),
+            tenant_id="anonymous", # Decoupled from tenant model in adapter
             provider="aws",
             start_date=date.today(),
             end_date=date.today(),

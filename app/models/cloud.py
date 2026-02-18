@@ -1,6 +1,7 @@
 from uuid import UUID, uuid4
 from datetime import date, datetime
 from decimal import Decimal
+import sqlalchemy as sa
 from sqlalchemy import (
     String,
     Boolean,
@@ -132,5 +133,7 @@ class CostRecord(Base):
             "resource_id",
             name="uix_account_cost_granularity",
         ),
+        # BE-COST-2: Composite index for performance at scale (Phase 3 Audit Remediation)
+        sa.Index("ix_cost_records_tenant_recorded", "tenant_id", "recorded_at"),
         get_partition_args("RANGE (recorded_at)"),
     )

@@ -289,9 +289,9 @@ async def _get_feature_usage(db: AsyncSession, tenant_id: UUID) -> FeatureUsageM
     row = result.one()
 
     # Determine features based on tier
-    tier_raw = row.tenant_plan if row.tenant_plan else "free_trial"
+    tier_raw = row.tenant_plan if row.tenant_plan else "free"
     tier = tier_raw.value if hasattr(tier_raw, "value") else str(tier_raw)
-    is_paid = tier.lower() not in {"free_trial", "starter"}
+    is_paid = tier.lower() not in {"free", "starter"}
 
     return FeatureUsageMetrics(
         greenops_enabled=is_paid,

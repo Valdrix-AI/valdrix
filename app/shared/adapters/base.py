@@ -12,6 +12,7 @@ class BaseAdapter(ABC):
     - Resource Discovery
     - Connection Verification
     """
+    last_error: Optional[str] = None
 
     @abstractmethod
     async def verify_connection(self) -> bool:
@@ -44,7 +45,7 @@ class BaseAdapter(ABC):
 
     # Compatibility method for adapters that do not expose resource-level usage yet.
     async def get_resource_usage(
-        self, service_name: str, resource_id: Optional[str] = None
+        self, _service_name: str, _resource_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         return []
 

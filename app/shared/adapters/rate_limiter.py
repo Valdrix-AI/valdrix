@@ -1,12 +1,11 @@
 """
-AWS Rate Limiting Helper - Infrastructure Optimization (Phase 7: 10K Scale)
+AWS Rate Limiting Helper
 
 Provides rate limiting and exponential backoff for AWS API calls:
-- 5 requests per second default (AWS Cost Explorer limit)
 - Exponential backoff on ThrottlingException
 - Automatic retry with jitter
 
-This prevents rate limit errors at scale (10K tenants = 10K API calls).
+This prevents rate limit errors at scale.
 """
 
 import asyncio
@@ -19,15 +18,12 @@ import structlog
 logger = structlog.get_logger()
 
 # Rate limiting constants
-# CE is notoriously restrictive (5/s across account)
-# EC2/CW have higher burst/refill limits but we keep them safe for 10K scale
 SERVICE_LIMITS = {
-    "ce": 5,  # Cost Explorer
     "cur": 10,  # Cost & Usage Report
     "ec2": 20,  # EC2
     "cw": 20,  # CloudWatch
     "trust": 10,  # Trusted Advisor
-    "default": 5,  # Safe fallback
+    "default": 10,  # Safe fallback
 }
 
 INITIAL_BACKOFF_SECONDS = 1.0
@@ -81,7 +77,7 @@ class RateLimiter:
 _limiters: dict[str, RateLimiter] = {}
 
 
-def get_aws_rate_limiter(service: str = "ce") -> RateLimiter:
+def get_aws_rate_limiter(service: str = "default") -> RateLimiter:
     """Get or create the rate limiter for a specific AWS service."""
     global _limiters
     service = service.lower()
@@ -94,7 +90,7 @@ def get_aws_rate_limiter(service: str = "ce") -> RateLimiter:
 async def with_rate_limit(
     coro: Callable[..., Awaitable[T]],
     *args: Any,
-    service: str = "ce",
+    service: str = "default",
     **kwargs: Any,
 ) -> T:
     """

@@ -14,6 +14,7 @@ import structlog
 
 from app.shared.core.auth import CurrentUser, get_current_user
 from app.shared.core.cache import get_cache_service
+from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
 from app.models.remediation import RemediationRequest
 from app.shared.core.pricing import PricingTier, requires_tier
@@ -57,8 +58,9 @@ class LeaderboardResponse(BaseModel):
 
 
 @router.get("", response_model=LeaderboardResponse)
+@rate_limit("60/minute")
 @requires_tier(
-    PricingTier.GROWTH, PricingTier.PRO, PricingTier.ENTERPRISE, PricingTier.FREE_TRIAL
+    PricingTier.GROWTH, PricingTier.PRO, PricingTier.ENTERPRISE, PricingTier.FREE
 )
 async def get_leaderboard(
     period: str = Query("30d", pattern="^(7d|30d|90d|all)$"),

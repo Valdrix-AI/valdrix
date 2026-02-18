@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.platform_connection import PlatformConnection
-from app.shared.adapters.platform import PlatformAdapter
+from app.shared.adapters.factory import AdapterFactory
 from app.shared.core.exceptions import ResourceNotFoundError
 
 
@@ -35,7 +35,7 @@ class PlatformConnectionService:
                 f"Platform Connection {connection_id} not found"
             )
 
-        adapter = PlatformAdapter(connection)
+        adapter = AdapterFactory.get_adapter(connection)
         success = await adapter.verify_connection()
         connection.last_synced_at = datetime.now(timezone.utc)
         connection.is_active = success

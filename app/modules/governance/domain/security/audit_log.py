@@ -305,8 +305,7 @@ class AuditLogger:
             error_message=error_message,
         )
 
-        from app.shared.core.async_utils import maybe_await
-        await maybe_await(self.db.add(entry))
+        self.db.add(entry)
         await self.db.flush()
 
         # Also log to structured logger for real-time monitoring

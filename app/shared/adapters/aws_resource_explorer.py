@@ -27,8 +27,10 @@ class AWSResourceExplorerAdapter:
     async def _get_client(self) -> Any:
         """Helper to get a configured resource-explorer-2 client."""
         from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+        from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
 
-        adapter = MultiTenantAWSAdapter(self.connection)
+        aws_creds = map_aws_connection_to_credentials(self.connection)
+        adapter = MultiTenantAWSAdapter(aws_creds)
         creds = await adapter.get_credentials()
 
         return self.session.client(

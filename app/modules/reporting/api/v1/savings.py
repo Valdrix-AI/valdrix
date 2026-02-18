@@ -60,7 +60,7 @@ async def get_savings_proof(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     tenant_id = _require_tenant_id(current_user)
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     normalized_provider = provider.strip().lower() if provider else None
     service = SavingsProofService(db)
     try:
@@ -101,7 +101,7 @@ async def get_savings_proof_drilldown(
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     tenant_id = _require_tenant_id(current_user)
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE_TRIAL))
+    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     normalized_provider = provider.strip().lower() if provider else None
     service = SavingsProofService(db)
     try:

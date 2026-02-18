@@ -407,9 +407,8 @@ class AttributionEngine:
         allocations = await self.apply_rules(cost_record, rules)
 
         # Persist allocations
-        from app.shared.core.async_utils import maybe_await
         for allocation in allocations:
-            await maybe_await(self.db.add(allocation))
+            self.db.add(allocation)
 
         await self.db.commit()
 
@@ -487,6 +486,8 @@ class AttributionEngine:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         bucket: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> Dict[str, Any]:
         """
         Get aggregated allocation summary by bucket for a tenant.

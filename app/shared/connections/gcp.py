@@ -3,7 +3,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.gcp_connection import GCPConnection
-from app.shared.adapters.gcp import GCPAdapter
+from app.shared.adapters.factory import AdapterFactory
 from app.shared.core.exceptions import ResourceNotFoundError
 
 
@@ -23,7 +23,7 @@ class GCPConnectionService:
         if not connection:
             raise ResourceNotFoundError(f"GCP Connection {connection_id} not found")
 
-        adapter = GCPAdapter(connection)
+        adapter = AdapterFactory.get_adapter(connection)
         success = await adapter.verify_connection()
         if success:
             connection.is_active = True

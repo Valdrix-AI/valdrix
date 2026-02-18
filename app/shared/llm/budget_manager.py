@@ -7,21 +7,21 @@ Implements atomic budget reservation/debit pattern to prevent cost overages.
 
 import structlog
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from enum import Enum
 from typing import Any
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.llm import LLMBudget, LLMUsage
-from app.shared.core.exceptions import BudgetExceededError, ResourceNotFoundError
+from app.shared.core.exceptions import BudgetExceededError
 from app.shared.llm.pricing_data import LLM_PRICING
 from app.shared.llm.pricing_data import ProviderCost
 from app.shared.core.cache import get_cache_service
 
 # Moved BudgetStatus here
 from app.shared.core.ops_metrics import LLM_PRE_AUTH_DENIALS, LLM_SPEND_USD
-from app.shared.core.pricing import get_tenant_tier
+from app.shared.core.pricing import get_tenant_tier, PricingTier
 from app.shared.core.logging import audit_log
 from app.shared.core.async_utils import maybe_call
 
@@ -99,6 +99,63 @@ class LLMBudgetManager:
         return (input_cost + output_cost).quantize(Decimal("0.0001"))
 
     @classmethod
+    async def _enforce_daily_analysis_limit(
+        cls,
+        tenant_id: UUID,
+        db: AsyncSession,
+    ) -> None:
+        """
+        Enforce tier-based per-day LLM analysis quota.
+
+        This guard is evaluated before budget reservation to fail fast on plan limits.
+        """
+        from app.shared.core.pricing import get_tenant_tier, get_tier_limit
+        from app.models.llm import LLMUsage
+
+        tier = await get_tenant_tier(tenant_id, db)
+        raw_limit = get_tier_limit(tier, "llm_analyses_per_day")
+        if raw_limit is None:
+            return
+
+        try:
+            daily_limit = int(raw_limit)
+        except (TypeError, ValueError):
+            logger.warning(
+                "invalid_llm_daily_limit",
+                tenant_id=str(tenant_id),
+                tier=tier.value,
+                raw_limit=raw_limit,
+            )
+            return
+
+        if daily_limit <= 0:
+            raise BudgetExceededError(
+                "LLM analysis is not available on your current plan.",
+                details={"daily_limit": daily_limit, "requests_today": 0},
+            )
+
+        now = datetime.now(timezone.utc)
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+
+        result = await db.execute(
+            select(func.count(LLMUsage.id)).where(
+                LLMUsage.tenant_id == tenant_id,
+                LLMUsage.created_at >= day_start,
+                LLMUsage.created_at < day_end,
+            )
+        )
+        requests_today = int(result.scalar() or 0)
+        if requests_today >= daily_limit:
+            raise BudgetExceededError(
+                "Daily LLM analysis limit reached for your current plan.",
+                details={
+                    "daily_limit": daily_limit,
+                    "requests_today": requests_today,
+                },
+            )
+
+    @classmethod
     async def check_and_reserve(
         cls,
         tenant_id: UUID,
@@ -117,6 +174,9 @@ class LLMBudgetManager:
         )
 
         try:
+            # 0. Enforce plan-level daily LLM request quota.
+            await cls._enforce_daily_analysis_limit(tenant_id, db)
+
             # 1. Fetch current budget state (with FOR UPDATE lock)
             result = await db.execute(
                 select(LLMBudget)
@@ -126,78 +186,96 @@ class LLMBudgetManager:
             budget = result.scalar_one_or_none()
 
             if not budget:
-                logger.error(
-                    "budget_not_configured",
+                tier = await get_tenant_tier(tenant_id, db)
+                default_limit = Decimal("1.00")
+                if tier in {PricingTier.STARTER, PricingTier.GROWTH}:
+                    default_limit = Decimal("10.00")
+                elif tier in {PricingTier.PRO, PricingTier.ENTERPRISE}:
+                    default_limit = Decimal("50.00")
+
+                budget = LLMBudget(
+                    tenant_id=tenant_id,
+                    monthly_limit_usd=float(default_limit),
+                    alert_threshold_percent=80,
+                    hard_limit=True,
+                    preferred_provider="groq",
+                    preferred_model="llama-3.3-70b-versatile",
+                )
+                db.add(budget)
+                await db.flush()
+                logger.info(
+                    "budget_auto_bootstrapped",
                     tenant_id=str(tenant_id),
-                    error="LLMBudget record not found",
-                )
-                raise ResourceNotFoundError(
-                    f"LLM budget not configured for tenant {tenant_id}",
-                    code="budget_not_found",
+                    tier=tier.value,
+                    monthly_limit_usd=float(default_limit),
                 )
 
-            # 2. Calculate current month usage
+            # 2. Handle month-rollover logic (Finding #S2)
             now = datetime.now(timezone.utc)
-            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-            result_usage = await db.execute(
-                select(func.coalesce(func.sum(LLMUsage.cost_usd), Decimal("0"))).where(
-                    (LLMUsage.tenant_id == tenant_id)
-                    & (LLMUsage.created_at >= month_start)
+            if (
+                budget.budget_reset_at.year != now.year
+                or budget.budget_reset_at.month != now.month
+            ):
+                logger.info(
+                    "llm_budget_month_reset",
+                    tenant_id=str(tenant_id),
+                    old_reset=budget.budget_reset_at.isoformat(),
+                    new_reset=now.isoformat(),
+                    previous_spend=float(budget.monthly_spend_usd),
                 )
-            )
-            current_usage = cls._to_decimal(result_usage.scalar())
+                budget.monthly_spend_usd = Decimal("0.0")
+                budget.pending_reservations_usd = Decimal("0.0")
+                budget.budget_reset_at = now
+                # We don't need to commit yet, as we are in the same transaction
 
+            # 3. Enforce hard limit using atomic counters
             limit = cls._to_decimal(budget.monthly_limit_usd)
-            remaining_budget = limit - current_usage
+            current_total = budget.monthly_spend_usd + budget.pending_reservations_usd
+            remaining_budget = limit - current_total
 
-            # 3. Enforce hard limit
             if estimated_cost > remaining_budget:
                 logger.warning(
                     "llm_budget_exceeded",
                     tenant_id=str(tenant_id),
                     model=model,
-                    requested_amount=float(estimated_cost),
+                    estimated_cost=float(estimated_cost),
                     remaining_budget=float(remaining_budget),
                     monthly_limit=float(limit),
-                    current_usage=float(current_usage),
+                    current_total_committed=float(current_total),
                 )
 
                 # Emit metric for alerting
-                try:
-                    LLM_PRE_AUTH_DENIALS.labels(
-                        reason="hard_limit_exceeded", tenant_tier="unknown"
-                    ).inc()
-                except Exception as e:
-                    logger.debug(
-                        "llm_metric_denial_inc_failed", error=str(e), exc_info=True
-                    )
+                LLM_PRE_AUTH_DENIALS.labels(
+                    reason="hard_limit_exceeded", tenant_tier="unknown"
+                ).inc()
 
                 raise BudgetExceededError(
                     f"LLM budget exceeded. Required: ${float(estimated_cost):.4f}, Available: ${float(remaining_budget):.4f}",
                     details={
                         "monthly_limit": float(limit),
-                        "current_usage": float(current_usage),
-                        "requested_amount": float(estimated_cost),
+                        "current_total_committed": float(current_total),
+                        "estimated_cost": float(estimated_cost),
                         "remaining_budget": float(remaining_budget),
                         "model": model,
-                        "hard_limit_enabled": budget.hard_limit,
                     },
                 )
 
-            # 4. Record reservation in audit log (optional: can be used for reconciliation)
+            # 4. Atomic Increment of Pending Reservations
+            budget.pending_reservations_usd += estimated_cost
+            await db.flush() # Ensure sync to DB state before proceeding
+
             logger.info(
                 "llm_budget_reserved",
                 tenant_id=str(tenant_id),
                 model=model,
                 reserved_amount=float(estimated_cost),
-                remaining_after_reservation=float(remaining_budget - estimated_cost),
+                new_pending_total=float(budget.pending_reservations_usd),
                 operation_id=operation_id,
             )
 
             return estimated_cost
 
-        except (BudgetExceededError, ResourceNotFoundError):
+        except BudgetExceededError:
             raise
         except Exception as e:
             logger.error(
@@ -227,15 +305,43 @@ class LLMBudgetManager:
         Record actual LLM usage and handle metrics/alerts.
         """
         try:
-            # 1. PRODUCTION: Implement BYOK Platform Fee
-            # If BYOK is used, we charge a flat orchestration fee instead of token cost.
-            if actual_cost_usd is None:
-                if is_byok:
-                    actual_cost_usd = cls.BYOK_PLATFORM_FEE_USD
-                else:
-                    actual_cost_usd = cls.estimate_cost(
-                        prompt_tokens, completion_tokens, model, provider
-                    )
+            # 1. Fetch budget for update to ensure atomic debit
+            # Note: We assume the reservation was already made by check_and_reserve
+            result = await db.execute(
+                select(LLMBudget)
+                .where(LLMBudget.tenant_id == tenant_id)
+                .with_for_update()
+            )
+            budget = result.scalar_one_or_none()
+
+            if is_byok:
+                actual_cost_usd = cls.BYOK_PLATFORM_FEE_USD
+            elif actual_cost_usd is None:
+                actual_cost_usd = cls.estimate_cost(
+                    prompt_tokens, completion_tokens, model, provider
+                )
+
+            actual_cost_decimal = cls._to_decimal(actual_cost_usd)
+
+            if budget:
+                # 2. Atomic Transition: Reservation -> Hard Spend
+                # We subtract the reservation estimate (approximated here if not passed back)
+                # and add the actual cost.
+                # For simplicity, we decrement pending_reservations_usd by the estimate
+                # and increment monthly_spend_usd by actual.
+                
+                # We need the original reservation to be perfect, but since we don't store 
+                # per-request reservation IDs in the DB table yet, we perform a safe decrement.
+                estimated_reservation = cls.estimate_cost(
+                    prompt_tokens, completion_tokens, model, provider
+                )
+                
+                budget.pending_reservations_usd = max(
+                    Decimal("0.0"), 
+                    budget.pending_reservations_usd - estimated_reservation
+                )
+                budget.monthly_spend_usd += actual_cost_decimal
+                await db.flush()
 
             # Create usage record
             usage = LLMUsage(
@@ -245,12 +351,12 @@ class LLMBudgetManager:
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 total_tokens=prompt_tokens + completion_tokens,
-                cost_usd=cls._to_decimal(actual_cost_usd),
-                is_byok=is_byok,  # Explicitly record BYOK status
+                cost_usd=actual_cost_decimal,
+                is_byok=is_byok,
                 operation_id=operation_id,
                 request_type=request_type,
             )
-            await maybe_call(db.add, usage)
+            db.add(usage)
 
             # Metrics
             try:
@@ -323,17 +429,8 @@ class LLMBudgetManager:
         if not budget:
             return BudgetStatus.OK
 
-        # Calculate usage
-        now = datetime.now(timezone.utc)
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        result_usage = await db.execute(
-            select(func.coalesce(func.sum(LLMUsage.cost_usd), Decimal("0"))).where(
-                (LLMUsage.tenant_id == tenant_id) & (LLMUsage.created_at >= month_start)
-            )
-        )
-        current_usage = cls._to_decimal(result_usage.scalar())
-
         limit = cls._to_decimal(budget.monthly_limit_usd)
+        current_usage = budget.monthly_spend_usd + budget.pending_reservations_usd
         threshold = cls._to_decimal(budget.alert_threshold_percent) / Decimal("100")
 
         if current_usage >= limit:

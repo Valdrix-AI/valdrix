@@ -1,7 +1,18 @@
 import ssl
 import uuid
-from collections.abc import AsyncGenerator
-from typing import Any, Dict, cast
+from uuid import UUID
+from typing import (
+    Any,
+    AsyncGenerator,
+    Dict,
+    List,
+    Optional,
+    Type,
+    Union,
+    Sequence,
+    Tuple,
+    cast,
+)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import event, text
 from sqlalchemy.engine import Connection, Engine
@@ -206,15 +217,20 @@ async_session_maker = async_sessionmaker(
 
 
 def _session_uses_postgresql(session: AsyncSession) -> bool:
-    """Best-effort dialect detection that works for real sessions and test doubles."""
+    """
+    Check if the session is using a PostgreSQL backend.
+    Finding #14: Avoid fallback to module-level URL which may be misleading in tests.
+    """
     try:
-        bind = getattr(session, "bind", None)
-        bind_url = str(getattr(bind, "url", "")) if bind is not None else ""
-        if bind_url:
-            return "postgresql" in bind_url
+        # Use the actual engine URL from the session
+        url = str(getattr(session.bind, "url", "")) if session.bind else ""
+        return "postgresql" in url.lower()
+    except AttributeError:
+        # session.bind might be None or not have a .url in some test doubles
+        return False
     except Exception as e:
         logger.debug("session_dialect_detection_failed", error=str(e), exc_info=True)
-    return "postgresql" in effective_url
+        return False # Default to false on unexpected errors
 
 
 async def get_db(
@@ -228,6 +244,7 @@ async def get_db(
 
         if request is not None:
             tenant_id = getattr(request.state, "tenant_id", None)
+            tenant_key = str(tenant_id) if isinstance(tenant_id, uuid.UUID) else tenant_id
             if tenant_id:
                 try:
                     # RLS: Only execute on PostgreSQL
@@ -285,11 +302,10 @@ async def get_system_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def set_session_tenant_id(session: AsyncSession, tenant_id: uuid.UUID) -> None:
-    """
-    Sets the RLS tenant context for the given session.
-    Must be called after the tenant_id is known (e.g., in auth dependency).
-    """
+async def set_session_tenant_id(session: AsyncSession, tenant_id: Optional[UUID]) -> None:
+    """Sets the tenant_id in the database session's info dictionary."""
+    session.info["tenant_id"] = tenant_id
+    # Force the session to be 'dirty' even if no model changes were made yet
     session.info["rls_context_set"] = True
 
     # We must ensure the connection itself has the info, as listeners look there
@@ -352,13 +368,8 @@ def check_rls_policy(
     import re
 
     pattern = r"\b(" + "|".join(RLS_EXEMPT_TABLES) + r")\b"
-    # DEBUG PRINT
-    print(f"RLS_DEBUG: Checking statement: {stmt_lower[:200]}")
-    print(f"RLS_DEBUG: Pattern: {pattern}")
     if re.search(pattern, stmt_lower):
-        print(f"RLS_DEBUG: EXEMPTED: {stmt_lower[:100]}")
         return statement, parameters
-    print(f"RLS_DEBUG: NOT EXEMPTED. rls_status={conn.info.get('rls_context_set')}")
 
     # Identify the state from the connection info
     rls_status = conn.info.get("rls_context_set")
