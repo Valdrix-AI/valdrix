@@ -23,6 +23,7 @@
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import { jobStore } from '$lib/stores/jobs.svelte';
 	import { allowedNavHrefs, isAdminRole, normalizePersona } from '$lib/persona';
+	import ErrorBoundary from '$lib/components/ErrorBoundary.svelte';
 
 	let { data, children } = $props();
 
@@ -335,7 +336,9 @@
 					delay: prefersReducedMotion ? 0 : 200
 				}}
 			>
-				{@render children()}
+				<ErrorBoundary>
+					{@render children()}
+				</ErrorBoundary>
 			</div>
 		</main>
 

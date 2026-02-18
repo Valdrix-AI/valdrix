@@ -47,7 +47,6 @@ export async function getSession(supabase: ReturnType<typeof createBrowserClient
 		error
 	} = await supabase.auth.getSession();
 	if (error) {
-		console.error('Error getting session:', error.message);
 		return null;
 	}
 	return session;
@@ -62,7 +61,6 @@ export async function getUser(supabase: ReturnType<typeof createBrowserClient>) 
 		error
 	} = await supabase.auth.getUser();
 	if (error) {
-		console.error('Error getting user:', error.message);
 		return null;
 	}
 	return user;

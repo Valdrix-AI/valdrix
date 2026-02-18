@@ -32,6 +32,8 @@ function getCookie(name: string): string | undefined {
 	return undefined;
 }
 
+let csrfPromise: Promise<string | undefined> | null = null;
+
 export async function resilientFetch(
 	url: string | URL,
 	options: ResilientRequestInit = {}
@@ -50,22 +52,33 @@ export async function resilientFetch(
 		if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
 			let csrfToken = getCookie('fastapi-csrf-token');
 
-			// If token missing, try to fetch it from the unified CSRF endpoint
+			// SEC-06: Prevent CSRF Race Condition with Singleton Promise
 			if (!csrfToken) {
-				try {
-					const csrfRes = await fetchWithTimeout(
-						fetch,
-						`${PUBLIC_API_URL}/public/csrf`,
-						{ credentials: requestOptions.credentials },
-						Math.min(5000, timeoutMs)
-					);
-					if (csrfRes.ok) {
-						const data = await csrfRes.json();
-						csrfToken = data.csrf_token;
-					}
-				} catch (e) {
-					console.warn('[CSRF] Failed to pre-fetch token', e);
+				if (!csrfPromise) {
+					csrfPromise = (async () => {
+						try {
+							const csrfRes = await fetchWithTimeout(
+								fetch,
+								`${PUBLIC_API_URL}/public/csrf`,
+								{ credentials: requestOptions.credentials },
+								Math.min(5000, timeoutMs)
+							);
+							if (csrfRes.ok) {
+								const data = await csrfRes.json();
+								return data.csrf_token;
+							}
+						} catch (e) {
+							// Silent fail for token pre-fetch
+						} finally {
+							// Allow subsequent retries if some requests still fail
+							setTimeout(() => {
+								csrfPromise = null;
+							}, 1000);
+						}
+						return undefined;
+					})();
 				}
+				csrfToken = await csrfPromise;
 			}
 
 			if (csrfToken) {
@@ -91,7 +104,7 @@ export async function resilientFetch(
 				requestOptions.headers = headers;
 				response = await fetchWithTimeout(fetch, url, requestOptions, timeoutMs);
 			} else {
-				console.warn('[API Auth] 401 Unauthorized and Refresh failed. Session expired.');
+				// Session expired
 			}
 		}
 
@@ -118,10 +131,6 @@ export async function resilientFetch(
 						}
 
 						if (obj.tenant_id && userTenantId && obj.tenant_id !== userTenantId) {
-							console.error('[Security] Tenant Data Leakage Detected!', {
-								expected: userTenantId,
-								actual: obj.tenant_id
-							});
 							throw new Error('Security Error: Unauthorized data access');
 						}
 						for (const k in obj) {
@@ -139,7 +148,6 @@ export async function resilientFetch(
 
 		if (!response.ok) {
 			if (response.status >= 500) {
-				console.error(`[API Error] ${response.status} at ${url}`);
 				// FE-H1: Sanitize error messages globally
 				const errorData = await response.json().catch(() => ({}));
 				const safeMessage =
@@ -162,7 +170,6 @@ export async function resilientFetch(
 
 		return response;
 	} catch (error) {
-		console.error(`[Network Error] at ${url}`, error);
 		throw error;
 	}
 }
@@ -183,9 +190,6 @@ export async function resilientFetchWithRetry(
 			// Handle 503 Service Unavailable with backoff
 			if (response.status === 503 && i < maxRetries - 1) {
 				const delay = Math.pow(2, i) * 1000;
-				console.warn(
-					`[API] 503 detected. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`
-				);
 				await new Promise((resolve) => setTimeout(resolve, delay));
 				continue;
 			}

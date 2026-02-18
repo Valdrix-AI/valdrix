@@ -70,7 +70,7 @@ describe('dashboard load contract', () => {
 		expect(calls.some((u) => u.includes('/costs/unit-economics?'))).toBe(true);
 	});
 
-	it('skips chargeback requests for free_trial tier while loading unit economics', async () => {
+	it('skips chargeback requests for free tier while loading unit economics', async () => {
 		const calls: string[] = [];
 		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
 			const url = String(input);
@@ -88,7 +88,7 @@ describe('dashboard load contract', () => {
 			parent: async () => ({
 				session: { access_token: 'token' },
 				user: { id: 'user-id' },
-				subscription: { tier: 'free_trial', status: 'active' },
+				subscription: { tier: 'free', status: 'active' },
 				profile: { persona: 'finance' }
 			}),
 			url: new URL('http://localhost/?start_date=2024-01-01&end_date=2024-01-31')

@@ -15,7 +15,7 @@
 			total_tenants: number;
 			active_last_24h: number;
 			active_last_7d: number;
-			trial_tenants: number;
+			free_tenants: number;
 			paid_tenants: number;
 			churn_risk: number;
 		};

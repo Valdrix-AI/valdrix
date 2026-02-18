@@ -30,9 +30,9 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 	const headers = {
 		Authorization: `Bearer ${session?.access_token}`
 	};
-	const tier = String(subscription?.tier ?? 'free_trial').toLowerCase();
+	const tier = String(subscription?.tier ?? 'free').toLowerCase();
 	const hasChargeback = ['growth', 'pro', 'enterprise'].includes(tier);
-	const hasUnitEconomics = ['starter', 'growth', 'pro', 'enterprise', 'free_trial'].includes(tier);
+	const hasUnitEconomics = ['starter', 'growth', 'pro', 'enterprise', 'free'].includes(tier);
 
 	const providerQuery = provider ? `&provider=${provider}` : '';
 	const getWithTimeout = (input: string) =>

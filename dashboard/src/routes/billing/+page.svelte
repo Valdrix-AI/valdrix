@@ -16,7 +16,7 @@
 
 	let { data } = $props();
 	const BILLING_REQUEST_TIMEOUT_MS = 8000;
-	const DEFAULT_SUBSCRIPTION = { tier: 'free_trial', status: 'active' };
+	const DEFAULT_SUBSCRIPTION = { tier: 'free', status: 'active' };
 
 	let loading = $state(false);
 	let subscription = $state<{ tier?: string; status?: string; next_payment_date?: string } | null>(
