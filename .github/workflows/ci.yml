@@ -79,9 +79,9 @@ jobs:
             --cov=app/modules/reporting \
             --cov=app/shared/llm/hybrid_scheduler.py \
             --cov-report=term-missing
-          uv run coverage report --include="app/modules/optimization/*" --fail-under=85
-          uv run coverage report --include="app/modules/reporting/*" --fail-under=85
-          uv run coverage report --include="app/shared/llm/hybrid_scheduler.py" --fail-under=90
+          uv run coverage report --include="app/modules/optimization/*" --fail-under=95
+          uv run coverage report --include="app/modules/reporting/*" --fail-under=95
+          uv run coverage report --include="app/shared/llm/hybrid_scheduler.py" --fail-under=95
           
       - name: Upload Coverage Report
         uses: codecov/codecov-action@v4
@@ -89,6 +89,35 @@ jobs:
           files: ./coverage.xml
           fail_ci_if_error: false
           verbose: true
+
+      - name: Enforce Global Coverage Gate (90%)
+        run: |
+          uv run coverage report --include="app/*" --fail-under=90
+
+  # JOB 1C: TYPE SAFETY (2026 Strict Standards)
+  type-check:
+    name: Backend Type Check (Mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Install Dependencies
+        run: uv sync --dev
+
+      - name: Run Mypy
+        run: uv run mypy app
 
   # JOB 1B: DASHBOARD QUALITY (2026 Frontend Standards)
   dashboard-quality:
