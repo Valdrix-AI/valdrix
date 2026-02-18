@@ -1,238 +1,177 @@
-# Valdrix Deployment Guide
+# Valdrix Deployment Guide (Cloudflare Pages + Koyeb + Supabase)
 
-Deploy Valdrix for **$0/month** using Supabase, Vercel, and Koyeb.
+Last verified: **2026-02-18**
 
-## Architecture Overview
+This guide defines the current production path for Valdrix:
+- Frontend: Cloudflare Pages (SvelteKit + Cloudflare adapter)
+- API: Koyeb (FastAPI)
+- Data/Auth: Supabase (PostgreSQL + Auth)
+- Optional cache/rate-limit backend: Upstash Redis
+
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        VERCEL                               │
-│                   (SvelteKit Dashboard)                     │
-│                    dashboard.valdrix.ai                     │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ API Calls
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        KOYEB                                │
-│                   (FastAPI Backend)                         │
-│                     api.valdrix.ai                          │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ SQL + Auth
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       SUPABASE                              │
-│              (PostgreSQL + Auth + RLS)                      │
-└─────────────────────────────────────────────────────────────┘
+Cloudflare Pages (dashboard.valdrix.ai)
+            |
+            | HTTPS API calls
+            v
+Koyeb (api.valdrix.ai, FastAPI)
+            |
+            | SQL + JWT verification
+            v
+Supabase (PostgreSQL + Auth)
 ```
 
----
+Notes:
+- The dashboard currently calls `PUBLIC_API_URL` directly.
+- There is no Cloudflare edge API proxy/cache layer in the current implementation.
 
-## Step 1: Supabase Setup (Database + Auth)
+## Step 1: Supabase Setup
 
-### 1.1 Create Project
-1. Go to [supabase.com](https://supabase.com) and sign up
-2. Click **New Project**
-3. Name: `valdrix-prod`
-4. Database Password: Generate a strong one and **save it**
-5. Region: Choose closest to your users (e.g., `us-east-1`)
+1. Create a Supabase project.
+2. Copy the pooled Postgres URL (pooler endpoint).
+3. Copy `SUPABASE_JWT_SECRET`.
+4. Copy `PUBLIC_SUPABASE_URL` and `PUBLIC_SUPABASE_ANON_KEY` for dashboard runtime.
 
-### 1.2 Get Connection String
-1. Go to **Project Settings** → **Database**
-2. Copy the **Connection string (URI)** under "Connection Pooling"
-3. It looks like: `postgresql://postgres.[ref]:[password]@aws-0-us-east-1.pooler.supabase.com:6543/postgres`
+## Step 2: Required Secrets
 
-> [!IMPORTANT]
-> Use the **pooler** connection string (port 6543), not the direct one (port 5432).
-> This is required for serverless environments like Koyeb.
+Generate and store:
 
-### 1.3 Get Auth JWT Secret
-1. Go to **Project Settings** → **API**
-2. Copy the **JWT Secret** (under "JWT Settings")
-
-### 1.4 Configure Auth Providers (Optional)
-1. Go to **Authentication** → **Providers**
-2. Enable **Google**, **GitHub**, or **Email/Password** as needed
-
----
-
-## Step 2: Get API Keys
-
-### 2.1 Groq (Free LLM)
-1. Go to [console.groq.com](https://console.groq.com)
-2. Sign up and create an API key
-3. Free tier: ~30 requests/min with Llama 3.3 70B
-
-### 2.2 Encryption Key
-Generate a secure key for encrypting AWS credentials at rest:
 ```bash
-openssl rand -hex 32
+openssl rand -hex 32   # ENCRYPTION_KEY
+openssl rand -hex 16   # ADMIN_API_KEY
 ```
 
-### 2.3 Admin API Key
-Create a secret password for admin endpoints:
+Also create:
+- `GROQ_API_KEY` (if using managed Groq for low-cost/default LLM)
+
+## Step 3: Deploy API to Koyeb
+
+1. Create a Koyeb web service from this repository.
+2. Use Docker build from project `Dockerfile`.
+3. Set port `8000`.
+4. Configure environment variables:
+
+| Variable | Example | Notes |
+|---|---|---|
+| `DATABASE_URL` | `postgresql://...` | Supabase pooled URL |
+| `SUPABASE_JWT_SECRET` | `...` | Supabase JWT secret |
+| `ENCRYPTION_KEY` | `...` | 64-char hex |
+| `ADMIN_API_KEY` | `...` | Admin secret |
+| `LLM_PROVIDER` | `groq` | Default managed provider |
+| `GROQ_API_KEY` | `gsk_...` | If not BYOK-only |
+| `CORS_ORIGINS` | `["https://dashboard.valdrix.ai"]` | Must match dashboard origin |
+| `SAAS_STRICT_INTEGRATIONS` | `true` | Recommended |
+| `UPSTASH_REDIS_URL` | `https://...` | Optional |
+| `UPSTASH_REDIS_TOKEN` | `...` | Optional |
+
+5. Deploy and record your service URL.
+
+## Step 4: Run Database Migrations
+
+Run after backend env vars are configured:
+
 ```bash
-openssl rand -hex 16
+uv run alembic upgrade head
 ```
 
----
+If `uv alembic` fails in your shell, use:
 
-## Step 3: Deploy Backend to Koyeb
-
-### 3.1 Create Koyeb Account
-1. Go to [koyeb.com](https://koyeb.com) and sign up
-2. Connect your GitHub account
-
-### 3.2 Create New Service
-1. Click **Create Service** → **Web Service**
-2. Select **GitHub** and choose your `valdrix` repository
-3. Configure:
-   - **Builder**: Docker
-   - **Dockerfile path**: `Dockerfile`
-   - **Port**: `8000`
-
-### 3.3 Set Environment Variables
-Add these in Koyeb's dashboard under **Environment Variables**:
-
-| Variable | Value | Notes |
-|----------|-------|-------|
-| `DATABASE_URL` | `postgresql://postgres.[ref]...` | From Supabase Step 1.2 |
-| `SUPABASE_JWT_SECRET` | `your-jwt-secret` | From Supabase Step 1.3 |
-| `ENCRYPTION_KEY` | `your-64-char-hex` | From Step 2.2 |
-| `ADMIN_API_KEY` | `your-admin-key` | From Step 2.3 |
-| `LLM_PROVIDER` | `groq` | Free LLM provider |
-| `GROQ_API_KEY` | `gsk_...` | From Step 2.1 |
-| `CORS_ORIGINS` | `["https://your-vercel-app.vercel.app"]` | Update after Vercel deploy |
-| `SAAS_STRICT_INTEGRATIONS` | `true` | Recommended for multi-tenant SaaS mode |
-
-### 3.4 Deploy
-1. Click **Deploy**
-2. Wait for build to complete (~3-5 minutes)
-3. Note your service URL: `https://valdrix-xxx.koyeb.app`
-
-> In strict SaaS mode, tenant integrations (Jira/workflows/channels) are configured in-app, not via backend env vars.
-
-### 3.5 Run Database Migrations
-After deployment, run migrations via Koyeb's console or locally:
 ```bash
-# Option A: Run locally against production DB
-DATABASE_URL="your-supabase-url" alembic upgrade head
-
-# Option B: Add a one-time job in Koyeb
-# Command: alembic upgrade head
+.venv/bin/alembic upgrade head
 ```
 
----
+Confirm migration state:
 
-## Step 4: Deploy Frontend to Vercel
-
-### 4.1 Create Vercel Account
-1. Go to [vercel.com](https://vercel.com) and sign up
-2. Connect your GitHub account
-
-### 4.2 Import Project
-1. Click **Add New** → **Project**
-2. Select your `valdrix` repository
-3. Configure:
-   - **Framework Preset**: SvelteKit
-   - **Root Directory**: `dashboard`
-
-### 4.3 Set Environment Variables
-Add these in Vercel's dashboard:
-
-| Variable | Value |
-|----------|-------|
-| `PUBLIC_API_URL` | `https://valdrix-xxx.koyeb.app` |
-| `PUBLIC_SUPABASE_URL` | `https://xxx.supabase.co` |
-| `PUBLIC_SUPABASE_ANON_KEY` | `eyJhbG...` (from Supabase API settings) |
-
-### 4.4 Deploy
-1. Click **Deploy**
-2. Wait for build (~1-2 minutes)
-3. Note your URL: `https://valdrix.vercel.app`
-
-### 4.5 Update CORS on Koyeb
-Go back to Koyeb and update `CORS_ORIGINS`:
-```
-["https://valdrix.vercel.app"]
-```
-
----
-
-## Step 5: Verify Deployment
-
-### 5.1 Health Check
 ```bash
-curl https://valdrix-xxx.koyeb.app/health
+uv run alembic heads
+uv run alembic current
 ```
 
-Expected response:
-```json
-{
-  "status": "active",
-  "app": "Valdrix",
-  "version": "0.1.0",
-  "scheduler": {"running": true, "jobs": ["daily_finops_scan", "weekly_remediation_sweep"]}
-}
+## Step 5: Deploy Dashboard to Cloudflare Pages
+
+The dashboard is now configured for Cloudflare runtime via `@sveltejs/adapter-cloudflare`.
+
+1. In Cloudflare Pages, connect this repository.
+2. Set **Root directory** to `dashboard`.
+3. Set build config:
+   - **Build command**: `pnpm run build`
+   - **Build output directory**: `.svelte-kit/cloudflare`
+4. Set runtime environment variables:
+
+| Variable | Example |
+|---|---|
+| `PUBLIC_API_URL` | `https://api.valdrix.ai` |
+| `PUBLIC_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `PUBLIC_SUPABASE_ANON_KEY` | `<anon-key>` |
+
+5. Deploy and record your Pages URL.
+6. Add custom domain `dashboard.valdrix.ai` (or your preferred domain).
+7. Update Koyeb `CORS_ORIGINS` to the final dashboard URL.
+
+## Step 6: Verify Deployment
+
+1. API health check:
+
+```bash
+curl -fsS https://api.valdrix.ai/health
 ```
 
-### 5.2 Test Authentication
-1. Open `https://valdrix.vercel.app`
-2. Sign up with email or OAuth
-3. Verify you can access the dashboard
+2. Dashboard auth flow:
+- Open dashboard URL
+- Sign in
+- Confirm dashboard routes load
 
-### 5.3 Test AWS Connection
-1. Go to Settings → AWS Connections
-2. Add your AWS Role ARN
-3. Verify the connection
-
----
-
-## Custom Domain Setup (Optional)
-
-### Vercel (Frontend)
-1. Go to **Project Settings** → **Domains**
-2. Add `app.valdrix.ai`
-3. Update DNS: CNAME → `cname.vercel-dns.com`
-
-### Koyeb (Backend)
-1. Go to **Service Settings** → **Domains**
-2. Add `api.valdrix.ai`
-3. Update DNS: CNAME → provided by Koyeb
-
-### Update Environment Variables
-After custom domains:
-- Koyeb: `CORS_ORIGINS=["https://app.valdrix.ai"]`
-- Vercel: `PUBLIC_API_URL=https://api.valdrix.ai`
-
----
+3. API connectivity from dashboard:
+- Confirm subscription/profile requests succeed
+- Confirm no CORS errors in browser console
 
 ## Troubleshooting
 
-### Database Connection Issues
-- Ensure you're using the **pooler** connection (port 6543)
-- Check that your IP is not blocked in Supabase
+### `Multiple head revisions are present`
+Use:
 
-### Auth Errors
-- Verify `SUPABASE_JWT_SECRET` matches exactly
-- Check that the JWT hasn't expired
+```bash
+uv run alembic heads
+```
 
-### Scheduler Not Running
-- Koyeb free tier keeps services awake (unlike Render)
-- Check logs: `valdrix_scheduler_job_runs_total` metric
+If more than one head appears, merge revisions first, then rerun upgrade.
 
-### CORS Errors
-- Ensure `CORS_ORIGINS` includes your exact frontend URL
-- Include the protocol (`https://`)
+### Cloudflare build fails with missing adapter
+Install dashboard dependencies and ensure the adapter exists:
 
----
+```bash
+pnpm --dir dashboard install
+pnpm --dir dashboard build
+```
 
-## Cost Summary
+### CORS failures
+- Ensure exact scheme + host in `CORS_ORIGINS`
+- Avoid wildcard origins in production
 
-| Service | Free Tier Limit | Overage Cost |
-|---------|-----------------|--------------|
-| Supabase | 500MB DB, 50K auth users | $25/mo Pro |
-| Koyeb | 2 nano instances, 100GB bandwidth | $5.50/mo per instance |
-| Vercel | 100GB bandwidth, 6000 min/mo | $20/mo Pro |
-| Groq | ~30 req/min | Usage-based |
+## Provider Limits Snapshot (for planning)
 
-**Total: $0/month** until you scale beyond free tiers.
+Verified against official docs on **2026-02-18**:
+
+| Provider | Free-tier point relevant to this stack |
+|---|---|
+| Cloudflare Pages | 500 builds/month; custom domains are capped per project |
+| Cloudflare Pages/Workers | Static asset delivery and Functions are governed by Pages + Workers limits |
+| Upstash Redis | Free plan uses monthly request/command quota (not 10K/day legacy claim) |
+| Vercel Hobby | Not suitable for commercial production usage per fair-use policy |
+| Koyeb Starter | Free starter exists; onboarding requires credit card |
+
+Always re-check limits before external/customer claims.
+
+## Sources
+
+- Cloudflare Pages limits: https://developers.cloudflare.com/pages/platform/limits/
+- Cloudflare Pages Functions pricing: https://developers.cloudflare.com/pages/functions/pricing/
+- Cloudflare Workers pricing: https://developers.cloudflare.com/workers/platform/pricing/
+- Cloudflare SvelteKit guide: https://developers.cloudflare.com/pages/framework-guides/deploy-a-svelte-kit-site/
+- SvelteKit Cloudflare adapter: https://kit.svelte.dev/docs/adapter-cloudflare
+- Upstash Redis pricing: https://upstash.com/pricing/redis
+- Supabase pricing: https://supabase.com/pricing
+- Koyeb pricing: https://www.koyeb.com/pricing/
+- Vercel limits: https://vercel.com/docs/limits
+- Vercel fair-use: https://vercel.com/docs/limits/fair-use-guidelines
