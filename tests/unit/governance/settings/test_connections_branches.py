@@ -64,7 +64,7 @@ def test_require_tenant_id_raises_when_missing() -> None:
 
 def test_enforce_growth_tier_rejects_free(user: CurrentUser) -> None:
     with pytest.raises(HTTPException) as exc:
-        connections_api._enforce_growth_tier(PricingTier.FREE_TRIAL, user)
+        connections_api._enforce_growth_tier(PricingTier.FREE, user)
     assert exc.value.status_code == 403
 
 
@@ -72,7 +72,7 @@ def test_enforce_growth_tier_rejects_free(user: CurrentUser) -> None:
 async def test_check_growth_tier_denied_for_free(
     user: CurrentUser, db: MagicMock
 ) -> None:
-    user.tier = PricingTier.FREE_TRIAL
+    user.tier = PricingTier.FREE
     with pytest.raises(HTTPException) as exc:
         connections_api.check_growth_tier(user)
     assert exc.value.status_code == 403
@@ -83,7 +83,7 @@ async def test_check_growth_tier_denied_for_free(
 async def test_check_growth_tier_denied_again(
     user: CurrentUser, db: MagicMock
 ) -> None:
-    user.tier = PricingTier.FREE_TRIAL
+    user.tier = PricingTier.FREE
     with pytest.raises(HTTPException) as exc:
         connections_api.check_growth_tier(user)
     assert exc.value.status_code == 403  # GROWTH required

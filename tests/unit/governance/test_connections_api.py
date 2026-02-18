@@ -21,7 +21,7 @@ from sqlalchemy import select
 
 @pytest_asyncio.fixture
 async def test_tenant(db):
-    tenant = Tenant(id=uuid4(), name="Test Tenant", plan=PricingTier.FREE_TRIAL)
+    tenant = Tenant(id=uuid4(), name="Test Tenant", plan=PricingTier.FREE)
     db.add(tenant)
     await db.commit()
     await db.refresh(tenant)
@@ -86,74 +86,6 @@ def test_tier_gates_are_enforced(auth_user):
     auth_user.tier = PricingTier.PRO
     assert check_cloud_plus_tier(auth_user) == PricingTier.PRO
 
-
-    auth_user.tier = PricingTier.PRO
-    assert check_cloud_plus_tier(auth_user) == PricingTier.PRO
-
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        await check_growth_tier(auth_user, db)
-        db.execute.assert_not_awaited()
-
-@pytest.mark.asyncio
-async def test_check_growth_tier_cache_invalid(auth_user):
-    from app.modules.governance.api.v1.settings.connections import check_growth_tier
-    db = MagicMock()
-    tenant = MagicMock()
-    tenant.plan = PricingTier.GROWTH.value
-    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=tenant)))
-    cache = MagicMock()
-    cache.get = AsyncMock(return_value="legacy-plan")
-    cache.set = AsyncMock()
-
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        await check_growth_tier(auth_user, db)
-        db.execute.assert_awaited()
-
-@pytest.mark.asyncio
-async def test_check_growth_tier_cache_get_error_fallback(auth_user):
-    from app.modules.governance.api.v1.settings.connections import check_growth_tier
-    tenant = MagicMock()
-    tenant.plan = PricingTier.GROWTH.value
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=tenant)))
-    cache = MagicMock()
-    cache.get = AsyncMock(side_effect=RuntimeError("redis down"))
-    cache.set = AsyncMock(return_value=True)
-
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        await check_growth_tier(auth_user, db)
-        db.execute.assert_awaited()
-
-@pytest.mark.asyncio
-async def test_check_growth_tier_cache_set_error_nonfatal(auth_user):
-    from app.modules.governance.api.v1.settings.connections import check_growth_tier
-    tenant = MagicMock()
-    tenant.plan = PricingTier.GROWTH.value
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=tenant)))
-    cache = MagicMock()
-    cache.get = AsyncMock(return_value=None)
-    cache.set = AsyncMock(side_effect=RuntimeError("redis write down"))
-
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        await check_growth_tier(auth_user, db)
-        db.execute.assert_awaited()
-
-@pytest.mark.asyncio
-async def test_check_growth_tier_missing_tenant(auth_user):
-    from app.modules.governance.api.v1.settings.connections import check_growth_tier
-    from fastapi import HTTPException
-    db = MagicMock()
-    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
-    cache = MagicMock()
-    cache.get = AsyncMock(return_value=None)
-    cache.set = AsyncMock(return_value=True)
-
-    with patch("app.shared.core.cache.get_cache_service", return_value=cache):
-        with pytest.raises(HTTPException) as exc:
-            await check_growth_tier(auth_user, db)
-        assert exc.value.status_code == 404
-
 # ==================== AWS API Tests ====================
 
 
@@ -168,7 +100,7 @@ async def test_aws_setup_templates(ac):
             "terraform_hcl": "resource...",
             "magic_link": "https://...",
             "instructions": "steps...",
-            "permissions_summary": ["CostExplorer"],
+            "permissions_summary": ["sts:AssumeRole"],
         }
         resp = await ac.post("/api/v1/settings/connections/aws/setup")
         assert resp.status_code == 200
@@ -543,7 +475,7 @@ async def test_verify_azure_connection_tenant_isolation(
 @pytest.mark.asyncio
 async def test_verify_azure_connection_denied_on_free(ac, db, override_auth, auth_user):
     tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.FREE_TRIAL.value
+    tenant.plan = PricingTier.FREE.value
     await db.commit()
 
     conn = AzureConnection(
@@ -741,7 +673,7 @@ async def test_create_gcp_connection_workload_identity_verification_failure(
 @pytest.mark.asyncio
 async def test_verify_gcp_connection_denied_on_free(ac, db, override_auth, auth_user):
     tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.FREE_TRIAL.value
+    tenant.plan = PricingTier.FREE.value
     await db.commit()
 
     conn = GCPConnection(tenant_id=auth_user.tenant_id, name="g", project_id="p")
@@ -1150,7 +1082,7 @@ async def test_list_hybrid_connections_tenant_isolation(
 
 @pytest.mark.asyncio
 async def test_link_discovered_account(ac, db, override_auth, auth_user):
-    # Free Trial only allows 1 AWS account; org discovery + link needs a higher tier.
+    # Free tier only allows 1 AWS account; org discovery + link needs a higher tier.
     auth_user.tier = PricingTier.STARTER
     # 1. Create management connection
     mgmt = AWSConnection(

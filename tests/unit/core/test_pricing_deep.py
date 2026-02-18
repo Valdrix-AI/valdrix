@@ -38,7 +38,7 @@ class TestPricingDeep:
         # PricingTier is an Enum, so it's hard to pass an 'invalid' member
         # unless we cast or bypass types
         config = get_tier_config("unknown_tier")
-        assert config["name"] == "Free Trial"
+        assert config["name"] == "Free"
 
     def test_is_feature_enabled_string_mapping(self):
         """Test is_feature_enabled maps string to FeatureFlag."""
@@ -114,14 +114,14 @@ class TestPricingDeep:
     async def test_get_tenant_tier_invalid_uuid_string(self, mock_db):
         """Test get_tenant_tier with invalid UUID string returns FREE."""
         tier = await get_tenant_tier("not-a-uuid", mock_db)
-        assert tier == PricingTier.FREE_TRIAL
+        assert tier == PricingTier.FREE
 
     @pytest.mark.asyncio
     async def test_get_tenant_tier_db_exception(self, mock_db):
         """Test get_tenant_tier returns FREE on database exception."""
         mock_db.execute.side_effect = Exception("DB Error")
         tier = await get_tenant_tier(uuid.uuid4(), mock_db)
-        assert tier == PricingTier.FREE_TRIAL
+        assert tier == PricingTier.FREE
 
     @pytest.mark.asyncio
     async def test_get_tenant_tier_invalid_plan_returns_free(self, mock_db):
@@ -134,7 +134,7 @@ class TestPricingDeep:
 
         with patch("app.shared.core.pricing.logger") as mock_logger:
             tier = await get_tenant_tier(uuid.uuid4(), mock_db)
-            assert tier == PricingTier.FREE_TRIAL
+            assert tier == PricingTier.FREE
             mock_logger.error.assert_called()
 
     @pytest.mark.asyncio
@@ -207,7 +207,7 @@ class TestPricingDeep:
         # Line 344
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
         tier = await get_tenant_tier(uuid.uuid4(), mock_db)
-        assert tier == PricingTier.FREE_TRIAL
+        assert tier == PricingTier.FREE
 
     @pytest.mark.asyncio
     async def test_tier_guard_require_failure_deep(self, mock_db):

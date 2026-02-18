@@ -72,6 +72,9 @@ async def test_execute_remediation_error_handling(remediation_service, mock_db):
         mock_result_safety,
         mock_result_safety,
         mock_result_safety,
+        mock_result_safety,
+        mock_result_safety,
+        mock_result_safety,
     ]
 
     mock_ec2 = AsyncMock()
@@ -115,6 +118,9 @@ async def test_remediation_with_backup_and_verify(remediation_service, mock_db):
     # Provide enough results
     mock_db.execute.side_effect = [
         mock_result_main,
+        mock_result_safety,
+        mock_result_safety,
+        mock_result_safety,
         mock_result_safety,
         mock_result_safety,
         mock_result_safety,

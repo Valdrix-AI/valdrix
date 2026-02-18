@@ -170,7 +170,7 @@ async def test_zombie_service_enrich_with_ai_tier_restriction(mock_db):
     zombies = {"total_monthly_waste": 100.0}
 
     mock_user = MagicMock()
-    mock_user.tier = PricingTier.FREE_TRIAL
+    mock_user.tier = PricingTier.FREE
 
     await service._enrich_with_ai(zombies, uuid.uuid4(), mock_user.tier)
 
