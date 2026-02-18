@@ -34,36 +34,37 @@ class UnusedElasticIpsPlugin(ZombiePlugin):
             async with self._get_client(
                 session, "ec2", region, credentials, config=config
             ) as ec2:
-                response = await ec2.describe_addresses()
-
-                for addr in response.get("Addresses", []):
-                    # SEC: Check AssociationId and NetworkInterfaceId properly
-                    # Legitimate EIP usage: instance-attached or NI-attached (including NAT Gateways)
-                    is_zombie = (
-                        not addr.get("InstanceId")
-                        and not addr.get("NetworkInterfaceId")
-                        and not addr.get("AssociationId")
-                    )
-
-                    if is_zombie:
-                        zombies.append(
-                            {
-                                "resource_id": addr.get(
-                                    "AllocationId", addr.get("PublicIp")
-                                ),
-                                "resource_type": "Elastic IP",
-                                "public_ip": addr.get("PublicIp"),
-                                "monthly_cost": PricingService.estimate_monthly_waste(
-                                    provider="aws", resource_type="ip", region=region
-                                ),
-                                "backup_cost_monthly": 0,
-                                "recommendation": "Release if not needed",
-                                "action": "release_elastic_ip",
-                                "supports_backup": False,
-                                "explainability_notes": "Static IP address is not associated with any running instance, network interface, or association ID.",
-                                "confidence_score": 0.99,
-                            }
+                # SEC: Use paginator for unbounded resource lists
+                paginator = ec2.get_paginator("describe_addresses")
+                async for page in paginator.paginate():
+                    for addr in page.get("Addresses", []):
+                        # SEC: Check AssociationId and NetworkInterfaceId properly
+                        # Legitimate EIP usage: instance-attached or NI-attached (including NAT Gateways)
+                        is_zombie = (
+                            not addr.get("InstanceId")
+                            and not addr.get("NetworkInterfaceId")
+                            and not addr.get("AssociationId")
                         )
+
+                        if is_zombie:
+                            zombies.append(
+                                {
+                                    "resource_id": addr.get(
+                                        "AllocationId", addr.get("PublicIp")
+                                    ),
+                                    "resource_type": "Elastic IP",
+                                    "public_ip": addr.get("PublicIp"),
+                                    "monthly_cost": PricingService.estimate_monthly_waste(
+                                        provider="aws", resource_type="ip", region=region
+                                    ),
+                                    "backup_cost_monthly": 0,
+                                    "recommendation": "Release if not needed",
+                                    "action": "release_elastic_ip",
+                                    "supports_backup": False,
+                                    "explainability_notes": "Static IP address is not associated with any running instance, network interface, or association ID.",
+                                    "confidence_score": 0.99,
+                                }
+                            )
         except ClientError as e:
             logger.warning("eip_scan_error", error=str(e))
 
@@ -78,29 +79,23 @@ class IdleInstancesPlugin(ZombiePlugin):
 
     async def _get_attribution(
         self,
-        session: aioboto3.Session,
-        region: str,
+        ct_client: Any,
         instance_id: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
     ) -> str:
         """
         Governance Layer: Uses CloudTrail to find who launched the instance.
         """
         try:
-            async with self._get_client(
-                session, "cloudtrail", region, credentials, config=config
-            ) as ct:
-                response = await ct.lookup_events(
-                    LookupAttributes=[
-                        {"AttributeKey": "ResourceName", "AttributeValue": instance_id}
-                    ],
-                    MaxResults=10,
-                )
-                for event in response.get("Events", []):
-                    # We look for the RunInstances event to find the original launcher
-                    if event.get("EventName") == "RunInstances":
-                        return str(event.get("Username", "Unknown"))
+            response = await ct_client.lookup_events(
+                LookupAttributes=[
+                    {"AttributeKey": "ResourceName", "AttributeValue": instance_id}
+                ],
+                MaxResults=1,  # We only need the latest/original launch event
+            )
+            for event in response.get("Events", []):
+                # We look for the RunInstances event to find the original launcher
+                if event.get("EventName") == "RunInstances":
+                    return str(event.get("Username", "Unknown"))
         except Exception as e:
             logger.warning(
                 "cloudtrail_lookup_failed", instance_id=instance_id, error=str(e)
@@ -262,7 +257,7 @@ class IdleInstancesPlugin(ZombiePlugin):
             )
 
             end_time = datetime.now(timezone.utc)
-            start_time = end_time - timedelta(days=days)
+            start_date_lookback = end_time - timedelta(days=days)
 
             async with self._get_client(
                 session, "cloudwatch", region, credentials, config=config
@@ -294,63 +289,64 @@ class IdleInstancesPlugin(ZombiePlugin):
 
                     results = await cloudwatch.get_metric_data(
                         MetricDataQueries=queries,
-                        StartTime=start_time,
+                        StartTime=start_date_lookback,
                         EndTime=end_time,
                     )
 
-                    # Map results back to instances
-                    for idx, inst in enumerate(batch):
-                        res = next(
-                            (
-                                r
-                                for r in results.get("MetricDataResults", [])
-                                if r["Id"] == f"m{idx}"
-                            ),
-                            None,
-                        )
-                        if res and res.get("Values"):
-                            avg_cpu = res["Values"][0]
-
-                            # Decision logic: GPU instances are higher priority "Zombies"
-                            # If it's a GPU instance, even slightly higher CPU might still be a zombie if under-utilized
-                            threshold = (
-                                cpu_threshold * 1.5 if inst["is_gpu"] else cpu_threshold
+                    # CloudTrail Client Reuse: Prevent N+1 client creation and rate limiting
+                    async with self._get_client(
+                        session, "cloudtrail", region, credentials, config=config
+                    ) as ct:
+                        # Map results back to instances
+                        for idx, inst in enumerate(batch):
+                            res = next(
+                                (
+                                    r
+                                    for r in results.get("MetricDataResults", [])
+                                    if r["Id"] == f"m{idx}"
+                                ),
+                                None,
                             )
+                            if res and res.get("Values"):
+                                avg_cpu = res["Values"][0]
 
-                            if avg_cpu < threshold:
-                                monthly_cost = PricingService.estimate_monthly_waste(
-                                    provider="aws",
-                                    resource_type="instance",
-                                    resource_size=inst["type"],
-                                    region=region,
+                                # Decision logic: GPU instances are higher priority "Zombies"
+                                threshold = (
+                                    cpu_threshold * 1.5 if inst["is_gpu"] else cpu_threshold
                                 )
 
-                                # Governance: Get Attribution
-                                owner = await self._get_attribution(
-                                    session, region, inst["id"], credentials, config
-                                )
+                                if avg_cpu < threshold:
+                                    monthly_cost = PricingService.estimate_monthly_waste(
+                                        provider="aws",
+                                        resource_type="instance",
+                                        resource_size=inst["type"],
+                                        region=region,
+                                    )
 
-                                zombies.append(
-                                    {
-                                        "resource_id": inst["id"],
-                                        "resource_type": "EC2 Instance",
-                                        "instance_type": inst["type"],
-                                        "is_gpu": inst["is_gpu"],
-                                        "owner": owner,
-                                        "avg_cpu_percent": round(avg_cpu, 2),
-                                        "monthly_cost": round(monthly_cost, 2),
-                                        "launch_time": inst["launch_time"].isoformat()
-                                        if inst["launch_time"]
-                                        else "",
-                                        "recommendation": "Stop or terminate if not needed",
-                                        "action": "stop_instance",
-                                        "supports_backup": True,
-                                        "explainability_notes": f"Instance ({inst['type']}) has shown extremely low CPU utilization (avg {round(avg_cpu, 2)}%) over a 14-day analysis period. {'HIGH PRIORITY: Expensive GPU instance detected.' if inst['is_gpu'] else ''} Launched by: {owner}.",
-                                        "confidence_score": 0.99
-                                        if inst["is_gpu"]
-                                        else 0.98,
-                                    }
-                                )
+                                    # Governance: Get Attribution (Reusing CloudTrail client)
+                                    owner = await self._get_attribution(ct, inst["id"])
+
+                                    zombies.append(
+                                        {
+                                            "resource_id": inst["id"],
+                                            "resource_type": "EC2 Instance",
+                                            "instance_type": inst["type"],
+                                            "is_gpu": inst["is_gpu"],
+                                            "owner": owner,
+                                            "avg_cpu_percent": round(avg_cpu, 2),
+                                            "monthly_cost": round(monthly_cost, 2),
+                                            "launch_time": inst["launch_time"].isoformat()
+                                            if inst["launch_time"]
+                                            else "",
+                                            "recommendation": "Stop or terminate if not needed",
+                                            "action": "stop_instance",
+                                            "supports_backup": True,
+                                            "explainability_notes": f"Instance ({inst['type']}) has shown extremely low CPU utilization (avg {round(avg_cpu, 2)}%) over a 14-day analysis period. {'HIGH PRIORITY: Expensive GPU instance detected.' if inst['is_gpu'] else ''} Launched by: {owner}.",
+                                            "confidence_score": 0.99
+                                            if inst["is_gpu"]
+                                            else 0.98,
+                                        }
+                                    )
 
         except ClientError as e:
             logger.warning("idle_instance_scan_error", error=str(e))
