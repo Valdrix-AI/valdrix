@@ -68,15 +68,15 @@ class TestPaystackClient:
 
 class TestBillingService:
     @pytest.mark.asyncio
-    async def test_create_checkout_session_trial_error(self, mock_db, mock_settings):
+    async def test_create_checkout_session_free_error(self, mock_db, mock_settings):
         # Patch client initialization or handle it carefully
         with patch(
             "app.modules.billing.domain.billing.paystack_billing.PaystackClient"
         ):
             service = BillingService(mock_db)
-            with pytest.raises(ValueError, match="Cannot checkout free_trial tier"):
+            with pytest.raises(ValueError, match="Cannot checkout free tier"):
                 await service.create_checkout_session(
-                    uuid4(), PricingTier.FREE_TRIAL, "e@e.com", "http://url"
+                    uuid4(), PricingTier.FREE, "e@e.com", "http://url"
                 )
 
     @pytest.mark.asyncio
@@ -184,6 +184,12 @@ class TestBillingService:
 
 
 class TestWebhookHandler:
+    @staticmethod
+    def _mock_request():
+        request = MagicMock()
+        request.headers = {"Content-Type": "application/json"}
+        return request
+
     @pytest.mark.asyncio
     async def test_verify_signature(self, mock_db, mock_settings):
         handler = WebhookHandler(mock_db)
@@ -196,7 +202,7 @@ class TestWebhookHandler:
     async def test_handle_invalid_signature(self, mock_db, mock_settings):
         handler = WebhookHandler(mock_db)
         with pytest.raises(HTTPException) as exc:
-            await handler.handle(b"{}", "bad")
+            await handler.handle(self._mock_request(), b"{}", "bad")
         assert exc.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -222,7 +228,7 @@ class TestWebhookHandler:
             return_value="encrypted_auth",
         ):
             mock_db.execute.return_value = MagicMock(scalar_one_or_none=lambda: None)
-            res = await handler.handle(payload, signature)
+            res = await handler.handle(self._mock_request(), payload, signature)
             assert res == {"status": "success"}
 
     @pytest.mark.asyncio
@@ -245,7 +251,7 @@ class TestWebhookHandler:
         sub = MagicMock()
         mock_db.execute.return_value = MagicMock(scalar_one_or_none=lambda: sub)
 
-        await handler.handle(payload, signature)
+        await handler.handle(self._mock_request(), payload, signature)
         assert sub.paystack_subscription_code == "SUB_123"
         assert sub.status == SubscriptionStatus.ACTIVE.value
 
@@ -261,7 +267,7 @@ class TestWebhookHandler:
         sub = MagicMock()
         mock_db.execute.return_value = MagicMock(scalar_one_or_none=lambda: sub)
 
-        await handler.handle(payload, signature)
+        await handler.handle(self._mock_request(), payload, signature)
         assert sub.status == SubscriptionStatus.CANCELLED.value
         mock_db.commit.assert_called()
 
@@ -285,5 +291,5 @@ class TestWebhookHandler:
             "app.modules.billing.domain.billing.dunning_service.DunningService.process_failed_payment",
             new_callable=AsyncMock,
         ) as mock_dunning:
-            await handler.handle(payload, signature)
+            await handler.handle(self._mock_request(), payload, signature)
             mock_dunning.assert_called_once_with(sub.id, is_webhook=True)

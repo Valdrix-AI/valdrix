@@ -37,7 +37,8 @@ logger = structlog.get_logger()
 
 # Webhook configuration
 WEBHOOK_MAX_ATTEMPTS = 5  # More retries for revenue-critical
-WEBHOOK_IDEMPOTENCY_TTL_HOURS = 48  # Keep idempotency keys for 48h
+# L5: Now configurable via settings
+WEBHOOK_IDEMPOTENCY_TTL_HOURS = get_settings().WEBHOOK_IDEMPOTENCY_TTL_HOURS
 
 
 class WebhookRetryService:

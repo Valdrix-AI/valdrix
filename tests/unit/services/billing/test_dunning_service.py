@@ -111,7 +111,7 @@ async def test_process_failed_payment_max_attempts_reached(mock_db, mock_subscri
         result = await dunning.process_failed_payment(mock_subscription.id)
 
         assert result["status"] == "downgraded"
-        assert mock_subscription.tier == PricingTier.FREE_TRIAL.value
+        assert mock_subscription.tier == PricingTier.FREE.value
         assert mock_subscription.status == SubscriptionStatus.CANCELLED.value
 
 
@@ -243,14 +243,14 @@ async def test_handle_retry_success_clears_state(mock_db, mock_subscription):
 
 @pytest.mark.asyncio
 async def test_handle_final_failure_downgrades(mock_db, mock_subscription):
-    """Test _handle_final_failure downgrades to trial."""
+    """Test _handle_final_failure downgrades to free."""
     dunning = DunningService(mock_db)
     with patch.object(
         DunningService, "_send_account_downgraded_email", new_callable=AsyncMock
     ):
         await dunning._handle_final_failure(mock_subscription)
 
-        assert mock_subscription.tier == PricingTier.FREE_TRIAL.value
+        assert mock_subscription.tier == PricingTier.FREE.value
         assert mock_subscription.status == SubscriptionStatus.CANCELLED.value
         assert mock_subscription.canceled_at is not None
         mock_db.commit.assert_called()

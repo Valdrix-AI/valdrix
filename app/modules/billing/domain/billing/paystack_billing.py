@@ -16,12 +16,14 @@ Requirements:
 
 import hashlib
 import hmac
+import json
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Any, Optional
 from uuid import UUID
 import httpx
 import structlog
+from fastapi import Request
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,12 +48,6 @@ def _email_hash(email: Optional[str]) -> Optional[str]:
         return None
     return hashlib.sha256(email.strip().lower().encode()).hexdigest()[:12]
 
-
-
-def _email_hash(email: Optional[str]) -> Optional[str]:
-    if not email:
-        return None
-    return hashlib.sha256(email.strip().lower().encode()).hexdigest()[:12]
 
 
 class SubscriptionStatus(str, Enum):
@@ -191,7 +187,7 @@ class BillingService:
 
         for tier, config in TIER_CONFIG.items():
             kobo_config = config.get("paystack_amount_kobo")
-            if tier == PricingTier.FREE_TRIAL and kobo_config is None:
+            if tier == PricingTier.FREE and kobo_config is None:
                 continue
             # Enterprise/custom tiers may not have fixed Paystack amounts.
             if kobo_config is None:
@@ -234,8 +230,8 @@ class BillingService:
         Initialize Paystack transaction for subscription using dynamic currency.
         We no longer use fixed Paystack Plans to support fluctuating exchange rates.
         """
-        if tier == PricingTier.FREE_TRIAL:
-            raise ValueError("Cannot checkout free_trial tier")
+        if tier == PricingTier.FREE:
+            raise ValueError("Cannot checkout free tier")
 
         is_annual = billing_cycle.lower() == "annual"
 
@@ -461,16 +457,25 @@ class WebhookHandler:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def handle(self, payload: bytes, signature: str) -> dict[str, str]:
+    async def handle(self, request: Request, payload: bytes, signature: str) -> dict[str, str]:
         """Verify and process webhook."""
         from fastapi import HTTPException
+
+        # Finding #12: Validate Content-Type for JSON parsing safety
+        content_type = request.headers.get("Content-Type", "")
+        if "application/json" not in content_type.lower():
+            logger.warning("paystack_webhook_invalid_content_type", content_type=content_type)
+            raise HTTPException(400, "Unsupported media type: expected application/json")
 
         if not self.verify_signature(payload, signature):
             raise HTTPException(401, "Invalid signature")
 
-        import json
+        try:
+            event = json.loads(payload)
+        except json.JSONDecodeError:
+            logger.error("paystack_webhook_invalid_json", payload_len=len(payload))
+            raise HTTPException(400, "Invalid JSON payload")
 
-        event = json.loads(payload)
         event_type = event.get("event")
         data = event.get("data", {})
 

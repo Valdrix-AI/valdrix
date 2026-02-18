@@ -1,4 +1,4 @@
-"""enforce_free_trial_tier_constraints
+"""enforce_free_tier_constraints
 
 Revision ID: 5f3a9c2d1e8b
 Revises: 4d2f9a1b7c3e
@@ -18,7 +18,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-ALLOWED_TIERS_SQL = "('free_trial', 'starter', 'growth', 'pro', 'enterprise')"
+ALLOWED_TIERS_SQL = "('free', 'starter', 'growth', 'pro', 'enterprise')"
 
 
 def upgrade() -> None:
@@ -27,7 +27,7 @@ def upgrade() -> None:
     op.execute(
         f"""
         UPDATE tenants
-        SET plan = 'free_trial'
+        SET plan = 'free'
         WHERE plan IS NULL
            OR plan NOT IN {ALLOWED_TIERS_SQL}
         """
@@ -35,7 +35,7 @@ def upgrade() -> None:
     op.execute(
         f"""
         UPDATE tenant_subscriptions
-        SET tier = 'free_trial'
+        SET tier = 'free'
         WHERE tier IS NULL
            OR tier NOT IN {ALLOWED_TIERS_SQL}
         """
@@ -45,14 +45,14 @@ def upgrade() -> None:
         "tenants",
         "plan",
         existing_type=sa.String(),
-        server_default=sa.text("'free_trial'"),
+        server_default=sa.text("'free'"),
         existing_nullable=False,
     )
     op.alter_column(
         "tenant_subscriptions",
         "tier",
         existing_type=sa.String(length=20),
-        server_default=sa.text("'free_trial'"),
+        server_default=sa.text("'free'"),
         existing_nullable=False,
     )
 
@@ -73,20 +73,20 @@ def downgrade() -> None:
     op.drop_constraint("ck_tenant_subscriptions_tier_allowed", "tenant_subscriptions", type_="check")
     op.drop_constraint("ck_tenants_plan_allowed", "tenants", type_="check")
 
-    op.execute("UPDATE tenant_subscriptions SET tier = 'trial' WHERE tier = 'free_trial'")
-    op.execute("UPDATE tenants SET plan = 'trial' WHERE plan = 'free_trial'")
+    op.execute("UPDATE tenant_subscriptions SET tier = 'free' WHERE tier IS NULL")
+    op.execute("UPDATE tenants SET plan = 'free' WHERE plan IS NULL")
 
     op.alter_column(
         "tenant_subscriptions",
         "tier",
         existing_type=sa.String(length=20),
-        server_default=sa.text("'trial'"),
+        server_default=sa.text("'free'"),
         existing_nullable=False,
     )
     op.alter_column(
         "tenants",
         "plan",
         existing_type=sa.String(),
-        server_default=sa.text("'trial'"),
+        server_default=sa.text("'free'"),
         existing_nullable=False,
     )

@@ -4,7 +4,7 @@ Dunning Service - Payment Retry and Customer Notification Workflow
 Implements production-grade dunning for failed payments:
 1. Retry payment with exponential backoff (day 1, 3, 7)
 2. Send email notification on each failure
-3. Downgrade to TRIAL tier after max attempts
+3. Downgrade to FREE tier after max attempts
 """
 
 from datetime import datetime, timezone, timedelta
@@ -44,7 +44,7 @@ class DunningService:
     2. Subscription status → ATTENTION, schedule retry
     3. DUNNING job executes → retry_payment
     4. On success: clear dunning, status → ACTIVE
-    5. On final failure: downgrade → TRIAL, send notice
+    5. On final failure: downgrade → FREE, send notice
     """
 
     def __init__(self, db: AsyncSession):
@@ -220,9 +220,9 @@ class DunningService:
     async def _handle_final_failure(
         self, subscription: TenantSubscription
     ) -> Dict[str, Any]:
-        """Handle max retries exhausted - downgrade to TRIAL."""
+        """Handle max retries exhausted - downgrade to FREE."""
         subscription.status = SubscriptionStatus.CANCELLED.value
-        subscription.tier = PricingTier.FREE_TRIAL.value
+        subscription.tier = PricingTier.FREE.value
         subscription.canceled_at = datetime.now(timezone.utc)
         subscription.dunning_next_retry_at = None
 
@@ -231,7 +231,7 @@ class DunningService:
         logger.warning(
             "dunning_max_attempts_reached",
             tenant_id=str(subscription.tenant_id),
-            msg="Subscription downgraded to TRIAL due to payment failure",
+            msg="Subscription downgraded to FREE due to payment failure",
         )
 
         # Send final notice email
@@ -239,7 +239,7 @@ class DunningService:
 
         return {
             "status": "downgraded",
-            "action": "tier_changed_to_trial",
+            "action": "tier_changed_to_free",
             "reason": "max_dunning_attempts_exhausted",
         }
 
