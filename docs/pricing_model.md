@@ -14,7 +14,7 @@ Reference implementation: `app/shared/core/pricing.py`.
 
 ## Plan Baseline
 
-- `free_trial`: evaluation and onboarding baseline.
+- `free`: permanent entry tier with strict limits and no credit card requirement.
 - `starter`, `growth`, `pro`, `enterprise`: progressively higher scale and capability.
 
 ## Billing Event Mapping (Product to Billing)

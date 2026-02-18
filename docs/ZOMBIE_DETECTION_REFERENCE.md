@@ -518,8 +518,7 @@ def find_old_terminated_gcp_instances(instance_client, project_id, days=30):
   "lambda:List*",
   "iam:GenerateCredentialReport",
   "iam:GetCredentialReport",
-  "cloudwatch:GetMetricStatistics",
-  "ce:GetCostAndUsage"
+  "cloudwatch:GetMetricStatistics"
 }
 ```
 
