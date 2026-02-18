@@ -251,18 +251,27 @@ class CloudConnectionService:
         except HTTPException:
             raise
         except Exception as e:
+            from app.shared.core.exceptions import AdapterError
+            adapter_err = AdapterError(str(e))
+            
             logger.error(
                 "provider_verification_failed",
                 provider=provider,
                 error=str(e),
                 connection_id=str(connection_id),
             )
-            if hasattr(connection, "status"):
-                connection.status = "error"
-            if hasattr(connection, "error_message"):
-                connection.error_message = str(e)
+            # Update status
+            if connection:
+                if hasattr(connection, "status"):
+                    connection.status = "error"
+                if hasattr(connection, "error_message"):
+                    connection.error_message = adapter_err.message
+                if hasattr(connection, "is_active"):
+                    connection.is_active = False
             await self.db.commit()
-            raise HTTPException(status_code=500, detail=str(e))
+
+            # Raise sanitized exception (Finding #2)
+            raise adapter_err
 
     @staticmethod
     def get_aws_setup_templates(external_id: str) -> dict[str, str]:

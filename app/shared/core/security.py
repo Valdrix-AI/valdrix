@@ -4,8 +4,10 @@ import base64
 import binascii
 import os
 import secrets
+import time
+import threading
+from typing import Any, cast
 import structlog
-from functools import lru_cache
 from cryptography.fernet import Fernet, MultiFernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -54,15 +56,52 @@ class EncryptionKeyManager:
             "(base64-encoded random 32 bytes)."
         )
 
-    @staticmethod
-    @lru_cache(maxsize=32)
+    # TTL-cached key derivation (Finding #4: replaces @lru_cache to prevent
+    # indefinite secret retention and support key rotation without restarts)
+    _key_cache: dict[str, tuple[Any, float]] = {}
+    _cache_lock = threading.Lock()
+    _CACHE_TTL = 3600  # 1 hour
+    _MAX_CACHE_SIZE = 1000 # Prevent unbounded growth (Finding #7)
+
+    @classmethod
+    def _get_cached(cls, key: str) -> Any | None:
+        with cls._cache_lock:
+            entry = cls._key_cache.get(key)
+            if entry and (time.monotonic() - entry[1]) < cls._CACHE_TTL:
+                return entry[0]
+            elif entry:
+                del cls._key_cache[key]
+        return None
+
+    @classmethod
+    def _set_cached(cls, key: str, value: Any) -> None:
+        with cls._cache_lock:
+            # If cache is full, pop the oldest entry based on time
+            if len(cls._key_cache) >= cls._MAX_CACHE_SIZE:
+                oldest_key = min(cls._key_cache.keys(), key=lambda k: cls._key_cache[k][1])
+                del cls._key_cache[oldest_key]
+            cls._key_cache[key] = (value, time.monotonic())
+
+    @classmethod
+    def clear_key_caches(cls) -> None:
+        """Clear all cached keys. Call after key rotation."""
+        with cls._cache_lock:
+            cls._key_cache.clear()
+
+    @classmethod
     def derive_key(
+        cls,
         master_key: str,
         salt: str,
         key_version: int = 1,
         iterations: int = KDF_ITERATIONS,
     ) -> bytes:
-        """Derive an encryption key from master key using PBKDF2."""
+        """Derive an encryption key from master key using PBKDF2 (TTL-cached)."""
+        cache_key = f"dk:{salt}:{key_version}:{iterations}"
+        cached = cls._get_cached(cache_key)
+        if cached is not None:
+            return cast(bytes, cached)
+
         try:
             salt_bytes = base64.b64decode(salt, validate=True)
         except (binascii.Error, ValueError) as e:
@@ -83,16 +122,22 @@ class EncryptionKeyManager:
         )
 
         derived_key = kdf.derive(kdf_input)
-        return base64.urlsafe_b64encode(derived_key)
+        result = base64.urlsafe_b64encode(derived_key)
+        cls._set_cached(cache_key, result)
+        return result
+
+    @classmethod
+    def create_fernet_for_key(cls, master_key: str, salt: str) -> Fernet:
+        cache_key = f"fernet:{salt}"
+        cached = cls._get_cached(cache_key)
+        if cached is not None:
+            return cast(Fernet, cached)
+        derived_key = cls.derive_key(master_key, salt)
+        fernet = Fernet(derived_key)
+        cls._set_cached(cache_key, fernet)
+        return fernet
 
     @staticmethod
-    @lru_cache(maxsize=32)
-    def create_fernet_for_key(master_key: str, salt: str) -> Fernet:
-        derived_key = EncryptionKeyManager.derive_key(master_key, salt)
-        return Fernet(derived_key)
-
-    @staticmethod
-    @lru_cache(maxsize=16)
     def create_multi_fernet(
         primary_key: str,
         fallback_keys: tuple[str, ...] | None = None,
@@ -242,9 +287,13 @@ def decrypt_string(value: str, context: str = "generic") -> str | None:
         return None
 
 
-def generate_blind_index(value: str) -> str | None:
+def generate_blind_index(value: str, tenant_id: Any | None = None) -> str | None:
     """
     Generates a deterministic hash for searchable encryption.
+    
+    SEC-HAR-11: Salted Blind Indexes (Founding #H17)
+    If tenant_id is provided, it is used as a salt prefix to ensure 
+    cross-tenant isolation (same value in different tenants yields different hashes).
     """
     if not value or value == "":
         return None
@@ -255,16 +304,21 @@ def generate_blind_index(value: str) -> str | None:
         return None
 
     key = key_str.encode()
-    normalized_value = str(value).strip().lower()
+    # Normalize and salt
+    raw_value = str(value).strip().lower()
+    if not raw_value:
+        return None
+    if tenant_id:
+        raw_value = f"{tenant_id}:{raw_value}"
+        
+    return hmac.new(key, raw_value.encode(), hashlib.sha256).hexdigest()
 
-    return hmac.new(key, normalized_value.encode(), hashlib.sha256).hexdigest()
 
-
-def generate_secret_blind_index(value: str) -> str | None:
+def generate_secret_blind_index(value: str, tenant_id: Any | None = None) -> str | None:
     """
     Generates a deterministic hash for secrets (tokens/keys) where case must be preserved.
-
-    This is intentionally NOT lowercased to avoid reducing entropy for bearer tokens.
+    
+    SEC-HAR-11: Salted Blind Indexes (Founding #H17)
     """
     if not value:
         return None
@@ -274,12 +328,16 @@ def generate_secret_blind_index(value: str) -> str | None:
     if not key_str:
         return None
 
-    normalized_value = str(value).strip()
-    if not normalized_value:
+    # Salt but preserve case for secrets
+    raw_value = str(value).strip()
+    if not raw_value:
         return None
-
+        
     key = key_str.encode()
-    return hmac.new(key, normalized_value.encode(), hashlib.sha256).hexdigest()
+    if tenant_id:
+        raw_value = f"{tenant_id}:{raw_value}"
+        
+    return hmac.new(key, raw_value.encode(), hashlib.sha256).hexdigest()
 
 
 def generate_new_key() -> str:

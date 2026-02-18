@@ -28,14 +28,39 @@ def handle_exception(
 
     error_id = error_id or str(uuid4())
 
-    # 1. Classification
+    # 1. Classification & Sanitization
+    from app.shared.core.config import get_settings
+    settings = get_settings()
+    is_prod = settings.ENVIRONMENT.lower() in ("production", "staging")
+
     if isinstance(exc, ValdrixException):
         valdrix_exc = exc
-    else:
-        # Wrap unknown exceptions as ExternalAPIError or Generic Internal
-        # in a production environment, we should be strictly specific.
+        # SEC-07: Sanitize message in production if it's not a known safe-to-leak type
+        if is_prod:
+            # Only allow specific safe codes or manually verified safe messages
+            safe_codes = {"auth_error", "not_found", "budget_exceeded", "kill_switch_triggered"}
+            if valdrix_exc.code not in safe_codes:
+                valdrix_exc.message = "An error occurred while processing your request"
+    elif isinstance(exc, ValueError):
+        # Business logic validation errors should be 400
+        msg = "Invalid request parameters" if is_prod else str(exc)
         valdrix_exc = ValdrixException(
-            message="An unexpected internal error occurred",
+            message=msg,
+            code="value_error",
+            status_code=400,
+        )
+        # Log the real cause
+        logger.warning(
+            "business_validation_error",
+            error=str(exc),
+            error_id=error_id,
+            path=request.url.path,
+        )
+    else:
+        # Generic internal error for everything else
+        msg = "An unexpected internal error occurred" if is_prod else str(exc)
+        valdrix_exc = ValdrixException(
+            message=msg,
             code="internal_error",
             status_code=500,
         )

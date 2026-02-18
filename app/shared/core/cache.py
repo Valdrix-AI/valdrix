@@ -14,6 +14,7 @@ Uses Upstash free tier (10K commands/day) which is sufficient for:
 import json
 import hashlib
 import structlog
+import asyncio
 from typing import Any, Optional
 from uuid import UUID
 from datetime import timedelta
@@ -304,6 +305,8 @@ class QueryCache:
             while True:
                 cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
                 if keys:
+                    # Use a transaction/pipeline for atomic deletion if supported, 
+                    # or just delete the batch. Upstash-redis-python handles delete(*keys).
                     await self.redis.delete(*keys)
                     logger.info(
                         "cache_invalidated", tenant_id=tenant_id, keys_deleted=len(keys)
@@ -358,11 +361,31 @@ class QueryCache:
                 if cached_result is not None:
                     return cached_result
 
-                # Execute query
-                result = await func(*args, **kwargs)
+                # SEC: Dogpile/Stampede Protection (BE-CORE-1)
+                # Use a short-lived lock (30s) to ensure only one worker executes the query
+                lock_key = f"lock:{cache_key}"
+                if self.redis:
+                    # SET NX (if not exists) EX (expire)
+                    # Note: upstash_redis supports standard arguments
+                    acquired = await self.redis.set(lock_key, "locked", ex=30, nx=True)
+                    if not acquired:
+                        # Wait briefly and retry cache
+                        await asyncio.sleep(0.5)
+                        cached_result = await self.get_cached_result(cache_key)
+                        if cached_result is not None:
+                            return cached_result
+                        # If still no cache, fall back to executing query (safety hatch)
 
-                # Cache result
-                await self.set_cached_result(cache_key, result, ttl)
+                try:
+                    # Execute query
+                    result = await func(*args, **kwargs)
+
+                    # Cache result
+                    await self.set_cached_result(cache_key, result, ttl)
+                finally:
+                    # Release lock
+                    if self.redis:
+                        await self.redis.delete(lock_key)
 
                 return result
 

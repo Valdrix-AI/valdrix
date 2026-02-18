@@ -58,3 +58,20 @@ RLS_EXEMPT_TABLES = [
     "unit_economics_settings",
     "llm_provider_pricing",
 ]
+
+
+class Persona(str, Enum):
+    """Supported User Personas."""
+
+    ENGINEERING = "engineering"
+    FINANCE = "finance"
+    PLATFORM = "platform"
+    LEADERSHIP = "leadership"
+
+
+# Subscription Logic
+TIER_FREE = "free"
+TIER_STARTER = "starter"
+TIER_GROWTH = "growth"
+TIER_PRO = "pro"
+TIER_ENTERPRISE = "enterprise"

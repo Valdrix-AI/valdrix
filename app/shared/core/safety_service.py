@@ -91,8 +91,8 @@ class SafetyGuardrailService:
         if not settings or not settings.hard_cap_enabled:
             return
 
-        # Calculate current month spend
-        today = date.today()
+        # Calculate current month spend (UTC for global consistency)
+        today = datetime.now(timezone.utc).date()
         start_of_month = date(today.year, today.month, 1)
 
         summary = await CostAggregator.get_summary(

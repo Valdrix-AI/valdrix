@@ -59,11 +59,26 @@ def context_aware_key(request: Request) -> str:
 
 
 def get_limiter() -> Limiter:
-    """Lazy initialization of the Limiter instance."""
+    """Lazy initialization of the Limiter instance.
+
+    ADR (Finding #6): Production deployments MUST set REDIS_URL for distributed
+    rate limiting. The ``memory://`` fallback is intentionally kept for
+    single-instance dev/test, but it is NOT suitable for multi-replica
+    deployments where limits must be shared across processes.
+    """
     global _limiter
     if _limiter is None:
         settings = get_settings()
         storage_uri = settings.REDIS_URL or "memory://"
+        
+        # SEC: Warn if production-like environment is missing distributed rate limiting
+        if not settings.REDIS_URL and settings.ENVIRONMENT.lower() in ("production", "staging"):
+            logger.warning(
+                "rate_limiting_in_memory_production",
+                msg="REDIS_URL is not set. Rate limiting will be per-process only. "
+                "This is NOT RECOMMENDED for production deployments with multiple workers."
+            )
+            
         _limiter = Limiter(
             key_func=context_aware_key,
             storage_uri=storage_uri,
@@ -160,7 +175,7 @@ def get_analysis_limit(request: Optional[Request] = None) -> str:
 
     # Mapping of tier to rate limit (per hour to prevent burst costs)
     limits = {
-        "free_trial": "1/hour",
+        "free": "1/hour",
         "starter": "2/hour",
         "growth": "10/hour",
         "pro": "50/hour",
@@ -194,6 +209,7 @@ def analysis_limit(func: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator that applies a dynamic analysis limit based on tenant tier."""
     if get_settings().TESTING:
         return func
+    # Pass the callable (not its result) so it's evaluated per-request
     decorated = get_limiter().limit(get_analysis_limit)(func)
     return cast(Callable[..., Any], decorated)
 
@@ -221,6 +237,10 @@ async def check_remediation_rate_limit(
     tenant_key = str(tenant_id) if isinstance(tenant_id, UUID) else tenant_id
     redis = get_redis_client()
 
+    # Finding #6: Enforce Redis for production/staging to ensure distributed correctness
+    settings = get_settings()
+    is_prod = settings.ENVIRONMENT.lower() in ("production", "staging")
+    
     if redis:
         try:
             # Use Redis for distributed rate limiting
@@ -242,9 +262,16 @@ async def check_remediation_rate_limit(
             return True
         except Exception as e:
             logger.error("remediation_rate_limit_redis_error", error=str(e))
-            # Fall through to memory fallback
+            # Fall through to memory fallback if NOT in production
+            if is_prod:
+                return False
 
-    # Memory fallback for single-instance deployments
+    # Finding #6: Enforce Redis for production/staging
+    if is_prod:
+        logger.error("redis_unavailable_in_production", tenant_id=tenant_key, action=action)
+        return False
+
+    # Memory fallback for local/single-instance deployments
     current_time = time.time()
     window_key = f"{tenant_key}:{action}"
 
