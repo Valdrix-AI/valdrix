@@ -35,6 +35,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "db_username" {
+  description = "Username for the RDS instance."
+  type        = string
+  default     = "valdrix_admin"
+}
+
 variable "skip_final_snapshot" {
   description = "Whether to skip final snapshot on DB deletion. Set false for production."
   type        = bool
