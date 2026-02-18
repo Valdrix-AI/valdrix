@@ -104,14 +104,14 @@
 					jira_base_url: loaded.jira_base_url ?? '',
 					jira_email: loaded.jira_email ?? '',
 					jira_project_key: loaded.jira_project_key ?? '',
-						jira_issue_type: loaded.jira_issue_type ?? 'Task',
-						jira_api_token: '',
-						clear_jira_api_token: false,
-						teams_enabled: loaded.teams_enabled ?? false,
-						teams_webhook_url: loaded.teams_webhook_url ?? '',
-						clear_teams_webhook_url: false,
-						has_teams_webhook_url: loaded.has_teams_webhook_url ?? false,
-						workflow_github_enabled: loaded.workflow_github_enabled ?? false,
+					jira_issue_type: loaded.jira_issue_type ?? 'Task',
+					jira_api_token: '',
+					clear_jira_api_token: false,
+					teams_enabled: loaded.teams_enabled ?? false,
+					teams_webhook_url: loaded.teams_webhook_url ?? '',
+					clear_teams_webhook_url: false,
+					has_teams_webhook_url: loaded.has_teams_webhook_url ?? false,
+					workflow_github_enabled: loaded.workflow_github_enabled ?? false,
 					workflow_github_owner: loaded.workflow_github_owner ?? '',
 					workflow_github_repo: loaded.workflow_github_repo ?? '',
 					workflow_github_workflow_id: loaded.workflow_github_workflow_id ?? '',
@@ -232,11 +232,11 @@
 				slack_channel_override: settings.slack_channel_override || undefined,
 				jira_base_url: settings.jira_base_url || undefined,
 				jira_email: settings.jira_email || undefined,
-					jira_project_key: settings.jira_project_key || undefined,
-					jira_issue_type: settings.jira_issue_type || undefined,
-					jira_api_token: settings.jira_api_token || undefined,
-					teams_webhook_url: settings.teams_webhook_url || undefined,
-					workflow_github_owner: settings.workflow_github_owner || undefined,
+				jira_project_key: settings.jira_project_key || undefined,
+				jira_issue_type: settings.jira_issue_type || undefined,
+				jira_api_token: settings.jira_api_token || undefined,
+				teams_webhook_url: settings.teams_webhook_url || undefined,
+				workflow_github_owner: settings.workflow_github_owner || undefined,
 				workflow_github_repo: settings.workflow_github_repo || undefined,
 				workflow_github_workflow_id: settings.workflow_github_workflow_id || undefined,
 				workflow_github_ref: settings.workflow_github_ref || 'main',
@@ -263,18 +263,18 @@
 			if (validated.clear_jira_api_token) {
 				settings.has_jira_api_token = false;
 			}
-				settings.jira_api_token = '';
-				settings.clear_jira_api_token = false;
-				if (validated.teams_webhook_url) {
-					settings.has_teams_webhook_url = true;
-				}
-				if (validated.clear_teams_webhook_url) {
-					settings.has_teams_webhook_url = false;
-				}
-				settings.teams_webhook_url = '';
-				settings.clear_teams_webhook_url = false;
-				if (validated.workflow_github_token) {
-					settings.workflow_has_github_token = true;
+			settings.jira_api_token = '';
+			settings.clear_jira_api_token = false;
+			if (validated.teams_webhook_url) {
+				settings.has_teams_webhook_url = true;
+			}
+			if (validated.clear_teams_webhook_url) {
+				settings.has_teams_webhook_url = false;
+			}
+			settings.teams_webhook_url = '';
+			settings.clear_teams_webhook_url = false;
+			if (validated.workflow_github_token) {
+				settings.workflow_has_github_token = true;
 			}
 			if (validated.clear_workflow_github_token) {
 				settings.workflow_has_github_token = false;

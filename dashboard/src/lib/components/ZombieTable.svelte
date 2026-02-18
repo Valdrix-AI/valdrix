@@ -18,12 +18,22 @@
 		instance_type?: string;
 	};
 
-	let { 
-		zombies, 
-		zombieCount, 
-		onRemediate 
-	} = $props<{
-		zombies: any;
+	type ZombieCollections = {
+		unattached_volumes?: RemediationFinding[];
+		old_snapshots?: RemediationFinding[];
+		unused_elastic_ips?: RemediationFinding[];
+		idle_instances?: RemediationFinding[];
+		orphan_load_balancers?: RemediationFinding[];
+		idle_rds_databases?: RemediationFinding[];
+		underused_nat_gateways?: RemediationFinding[];
+		idle_s3_buckets?: RemediationFinding[];
+		stale_ecr_images?: RemediationFinding[];
+		idle_sagemaker_endpoints?: RemediationFinding[];
+		cold_redshift_clusters?: RemediationFinding[];
+	};
+
+	let { zombies, zombieCount, onRemediate } = $props<{
+		zombies: ZombieCollections | null | undefined;
 		zombieCount: number;
 		onRemediate: (finding: RemediationFinding) => void;
 	}>();
@@ -134,7 +144,8 @@
 							</div>
 						</td>
 						<td>
-							<button class="btn btn-ghost text-xs" onclick={() => onRemediate(snap)}>Review</button>
+							<button class="btn btn-ghost text-xs" onclick={() => onRemediate(snap)}>Review</button
+							>
 						</td>
 					</tr>
 				{/each}
@@ -213,7 +224,8 @@
 						<td>
 							<div class="flex flex-col gap-1 max-w-xs">
 								<p class="text-[10px] leading-tight text-ink-300">
-									{ec2.explainability_notes || 'Low CPU and network utilization detected over 7 days.'}
+									{ec2.explainability_notes ||
+										'Low CPU and network utilization detected over 7 days.'}
 								</p>
 								<div class="flex items-center gap-2">
 									<div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
@@ -348,7 +360,8 @@
 						<td>
 							<div class="flex flex-col gap-1 max-w-xs">
 								<p class="text-[10px] leading-tight text-ink-300">
-									{nat.explainability_notes || 'Minimal data processing detected compared to runtime cost.'}
+									{nat.explainability_notes ||
+										'Minimal data processing detected compared to runtime cost.'}
 								</p>
 								<div class="flex items-center gap-2">
 									<div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">
@@ -483,7 +496,8 @@
 						<td>
 							<div class="flex flex-col gap-1 max-w-xs">
 								<p class="text-[10px] leading-tight text-ink-300">
-									{sm.explainability_notes || 'Endpoint has not processed any inference requests recently.'}
+									{sm.explainability_notes ||
+										'Endpoint has not processed any inference requests recently.'}
 								</p>
 								<div class="flex items-center gap-2">
 									<div class="h-1 w-16 bg-ink-700 rounded-full overflow-hidden">

@@ -11,7 +11,10 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const next = _safeRedirectTarget(url.searchParams.get('next'));
 	const code = url.searchParams.get('code');
 	if (!code) {
-		const reason = url.searchParams.get('error_description') || url.searchParams.get('error') || 'Missing auth code.';
+		const reason =
+			url.searchParams.get('error_description') ||
+			url.searchParams.get('error') ||
+			'Missing auth code.';
 		throw redirect(303, `${base}/auth/login?error=${encodeURIComponent(reason)}`);
 	}
 

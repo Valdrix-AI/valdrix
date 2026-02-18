@@ -214,31 +214,31 @@ function setupOpsGetMocks({
 		if (url.includes('/costs/reconciliation/close-package?')) {
 			return jsonResponse(
 				closePackage ?? {
-				tenant_id: 'tenant-id',
-				provider: 'all',
-				period: { start_date: '2026-01-01', end_date: '2026-01-31' },
-				close_status: 'ready',
-				lifecycle: {
-					total_records: 120,
-					preliminary_records: 0,
-					final_records: 120,
-					total_cost_usd: 1200,
-					preliminary_cost_usd: 0,
-					final_cost_usd: 1200
-				},
-				reconciliation: {
-					status: 'healthy',
-					discrepancy_percentage: 0.42,
-					confidence: 0.92
-				},
-				restatements: {
-					count: 2,
-					net_delta_usd: -4.2,
-					absolute_delta_usd: 8.1
-				},
-				integrity_hash: 'abc123hash',
-				package_version: 'reconciliation-v2'
-			}
+					tenant_id: 'tenant-id',
+					provider: 'all',
+					period: { start_date: '2026-01-01', end_date: '2026-01-31' },
+					close_status: 'ready',
+					lifecycle: {
+						total_records: 120,
+						preliminary_records: 0,
+						final_records: 120,
+						total_cost_usd: 1200,
+						preliminary_cost_usd: 0,
+						final_cost_usd: 1200
+					},
+					reconciliation: {
+						status: 'healthy',
+						discrepancy_percentage: 0.42,
+						confidence: 0.92
+					},
+					restatements: {
+						count: 2,
+						net_delta_usd: -4.2,
+						absolute_delta_usd: 8.1
+					},
+					integrity_hash: 'abc123hash',
+					package_version: 'reconciliation-v2'
+				}
 			);
 		}
 		if (
@@ -638,17 +638,21 @@ describe('ops page unit economics interactions', () => {
 		});
 		postMock.mockResolvedValueOnce(jsonResponse({ status: 'success', invoice: { id: 'inv-1' } }));
 
-			render(Page, {
-				data: testOpsPageData
-			});
+		render(Page, {
+			data: testOpsPageData
+		});
 
-			await screen.findByText('Reconciliation Close Workflow');
-			const closeCard = screen.getByText('Reconciliation Close Workflow').closest('.card') as HTMLElement;
-			const closeCardUtils = within(closeCard);
-			await fireEvent.input(closeCardUtils.getByLabelText('Start'), {
-				target: { value: '2026-01-01' }
-			});
-		await fireEvent.input(closeCardUtils.getByLabelText('End'), { target: { value: '2026-01-31' } });
+		await screen.findByText('Reconciliation Close Workflow');
+		const closeCard = screen
+			.getByText('Reconciliation Close Workflow')
+			.closest('.card') as HTMLElement;
+		const closeCardUtils = within(closeCard);
+		await fireEvent.input(closeCardUtils.getByLabelText('Start'), {
+			target: { value: '2026-01-01' }
+		});
+		await fireEvent.input(closeCardUtils.getByLabelText('End'), {
+			target: { value: '2026-01-31' }
+		});
 		await fireEvent.change(closeCardUtils.getByLabelText('Provider'), { target: { value: 'aws' } });
 		await fireEvent.click(closeCardUtils.getByRole('button', { name: 'Preview Close Status' }));
 
@@ -657,7 +661,9 @@ describe('ops page unit economics interactions', () => {
 
 		await waitFor(() => {
 			expect(
-				postMock.mock.calls.some((call) => String(call[0]).includes('/costs/reconciliation/invoices'))
+				postMock.mock.calls.some((call) =>
+					String(call[0]).includes('/costs/reconciliation/invoices')
+				)
 			).toBe(true);
 		});
 		const [url, body] = postMock.mock.calls.find((call) =>

@@ -69,7 +69,7 @@ class JobStore {
 			});
 		});
 
-		this.#eventSource.onerror = (error) => {
+		this.#eventSource.onerror = () => {
 			this.#isConnected = false;
 			this.#eventSource?.close();
 			this.#eventSource = null;

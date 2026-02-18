@@ -46,7 +46,13 @@
 	function normalizeDomain(value: string): string {
 		const normalized = value.trim().toLowerCase();
 		if (!normalized.includes('@')) return '';
-		return normalized.split('@')[1]?.trim().toLowerCase().replace(/^\.+|\.+$/g, '') ?? '';
+		return (
+			normalized
+				.split('@')[1]
+				?.trim()
+				.toLowerCase()
+				.replace(/^\.+|\.+$/g, '') ?? ''
+		);
 	}
 
 	async function handleSubmit() {

@@ -176,9 +176,7 @@
 			const apiKey = (
 				isSaaS ? saasApiKey : isLicense ? licenseApiKey : isPlatform ? platformApiKey : hybridApiKey
 			).trim();
-			const apiSecret = (
-				isPlatform ? platformApiSecret : isHybrid ? hybridApiSecret : ''
-			).trim();
+			const apiSecret = (isPlatform ? platformApiSecret : isHybrid ? hybridApiSecret : '').trim();
 			const configRaw = isSaaS
 				? saasConnectorConfig
 				: isLicense
@@ -214,7 +212,10 @@
 
 					if (vendorKey === 'datadog') {
 						if (!apiSecret) throw new Error('Datadog requires an application key (api_secret).');
-						if (typeof connectorConfig.unit_prices_usd !== 'object' || !connectorConfig.unit_prices_usd) {
+						if (
+							typeof connectorConfig.unit_prices_usd !== 'object' ||
+							!connectorConfig.unit_prices_usd
+						) {
 							throw new Error('Datadog requires connector_config.unit_prices_usd for pricing.');
 						}
 					}
@@ -226,7 +227,10 @@
 						if (!connectorConfig.nrql_template && !connectorConfig.nrql_query) {
 							throw new Error('New Relic requires connector_config.nrql_template.');
 						}
-						if (typeof connectorConfig.unit_prices_usd !== 'object' || !connectorConfig.unit_prices_usd) {
+						if (
+							typeof connectorConfig.unit_prices_usd !== 'object' ||
+							!connectorConfig.unit_prices_usd
+						) {
 							throw new Error('New Relic requires connector_config.unit_prices_usd for pricing.');
 						}
 					}
@@ -248,7 +252,9 @@
 							typeof connectorConfig.cloudkitty_base_url !== 'string' ||
 							!connectorConfig.cloudkitty_base_url.trim()
 						) {
-							throw new Error('OpenStack/CloudKitty requires connector_config.cloudkitty_base_url.');
+							throw new Error(
+								'OpenStack/CloudKitty requires connector_config.cloudkitty_base_url.'
+							);
 						}
 					}
 
@@ -257,7 +263,10 @@
 						if (typeof connectorConfig.base_url !== 'string' || !connectorConfig.base_url.trim()) {
 							throw new Error('VMware/vCenter requires connector_config.base_url.');
 						}
-						if (typeof connectorConfig.cpu_hour_usd !== 'number' || connectorConfig.cpu_hour_usd <= 0) {
+						if (
+							typeof connectorConfig.cpu_hour_usd !== 'number' ||
+							connectorConfig.cpu_hour_usd <= 0
+						) {
 							throw new Error('VMware/vCenter requires connector_config.cpu_hour_usd > 0.');
 						}
 						if (
@@ -1238,11 +1247,11 @@
 									/>
 								{/if}
 							{/if}
-								<textarea
-									class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-20 font-mono"
-									placeholder={`Connector config JSON (ledger_http: {"base_url":"https://ledger.company.com","costs_path":"/api/v1/finops/costs"} | datadog/newrelic: {"unit_prices_usd":{...}} )`}
-									bind:value={platformConnectorConfig}
-								></textarea>
+							<textarea
+								class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-20 font-mono"
+								placeholder={`Connector config JSON (ledger_http: {"base_url":"https://ledger.company.com","costs_path":"/api/v1/finops/costs"} | datadog/newrelic: {"unit_prices_usd":{...}} )`}
+								bind:value={platformConnectorConfig}
+							></textarea>
 							{#if platformAuthMethod !== 'api_key'}
 								<textarea
 									class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-24 font-mono"
@@ -1372,9 +1381,7 @@
 									placeholder="API key / username / app credential id"
 									bind:value={hybridApiKey}
 								/>
-								{#if ['openstack', 'cloudkitty', 'vmware', 'vcenter', 'vsphere'].includes(
-									hybridVendor.toLowerCase()
-								)}
+								{#if ['openstack', 'cloudkitty', 'vmware', 'vcenter', 'vsphere'].includes(hybridVendor.toLowerCase())}
 									<input
 										class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
 										type="password"
@@ -1383,11 +1390,11 @@
 									/>
 								{/if}
 							{/if}
-								<textarea
-									class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-20 font-mono"
-									placeholder={`Connector config JSON (ledger_http: {"base_url":"https://ledger.company.com"} | cloudkitty: {"auth_url":"...","cloudkitty_base_url":"..."} | vmware: {"base_url":"...","cpu_hour_usd":0.1,"ram_gb_hour_usd":0.01})`}
-									bind:value={hybridConnectorConfig}
-								></textarea>
+							<textarea
+								class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-20 font-mono"
+								placeholder={`Connector config JSON (ledger_http: {"base_url":"https://ledger.company.com"} | cloudkitty: {"auth_url":"...","cloudkitty_base_url":"..."} | vmware: {"base_url":"...","cpu_hour_usd":0.1,"ram_gb_hour_usd":0.01})`}
+								bind:value={hybridConnectorConfig}
+							></textarea>
 							{#if hybridAuthMethod !== 'api_key'}
 								<textarea
 									class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-24 font-mono"
