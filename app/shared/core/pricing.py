@@ -31,7 +31,7 @@ __all__ = [
 class PricingTier(str, Enum):
     """Available subscription tiers."""
 
-    FREE_TRIAL = "free_trial"
+    FREE = "free"
     STARTER = "starter"
     GROWTH = "growth"
     PRO = "pro"
@@ -84,18 +84,18 @@ class FeatureFlag(str, Enum):
 
 # Tier configuration - USD pricing
 TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
-    PricingTier.FREE_TRIAL: {
-        "name": "Free Trial",
+    PricingTier.FREE: {
+        "name": "Free",
         "price_usd": 0,
         "features": {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
             FeatureFlag.ALERTS,
             FeatureFlag.ZOMBIE_SCAN,
+            FeatureFlag.LLM_ANALYSIS,
             FeatureFlag.GREENOPS,
             FeatureFlag.CARBON_TRACKING,
             FeatureFlag.UNIT_ECONOMICS,
-            FeatureFlag.INGESTION_SLA,
         },
         "limits": {
             "max_aws_accounts": 1,
@@ -106,20 +106,20 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "max_platform_connections": 0,
             "max_hybrid_connections": 0,
             "ai_insights_per_month": 0,
-            "scan_frequency_hours": 24,
-            "zombie_scans_per_day": 5,
-            "llm_analyses_per_day": 0,
+            "scan_frequency_hours": 168,
+            "zombie_scans_per_day": 1,
+            "llm_analyses_per_day": 1,
             "max_backfill_days": 0,
-            "retention_days": 14,
+            "retention_days": 30,
         },
-        "description": "Entry plan with core FinOps visibility and guided onboarding.",
-        "cta": "Start Free Trial",
+        "description": "Permanent free plan with core FinOps visibility and capped AI usage.",
+        "cta": "Start Free",
         "display_features": [
-            "Single cloud provider (AWS)",
-            "Core cost + carbon dashboards",
-            "Daily zombie scanning + basic alerts",
-            "Unit economics monitor + ingestion SLA",
-            "Entry-tier limits",
+            "Single cloud provider (AWS) + core dashboards",
+            "Weekly zombie scans + basic alerts",
+            "1 AI analysis/day (Groq default)",
+            "30-day data retention",
+            "Entry-tier limits with no credit card",
         ],
     },
     PricingTier.STARTER: {
@@ -132,6 +132,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             FeatureFlag.ALERTS,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
+            FeatureFlag.LLM_ANALYSIS,
             FeatureFlag.MULTI_REGION,
             FeatureFlag.CARBON_TRACKING,
             FeatureFlag.GREENOPS,
@@ -147,7 +148,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "max_platform_connections": 0,
             "max_hybrid_connections": 0,
             "ai_insights_per_month": 10,
-            "llm_analyses_per_day": 0,
+            "llm_analyses_per_day": 5,
             "max_backfill_days": 0,
             "scan_frequency_hours": 24,
             "retention_days": 90,
@@ -155,9 +156,10 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
         "description": "For small teams getting started with cloud cost visibility.",
         "cta": "Start with Starter",
         "display_features": [
-            "Includes all Free Trial features",
+            "Includes all Free features",
             "Multi-account support",
             "Advanced budget alerts",
+            "5 AI analyses/day",
             "Unit economics KPIs + ingestion SLA monitor",
             "Multi-region analysis",
             "90-day data retention",
@@ -206,7 +208,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "retention_days": 365,
         },
         "description": "For growing teams who need AI-powered cost intelligence.",
-        "cta": "Start Free Trial",
+        "cta": "Start with Growth",
         "display_features": [
             "Includes all Starter features",
             "AI-driven savings insights",
@@ -332,15 +334,15 @@ def normalize_tier(tier: PricingTier | str | None) -> PricingTier:
         try:
             return PricingTier(candidate)
         except ValueError:
-            return PricingTier.FREE_TRIAL
-    return PricingTier.FREE_TRIAL
+            return PricingTier.FREE
+    return PricingTier.FREE
 
 
 def get_tier_config(tier: PricingTier | str) -> dict[str, Any]:
     """Get configuration for a tier."""
     resolved = normalize_tier(tier)
     fallback = (
-        TIER_CONFIG.get(PricingTier.FREE_TRIAL)
+        TIER_CONFIG.get(PricingTier.FREE)
         or TIER_CONFIG.get(PricingTier.STARTER)
         or {}
     )
@@ -400,7 +402,7 @@ def requires_tier(
                     detail="Authentication required",
                 )
 
-            user_tier = normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
+            user_tier = normalize_tier(getattr(user, "tier", PricingTier.FREE))
 
             if user_tier not in allowed_tiers:
                 tier_names = [t.value for t in allowed_tiers]
@@ -433,7 +435,7 @@ def requires_feature(
                     detail="Authentication required",
                 )
 
-            user_tier = normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
+            user_tier = normalize_tier(getattr(user, "tier", PricingTier.FREE))
 
             if not is_feature_enabled(user_tier, feature_name):
                 fn = (
@@ -465,24 +467,24 @@ async def get_tenant_tier(
             tenant_id = uuid.UUID(tenant_id)
         except (ValueError, AttributeError):
             # If not a valid UUID string, we can't look it up.
-            return PricingTier.FREE_TRIAL
+            return PricingTier.FREE
 
     try:
         result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = result.scalar_one_or_none()
 
         if not tenant:
-            return PricingTier.FREE_TRIAL
+            return PricingTier.FREE
         try:
             return PricingTier(tenant.plan)
         except ValueError:
             logger.error(
                 "invalid_tenant_plan", tenant_id=str(tenant_id), plan=tenant.plan
             )
-            return PricingTier.FREE_TRIAL
+            return PricingTier.FREE
     except Exception as e:
         logger.error("get_tenant_tier_failed", tenant_id=str(tenant_id), error=str(e))
-        return PricingTier.FREE_TRIAL
+        return PricingTier.FREE
 
 
 class TierGuard:
@@ -498,7 +500,7 @@ class TierGuard:
     def __init__(self, user: "CurrentUser", db: "AsyncSession"):
         self.user = user
         self.db = db
-        self.tier = PricingTier.FREE_TRIAL
+        self.tier = PricingTier.FREE
 
     async def __aenter__(self) -> "TierGuard":
         if self.user and self.user.tenant_id:

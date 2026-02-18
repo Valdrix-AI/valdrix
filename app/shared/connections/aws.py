@@ -4,7 +4,7 @@ from sqlalchemy import select
 from typing import Any
 import structlog
 from app.models.aws_connection import AWSConnection
-from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+from app.shared.adapters.factory import AdapterFactory
 from app.shared.core.exceptions import ResourceNotFoundError, AdapterError
 
 logger = structlog.get_logger()
@@ -26,7 +26,7 @@ class AWSConnectionService:
             "terraform_hcl": f'module "valdrix_connection" {{ source = "valdrix/aws-connection" external_id = "{external_id}" }}',
             "magic_link": f"https://app.valdrix.ai/onboard/aws?external_id={external_id}",
             "instructions": "Follow the link to setup your AWS connection.",
-            "permissions_summary": ["sts:AssumeRole", "ce:GetCostAndUsage"],
+            "permissions_summary": ["sts:AssumeRole"],
         }
 
     async def verify_connection(
@@ -44,7 +44,7 @@ class AWSConnectionService:
         if not connection:
             raise ResourceNotFoundError(f"AWS Connection {connection_id} not found")
 
-        adapter = MultiTenantAWSAdapter(connection)
+        adapter = AdapterFactory.get_adapter(connection)
         try:
             success = await adapter.verify_connection()
             if success:

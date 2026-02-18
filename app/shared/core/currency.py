@@ -18,12 +18,14 @@ logger = structlog.get_logger()
 # key: currency_code, value: (rate_vs_usd, last_updated_timestamp)
 _RATES_CACHE: Dict[str, tuple[Decimal, float]] = {"USD": (Decimal("1.0"), time.time())}
 
-# Fallback rates (Hardcoded as a last resort)
-FALLBACK_RATES = {
-    "NGN": Decimal("1550.0"),  # Approximate market rate Jan 2026
-    "EUR": Decimal("0.92"),
-    "GBP": Decimal("0.78"),
-}
+def _get_fallback_rates() -> Dict[str, Decimal]:
+    """Centralized fallback rates using settings as the single source of truth (Finding #13)."""
+    settings = get_settings()
+    return {
+        "NGN": Decimal(str(settings.FALLBACK_NGN_RATE)),
+        "EUR": Decimal("0.92"),
+        "GBP": Decimal("0.78"),
+    }
 
 
 async def fetch_paystack_ngn_rate() -> Optional[Decimal]:
@@ -86,12 +88,13 @@ async def fetch_fallback_rates() -> Dict[str, Decimal]:
     For MVP, we use hardcoded defaults if Paystack/Specific providers fail.
     """
     public_rates = await fetch_public_exchange_rates()
+    base_fallbacks = _get_fallback_rates()
     if public_rates:
         # Merge with hardcoded defaults, public rates taking precedence
-        merged = FALLBACK_RATES.copy()
-        merged.update({k: v for k, v in public_rates.items() if k in FALLBACK_RATES})
+        merged = base_fallbacks.copy()
+        merged.update({k: v for k, v in public_rates.items() if k in base_fallbacks})
         return merged
-    return FALLBACK_RATES
+    return base_fallbacks
 
 
 async def get_exchange_rate(to_currency: str) -> Decimal:
@@ -134,8 +137,7 @@ async def get_exchange_rate(to_currency: str) -> Decimal:
 
     if not rate:
         all_fallbacks = await fetch_fallback_rates()
-        fallback_rate = all_fallbacks.get(to_currency, FALLBACK_RATES.get(to_currency))
-        rate = Decimal(str(fallback_rate)) if fallback_rate is not None else None
+        rate = all_fallbacks.get(to_currency)
 
     if rate:
         # Update L1 and L2

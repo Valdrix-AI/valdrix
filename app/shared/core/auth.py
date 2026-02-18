@@ -76,7 +76,7 @@ class CurrentUser(BaseModel):
     email: str
     tenant_id: Optional[UUID] = None
     role: UserRole = UserRole.MEMBER
-    tier: PricingTier = PricingTier.FREE_TRIAL
+    tier: PricingTier = PricingTier.FREE
     persona: UserPersona = UserPersona.ENGINEERING
 
 
@@ -196,7 +196,8 @@ async def get_current_user(
             if include_optional:
                 # These columns may not exist yet if a deploy happened before migrations ran.
                 cols.extend([User.persona, User.is_active])
-            cols.append(Tenant.plan)
+            # SECH-HAR-13: Validate tenant status during every auth check (Finding #H18)
+            cols.extend([Tenant.plan, Tenant.is_deleted])
             stmt = (
                 select(*cols)
                 .join(Tenant, User.tenant_id == Tenant.id)
@@ -227,14 +228,18 @@ async def get_current_user(
             raise HTTPException(403, "User not found. Complete Onboarding first.")
 
         # Row shape depends on whether optional columns were selected.
-        # With optional cols: (id, tenant_id, role, persona, is_active, plan)
-        # Without optional cols: (id, tenant_id, role, plan)
+        # With optional cols: (id, tenant_id, role, persona, is_active, plan, is_deleted)
+        # Without optional cols: (id, tenant_id, role, plan, is_deleted)
         if has_optional_cols:
-            _uid, tenant_id, role_value, persona_value, is_active_value, plan = row
+            _uid, tenant_id, role_value, persona_value, is_active_value, plan, t_is_deleted = row
         else:
-            _uid, tenant_id, role_value, plan = row
+            _uid, tenant_id, role_value, plan, t_is_deleted = row
             persona_value = None
             is_active_value = None
+
+        if t_is_deleted:
+            logger.warning("auth_tenant_soft_deleted", tenant_id=str(tenant_id), user_id=user_id)
+            raise HTTPException(403, "Access denied: Account is deactivated.")
 
         tier = normalize_tier(plan)
         persona_value = persona_value or UserPersona.ENGINEERING.value

@@ -10,6 +10,7 @@ import logging
 import random
 from typing import Any, Awaitable, Callable, TypeVar, TypedDict, cast
 from functools import wraps
+import sqlalchemy.exc
 import structlog
 from tenacity import (
     retry,
@@ -41,7 +42,12 @@ RETRY_CONFIGS: dict[str, RetryConfig] = {
         "min_wait": 0.1,
         "max_wait": 2.0,
         "multiplier": 2.0,
-        "exceptions": (Exception,),  # Broad catch for DB issues
+        "exceptions": (
+            sqlalchemy.exc.OperationalError,
+            sqlalchemy.exc.InterfaceError,
+            asyncio.TimeoutError,
+            ConnectionError,
+        ),  # Narrowed: only transient DB/network errors
     },
     "external_api": {
         "max_attempts": 3,
@@ -79,7 +85,12 @@ class RetryManager:
                 "min_wait": 0.1,
                 "max_wait": 2.0,
                 "multiplier": 2.0,
-                "exceptions": (Exception,),
+                "exceptions": (
+                    sqlalchemy.exc.OperationalError,
+                    sqlalchemy.exc.InterfaceError,
+                    asyncio.TimeoutError,
+                    ConnectionError,
+                ),
             },
         )
 

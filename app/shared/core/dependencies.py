@@ -35,7 +35,7 @@ def requires_feature(
     async def feature_checker(
         user: Annotated[CurrentUser, Depends(requires_role(required_role))],
     ) -> CurrentUser:
-        tier_enum = normalize_tier(getattr(user, "tier", PricingTier.FREE_TRIAL))
+        tier_enum = normalize_tier(getattr(user, "tier", PricingTier.FREE))
 
         if not is_feature_enabled(tier_enum, feature_name):
             fn = (
