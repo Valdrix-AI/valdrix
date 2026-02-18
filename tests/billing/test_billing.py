@@ -30,7 +30,7 @@ class TestSubscriptionResponse:
 
     def test_subscription_response_optional_date(self) -> None:
         """next_payment_date should be optional."""
-        response = SubscriptionResponse(tier=PricingTier.FREE_TRIAL, status="active")
+        response = SubscriptionResponse(tier=PricingTier.FREE, status="active")
         assert response.next_payment_date is None
 
 
@@ -113,7 +113,7 @@ class TestPricingTier:
         """PricingTier should have expected values."""
         from app.shared.core.pricing import PricingTier
 
-        assert PricingTier.FREE_TRIAL.value == "free_trial"
+        assert PricingTier.FREE.value == "free"
         assert PricingTier.STARTER.value == "starter"
         assert PricingTier.PRO.value == "pro"
         assert PricingTier.ENTERPRISE.value == "enterprise"

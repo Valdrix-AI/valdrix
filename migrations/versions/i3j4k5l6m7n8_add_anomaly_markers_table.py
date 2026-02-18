@@ -5,8 +5,11 @@ Allows customers to mark expected anomalies (Black Friday, batch jobs)
 so forecasting can exclude them during training.
 
 Revision ID: i3j4k5l6m7n8
-Revises: 2c3cc39a7285
-Create Date: 2026-01-19
+Revises: h2i3j4k5l6m7
+Create Date: 2026-02-15 10:00:00.000000
+
+AUDIT: Schema alignment for Series-A production hardening.
+No-op merge for baseline synchronization.
 
 Phase 3.2: Manual intervention markers for forecast tuning.
 """

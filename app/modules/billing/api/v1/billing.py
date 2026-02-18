@@ -201,7 +201,7 @@ async def get_subscription(
         sub = result.scalar_one_or_none()
 
         if not sub:
-            return SubscriptionResponse(tier="free_trial", status="active")
+            return SubscriptionResponse(tier="free", status="active")
 
         return SubscriptionResponse(
             tier=sub.tier,
@@ -229,7 +229,7 @@ async def get_features(
     """
     from app.shared.core.pricing import PricingTier, get_tier_config
 
-    user_tier = getattr(user, "tier", PricingTier.FREE_TRIAL)
+    user_tier = getattr(user, "tier", PricingTier.FREE)
     config = get_tier_config(user_tier)
 
     return {
@@ -260,7 +260,7 @@ async def get_billing_usage(
     from app.models.license_connection import LicenseConnection
     from app.shared.core.pricing import PricingTier, get_tier_limit
 
-    tier = getattr(user, "tier", PricingTier.FREE_TRIAL)
+    tier = getattr(user, "tier", PricingTier.FREE)
 
     async def _count(model: Any) -> int:
         res = await db.execute(
@@ -420,6 +420,13 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
             logger.warning("unauthorized_webhook_origin", ip=client_ip)
             raise HTTPException(403, "Unauthorized origin IP")
 
+        # Finding #12: Reject non-JSON payloads to prevent request forgery
+        content_type = request.headers.get("content-type", "")
+        if "application/json" not in content_type:
+            raise HTTPException(
+                415, "Unsupported Media Type: expected application/json"
+            )
+
         payload = await request.body()
         signature = request.headers.get("x-paystack-signature", "")
 
@@ -459,7 +466,7 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
 
         # Process immediately (job stored for retry if fails)
         try:
-            result = await handler.handle(payload, signature)
+            result = await handler.handle(request, payload, signature)
             return result
         except Exception as process_error:
             logger.warning(
