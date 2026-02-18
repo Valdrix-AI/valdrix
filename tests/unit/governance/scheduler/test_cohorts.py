@@ -52,9 +52,9 @@ class TestGetTenantCohort:
         tenant = self._make_tenant("starter")
         assert get_tenant_cohort(tenant) == TenantCohort.DORMANT
 
-    def test_trial_without_activity_is_dormant(self):
-        """Trial tier with no activity info should be DORMANT."""
-        tenant = self._make_tenant("free_trial")
+    def test_free_without_activity_is_dormant(self):
+        """Free tier with no activity info should be DORMANT."""
+        tenant = self._make_tenant("free")
         assert get_tenant_cohort(tenant) == TenantCohort.DORMANT
 
     def test_dormancy_detection_7_days(self):

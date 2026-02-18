@@ -109,7 +109,7 @@ async def test_scan_for_tenant_multi_provider(zombie_service, db):
 @pytest.mark.asyncio
 async def test_enrich_with_ai_tier_restriction(zombie_service):
     """Test AI enrichment block for low tiers."""
-    user = MagicMock(tier=PricingTier.FREE_TRIAL)
+    user = MagicMock(tier=PricingTier.FREE)
     zombies = {"total_monthly_waste": 100.0}
 
     await zombie_service._enrich_with_ai(zombies, user.tenant_id, user.tier)

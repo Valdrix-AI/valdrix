@@ -18,7 +18,7 @@ def mock_user():
     user.id = uuid.uuid4()
     user.tenant_id = uuid.uuid4()
     user.role = UserRole.MEMBER
-    user.tier = PricingTier.FREE_TRIAL
+    user.tier = PricingTier.FREE
     return user
 
 
@@ -98,7 +98,7 @@ async def test_create_azure_connection_denied_on_free_tier(
     """Test Azure connection denied for Free tier."""
     # Ensure tenant is on FREE plan
     tenant = Tenant(
-        id=mock_user.tenant_id, name="Free Tenant", plan=PricingTier.FREE_TRIAL.value
+        id=mock_user.tenant_id, name="Free Tenant", plan=PricingTier.FREE.value
     )
     db_session.add(tenant)
     await db_session.commit()

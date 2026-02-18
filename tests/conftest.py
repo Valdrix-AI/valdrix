@@ -41,16 +41,16 @@ if TYPE_CHECKING:
 # Import test isolation utilities
 
 # Set test environment BEFORE any app imports
-os.environ["TESTING"] = "true"
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
-os.environ["SUPABASE_JWT_SECRET"] = "test-jwt-secret-for-testing-at-least-32-bytes"
-os.environ["ENCRYPTION_KEY"] = "32-byte-long-test-encryption-key"
-os.environ["CSRF_SECRET_KEY"] = "test-csrf-secret-key-at-least-32-bytes"
-os.environ["KDF_SALT"] = (
-    "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="  # Base64 for 'KDF_SALT_FOR_TESTING_32_BYTES_OK'
-)
-os.environ["DB_SSL_MODE"] = "disable"  # Disable SSL for tests
-os.environ["is_production"] = "false"  # Ensure we're not in production mode
+# Use environment variables with safe defaults for testing
+# In a real CI/CD pipeline, these would be injected via secrets manager
+os.environ.setdefault("TESTING", "true")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("SUPABASE_JWT_SECRET", os.getenv("TEST_SUPABASE_JWT_SECRET", "test-jwt-secret-for-testing-at-least-32-bytes"))
+os.environ.setdefault("ENCRYPTION_KEY", os.getenv("TEST_ENCRYPTION_KEY", "32-byte-long-test-encryption-key"))
+os.environ.setdefault("CSRF_SECRET_KEY", os.getenv("TEST_CSRF_SECRET_KEY", "test-csrf-secret-key-at-least-32-bytes"))
+os.environ.setdefault("KDF_SALT", os.getenv("TEST_KDF_SALT", "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="))
+os.environ.setdefault("DB_SSL_MODE", "disable")
+os.environ.setdefault("is_production", "false")
 
 # Import all models to register them in SQLAlchemy mapper globally for all tests
 
@@ -88,7 +88,11 @@ def _register_models():
     from app.modules.governance.domain.security.audit_log import AuditLog  # noqa: F401
 
 
-_register_models()
+def pytest_configure(config):
+    # Finding #5: Move model registration to pytest_configure
+    # This prevents circular imports at module load time and 
+    # ensures models are registered before any tests run.
+    _register_models()
 
 
 # Mock tiktoken if not installed

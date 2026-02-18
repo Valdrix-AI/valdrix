@@ -1,12 +1,14 @@
 import pytest
 import os
 import base64
+from uuid import uuid4
 from unittest.mock import patch
 from app.shared.core.security import (
     EncryptionKeyManager,
     encrypt_string,
     decrypt_string,
     generate_blind_index,
+    generate_secret_blind_index,
 )
 
 
@@ -96,3 +98,94 @@ def test_blind_index_normalization(mock_settings):
     val2 = generate_blind_index("user@example.com")
 
     assert val1 == val2
+
+
+class TestSaltedBlindIndex:
+    """Tests for SEC-HAR-11: Salted Blind Indexes (Finding #H17).
+
+    Verifies cross-tenant isolation: the same plaintext value must
+    produce different blind index hashes when different tenant_ids
+    are used as HMAC salts.
+    """
+
+    def test_same_value_different_tenants_yields_different_hashes(self, mock_settings):
+        """Two tenants encrypting the same email must get distinct hashes."""
+        tenant_a = uuid4()
+        tenant_b = uuid4()
+
+        hash_a = generate_blind_index("shared@example.com", tenant_id=tenant_a)
+        hash_b = generate_blind_index("shared@example.com", tenant_id=tenant_b)
+
+        assert hash_a is not None
+        assert hash_b is not None
+        assert hash_a != hash_b, "Same value with different tenant_ids must produce different hashes"
+
+    def test_same_value_same_tenant_is_deterministic(self, mock_settings):
+        """Same value + same tenant must be repeatable."""
+        tenant = uuid4()
+
+        hash_1 = generate_blind_index("user@example.com", tenant_id=tenant)
+        hash_2 = generate_blind_index("user@example.com", tenant_id=tenant)
+
+        assert hash_1 == hash_2
+
+    def test_unsalted_differs_from_salted(self, mock_settings):
+        """Hash without tenant salt must differ from hash with tenant salt."""
+        tenant = uuid4()
+
+        unsalted = generate_blind_index("shared@example.com")
+        salted = generate_blind_index("shared@example.com", tenant_id=tenant)
+
+        assert unsalted != salted, "Salted hash must differ from unsalted hash"
+
+    def test_empty_value_returns_none(self, mock_settings):
+        """Empty or blank values return None regardless of tenant_id."""
+        assert generate_blind_index("", tenant_id=uuid4()) is None
+        assert generate_blind_index("  ", tenant_id=uuid4()) is None
+
+    def test_none_value_returns_none(self, mock_settings):
+        """None value returns None."""
+        assert generate_blind_index(None, tenant_id=uuid4()) is None
+
+
+class TestSecretSaltedBlindIndex:
+    """Tests for generate_secret_blind_index with tenant salting.
+
+    Secret blind indexes preserve case (e.g. API keys, tokens)
+    but still support per-tenant isolation.
+    """
+
+    def test_secret_preserves_case(self, mock_settings):
+        """Secret blind index must NOT lowercase the value."""
+        tenant = uuid4()
+
+        hash_lower = generate_secret_blind_index("mySecretKey", tenant_id=tenant)
+        hash_upper = generate_secret_blind_index("MYSECRETKEY", tenant_id=tenant)
+
+        assert hash_lower != hash_upper, "Secret blind index must preserve case"
+
+    def test_secret_same_value_different_tenants(self, mock_settings):
+        """Same secret in different tenants yields different hashes."""
+        tenant_a = uuid4()
+        tenant_b = uuid4()
+
+        hash_a = generate_secret_blind_index("sk-live-abc123", tenant_id=tenant_a)
+        hash_b = generate_secret_blind_index("sk-live-abc123", tenant_id=tenant_b)
+
+        assert hash_a is not None
+        assert hash_b is not None
+        assert hash_a != hash_b
+
+    def test_secret_deterministic_with_same_tenant(self, mock_settings):
+        """Same secret + same tenant must be repeatable."""
+        tenant = uuid4()
+
+        hash_1 = generate_secret_blind_index("api-key-xyz", tenant_id=tenant)
+        hash_2 = generate_secret_blind_index("api-key-xyz", tenant_id=tenant)
+
+        assert hash_1 == hash_2
+
+    def test_secret_empty_returns_none(self, mock_settings):
+        """Empty secrets return None."""
+        assert generate_secret_blind_index("", tenant_id=uuid4()) is None
+        assert generate_secret_blind_index(None, tenant_id=uuid4()) is None

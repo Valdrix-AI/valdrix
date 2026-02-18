@@ -84,13 +84,13 @@ class TestCohortAnalysis:
             mock_stmt_result = MagicMock()
             mock_stmt_result.rowcount = 1
 
-            # First execute -> select result, then multiple insert results
-            mock_session.execute.side_effect = [mock_result] + [mock_stmt_result] * 8
+            # First execute -> select tenants, second execute -> single bulk insert.
+            mock_session.execute.side_effect = [mock_result, mock_stmt_result]
 
             await _cohort_analysis_logic(TenantCohort.HIGH_VALUE)
 
-            # Should have executed 4 job types for 2 tenants = 8 insertions
-            assert mock_session.execute.call_count >= 8
+            # Current implementation uses one select + one batched insert.
+            assert mock_session.execute.call_count == 2
 
     @pytest.mark.asyncio
     async def test_cohort_analysis_active_cohort(self, mock_db):
@@ -601,24 +601,23 @@ class TestSchedulerTasksErrorHandling:
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
 
-            # Simulate deadlock on first two attempts, success on third
-            mock_session.__aenter__ = AsyncMock(
-                side_effect=[
-                    Exception("Deadlock detected"),  # First attempt
-                    Exception("Concurrent update"),  # Second attempt
-                    mock_session,  # Third attempt success
-                ]
-            )
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock(return_value=None)
             mock_session.begin.return_value.__aenter__ = AsyncMock(
                 return_value=mock_session
             )
             mock_session.begin.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            # Mock successful third attempt
+            # Simulate deadlocks on query execution, then success.
             mock_result = MagicMock()
             mock_result.scalars.return_value.all.return_value = []
-            mock_session.execute.return_value = mock_result
+            mock_session.execute = AsyncMock(
+                side_effect=[
+                    Exception("deadlock detected"),
+                    Exception("concurrent update"),
+                    mock_result,
+                ]
+            )
 
             await _cohort_analysis_logic(TenantCohort.HIGH_VALUE)
 

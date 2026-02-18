@@ -288,7 +288,7 @@ async def test_value_error_handler_records_metrics():
     request = _make_request(path="/value", method="PUT")
     exc = ValueError("boom")
 
-    with patch("app.main.API_ERRORS_TOTAL") as mock_metric:
+    with patch("app.shared.core.error_governance.API_ERRORS_TOTAL") as mock_metric:
         response = await value_error_handler(request, exc)
         mock_metric.labels.assert_called_once_with(
             path="/value", method="PUT", status_code=400

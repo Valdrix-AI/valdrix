@@ -145,7 +145,7 @@ async def test_scan_for_tenant_timeout_handling(zombie_service, db_session):
 @pytest.mark.asyncio
 async def test_ai_enrichment_tier_gating(zombie_service, db_session):
     tenant_id = uuid4()
-    MagicMock(tenant_id=tenant_id, tier="free_trial")
+    MagicMock(tenant_id=tenant_id, tier="free")
     zombies = {"unattached_volumes": []}
 
     with patch(

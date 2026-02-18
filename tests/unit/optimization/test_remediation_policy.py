@@ -387,7 +387,7 @@ async def test_execute_policy_escalation_is_pending_even_without_escalation_feat
             service, "_execute_action", new_callable=AsyncMock
         ) as mock_execute,
     ):
-        mock_tier.return_value = PricingTier.FREE_TRIAL.value
+        mock_tier.return_value = PricingTier.FREE.value
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 

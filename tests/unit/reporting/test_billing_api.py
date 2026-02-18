@@ -100,7 +100,7 @@ async def test_get_subscription_trial(mock_db):
     mock_db.execute.return_value = mock_result
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/api/v1/billing/subscription")
-    assert response.json()["tier"] == "free_trial"
+    assert response.json()["tier"] == "free"
 
 
 @pytest.mark.asyncio

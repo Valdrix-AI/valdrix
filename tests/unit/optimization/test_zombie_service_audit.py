@@ -72,7 +72,7 @@ async def test_scan_for_tenant_success(mock_db, tenant_id):
         ):
             with patch(
                 "app.shared.core.pricing.get_tenant_tier",
-                return_value=PricingTier.FREE_TRIAL,
+                return_value=PricingTier.FREE,
             ):
                 # Mock metrics and notifications
                 with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
@@ -139,7 +139,7 @@ async def test_scan_for_tenant_preserves_custom_categories_and_maps_provider_key
         ):
             with patch(
                 "app.shared.core.pricing.get_tenant_tier",
-                return_value=PricingTier.FREE_TRIAL,
+                return_value=PricingTier.FREE,
             ):
                 with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
                     with patch(
@@ -180,7 +180,7 @@ async def test_scan_for_tenant_timeout(mock_db, tenant_id):
 
         with patch(
             "app.shared.core.pricing.get_tenant_tier",
-            return_value=PricingTier.FREE_TRIAL,
+            return_value=PricingTier.FREE,
         ):
             with patch("app.shared.core.ops_metrics.SCAN_TIMEOUTS"):
                 # Use a very short timeout for testing
@@ -223,7 +223,7 @@ async def test_scan_for_tenant_invalid_tenant_config_in_detector(mock_db, tenant
         ):
             with patch(
                 "app.shared.core.pricing.get_tenant_tier",
-                return_value=PricingTier.FREE_TRIAL,
+                return_value=PricingTier.FREE,
             ):
                 with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
                     with patch(

@@ -61,7 +61,7 @@ async def test_get_investor_health_dashboard_handler_success():
                     total_tenants=10,
                     active_last_24h=5,
                     active_last_7d=8,
-                    trial_tenants=2,
+                    free_tenants=2,
                     paid_tenants=8,
                     churn_risk=1,
                 )
@@ -132,7 +132,7 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
             "total_tenants": 5,
             "active_last_24h": 2,
             "active_last_7d": 4,
-            "trial_tenants": 1,
+            "free_tenants": 1,
             "paid_tenants": 4,
             "churn_risk": 0,
         },

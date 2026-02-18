@@ -136,8 +136,8 @@ class TestDependencies:
                 feature_checker = requires_feature("some_feature")
                 await feature_checker(mock_user)
 
-            # Should default to FREE_TRIAL tier
-            mock_check.assert_called_once_with(PricingTier.FREE_TRIAL, "some_feature")
+            # Should default to FREE tier
+            mock_check.assert_called_once_with(PricingTier.FREE, "some_feature")
             assert exc.value.status_code == status.HTTP_403_FORBIDDEN
 
     @pytest.mark.asyncio
@@ -154,8 +154,8 @@ class TestDependencies:
                 feature_checker = requires_feature("some_feature")
                 await feature_checker(mock_user)
 
-            # Should default to FREE_TRIAL tier when tier is missing
-            mock_check.assert_called_once_with(PricingTier.FREE_TRIAL, "some_feature")
+            # Should default to FREE tier when tier is missing
+            mock_check.assert_called_once_with(PricingTier.FREE, "some_feature")
             assert exc.value.status_code == status.HTTP_403_FORBIDDEN
 
     @pytest.mark.asyncio
