@@ -3,6 +3,7 @@
   
   Features:
   - USD pricing with NGN payment note
+  - BYOK available in current plans with no additional platform surcharge
   - Highlight Growth as "Most Popular"
   - Permanent free tier CTA
   - Feature comparison table
@@ -33,8 +34,12 @@
 			price_monthly: 29,
 			price_annual: 290,
 			period: '/mo',
-			description: 'For small teams getting started with cloud cost visibility.',
-			features: ['Single cloud provider (AWS)', 'Cost dashboards', 'Budget alerts'],
+				description: 'For small teams getting started with cloud cost visibility.',
+				features: [
+					'Single cloud provider (AWS)',
+					'Cost dashboards + budget alerts',
+					'BYOK supported (no additional platform surcharge)'
+				],
 			cta: 'Start with Starter',
 			popular: false
 		},
@@ -44,8 +49,12 @@
 			price_monthly: 79,
 			price_annual: 790,
 			period: '/mo',
-			description: 'For growing teams who need AI-powered cost intelligence.',
-			features: ['Multi-cloud support', 'AI insights', 'GreenOps'],
+				description: 'For growing teams who need AI-powered cost intelligence.',
+				features: [
+					'Multi-cloud support',
+					'AI analyses + GreenOps',
+					'BYOK supported (no additional platform surcharge)'
+				],
 			cta: 'Start with Growth',
 			popular: true
 		},
@@ -55,8 +64,12 @@
 			price_monthly: 199,
 			price_annual: 1990,
 			period: '/mo',
-			description: 'For teams who want automated optimization and full API access.',
-			features: ['Automated remediation', 'Priority support', 'Full API access'],
+				description: 'For teams who want automated optimization and full API access.',
+				features: [
+					'Automated remediation',
+					'Priority support + full API access',
+					'BYOK supported (no additional platform surcharge)'
+				],
 			cta: 'Start with Pro',
 			popular: false
 		}
@@ -127,12 +140,12 @@
 	<title>Pricing | Valdrix</title>
 	<meta
 		name="description"
-		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier."
+		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."
 	/>
 	<meta property="og:title" content="Pricing | Valdrix" />
 	<meta
 		property="og:description"
-		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier."
+		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."
 	/>
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
@@ -144,17 +157,18 @@
 	<meta name="twitter:title" content="Pricing | Valdrix" />
 	<meta
 		name="twitter:description"
-		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier."
+		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."
 	/>
 </svelte:head>
 
 <div class="pricing-page">
 	<!-- Hero Section -->
-	<div class="hero-section">
-		<h1 class="hero-title">Simple, Transparent Pricing</h1>
-		<p class="hero-subtitle">
-			Start with a <strong>permanent free tier</strong>. No credit card required.
-		</p>
+		<div class="hero-section">
+			<h1 class="hero-title">Simple, Transparent Pricing</h1>
+			<p class="hero-subtitle">
+				Start with a <strong>permanent free tier</strong>. BYOK is available across current plans with no
+				additional platform surcharge.
+			</p>
 
 		<!-- Cycle Toggle -->
 		<div class="cycle-toggle-container">
@@ -235,13 +249,13 @@
 	<!-- Enterprise Section -->
 	<div class="enterprise-section">
 		<div class="enterprise-content">
-			<h2>Enterprise</h2>
-			<p>For organizations with complex requirements and high cloud spend.</p>
-			<ul>
-				<li>Unlimited cloud spend</li>
-				<li>SSO (SAML/OIDC)</li>
-				<li>Dedicated support & SLA</li>
-				<li>Custom integrations</li>
+				<h2>Enterprise</h2>
+				<p>For organizations with complex requirements and high cloud spend.</p>
+				<ul>
+					<li>Designed for high cloud spend</li>
+					<li>SSO (SAML/OIDC)</li>
+					<li>Dedicated support & SLA</li>
+					<li>Custom integrations</li>
 			</ul>
 		</div>
 		<a href="mailto:enterprise@valdrix.io" class="enterprise-cta">Contact Sales</a>
@@ -250,8 +264,9 @@
 	<!-- Payment Note -->
 	<div class="payment-note">
 		<p>
-			<strong>💳 Secure payments via Paystack.</strong>
-			Prices shown in USD. Payment processed in NGN at current exchange rate.
+			<strong>Secure payments via Paystack.</strong>
+			Prices are listed in USD. Checkout is currently processed in NGN at the live exchange rate. BYOK
+			does not add a separate platform surcharge.
 		</p>
 	</div>
 
@@ -267,22 +282,33 @@
 				</p>
 			</div>
 
-			<div class="faq-item">
-				<h3>Can I upgrade or downgrade anytime?</h3>
-				<p>
-					Yes! You can change plans at any time. Changes take effect on your next billing cycle.
-				</p>
-			</div>
+				<div class="faq-item">
+					<h3>Is BYOK available on every tier?</h3>
+					<p>
+						In the current lineup, Free, Starter, Growth, and Pro can use BYOK. Daily AI usage limits
+						still apply by tier.
+					</p>
+				</div>
+
+				<div class="faq-item">
+					<h3>Can I upgrade or downgrade anytime?</h3>
+					<p>
+						You can request plan changes at any time. Most changes take effect on your next billing cycle.
+					</p>
+				</div>
 
 			<div class="faq-item">
 				<h3>What cloud providers do you support?</h3>
 				<p>Starter supports AWS. Growth and Pro support AWS, Azure, and GCP.</p>
 			</div>
 
-			<div class="faq-item">
-				<h3>Is my data secure?</h3>
-				<p>Yes. We use read-only IAM roles and never store your cloud credentials.</p>
-			</div>
+				<div class="faq-item">
+					<h3>Is my data secure?</h3>
+					<p>
+						We use read-only cloud roles where supported, and connector secrets are stored encrypted at
+						rest.
+					</p>
+				</div>
 		</div>
 	</div>
 </div>

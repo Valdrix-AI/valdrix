@@ -97,23 +97,24 @@ Aggregates raw statistics into actionable business intelligence.
 
 ---
 
-## 💰 Zero-API-Cost Architecture
+## 💰 Low-Incremental-API-Cost Architecture
 
-Valdrix is designed to minimize or eliminate AWS API costs billed to the customer's account.
+Valdrix is designed to minimize incremental cloud API costs billed to the customer's account while preserving scan coverage.
 
-### Data Sources (Customer Cost: ~$0.00)
+### Data Sources (Customer Cost Profile)
 
 | Data Type | Source | Customer Cost |
 |---|---|---|
-| **Cost Data** | AWS CUR 2.0 (S3 Parquet) | ~$0.02/month (S3) |
-| **Resource Discovery** | AWS Resource Explorer 2 | Free |
-| **Idle Detection** | CUR Usage Analysis | Free |
+| **Cost Data** | AWS CUR 2.0 (S3 Parquet) | S3 request/storage/query cost (typically low, workload-dependent) |
+| **Resource Discovery** | AWS describe/list APIs + Resource Explorer 2 (when enabled) | Generally no additional per-request API charge |
+| **Idle Detection** | CUR usage analysis first, CloudWatch metrics fallback | CloudWatch metric request charges may apply when fallback is used |
 
 ### Key Design Principles
 
-1.  **CUR-First**: Cost data is ingested from Cost & Usage Reports (S3), not the Cost Explorer API ($0.01/request).
-2.  **Search, Don't Scan**: Resource discovery uses the global Resource Explorer 2 index instead of per-region API calls.
-3.  **Infer, Don't Query**: Idle instances are identified from CUR usage patterns, eliminating CloudWatch API calls.
+1.  **CUR-First**: Cost data is ingested from Cost & Usage Reports (S3), not Cost Explorer (`ce:*` is intentionally excluded).
+2.  **Scan Efficiently**: Resource discovery prefers aggregated/index-based paths where available and limits brute-force polling.
+3.  **Fallback-Aware**: Idle detection uses CUR first, but may call CloudWatch when CUR coverage is unavailable for a signal.
+4.  **Policy Guardrail**: Reintroducing Cost Explorer requires explicit architectural approval due customer-side request charges.
 
 ### CloudFormation Templates
 
@@ -301,29 +302,29 @@ sequenceDiagram
     API->>Cloud: Execute Action
 ```
 
-## Zero-API-Cost Architecture
+## AWS Cost-Sensitive Architecture
 
 ```mermaid
 flowchart LR
-    subgraph "Traditional (Expensive)"
-        CE[Cost Explorer API<br/>$0.01/request]
-        CW[CloudWatch API<br/>$0.01/1000 requests]
-        CL[CloudTrail API<br/>$2.00/100k events]
+    subgraph "Traditional (Higher Incremental Cost)"
+        CE[Cost Explorer API<br/>Per-request billing]
+        CW[Heavy CloudWatch polling<br/>Metric request billing]
+        BRUTE[Brute-force regional polling]
     end
 
-    subgraph "Valdrix (Zero-Cost)"
-        CUR[AWS CUR Export<br/>$0.00]
-        RE[Resource Explorer<br/>$0.00]
-        BQ[BigQuery Export<br/>Free Tier]
+    subgraph "Valdrix (Cost-Sensitive)"
+        CUR[AWS CUR Export<br/>Primary cost source]
+        RE[Resource Explorer + Describe/List<br/>Discovery path]
+        CWF[Selective CloudWatch fallback<br/>Only when needed]
     end
 
-    CE -.->|"$500+/month"| X((❌))
-    CW -.->|"at scale"| X
-    CL -.->|"at scale"| X
+    CE -.->|"avoided by policy"| X((❌))
+    CW -.->|"unbounded polling risk"| X
+    BRUTE -.->|"higher scan overhead"| X
 
-    CUR -->|"$0/month"| Y((✅))
-    RE -->|"at scale"| Y
-    BQ -->|"1TB free"| Y
+    CUR -->|"baseline ingestion path"| Y((✅))
+    RE -->|"efficient discovery"| Y
+    CWF -->|"targeted fallback"| Y
 ```
 
 ## Multi-Tenant Security

@@ -14,7 +14,7 @@ This plan outlines the infrastructure targets for scaling the platform.
 
 ### Database (Neon/Supabase)
 - **Current**: Single instance, Supavisor pooling.
-- **10k Users**: Enable Read Replicas for cost explorer queries. Implement partition pruning on `audit_logs` by `created_at`.
+- **10k Users**: Enable read replicas for reporting/analytics query load and implement partition pruning on `audit_logs` by `created_at`.
 - **100k Users**: Shard by `tenant_id` or migrate to Citus for horizontal scale.
 
 ### Compute Workloads (Analyzers)

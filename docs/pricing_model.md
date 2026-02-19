@@ -16,6 +16,9 @@ Reference implementation: `app/shared/core/pricing.py`.
 
 - `free`: permanent entry tier with strict limits and no credit card requirement.
 - `starter`, `growth`, `pro`, `enterprise`: progressively higher scale and capability.
+- BYOK is available on all tiers.
+- BYOK does not add a separate platform surcharge.
+- Tier AI usage limits still apply even when BYOK is used.
 
 ## Billing Event Mapping (Product to Billing)
 
@@ -33,3 +36,4 @@ Reference implementation: `app/shared/core/pricing.py`.
 2. Core allocation/reconciliation signals remain available at practical tiers.
 3. Hard limits should fail with clear guidance, not silent degradation.
 4. Tier checks must be deterministic and test-covered.
+5. BYOK is a control/privacy option, not a discount model.

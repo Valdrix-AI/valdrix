@@ -3,6 +3,11 @@
 ## Goal
 Package capabilities so entry tiers are affordable, advanced FinOps workflows are monetizable, and enterprise features align to procurement requirements.
 
+## BYOK policy
+- BYOK is enabled on all tiers (`free`, `starter`, `growth`, `pro`, `enterprise`).
+- BYOK does not introduce a separate per-request platform surcharge.
+- Tier `llm_analyses_per_day` limits still apply with or without BYOK.
+
 ## Tier map
 
 ### Starter
@@ -25,11 +30,13 @@ Package capabilities so entry tiers are affordable, advanced FinOps workflows ar
   - `chargeback`
   - `ingestion_backfill`
   - `auto_remediation`
+  - `domain_discovery`
   - `precision_discovery`
   - `owner_attribution`
 
 ### Pro
 - Includes Growth, plus finance-grade and enterprise controls:
+  - `idp_deep_scan`
   - `reconciliation`
   - `close_workflow`
   - `carbon_assurance`

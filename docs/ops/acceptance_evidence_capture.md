@@ -126,6 +126,31 @@ uv run python scripts/load_test_api.py --profile soak --rounds 5 --pause 2 --dur
   --p95-target 2.0 --max-error-rate 1.0 --publish
 ```
 
+### Recommended Concurrency Evidence Protocol (2026-02-18)
+
+1. Use `health` profile (`/health/live`) for baseline capacity checks.
+2. Use `health_deep` profile (`/health`) only for dependency/readiness checks.
+3. Keep preflight enabled (default) so invalid auth/runtime issues fail fast before load generation.
+
+Example (100 concurrent baseline):
+
+```bash
+uv run python scripts/load_test_api.py \
+  --profile health \
+  --users 100 \
+  --duration 30 \
+  --rounds 3 \
+  --pause 2 \
+  --enforce-thresholds \
+  --out reports/acceptance/$(date -u +%Y%m%dT%H%M%SZ)/performance_load_test_evidence.json
+```
+
+Preflight controls:
+
+- `--skip-preflight` to bypass validation (not recommended for audit evidence).
+- `--allow-preflight-failures` to continue despite preflight failures (diagnostics only).
+- `--preflight-attempts N` and `--preflight-timeout SECONDS` for flaky environments.
+
 ### GitHub Actions Performance Gate (Manual) (Recommended)
 
 If you want a repeatable, reviewable performance check for staging/prod sign-off, use the manual workflow:

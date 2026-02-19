@@ -42,9 +42,27 @@
 		};
 	};
 
+	type FairUseRuntime = {
+		generated_at: string;
+		guards_enabled: boolean;
+		tenant_tier: string;
+		tier_eligible: boolean;
+		active_for_tenant: boolean;
+		thresholds: {
+			pro_daily_soft_cap: number | null;
+			enterprise_daily_soft_cap: number | null;
+			per_minute_cap: number | null;
+			per_tenant_concurrency_cap: number | null;
+			concurrency_lease_ttl_seconds: number;
+			enforced_tiers: string[];
+		};
+	};
+
 	let { data } = $props();
 	const ADMIN_HEALTH_TIMEOUT_MS = 10000;
 	let dashboard = $state<HealthDashboard | null>(null);
+	let fairUse = $state<FairUseRuntime | null>(null);
+	let fairUseError = $state('');
 	let error = $state('');
 	let forbidden = $state(false);
 	let loading = $state(false);
@@ -65,6 +83,8 @@
 
 		if (!hasUser || !accessToken) {
 			dashboard = null;
+			fairUse = null;
+			fairUseError = '';
 			error = '';
 			forbidden = false;
 			loading = false;
@@ -74,6 +94,7 @@
 
 		loading = true;
 		error = '';
+		fairUseError = '';
 
 		try {
 			const res = await fetchWithTimeout(
@@ -91,6 +112,8 @@
 
 			if (res.status === 403) {
 				dashboard = null;
+				fairUse = null;
+				fairUseError = '';
 				forbidden = true;
 				error = 'Admin role required to access system health metrics.';
 				return;
@@ -98,6 +121,8 @@
 
 			if (res.status === 401) {
 				dashboard = null;
+				fairUse = null;
+				fairUseError = '';
 				forbidden = false;
 				error = 'Session expired. Please sign in again.';
 				return;
@@ -106,6 +131,8 @@
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				dashboard = null;
+				fairUse = null;
+				fairUseError = '';
 				forbidden = false;
 				error = extractApiError(payload) || `Failed to load health metrics (HTTP ${res.status}).`;
 				return;
@@ -114,9 +141,45 @@
 			dashboard = (await res.json()) as HealthDashboard;
 			forbidden = false;
 			error = '';
+
+			try {
+				const fairUseRes = await fetchWithTimeout(
+					fetch,
+					`${PUBLIC_API_URL}/admin/health-dashboard/fair-use`,
+					{
+						headers: {
+							Authorization: `Bearer ${accessToken}`
+						}
+					},
+					ADMIN_HEALTH_TIMEOUT_MS
+				);
+
+				if (requestId !== healthRequestId) return;
+
+				if (!fairUseRes.ok) {
+					const payload = await fairUseRes.json().catch(() => ({}));
+					fairUse = null;
+					fairUseError =
+						extractApiError(payload) ||
+						`Fair-use runtime status unavailable (HTTP ${fairUseRes.status}).`;
+					return;
+				}
+
+				fairUse = (await fairUseRes.json()) as FairUseRuntime;
+				fairUseError = '';
+			} catch (fairUseErr) {
+				if (requestId !== healthRequestId) return;
+				fairUse = null;
+				fairUseError =
+					fairUseErr instanceof TimeoutError
+						? 'Fair-use runtime request timed out. Please try again.'
+						: (fairUseErr as Error).message || 'Fair-use runtime status unavailable.';
+			}
 		} catch (err) {
 			if (requestId !== healthRequestId) return;
 			dashboard = null;
+			fairUse = null;
+			fairUseError = '';
 			forbidden = false;
 			error =
 				err instanceof TimeoutError
@@ -144,6 +207,11 @@
 
 	function formatMs(value: number): string {
 		return `${Math.round(value || 0).toLocaleString()} ms`;
+	}
+
+	function formatLimit(value: number | null | undefined): string {
+		if (!value || value <= 0) return 'disabled';
+		return value.toLocaleString();
 	}
 
 	function statusBadgeClass(status: string | undefined): string {
@@ -347,6 +415,59 @@
 						<span>{(dashboard.llm_usage.cache_hit_rate * 100).toFixed(1)}%</span>
 					</div>
 				</div>
+			</div>
+
+			<div class="card">
+				<h2 class="text-lg font-semibold mb-3">LLM Fair-Use Runtime</h2>
+				{#if fairUse}
+					<div class="space-y-2 text-sm">
+						<div class="flex items-center justify-between">
+							<span class="text-ink-400">Guardrails</span>
+							<span class={statusBadgeClass(fairUse.guards_enabled ? 'healthy' : 'degraded')}>
+								{fairUse.guards_enabled ? 'ON' : 'OFF'}
+							</span>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-ink-400">Tenant tier</span>
+							<span>{fairUse.tenant_tier.toUpperCase()}</span>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-ink-400">Enforced for this tenant</span>
+							<span class={statusBadgeClass(fairUse.active_for_tenant ? 'healthy' : 'degraded')}>
+								{fairUse.active_for_tenant ? 'YES' : 'NO'}
+							</span>
+						</div>
+						<div class="pt-2 border-t border-ink-800">
+							<p class="text-ink-500 text-xs uppercase mb-2 tracking-wide">Thresholds</p>
+							<div class="space-y-2">
+								<div class="flex items-center justify-between">
+									<span class="text-ink-400">Pro daily soft cap</span>
+									<span>{formatLimit(fairUse.thresholds.pro_daily_soft_cap)}</span>
+								</div>
+								<div class="flex items-center justify-between">
+									<span class="text-ink-400">Enterprise daily soft cap</span>
+									<span>{formatLimit(fairUse.thresholds.enterprise_daily_soft_cap)}</span>
+								</div>
+								<div class="flex items-center justify-between">
+									<span class="text-ink-400">Per-minute cap</span>
+									<span>{formatLimit(fairUse.thresholds.per_minute_cap)}</span>
+								</div>
+								<div class="flex items-center justify-between">
+									<span class="text-ink-400">Per-tenant concurrency cap</span>
+									<span>{formatLimit(fairUse.thresholds.per_tenant_concurrency_cap)}</span>
+								</div>
+								<div class="flex items-center justify-between">
+									<span class="text-ink-400">Concurrency lease TTL</span>
+									<span>{fairUse.thresholds.concurrency_lease_ttl_seconds}s</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				{:else if fairUseError}
+					<p class="text-danger-400 text-sm">{fairUseError}</p>
+				{:else}
+					<p class="text-ink-400 text-sm">Fair-use runtime status is not available.</p>
+				{/if}
 			</div>
 		</div>
 	{/if}

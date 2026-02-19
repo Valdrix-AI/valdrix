@@ -10,6 +10,8 @@
 		connection_id?: string;
 		monthly_cost?: string | number;
 		recommended_action?: string;
+		recommended_instance_type?: string;
+		instance_type?: string;
 	};
 
 	type RemediationPreview = {
@@ -17,6 +19,11 @@
 		summary: string;
 		tier: string;
 		rule_hits: Array<{ rule_id: string; message?: string }>;
+	};
+
+	type RemediationParameters = {
+		target_size: string;
+		[key: string]: string | number | boolean | null;
 	};
 
 	let {
@@ -37,6 +44,15 @@
 	let actionError = $state('');
 	let actionSuccess = $state('');
 	let preview = $state<RemediationPreview | null>(null);
+	let parameters = $state<RemediationParameters>({ target_size: '' });
+
+	const action = $derived(finding ? deriveRemediationAction(finding) : '');
+
+	$effect(() => {
+		if (isOpen && finding && !parameters.target_size) {
+			parameters.target_size = finding.recommended_instance_type || '';
+		}
+	});
 
 	$effect(() => {
 		if (isOpen && finding && !preview && !previewLoading) {
@@ -47,8 +63,15 @@
 	function deriveRemediationAction(finding: RemediationFinding): string {
 		const suggested = finding.recommended_action?.toLowerCase() ?? '';
 		const resourceType = finding.resource_type?.toLowerCase() ?? '';
+		const provider = finding.provider?.toLowerCase() ?? 'aws';
 
-		if (suggested.includes('delete')) {
+		if (suggested.includes('resize') || suggested.includes('rightsize')) {
+			if (provider === 'azure') return 'resize_azure_vm';
+			if (provider === 'gcp') return 'resize_gcp_instance';
+			return 'resize_instance';
+		}
+
+		if (suggested.includes('delete') || suggested.includes('terminate')) {
 			if (resourceType.includes('snapshot')) return 'delete_snapshot';
 			if (resourceType.includes('ecr')) return 'delete_ecr_image';
 			if (resourceType.includes('sagemaker')) return 'delete_sagemaker_endpoint';
@@ -58,6 +81,12 @@
 			if (resourceType.includes('s3')) return 'delete_s3_bucket';
 			if (resourceType.includes('rds')) return 'delete_rds_instance';
 			return 'delete_volume';
+		}
+
+		if (suggested.includes('stop') || suggested.includes('deallocate')) {
+			if (provider === 'azure') return 'deallocate_azure_vm';
+			if (provider === 'gcp') return 'stop_gcp_instance';
+			return 'stop_instance';
 		}
 
 		if (resourceType.includes('elastic ip') || resourceType.includes('eip')) {
@@ -112,7 +141,8 @@
 					resource_id: finding.resource_id,
 					resource_type: finding.resource_type || 'unknown',
 					provider: finding.provider || 'aws',
-					action
+					action,
+					parameters
 				},
 				{ headers }
 			);
@@ -163,7 +193,8 @@
 					connection_id: finding.connection_id,
 					action,
 					estimated_savings: parseMonthlyCost(finding.monthly_cost),
-					create_backup: true
+					create_backup: true,
+					parameters
 				},
 				{ headers }
 			);
@@ -235,6 +266,27 @@
 						<p class="text-sm text-danger-400 font-bold">${finding.monthly_cost || '0.00'}</p>
 					</div>
 				</div>
+
+				<!-- Parameters (Conditional) -->
+				{#if action.includes('resize')}
+					<div class="space-y-2 p-4 bg-accent-500/5 border border-accent-500/20 rounded-lg">
+						<label class="text-xs text-accent-400 uppercase font-bold" for="target_size"
+							>Target Size</label
+						>
+						<input
+							id="target_size"
+							type="text"
+							class="input input-sm w-full bg-ink-950 border-ink-800 text-sm focus:border-accent-500"
+							placeholder="e.g. t3.micro"
+							bind:value={parameters.target_size}
+							onchange={runPreview}
+						/>
+						<p class="text-[10px] text-ink-500">
+							Recommended optimization for {finding.resource_id} ({finding.instance_type ||
+								'current'})
+						</p>
+					</div>
+				{/if}
 
 				<!-- Policy Preview -->
 				<div class="space-y-3">

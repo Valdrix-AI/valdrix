@@ -3,18 +3,12 @@ Graviton Migration Analyzer
 
 Identifies EC2 instances that could benefit from migrating to
 AWS Graviton (ARM-based) processors for up to 60% energy savings.
-
-Valdrix Innovation: Helps customers reduce both costs and
-carbon footprint by recommending Graviton migrations.
-
-References:
-- AWS Graviton processors use up to 60% less energy for same performance
-- AWS Sustainability Pillar recommends Graviton for carbon reduction
 """
 
 from typing import Any, Dict, Optional
 import structlog
-import aioboto3
+
+from app.modules.reporting.domain.arm_analyzer import ArmMigrationAnalyzer
 
 logger = structlog.get_logger()
 
@@ -77,136 +71,57 @@ REQUIRES_VALIDATION = [
 ]
 
 
-class GravitonAnalyzer:
+class GravitonAnalyzer(ArmMigrationAnalyzer):
     """
     Analyzes EC2 instances for Graviton migration opportunities.
-
-    Valdrix Innovation: Combines cost savings with carbon reduction
-    by recommending energy-efficient ARM-based instances.
     """
 
-    def __init__(
-        self, credentials: Optional[dict[str, str]] = None, region: str = "us-east-1"
-    ):
-        """
-        Initialize the analyzer.
+    def is_arm(self, instance_type: str) -> bool:
+        return any(g in instance_type.lower() for g in ["g.", "7g.", "6g.", "4g."])
 
-        Args:
-            credentials: Optional STS credentials dict for multi-tenant access
-            region: AWS region to scan
-        """
-        self.credentials = credentials
-        self.region = region
-        self.session = aioboto3.Session()
+    def get_equivalent(self, instance_type: str) -> Optional[tuple[str, int]]:
+        return GRAVITON_EQUIVALENTS.get(instance_type)
 
-    def _get_ec2_client_context(self) -> Any:
-        """Get EC2 client context manager with optional STS credentials."""
-        if self.credentials:
-            return self.session.client(
-                "ec2",
-                region_name=self.region,
-                aws_access_key_id=self.credentials["AccessKeyId"],
-                aws_secret_access_key=self.credentials["SecretAccessKey"],
-                aws_session_token=self.credentials["SessionToken"],
-            )
-        return self.session.client("ec2", region_name=self.region)
+    def get_instance_type_from_resource(self, resource: Dict[str, Any]) -> Optional[str]:
+        # For AWS, MultiTenantAWSAdapter returns the instance type in the 'type' field
+        return resource.get("type")
 
     async def analyze_instances(self) -> Dict[str, Any]:
         """
-        Scan EC2 instances and identify Graviton migration candidates.
-
-        Returns:
-            Dict containing migration opportunities and estimated savings
+        Legacy compatibility method for original GravitonAnalyzer interface.
         """
-        try:
-            async with self._get_ec2_client_context() as ec2:
-                # Get all running instances with pagination
-                candidates = []
-                total_instances = 0
-                graviton_instances = 0
+        return await self.analyze()
 
-                paginator = ec2.get_paginator("describe_instances")
+    async def analyze(self) -> Dict[str, Any]:
+        """
+        Scan EC2 instances and identify Graviton migration candidates.
+        """
+        base_result = await super().analyze()
+        
+        # Enrich with AWS-specific metadata
+        base_result.update({
+            "already_graviton": base_result.get("arm_instances", 0),
+            "potential_energy_reduction_percent": (
+                sum(c["savings_percent"] for c in base_result["candidates"])
+                / len(base_result["candidates"])
+                if base_result["candidates"]
+                else 0
+            ),
+            "compatible_workloads": COMPATIBLE_WORKLOADS,
+            "requires_validation": REQUIRES_VALIDATION,
+        })
 
-                async for response in paginator.paginate(
-                    Filters=[{"Name": "instance-state-name", "Values": ["running"]}]
-                ):
-                    for reservation in response.get("Reservations", []):
-                        for instance in reservation.get("Instances", []):
-                            total_instances += 1
-                            instance_type = instance.get("InstanceType", "")
-                            instance_id = instance.get("InstanceId", "")
+        logger.info(
+            "graviton_analysis_complete",
+            total=base_result.get("total_instances"),
+            candidates=base_result.get("migration_candidates"),
+        )
 
-                            # Check if already on Graviton
-                            if any(
-                                g in instance_type for g in ["g.", "7g.", "6g.", "4g."]
-                            ):
-                                graviton_instances += 1
-                                continue
-
-                            # Check if migration candidate exists
-                            if instance_type in GRAVITON_EQUIVALENTS:
-                                graviton_type, savings_percent = GRAVITON_EQUIVALENTS[
-                                    instance_type
-                                ]
-
-                                # Get instance name from tags
-                                name = ""
-                                for tag in instance.get("Tags", []):
-                                    if tag.get("Key") == "Name":
-                                        name = tag.get("Value", "")
-                                        break
-
-                                candidates.append(
-                                    {
-                                        "instance_id": instance_id,
-                                        "name": name,
-                                        "current_type": instance_type,
-                                        "recommended_type": graviton_type,
-                                        "energy_savings_percent": savings_percent,
-                                        "carbon_reduction_percent": savings_percent,  # ~1:1 with energy
-                                        "migration_complexity": "low",  # Most are compatible
-                                    }
-                                )
-
-            # Calculate summary
-            result = {
-                "total_instances": total_instances,
-                "already_graviton": graviton_instances,
-                "migration_candidates": len(candidates),
-                "candidates": candidates,
-                "potential_energy_reduction_percent": (
-                    sum(c["energy_savings_percent"] for c in candidates)
-                    / len(candidates)
-                    if candidates
-                    else 0
-                ),
-                "compatible_workloads": COMPATIBLE_WORKLOADS,
-                "requires_validation": REQUIRES_VALIDATION,
-            }
-
-            logger.info(
-                "graviton_analysis_complete",
-                total=total_instances,
-                candidates=len(candidates),
-                already_graviton=graviton_instances,
-            )
-
-            return result
-
-        except Exception as e:
-            logger.error("graviton_analysis_failed", error=str(e))
-            return {
-                "error": str(e),
-                "total_instances": 0,
-                "migration_candidates": 0,
-                "candidates": [],
-            }
+        return base_result
 
     def get_migration_guide(self, instance_type: str) -> Dict[str, Any]:
         """
         Get detailed migration guide for a specific instance type.
-
-        Returns step-by-step instructions and compatibility notes.
         """
         if instance_type not in GRAVITON_EQUIVALENTS:
             return {"error": f"No Graviton equivalent found for {instance_type}"}
@@ -218,21 +133,20 @@ class GravitonAnalyzer:
             "target_type": graviton_type,
             "estimated_savings": {
                 "energy_percent": savings,
-                "cost_percent": savings - 5,  # Graviton is also cheaper
+                "cost_percent": savings - 5,
                 "carbon_percent": savings,
             },
             "steps": [
-                "1. Review application compatibility (most Linux workloads work)",
-                "2. Create an AMI backup of your current instance",
-                "3. Launch a test instance with Graviton type",
-                "4. Deploy and test your application",
+                "1. Review application compatibility",
+                "2. Create an AMI backup",
+                "3. Launch a test instance with Graviton",
+                "4. Deploy and test application",
                 "5. Run performance benchmarks",
-                "6. If tests pass, migrate production workload",
+                "6. Migrate production workload",
             ],
             "compatibility_notes": [
-                "Most Docker containers work without changes",
+                "Most Docker containers work",
                 "Python, Node.js, Java, Go work natively",
-                "Use multi-arch Docker images when available",
-                "Recompile C/C++ code for ARM64 if needed",
+                "Use multi-arch Docker images",
             ],
         }

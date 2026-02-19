@@ -8,10 +8,10 @@
  * 4. Inject CSRF tokens for state-changing requests
  */
 
-import { PUBLIC_API_URL } from '$env/static/public';
 import { uiState } from './stores/ui.svelte';
 import { createSupabaseBrowserClient } from './supabase';
 import { fetchWithTimeout } from './fetchWithTimeout';
+import { edgeApiPath } from './edgeProxy';
 
 export type ResilientRequestInit = RequestInit & {
 	/**
@@ -57,7 +57,7 @@ export async function resilientFetch(
 					try {
 						const csrfRes = await fetchWithTimeout(
 							fetch,
-							`${PUBLIC_API_URL}/public/csrf`,
+							edgeApiPath('/public/csrf'),
 							{ credentials: requestOptions.credentials },
 							Math.min(5000, timeoutMs)
 						);
