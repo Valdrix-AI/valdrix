@@ -260,3 +260,99 @@ class IdleS3BucketsPlugin(ZombiePlugin):
         except ClientError as e:
             logger.warning("s3_scan_error", error=str(e))
         return zombies
+
+
+@registry.register("aws")
+class EmptyEfsPlugin(ZombiePlugin):
+    @property
+    def category_key(self) -> str:
+        return "empty_efs_volumes"
+
+    async def scan(
+        self,
+        session: aioboto3.Session,
+        region: str,
+        credentials: Dict[str, str] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
+        zombies = []
+        days = 7
+
+        try:
+            async with self._get_client(
+                session, "efs", region, credentials, config=config
+            ) as efs:
+                paginator = efs.get_paginator("describe_file_systems")
+                async with self._get_client(
+                    session, "cloudwatch", region, credentials, config=config
+                ) as cloudwatch:
+                    async for page in paginator.paginate():
+                        for fs in page.get("FileSystems", []):
+                            fs_id = fs["FileSystemId"]
+                            
+                            # Check number of mount targets (if 0, definitely unattached)
+                            if fs["NumberOfMountTargets"] == 0:
+                                size_gb = fs.get("SizeInBytes", {}).get("Value", 0) / (1024**3)
+                                # Estimate Cost: ~$0.30/GB/month for Standard
+                                monthly_cost = size_gb * 0.30
+
+                                zombies.append(
+                                    {
+                                        "resource_id": fs_id,
+                                        "resource_type": "EFS File System",
+                                        "size_gb": round(size_gb, 2),
+                                        "monthly_cost": round(monthly_cost, 2),
+                                        "recommendation": "Delete unused file system",
+                                        "action": "delete_efs",
+                                        "explainability_notes": "EFS has 0 mount targets, meaning it is not attached to any VPC/Instance.",
+                                        "confidence_score": 1.0,
+                                    }
+                                )
+                                continue
+
+                            # If mounted, check if actually used (ClientConnections metric)
+                            try:
+                                end_time = datetime.now(timezone.utc)
+                                start_time = end_time - timedelta(days=days)
+
+                                metrics = await cloudwatch.get_metric_statistics(
+                                    Namespace="AWS/EFS",
+                                    MetricName="ClientConnections",
+                                    Dimensions=[{"Name": "FileSystemId", "Value": fs_id}],
+                                    StartTime=start_time,
+                                    EndTime=end_time,
+                                    Period=86400 * days,
+                                    Statistics=["Sum"],
+                                )
+
+                                total_conns = sum(d["Sum"] for d in metrics.get("Datapoints", []))
+
+                                if total_conns == 0:
+                                    size_gb = fs.get("SizeInBytes", {}).get("Value", 0) / (1024**3)
+                                    monthly_cost = size_gb * 0.30
+                                    
+                                    # If very small (<1MB), likely empty default
+                                    is_empty = size_gb < 0.001 
+
+                                    zombies.append(
+                                        {
+                                            "resource_id": fs_id,
+                                            "resource_type": "EFS File System",
+                                            "size_gb": round(size_gb, 2),
+                                            "monthly_cost": round(monthly_cost, 2),
+                                            "recommendation": "Delete if unused",
+                                            "action": "delete_efs",
+                                            "explainability_notes": f"EFS has had 0 client connections in the last {days} days.",
+                                            "confidence_score": 0.90,
+                                        }
+                                    )
+
+                            except ClientError as e:
+                                logger.warning("efs_metric_check_failed", fs=fs_id, error=str(e))
+
+        except ClientError as e:
+            logger.warning("efs_scan_error", error=str(e))
+
+        return zombies

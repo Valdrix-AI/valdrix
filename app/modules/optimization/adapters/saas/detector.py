@@ -21,6 +21,7 @@ class SaaSZombieDetector(BaseZombieDetector):
 
     ALLOWED_PLUGIN_CATEGORIES = {
         "idle_saas_subscriptions",
+        "unused_license_seats",
     }
 
     @property

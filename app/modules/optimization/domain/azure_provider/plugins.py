@@ -1,0 +1,33 @@
+from app.modules.optimization.adapters.azure.plugins import (
+    IdleVmsPlugin,
+    IdleGpuVmsPlugin,
+    StoppedVmsPlugin,
+    UnattachedDisksPlugin,
+    OldSnapshotsPlugin,
+    OrphanPublicIpsPlugin,
+    OrphanNicsPlugin,
+    OrphanNsgsPlugin,
+    IdleSqlDatabasesPlugin,
+    IdleAksClusterPlugin,
+    UnusedAppServicePlansPlugin,
+    IdleAzureOpenAIPlugin,
+    IdleAISearchPlugin,
+    OverprovisionedVmPlugin,
+)
+
+__all__ = [
+    "IdleVmsPlugin",
+    "IdleGpuVmsPlugin",
+    "StoppedVmsPlugin",
+    "UnattachedDisksPlugin",
+    "OldSnapshotsPlugin",
+    "OrphanPublicIpsPlugin",
+    "OrphanNicsPlugin",
+    "OrphanNsgsPlugin",
+    "IdleSqlDatabasesPlugin",
+    "IdleAksClusterPlugin",
+    "UnusedAppServicePlansPlugin",
+    "IdleAzureOpenAIPlugin",
+    "IdleAISearchPlugin",
+    "OverprovisionedVmPlugin",
+]

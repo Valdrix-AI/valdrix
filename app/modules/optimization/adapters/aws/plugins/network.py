@@ -186,3 +186,92 @@ class UnderusedNatGatewaysPlugin(ZombiePlugin):
         except ClientError as e:
             logger.warning("nat_scan_error", error=str(e))
         return zombies
+
+
+@registry.register("aws")
+class IdleCloudFrontPlugin(ZombiePlugin):
+    @property
+    def category_key(self) -> str:
+        return "idle_cloudfront_distributions"
+
+    async def scan(
+        self,
+        session: aioboto3.Session,
+        region: str,
+        credentials: Dict[str, str] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
+        # CloudFront is global, but typically accessed via us-east-1
+        if region != "us-east-1":
+            return []
+
+        zombies = []
+        days = 7
+
+        try:
+            async with self._get_client(
+                session, "cloudfront", "us-east-1", credentials, config=config
+            ) as cf:
+                paginator = cf.get_paginator("list_distributions")
+
+                async with self._get_client(
+                    session, "cloudwatch", "us-east-1", credentials, config=config
+                ) as cw:
+                    async for page in paginator.paginate():
+                        for dist in page.get("DistributionList", {}).get("Items", []):
+                            if not dist["Enabled"]:
+                                continue
+
+                            dist_id = dist["Id"]
+                            try:
+                                end_time = datetime.now(timezone.utc)
+                                start_time = end_time - timedelta(days=days)
+
+                                # Metric: Requests
+                                metrics = await cw.get_metric_statistics(
+                                    Namespace="AWS/CloudFront",
+                                    MetricName="Requests",
+                                    Dimensions=[
+                                        {"Name": "DistributionId", "Value": dist_id},
+                                        {"Name": "Region", "Value": "Global"},
+                                    ],
+                                    StartTime=start_time,
+                                    EndTime=end_time,
+                                    Period=86400 * days,
+                                    Statistics=["Sum"],
+                                )
+
+                                total_requests = sum(
+                                    d["Sum"] for d in metrics.get("Datapoints", [])
+                                )
+
+                                if (
+                                    total_requests < 100
+                                ):  # Arbitrary "low usage" threshold
+                                    zombies.append(
+                                        {
+                                            "resource_id": dist_id,
+                                            "resource_type": "CloudFront Distribution",
+                                            "resource_name": dist.get(
+                                                "DomainName", dist_id
+                                            ),
+                                            "monthly_cost": 0.0,  # Hard to estimate base cost (mostly transfer), but existing is a risk
+                                            "recommendation": "Disable and delete if unused",
+                                            "action": "disable_cloudfront_distribution",
+                                            "confidence_score": 0.9,
+                                            "explainability_notes": f"Distribution has had only {int(total_requests)} requests in the last {days} days.",
+                                        }
+                                    )
+                            except ClientError as e:
+                                logger.warning(
+                                    "cloudfront_metric_failed",
+                                    dist=dist_id,
+                                    error=str(e),
+                                )
+
+        except ClientError as e:
+            logger.warning("cloudfront_scan_error", error=str(e))
+
+        return zombies

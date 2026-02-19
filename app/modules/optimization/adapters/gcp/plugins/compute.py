@@ -129,3 +129,65 @@ class IdleGpuInstancesPlugin(ZombiePlugin):
 
         # Fallback handled by IdleVmsPlugin
         return []
+
+
+@registry.register("gcp")
+class StoppedVmsPlugin(ZombiePlugin):
+    """Detect Stopped/Terminated Instances that still incur storage costs."""
+
+    @property
+    def category_key(self) -> str:
+        return "stopped_gcp_instances"
+
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
+        """Scan for stopped instances."""
+        project_id = str(kwargs.get("project_id") or session or "")
+        if not project_id:
+            return []
+
+        zombies = []
+        try:
+            client = compute_v1.InstancesClient(credentials=credentials)
+            request = compute_v1.AggregatedListInstancesRequest(project=project_id)
+
+            for zone, response in client.aggregated_list(request=request):
+                if not response.instances:
+                    continue
+
+                for instance in response.instances:
+                    if instance.status in ["TERMINATED", "STOPPED", "SUSPENDED"]:
+                        # Calculate disk costs
+                        disk_cost = 0.0
+                        disk_details = []
+                        for disk in instance.disks:
+                            size_gb = disk.disk_size_gb or 30 # Default estimate
+                            # ~$0.04/GB for standard pd
+                            disk_cost += size_gb * 0.04
+                            disk_details.append(f"{size_gb}GB")
+
+                        zombies.append(
+                            {
+                                "resource_id": f"projects/{project_id}/zones/{zone}/instances/{instance.name}",
+                                "resource_name": instance.name,
+                                "resource_type": "Compute Instance (Stopped)",
+                                "zone": zone.split("/")[-1],
+                                "status": instance.status,
+                                "monthly_cost": round(disk_cost, 2),
+                                "recommendation": "Delete Instance and Disks if decommissioned",
+                                "action": "delete_instance",
+                                "confidence_score": 1.0,
+                                "explainability_notes": f"Instance is {instance.status}. You are paying ~${round(disk_cost, 2)}/mo for attached disks ({', '.join(disk_details)}).",
+                            }
+                        )
+        except Exception as e:
+            logger.warning("gcp_stopped_vm_scan_error", error=str(e))
+
+        return zombies

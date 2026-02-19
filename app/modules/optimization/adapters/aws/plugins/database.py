@@ -218,3 +218,116 @@ class ColdRedshiftPlugin(ZombiePlugin):
         except ClientError as e:
             logger.warning("redshift_scan_error", error=str(e))
         return zombies
+
+
+@registry.register("aws")
+class IdleDynamoDbPlugin(ZombiePlugin):
+    @property
+    def category_key(self) -> str:
+        return "idle_dynamodb_tables"
+
+    async def scan(
+        self,
+        session: aioboto3.Session,
+        region: str,
+        credentials: Dict[str, str] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
+        zombies = []
+        days = 7
+
+        try:
+            async with self._get_client(
+                session, "dynamodb", region, credentials, config=config
+            ) as ddb:
+                paginator = ddb.get_paginator("list_tables")
+                async with self._get_client(
+                    session, "cloudwatch", region, credentials, config=config
+                ) as cloudwatch:
+                    async for page in paginator.paginate():
+                        for table_name in page.get("TableNames", []):
+                            try:
+                                # Get capacity details
+                                desc = await ddb.describe_table(TableName=table_name)
+                                table = desc["Table"]
+                                
+                                # Skip On-Demand tables (pay-per-req) as they don't incur idle costs (mostly)
+                                billing_mode = table.get("BillingModeSummary", {}).get("BillingMode", "PROVISIONED")
+                                if billing_mode == "PAY_PER_REQUEST":
+                                    continue
+
+                                rcu = table.get("ProvisionedThroughput", {}).get("ReadCapacityUnits", 0)
+                                wcu = table.get("ProvisionedThroughput", {}).get("WriteCapacityUnits", 0)
+                                
+                                if rcu == 0 and wcu == 0:
+                                    continue
+
+                                # Check usage metrics
+                                end_time = datetime.now(timezone.utc)
+                                start_time = end_time - timedelta(days=days)
+
+                                metrics = await cloudwatch.get_metric_data(
+                                    MetricDataQueries=[
+                                        {
+                                            "Id": "consumed_rcu",
+                                            "MetricStat": {
+                                                "Metric": {
+                                                    "Namespace": "AWS/DynamoDB",
+                                                    "MetricName": "ConsumedReadCapacityUnits",
+                                                    "Dimensions": [{"Name": "TableName", "Value": table_name}],
+                                                },
+                                                "Period": 86400 * days,
+                                                "Stat": "Sum",
+                                            },
+                                        },
+                                        {
+                                            "Id": "consumed_wcu",
+                                            "MetricStat": {
+                                                "Metric": {
+                                                    "Namespace": "AWS/DynamoDB",
+                                                    "MetricName": "ConsumedWriteCapacityUnits",
+                                                    "Dimensions": [{"Name": "TableName", "Value": table_name}],
+                                                },
+                                                "Period": 86400 * days,
+                                                "Stat": "Sum",
+                                            },
+                                        }
+                                    ],
+                                    StartTime=start_time,
+                                    EndTime=end_time,
+                                )
+
+                                total_usage = 0
+                                for res in metrics.get("MetricDataResults", []):
+                                    total_usage += sum(res.get("Values", []))
+
+                                if total_usage == 0:
+                                    # Estimate Cost: ~$0.00013 per RCU-hr, ~$0.00065 per WCU-hr (Region dependent, using us-east-1 avg)
+                                    # Monthly hours = 730
+                                    cost_rcu = rcu * 0.00013 * 730
+                                    cost_wcu = wcu * 0.00065 * 730
+                                    monthly_cost = cost_rcu + cost_wcu
+
+                                    zombies.append(
+                                        {
+                                            "resource_id": table_name,
+                                            "resource_type": "DynamoDB Table",
+                                            "rcu": rcu,
+                                            "wcu": wcu,
+                                            "monthly_cost": round(monthly_cost, 2),
+                                            "recommendation": "Switch to On-Demand or Delete",
+                                            "action": "modify_dynamodb_table",
+                                            "explainability_notes": f"Table has Provisioned Capacity ({rcu} RCU / {wcu} WCU) but consumed 0 units in the last {days} days.",
+                                            "confidence_score": 0.95,
+                                        }
+                                    )
+
+                            except ClientError as e:
+                                logger.warning("dynamodb_table_check_failed", table=table_name, error=str(e))
+
+        except ClientError as e:
+            logger.warning("dynamodb_scan_error", error=str(e))
+
+        return zombies
