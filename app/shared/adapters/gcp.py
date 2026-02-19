@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, cast
 import structlog
 from google.auth.credentials import Credentials as GoogleCredentials
@@ -14,6 +14,7 @@ import tenacity
 from app.shared.adapters.base import BaseAdapter
 from app.shared.core.credentials import GCPCredentials
 from app.shared.core.exceptions import ConfigurationError
+from app.schemas.costs import CloudUsageSummary
 
 logger = structlog.get_logger()
 
@@ -56,7 +57,9 @@ class GCPAdapter(BaseAdapter):
         """Initialize GCP credentials from service account JSON or environment."""
         if self.credentials.service_account_json:
             try:
-                info = json.loads(self.credentials.service_account_json.get_secret_value())
+                info = json.loads(
+                    self.credentials.service_account_json.get_secret_value()
+                )
                 return cast(
                     GoogleCredentials,
                     service_account.Credentials.from_service_account_info(info),  # type: ignore[no-untyped-call]
@@ -130,7 +133,7 @@ class GCPAdapter(BaseAdapter):
 
         table_path = f"{billing_project}.{billing_dataset}.{billing_table}"
 
-        query = self._build_cost_query(table_path)
+        query = self._build_cost_query(table_path, include_credits=include_credits)
 
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
@@ -150,8 +153,9 @@ class GCPAdapter(BaseAdapter):
             logger.error("gcp_bq_query_failed", table=table_path, error=str(e))
             raise AdapterError(f"GCP BigQuery cost fetch failed: {str(e)}") from e
 
-    def _build_cost_query(self, table_path: str) -> str:
+    def _build_cost_query(self, table_path: str, include_credits: bool = True) -> str:
         """Constructs the BigQuery SQL for cost extraction."""
+        credit_filter = "" if include_credits else "AND cost_type != 'adjustment'"
         return f"""
             SELECT
                 service.description as service,
@@ -179,7 +183,67 @@ class GCPAdapter(BaseAdapter):
             "currency": row.currency,
             "region": "global",
             "source_adapter": "cur_billing_export",
+            "usage_type": "subscription",  # Standardize for GCP row
+            "tags": {},  # Expanded tag support can be added to the BigQuery SQL if needed
+            "amount_raw": float(row.cost_usd),
         }
+
+    async def get_daily_costs(
+        self,
+        start_date: date,
+        end_date: date,
+        group_by_service: bool = True,
+    ) -> CloudUsageSummary:
+        """
+        Fetch daily costs directly as a CloudUsageSummary from BigQuery.
+        """
+        from app.schemas.costs import CloudUsageSummary, CostRecord
+        from decimal import Decimal
+
+        start_dt = datetime.combine(
+            start_date, datetime.min.time(), tzinfo=timezone.utc
+        )
+        end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc)
+
+        # Re-use the existing logic but map to CloudUsageSummary
+        rows = await self.get_cost_and_usage(start_dt, end_dt, granularity="DAILY")
+
+        records: list[CostRecord] = []
+        total_cost = Decimal("0")
+        by_service: dict[str, Decimal] = {}
+
+        for row in rows:
+            amount = Decimal(str(row["cost_usd"]))
+            if amount <= 0:
+                continue
+
+            total_cost += amount
+            service = row["service"]
+            if group_by_service:
+                by_service[service] = by_service.get(service, Decimal("0")) + amount
+
+            records.append(
+                CostRecord(
+                    date=row["timestamp"],
+                    amount=amount,
+                    amount_raw=Decimal(str(row["amount_raw"])),
+                    currency=row["currency"],
+                    service=service,
+                    region=row["region"],
+                    usage_type=row["usage_type"],
+                    tags=row.get("tags", {}),
+                )
+            )
+
+        return CloudUsageSummary(
+            tenant_id="anonymous",
+            provider="gcp",
+            start_date=start_date,
+            end_date=end_date,
+            total_cost=total_cost,
+            records=records,
+            by_service=by_service if group_by_service else {},
+        )
 
     async def get_amortized_costs(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
@@ -196,7 +260,12 @@ class GCPAdapter(BaseAdapter):
             {**r, "cost_usd": r.get("amortized_cost", r["cost_usd"])} for r in records
         ]
 
-    async def stream_cost_and_usage(
+    def stream_cost_and_usage(
+        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        return self._stream_cost_and_usage_impl(start_date, end_date, granularity)
+
+    async def _stream_cost_and_usage_impl(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> AsyncGenerator[dict[str, Any], None]:
         """
@@ -243,6 +312,20 @@ class GCPAdapter(BaseAdapter):
                 resources = []
                 for asset in response:
                     res = asset.resource
+                    metadata = {
+                        "project_id": self.credentials.project_id,
+                        "provider": "gcp",
+                    }
+
+                    # Extract machine type for compute instances
+                    if asset.asset_type == "compute.googleapis.com/Instance":
+                        data = res.data
+                        # res.data is likely a dict or protobuf-like object
+                        # We try to extract machineType if available
+                        machine_type_full = str(data.get("machineType", ""))
+                        if machine_type_full:
+                            metadata["machine_type"] = machine_type_full.split("/")[-1]
+
                     resources.append(
                         {
                             "id": asset.name,
@@ -250,10 +333,7 @@ class GCPAdapter(BaseAdapter):
                             "type": asset.asset_type,
                             "region": region or "global",
                             "provider": "gcp",
-                            "metadata": {
-                                "project_id": self.credentials.project_id,
-                                "data": str(res.data),
-                            },
+                            "metadata": metadata,
                         }
                     )
                 return resources

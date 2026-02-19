@@ -16,6 +16,7 @@ from app.models import (  # noqa: F401
     carbon_settings,
     cloud,
     cost_audit,
+    discovery_candidate,
     discovered_account,
     gcp_connection,
     hybrid_connection,

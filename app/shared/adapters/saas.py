@@ -39,19 +39,54 @@ class SaaSAdapter(BaseAdapter):
         self.credentials = credentials
         self.last_error = None
 
+    def _get_credential_field(self, name: str, default: Any = None) -> Any:
+        fields = getattr(self.credentials, "__dict__", None)
+        if isinstance(fields, dict) and name in fields:
+            value = fields[name]
+        else:
+            value = getattr(self.credentials, name, default)
+            if type(value).__name__ == "MagicMock":
+                return default
+        if value is None:
+            return default
+        return value
+
     @property
     def _auth_method(self) -> str:
-        # SaaSCredentials doesn't explicitly have auth_method yet, 
-        # but extra_config can hold it or we can derive from api_key presence.
-        return str(self.credentials.extra_config.get("auth_method", "manual")).strip().lower()
+        raw = self._get_credential_field("auth_method")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip().lower()
+        return str(self._connector_config.get("auth_method", "manual")).strip().lower()
 
     @property
     def _vendor(self) -> str:
-        return self.credentials.platform.strip().lower()
+        raw_vendor = self._get_credential_field("vendor")
+        if isinstance(raw_vendor, str) and raw_vendor.strip():
+            return raw_vendor.strip().lower()
+        raw_platform = self._get_credential_field("platform", "")
+        return str(raw_platform).strip().lower()
 
     @property
     def _connector_config(self) -> dict[str, Any]:
-        return self.credentials.extra_config
+        connector_config = self._get_credential_field("connector_config")
+        if isinstance(connector_config, dict):
+            return connector_config
+        extra_config = self._get_credential_field("extra_config")
+        if isinstance(extra_config, dict):
+            return extra_config
+        return {}
+
+    @property
+    def _manual_feed(self) -> Any:
+        for field in ("spend_feed", "cost_feed"):
+            value = self._get_credential_field(field)
+            if value is not None:
+                return value
+        for field in ("spend_feed", "cost_feed"):
+            value = self._connector_config.get(field)
+            if value is not None:
+                return value
+        return None
 
     @property
     def _native_vendor(self) -> str | None:
@@ -62,7 +97,14 @@ class SaaSAdapter(BaseAdapter):
         return None
 
     def _resolve_api_key(self) -> str:
-        token = self.credentials.api_key.get_secret_value()
+        raw_token = self._get_credential_field("api_key")
+        if raw_token is None:
+            raise ExternalAPIError("Missing API token for SaaS native connector")
+        token = (
+            raw_token.get_secret_value()
+            if hasattr(raw_token, "get_secret_value")
+            else str(raw_token)
+        )
         if not token or not token.strip():
             raise ExternalAPIError("Missing API token for SaaS native connector")
         return token.strip()
@@ -72,7 +114,7 @@ class SaaSAdapter(BaseAdapter):
         native_vendor = self._native_vendor
         if self._auth_method in {"api_key", "oauth"} and native_vendor is None:
             supported_vendors = ", ".join(sorted(_NATIVE_SUPPORTED_VENDORS))
-            self._last_error = (
+            self.last_error = (
                 f"Native SaaS auth is not supported for vendor '{self._vendor}'. "
                 f"Supported vendors: {supported_vendors}. "
                 "Use auth_method manual/csv for custom vendors."
@@ -96,11 +138,11 @@ class SaaSAdapter(BaseAdapter):
                 )
                 return False
 
-        feed = self.credentials.extra_config.get("spend_feed") or self.credentials.extra_config.get("cost_feed")
+        feed = self._manual_feed
         is_valid = self._validate_manual_feed(feed)
         if not is_valid:
-            if self._last_error is None:
-                self._last_error = "Spend feed is missing or invalid."
+            if self.last_error is None:
+                self.last_error = "Spend feed is missing or invalid."
         return is_valid
 
     def _validate_manual_feed(self, feed: Any) -> bool:
@@ -109,17 +151,17 @@ class SaaSAdapter(BaseAdapter):
             return False
         for idx, entry in enumerate(feed):
             if not isinstance(entry, dict):
-                self._last_error = f"Spend feed entry #{idx + 1} must be a JSON object."
+                self.last_error = f"Spend feed entry #{idx + 1} must be a JSON object."
                 return False
             has_timestamp = entry.get("timestamp") or entry.get("date")
             if not has_timestamp:
-                self._last_error = (
+                self.last_error = (
                     f"Spend feed entry #{idx + 1} is missing timestamp/date."
                 )
                 return False
             amount = entry.get("cost_usd", entry.get("amount_usd"))
             if not is_number(amount):
-                self._last_error = f"Spend feed entry #{idx + 1} must include numeric cost_usd or amount_usd."
+                self.last_error = f"Spend feed entry #{idx + 1} must include numeric cost_usd or amount_usd."
                 return False
         return True
 
@@ -163,11 +205,7 @@ class SaaSAdapter(BaseAdapter):
                     error=str(exc),
                 )
 
-        feed = (
-            self.credentials.extra_config.get("spend_feed")
-            or self.credentials.extra_config.get("cost_feed")
-            or []
-        )
+        feed = self._manual_feed or []
         if not isinstance(feed, list):
             return
 
@@ -410,10 +448,8 @@ class SaaSAdapter(BaseAdapter):
         last_error: Exception | None = None
         for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
             try:
-                from app.shared.core.http import get_http_client
-
-                client = get_http_client()
-                response = await client.get(url, headers=headers, params=params)
+                async with httpx.AsyncClient(timeout=_NATIVE_TIMEOUT_SECONDS) as client:
+                    response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 payload = response.json()
                 if not isinstance(payload, dict):

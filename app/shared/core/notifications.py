@@ -6,6 +6,7 @@ This allows adding new channels (Teams, Discord, Email) without modifying domain
 """
 
 import structlog
+from datetime import datetime
 from typing import Any, Dict, TYPE_CHECKING
 from app.modules.notifications.domain import (
     get_jira_service,
@@ -351,3 +352,52 @@ class NotificationDispatcher:
             notify_jira=notify_jira,
             notify_workflow=notify_workflow,
         )
+    @staticmethod
+    async def notify_license_reclamation(
+        tenant_id: str,
+        user_email: str,
+        last_active_at: datetime,
+        savings: float,
+        grace_period_days: int,
+        request_id: str,
+        db: "AsyncSession",
+    ) -> None:
+        """
+        Notify that a license seat has been flagged for reclamation due to inactivity.
+        """
+        title = "🛡️ License Reclamation Warning"
+        message = (
+            f"User *{user_email}* has been inactive since {last_active_at.strftime('%Y-%m-%d')}.\n"
+            f"This seat is scheduled for reclamation in *{grace_period_days} days* to save *${savings:.2f}/mo*.\n"
+            f"If this is an error, please cancel the scheduled action in the dashboard."
+        )
+        
+        # 1. Notify via Slack
+        slack = await NotificationDispatcher._resolve_slack_service(tenant_id=tenant_id, db=db)
+        if slack:
+            # We assume slack service has a generic send_alert or similar
+            # In a refined implementation, we'd use a rich block-based notification
+            await slack.send_alert(title, message, severity="warning")
+            
+        # 2. Notify via Teams
+        teams = await NotificationDispatcher._resolve_teams_service(tenant_id=tenant_id, db=db)
+        if teams:
+            await teams.send_alert(title=title, message=message, severity="warning")
+
+        # 3. Notify via Workflow (if configured)
+        await NotificationDispatcher._dispatch_workflow_event(
+            event_type="license.reclamation_flagged",
+            payload={
+                "tenant_id": tenant_id,
+                "request_id": request_id,
+                "user_email": user_email,
+                "last_active_at": last_active_at.isoformat(),
+                "estimated_monthly_savings_usd": savings,
+                "grace_period_days": grace_period_days,
+                "evidence_links": NotificationDispatcher._build_remediation_evidence_links(request_id)
+            },
+            db=db,
+            tenant_id=tenant_id
+        )
+
+        logger.info("license_reclamation_notification_dispatched", tenant_id=tenant_id, user_email=user_email)

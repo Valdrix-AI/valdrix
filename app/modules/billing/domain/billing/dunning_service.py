@@ -204,6 +204,16 @@ class DunningService:
         subscription.last_dunning_at = None
         subscription.dunning_next_retry_at = None
 
+        # SEC-10: Ensure Tenant.plan is synced back (entitlement recovery)
+        from sqlalchemy import update
+        from app.models.tenant import Tenant
+
+        await self.db.execute(
+            update(Tenant)
+            .where(Tenant.id == subscription.tenant_id)
+            .values(plan=subscription.tier)
+        )
+
         await self.db.commit()
 
         logger.info(
@@ -225,6 +235,16 @@ class DunningService:
         subscription.tier = PricingTier.FREE.value
         subscription.canceled_at = datetime.now(timezone.utc)
         subscription.dunning_next_retry_at = None
+
+        # SEC-10: Ensure Tenant.plan is synced to FREE (entitlement lockdown)
+        from sqlalchemy import update
+        from app.models.tenant import Tenant
+
+        await self.db.execute(
+            update(Tenant)
+            .where(Tenant.id == subscription.tenant_id)
+            .values(plan=PricingTier.FREE.value)
+        )
 
         await self.db.commit()
 

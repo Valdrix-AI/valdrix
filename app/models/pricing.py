@@ -105,6 +105,12 @@ class TenantSubscription(Base):
     next_payment_date: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True)
     )
+    billing_currency: Mapped[str] = mapped_column(String(3), default="NGN")
+    last_charge_amount_subunits: Mapped[Optional[int]] = mapped_column(Numeric(20, 0))
+    last_charge_fx_rate: Mapped[Optional[float]] = mapped_column(Numeric(12, 6))
+    last_charge_fx_provider: Mapped[Optional[str]] = mapped_column(String(50))
+    last_charge_reference: Mapped[Optional[str]] = mapped_column(String(255))
+    last_charge_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     dunning_attempts: Mapped[int] = mapped_column(Numeric(2, 0), default=0)
     last_dunning_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

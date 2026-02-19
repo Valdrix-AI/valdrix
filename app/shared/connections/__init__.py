@@ -5,6 +5,7 @@ from .saas import SaaSConnectionService
 from .license import LicenseConnectionService
 from .organizations import OrganizationsDiscoveryService
 from .oidc import OIDCService
+from .discovery import DiscoveryWizardService
 
 __all__ = [
     "AWSConnectionService",
@@ -14,4 +15,5 @@ __all__ = [
     "LicenseConnectionService",
     "OrganizationsDiscoveryService",
     "OIDCService",
+    "DiscoveryWizardService",
 ]

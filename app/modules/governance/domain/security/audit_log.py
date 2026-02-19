@@ -104,6 +104,7 @@ class AuditEventType(str, Enum):
 
     # Billing
     BILLING_SUBSCRIPTION_CREATED = "billing.subscription_created"
+    BILLING_PAYMENT_INITIATED = "billing.payment_initiated"
     BILLING_PAYMENT_RECEIVED = "billing.payment_received"
     BILLING_PAYMENT_FAILED = "billing.payment_failed"
 

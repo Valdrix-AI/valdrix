@@ -60,14 +60,39 @@ class EncryptionKeyManager:
     # indefinite secret retention and support key rotation without restarts)
     _key_cache: dict[str, tuple[Any, float]] = {}
     _cache_lock = threading.Lock()
-    _CACHE_TTL = 3600  # 1 hour
-    _MAX_CACHE_SIZE = 1000 # Prevent unbounded growth (Finding #7)
+    _DEFAULT_CACHE_TTL_SECONDS = 3600
+    _DEFAULT_MAX_CACHE_SIZE = 1000
+
+    @classmethod
+    def _cache_ttl_seconds(cls) -> int:
+        settings = get_settings()
+        raw_ttl = int(
+            getattr(
+                settings,
+                "ENCRYPTION_KEY_CACHE_TTL_SECONDS",
+                cls._DEFAULT_CACHE_TTL_SECONDS,
+            )
+        )
+        return max(60, raw_ttl)
+
+    @classmethod
+    def _cache_max_size(cls) -> int:
+        settings = get_settings()
+        raw_max = int(
+            getattr(
+                settings,
+                "ENCRYPTION_KEY_CACHE_MAX_SIZE",
+                cls._DEFAULT_MAX_CACHE_SIZE,
+            )
+        )
+        return max(10, raw_max)
 
     @classmethod
     def _get_cached(cls, key: str) -> Any | None:
+        ttl_seconds = cls._cache_ttl_seconds()
         with cls._cache_lock:
             entry = cls._key_cache.get(key)
-            if entry and (time.monotonic() - entry[1]) < cls._CACHE_TTL:
+            if entry and (time.monotonic() - entry[1]) < ttl_seconds:
                 return entry[0]
             elif entry:
                 del cls._key_cache[key]
@@ -75,9 +100,10 @@ class EncryptionKeyManager:
 
     @classmethod
     def _set_cached(cls, key: str, value: Any) -> None:
+        max_cache_size = cls._cache_max_size()
         with cls._cache_lock:
             # If cache is full, pop the oldest entry based on time
-            if len(cls._key_cache) >= cls._MAX_CACHE_SIZE:
+            if len(cls._key_cache) >= max_cache_size:
                 oldest_key = min(cls._key_cache.keys(), key=lambda k: cls._key_cache[k][1])
                 del cls._key_cache[oldest_key]
             cls._key_cache[key] = (value, time.monotonic())

@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    JSON,
     String,
     Integer,
     Boolean,
@@ -34,6 +35,7 @@ from sqlalchemy import (
 # from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
+from sqlalchemy.dialects.postgresql import JSONB
 from app.shared.db.base import Base
 
 from typing import TYPE_CHECKING
@@ -73,6 +75,21 @@ class RemediationAction(str, Enum):
     DELETE_RDS_INSTANCE = "delete_rds_instance"
     DELETE_NAT_GATEWAY = "delete_nat_gateway"
     RESIZE_INSTANCE = "resize_instance"
+    
+    # Azure Actions
+    DEALLOCATE_AZURE_VM = "deallocate_azure_vm"
+    RESIZE_AZURE_VM = "resize_azure_vm"
+    
+    # GCP Actions
+    STOP_GCP_INSTANCE = "stop_gcp_instance"
+    RESIZE_GCP_INSTANCE = "resize_gcp_instance"
+    
+    # SaaS / Cloud+ Actions
+    REVOKE_GITHUB_SEAT = "revoke_github_seat"
+    
+    # License / Cloud+ Actions
+    RECLAIM_LICENSE_SEAT = "reclaim_license_seat"
+    
     MANUAL_REVIEW = "manual_review"
 
 
@@ -173,6 +190,11 @@ class RemediationRequest(Base):
     )
     executed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    # Contextual parameters for the action (e.g., target instance type for resizing)
+    action_parameters: Mapped[Optional[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
     )
 
     # Timestamps

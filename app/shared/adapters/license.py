@@ -22,6 +22,16 @@ _MICROSOFT_LICENSE_VENDORS = {
     "m365",
     "microsoft",
 }
+_GOOGLE_LICENSE_VENDORS = {
+    "google_workspace",
+    "googleworkspace",
+    "gsuite",
+    "google",
+}
+_GITHUB_LICENSE_VENDORS = {"github", "github_enterprise"}
+_SLACK_LICENSE_VENDORS = {"slack", "slack_enterprise"}
+_ZOOM_LICENSE_VENDORS = {"zoom"}
+_SALESFORCE_LICENSE_VENDORS = {"salesforce", "sfdc"}
 
 
 class LicenseAdapter(BaseAdapter):
@@ -30,7 +40,8 @@ class LicenseAdapter(BaseAdapter):
 
     Supported modes:
     - Manual feed (`auth_method=manual|csv`) via `license_feed`
-    - Native vendor pulls (`auth_method=api_key|oauth`) for Microsoft 365
+    - Native vendor pulls (`auth_method=api_key|oauth`) for:
+      Microsoft 365, Google Workspace, GitHub, Slack, Zoom, Salesforce
     """
 
     def __init__(self, credentials: LicenseCredentials):
@@ -55,31 +66,47 @@ class LicenseAdapter(BaseAdapter):
             return None
         if self._vendor in _MICROSOFT_LICENSE_VENDORS:
             return "microsoft_365"
+        if self._vendor in _GOOGLE_LICENSE_VENDORS:
+            return "google_workspace"
+        if self._vendor in _GITHUB_LICENSE_VENDORS:
+            return "github"
+        if self._vendor in _SLACK_LICENSE_VENDORS:
+            return "slack"
+        if self._vendor in _ZOOM_LICENSE_VENDORS:
+            return "zoom"
+        if self._vendor in _SALESFORCE_LICENSE_VENDORS:
+            return "salesforce"
         return None
 
     def _resolve_api_key(self) -> str:
         token = self.credentials.api_key
         if not token:
             raise ExternalAPIError("Missing API token for license native connector")
-        return token.get_secret_value().strip()
+        resolved = (
+            token.get_secret_value() if hasattr(token, "get_secret_value") else str(token)
+        )
+        if not resolved or not resolved.strip():
+            raise ExternalAPIError("Missing API token for license native connector")
+        return resolved.strip()
 
     async def verify_connection(self) -> bool:
-        self._last_error = None
+        self.last_error = None
         native_vendor = self._native_vendor
         if self._auth_method in {"api_key", "oauth"} and native_vendor is None:
-            self._last_error = (
+            self.last_error = (
                 f"Native license auth is not supported for vendor '{self._vendor}'. "
-                "Supported vendor aliases: microsoft_365, microsoft365, m365, microsoft. "
+                "Supported vendor aliases: microsoft_365, google_workspace, github, "
+                "slack, zoom, salesforce (and common aliases). "
                 "Use auth_method manual/csv for custom vendors."
             )
             return False
 
-        if native_vendor == "microsoft_365":
+        if native_vendor is not None:
             try:
-                await self._verify_microsoft_365()
+                await self._verify_native_vendor(native_vendor)
                 return True
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
                 logger.warning(
                     "license_native_verify_failed", vendor=native_vendor, error=str(exc)
                 )
@@ -88,29 +115,29 @@ class LicenseAdapter(BaseAdapter):
         feed = self.credentials.license_feed
         is_valid = self._validate_manual_feed(feed)
         if not is_valid:
-            if self._last_error is None:
-                self._last_error = "License feed is missing or invalid."
+            if self.last_error is None:
+                self.last_error = "License feed is missing or invalid."
         return is_valid
 
     def _validate_manual_feed(self, feed: Any) -> bool:
         if not isinstance(feed, list) or not feed:
-            self._last_error = "License feed must contain at least one record for manual/csv verification."
+            self.last_error = "License feed must contain at least one record for manual/csv verification."
             return False
         for idx, entry in enumerate(feed):
             if not isinstance(entry, dict):
-                self._last_error = (
+                self.last_error = (
                     f"License feed entry #{idx + 1} must be a JSON object."
                 )
                 return False
             has_timestamp = entry.get("timestamp") or entry.get("date")
             if not has_timestamp:
-                self._last_error = (
+                self.last_error = (
                     f"License feed entry #{idx + 1} is missing timestamp/date."
                 )
                 return False
             amount = entry.get("cost_usd", entry.get("amount_usd"))
             if not is_number(amount):
-                self._last_error = f"License feed entry #{idx + 1} must include numeric cost_usd or amount_usd."
+                self.last_error = f"License feed entry #{idx + 1} must include numeric cost_usd or amount_usd."
                 return False
         return True
 
@@ -125,7 +152,15 @@ class LicenseAdapter(BaseAdapter):
             records.append(row)
         return records
 
-    async def stream_cost_and_usage(
+    def stream_cost_and_usage(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        granularity: str = "DAILY",
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        return self._stream_cost_and_usage_impl(start_date, end_date, granularity)
+
+    async def _stream_cost_and_usage_impl(
         self,
         start_date: datetime,
         end_date: datetime,
@@ -140,7 +175,22 @@ class LicenseAdapter(BaseAdapter):
                     yield row
                 return
             except ExternalAPIError as exc:
-                self._last_error = str(exc)
+                self.last_error = str(exc)
+                logger.warning(
+                    "license_native_stream_failed_fallback_to_feed",
+                    vendor=native_vendor,
+                    error=str(exc),
+                )
+
+        if native_vendor == "google_workspace":
+            try:
+                async for row in self._stream_google_workspace_license_costs(
+                    start_date, end_date
+                ):
+                    yield row
+                return
+            except ExternalAPIError as exc:
+                self.last_error = str(exc)
                 logger.warning(
                     "license_native_stream_failed_fallback_to_feed",
                     vendor=native_vendor,
@@ -195,12 +245,157 @@ class LicenseAdapter(BaseAdapter):
                 else {},
             }
 
+    async def _verify_native_vendor(self, native_vendor: str) -> None:
+        if native_vendor == "microsoft_365":
+            await self._verify_microsoft_365()
+            return
+        if native_vendor == "google_workspace":
+            await self._verify_google_workspace()
+            return
+        if native_vendor == "github":
+            await self._verify_github()
+            return
+        if native_vendor == "slack":
+            await self._verify_slack()
+            return
+        if native_vendor == "zoom":
+            await self._verify_zoom()
+            return
+        if native_vendor == "salesforce":
+            await self._verify_salesforce()
+            return
+        raise ExternalAPIError(f"Unsupported native license vendor '{native_vendor}'")
+
     async def _verify_microsoft_365(self) -> None:
         token = self._resolve_api_key()
         await self._get_json(
             "https://graph.microsoft.com/v1.0/subscribedSkus",
             headers={"Authorization": f"Bearer {token}"},
         )
+
+    async def _verify_google_workspace(self) -> None:
+        token = self._resolve_api_key()
+        await self._get_json(
+            "https://admin.googleapis.com/admin/directory/v1/customer/my_customer",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    async def _verify_github(self) -> None:
+        token = self._resolve_api_key()
+        await self._get_json(
+            "https://api.github.com/user",
+            headers={
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github.v3+json",
+            },
+        )
+
+    async def _verify_slack(self) -> None:
+        token = self._resolve_api_key()
+        payload = await self._get_json(
+            "https://slack.com/api/auth.test",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        if not payload.get("ok"):
+            raise ExternalAPIError(
+                f"Slack auth.test failed: {payload.get('error') or 'unknown_error'}"
+            )
+
+    async def _verify_zoom(self) -> None:
+        token = self._resolve_api_key()
+        await self._get_json(
+            "https://api.zoom.us/v2/users/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    async def _verify_salesforce(self) -> None:
+        token = self._resolve_api_key()
+        instance_url = self._salesforce_instance_url()
+        api_version = self._connector_config.get("salesforce_api_version", "v60.0")
+        await self._get_json(
+            f"{instance_url}/services/data/{api_version}/limits",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    def _salesforce_instance_url(self) -> str:
+        raw = self._connector_config.get("salesforce_instance_url") or self._connector_config.get("instance_url")
+        if not isinstance(raw, str) or not raw.strip():
+            raise ExternalAPIError(
+                "Missing connector_config.salesforce_instance_url for Salesforce connector"
+            )
+        normalized = raw.strip().rstrip("/")
+        if not normalized.startswith(("https://", "http://")):
+            raise ExternalAPIError(
+                "connector_config.salesforce_instance_url must be an http(s) URL"
+            )
+        return normalized
+
+    async def _stream_google_workspace_license_costs(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        token = self._resolve_api_key()
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # Standard Google Workspace SKUs to check if none specified
+        sku_prices_raw = self._connector_config.get("sku_prices")
+        sku_prices: dict[str, float] = {}
+        if isinstance(sku_prices_raw, dict):
+            for key, value in sku_prices_raw.items():
+                if isinstance(key, str):
+                    sku_prices[key.strip()] = as_float(value)
+        
+        default_price = as_float(
+            self._connector_config.get("default_seat_price_usd"), default=12.0 # Business Standard default
+        )
+        default_currency = str(self._connector_config.get("currency") or "USD").upper()
+        timestamp = (
+            end_date if end_date.tzinfo else end_date.replace(tzinfo=timezone.utc)
+        )
+
+        # Target Products/SKUs (Simplified for POC parity)
+        # In a full implementation, we'd list all assigned licenses via Directories API
+        target_skus = list(sku_prices.keys()) or ["Google-Apps-For-Business", "1010020027"] # Standard SKUs
+        
+        for sku_id in target_skus:
+            try:
+                # GET https://licensing.googleapis.com/licensing/v1/product/{productId}/sku/{skuId}/usage
+                # ProducID for Workspace is usually 'Google-Apps'
+                product_id = "Google-Apps" 
+                url = f"https://licensing.googleapis.com/licensing/v1/product/{product_id}/sku/{sku_id}/usage"
+                
+                payload = await self._get_json(url, headers=headers)
+                consumed_units = as_float(payload.get("totalUnits"), default=0.0)
+                
+                unit_price = sku_prices.get(sku_id, default_price)
+                total_cost = round(consumed_units * unit_price, 2)
+
+                if timestamp < start_date or timestamp > end_date:
+                    continue
+
+                yield {
+                    "provider": "license",
+                    "service": sku_id,
+                    "region": "global",
+                    "usage_type": "seat_license",
+                    "resource_id": sku_id,
+                    "usage_amount": consumed_units,
+                    "usage_unit": "seat",
+                    "cost_usd": total_cost,
+                    "amount_raw": consumed_units,
+                    "currency": default_currency,
+                    "timestamp": timestamp,
+                    "source_adapter": "google_workspace_licensing",
+                    "tags": {
+                        "vendor": "google_workspace",
+                        "sku_id": sku_id,
+                        "unit_price_usd": unit_price,
+                    },
+                }
+            except Exception as e:
+                logger.warning("google_workspace_sku_fetch_failed", sku_id=sku_id, error=str(e))
+                continue
 
     async def _stream_microsoft_365_license_costs(
         self,
@@ -275,14 +470,44 @@ class LicenseAdapter(BaseAdapter):
         headers: dict[str, str],
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Compatibility wrapper for GET endpoints used by tests and callers."""
+        return await self._request_json(
+            "GET",
+            url,
+            headers=headers,
+            params=params,
+        )
+
+    async def _request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         last_error: Exception | None = None
+        method_name = method.strip().lower()
         for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
             try:
-                from app.shared.core.http import get_http_client
+                request_kwargs: dict[str, Any] = {"headers": headers}
+                if params is not None:
+                    request_kwargs["params"] = params
+                if json is not None and method_name != "get":
+                    request_kwargs["json"] = json
 
-                client = get_http_client()
-                response = await client.post(url, headers=headers, params=params)
+                async with httpx.AsyncClient(timeout=_NATIVE_TIMEOUT_SECONDS) as client:
+                    request_fn = getattr(client, method_name, None)
+                    if callable(request_fn):
+                        response = await request_fn(url, **request_kwargs)
+                    else:
+                        response = await client.request(
+                            method, url, params=params, json=json, headers=headers
+                        )
                 response.raise_for_status()
+                if response.status_code == 204:
+                    return {}
                 payload = response.json()
                 if not isinstance(payload, dict):
                     raise ExternalAPIError(
@@ -331,6 +556,497 @@ class LicenseAdapter(BaseAdapter):
                 f"License connector API request failed: {last_error}"
             ) from last_error
         raise ExternalAPIError("License connector API request failed unexpectedly")
+
+    async def revoke_license(self, resource_id: str, sku_id: str | None = None) -> bool:
+        """
+        Revoke a license/seat for a specific user.
+        Supported for: google_workspace, microsoft_365, github, slack, zoom, salesforce
+        """
+        native_vendor = self._native_vendor
+        if native_vendor == "google_workspace":
+            return await self._revoke_google_workspace(resource_id, sku_id)
+        if native_vendor == "microsoft_365":
+            return await self._revoke_microsoft_365(resource_id, sku_id)
+        if native_vendor == "github":
+            return await self._revoke_github(resource_id)
+        if native_vendor == "slack":
+            return await self._revoke_slack(resource_id)
+        if native_vendor == "zoom":
+            return await self._revoke_zoom(resource_id)
+        if native_vendor == "salesforce":
+            return await self._revoke_salesforce(resource_id)
+            
+        raise NotImplementedError(
+            f"License revocation not implemented for vendor '{self._vendor}'"
+        )
+
+    async def _revoke_google_workspace(self, resource_id: str, sku_id: str | None = None) -> bool:
+        token = self._resolve_api_key()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+
+        product_id = "Google-Apps"
+        skus_to_check = [sku_id] if sku_id else self._connector_config.get("managed_skus", ["Google-Apps-For-Business", "1010020027"])
+
+        success = False
+        for current_sku in skus_to_check:
+            try:
+                url = f"https://licensing.googleapis.com/licensing/v1/product/{product_id}/sku/{current_sku}/user/{resource_id}"
+                
+                from app.shared.core.http import get_http_client
+                client = get_http_client()
+                response = await client.delete(url, headers=headers)
+                
+                if response.status_code == 204:
+                    logger.info("google_workspace_license_revoked", user_id=resource_id, sku_id=current_sku)
+                    success = True
+                    break
+                elif response.status_code != 404:
+                    logger.warning("google_workspace_license_revoke_failed", user_id=resource_id, sku_id=current_sku, status=response.status_code)
+            except (ExternalAPIError, httpx.HTTPError) as e:
+                logger.error("google_workspace_license_revoke_error", user_id=resource_id, error=str(e))
+                continue
+
+        return success
+
+    async def list_users_activity(self) -> list[dict[str, Any]]:
+        """
+        List all users and their last activity timestamp.
+        Supported for: google_workspace, microsoft_365, github, slack, zoom, salesforce
+        """
+        native_vendor = self._native_vendor
+        if native_vendor == "google_workspace":
+            return await self._list_google_workspace_activity()
+        if native_vendor == "microsoft_365":
+            return await self._list_microsoft_365_activity()
+        if native_vendor == "github":
+            return await self._list_github_activity()
+        if native_vendor == "slack":
+            return await self._list_slack_activity()
+        if native_vendor == "zoom":
+            return await self._list_zoom_activity()
+        if native_vendor == "salesforce":
+            return await self._list_salesforce_activity()
+            
+        return []
+
+    async def _revoke_microsoft_365(self, resource_id: str, sku_id: str | None = None) -> bool:
+        """
+        Revoke license for M365 user via assignLicense endpoint.
+        """
+        token = self._resolve_api_key()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        
+        # In M365, 'resource_id' is usually the userPrincipalName or id.
+        # sku_id is required to know WHICH license to remove.
+        if not sku_id:
+            logger.warning("m365_revoke_failed_no_sku", user_id=resource_id)
+            return False
+
+        url = f"https://graph.microsoft.com/v1.0/users/{resource_id}/assignLicense"
+        payload = {
+            "addLicenses": [],
+            "removeLicenses": [sku_id]
+        }
+        
+        try:
+            from app.shared.core.http import get_http_client
+            client = get_http_client()
+            response = await client.post(url, headers=headers, json=payload)
+            
+            if response.status_code == 200:
+                logger.info("m365_license_revoked", user_id=resource_id, sku_id=sku_id)
+                return True
+            else:
+                logger.warning("m365_license_revoke_failed", user_id=resource_id, status=response.status_code)
+                return False
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("m365_license_revoke_error", user_id=resource_id, error=str(e))
+            return False
+
+    async def _list_microsoft_365_activity(self) -> list[dict[str, Any]]:
+        """
+        List M365 users and activity via signInActivity property.
+        """
+        token = self._resolve_api_key()
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # We need signInActivity which requires Entra ID P1/P2
+        url = "https://graph.microsoft.com/v1.0/users?$select=displayName,userPrincipalName,id,signInActivity,accountEnabled"
+        
+        try:
+            payload = await self._get_json(url, headers=headers)
+            users_list = payload.get("value", [])
+            
+            activity_records = []
+            for user in users_list:
+                email = user.get("userPrincipalName")
+                display_name = user.get("displayName")
+                sign_in = user.get("signInActivity", {})
+                
+                # Use lastSuccessfulSignInDateTime or fallback to lastSignInDateTime
+                last_login_raw = sign_in.get("lastSuccessfulSignInDateTime") or sign_in.get("lastSignInDateTime")
+                
+                last_active_at = None
+                if last_login_raw:
+                    try:
+                        last_active_at = parse_timestamp(last_login_raw)
+                    except Exception:
+                        pass
+                
+                activity_records.append({
+                    "user_id": user.get("id"),
+                    "email": email,
+                    "full_name": display_name,
+                    "last_active_at": last_active_at,
+                    "is_admin": False, # Would need role assignments check for full parity
+                    "suspended": not user.get("accountEnabled", True)
+                })
+            return activity_records
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("m365_list_users_failed", error=str(e))
+            return []
+
+    async def _revoke_github(self, resource_id: str) -> bool:
+        """
+        Remove user from GitHub organization.
+        """
+        token = self._resolve_api_key()
+        org = self._connector_config.get("github_org")
+        if not org:
+            logger.warning("github_revoke_failed_no_org", user_id=resource_id)
+            return False
+
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        url = f"https://api.github.com/orgs/{org}/memberships/{resource_id}"
+        
+        try:
+            from app.shared.core.http import get_http_client
+            client = get_http_client()
+            response = await client.delete(url, headers=headers)
+            
+            if response.status_code == 204:
+                logger.info("github_membership_revoked", user_id=resource_id, org=org)
+                return True
+            else:
+                logger.warning("github_membership_revoke_failed", user_id=resource_id, status=response.status_code)
+                return False
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("github_membership_revoke_error", user_id=resource_id, error=str(e))
+            return False
+
+    async def _list_github_activity(self) -> list[dict[str, Any]]:
+        """
+        List GitHub org members and estimate activity via Org Events API.
+        """
+        token = self._resolve_api_key()
+        org = self._connector_config.get("github_org")
+        if not org:
+            return []
+
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+        
+        try:
+            # 1. Fetch Org Members
+            members_url = f"https://api.github.com/orgs/{org}/members"
+            members_payload = await self._get_json(members_url, headers=headers)
+            members = members_payload.get("value", [])
+            
+            # 2. Fetch recent Org Events to find last activity for these members
+            # This is a high-fidelity fallback for the Audit Log API (Enterprise only)
+            events_url = f"https://api.github.com/orgs/{org}/events?per_page=100"
+            events_payload = await self._get_json(events_url, headers=headers)
+            events = events_payload.get("value", [])
+            
+            last_event_per_user = {} # login -> timestamp
+            for event in events:
+                login = event.get("actor", {}).get("login")
+                created_at = event.get("created_at")
+                if login and created_at:
+                    ts = parse_timestamp(created_at)
+                    if login not in last_event_per_user or ts > last_event_per_user[login]:
+                        last_event_per_user[login] = ts
+
+            activity_records = []
+            for member in members:
+                login = member.get("login")
+                activity_records.append({
+                    "user_id": login,
+                    "email": login,
+                    "full_name": login,
+                    "last_active_at": last_event_per_user.get(login),
+                    "is_admin": member.get("site_admin", False),
+                    "suspended": False
+                })
+            return activity_records
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("github_list_members_failed", error=str(e))
+            return []
+
+    async def _revoke_zoom(self, resource_id: str) -> bool:
+        """
+        Disassociate user from Zoom account.
+        """
+        token = self._resolve_api_key()
+        headers = {"Authorization": f"Bearer {token}"}
+        url = f"https://api.zoom.us/v2/users/{resource_id}?action=disassociate"
+        
+        try:
+            from app.shared.core.http import get_http_client
+            client = get_http_client()
+            response = await client.delete(url, headers=headers)
+            
+            if response.status_code == 204:
+                logger.info("zoom_user_disassociated", user_id=resource_id)
+                return True
+            else:
+                logger.warning("zoom_user_disassociate_failed", user_id=resource_id, status=response.status_code)
+                return False
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("zoom_user_disassociate_error", user_id=resource_id, error=str(e))
+            return False
+
+    async def _list_zoom_activity(self) -> list[dict[str, Any]]:
+        """
+        List Zoom users and their last login time.
+        """
+        token = self._resolve_api_key()
+        headers = {"Authorization": f"Bearer {token}"}
+        url = "https://api.zoom.us/v2/users"
+        
+        try:
+            payload = await self._get_json(url, headers=headers)
+            users_list = payload.get("users", [])
+            
+            activity_records = []
+            for user in users_list:
+                last_login_raw = user.get("last_login_time")
+                last_active_at = None
+                if last_login_raw:
+                    try:
+                        last_active_at = parse_timestamp(last_login_raw)
+                    except Exception:
+                        pass
+                
+                activity_records.append({
+                    "user_id": user.get("id"),
+                    "email": user.get("email"),
+                    "full_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+                    "last_active_at": last_active_at,
+                    "is_admin": user.get("role_name") == "Owner",
+                    "suspended": user.get("status") == "inactive"
+                })
+            return activity_records
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("zoom_list_users_failed", error=str(e))
+            return []
+
+    async def _revoke_slack(self, resource_id: str) -> bool:
+        """
+        Deactivate user in Slack.
+        """
+        token = self._resolve_api_key()
+        # admin.users.remove requires Enterprise Grid
+        url = "https://slack.com/api/admin.users.remove"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        team_id = self._connector_config.get("slack_team_id")
+        
+        payload = {
+            "team_id": team_id,
+            "user_id": resource_id
+        }
+        
+        try:
+            from app.shared.core.http import get_http_client
+            client = get_http_client()
+            # method is POST for admin.users.remove
+            response = await client.post(url, headers=headers, json=payload)
+            data = response.json()
+            
+            if data.get("ok"):
+                logger.info("slack_user_deactivated", user_id=resource_id)
+                return True
+            else:
+                logger.warning("slack_user_deactivation_failed", user_id=resource_id, error=data.get("error"))
+                return False
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("slack_user_deactivation_error", user_id=resource_id, error=str(e))
+            return False
+
+    async def _list_slack_activity(self) -> list[dict[str, Any]]:
+        """
+        List Slack access logs to determine activity.
+        """
+        token = self._resolve_api_key()
+        headers = {"Authorization": f"Bearer {token}"}
+        url = "https://slack.com/api/team.accessLogs"
+        
+        try:
+            # Requires paid plan. We'll parse the logs to find last activity per user.
+            payload = await self._get_json(url, headers=headers)
+            if not payload.get("ok"):
+                logger.warning("slack_activity_fetch_failed", error=payload.get("error"))
+                return []
+                
+            logs = payload.get("logins", [])
+            user_activity = {} # user_id -> last_timestamp
+            
+            for log in logs:
+                uid = log.get("user_id")
+                ts = log.get("date_last")
+                if uid and ts:
+                    user_activity[uid] = max(user_activity.get(uid, 0), ts)
+            
+            activity_records = []
+            # We also need to list users to get their metadata
+            users_url = "https://slack.com/api/users.list"
+            users_payload = await self._get_json(users_url, headers=headers)
+            for user in users_payload.get("members", []):
+                uid = user.get("id")
+                last_ts = user_activity.get(uid)
+                last_active_at = datetime.fromtimestamp(last_ts, tz=timezone.utc) if last_ts else None
+                
+                activity_records.append({
+                    "user_id": uid,
+                    "email": user.get("profile", {}).get("email"),
+                    "full_name": user.get("real_name") or user.get("name"),
+                    "last_active_at": last_active_at,
+                    "is_admin": user.get("is_admin", False),
+                    "suspended": user.get("deleted", False)
+                })
+            return activity_records
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("slack_list_activity_failed", error=str(e))
+            return []
+
+    async def _revoke_salesforce(self, resource_id: str) -> bool:
+        """
+        Deactivate user in Salesforce.
+        """
+        token = self._resolve_api_key()
+        try:
+            instance_url = self._salesforce_instance_url()
+        except ExternalAPIError:
+            logger.warning("salesforce_revoke_failed_no_url", user_id=resource_id)
+            return False
+        api_version = self._connector_config.get("salesforce_api_version", "v60.0")
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        url = f"{instance_url}/services/data/{api_version}/sobjects/User/{resource_id}"
+        
+        try:
+            from app.shared.core.http import get_http_client
+            client = get_http_client()
+            # use PATCH to update IsActive
+            response = await client.patch(url, headers=headers, json={"IsActive": False})
+            
+            if response.status_code == 204:
+                logger.info("salesforce_user_deactivated", user_id=resource_id)
+                return True
+            else:
+                logger.warning("salesforce_user_deactivation_failed", user_id=resource_id, status=response.status_code)
+                return False
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("salesforce_user_deactivation_error", user_id=resource_id, error=str(e))
+            return False
+
+    async def _list_salesforce_activity(self) -> list[dict[str, Any]]:
+        """
+        List Salesforce users and their last login date.
+        """
+        token = self._resolve_api_key()
+        try:
+            instance_url = self._salesforce_instance_url()
+        except ExternalAPIError:
+            return []
+        api_version = self._connector_config.get("salesforce_api_version", "v60.0")
+
+        headers = {"Authorization": f"Bearer {token}"}
+        query = "SELECT+Id,Email,Name,LastLoginDate,IsActive,IsSystemAdmin+FROM+User"
+        url = f"{instance_url}/services/data/{api_version}/query?q={query}"
+        
+        try:
+            payload = await self._get_json(url, headers=headers)
+            records = payload.get("records", [])
+            
+            activity_records = []
+            for user in records:
+                last_login_raw = user.get("LastLoginDate")
+                last_active_at = None
+                if last_login_raw:
+                    try:
+                        last_active_at = parse_timestamp(last_login_raw)
+                    except Exception:
+                        pass
+                
+                activity_records.append({
+                    "user_id": user.get("Id"),
+                    "email": user.get("Email"),
+                    "full_name": user.get("Name"),
+                    "last_active_at": last_active_at,
+                    "is_admin": user.get("IsSystemAdmin", False),
+                    "suspended": not user.get("IsActive", True)
+                })
+            return activity_records
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("salesforce_list_users_failed", error=str(e))
+            return []
+
+    async def _list_google_workspace_activity(self) -> list[dict[str, Any]]:
+
+        token = self._resolve_api_key()
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # GET https://admin.googleapis.com/admin/directory/v1/users?customer=my_customer&viewType=admin_view
+        url = "https://admin.googleapis.com/admin/directory/v1/users?customer=my_customer"
+        
+        try:
+            payload = await self._get_json(url, headers=headers)
+            users_list = payload.get("users", [])
+            
+            activity_records = []
+            for user in users_list:
+                primary_email = user.get("primaryEmail")
+                last_login_raw = user.get("lastLoginTime")
+                
+                # Format: "2024-02-19T06:41:24.000Z"
+                last_active_at = None
+                if last_login_raw:
+                    try:
+                        last_active_at = parse_timestamp(last_login_raw)
+                    except Exception:
+                        pass
+                
+                activity_records.append({
+                    "user_id": primary_email,
+                    "email": primary_email,
+                    "full_name": user.get("name", {}).get("fullName"),
+                    "last_active_at": last_active_at,
+                    "is_admin": user.get("isAdmin", False),
+                    "suspended": user.get("suspended", False),
+                    "creation_time": user.get("creationTime"),
+                })
+            return activity_records
+        except (ExternalAPIError, httpx.HTTPError) as e:
+            logger.error("google_workspace_list_users_failed", error=str(e))
+            return []
 
     async def discover_resources(
         self, resource_type: str, region: str | None = None

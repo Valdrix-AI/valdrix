@@ -5,7 +5,7 @@ Manages LLM provider preferences and budget settings for tenants.
 Supports BYOK (Bring Your Own Key) for OpenAI, Claude, Google, and Groq.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,7 @@ import structlog
 
 from app.shared.core.auth import CurrentUser, get_current_user, requires_role
 from app.shared.core.logging import audit_log
+from app.shared.core.pricing import normalize_tier, get_tier_limit
 from app.shared.db.session import get_db
 from app.models.llm import LLMBudget
 
@@ -123,6 +124,21 @@ async def update_llm_settings(
     """
     Update LLM budget and selection settings for the current tenant.
     """
+    byok_key_fields = (
+        "openai_api_key",
+        "claude_api_key",
+        "google_api_key",
+        "groq_api_key",
+    )
+    byok_requested = any(getattr(data, key) is not None for key in byok_key_fields)
+    if byok_requested:
+        tenant_tier = normalize_tier(getattr(current_user, "tier", None))
+        if not bool(get_tier_limit(tenant_tier, "byok_enabled")):
+            raise HTTPException(
+                403,
+                "BYOK is not enabled for your current subscription tier.",
+            )
+
     result = await db.execute(
         select(LLMBudget).where(LLMBudget.tenant_id == current_user.tenant_id)
     )

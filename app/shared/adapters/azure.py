@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator
 import structlog
 from azure.identity.aio import ClientSecretCredential
@@ -12,12 +12,14 @@ from azure.mgmt.costmanagement.models import (
     QueryGrouping,
 )
 from azure.mgmt.resource.resources.aio import ResourceManagementClient
+from azure.mgmt.compute.aio import ComputeManagementClient
 from azure.core.exceptions import ServiceRequestError, ServiceResponseError
 import tenacity
 
 from app.shared.adapters.base import BaseAdapter
 from app.shared.core.credentials import AzureCredentials
 from app.shared.core.exceptions import ConfigurationError
+from app.schemas.costs import CloudUsageSummary
 
 logger = structlog.get_logger()
 
@@ -40,6 +42,7 @@ class AzureAdapter(BaseAdapter):
         self._credential: ClientSecretCredential | None = None
         self._cost_client: CostManagementClient | None = None
         self._resource_client: ResourceManagementClient | None = None
+        self._compute_client: ComputeManagementClient | None = None
 
     async def _get_credentials(self) -> ClientSecretCredential:
         if not self._credential:
@@ -67,6 +70,14 @@ class AzureAdapter(BaseAdapter):
                 credential=creds, subscription_id=self.credentials.subscription_id
             )
         return self._resource_client
+
+    async def _get_compute_client(self) -> ComputeManagementClient:
+        if not self._compute_client:
+            creds = await self._get_credentials()
+            self._compute_client = ComputeManagementClient(
+                credential=creds, subscription_id=self.credentials.subscription_id
+            )
+        return self._compute_client
 
     async def verify_connection(self) -> bool:
         """
@@ -177,7 +188,65 @@ class AzureAdapter(BaseAdapter):
             "cost_type": cost_type,
             "is_finalized": (now - dt).days > 3,
             "source_adapter": "explorer_api",
+            "tags": {},  # Azure Query API dimensions can be expanded for tags if needed
         }
+
+    async def get_daily_costs(
+        self,
+        start_date: date,
+        end_date: date,
+        group_by_service: bool = True,
+    ) -> CloudUsageSummary:
+        """
+        Fetch daily costs and return a standardized CloudUsageSummary.
+        Optimized for scheduler integration.
+        """
+        from app.schemas.costs import CloudUsageSummary, CostRecord
+        from decimal import Decimal
+
+        start_dt = datetime.combine(
+            start_date, datetime.min.time(), tzinfo=timezone.utc
+        )
+        end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc)
+
+        rows = await self.get_cost_and_usage(start_dt, end_dt, granularity="DAILY")
+
+        records: list[CostRecord] = []
+        total_cost = Decimal("0")
+        by_service: dict[str, Decimal] = {}
+
+        for row in rows:
+            amount = Decimal(str(row["cost_usd"]))
+            if amount <= 0:
+                continue
+
+            total_cost += amount
+            service = row["service"]
+            if group_by_service:
+                by_service[service] = by_service.get(service, Decimal("0")) + amount
+
+            records.append(
+                CostRecord(
+                    date=row["timestamp"],
+                    amount=amount,
+                    amount_raw=Decimal(str(row["amount_raw"])),
+                    currency=row["currency"],
+                    service=service,
+                    region=row["region"],
+                    usage_type=row["usage_type"],
+                    tags=row.get("tags", {}),
+                )
+            )
+
+        return CloudUsageSummary(
+            tenant_id="anonymous",
+            provider="azure",
+            start_date=start_date,
+            end_date=end_date,
+            total_cost=total_cost,
+            records=records,
+            by_service=by_service if group_by_service else {},
+        )
 
     async def get_amortized_costs(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
@@ -190,7 +259,12 @@ class AzureAdapter(BaseAdapter):
             start_date, end_date, granularity, cost_type="AmortizedCost"
         )
 
-    async def stream_cost_and_usage(
+    def stream_cost_and_usage(
+        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        return self._stream_cost_and_usage_impl(start_date, end_date, granularity)
+
+    async def _stream_cost_and_usage_impl(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> AsyncGenerator[dict[str, Any], None]:
         """
@@ -215,8 +289,31 @@ class AzureAdapter(BaseAdapter):
             span.set_attribute("subscription_id", self.credentials.subscription_id)
 
             try:
-                client = await self._get_resource_client()
                 resources = []
+                # Specialized discovery for compute resources to get VM Size (used for ARM analysis)
+                if resource_type.lower() == "compute":
+                    comp_client = await self._get_compute_client()
+                    async for vm in comp_client.virtual_machines.list_all():
+                        if region and region.lower() != vm.location.lower():
+                            continue
+                        resources.append(
+                            {
+                                "id": vm.id,
+                                "name": vm.name,
+                                "type": "Microsoft.Compute/virtualMachines",
+                                "location": vm.location,
+                                "tags": vm.tags or {},
+                                "metadata": {
+                                    "size": vm.hardware_profile.vm_size
+                                    if vm.hardware_profile
+                                    else "unknown",
+                                    "provider": "azure",
+                                },
+                            }
+                        )
+                    return resources
+
+                client = await self._get_resource_client()
                 async for resource in client.resources.list():
                     if (
                         resource_type
@@ -232,7 +329,7 @@ class AzureAdapter(BaseAdapter):
                             "name": resource.name,
                             "type": resource.type,
                             "location": resource.location,
-                            "tags": resource.tags,
+                            "tags": resource.tags or {},
                         }
                     )
                 return resources

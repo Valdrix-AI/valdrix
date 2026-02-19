@@ -34,6 +34,9 @@ from app.shared.core.security import encrypt_string, decrypt_string
 
 logger = structlog.get_logger()
 settings = get_settings()
+PAYSTACK_CHECKOUT_CURRENCY = "NGN"
+PAYSTACK_FX_PROVIDER = "cbn_nfem"
+PAYSTACK_USD_FX_PROVIDER = "native_usd"
 
 __all__ = [
     "TenantSubscription",
@@ -43,11 +46,11 @@ __all__ = [
     "PaystackClient",
 ]
 
+
 def _email_hash(email: Optional[str]) -> Optional[str]:
     if not email:
         return None
     return hashlib.sha256(email.strip().lower().encode()).hexdigest()[:12]
-
 
 
 class SubscriptionStatus(str, Enum):
@@ -218,6 +221,29 @@ class BillingService:
             self.plan_amounts[tier] = int(monthly)
             self.annual_plan_amounts[tier] = int(annual)
 
+    def _resolve_checkout_currency(self, requested_currency: str | None) -> str:
+        default_currency = str(
+            getattr(
+                settings, "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY", PAYSTACK_CHECKOUT_CURRENCY
+            )
+            or PAYSTACK_CHECKOUT_CURRENCY
+        ).strip().upper()
+        if default_currency not in {"NGN", "USD"}:
+            default_currency = PAYSTACK_CHECKOUT_CURRENCY
+
+        resolved = (
+            str(requested_currency).strip().upper()
+            if isinstance(requested_currency, str) and requested_currency.strip()
+            else default_currency
+        )
+        if resolved == "USD" and not bool(
+            getattr(settings, "PAYSTACK_ENABLE_USD_CHECKOUT", False)
+        ):
+            raise ValueError("USD checkout is not enabled")
+        if resolved not in {"NGN", "USD"}:
+            raise ValueError(f"Unsupported checkout currency: {resolved}")
+        return resolved
+
     async def create_checkout_session(
         self,
         tenant_id: UUID,
@@ -225,10 +251,11 @@ class BillingService:
         email: str,
         callback_url: str,
         billing_cycle: str = "monthly",
+        currency: str | None = None,
     ) -> dict[str, Any]:
         """
         Initialize Paystack transaction for subscription using dynamic currency.
-        We no longer use fixed Paystack Plans to support fluctuating exchange rates.
+        Defaults to NGN and supports USD only when explicitly enabled.
         """
         if tier == PricingTier.FREE:
             raise ValueError("Cannot checkout free tier")
@@ -248,12 +275,25 @@ class BillingService:
             else config["price_usd"]["monthly"]
         )
 
-        # 2. Convert to NGN using Exchange Rate Service
-        from app.modules.billing.domain.billing.currency import ExchangeRateService
+        checkout_currency = self._resolve_checkout_currency(currency)
+        fx_rate: float | None = None
+        fx_provider: str | None = None
+        amount_subunits: int
 
-        currency_service = ExchangeRateService(self.db)
-        ngn_rate = await currency_service.get_ngn_rate()
-        amount_kobo = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
+        if checkout_currency == PAYSTACK_CHECKOUT_CURRENCY:
+            # Convert to NGN using Exchange Rate Service.
+            from app.shared.core.currency import ExchangeRateService
+
+            currency_service = ExchangeRateService(self.db)
+            ngn_rate = await currency_service.get_ngn_rate()
+            amount_subunits = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
+            fx_rate = float(ngn_rate)
+            fx_provider = PAYSTACK_FX_PROVIDER
+        else:
+            # USD checkout uses native currency subunits (cents).
+            amount_subunits = int(round(float(usd_price) * 100))
+            fx_rate = 1.0
+            fx_provider = PAYSTACK_USD_FX_PROVIDER
 
         try:
             # Check existing subscription
@@ -268,7 +308,7 @@ class BillingService:
             # We pass plan_code as None here because initialize_transaction supports it
             response = await self.client.initialize_transaction(
                 email=email,
-                amount_kobo=amount_kobo,
+                amount_kobo=amount_subunits,
                 plan_code=None,  # Dynamic billing uses authorization_code later
                 callback_url=callback_url,
                 metadata={
@@ -276,7 +316,10 @@ class BillingService:
                     "tier": tier.value,
                     "billing_cycle": billing_cycle,
                     "usd_price": usd_price,
-                    "exchange_rate": ngn_rate,
+                    "currency": checkout_currency,
+                    "amount_subunits": amount_subunits,
+                    "exchange_rate": fx_rate,
+                    "fx_provider": fx_provider,
                 },
             )
 
@@ -287,9 +330,43 @@ class BillingService:
                 "paystack_dynamic_tx_initialized",
                 tenant_id=str(tenant_id),
                 tier=tier.value,
-                amount_ngn=amount_kobo / 100,
+                currency=checkout_currency,
+                amount_subunits=amount_subunits,
                 reference=reference,
+                fx_rate=fx_rate,
+                usd_price=usd_price,
             )
+
+            # SOC2: Persist immutable billing event for audit trails (FX transparency)
+            try:
+                from app.modules.governance.domain.security.audit_log import (
+                    AuditEventType,
+                    AuditLogger,
+                )
+
+                audit = AuditLogger(
+                    db=self.db, tenant_id=tenant_id, correlation_id=reference
+                )
+                await audit.log(
+                    event_type=AuditEventType.BILLING_PAYMENT_INITIATED,
+                    resource_type="tenant_subscription",
+                    resource_id=str(tenant_id),
+                    details={
+                        "provider": "paystack",
+                        "tier": tier.value,
+                        "usd_price": usd_price,
+                        "exchange_rate": fx_rate,
+                        "amount_subunits": amount_subunits,
+                        "settlement_currency": checkout_currency,
+                        "billing_cycle": billing_cycle,
+                    },
+                )
+            except Exception as audit_exc:
+                logger.warning(
+                    "billing_init_audit_failed",
+                    tenant_id=str(tenant_id),
+                    error=str(audit_exc),
+                )
 
             # Create/Update local record placeholder
             if not sub:
@@ -299,6 +376,12 @@ class BillingService:
                     id=uuid.uuid4(), tenant_id=tenant_id, tier=tier.value
                 )
                 self.db.add(sub)
+            sub.billing_currency = checkout_currency
+            sub.last_charge_amount_subunits = amount_subunits
+            sub.last_charge_fx_rate = fx_rate
+            sub.last_charge_fx_provider = fx_provider
+            sub.last_charge_reference = reference
+            sub.last_charge_at = datetime.now(timezone.utc)
 
             await self.db.commit()
 
@@ -364,12 +447,42 @@ class BillingService:
                 else float(price_cfg)
             )
 
-        # 2. Get latest exchange rate
-        from app.modules.billing.domain.billing.currency import ExchangeRateService
+        raw_currency = getattr(subscription, "billing_currency", None)
+        if isinstance(raw_currency, str) and raw_currency.strip():
+            renewal_currency = raw_currency.strip().upper()
+        else:
+            renewal_currency = PAYSTACK_CHECKOUT_CURRENCY
+        fx_rate: float | None = None
+        fx_provider: str | None = None
+        amount_subunits: int
 
-        currency_service = ExchangeRateService(self.db)
-        ngn_rate = await currency_service.get_ngn_rate()
-        amount_kobo = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
+        if renewal_currency == PAYSTACK_CHECKOUT_CURRENCY:
+            # Get latest exchange rate for NGN settlement.
+            from app.shared.core.currency import ExchangeRateService
+
+            currency_service = ExchangeRateService(self.db)
+            ngn_rate = await currency_service.get_ngn_rate()
+            amount_subunits = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
+            fx_rate = float(ngn_rate)
+            fx_provider = PAYSTACK_FX_PROVIDER
+        elif renewal_currency == "USD":
+            amount_subunits = int(round(float(usd_price) * 100))
+            fx_rate = 1.0
+            fx_provider = PAYSTACK_USD_FX_PROVIDER
+        else:
+            logger.warning(
+                "renewal_unsupported_currency_fallback_to_ngn",
+                tenant_id=str(subscription.tenant_id),
+                billing_currency=raw_currency,
+            )
+            from app.shared.core.currency import ExchangeRateService
+
+            currency_service = ExchangeRateService(self.db)
+            ngn_rate = await currency_service.get_ngn_rate()
+            amount_subunits = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
+            fx_rate = float(ngn_rate)
+            fx_provider = PAYSTACK_FX_PROVIDER
+            renewal_currency = PAYSTACK_CHECKOUT_CURRENCY
 
         # 3. Fetch User email linked to tenant
         from app.models.tenant import User
@@ -400,20 +513,67 @@ class BillingService:
             # Paystack Charge Authorization API
             response = await self.client.charge_authorization(
                 email=user_email,
-                amount_kobo=amount_kobo,
+                amount_kobo=amount_subunits,
                 authorization_code=auth_code,
                 metadata={
                     "tenant_id": str(subscription.tenant_id),
                     "type": "renewal",
                     "plan": subscription.tier,
+                    "currency": renewal_currency,
+                    "exchange_rate": fx_rate,
+                    "fx_provider": fx_provider,
                 },
             )
 
             if response.get("status") and response["data"].get("status") == "success":
+                charge_data = response.get("data", {})
+                reference = charge_data.get("reference")
                 subscription.next_payment_date = datetime.now(timezone.utc) + timedelta(
                     days=30
                 )
+                subscription.billing_currency = renewal_currency
+                subscription.last_charge_amount_subunits = amount_subunits
+                subscription.last_charge_fx_rate = fx_rate
+                subscription.last_charge_fx_provider = fx_provider
+                if reference:
+                    subscription.last_charge_reference = str(reference)
+                subscription.last_charge_at = datetime.now(timezone.utc)
                 await self.db.commit()
+
+                # SOC2: Persist immutable billing event for audit trails (FX transparency on renewal)
+                try:
+                    from app.modules.governance.domain.security.audit_log import (
+                        AuditEventType,
+                        AuditLogger,
+                    )
+
+                    audit = AuditLogger(
+                        db=self.db,
+                        tenant_id=subscription.tenant_id,
+                        correlation_id=str(reference) if reference else None,
+                    )
+                    await audit.log(
+                        event_type=AuditEventType.BILLING_PAYMENT_RECEIVED,
+                        resource_type="tenant_subscription",
+                        resource_id=str(subscription.id),
+                        details={
+                            "provider": "paystack",
+                            "event": "charge_renewal",
+                            "usd_price": usd_price,
+                            "exchange_rate": fx_rate,
+                            "amount_subunits": amount_subunits,
+                            "settlement_currency": renewal_currency,
+                            "reference": reference,
+                            "success": True,
+                        },
+                    )
+                except Exception as audit_exc:
+                    logger.warning(
+                        "billing_renewal_audit_failed",
+                        tenant_id=str(subscription.tenant_id),
+                        error=str(audit_exc),
+                    )
+
                 return True
             return False
         except Exception as e:
@@ -457,15 +617,21 @@ class WebhookHandler:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def handle(self, request: Request, payload: bytes, signature: str) -> dict[str, str]:
+    async def handle(
+        self, request: Request, payload: bytes, signature: str
+    ) -> dict[str, str]:
         """Verify and process webhook."""
         from fastapi import HTTPException
 
         # Finding #12: Validate Content-Type for JSON parsing safety
         content_type = request.headers.get("Content-Type", "")
         if "application/json" not in content_type.lower():
-            logger.warning("paystack_webhook_invalid_content_type", content_type=content_type)
-            raise HTTPException(400, "Unsupported media type: expected application/json")
+            logger.warning(
+                "paystack_webhook_invalid_content_type", content_type=content_type
+            )
+            raise HTTPException(
+                400, "Unsupported media type: expected application/json"
+            )
 
         if not self.verify_signature(payload, signature):
             raise HTTPException(401, "Invalid signature")
@@ -615,6 +781,11 @@ class WebhookHandler:
         customer = data.get("customer", {})
         customer_code = customer.get("customer_code")
         customer_email = customer.get("email")
+        charge_amount_raw = data.get("amount")
+        charge_currency = str(
+            data.get("currency") or PAYSTACK_CHECKOUT_CURRENCY
+        ).upper()
+        charge_reference = data.get("reference")
 
         tenant_id = None
         if tenant_id_str:
@@ -705,6 +876,34 @@ class WebhookHandler:
             if resolved_tier is not None:
                 sub.tier = resolved_tier.value
             sub.status = SubscriptionStatus.ACTIVE.value
+            sub.billing_currency = charge_currency
+            if isinstance(charge_amount_raw, (int, float, str)):
+                try:
+                    sub.last_charge_amount_subunits = int(charge_amount_raw)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "paystack_charge_amount_invalid",
+                        tenant_id=str(tenant_id),
+                        amount=charge_amount_raw,
+                    )
+            fx_rate_raw = metadata.get("exchange_rate")
+            if isinstance(fx_rate_raw, (int, float, str)):
+                try:
+                    sub.last_charge_fx_rate = float(fx_rate_raw)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "paystack_fx_rate_invalid",
+                        tenant_id=str(tenant_id),
+                        exchange_rate=fx_rate_raw,
+                    )
+            fx_provider = metadata.get("fx_provider")
+            if isinstance(fx_provider, str) and fx_provider.strip():
+                sub.last_charge_fx_provider = fx_provider.strip().lower()
+            elif charge_currency == PAYSTACK_CHECKOUT_CURRENCY:
+                sub.last_charge_fx_provider = PAYSTACK_FX_PROVIDER
+            if charge_reference:
+                sub.last_charge_reference = str(charge_reference)
+            sub.last_charge_at = datetime.now(timezone.utc)
 
             # Keep entitlements in sync: auth reads Tenant.plan, not TenantSubscription.tier.
             if resolved_tier is not None:
@@ -746,6 +945,15 @@ class WebhookHandler:
                         "reference": reference,
                         "tier": (resolved_tier.value if resolved_tier else sub.tier),
                         "customer_code": customer_code,
+                        "currency": charge_currency,
+                        "amount_subunits": (
+                            int(charge_amount_raw)
+                            if isinstance(charge_amount_raw, (int, float))
+                            else charge_amount_raw
+                        ),
+                        "fx_rate": metadata.get("exchange_rate"),
+                        "fx_provider": metadata.get("fx_provider")
+                        or sub.last_charge_fx_provider,
                     },
                 )
             except Exception as exc:

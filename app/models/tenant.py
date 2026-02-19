@@ -24,6 +24,7 @@ from app.models._encryption import get_encryption_key
 if TYPE_CHECKING:
     from app.models.llm import LLMUsage, LLMBudget
     from app.models.aws_connection import AWSConnection
+    from app.models.discovery_candidate import DiscoveryCandidate
     from app.models.saas_connection import SaaSConnection
     from app.models.license_connection import LicenseConnection
     from app.models.platform_connection import PlatformConnection
@@ -91,6 +92,10 @@ class Tenant(Base):
     )
     aws_connections: Mapped[List["AWSConnection"]] = relationship(
         back_populates="tenant", cascade="all, delete-orphan"
+    )
+    discovery_candidates: Mapped[List["DiscoveryCandidate"]] = relationship(
+        back_populates="tenant",
+        cascade="all, delete-orphan",
     )
     saas_connections: Mapped[List["SaaSConnection"]] = relationship(
         back_populates="tenant", cascade="all, delete-orphan"

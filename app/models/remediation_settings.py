@@ -59,6 +59,20 @@ class RemediationSettings(Base):
         String(20), default="owner"
     )
 
+    # Autonomous License Governance (Phase 8)
+    license_auto_reclaim_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False
+    )
+    license_inactive_threshold_days: Mapped[int] = mapped_column(
+        Integer, default=30
+    )
+    license_reclaim_grace_period_days: Mapped[int] = mapped_column(
+        Integer, default=3
+    )
+    license_downgrade_recommendations_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True
+    )
+
     # Relationship
     tenant: Mapped["Tenant"] = relationship("Tenant")
 

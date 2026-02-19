@@ -55,9 +55,8 @@ class AdapterFactory:
                 return AWSCURAdapter(aws_creds)
             
             raise ConfigurationError(
-                "AWS Cost Explorer is disabled to prevent unexpected API charges. "
-                "Please configure CUR (Cost and Usage Report) in S3 via Data Exports "
-                "to enable cost ingestion for this account."
+                "AWS Cost Explorer is not supported in Valdrix. "
+                "Cost ingestion requires CUR (Cost and Usage Report) in S3 via Data Exports."
             )
 
         elif isinstance(connection, AzureConnection):

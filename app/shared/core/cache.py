@@ -362,19 +362,62 @@ class QueryCache:
                     return cached_result
 
                 # SEC: Dogpile/Stampede Protection (BE-CORE-1)
-                # Use a short-lived lock (30s) to ensure only one worker executes the query
+                # Use a short-lived lock to ensure only one worker executes the query.
                 lock_key = f"lock:{cache_key}"
+                lock_acquired = False
                 if self.redis:
-                    # SET NX (if not exists) EX (expire)
-                    # Note: upstash_redis supports standard arguments
-                    acquired = await self.redis.set(lock_key, "locked", ex=30, nx=True)
-                    if not acquired:
-                        # Wait briefly and retry cache
-                        await asyncio.sleep(0.5)
-                        cached_result = await self.get_cached_result(cache_key)
-                        if cached_result is not None:
-                            return cached_result
-                        # If still no cache, fall back to executing query (safety hatch)
+                    lock_ttl_seconds = 30
+                    wait_step_seconds = 0.25
+                    max_wait_seconds = 2.0
+                    try:
+                        # SET NX (if not exists) EX (expire)
+                        lock_acquired = bool(
+                            await self.redis.set(
+                                lock_key,
+                                "locked",
+                                ex=lock_ttl_seconds,
+                                nx=True,
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "cache_lock_acquire_error",
+                            key=lock_key,
+                            error=str(e),
+                        )
+                        lock_acquired = False
+
+                    # If another worker holds the lock, wait for cache fill and retry once.
+                    if not lock_acquired:
+                        waited = 0.0
+                        while waited < max_wait_seconds:
+                            await asyncio.sleep(wait_step_seconds)
+                            waited += wait_step_seconds
+                            cached_result = await self.get_cached_result(cache_key)
+                            if cached_result is not None:
+                                return cached_result
+                        try:
+                            lock_acquired = bool(
+                                await self.redis.set(
+                                    lock_key,
+                                    "locked",
+                                    ex=lock_ttl_seconds,
+                                    nx=True,
+                                )
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "cache_lock_reacquire_error",
+                                key=lock_key,
+                                error=str(e),
+                            )
+                            lock_acquired = False
+                        if not lock_acquired:
+                            logger.warning(
+                                "cache_lock_wait_timeout_fallback",
+                                key=cache_key,
+                                wait_seconds=max_wait_seconds,
+                            )
 
                 try:
                     # Execute query
@@ -384,8 +427,15 @@ class QueryCache:
                     await self.set_cached_result(cache_key, result, ttl)
                 finally:
                     # Release lock
-                    if self.redis:
-                        await self.redis.delete(lock_key)
+                    if self.redis and lock_acquired:
+                        try:
+                            await self.redis.delete(lock_key)
+                        except Exception as e:
+                            logger.warning(
+                                "cache_lock_release_error",
+                                key=lock_key,
+                                error=str(e),
+                            )
 
                 return result
 

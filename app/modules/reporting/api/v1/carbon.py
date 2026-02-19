@@ -4,7 +4,7 @@ from typing import Annotated, Any, Dict
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -345,11 +345,15 @@ async def analyze_graviton_opportunities(
 @router.get("/intensity")
 @rate_limit("30/minute")
 async def get_carbon_intensity_forecast(
+    request: Request,
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
     region: str = Query(default="us-east-1"),
     hours: int = Query(default=24, ge=1, le=72),
 ) -> Dict[str, Any]:
     """Get current and forecasted carbon intensity for a region."""
+    # Consumed by slowapi decorator for keying; keep explicit for correctness.
+    del request
+
     cache_key = f"api:carbon:intensity:{region}:{hours}"
     cached = await _read_cached_payload(cache_key)
     if cached is not None:

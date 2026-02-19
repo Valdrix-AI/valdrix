@@ -5,12 +5,7 @@ from typing import (
     Any,
     AsyncGenerator,
     Dict,
-    List,
     Optional,
-    Type,
-    Union,
-    Sequence,
-    Tuple,
     cast,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -61,10 +56,23 @@ connect_args: dict[str, Any] = {}
 # OR if the provided URL is not sqlite and we want to prevent side-effects on real DBs
 # (unless explicitly allowed via a flag if we had one, but let's keep it safe for now).
 effective_url = db_url
+raw_allow_test_database_url = getattr(settings, "ALLOW_TEST_DATABASE_URL", False)
+if isinstance(raw_allow_test_database_url, bool):
+    allow_test_database_url = raw_allow_test_database_url
+elif isinstance(raw_allow_test_database_url, str):
+    allow_test_database_url = raw_allow_test_database_url.strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+else:
+    # Default to False for non-bool/non-string values (e.g. MagicMock in tests).
+    allow_test_database_url = False
 if settings.TESTING and not db_url:
     effective_url = "sqlite+aiosqlite:///:memory:"
 elif (
-    settings.TESTING and "sqlite" not in db_url and not settings.ALLOW_TEST_DATABASE_URL
+    settings.TESTING and "sqlite" not in db_url and not allow_test_database_url
 ):
     # Safety feature: swap non-sqlite to memory in testing to prevent accidental wipes.
     # To test against real Postgres, you must use a sqlite URL or handle it elsewhere.
@@ -217,20 +225,83 @@ async_session_maker = async_sessionmaker(
 
 
 def _session_uses_postgresql(session: AsyncSession) -> bool:
+    backend, source = _resolve_session_backend(session)
+    if backend == "unknown":
+        logger.warning(
+            "session_dialect_unknown",
+            source=source,
+            fail_safe_default=False,
+        )
+        return False
+    return backend == "postgresql"
+
+
+def _backend_from_url(url: str) -> Optional[str]:
+    value = url.strip().lower()
+    if not value:
+        return None
+    if "postgresql" in value:
+        return "postgresql"
+    if "sqlite" in value:
+        return "sqlite"
+    if "mysql" in value:
+        return "mysql"
+    return None
+
+
+def _resolve_session_backend(session: AsyncSession) -> tuple[str, str]:
     """
-    Check if the session is using a PostgreSQL backend.
-    Finding #14: Avoid fallback to module-level URL which may be misleading in tests.
+    Resolve effective DB backend for a session with explicit source metadata.
+    Returns `(backend, source)` where backend is one of:
+    - `postgresql`, `sqlite`, `mysql`
+    - `unknown` (unresolved)
+
+    Resolution order:
+    1) `session.bind.dialect.name`
+    2) `session.bind.url`
+    3) `session.get_bind()` dialect/url
+    4) module-level configured URL fallback (`effective_url`)
     """
     try:
-        # Use the actual engine URL from the session
-        url = str(getattr(session.bind, "url", "")) if session.bind else ""
-        return "postgresql" in url.lower()
-    except AttributeError:
-        # session.bind might be None or not have a .url in some test doubles
-        return False
+        bind = getattr(session, "bind", None)
+        if bind is not None:
+            dialect_name = getattr(getattr(bind, "dialect", None), "name", None)
+            if isinstance(dialect_name, str) and dialect_name.strip():
+                return dialect_name.strip().lower(), "session.bind.dialect.name"
+
+            bind_url = getattr(bind, "url", None)
+            if bind_url is not None:
+                backend = _backend_from_url(str(bind_url))
+                if backend is not None:
+                    return backend, "session.bind.url"
     except Exception as e:
-        logger.debug("session_dialect_detection_failed", error=str(e), exc_info=True)
-        return False # Default to false on unexpected errors
+        logger.debug("session_bind_introspection_failed", error=str(e), exc_info=True)
+
+    try:
+        runtime_bind = session.get_bind()
+        if runtime_bind is not None:
+            dialect_name = getattr(getattr(runtime_bind, "dialect", None), "name", None)
+            if isinstance(dialect_name, str) and dialect_name.strip():
+                return dialect_name.strip().lower(), "session.get_bind().dialect.name"
+
+            runtime_url = getattr(runtime_bind, "url", None)
+            if runtime_url is not None:
+                backend = _backend_from_url(str(runtime_url))
+                if backend is not None:
+                    return backend, "session.get_bind().url"
+    except Exception as e:
+        logger.debug("session_runtime_bind_resolution_failed", error=str(e), exc_info=True)
+
+    fallback_backend = _backend_from_url(effective_url)
+    if fallback_backend is not None:
+        logger.warning(
+            "session_dialect_fallback_used",
+            backend=fallback_backend,
+            source="effective_url",
+        )
+        return fallback_backend, "effective_url"
+
+    return "unknown", "unresolved"
 
 
 async def get_db(
@@ -247,8 +318,9 @@ async def get_db(
             tenant_key = str(tenant_id) if isinstance(tenant_id, uuid.UUID) else tenant_id
             if tenant_id:
                 try:
-                    # RLS: Only execute on PostgreSQL
-                    if _session_uses_postgresql(session):
+                    backend, source = _resolve_session_backend(session)
+                    # RLS: execute set_config only on PostgreSQL.
+                    if backend == "postgresql":
                         rls_start = time.perf_counter()
                         await session.execute(
                             text(
@@ -257,7 +329,18 @@ async def get_db(
                             {"tid": str(tenant_id)},
                         )
                         RLS_ENFORCEMENT_LATENCY.observe(time.perf_counter() - rls_start)
-                    rls_context_set = True
+                        rls_context_set = True
+                    elif backend == "unknown":
+                        # Fail closed: do not mark context as set when backend cannot be resolved.
+                        logger.error(
+                            "rls_session_backend_unknown_fail_closed",
+                            source=source,
+                            tenant_id=tenant_key,
+                        )
+                        rls_context_set = False
+                    else:
+                        # Non-Postgres backend (e.g. sqlite in tests).
+                        rls_context_set = True
 
                 except Exception as e:
                     logger.warning("rls_context_set_failed", error=str(e))
@@ -305,15 +388,27 @@ async def get_system_db() -> AsyncGenerator[AsyncSession, None]:
 async def set_session_tenant_id(session: AsyncSession, tenant_id: Optional[UUID]) -> None:
     """Sets the tenant_id in the database session's info dictionary."""
     session.info["tenant_id"] = tenant_id
-    # Force the session to be 'dirty' even if no model changes were made yet
-    session.info["rls_context_set"] = True
 
     # We must ensure the connection itself has the info, as listeners look there
     conn = await session.connection()
+    backend, source = _resolve_session_backend(session)
+    if backend == "unknown":
+        # Fail closed on unresolved backend detection.
+        session.info["rls_context_set"] = False
+        conn.info["rls_context_set"] = False
+        logger.error(
+            "set_session_tenant_id_backend_unknown_fail_closed",
+            source=source,
+            tenant_id=str(tenant_id) if tenant_id else None,
+        )
+        return
+
+    # Mark context as set for known backends.
+    session.info["rls_context_set"] = True
     conn.info["rls_context_set"] = True
 
-    # For Postgres, execute the actual set_config for RLS
-    if _session_uses_postgresql(session):
+    # For Postgres, execute the actual set_config for RLS.
+    if backend == "postgresql":
         try:
             rls_start = time.perf_counter()
             await session.execute(
@@ -322,6 +417,8 @@ async def set_session_tenant_id(session: AsyncSession, tenant_id: Optional[UUID]
             )
             RLS_ENFORCEMENT_LATENCY.observe(time.perf_counter() - rls_start)
         except Exception as e:
+            session.info["rls_context_set"] = False
+            conn.info["rls_context_set"] = False
             logger.warning("failed_to_set_rls_config_in_session", error=str(e))
 
 

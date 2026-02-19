@@ -6,7 +6,7 @@ Shows team savings rankings ("Who saved the most?").
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +63,7 @@ class LeaderboardResponse(BaseModel):
     PricingTier.GROWTH, PricingTier.PRO, PricingTier.ENTERPRISE, PricingTier.FREE
 )
 async def get_leaderboard(
+    request: Request,
     period: str = Query("30d", pattern="^(7d|30d|90d|all)$"),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -74,6 +75,9 @@ async def get_leaderboard(
     """
     from app.models.tenant import User
     from app.models.remediation import RemediationStatus
+
+    # Consumed by slowapi decorator for keying; keep explicit for correctness.
+    del request
 
     tenant_id = _require_tenant_id(current_user)
     cache = get_cache_service()

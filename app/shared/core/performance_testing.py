@@ -25,6 +25,15 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 
+def format_exception_message(exc: BaseException) -> str:
+    """Return stable, non-empty exception text for evidence payloads."""
+    exc_type = exc.__class__.__name__
+    detail = str(exc).strip()
+    if detail:
+        return f"{exc_type}: {detail}"
+    return exc_type
+
+
 @dataclass
 class LoadTestConfig:
     """Configuration for load testing."""
@@ -33,7 +42,7 @@ class LoadTestConfig:
     concurrent_users: int = 10  # Number of concurrent users
     ramp_up_seconds: int = 10  # Time to ramp up to full concurrency
     target_url: str = "http://localhost:8000"
-    endpoints: List[str] = field(default_factory=lambda: ["/health"])
+    endpoints: List[str] = field(default_factory=lambda: ["/health/live"])
     request_timeout: float = 30.0
     headers: Dict[str, str] = field(default_factory=dict)
 
@@ -130,7 +139,7 @@ class LoadTester:
                 request_start = time.time()
                 try:
                     url = f"{self.config.target_url}{endpoint}"
-                    response = await client.get(url)
+                    response = await client.get(url, headers=self.config.headers)
 
                     response_time = time.time() - request_start
 
@@ -144,7 +153,7 @@ class LoadTester:
                     else:
                         self.results.failed_requests += 1
                         self.results.errors.append(
-                            f"HTTP {response.status_code}: {response.text[:100]}"
+                            f"{endpoint} -> HTTP {response.status_code}: {response.text[:100]}"
                         )
 
                     API_REQUESTS_TOTAL.labels(
@@ -174,7 +183,9 @@ class LoadTester:
                     response_time = time.time() - request_start
                     self.results.total_requests += 1
                     self.results.failed_requests += 1
-                    self.results.errors.append(str(e))
+                    self.results.errors.append(
+                        f"{endpoint} -> {format_exception_message(e)}"
+                    )
                     API_REQUESTS_TOTAL.labels(
                         method="GET", endpoint=endpoint, status_code="exception"
                     ).inc()

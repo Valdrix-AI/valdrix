@@ -6,6 +6,7 @@ Implements atomic budget reservation/debit pattern to prevent cost overages.
 """
 
 import structlog
+import asyncio
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
@@ -14,16 +15,22 @@ from typing import Any
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.llm import LLMBudget, LLMUsage
-from app.shared.core.exceptions import BudgetExceededError
+from app.shared.core.exceptions import BudgetExceededError, LLMFairUseExceededError
 from app.shared.llm.pricing_data import LLM_PRICING
 from app.shared.llm.pricing_data import ProviderCost
 from app.shared.core.cache import get_cache_service
+from app.shared.core.config import get_settings
 
 # Moved BudgetStatus here
-from app.shared.core.ops_metrics import LLM_PRE_AUTH_DENIALS, LLM_SPEND_USD
+from app.shared.core.ops_metrics import (
+    LLM_PRE_AUTH_DENIALS,
+    LLM_SPEND_USD,
+    LLM_FAIR_USE_DENIALS,
+    LLM_FAIR_USE_EVALUATIONS,
+    LLM_FAIR_USE_OBSERVED,
+)
 from app.shared.core.pricing import get_tenant_tier, PricingTier
 from app.shared.core.logging import audit_log
-from app.shared.core.async_utils import maybe_call
 
 logger = structlog.get_logger()
 
@@ -48,8 +55,10 @@ class LLMBudgetManager:
     AVG_PROMPT_TOKENS = 500
     AVG_RESPONSE_TOKENS = 500
 
-    # PRODUCTION: 2026 BYOK Revenue Model
-    BYOK_PLATFORM_FEE_USD = Decimal("0.50")
+    # BYOK policy: no surcharge; platform pricing is tier-based.
+    BYOK_PLATFORM_FEE_USD = Decimal("0.00")
+    _local_inflight_counts: dict[str, int] = {}
+    _local_inflight_lock = asyncio.Lock()
 
     @staticmethod
     def _to_decimal(v: Any) -> Decimal:
@@ -155,6 +164,289 @@ class LLMBudgetManager:
                 },
             )
 
+    @staticmethod
+    def _fair_use_inflight_key(tenant_id: UUID) -> str:
+        return f"llm:fair_use:inflight:{tenant_id}"
+
+    @staticmethod
+    def _fair_use_tier_allowed(tier: PricingTier) -> bool:
+        return tier in {PricingTier.PRO, PricingTier.ENTERPRISE}
+
+    @staticmethod
+    def _fair_use_daily_soft_cap(tier: PricingTier) -> int | None:
+        settings = get_settings()
+        cap_map = {
+            PricingTier.PRO: settings.LLM_FAIR_USE_PRO_DAILY_SOFT_CAP,
+            PricingTier.ENTERPRISE: settings.LLM_FAIR_USE_ENTERPRISE_DAILY_SOFT_CAP,
+        }
+        cap = cap_map.get(tier)
+        if cap is None:
+            return None
+        try:
+            cap_int = int(cap)
+        except (TypeError, ValueError):
+            return None
+        return cap_int if cap_int > 0 else None
+
+    @staticmethod
+    async def _count_requests_in_window(
+        tenant_id: UUID,
+        db: AsyncSession,
+        start: datetime,
+        end: datetime | None = None,
+    ) -> int:
+        query = select(func.count(LLMUsage.id)).where(
+            LLMUsage.tenant_id == tenant_id,
+            LLMUsage.created_at >= start,
+        )
+        if end is not None:
+            query = query.where(LLMUsage.created_at < end)
+        result = await db.execute(query)
+        return int(result.scalar() or 0)
+
+    @classmethod
+    async def _acquire_fair_use_inflight_slot(
+        cls, tenant_id: UUID, max_inflight: int, ttl_seconds: int
+    ) -> tuple[bool, int]:
+        """Acquire one in-flight request slot for a tenant."""
+        key = cls._fair_use_inflight_key(tenant_id)
+
+        cache = get_cache_service()
+        if cache.enabled and cache.client is not None:
+            try:
+                client = cache.client
+                incr = getattr(client, "incr", None)
+                decr = getattr(client, "decr", None)
+                expire = getattr(client, "expire", None)
+                if callable(incr) and callable(decr):
+                    current = int(await incr(key))
+                    if callable(expire):
+                        await expire(key, ttl_seconds)
+                    if current > max_inflight:
+                        await decr(key)
+                        return False, max(current - 1, 0)
+                    return True, current
+            except Exception as exc:
+                logger.warning(
+                    "llm_fair_use_redis_acquire_failed",
+                    tenant_id=str(tenant_id),
+                    error=str(exc),
+                )
+
+        async with cls._local_inflight_lock:
+            current = cls._local_inflight_counts.get(key, 0) + 1
+            cls._local_inflight_counts[key] = current
+            if current > max_inflight:
+                next_value = current - 1
+                if next_value <= 0:
+                    cls._local_inflight_counts.pop(key, None)
+                else:
+                    cls._local_inflight_counts[key] = next_value
+                return False, max(next_value, 0)
+            return True, current
+
+    @classmethod
+    async def _release_fair_use_inflight_slot(cls, tenant_id: UUID) -> None:
+        """Best-effort release for one in-flight request slot."""
+        key = cls._fair_use_inflight_key(tenant_id)
+        if not get_settings().LLM_FAIR_USE_GUARDS_ENABLED:
+            async with cls._local_inflight_lock:
+                cls._local_inflight_counts.pop(key, None)
+            return
+
+        cache = get_cache_service()
+        if cache.enabled and cache.client is not None:
+            try:
+                decr = getattr(cache.client, "decr", None)
+                if callable(decr):
+                    current = int(await decr(key))
+                    if current < 0:
+                        set_fn = getattr(cache.client, "set", None)
+                        if callable(set_fn):
+                            await set_fn(key, "0", ex=60)
+                    return
+            except Exception as exc:
+                logger.warning(
+                    "llm_fair_use_redis_release_failed",
+                    tenant_id=str(tenant_id),
+                    error=str(exc),
+                )
+
+        async with cls._local_inflight_lock:
+            current = cls._local_inflight_counts.get(key, 0)
+            if current <= 1:
+                cls._local_inflight_counts.pop(key, None)
+            else:
+                cls._local_inflight_counts[key] = current - 1
+
+    @classmethod
+    async def _enforce_fair_use_guards(
+        cls,
+        tenant_id: UUID,
+        db: AsyncSession,
+        tier: PricingTier,
+    ) -> bool:
+        """
+        Optional fair-use guardrails for future near-unlimited tiers.
+
+        Returns True when a concurrency slot is acquired and must be released.
+        """
+        settings = get_settings()
+        tier_label = tier.value
+        if not settings.LLM_FAIR_USE_GUARDS_ENABLED:
+            return False
+        if not cls._fair_use_tier_allowed(tier):
+            return False
+
+        now = datetime.now(timezone.utc)
+
+        daily_soft_cap = cls._fair_use_daily_soft_cap(tier)
+        if daily_soft_cap is not None:
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+            requests_today = await cls._count_requests_in_window(
+                tenant_id=tenant_id, db=db, start=day_start, end=day_end
+            )
+            LLM_FAIR_USE_OBSERVED.labels(gate="soft_daily", tenant_tier=tier_label).set(
+                requests_today
+            )
+            if requests_today >= daily_soft_cap:
+                LLM_PRE_AUTH_DENIALS.labels(
+                    reason="fair_use_soft_daily", tenant_tier=tier_label
+                ).inc()
+                LLM_FAIR_USE_DENIALS.labels(
+                    gate="soft_daily", tenant_tier=tier_label
+                ).inc()
+                LLM_FAIR_USE_EVALUATIONS.labels(
+                    gate="soft_daily", outcome="deny", tenant_tier=tier_label
+                ).inc()
+                audit_log(
+                    event="llm_fair_use_denied",
+                    user_id="system",
+                    tenant_id=str(tenant_id),
+                    details={
+                        "gate": "soft_daily",
+                        "tier": tier_label,
+                        "limit": daily_soft_cap,
+                        "observed": requests_today,
+                    },
+                )
+                raise LLMFairUseExceededError(
+                    "Daily fair-use limit reached. Retry tomorrow or contact support to increase limits.",
+                    details={
+                        "gate": "soft_daily",
+                        "limit": daily_soft_cap,
+                        "observed": requests_today,
+                        "recommendation": "upgrade_or_contact_support",
+                    },
+                )
+            LLM_FAIR_USE_EVALUATIONS.labels(
+                gate="soft_daily", outcome="allow", tenant_tier=tier_label
+            ).inc()
+
+        try:
+            per_minute_cap = int(settings.LLM_FAIR_USE_PER_MINUTE_CAP)
+        except (TypeError, ValueError):
+            per_minute_cap = 0
+        if per_minute_cap > 0:
+            minute_start = now - timedelta(minutes=1)
+            requests_last_minute = await cls._count_requests_in_window(
+                tenant_id=tenant_id, db=db, start=minute_start
+            )
+            LLM_FAIR_USE_OBSERVED.labels(gate="per_minute", tenant_tier=tier_label).set(
+                requests_last_minute
+            )
+            if requests_last_minute >= per_minute_cap:
+                LLM_PRE_AUTH_DENIALS.labels(
+                    reason="fair_use_per_minute", tenant_tier=tier_label
+                ).inc()
+                LLM_FAIR_USE_DENIALS.labels(
+                    gate="per_minute", tenant_tier=tier_label
+                ).inc()
+                LLM_FAIR_USE_EVALUATIONS.labels(
+                    gate="per_minute", outcome="deny", tenant_tier=tier_label
+                ).inc()
+                audit_log(
+                    event="llm_fair_use_denied",
+                    user_id="system",
+                    tenant_id=str(tenant_id),
+                    details={
+                        "gate": "per_minute",
+                        "tier": tier_label,
+                        "limit": per_minute_cap,
+                        "observed": requests_last_minute,
+                    },
+                )
+                raise LLMFairUseExceededError(
+                    "Rate limit reached for this tenant. Retry in about 60 seconds or contact support for higher throughput.",
+                    details={
+                        "gate": "per_minute",
+                        "limit": per_minute_cap,
+                        "observed": requests_last_minute,
+                        "retry_after_seconds": 60,
+                        "recommendation": "upgrade_or_contact_support",
+                    },
+                )
+            LLM_FAIR_USE_EVALUATIONS.labels(
+                gate="per_minute", outcome="allow", tenant_tier=tier_label
+            ).inc()
+
+        try:
+            max_concurrency = int(settings.LLM_FAIR_USE_PER_TENANT_CONCURRENCY_CAP)
+        except (TypeError, ValueError):
+            max_concurrency = 0
+        if max_concurrency <= 0:
+            return False
+
+        try:
+            lease_ttl = int(settings.LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS)
+        except (TypeError, ValueError):
+            lease_ttl = 180
+
+        acquired, current_inflight = await cls._acquire_fair_use_inflight_slot(
+            tenant_id=tenant_id,
+            max_inflight=max_concurrency,
+            ttl_seconds=max(30, lease_ttl),
+        )
+        LLM_FAIR_USE_OBSERVED.labels(gate="concurrency", tenant_tier=tier_label).set(
+            current_inflight
+        )
+        if not acquired:
+            LLM_PRE_AUTH_DENIALS.labels(
+                reason="fair_use_concurrency", tenant_tier=tier_label
+            ).inc()
+            LLM_FAIR_USE_DENIALS.labels(
+                gate="concurrency", tenant_tier=tier_label
+            ).inc()
+            LLM_FAIR_USE_EVALUATIONS.labels(
+                gate="concurrency", outcome="deny", tenant_tier=tier_label
+            ).inc()
+            audit_log(
+                event="llm_fair_use_denied",
+                user_id="system",
+                tenant_id=str(tenant_id),
+                details={
+                    "gate": "concurrency",
+                    "tier": tier_label,
+                    "limit": max_concurrency,
+                    "observed": current_inflight,
+                },
+            )
+            raise LLMFairUseExceededError(
+                "Too many in-flight LLM requests for this tenant. Retry shortly or contact support for higher throughput.",
+                details={
+                    "gate": "concurrency",
+                    "limit": max_concurrency,
+                    "observed": current_inflight,
+                    "retry_after_seconds": max(5, min(lease_ttl, 60)),
+                    "recommendation": "upgrade_or_contact_support",
+                },
+            )
+        LLM_FAIR_USE_EVALUATIONS.labels(
+            gate="concurrency", outcome="allow", tenant_tier=tier_label
+        ).inc()
+        return True
+
     @classmethod
     async def check_and_reserve(
         cls,
@@ -172,10 +464,20 @@ class LLMBudgetManager:
         estimated_cost = cls.estimate_cost(
             prompt_tokens, completion_tokens, model, provider
         )
+        concurrency_slot_acquired = False
+        tier_for_metrics = "unknown"
 
         try:
             # 0. Enforce plan-level daily LLM request quota.
             await cls._enforce_daily_analysis_limit(tenant_id, db)
+            if get_settings().LLM_FAIR_USE_GUARDS_ENABLED:
+                tier = await get_tenant_tier(tenant_id, db)
+                tier_for_metrics = tier.value
+                concurrency_slot_acquired = await cls._enforce_fair_use_guards(
+                    tenant_id=tenant_id,
+                    db=db,
+                    tier=tier,
+                )
 
             # 1. Fetch current budget state (with FOR UPDATE lock)
             result = await db.execute(
@@ -246,7 +548,7 @@ class LLMBudgetManager:
 
                 # Emit metric for alerting
                 LLM_PRE_AUTH_DENIALS.labels(
-                    reason="hard_limit_exceeded", tenant_tier="unknown"
+                    reason="hard_limit_exceeded", tenant_tier=tier_for_metrics
                 ).inc()
 
                 raise BudgetExceededError(
@@ -262,7 +564,7 @@ class LLMBudgetManager:
 
             # 4. Atomic Increment of Pending Reservations
             budget.pending_reservations_usd += estimated_cost
-            await db.flush() # Ensure sync to DB state before proceeding
+            await db.flush()  # Ensure sync to DB state before proceeding
 
             logger.info(
                 "llm_budget_reserved",
@@ -276,8 +578,12 @@ class LLMBudgetManager:
             return estimated_cost
 
         except BudgetExceededError:
+            if concurrency_slot_acquired:
+                await cls._release_fair_use_inflight_slot(tenant_id)
             raise
         except Exception as e:
+            if concurrency_slot_acquired:
+                await cls._release_fair_use_inflight_slot(tenant_id)
             logger.error(
                 "budget_check_failed",
                 tenant_id=str(tenant_id),
@@ -329,16 +635,16 @@ class LLMBudgetManager:
                 # and add the actual cost.
                 # For simplicity, we decrement pending_reservations_usd by the estimate
                 # and increment monthly_spend_usd by actual.
-                
-                # We need the original reservation to be perfect, but since we don't store 
+
+                # We need the original reservation to be perfect, but since we don't store
                 # per-request reservation IDs in the DB table yet, we perform a safe decrement.
                 estimated_reservation = cls.estimate_cost(
                     prompt_tokens, completion_tokens, model, provider
                 )
-                
+
                 budget.pending_reservations_usd = max(
-                    Decimal("0.0"), 
-                    budget.pending_reservations_usd - estimated_reservation
+                    Decimal("0.0"),
+                    budget.pending_reservations_usd - estimated_reservation,
                 )
                 budget.monthly_spend_usd += actual_cost_decimal
                 await db.flush()
@@ -392,6 +698,8 @@ class LLMBudgetManager:
             )
             # Don't fail the request if we can't record usage
             # (the usage is what matters, not the audit log)
+        finally:
+            await cls._release_fair_use_inflight_slot(tenant_id)
 
     @classmethod
     async def check_budget(cls, tenant_id: UUID, db: AsyncSession) -> BudgetStatus:
