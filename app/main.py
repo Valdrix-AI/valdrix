@@ -3,23 +3,24 @@ import inspect
 import json
 import os
 from contextlib import asynccontextmanager
-from typing import Annotated, Any, AsyncGenerator, Awaitable, Callable, Dict, List, Sequence, TypeVar, cast
+from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Sequence, TypeVar, cast
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
-from prometheus_client import Gauge
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.shared.core.app_routes import register_api_routers, register_lifecycle_routes
 from app.shared.core.config import get_settings
 from app.shared.core.logging import setup_logging
 from app.shared.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
@@ -30,43 +31,16 @@ from app.shared.core.sentry import init_sentry
 # SchedulerService imported lazily in lifespan() to avoid Celery blocking on startup
 from app.shared.core.timeout import TimeoutMiddleware
 from app.shared.core.tracing import setup_tracing
-from app.shared.db.session import get_db, async_session_maker, engine
-from sqlalchemy.ext.asyncio import AsyncSession
+from app.shared.db.session import async_session_maker, engine
 from app.shared.core.exceptions import ValdrixException
 from app.shared.core.rate_limit import (
     setup_rate_limiting,
 )
 
 # Ensure all models are registered with SQLAlchemy
-# Ensure all models are registered with SQLAlchemy
 
 
-from app.modules.governance.api.v1.settings.onboard import router as onboard_router
-from app.modules.governance.api.v1.settings.connections import (
-    router as connections_router,
-)
-from app.modules.governance.api.v1.settings import router as settings_router
-from app.modules.reporting.api.v1.leaderboards import router as leaderboards_router
-from app.modules.reporting.api.v1.costs import router as costs_router
-from app.modules.reporting.api.v1.savings import router as savings_router
-from app.modules.reporting.api.v1.attribution import router as attribution_router
-from app.modules.reporting.api.v1.carbon import router as carbon_router
-from app.modules.reporting.api.v1.leadership import router as leadership_router
-from app.modules.optimization.api.v1.zombies import router as zombies_router
-from app.modules.optimization.api.v1.strategies import router as strategies_router
-from app.modules.governance.api.v1.admin import router as admin_router
-from app.modules.billing.api.v1.billing import router as billing_router
-from app.modules.governance.api.v1.audit import router as audit_router
-from app.modules.governance.api.v1.jobs import router as jobs_router
-from app.modules.governance.api.v1.health_dashboard import (
-    router as health_dashboard_router,
-)
-from app.modules.reporting.api.v1.usage import router as usage_router
-from app.modules.governance.api.oidc import router as oidc_router
-from app.modules.governance.api.v1.public import router as public_router
-from app.modules.reporting.api.v1.currency import router as currency_router
 from app.modules.governance.api.v1.scim import (
-    router as scim_router,
     ScimError,
     scim_error_response,
 )
@@ -268,17 +242,24 @@ async def csrf_protect_exception_handler(
 @valdrix_app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Handle FastAPI HTTP exceptions with standardized format."""
+    is_prod = settings.ENVIRONMENT.lower() in {"production", "staging"}
+    detail_text = str(exc.detail) if isinstance(exc.detail, str) else "Request failed"
+    if is_prod and exc.status_code >= 500:
+        error_text = "Internal Server Error"
+        message_text = "An unexpected internal error occurred"
+    else:
+        error_text = detail_text if isinstance(exc.detail, str) else "Error"
+        message_text = detail_text
+
     API_ERRORS_TOTAL.labels(
         path=request.url.path, method=request.method, status_code=exc.status_code
     ).inc()
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "error": exc.detail if isinstance(exc.detail, str) else "Error",
+            "error": error_text,
             "code": "HTTP_ERROR",
-            "message": str(exc.detail)
-            if isinstance(exc.detail, str)
-            else "Request failed",
+            "message": message_text,
         },
     )
 
@@ -404,45 +385,12 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 
     return handle_exception(request, exc)
 
-# Prometheus Gauge for System Health
-SYSTEM_HEALTH = Gauge(
-    "valdrix_system_health",
-    "System health status (1=healthy, 0.5=degraded, 0=unhealthy)",
+# Keep app entrypoint lean by registering lifecycle/health routes in a focused module.
+register_lifecycle_routes(
+    valdrix_app,
+    app_name=settings.APP_NAME,
+    version=settings.VERSION,
 )
-
-
-@valdrix_app.get("/", tags=["Lifecycle"])
-async def root() -> Dict[str, str]:
-    """Root endpoint for basic reachability."""
-    return {"status": "ok", "app": settings.APP_NAME, "version": settings.VERSION}
-
-
-@valdrix_app.get("/health/live", tags=["Lifecycle"])
-async def liveness_check() -> Dict[str, str]:
-    """Fast liveness check without dependencies."""
-    return {"status": "healthy"}
-
-
-@valdrix_app.get("/health", tags=["Lifecycle"])
-async def health_check(db: Annotated[AsyncSession, Depends(get_db)]) -> Any:
-    """
-    Enhanced health check for load balancers.
-    Checks DB, Redis, and AWS STS reachability.
-    """
-    from app.shared.core.health import HealthService
-
-    service = HealthService(db)
-    health = await service.check_all()
-
-    # Update Prometheus metrics
-    status_map = {"healthy": 1.0, "degraded": 0.5, "unhealthy": 0.0}
-    SYSTEM_HEALTH.set(status_map.get(health["status"], 0.0))
-
-    # Critical dependency: Database
-    if health["database"]["status"] == "down":
-        return JSONResponse(status_code=503, content=health)
-
-    return health
 
 
 # Initialize Prometheus Metrics
@@ -454,6 +402,9 @@ Instrumentator().instrument(valdrix_app).expose(valdrix_app)
 
 # Add timeout middleware (5 minutes for long zombie scans)
 valdrix_app.add_middleware(TimeoutMiddleware, timeout_seconds=300)
+
+# Compress larger JSON responses to reduce bandwidth/latency on dashboard-heavy endpoints
+valdrix_app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Security headers and request ID
 valdrix_app.add_middleware(SecurityHeadersMiddleware)
@@ -522,27 +473,5 @@ async def csrf_protect_middleware(
     return await call_next(request)
 
 
-# Register Routers
-valdrix_app.include_router(onboard_router, prefix="/api/v1/settings/onboard")
-valdrix_app.include_router(connections_router, prefix="/api/v1/settings/connections")
-valdrix_app.include_router(settings_router, prefix="/api/v1/settings")
-valdrix_app.include_router(leaderboards_router, prefix="/api/v1/leaderboards")
-valdrix_app.include_router(costs_router, prefix="/api/v1/costs")
-valdrix_app.include_router(savings_router, prefix="/api/v1/savings")
-valdrix_app.include_router(leadership_router, prefix="/api/v1/leadership")
-valdrix_app.include_router(attribution_router, prefix="/api/v1/attribution")
-valdrix_app.include_router(carbon_router, prefix="/api/v1/carbon")
-valdrix_app.include_router(zombies_router, prefix="/api/v1/zombies")
-valdrix_app.include_router(strategies_router, prefix="/api/v1/strategies")
-valdrix_app.include_router(admin_router, prefix="/api/v1/admin")
-valdrix_app.include_router(billing_router, prefix="/api/v1/billing")
-valdrix_app.include_router(audit_router, prefix="/api/v1/audit")
-valdrix_app.include_router(jobs_router, prefix="/api/v1/jobs")
-valdrix_app.include_router(
-    health_dashboard_router, prefix="/api/v1/admin/health-dashboard"
-)
-valdrix_app.include_router(usage_router, prefix="/api/v1/usage")
-valdrix_app.include_router(currency_router, prefix="/api/v1/currency")
-valdrix_app.include_router(oidc_router)
-valdrix_app.include_router(public_router, prefix="/api/v1/public")
-valdrix_app.include_router(scim_router, prefix="/scim/v2")
+# Register API routers in a dedicated registry module for maintainability.
+register_api_routers(valdrix_app)

@@ -439,6 +439,20 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-mgmt-cognitiveservices"
+version = "14.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-mgmt-core" },
+    { name = "msrest" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fa/8e/9fcfdd507413a2536c5458b40942705ea8d74fe4e17f05fd1c32bb0225a9/azure_mgmt_cognitiveservices-14.1.0.tar.gz", hash = "sha256:915191374d0adb443863c20aaea2c9f3b9d558a849ac2b78f152249262fdcaf8", size = 184444, upload-time = "2025-10-24T07:28:14.229Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d3/25/ed6bbc01a03991255dd22aa41091360d225f1be20c88710af0f4a6c27459/azure_mgmt_cognitiveservices-14.1.0-py3-none-any.whl", hash = "sha256:3c0eecc00d183842a11d754f4f5c3328ff86f2d6c0a2b81b28dd7e073680258e", size = 290096, upload-time = "2025-10-24T07:28:15.766Z" },
+]
+
+[[package]]
 name = "azure-mgmt-compute"
 version = "37.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -450,6 +464,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d3/bc/6fa430dcf5b6b312d91669444edfe167e72eab03b216034c136ccaf19864/azure_mgmt_compute-37.1.0.tar.gz", hash = "sha256:57aed44f84c2a53323e11c3731485dd7be99aee0dd1a74f5fa77df607943d34a", size = 519133, upload-time = "2025-11-17T09:14:53.31Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/26/31/b204fde7990eee46b345fb3d73a61a1c5de8425505a9cca386984f3da69c/azure_mgmt_compute-37.1.0-py3-none-any.whl", hash = "sha256:e6ca720d869787cc6d35f021455e1d7b3128882a11897fc45594133a2832f5fb", size = 665064, upload-time = "2025-11-17T09:14:54.936Z" },
+]
+
+[[package]]
+name = "azure-mgmt-containerservice"
+version = "40.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-mgmt-core" },
+    { name = "msrest" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ed/2c/507e5abdb984ce84849f12e37a6a5c31927bdf2d466952af05bb81d36dda/azure_mgmt_containerservice-40.2.0.tar.gz", hash = "sha256:acd55cae95b768efeb0377d83dea07d610c434eec0c089e02935ff31f0e3e07d", size = 206403, upload-time = "2025-11-24T03:36:46.442Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/f0/c9407fc48457723f70c1a6a3d995f0a1f3c0de1f7400fe2484773ed19fdc/azure_mgmt_containerservice-40.2.0-py3-none-any.whl", hash = "sha256:a73d9720dd0ae29257dd6dcf39942b9274f15b588ffe25f4564aa77798eb4703", size = 226549, upload-time = "2025-11-24T03:36:47.891Z" },
 ]
 
 [[package]]
@@ -520,6 +548,49 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/50/4c/b27a3dfbedebbcc8e346a956a803528bd94a19fdf14b1de4bd781b03a6cc/azure_mgmt_resource-24.0.0.tar.gz", hash = "sha256:cf6b8995fcdd407ac9ff1dd474087129429a1d90dbb1ac77f97c19b96237b265", size = 3030022, upload-time = "2025-06-17T08:04:01.731Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/14/18/f047cb553dad6fdb65c625c4fe48552e043c4e9a859416a70c5047d07475/azure_mgmt_resource-24.0.0-py3-none-any.whl", hash = "sha256:27b32cd223e2784269f5a0db3c282042886ee4072d79cedc638438ece7cd0df4", size = 3613790, upload-time = "2025-06-17T08:04:04.046Z" },
+]
+
+[[package]]
+name = "azure-mgmt-search"
+version = "9.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-common" },
+    { name = "azure-mgmt-core" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/68/a2/df10a6b0ccf903a2f5a712d0ee49cd863d1c04cb594808627ae4efd4e026/azure_mgmt_search-9.2.0.tar.gz", hash = "sha256:a0da0ec332d1f43d0f6acb63b8cfd80085b075e91afcf812f8c769ad9fdcad84", size = 85694, upload-time = "2025-07-21T06:25:02.923Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6d/c8/5bd4676358118c01e64934dcc374b383e9303e24621399b47e22d7f3d88d/azure_mgmt_search-9.2.0-py3-none-any.whl", hash = "sha256:29dbbec94c4668c65a5e5138a724532d5f08d3ed1cfcb458f9da46dc8e5400ea", size = 124064, upload-time = "2025-07-21T06:25:03.969Z" },
+]
+
+[[package]]
+name = "azure-mgmt-sql"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-common" },
+    { name = "azure-mgmt-core" },
+    { name = "msrest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3f/af/398c57d15064ea23475076cd087b1a143b66d33a029e6e47c4688ca32310/azure-mgmt-sql-3.0.1.zip", hash = "sha256:129042cc011225e27aee6ef2697d585fa5722e5d1aeb0038af6ad2451a285457", size = 996625, upload-time = "2021-07-16T02:07:56.492Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0e/46/db6dd21a237c32eb747c4a1790a6b0aafe1f52c55e07b90f732231027d47/azure_mgmt_sql-3.0.1-py2.py3-none-any.whl", hash = "sha256:1d1dd940d4d41be4ee319aad626341251572a5bf4a2addec71779432d9a1381f", size = 912881, upload-time = "2021-07-16T02:07:53.079Z" },
+]
+
+[[package]]
+name = "azure-mgmt-web"
+version = "10.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-mgmt-core" },
+    { name = "msrest" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/24/dc/7b96067ce47b16a36a3235d5ed3931dceaaf95253dc7dbd0b0c4b7bbc8d4/azure_mgmt_web-10.1.0.tar.gz", hash = "sha256:26d3594bbe1b30589b72922c35855bc5b74c151f0224147a60d1a75234859226", size = 573655, upload-time = "2025-11-17T09:14:54.608Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bd/5e/2057f4e790a870ea8f1ba46bccf7d15fbafe2d78a3b76a50e161e8944df6/azure_mgmt_web-10.1.0-py3-none-any.whl", hash = "sha256:4f6d71bc68c5278fbb34fb4c7225ae949c5336b1e2c6810c045e737d964e6602", size = 653657, upload-time = "2025-11-17T09:14:57.155Z" },
 ]
 
 [[package]]
@@ -1315,6 +1386,29 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-aiplatform"
+version = "1.138.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docstring-parser" },
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-resource-manager" },
+    { name = "google-cloud-storage" },
+    { name = "google-genai" },
+    { name = "packaging" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+    { name = "pydantic" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ce/85/c6324a32b456a09f8e3d341bcfcede837bbfcf1bb1cb7afb429167763ff1/google_cloud_aiplatform-1.138.0.tar.gz", hash = "sha256:628ece014f2d2363d3d576ff2d38a08b3464a9cd262b7f01fafe2f6a3174a77c", size = 9963133, upload-time = "2026-02-17T22:10:02.511Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/58/a0/f9651ec6c4d62833b4482612691947f1153affc2a10b0af209420f76d53a/google_cloud_aiplatform-1.138.0-py2.py3-none-any.whl", hash = "sha256:fd92144a0f8e1370df2876ebfc3b221f4bb249a8d7cb4eaecf32e018c56676e9", size = 8207894, upload-time = "2026-02-17T22:09:59.887Z" },
+]
+
+[[package]]
 name = "google-cloud-appengine-logging"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1448,6 +1542,22 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-monitoring"
+version = "2.29.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/97/06/9fc0a34bed4221a68eef3e0373ae054de367dc42c0b689d5d917587ef61b/google_cloud_monitoring-2.29.1.tar.gz", hash = "sha256:86cac55cdd2608561819d19544fb3c129bbb7dcecc445d8de426e34cd6fa8e49", size = 404383, upload-time = "2026-02-05T18:59:13.026Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ac/97/7c27aa95eccf8b62b066295a7c4ad04284364b696d3e7d9d47152b255a24/google_cloud_monitoring-2.29.1-py3-none-any.whl", hash = "sha256:944a57031f20da38617d184d5658c1f938e019e8061f27fd944584831a1b9d5a", size = 387922, upload-time = "2026-02-05T18:58:54.964Z" },
+]
+
+[[package]]
 name = "google-cloud-org-policy"
 version = "1.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1480,6 +1590,40 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-resource-manager"
+version = "1.16.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpc-google-iam-v1" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/7f/db00b2820475793a52958dc55fe9ec2eb8e863546e05fcece9b921f86ebe/google_cloud_resource_manager-1.16.0.tar.gz", hash = "sha256:cc938f87cc36c2672f062b1e541650629e0d954c405a4dac35ceedee70c267c3", size = 459840, upload-time = "2026-01-15T13:04:07.726Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/ff/4b28bcc791d9d7e4ac8fea00fbd90ccb236afda56746a3b4564d2ae45df3/google_cloud_resource_manager-1.16.0-py3-none-any.whl", hash = "sha256:fb9a2ad2b5053c508e1c407ac31abfd1a22e91c32876c1892830724195819a28", size = 400218, upload-time = "2026-01-15T13:02:47.378Z" },
+]
+
+[[package]]
+name = "google-cloud-storage"
+version = "3.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core" },
+    { name = "google-auth" },
+    { name = "google-cloud-core" },
+    { name = "google-crc32c" },
+    { name = "google-resumable-media" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f7/b1/4f0798e88285b50dfc60ed3a7de071def538b358db2da468c2e0deecbb40/google_cloud_storage-3.9.0.tar.gz", hash = "sha256:f2d8ca7db2f652be757e92573b2196e10fbc09649b5c016f8b422ad593c641cc", size = 17298544, upload-time = "2026-02-02T13:36:34.119Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/46/0b/816a6ae3c9fd096937d2e5f9670558908811d57d59ddf69dd4b83b326fd1/google_cloud_storage-3.9.0-py3-none-any.whl", hash = "sha256:2dce75a9e8b3387078cbbdad44757d410ecdb916101f8ba308abf202b6968066", size = 321324, upload-time = "2026-02-02T13:36:32.271Z" },
+]
+
+[[package]]
 name = "google-crc32c"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1504,7 +1648,7 @@ wheels = [
 
 [[package]]
 name = "google-genai"
-version = "1.57.0"
+version = "1.63.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1518,9 +1662,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2b/b4/8251c2d2576224a4b51a8ab6159820f9200b8da28ff555c78ee15607096e/google_genai-1.57.0.tar.gz", hash = "sha256:0ff9c36b8d68abfbdbd13b703ece926de5f3e67955666b36315ecf669b94a826", size = 485648, upload-time = "2026-01-07T20:38:20.271Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/46/d7/07ec5dadd0741f09e89f3ff5f0ce051ce2aa3a76797699d661dc88def077/google_genai-1.63.0.tar.gz", hash = "sha256:dc76cab810932df33cbec6c7ef3ce1538db5bef27aaf78df62ac38666c476294", size = 491970, upload-time = "2026-02-11T23:46:28.472Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/02/858bdae08e2184b6afe0b18bc3113318522c9cf326a5a1698055edd31f88/google_genai-1.57.0-py3-none-any.whl", hash = "sha256:d63c7a89a1f549c4d14032f41a0cdb4b6fe3f565e2eee6b5e0907a0aeceabefd", size = 713323, upload-time = "2026-01-07T20:38:18.051Z" },
+    { url = "https://files.pythonhosted.org/packages/82/c8/ba32159e553fab787708c612cf0c3a899dafe7aca81115d841766e3bfe69/google_genai-1.63.0-py3-none-any.whl", hash = "sha256:6206c13fc20f332703ca7375bea7c191c82f95d6781c29936c6982d86599b359", size = 724747, upload-time = "2026-02-11T23:46:26.697Z" },
 ]
 
 [[package]]
@@ -4915,22 +5059,29 @@ dependencies = [
     { name = "apscheduler" },
     { name = "asyncpg" },
     { name = "azure-identity" },
+    { name = "azure-mgmt-cognitiveservices" },
     { name = "azure-mgmt-compute" },
+    { name = "azure-mgmt-containerservice" },
     { name = "azure-mgmt-costmanagement" },
     { name = "azure-mgmt-monitor" },
     { name = "azure-mgmt-network" },
     { name = "azure-mgmt-resource" },
+    { name = "azure-mgmt-search" },
+    { name = "azure-mgmt-sql" },
+    { name = "azure-mgmt-web" },
     { name = "boto3" },
     { name = "celery" },
     { name = "codecarbon" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "fastapi-csrf-protect" },
+    { name = "google-cloud-aiplatform" },
     { name = "google-cloud-asset" },
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-billing" },
     { name = "google-cloud-compute" },
     { name = "google-cloud-logging" },
+    { name = "google-cloud-monitoring" },
     { name = "h2" },
     { name = "httpx" },
     { name = "kubernetes-asyncio" },
@@ -4963,6 +5114,7 @@ dependencies = [
     { name = "sse-starlette" },
     { name = "statsmodels" },
     { name = "structlog" },
+    { name = "tenacity" },
     { name = "upstash-redis" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -5003,22 +5155,29 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=3.11.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "azure-identity", specifier = ">=1.25.1" },
+    { name = "azure-mgmt-cognitiveservices", specifier = ">=14.1.0" },
     { name = "azure-mgmt-compute", specifier = ">=37.1.0" },
+    { name = "azure-mgmt-containerservice", specifier = ">=40.2.0" },
     { name = "azure-mgmt-costmanagement", specifier = ">=4.0.0" },
     { name = "azure-mgmt-monitor", specifier = ">=6.0.0" },
     { name = "azure-mgmt-network", specifier = ">=30.1.0" },
     { name = "azure-mgmt-resource", specifier = ">=23.0.0" },
+    { name = "azure-mgmt-search", specifier = ">=9.2.0" },
+    { name = "azure-mgmt-sql", specifier = ">=3.0.1" },
+    { name = "azure-mgmt-web", specifier = ">=10.1.0" },
     { name = "boto3", specifier = ">=1.35.0" },
     { name = "celery", specifier = ">=5.3.0" },
     { name = "codecarbon", specifier = ">=2.7.1" },
     { name = "cryptography", specifier = ">=46.0.5" },
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "fastapi-csrf-protect", specifier = ">=1.0.7" },
+    { name = "google-cloud-aiplatform", specifier = ">=1.127.0" },
     { name = "google-cloud-asset", specifier = ">=3.20.0" },
     { name = "google-cloud-bigquery", specifier = ">=3.14.0" },
     { name = "google-cloud-billing", specifier = ">=1.13.0" },
     { name = "google-cloud-compute", specifier = ">=1.42.0" },
     { name = "google-cloud-logging", specifier = ">=3.11.0" },
+    { name = "google-cloud-monitoring", specifier = ">=2.28.0" },
     { name = "h2", specifier = ">=4.3.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "kubernetes-asyncio", specifier = ">=34.3.3" },
@@ -5055,6 +5214,7 @@ requires-dist = [
     { name = "sse-starlette", specifier = ">=2.0.0" },
     { name = "statsmodels", specifier = ">=0.14.0" },
     { name = "structlog", specifier = ">=25.1.0" },
+    { name = "tenacity", specifier = ">=9.0.0" },
     { name = "upstash-redis", specifier = ">=1.5.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
