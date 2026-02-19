@@ -384,7 +384,11 @@
 		policy_low_confidence_warn_threshold: 0.9,
 		policy_violation_notify_slack: true,
 		policy_violation_notify_jira: false,
-		policy_escalation_required_role: 'owner'
+		policy_escalation_required_role: 'owner',
+		license_auto_reclaim_enabled: false,
+		license_inactive_threshold_days: 30,
+		license_reclaim_grace_period_days: 3,
+		license_downgrade_recommendations_enabled: true
 	});
 	let loadingActiveOps = $state(true);
 	let savingActiveOps = $state(false);
@@ -701,7 +705,11 @@
 		policy_low_confidence_warn_threshold: z.number().min(0.5).max(1.0),
 		policy_violation_notify_slack: z.boolean(),
 		policy_violation_notify_jira: z.boolean(),
-		policy_escalation_required_role: z.enum(['owner', 'admin'])
+		policy_escalation_required_role: z.enum(['owner', 'admin']),
+		license_auto_reclaim_enabled: z.boolean(),
+		license_inactive_threshold_days: z.number().min(7).max(365),
+		license_reclaim_grace_period_days: z.number().min(1).max(30),
+		license_downgrade_recommendations_enabled: z.boolean()
 	});
 
 	async function saveActiveOpsSettings() {
@@ -1341,7 +1349,7 @@
 								</label>
 							</div>
 
-							<div class="form-group">
+							<div class="form-group border-t border-white/10 pt-4">
 								<label for="policy_escalation_role">Escalation Approval Role</label>
 								<select
 									id="policy_escalation_role"
@@ -1353,6 +1361,66 @@
 									<option value="admin">Admin</option>
 								</select>
 							</div>
+						</div>
+
+						<div class="pt-2 border-t border-white/10 space-y-4">
+							<h4 class="text-sm font-semibold text-ink-200 flex items-center gap-2">
+								<span>🪪</span> License & SaaS Governance
+							</h4>
+
+							<label class="flex items-center gap-3 cursor-pointer">
+								<input
+									type="checkbox"
+									bind:checked={activeOpsSettings.license_auto_reclaim_enabled}
+									class="toggle toggle-success"
+									disabled={!['pro', 'enterprise'].includes(data.subscription?.tier)}
+								/>
+								<span>Enable autonomous seat reclamation for inactive users</span>
+							</label>
+
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div class="form-group">
+									<label for="inactive_threshold"
+										>Inactivity Threshold: {activeOpsSettings.license_inactive_threshold_days} days</label
+									>
+									<input
+										type="range"
+										id="inactive_threshold"
+										bind:value={activeOpsSettings.license_inactive_threshold_days}
+										min="7"
+										max="365"
+										step="1"
+										class="range range-success"
+										disabled={!activeOpsSettings.license_auto_reclaim_enabled}
+									/>
+								</div>
+								<div class="form-group">
+									<label for="grace_period"
+										>Notification Grace Period: {activeOpsSettings.license_reclaim_grace_period_days}
+										days</label
+									>
+									<input
+										type="range"
+										id="grace_period"
+										bind:value={activeOpsSettings.license_reclaim_grace_period_days}
+										min="1"
+										max="30"
+										step="1"
+										class="range range-info"
+										disabled={!activeOpsSettings.license_auto_reclaim_enabled}
+									/>
+								</div>
+							</div>
+
+							<label class="flex items-center gap-3 cursor-pointer">
+								<input
+									type="checkbox"
+									bind:checked={activeOpsSettings.license_downgrade_recommendations_enabled}
+									class="toggle"
+									disabled={!['pro', 'enterprise'].includes(data.subscription?.tier)}
+								/>
+								<span>Enable cost-saving tier downgrade recommendations</span>
+							</label>
 						</div>
 
 						<button

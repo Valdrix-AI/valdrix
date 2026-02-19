@@ -7,7 +7,7 @@ standardize how we measure p95/p99 for key endpoints during hardening.
 
 Example:
   export VALDRIX_TOKEN="$(uv run python scripts/dev_bearer_token.py --email owner@valdrix.io)"
-  uv run python scripts/load_test_api.py --url http://127.0.0.1:8000 --endpoint /health --endpoint /api/v1/costs/acceptance/kpis
+  uv run python scripts/load_test_api.py --url http://127.0.0.1:8000 --endpoint /health/live --endpoint /api/v1/costs/acceptance/kpis
 
 Perf smoke (dashboard profile):
   uv run python scripts/load_test_api.py --profile dashboard --duration 30 --users 15 \\
@@ -20,15 +20,25 @@ import argparse
 import asyncio
 import json
 import os
+from typing import Any
 from datetime import date, timedelta
 from datetime import datetime, timezone
 
+import httpx
+
 from app.shared.core.evidence_capture import sanitize_bearer_token
-from app.shared.core.performance_testing import LoadTestConfig, LoadTester
+from app.shared.core.performance_testing import (
+    LoadTestConfig,
+    LoadTester,
+    format_exception_message,
+)
 from app.shared.core.performance_evidence import (
     LoadTestThresholds,
     evaluate_load_test_result,
 )
+
+LIVENESS_ENDPOINT = "/health/live"
+DEEP_HEALTH_ENDPOINT = "/health"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -39,7 +49,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         dest="profile",
-        choices=["health", "dashboard", "ops", "scale", "soak"],
+        choices=["health", "health_deep", "dashboard", "ops", "scale", "soak"],
         default="health",
         help="Use a pre-defined endpoint profile when --endpoint is not supplied.",
     )
@@ -48,7 +58,13 @@ def _parse_args() -> argparse.Namespace:
         dest="endpoints",
         action="append",
         default=[],
-        help="Endpoint path (repeatable). Default: /health",
+        help=f"Endpoint path (repeatable). Default: {LIVENESS_ENDPOINT}",
+    )
+    parser.add_argument(
+        "--include-deep-health",
+        dest="include_deep_health",
+        action="store_true",
+        help=f"Include {DEEP_HEALTH_ENDPOINT} in generated profile endpoints.",
     )
     parser.add_argument(
         "--start-date", dest="start_date", default="", help="ISO date (YYYY-MM-DD)"
@@ -77,6 +93,32 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=15.0,
         help="Request timeout seconds",
+    )
+    parser.add_argument(
+        "--skip-preflight",
+        dest="skip_preflight",
+        action="store_true",
+        help="Skip preflight endpoint validation before the load run.",
+    )
+    parser.add_argument(
+        "--allow-preflight-failures",
+        dest="allow_preflight_failures",
+        action="store_true",
+        help="Continue load run even if preflight checks fail.",
+    )
+    parser.add_argument(
+        "--preflight-attempts",
+        dest="preflight_attempts",
+        type=int,
+        default=2,
+        help="Number of preflight attempts per endpoint.",
+    )
+    parser.add_argument(
+        "--preflight-timeout",
+        dest="preflight_timeout",
+        type=float,
+        default=5.0,
+        help="Timeout (seconds) per preflight request.",
     )
     parser.add_argument(
         "--rounds",
@@ -153,36 +195,41 @@ def _build_profile_endpoints(args: argparse.Namespace) -> list[str]:
     )
 
     if args.profile == "health":
-        return ["/health"]
-
-    if args.profile == "dashboard":
+        endpoints = [LIVENESS_ENDPOINT]
+    elif args.profile == "health_deep":
+        endpoints = [DEEP_HEALTH_ENDPOINT]
+    elif args.profile == "dashboard":
         start_date, end_date = _resolve_date_window(args)
-        return [
-            "/health",
+        endpoints = [
+            LIVENESS_ENDPOINT,
             f"/api/v1/costs?start_date={start_date}&end_date={end_date}{provider_query}",
             f"/api/v1/carbon?start_date={start_date}&end_date={end_date}{carbon_provider_query}",
             f"/api/v1/zombies?analyze=false{zombies_provider_query}",
         ]
+    elif args.profile in {"scale", "soak"}:
+        endpoints = _build_scale_profile_endpoints(args)
+    else:
+        # ops profile
+        start_date, end_date = _resolve_date_window(args)
+        endpoints = [
+            LIVENESS_ENDPOINT,
+            "/api/v1/costs/ingestion/sla?window_hours=24&target_success_rate_percent=95",
+            (
+                "/api/v1/costs/acceptance/kpis?"
+                f"start_date={start_date}&end_date={end_date}"
+                "&ingestion_window_hours=168"
+                "&ingestion_target_success_rate_percent=95"
+                "&recency_target_hours=48"
+                "&chargeback_target_percent=90"
+                "&max_unit_anomalies=0"
+                "&response_format=json"
+            ),
+        ]
 
-    if args.profile in {"scale", "soak"}:
-        return _build_scale_profile_endpoints(args)
+    if args.include_deep_health and DEEP_HEALTH_ENDPOINT not in endpoints:
+        endpoints.insert(0, DEEP_HEALTH_ENDPOINT)
 
-    # ops profile
-    start_date, end_date = _resolve_date_window(args)
-    return [
-        "/health",
-        "/api/v1/costs/ingestion/sla?window_hours=24&target_success_rate_percent=95",
-        (
-            "/api/v1/costs/acceptance/kpis?"
-            f"start_date={start_date}&end_date={end_date}"
-            "&ingestion_window_hours=168"
-            "&ingestion_target_success_rate_percent=95"
-            "&recency_target_hours=48"
-            "&chargeback_target_percent=90"
-            "&max_unit_anomalies=0"
-            "&response_format=json"
-        ),
-    ]
+    return endpoints
 
 
 def _build_scale_profile_endpoints(args: argparse.Namespace) -> list[str]:
@@ -190,7 +237,7 @@ def _build_scale_profile_endpoints(args: argparse.Namespace) -> list[str]:
     provider = str(args.provider or "").strip().lower()
     provider_query = f"&provider={provider}" if provider else ""
     return [
-        "/health",
+        LIVENESS_ENDPOINT,
         f"/api/v1/costs?start_date={start_date}&end_date={end_date}{provider_query}",
         (
             "/api/v1/costs/acceptance/kpis?"
@@ -208,11 +255,91 @@ def _build_scale_profile_endpoints(args: argparse.Namespace) -> list[str]:
     ]
 
 
+async def _run_preflight_checks(
+    *,
+    target_url: str,
+    endpoints: list[str],
+    headers: dict[str, str],
+    timeout_seconds: float,
+    attempts: int,
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+    failures: list[dict[str, str]] = []
+    request_timeout = max(0.1, float(timeout_seconds))
+    attempts = max(1, int(attempts))
+
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(request_timeout, connect=min(request_timeout, 5.0)),
+        headers=headers,
+    ) as client:
+        for endpoint in endpoints:
+            passed = False
+            for attempt in range(1, attempts + 1):
+                started = datetime.now(timezone.utc)
+                try:
+                    response = await client.get(f"{target_url}{endpoint}")
+                    latency_ms = max(
+                        0.0,
+                        (datetime.now(timezone.utc) - started).total_seconds() * 1000.0,
+                    )
+                    status_code = int(response.status_code)
+                    preview = str(response.text or "").replace("\n", " ")[:140]
+                    ok = status_code < 400
+                    checks.append(
+                        {
+                            "endpoint": endpoint,
+                            "attempt": attempt,
+                            "status_code": status_code,
+                            "ok": ok,
+                            "latency_ms": round(latency_ms, 2),
+                            "error": "" if ok else f"HTTP {status_code}: {preview}",
+                        }
+                    )
+                    if ok:
+                        passed = True
+                        break
+                except Exception as exc:
+                    latency_ms = max(
+                        0.0,
+                        (datetime.now(timezone.utc) - started).total_seconds() * 1000.0,
+                    )
+                    checks.append(
+                        {
+                            "endpoint": endpoint,
+                            "attempt": attempt,
+                            "status_code": None,
+                            "ok": False,
+                            "latency_ms": round(latency_ms, 2),
+                            "error": format_exception_message(exc),
+                        }
+                    )
+                if attempt < attempts:
+                    await asyncio.sleep(min(0.25, attempt * 0.1))
+            if not passed:
+                last = checks[-1]
+                failures.append(
+                    {
+                        "endpoint": endpoint,
+                        "error": str(last.get("error") or "preflight failed"),
+                    }
+                )
+
+    return {
+        "enabled": True,
+        "passed": len(failures) == 0,
+        "attempts_per_endpoint": attempts,
+        "request_timeout_seconds": request_timeout,
+        "checks": checks,
+        "failures": failures,
+    }
+
+
 async def main() -> None:
     args = _parse_args()
     endpoints = args.endpoints or _build_profile_endpoints(args)
 
     headers: dict[str, str] = {}
+    token = ""
     raw_token = os.getenv("VALDRIX_TOKEN", "").strip()
     if raw_token:
         try:
@@ -236,6 +363,63 @@ async def main() -> None:
 
     rounds = max(1, int(args.rounds or 1))
     pause_seconds = max(0.0, float(args.pause or 0.0))
+    preflight_attempts = max(1, int(args.preflight_attempts or 1))
+    preflight_timeout = max(0.1, float(args.preflight_timeout or 0.1))
+    skip_preflight = bool(args.skip_preflight)
+    allow_preflight_failures = bool(args.allow_preflight_failures)
+
+    preflight: dict[str, Any]
+    if skip_preflight:
+        preflight = {
+            "enabled": False,
+            "passed": None,
+            "attempts_per_endpoint": 0,
+            "request_timeout_seconds": preflight_timeout,
+            "checks": [],
+            "failures": [],
+        }
+    else:
+        preflight = await _run_preflight_checks(
+            target_url=config.target_url,
+            endpoints=endpoints,
+            headers=headers,
+            timeout_seconds=preflight_timeout,
+            attempts=preflight_attempts,
+        )
+        if not preflight.get("passed") and not allow_preflight_failures:
+            failure_payload = {
+                "profile": str(args.profile),
+                "target_url": str(config.target_url),
+                "endpoints": list(endpoints),
+                "captured_at": datetime.now(timezone.utc).isoformat(),
+                "runner": "scripts/load_test_api.py",
+                "status": "preflight_failed",
+                "preflight": preflight,
+                "meets_targets": False,
+                "results": {
+                    "total_requests": 0,
+                    "successful_requests": 0,
+                    "failed_requests": 0,
+                    "throughput_rps": 0.0,
+                    "avg_response_time": 0.0,
+                    "median_response_time": 0.0,
+                    "p95_response_time": 0.0,
+                    "p99_response_time": 0.0,
+                    "min_response_time": 0.0,
+                    "max_response_time": 0.0,
+                    "errors_sample": [
+                        f"Preflight failed for {item['endpoint']}: {item['error']}"
+                        for item in list(preflight.get("failures", []))[:10]
+                    ],
+                },
+            }
+            print(json.dumps(failure_payload, indent=2, sort_keys=True))
+            if args.out:
+                with open(args.out, "w", encoding="utf-8") as f:
+                    json.dump(failure_payload, f, indent=2, sort_keys=True)
+            raise SystemExit(
+                "Preflight checks failed. Fix endpoint/auth/runtime health or re-run with --allow-preflight-failures."
+            )
 
     def result_to_payload(result: object) -> dict[str, object]:
         return {
@@ -264,7 +448,6 @@ async def main() -> None:
             "errors_sample": list(getattr(result, "errors", [])[:10]),
         }
 
-    run_results: list[LoadTester] = []
     run_payloads: list[dict[str, object]] = []
     raw_results = []
 
@@ -279,7 +462,6 @@ async def main() -> None:
                 "results": result_to_payload(raw),
             }
         )
-        run_results.append(tester)
         if pause_seconds and idx < rounds - 1:
             await asyncio.sleep(pause_seconds)
 
@@ -354,11 +536,15 @@ async def main() -> None:
         "min_throughput_rps": round(min_throughput, 4),
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "runner": "scripts/load_test_api.py",
+        "preflight": preflight,
     }
 
     profile_defaults: dict[str, LoadTestThresholds] = {
         "health": LoadTestThresholds(
             max_p95_seconds=1.0, max_error_rate_percent=1.0, min_throughput_rps=1.0
+        ),
+        "health_deep": LoadTestThresholds(
+            max_p95_seconds=4.0, max_error_rate_percent=2.0, min_throughput_rps=0.2
         ),
         "dashboard": LoadTestThresholds(
             max_p95_seconds=2.5, max_error_rate_percent=1.0, min_throughput_rps=0.5
@@ -426,7 +612,6 @@ async def main() -> None:
     if args.publish:
         if not token:
             raise SystemExit("VALDRIX_TOKEN is required for --publish.")
-        import httpx
 
         publish_url = f"{config.target_url}/api/v1/audit/performance/load-test/evidence"
         async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:

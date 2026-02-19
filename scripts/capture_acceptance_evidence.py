@@ -67,6 +67,7 @@ async def _bootstrap_in_process_app_and_token() -> tuple[httpx.ASGITransport, st
     import app.models.remediation_settings  # noqa: F401
     import app.models.background_job  # noqa: F401
     import app.models.llm  # noqa: F401
+    import app.modules.governance.domain.security.audit_log  # noqa: F401
 
     # Some environments (notably certain Python/aiosqlite builds) can fail to wake the event loop
     # for thread-safe callbacks unless there is at least one scheduled timer.
@@ -129,7 +130,7 @@ async def _bootstrap_in_process_app_and_token() -> tuple[httpx.ASGITransport, st
     finally:
         stop_wakeup.set()
         wakeup_task.cancel()
-        with suppress(Exception):
+        with suppress(asyncio.CancelledError):
             await wakeup_task
 
 
@@ -148,6 +149,13 @@ def _write_text(path: Path, content: str) -> None:
 
 def _write_json(path: Path, payload: Any) -> None:
     _write_text(path, json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _format_exception(exc: Exception) -> str:
+    message = str(exc).strip()
+    if message:
+        return f"{exc.__class__.__name__}: {message}"
+    return exc.__class__.__name__
 
 
 @dataclass(frozen=True)
@@ -224,7 +232,7 @@ async def capture_acceptance_evidence(
     close_end_date: date,
     close_provider: str = "all",
     close_enforce_finalized: bool = False,
-    timeout_seconds: float = 15.0,
+    timeout_seconds: float = 60.0,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> tuple[Path, list[CaptureResult]]:
     timestamp = _utc_now_compact()
@@ -292,7 +300,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("acceptance_kpis_json", kpis_path, None, False, str(exc))
+            record("acceptance_kpis_json", kpis_path, None, False, _format_exception(exc))
 
         # 2) Acceptance KPIs CSV
         kpi_csv_query = urlencode(
@@ -320,7 +328,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("acceptance_kpis_csv", kpis_csv_path, None, False, str(exc))
+            record("acceptance_kpis_csv", kpis_csv_path, None, False, _format_exception(exc))
 
         # 2b) Leadership KPIs export (JSON + CSV) (best-effort; depends on tier/features)
         leadership_query = urlencode(
@@ -349,7 +357,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("leadership_kpis_json", leadership_path, None, False, str(exc))
+            record("leadership_kpis_json", leadership_path, None, False, _format_exception(exc))
 
         leadership_csv_query = urlencode(
             {
@@ -378,7 +386,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("leadership_kpis_csv", leadership_csv_path, None, False, str(exc))
+            record("leadership_kpis_csv", leadership_csv_path, None, False, _format_exception(exc))
 
         # 2c) Savings proof export (JSON + CSV) (best-effort; Pro+)
         savings_query = urlencode(
@@ -405,7 +413,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("savings_proof_json", savings_path, None, False, str(exc))
+            record("savings_proof_json", savings_path, None, False, _format_exception(exc))
 
         savings_csv_query = urlencode(
             {
@@ -432,7 +440,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("savings_proof_csv", savings_csv_path, None, False, str(exc))
+            record("savings_proof_csv", savings_csv_path, None, False, _format_exception(exc))
 
         # 2d) Quarterly commercial proof report template (JSON + CSV) (best-effort; Pro+)
         quarterly_query = urlencode(
@@ -470,7 +478,7 @@ async def capture_acceptance_evidence(
                 quarterly_path,
                 None,
                 False,
-                str(exc),
+                _format_exception(exc),
             )
 
         quarterly_csv_query = urlencode(
@@ -508,7 +516,7 @@ async def capture_acceptance_evidence(
                 quarterly_csv_path,
                 None,
                 False,
-                str(exc),
+                _format_exception(exc),
             )
 
         # 3) Integration acceptance evidence (Slack/Jira/Workflow)
@@ -541,7 +549,7 @@ async def capture_acceptance_evidence(
                 evidence_path,
                 None,
                 False,
-                str(exc),
+                _format_exception(exc),
             )
 
         # 4) Job SLO snapshot (best-effort; admin-only, Pro+)
@@ -556,7 +564,7 @@ async def capture_acceptance_evidence(
             else:
                 record("jobs_slo_json", slo_path, resp.status_code, False, resp.text)
         except Exception as exc:
-            record("jobs_slo_json", slo_path, None, False, str(exc))
+            record("jobs_slo_json", slo_path, None, False, _format_exception(exc))
 
         # 4b) Audit-grade Job SLO evidence snapshot (best-effort; admin-only)
         # This is computed server-side and persisted into audit logs for compliance packs.
@@ -596,7 +604,7 @@ async def capture_acceptance_evidence(
                 )
         except Exception as exc:
             record(
-                "job_slo_evidence_capture_json", slo_capture_path, None, False, str(exc)
+                "job_slo_evidence_capture_json", slo_capture_path, None, False, _format_exception(exc)
             )
 
         slo_evidence_url = _build_url(
@@ -620,7 +628,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("job_slo_evidence_json", slo_evidence_path, None, False, str(exc))
+            record("job_slo_evidence_json", slo_evidence_path, None, False, _format_exception(exc))
 
         # 5) Profile snapshot (persona + tier)
         profile_url = _build_url(base_url, "/api/v1/settings/profile")
@@ -634,7 +642,7 @@ async def capture_acceptance_evidence(
             else:
                 record("profile_json", profile_path, resp.status_code, False, resp.text)
         except Exception as exc:
-            record("profile_json", profile_path, None, False, str(exc))
+            record("profile_json", profile_path, None, False, _format_exception(exc))
 
         # 6) Month-end close package evidence (JSON + CSV) + restatements CSV
         close_params = {
@@ -666,7 +674,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("close_package_json", close_json_path, None, False, str(exc))
+            record("close_package_json", close_json_path, None, False, _format_exception(exc))
 
         close_csv_url = _build_url(
             base_url,
@@ -687,7 +695,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("close_package_csv", close_csv_path, None, False, str(exc))
+            record("close_package_csv", close_csv_path, None, False, _format_exception(exc))
 
         restatement_csv_url = _build_url(
             base_url,
@@ -708,7 +716,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("restatements_csv", restatement_csv_path, None, False, str(exc))
+            record("restatements_csv", restatement_csv_path, None, False, _format_exception(exc))
 
         # 7) Realized savings evidence (JSON + CSV) (best-effort; Pro+)
         realized_query = urlencode(
@@ -738,7 +746,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("realized_savings_json", realized_path, None, False, str(exc))
+            record("realized_savings_json", realized_path, None, False, _format_exception(exc))
 
         realized_csv_query = urlencode(
             {
@@ -768,7 +776,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("realized_savings_csv", realized_csv_path, None, False, str(exc))
+            record("realized_savings_csv", realized_csv_path, None, False, _format_exception(exc))
 
         # 8) Performance evidence snapshots (best-effort; Pro+ admin)
         perf_url = _build_url(
@@ -796,7 +804,7 @@ async def capture_acceptance_evidence(
                 )
         except Exception as exc:
             record(
-                "performance_load_test_evidence_json", perf_path, None, False, str(exc)
+                "performance_load_test_evidence_json", perf_path, None, False, _format_exception(exc)
             )
 
         # 8b) Ingestion persistence benchmark evidence snapshots (best-effort; Pro+ admin)
@@ -830,7 +838,7 @@ async def capture_acceptance_evidence(
                 ingest_path,
                 None,
                 False,
-                str(exc),
+                _format_exception(exc),
             )
 
         # 8c) Ingestion soak evidence snapshots (best-effort; Pro+ admin)
@@ -855,7 +863,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("ingestion_soak_evidence_json", soak_path, None, False, str(exc))
+            record("ingestion_soak_evidence_json", soak_path, None, False, _format_exception(exc))
 
         # 8d) Partitioning validation evidence snapshots (best-effort; Pro+ admin)
         partition_url = _build_url(
@@ -879,7 +887,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("partitioning_evidence_json", partition_path, None, False, str(exc))
+            record("partitioning_evidence_json", partition_path, None, False, _format_exception(exc))
 
         # 9) Tenant isolation verification evidence snapshots (best-effort; Pro+ admin)
         isolation_url = _build_url(
@@ -907,7 +915,7 @@ async def capture_acceptance_evidence(
                 )
         except Exception as exc:
             record(
-                "tenant_isolation_evidence_json", isolation_path, None, False, str(exc)
+                "tenant_isolation_evidence_json", isolation_path, None, False, _format_exception(exc)
             )
 
         # 9b) Identity IdP smoke-test evidence snapshots (best-effort; Pro+ admin)
@@ -940,7 +948,7 @@ async def capture_acceptance_evidence(
                 identity_smoke_path,
                 None,
                 False,
-                str(exc),
+                _format_exception(exc),
             )
 
         # 9c) SSO federation validation evidence snapshots (best-effort; Pro+ admin)
@@ -973,7 +981,7 @@ async def capture_acceptance_evidence(
                 sso_validation_path,
                 None,
                 False,
-                str(exc),
+                _format_exception(exc),
             )
 
         # 10) Carbon assurance evidence snapshots (best-effort; Pro+ admin)
@@ -1001,7 +1009,7 @@ async def capture_acceptance_evidence(
                     resp.text,
                 )
         except Exception as exc:
-            record("carbon_assurance_evidence_json", carbon_path, None, False, str(exc))
+            record("carbon_assurance_evidence_json", carbon_path, None, False, _format_exception(exc))
 
     manifest = {
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -1042,6 +1050,12 @@ def main() -> int:
     parser.add_argument("--close-end-date", default=None)
     parser.add_argument("--close-provider", default="all")
     parser.add_argument("--close-enforce-finalized", action="store_true")
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=60.0,
+        help="HTTP timeout for each capture request.",
+    )
     args = parser.parse_args()
 
     transport: httpx.AsyncBaseTransport | None = None
@@ -1106,6 +1120,7 @@ def main() -> int:
             close_end_date=close_end_date,
             close_provider=str(args.close_provider or "all"),
             close_enforce_finalized=bool(args.close_enforce_finalized),
+            timeout_seconds=float(args.timeout_seconds),
             transport=transport,
         )
     )

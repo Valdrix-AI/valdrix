@@ -16,6 +16,7 @@
 		lb_type?: string;
 		is_gpu?: boolean;
 		instance_type?: string;
+		recommended_instance_type?: string;
 	};
 
 	type ZombieCollections = {

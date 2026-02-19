@@ -6,7 +6,7 @@ Validated on **February 18, 2026** against:
 
 ## Executive Summary
 
-Cloudflare Pages is a valid frontend hosting option for zero-budget launch, but the feedback includes multiple incorrect or unproven claims. The biggest gap is architectural: the current dashboard calls the API directly, so moving frontend hosting to Cloudflare Pages alone does **not** produce the claimed 75-80% backend load reduction.
+Cloudflare Pages is a valid frontend hosting option for zero-budget launch, but the feedback includes multiple incorrect or unproven claims. The biggest remaining gap is **evidence scope**: the repository now includes an edge proxy path for selected routes, but broad "75-80% backend load reduction" and "100 concurrent users across real workloads" claims are still not proven by full-path production benchmarks.
 
 ## What Is Factually Correct
 
@@ -29,10 +29,10 @@ Cloudflare Pages is a valid frontend hosting option for zero-budget launch, but 
   - Current fair-use guidance states commercial usage requires Pro or Enterprise.
 - `$0 on Koyeb` is possible but needs onboarding caveat.
   - Current Koyeb pricing FAQ states Starter is free but requires a credit card.
-- `Cloudflare Pages reduces Koyeb load by 75-80%` is not supported by current code behavior.
-  - This repository does not currently route dashboard API calls through Cloudflare edge proxy/cache.
-- `Yes, architecture can handle 100 concurrent users` remains unproven by stored benchmark evidence.
-  - Existing captured performance evidence files are empty (`items: []`).
+- `Cloudflare Pages reduces Koyeb load by 75-80%` is still not proven.
+  - The repository now has an edge proxy/cache path for selected routes, but not full dashboard/API coverage and no measured cache hit-rate evidence for that claim.
+- `Yes, architecture can handle 100 concurrent users` remains unproven for production workloads.
+  - Local liveness evidence at 100 concurrency now passes, but that does not prove full authenticated dashboard/API workload capacity.
 
 ## Repository Evidence (Current State)
 
@@ -46,12 +46,26 @@ Cloudflare Pages is a valid frontend hosting option for zero-budget launch, but 
 - Authenticated HTML is explicitly marked `Cache-Control: no-store`:
   - `dashboard/src/hooks.server.ts:82`
   - `dashboard/src/hooks.server.ts:85`
-- API calls are direct to `PUBLIC_API_URL` from browser/server code (not Cloudflare edge proxy):
-  - `dashboard/src/lib/api.ts:11`
-  - `dashboard/src/lib/api.ts:62`
-  - `dashboard/src/routes/+layout.server.ts:8`
-- Stored load-test evidence is currently empty:
+- Edge proxy/cache path now exists and is used in selected flows:
+  - `dashboard/src/lib/edgeProxy.ts:1`
+  - `dashboard/src/routes/api/edge/[...path]/+server.ts:1`
+  - `dashboard/src/routes/+layout.server.ts:26`
+  - `dashboard/src/routes/+page.ts:49`
+  - `dashboard/src/lib/api.ts:60`
+- Many feature routes still call `PUBLIC_API_URL` directly, so backend-load reduction claims must remain conservative:
+  - `dashboard/src/routes/settings/+page.svelte:97`
+  - `dashboard/src/routes/ops/+page.svelte:633`
+  - `dashboard/src/routes/connections/+page.svelte:436`
+- Historical evidence artifacts from 2026-02-15 are empty placeholders:
   - `reports/acceptance/20260215T084156Z/performance_load_test_evidence.json:1`
+- Non-empty benchmark evidence now exists from 2026-02-18:
+  - `reports/acceptance/20260218T185609Z/performance_load_test_evidence.json:1`
+  - Result summary (100 concurrent users, 30s, `/health` + `/api/v1/public/csrf`): p95 `12.4233s`, p99 `18.9147s`, throughput `13.3468 rps`, error rate `24.5509%`, `meets_targets=false`.
+  - Interpretation caveat: this mixes deep dependency health (`/health`) into user-capacity evidence. Updated load-test profiles now default to `/health/live` and include preflight validation.
+- Updated baseline evidence (liveness profile) is now passing at 100 concurrent users:
+  - `reports/acceptance/20260218T204814Z/performance_load_test_evidence.json:1`
+  - Result summary (3 rounds, 20s each, `/health/live`): worst p95 `0.3144s`, error rate `0.0%`, throughput floor `363.0399 rps`, `meets_targets=true`.
+  - Scope caveat: this validates liveness-path concurrency, not full authenticated dashboard/API workload capacity.
 
 ## Required Actions (Documented Work)
 
@@ -66,15 +80,15 @@ Cloudflare Pages is a valid frontend hosting option for zero-budget launch, but 
    - Switched SvelteKit adapter to Cloudflare in `dashboard/svelte.config.js`.
    - Validation evidence: `pnpm --dir dashboard check` and `pnpm --dir dashboard build` both pass on 2026-02-18.
 
-4. If backend-load reduction is a goal, add explicit edge proxy/cache design.
-   - Introduce dashboard-side server endpoints or Worker proxy for selected cacheable GET routes.
-   - Keep authenticated/no-store flows uncached by default.
-   - Define route-by-route caching policy with TTL and auth constraints.
+4. Edge proxy/cache design and initial implementation: partially completed.
+   - Completed: dashboard-side edge proxy endpoint implemented at `/api/edge/[...path]`.
+   - Completed: selected dashboard routes now use proxy path and conservative caching policy.
+   - Remaining: expand coverage route-by-route and publish cache hit-rate/load evidence before any backend reduction claim.
 
-5. Produce real performance evidence before capacity claims.
-   - Run k6/Locust against deployed stack.
-   - Store non-empty evidence artifacts.
-   - Report p50/p95/p99 latency, error rate, and throughput for declared concurrency levels.
+5. Produce real performance evidence before capacity claims: partially completed.
+   - Completed: non-empty artifact generated with p50/p95/p99, throughput, and error rate.
+   - Completed: load-test tool now forwards configured headers (`app/shared/core/performance_testing.py`) and has regression tests (`tests/unit/core/test_performance_testing.py`).
+   - Remaining: collect deployed-stack benchmark evidence that meets declared SLO thresholds before publishing any concurrency claim.
 
 ## Recommendation (As of 2026-02-18)
 
@@ -85,7 +99,7 @@ Recommended launch path:
 
 2. Keep backend topology unchanged for MVP.
    - API on Koyeb, DB/Auth on Supabase, Redis on Upstash.
-   - Do not claim edge-caching-driven API scale gains until an actual edge proxy/cache layer exists.
+   - Edge proxy exists for selected routes, but do not claim broad edge-caching-driven scale gains until route coverage and cache hit-rate evidence are published.
 
 3. Treat "100 concurrent users" as a test target, not a published capability claim.
    - Publish that claim only after collecting and storing real load-test evidence from deployed infrastructure.
@@ -93,21 +107,21 @@ Recommended launch path:
 4. Document limits with provider-official numbers only and date-stamp them.
    - Re-verify limits before investor/customer-facing communication.
 
-5. Phase 2 (post-MVP): add selective edge proxy/cache for safe read endpoints.
-   - Start with non-sensitive, cacheable GET endpoints.
+5. Phase 2 (post-MVP): expand selective edge proxy/cache for safe read endpoints.
+   - Extend proxy adoption across additional read-heavy dashboard routes.
    - Keep authenticated user HTML/API flows conservative (`no-store` by default).
    - Re-benchmark and then update capacity statements.
 
 Decision rule for go-live:
 - `Go` when adapter migration validation passes (`dashboard` install/check/build) and deployment docs are corrected.
-- `No-Go` for any public scale claims until benchmark artifacts are non-empty and reproducible.
+- `No-Go` for any public scale claims until benchmark artifacts are non-empty, reproducible, and meet agreed latency/error thresholds.
 
 ## Recommended Claim Language (Safe/Accurate)
 
 Use this wording in external/internal launch docs:
 - "Cloudflare Pages can reduce static asset delivery cost and improve global asset latency."
 - "API capacity and concurrent user claims require measured load-test evidence on the target deployment."
-- "Current implementation does not yet include an edge API proxy/cache layer."
+- "Current implementation includes a selective edge API proxy/cache layer; broad scale-impact claims require measured cache hit-rate and workload benchmarks."
 
 ## Sources
 

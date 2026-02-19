@@ -8,6 +8,8 @@
 
 	type CloudPlusAuthMethod = 'manual' | 'api_key' | 'oauth' | 'csv';
 	type CloudPlusProvider = 'saas' | 'license';
+	type IdpProvider = 'microsoft_365' | 'google_workspace';
+	type DiscoveryStatus = 'pending' | 'accepted' | 'ignored' | 'connected';
 
 	interface NativeConnectorMeta {
 		vendor: string;
@@ -21,6 +23,31 @@
 	interface ManualFeedSchema {
 		required_fields: string[];
 		optional_fields: string[];
+	}
+
+	interface DiscoveryCandidate {
+		id: string;
+		domain: string;
+		category: string;
+		provider: string;
+		source: string;
+		status: DiscoveryStatus;
+		confidence_score: number;
+		requires_admin_auth: boolean;
+		connection_target: string | null;
+		connection_vendor_hint: string | null;
+		evidence: string[];
+		details: Record<string, unknown>;
+		last_seen_at: string;
+		created_at: string;
+		updated_at: string;
+	}
+
+	interface DiscoveryStageResponse {
+		domain: string;
+		candidates: DiscoveryCandidate[];
+		warnings: string[];
+		total_candidates: number;
 	}
 
 	const CLOUD_PLUS_AUTH_METHODS: CloudPlusAuthMethod[] = ['manual', 'api_key', 'oauth', 'csv'];
@@ -66,6 +93,31 @@
 	let cloudPlusRequiredConfigValues = $state<Record<string, string>>({});
 	let cloudPlusConfigProvider = $state<CloudPlusProvider | null>(null);
 
+	// Discovery wizard state
+	let discoveryEmail = $state('');
+	let discoveryDomain = $state('');
+	let discoveryIdpProvider: IdpProvider = $state('microsoft_365');
+	let discoveryCandidates = $state<DiscoveryCandidate[]>([]);
+	let discoveryWarnings = $state<string[]>([]);
+	let discoveryLoadingStageA = $state(false);
+	let discoveryLoadingStageB = $state(false);
+	let discoveryActionCandidateId = $state<string | null>(null);
+	let discoveryError = $state('');
+	let discoveryInfo = $state('');
+
+	$effect(() => {
+		if (discoveryEmail.trim().length > 0) {
+			return;
+		}
+		if (typeof data?.user?.email !== 'string') {
+			return;
+		}
+		const normalized = data.user.email.trim();
+		if (normalized.length > 0) {
+			discoveryEmail = normalized;
+		}
+	});
+
 	let isLoading = $state(false);
 	let isVerifying = $state(false);
 	let error = $state('');
@@ -76,6 +128,7 @@
 
 	const growthAndAbove = ['growth', 'pro', 'enterprise'];
 	const cloudPlusAllowed = ['pro', 'enterprise'];
+	const idpDeepScanAllowed = ['pro', 'enterprise'];
 
 	function canUseGrowthFeatures(): boolean {
 		return growthAndAbove.includes(data?.subscription?.tier);
@@ -83,6 +136,10 @@
 
 	function canUseCloudPlusFeatures(): boolean {
 		return cloudPlusAllowed.includes(data?.subscription?.tier);
+	}
+
+	function canUseIdpDeepScan(): boolean {
+		return idpDeepScanAllowed.includes(data?.subscription?.tier);
 	}
 
 	function getProviderLabel(provider: typeof selectedProvider): string {
@@ -98,6 +155,283 @@
 			case 'license':
 				return 'License';
 		}
+	}
+
+	function extractDomainFromEmail(value: string): string {
+		const normalized = value.trim().toLowerCase();
+		const at = normalized.lastIndexOf('@');
+		if (at <= 0 || at >= normalized.length - 1) {
+			return '';
+		}
+		return normalized.slice(at + 1);
+	}
+
+	function getDiscoveryCategoryLabel(category: string): string {
+		if (category === 'cloud_provider') return 'Cloud';
+		if (category === 'cloud_plus') return 'Cloud+';
+		if (category === 'license') return 'License';
+		if (category === 'platform') return 'Platform';
+		return category;
+	}
+
+	function formatDiscoveryConfidence(score: number): string {
+		if (!Number.isFinite(score)) {
+			return '0%';
+		}
+		const bounded = Math.max(0, Math.min(score, 1));
+		return `${Math.round(bounded * 100)}%`;
+	}
+
+	function resolveProviderFromCandidate(
+		candidate: DiscoveryCandidate
+	): 'aws' | 'azure' | 'gcp' | 'saas' | 'license' | null {
+		if (candidate.category === 'cloud_provider') {
+			if (
+				candidate.provider === 'aws' ||
+				candidate.provider === 'azure' ||
+				candidate.provider === 'gcp'
+			) {
+				return candidate.provider;
+			}
+			return null;
+		}
+		if (candidate.category === 'license') {
+			return 'license';
+		}
+		if (candidate.category === 'cloud_plus') {
+			return 'saas';
+		}
+		return null;
+	}
+
+	function applyDiscoveryCandidateLocally(updated: DiscoveryCandidate): void {
+		discoveryCandidates = discoveryCandidates.map((candidate) =>
+			candidate.id === updated.id ? updated : candidate
+		);
+	}
+
+	function upsertDiscoveryCandidates(candidates: DiscoveryCandidate[]): void {
+		const merged = [...discoveryCandidates];
+		for (const candidate of candidates) {
+			const existingIndex = merged.findIndex((item) => item.id === candidate.id);
+			if (existingIndex >= 0) {
+				merged[existingIndex] = candidate;
+			} else {
+				merged.push(candidate);
+			}
+		}
+		discoveryCandidates = merged.sort((a, b) => {
+			if (b.confidence_score !== a.confidence_score) {
+				return b.confidence_score - a.confidence_score;
+			}
+			return a.provider.localeCompare(b.provider);
+		});
+	}
+
+	async function runDiscoveryStageA(): Promise<void> {
+		discoveryError = '';
+		discoveryInfo = '';
+		const normalizedEmail = discoveryEmail.trim();
+		if (!normalizedEmail) {
+			discoveryError = 'Enter a valid work email to run discovery.';
+			return;
+		}
+
+		discoveryLoadingStageA = true;
+		try {
+			const token = await getAccessToken();
+			if (!token) {
+				throw new Error('Please log in first');
+			}
+			const onboarded = await ensureOnboarded();
+			if (!onboarded) {
+				return;
+			}
+
+			const res = await api.post(
+				`${API_URL}/settings/connections/discovery/stage-a`,
+				{ email: normalizedEmail },
+				{
+					headers: { Authorization: `Bearer ${token}` }
+				}
+			);
+			const payload = (await res.json().catch(() => ({}))) as Partial<DiscoveryStageResponse> & {
+				detail?: string;
+			};
+			if (!res.ok) {
+				throw new Error(payload.detail || 'Failed to run Stage A discovery');
+			}
+
+			discoveryDomain = typeof payload.domain === 'string' ? payload.domain : '';
+			discoveryWarnings = Array.isArray(payload.warnings)
+				? payload.warnings.filter((warning): warning is string => typeof warning === 'string')
+				: [];
+			const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+			upsertDiscoveryCandidates(candidates);
+			discoveryInfo = `Stage A complete: found ${candidates.length} candidate(s).`;
+		} catch (e) {
+			const err = e as Error;
+			discoveryError = err.message || 'Failed to run Stage A discovery';
+		} finally {
+			discoveryLoadingStageA = false;
+		}
+	}
+
+	async function runDiscoveryStageB(): Promise<void> {
+		discoveryError = '';
+		discoveryInfo = '';
+		if (!canUseIdpDeepScan()) {
+			discoveryError = 'Deep scan requires Pro tier or higher.';
+			return;
+		}
+
+		const domain = discoveryDomain || extractDomainFromEmail(discoveryEmail);
+		if (!domain) {
+			discoveryError = 'Run Stage A first or enter a valid email domain.';
+			return;
+		}
+
+		discoveryLoadingStageB = true;
+		try {
+			const token = await getAccessToken();
+			if (!token) {
+				throw new Error('Please log in first');
+			}
+			const onboarded = await ensureOnboarded();
+			if (!onboarded) {
+				return;
+			}
+
+			const res = await api.post(
+				`${API_URL}/settings/connections/discovery/deep-scan`,
+				{
+					domain,
+					idp_provider: discoveryIdpProvider,
+					max_users: 20
+				},
+				{
+					headers: { Authorization: `Bearer ${token}` }
+				}
+			);
+			const payload = (await res.json().catch(() => ({}))) as Partial<DiscoveryStageResponse> & {
+				detail?: string;
+			};
+			if (!res.ok) {
+				throw new Error(payload.detail || 'Failed to run Stage B deep scan');
+			}
+
+			discoveryDomain = typeof payload.domain === 'string' ? payload.domain : domain;
+			discoveryWarnings = Array.isArray(payload.warnings)
+				? payload.warnings.filter((warning): warning is string => typeof warning === 'string')
+				: [];
+			const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+			upsertDiscoveryCandidates(candidates);
+			discoveryInfo = `Stage B complete: ${candidates.length} candidate(s) now in scope.`;
+		} catch (e) {
+			const err = e as Error;
+			discoveryError = err.message || 'Failed to run Stage B deep scan';
+		} finally {
+			discoveryLoadingStageB = false;
+		}
+	}
+
+	async function updateDiscoveryCandidateStatus(
+		candidate: DiscoveryCandidate,
+		action: 'accept' | 'ignore' | 'connected'
+	): Promise<DiscoveryCandidate | null> {
+		discoveryError = '';
+		discoveryInfo = '';
+		discoveryActionCandidateId = candidate.id;
+		try {
+			const token = await getAccessToken();
+			if (!token) {
+				throw new Error('Please log in first');
+			}
+			const res = await api.post(
+				`${API_URL}/settings/connections/discovery/candidates/${candidate.id}/${action}`,
+				undefined,
+				{
+					headers: { Authorization: `Bearer ${token}` }
+				}
+			);
+			const payload = (await res.json().catch(() => ({}))) as DiscoveryCandidate & {
+				detail?: string;
+			};
+			if (!res.ok) {
+				throw new Error(payload.detail || `Failed to ${action} discovery candidate`);
+			}
+			applyDiscoveryCandidateLocally(payload);
+			return payload;
+		} catch (e) {
+			const err = e as Error;
+			discoveryError = err.message || `Failed to ${action} discovery candidate`;
+			return null;
+		} finally {
+			discoveryActionCandidateId = null;
+		}
+	}
+
+	async function ignoreDiscoveryCandidate(candidate: DiscoveryCandidate): Promise<void> {
+		const updated = await updateDiscoveryCandidateStatus(candidate, 'ignore');
+		if (updated) {
+			discoveryInfo = `${updated.provider} ignored.`;
+		}
+	}
+
+	async function markDiscoveryCandidateConnected(candidate: DiscoveryCandidate): Promise<void> {
+		const updated = await updateDiscoveryCandidateStatus(candidate, 'connected');
+		if (updated) {
+			discoveryInfo = `${updated.provider} marked as connected.`;
+		}
+	}
+
+	async function connectDiscoveryCandidate(candidate: DiscoveryCandidate): Promise<void> {
+		const provider = resolveProviderFromCandidate(candidate);
+		if (!provider) {
+			discoveryError =
+				'This candidate maps to a connector not yet supported in this onboarding flow. Use Connections page.';
+			return;
+		}
+
+		if ((provider === 'azure' || provider === 'gcp') && !canUseGrowthFeatures()) {
+			discoveryError = `${getProviderLabel(provider)} onboarding requires Growth tier or higher.`;
+			return;
+		}
+		if ((provider === 'saas' || provider === 'license') && !canUseCloudPlusFeatures()) {
+			discoveryError = `${getProviderLabel(provider)} onboarding requires Pro tier or higher.`;
+			return;
+		}
+
+		const accepted = await updateDiscoveryCandidateStatus(candidate, 'accept');
+		if (!accepted) {
+			return;
+		}
+
+		selectedProvider = provider;
+		currentStep = 1;
+		await fetchSetupData();
+
+		if (provider === 'saas' || provider === 'license') {
+			const preferredVendor = (accepted.connection_vendor_hint || accepted.provider || '')
+				.trim()
+				.toLowerCase();
+			if (preferredVendor) {
+				const knownConnector = cloudPlusNativeConnectors.find(
+					(connector) => connector.vendor === preferredVendor
+				);
+				if (knownConnector) {
+					chooseNativeCloudPlusVendor(knownConnector.vendor);
+				} else {
+					cloudPlusVendor = preferredVendor;
+					applyCloudPlusVendorDefaults(false);
+				}
+			}
+			if (!cloudPlusName.trim()) {
+				const label = accepted.provider.replace(/_/g, ' ');
+				cloudPlusName = `${label} connector`;
+			}
+		}
+		discoveryInfo = `${accepted.provider} ready for setup.`;
 	}
 
 	function toCloudPlusAuthMethod(
@@ -855,6 +1189,134 @@
 					</button>
 				</div>
 
+				<div class="discovery-panel mt-8">
+					<div class="discovery-header">
+						<h3>Discovery Wizard (Prefill)</h3>
+						<p class="text-xs text-ink-400">
+							Best-effort signals to find likely providers first, then choose what to connect.
+						</p>
+					</div>
+
+					<div class="discovery-stage-a">
+						<div class="form-group">
+							<label for="discoveryEmail">Work Email</label>
+							<input
+								type="email"
+								id="discoveryEmail"
+								bind:value={discoveryEmail}
+								placeholder="you@company.com"
+							/>
+						</div>
+						<div class="discovery-actions">
+							<button
+								type="button"
+								class="secondary-btn !w-auto px-4"
+								onclick={runDiscoveryStageA}
+								disabled={discoveryLoadingStageA || isLoading}
+							>
+								{discoveryLoadingStageA ? '⏳ Running Stage A...' : 'Run Stage A'}
+							</button>
+							{#if discoveryDomain}
+								<span class="text-xs text-ink-400">Domain: {discoveryDomain}</span>
+							{/if}
+						</div>
+					</div>
+
+					<div class="discovery-stage-b">
+						<div class="form-group">
+							<label for="idpProvider">IdP Deep Scan (Stage B)</label>
+							<select id="idpProvider" bind:value={discoveryIdpProvider}>
+								<option value="microsoft_365">microsoft_365</option>
+								<option value="google_workspace">google_workspace</option>
+							</select>
+						</div>
+						<div class="discovery-actions">
+							<button
+								type="button"
+								class="secondary-btn !w-auto px-4"
+								onclick={runDiscoveryStageB}
+								disabled={discoveryLoadingStageB || isLoading || !canUseIdpDeepScan()}
+							>
+								{discoveryLoadingStageB ? '⏳ Running Stage B...' : 'Run Stage B'}
+							</button>
+							{#if !canUseIdpDeepScan()}
+								<span class="text-xs text-ink-500">Pro tier required</span>
+							{/if}
+						</div>
+					</div>
+
+					{#if discoveryError}
+						<p class="discovery-error">{discoveryError}</p>
+					{/if}
+					{#if discoveryInfo}
+						<p class="discovery-info">{discoveryInfo}</p>
+					{/if}
+					{#if discoveryWarnings.length > 0}
+						<div class="discovery-warnings">
+							<p class="text-xs text-ink-400 mb-2">Warnings</p>
+							<ul>
+								{#each discoveryWarnings.slice(0, 3) as warning (warning)}
+									<li>{warning}</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
+
+					{#if discoveryCandidates.length > 0}
+						<div class="candidate-list">
+							{#each discoveryCandidates as candidate (candidate.id)}
+								<div class="candidate-row">
+									<div class="candidate-main">
+										<div class="candidate-title">
+											<strong>{candidate.provider}</strong>
+											<span class="candidate-pill"
+												>{getDiscoveryCategoryLabel(candidate.category)}</span
+											>
+											<span class="candidate-pill status">{candidate.status}</span>
+										</div>
+										<p class="candidate-meta">
+											Confidence: {formatDiscoveryConfidence(candidate.confidence_score)} · Source:
+											{candidate.source}
+											{#if candidate.connection_target}
+												· Target: {candidate.connection_target}
+											{/if}
+										</p>
+									</div>
+									<div class="candidate-actions">
+										<button
+											type="button"
+											class="secondary-btn !w-auto px-3 py-1.5 text-xs"
+											onclick={() => connectDiscoveryCandidate(candidate)}
+											disabled={discoveryActionCandidateId === candidate.id ||
+												candidate.status === 'connected'}
+										>
+											{candidate.status === 'connected' ? 'Connected' : 'Connect'}
+										</button>
+										<button
+											type="button"
+											class="secondary-btn !w-auto px-3 py-1.5 text-xs"
+											onclick={() => ignoreDiscoveryCandidate(candidate)}
+											disabled={discoveryActionCandidateId === candidate.id ||
+												candidate.status === 'ignored'}
+										>
+											Ignore
+										</button>
+										<button
+											type="button"
+											class="secondary-btn !w-auto px-3 py-1.5 text-xs"
+											onclick={() => markDiscoveryCandidateConnected(candidate)}
+											disabled={discoveryActionCandidateId === candidate.id ||
+												candidate.status === 'connected'}
+										>
+											Mark Connected
+										</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
 				{#if (selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()}
 					<a href={`${base}/billing`} class="primary-btn mt-8">Upgrade to Growth →</a>
 				{:else if (selectedProvider === 'saas' || selectedProvider === 'license') && !canUseCloudPlusFeatures()}
@@ -1058,7 +1520,7 @@
 							class="form-group pt-4 border-t border-ink-800 relative mt-4"
 							class:opacity-50={!['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 						>
-							<label class="flex items-center justify-between gap-3 cursor-pointer">
+								<label class="flex items-center justify-between gap-3 cursor-pointer">
 								<div class="flex items-center gap-3">
 									<input
 										type="checkbox"
@@ -1071,12 +1533,13 @@
 								{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 									<span class="badge badge-warning text-[10px]">Growth Tier +</span>
 								{/if}
-							</label>
-							<p class="text-xs text-ink-500 mt-2">
-								Enable this if this account is the Management Account of an AWS Organization.
-								Valdrix will automatically discover and help you link member accounts.
-							</p>
-						</div>
+								</label>
+									<p class="text-xs text-ink-500 mt-2">
+										Enable this if this account is the Management Account of an AWS Organization.
+										Valdrix may discover likely member accounts and prefill linking suggestions for
+										review when organization permissions allow.
+									</p>
+								</div>
 
 						{#if isManagementAccount}
 							<div class="form-group stagger-enter mt-4">
@@ -1418,12 +1881,13 @@
 						{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 							<span class="badge badge-warning text-[10px]">Growth Tier +</span>
 						{/if}
-					</label>
-					<p class="text-xs text-ink-500 mt-2">
-						Enable this if this account is the Management Account of an AWS Organization. Valdrix
-						will automatically discover and help you link member accounts.
-					</p>
-					{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
+						</label>
+							<p class="text-xs text-ink-500 mt-2">
+								Enable this if this account is the Management Account of an AWS Organization. Valdrix
+								may discover likely member accounts and prefill linking suggestions for review when
+								organization permissions allow.
+							</p>
+						{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 						<p class="text-[10px] text-accent-400 mt-1">
 							⚡ Multi-account discovery requires Growth tier or higher.
 						</p>
@@ -1482,6 +1946,136 @@
 		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 		gap: 1.5rem;
 		margin-top: 2rem;
+	}
+
+	.discovery-panel {
+		margin-top: 2rem;
+		padding: 1.25rem;
+		border: 1px solid var(--border, #333);
+		border-radius: 12px;
+		background: var(--bg-secondary, #0f0f1a);
+	}
+
+	.discovery-header {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+	}
+
+	.discovery-stage-a,
+	.discovery-stage-b {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: end;
+		gap: 0.75rem;
+		margin-top: 0.75rem;
+	}
+
+	.discovery-actions {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.4rem;
+		min-width: 180px;
+	}
+
+	.discovery-error {
+		margin-top: 0.75rem;
+		padding: 0.65rem 0.8rem;
+		border-radius: 8px;
+		border: 1px solid #f43f5e66;
+		background: #f43f5e14;
+		color: #fda4af;
+		font-size: 0.82rem;
+	}
+
+	.discovery-info {
+		margin-top: 0.75rem;
+		padding: 0.65rem 0.8rem;
+		border-radius: 8px;
+		border: 1px solid #22c55e66;
+		background: #22c55e14;
+		color: #86efac;
+		font-size: 0.82rem;
+	}
+
+	.discovery-warnings {
+		margin-top: 0.75rem;
+		padding: 0.75rem 0.85rem;
+		border-radius: 8px;
+		border: 1px solid #f59e0b55;
+		background: #f59e0b14;
+	}
+
+	.discovery-warnings ul {
+		margin: 0;
+		padding-left: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		font-size: 0.78rem;
+		color: #fcd34d;
+	}
+
+	.candidate-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		margin-top: 0.9rem;
+	}
+
+	.candidate-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.9rem;
+		padding: 0.75rem;
+		border: 1px solid var(--border, #333);
+		border-radius: 10px;
+		background: rgba(255, 255, 255, 0.02);
+	}
+
+	.candidate-main {
+		min-width: 0;
+	}
+
+	.candidate-title {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem;
+	}
+
+	.candidate-pill {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.1rem 0.45rem;
+		border-radius: 999px;
+		border: 1px solid var(--border, #333);
+		background: var(--card-bg, #1a1a2e);
+		color: var(--text-muted, #888);
+		font-size: 0.67rem;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.candidate-pill.status {
+		text-transform: capitalize;
+	}
+
+	.candidate-meta {
+		margin: 0.2rem 0 0;
+		font-size: 0.76rem;
+		color: var(--text-muted, #888);
+	}
+
+	.candidate-actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 0.4rem;
 	}
 
 	.provider-card {
@@ -1791,5 +2385,30 @@
 	.success-icon {
 		font-size: 4rem;
 		margin-bottom: 1rem;
+	}
+
+	@media (max-width: 768px) {
+		.onboarding-container {
+			padding: 1rem;
+		}
+
+		.discovery-stage-a,
+		.discovery-stage-b {
+			grid-template-columns: 1fr;
+		}
+
+		.discovery-actions {
+			min-width: 0;
+			width: 100%;
+			align-items: stretch;
+		}
+
+		.candidate-row {
+			flex-direction: column;
+		}
+
+		.candidate-actions {
+			justify-content: flex-start;
+		}
 	}
 </style>

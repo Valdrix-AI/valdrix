@@ -5,7 +5,7 @@
  * Fetches session and makes it available to all pages.
  */
 
-import { PUBLIC_API_URL } from '$env/static/public';
+import { edgeApiPath } from '$lib/edgeProxy';
 import { fetchWithTimeout } from '$lib/fetchWithTimeout';
 import type { LayoutServerLoad } from './$types';
 
@@ -23,7 +23,7 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 		try {
 			const res = await fetchWithTimeout(
 				fetch,
-				`${PUBLIC_API_URL}/billing/subscription`,
+				edgeApiPath('/billing/subscription'),
 				{
 					headers: {
 						Authorization: `Bearer ${session.access_token}`
@@ -42,7 +42,7 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 		try {
 			const res = await fetchWithTimeout(
 				fetch,
-				`${PUBLIC_API_URL}/settings/profile`,
+				edgeApiPath('/settings/profile'),
 				{
 					headers: {
 						Authorization: `Bearer ${session.access_token}`

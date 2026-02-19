@@ -104,6 +104,7 @@ class UsageTracker:
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
             provider=provider,
+            is_byok=is_byok,
             operation_id=operation_id,
             request_type=request_type,
         )

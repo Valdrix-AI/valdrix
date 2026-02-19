@@ -13,7 +13,7 @@ This guide defines the current production path for Valdrix:
 ```
 Cloudflare Pages (dashboard.valdrix.ai)
             |
-            | HTTPS API calls
+            | /api/edge/* (SvelteKit endpoint on Pages Functions) + direct API calls
             v
 Koyeb (api.valdrix.ai, FastAPI)
             |
@@ -23,8 +23,9 @@ Supabase (PostgreSQL + Auth)
 ```
 
 Notes:
-- The dashboard currently calls `PUBLIC_API_URL` directly.
-- There is no Cloudflare edge API proxy/cache layer in the current implementation.
+- The dashboard now includes an edge proxy endpoint: `dashboard/src/routes/api/edge/[...path]/+server.ts`.
+- Core dashboard server loads and CSRF bootstrap use proxy URLs via `dashboard/src/lib/edgeProxy.ts`.
+- Several feature routes still call `PUBLIC_API_URL` directly; edge coverage is selective, not global.
 
 ## Step 1: Supabase Setup
 
@@ -64,6 +65,16 @@ Also create:
 | `SAAS_STRICT_INTEGRATIONS` | `true` | Recommended |
 | `UPSTASH_REDIS_URL` | `https://...` | Optional |
 | `UPSTASH_REDIS_TOKEN` | `...` | Optional |
+| `PAYSTACK_DEFAULT_CHECKOUT_CURRENCY` | `NGN` | Checkout settlement currency default (`NGN` or `USD`) |
+| `PAYSTACK_ENABLE_USD_CHECKOUT` | `false` | Set `true` to allow USD checkout requests |
+| `ENCRYPTION_KEY_CACHE_TTL_SECONDS` | `3600` | Encryption key-cache TTL in seconds |
+| `ENCRYPTION_KEY_CACHE_MAX_SIZE` | `1000` | Max cached derived-key entries |
+| `LLM_FAIR_USE_GUARDS_ENABLED` | `false` | Keep disabled until rollout criteria are met |
+| `LLM_FAIR_USE_PRO_DAILY_SOFT_CAP` | `1200` | Optional; only used when fair-use guards are enabled |
+| `LLM_FAIR_USE_ENTERPRISE_DAILY_SOFT_CAP` | `4000` | Optional; only used when fair-use guards are enabled |
+| `LLM_FAIR_USE_PER_MINUTE_CAP` | `30` | Optional; only used when fair-use guards are enabled |
+| `LLM_FAIR_USE_PER_TENANT_CONCURRENCY_CAP` | `4` | Optional; only used when fair-use guards are enabled |
+| `LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS` | `180` | Optional; lease self-heal window |
 
 5. Deploy and record your service URL.
 
@@ -102,8 +113,11 @@ The dashboard is now configured for Cloudflare runtime via `@sveltejs/adapter-cl
 | Variable | Example |
 |---|---|
 | `PUBLIC_API_URL` | `https://api.valdrix.ai` |
+| `PRIVATE_API_ORIGIN` | `https://api.valdrix.ai` |
 | `PUBLIC_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
 | `PUBLIC_SUPABASE_ANON_KEY` | `<anon-key>` |
+
+`PRIVATE_API_ORIGIN` is used server-side by the edge proxy endpoint so upstream origin resolution is explicit and not dependent on public URL parsing.
 
 5. Deploy and record your Pages URL.
 6. Add custom domain `dashboard.valdrix.ai` (or your preferred domain).
@@ -124,7 +138,24 @@ curl -fsS https://api.valdrix.ai/health
 
 3. API connectivity from dashboard:
 - Confirm subscription/profile requests succeed
+
+4. Fair-use guardrails (if explicitly enabled):
+- Confirm 429 responses include `llm_fair_use_exceeded` when limits are hit.
+- Confirm metrics emit:
+  - `valdrix_ops_llm_fair_use_denials_total`
+  - `valdrix_ops_llm_fair_use_evaluations_total`
+  - `valdrix_ops_llm_fair_use_observed`
+- Confirm tenant-scoped runtime visibility endpoint responds:
+  - `GET /api/v1/admin/health-dashboard/fair-use` (admin-authenticated)
 - Confirm no CORS errors in browser console
+
+5. Edge proxy connectivity:
+
+```bash
+curl -i https://dashboard.valdrix.ai/api/edge/health/live
+```
+
+Expect `x-valdrix-edge-proxy: 1` on the response.
 
 ## Troubleshooting
 
@@ -148,6 +179,10 @@ pnpm --dir dashboard build
 ### CORS failures
 - Ensure exact scheme + host in `CORS_ORIGINS`
 - Avoid wildcard origins in production
+
+### Edge proxy upstream resolution failure
+- Ensure `PRIVATE_API_ORIGIN` is set on Cloudflare Pages runtime.
+- Confirm upstream API origin is reachable from Pages Functions.
 
 ## Provider Limits Snapshot (for planning)
 

@@ -75,6 +75,31 @@ SCAN_FAILURE_TOTAL = Counter(
     ["provider", "region", "error_type"],
 )
 
+# --- Cloud API Cost Governance ---
+CLOUD_API_CALLS_TOTAL = Counter(
+    "valdrix_ops_cloud_api_calls_total",
+    "Total expensive cloud API calls executed by the optimization engine",
+    ["provider", "api"],
+)
+
+CLOUD_API_BUDGET_DECISIONS_TOTAL = Counter(
+    "valdrix_ops_cloud_api_budget_decisions_total",
+    "Budget-governor decisions for expensive cloud API calls",
+    ["provider", "api", "decision"],  # allow | deny | would_deny
+)
+
+CLOUD_API_BUDGET_REMAINING = Gauge(
+    "valdrix_ops_cloud_api_budget_remaining_calls",
+    "Remaining expensive cloud API call budget for the current UTC day",
+    ["provider", "api"],
+)
+
+CLOUD_API_ESTIMATED_COST_USD = Counter(
+    "valdrix_ops_cloud_api_estimated_cost_usd_total",
+    "Estimated cloud API cost exposure in USD from expensive telemetry calls",
+    ["provider", "api"],
+)
+
 # --- API & Remediation Metrics ---
 API_REQUESTS_TOTAL = Counter(
     "valdrix_ops_api_requests_total",
@@ -125,6 +150,24 @@ LLM_PRE_AUTH_DENIALS = Counter(
     "valdrix_ops_llm_pre_auth_denials_total",
     "Total number of LLM requests denied by financial guardrails",
     ["reason", "tenant_tier"],
+)
+
+LLM_FAIR_USE_DENIALS = Counter(
+    "valdrix_ops_llm_fair_use_denials_total",
+    "Total number of LLM requests denied by fair-use throughput guardrails",
+    ["gate", "tenant_tier"],
+)
+
+LLM_FAIR_USE_EVALUATIONS = Counter(
+    "valdrix_ops_llm_fair_use_evaluations_total",
+    "Total fair-use evaluations by gate and outcome",
+    ["gate", "outcome", "tenant_tier"],
+)
+
+LLM_FAIR_USE_OBSERVED = Gauge(
+    "valdrix_ops_llm_fair_use_observed",
+    "Observed usage value at fair-use gate checks",
+    ["gate", "tenant_tier"],
 )
 
 LLM_REQUEST_DURATION = Histogram(

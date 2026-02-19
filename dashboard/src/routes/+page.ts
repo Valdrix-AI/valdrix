@@ -1,4 +1,4 @@
-import { PUBLIC_API_URL } from '$env/static/public';
+import { edgeApiPath } from '$lib/edgeProxy';
 import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
 import type { PageLoad } from './$types';
 
@@ -46,7 +46,7 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 
 		const carbonPromise = wantsCarbon
 			? getWithTimeout(
-					`${PUBLIC_API_URL}/carbon?start_date=${startDate}&end_date=${endDate}${providerQuery}`
+					edgeApiPath(`/carbon?start_date=${startDate}&end_date=${endDate}${providerQuery}`)
 				)
 			: Promise.resolve(null);
 
@@ -57,23 +57,25 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 			: '';
 
 		const zombiesUrl = wantsZombiesAnalysis
-			? `${PUBLIC_API_URL}/zombies?analyze=true${zombiesProviderQuery}`
-			: `${PUBLIC_API_URL}/zombies${zombiesProviderQuery}`;
+			? edgeApiPath(`/zombies?analyze=true${zombiesProviderQuery}`)
+			: edgeApiPath(`/zombies${zombiesProviderQuery}`);
 
 		const results = await Promise.allSettled([
 			getWithTimeout(
-				`${PUBLIC_API_URL}/costs?start_date=${startDate}&end_date=${endDate}${providerQuery}`
+				edgeApiPath(`/costs?start_date=${startDate}&end_date=${endDate}${providerQuery}`)
 			),
 			carbonPromise,
 			getWithTimeout(zombiesUrl),
 			hasChargeback && wantsAllocation
 				? getWithTimeout(
-						`${PUBLIC_API_URL}/costs/attribution/summary?start_date=${startDate}&end_date=${endDate}`
+						edgeApiPath(`/costs/attribution/summary?start_date=${startDate}&end_date=${endDate}`)
 					)
 				: Promise.resolve(null),
 			hasUnitEconomics && wantsUnitEconomics
 				? getWithTimeout(
-						`${PUBLIC_API_URL}/costs/unit-economics?start_date=${startDate}&end_date=${endDate}${providerQuery}&alert_on_anomaly=false`
+						edgeApiPath(
+							`/costs/unit-economics?start_date=${startDate}&end_date=${endDate}${providerQuery}&alert_on_anomaly=false`
+						)
 					)
 				: Promise.resolve(null)
 		]);

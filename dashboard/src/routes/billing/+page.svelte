@@ -32,7 +32,11 @@
 			name: 'Starter',
 			price_monthly: 29,
 			price_annual: 290,
-			features: ['Single cloud provider (AWS)', 'Cost dashboards', 'Budget alerts']
+			features: [
+				'Single cloud provider (AWS)',
+				'Cost dashboards + budget alerts',
+				'BYOK supported (no platform surcharge)'
+			]
 		},
 		{
 			id: 'growth',
@@ -40,14 +44,22 @@
 			price_monthly: 79,
 			price_annual: 790,
 			popular: true,
-			features: ['Multi-cloud support', 'AI insights', 'GreenOps']
+			features: [
+				'Multi-cloud support',
+				'AI analyses + GreenOps',
+				'BYOK supported (no platform surcharge)'
+			]
 		},
 		{
 			id: 'pro',
 			name: 'Pro',
 			price_monthly: 199,
 			price_annual: 1990,
-			features: ['Automated remediation', 'Priority support', 'Full API access']
+			features: [
+				'Automated remediation',
+				'Priority support + full API access',
+				'BYOK supported (no platform surcharge)'
+			]
 		}
 	];
 
@@ -161,7 +173,10 @@
 	<!-- Page Header -->
 	<div>
 		<h1 class="text-2xl font-bold mb-1">Billing & Plans</h1>
-		<p class="text-ink-400 text-sm">Manage your subscription and payment methods</p>
+		<p class="text-ink-400 text-sm">
+			Manage your subscription and payment methods. BYOK is supported on all tiers with no platform
+			surcharge.
+		</p>
 	</div>
 
 	<AuthGate authenticated={!!data.user} action="manage billing">
@@ -345,7 +360,8 @@
 					<span>Secure payment processing</span>
 				</div>
 				<p class="text-xs text-ink-500 mt-2">
-					All payments are processed securely. You can cancel your subscription at any time.
+					All payments are processed securely. BYOK does not add a separate platform surcharge, and
+					tier daily usage limits still apply.
 				</p>
 			</div>
 		{/if}
