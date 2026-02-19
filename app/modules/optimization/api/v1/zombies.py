@@ -23,6 +23,17 @@ router = APIRouter(tags=["Cloud Hygiene (Zombies)"])
 logger = structlog.get_logger()
 
 
+def _parse_remediation_action(action: str) -> RemediationAction:
+    try:
+        return RemediationAction(action)
+    except ValueError as exc:
+        raise ValdrixException(
+            message=f"Invalid action: {action}",
+            code="invalid_remediation_action",
+            status_code=400,
+        ) from exc
+
+
 # --- Schemas ---
 class RemediationRequestCreate(BaseModel):
     resource_id: str
@@ -107,14 +118,7 @@ async def create_remediation_request(
     region: str = Query(default="us-east-1"),
 ) -> Dict[str, str]:
     """Create a remediation request. Requires Pro tier or higher."""
-    try:
-        action_enum = RemediationAction(request.action)
-    except ValueError:
-        raise ValdrixException(
-            message=f"Invalid action: {request.action}",
-            code="invalid_remediation_action",
-            status_code=400,
-        )
+    action_enum = _parse_remediation_action(request.action)
 
     service = RemediationService(db=db, region=region)
     result = await service.create_request(
@@ -221,8 +225,6 @@ async def preview_remediation_policy(
         RemediationRequest, request_id, tenant_id
     )
     if not remediation_request:
-        from app.shared.core.exceptions import ResourceNotFoundError
-
         raise ResourceNotFoundError(f"Remediation request {request_id} not found")
     preview = await service.preview_policy(remediation_request, tenant_id)
     return PolicyPreviewResponse(**preview)
@@ -240,14 +242,7 @@ async def preview_remediation_policy_payload(
     region: str = Query(default="us-east-1"),
 ) -> PolicyPreviewResponse:
     """Preview deterministic policy outcome before a remediation request is created."""
-    try:
-        action_enum = RemediationAction(payload.action)
-    except ValueError:
-        raise ValdrixException(
-            message=f"Invalid action: {payload.action}",
-            code="invalid_remediation_action",
-            status_code=400,
-        )
+    action_enum = _parse_remediation_action(payload.action)
 
     service = RemediationService(db=db, region=region)
     preview = await service.preview_policy_input(
@@ -282,11 +277,6 @@ async def execute_remediation(
     ),
 ) -> Dict[str, str]:
     """Execute a remediation request. Requires Pro tier or higher and Admin role."""
-    # Note: requires_feature(FeatureFlag.AUTO_REMEDIATION) also checks for isAdmin if we wanted,
-    # but here we use requires_role("admin") explicitly for SEC-02.
-
-    # BE-REMED-Unified: Delegate execution entirely to RemediationService.
-    # It now handles multi-cloud credential resolution and strategy dispatch.
     service = RemediationService(db=db, region=region)
 
     try:
@@ -297,13 +287,23 @@ async def execute_remediation(
             "status": executed_request.status.value,
             "request_id": str(executed_request.id),
         }
-    except ResourceNotFoundError as e:
-        raise ResourceNotFoundError(str(e))
-    except Exception as e:
-        logger.error("remediation_api_execution_failed", request_id=str(request_id), error=str(e))
+    except ResourceNotFoundError:
+        raise
+    except ValdrixException:
+        raise
+    except ValueError as exc:
         raise ValdrixException(
-            message=str(e), code="remediation_execution_failed", status_code=400
-        )
+            message=str(exc),
+            code="remediation_execution_failed",
+            status_code=400,
+        ) from exc
+    except Exception:
+        logger.exception("remediation_api_execution_failed", request_id=str(request_id))
+        raise ValdrixException(
+            message="Failed to execute remediation request.",
+            code="remediation_execution_failed",
+            status_code=500,
+        ) from None
 
 
 @router.get("/plan/{request_id}")
@@ -327,8 +327,6 @@ async def get_remediation_plan(
     )
 
     if not remediation_request:
-        from app.shared.core.exceptions import ResourceNotFoundError
-
         raise ResourceNotFoundError(f"Remediation request {request_id} not found")
 
     plan = await service.generate_iac_plan(remediation_request, tenant_id)
