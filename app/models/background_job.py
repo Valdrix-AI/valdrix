@@ -61,6 +61,7 @@ class JobType(str, Enum):
         "cost_aggregation"  # Phase 4.2: Async aggregation for large datasets
     )
     DUNNING = "dunning"  # Payment retry and customer notifications
+    LICENSE_GOVERNANCE = "license_governance" # Phase 8: Autonomous License Lifecycle
 
 
 class BackgroundJob(Base):

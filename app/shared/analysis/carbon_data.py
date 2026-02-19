@@ -9,10 +9,26 @@ from decimal import Decimal, InvalidOperation
 # Illustrative intensities:
 # Coal-heavy (e.g. us-east-1) vs. Green-heavy (e.g. eu-central-1)
 REGION_CARBON_INTENSITY: Dict[str, float] = {
+    # AWS
     "us-east-1": 412.0,
     "us-west-2": 150.0,
     "eu-central-1": 55.0,
     "af-south-1": 620.0,
+    
+    # Azure
+    "eastus": 412.0,       # Proxy for Virginia
+    "westus": 150.0,       # Proxy for California
+    "westeurope": 55.0,    # Proxy for Germany/Netherlands
+    "northeurope": 65.0,   # Proxy for Ireland
+    "southafricanorth": 620.0,
+    
+    # GCP
+    "us-east4": 412.0,     # Proxy for Virginia
+    "us-central1": 350.0,  # Proxy for Iowa
+    "europe-west3": 55.0,  # Proxy for Frankfurt
+    "europe-west1": 65.0,  # Proxy for Belgium
+    "asia-southeast1": 480.0, # Proxy for Singapore
+    
     "global": 300.0,
 }
 

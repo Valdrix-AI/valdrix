@@ -4,7 +4,7 @@ import base64
 import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
-from app.shared.core.constants import AWS_SUPPORTED_REGIONS, LLMProvider
+from app.shared.core.constants import AWS_SUPPORTED_REGIONS
 
 # Environment Constants (Finding #10)
 ENV_PRODUCTION = "production"
@@ -94,7 +94,7 @@ class Settings(BaseSettings):
         self._validate_billing_config()
         self._validate_integration_config()
         self._validate_environment_safety()
-        
+
         return self
 
     def _validate_core_secrets(self) -> None:
@@ -113,7 +113,7 @@ class Settings(BaseSettings):
 
         # KDF_SALT validation (Base64 check)
         if not self.KDF_SALT:
-             raise ValueError("KDF_SALT must be set (base64-encoded random 32 bytes).")
+            raise ValueError("KDF_SALT must be set (base64-encoded random 32 bytes).")
         try:
             decoded_salt = base64.b64decode(self.KDF_SALT)
             if len(decoded_salt) != 32:
@@ -121,12 +121,17 @@ class Settings(BaseSettings):
         except Exception as exc:
             raise ValueError("KDF_SALT must be valid base64.") from exc
 
+        if self.ENCRYPTION_KEY_CACHE_TTL_SECONDS < 60:
+            raise ValueError("ENCRYPTION_KEY_CACHE_TTL_SECONDS must be >= 60.")
+        if self.ENCRYPTION_KEY_CACHE_MAX_SIZE < 10:
+            raise ValueError("ENCRYPTION_KEY_CACHE_MAX_SIZE must be >= 10.")
+
     def _validate_database_config(self) -> None:
         """Validates database and redis connectivity settings."""
         if self.is_production:
             if not self.DATABASE_URL:
                 raise ValueError("DATABASE_URL is required in production.")
-            
+
             # SEC-04: Database SSL Mode handled by Enum/Literal validation
             # in session.py, but we enforce production levels here.
             if self.DB_SSL_MODE not in ["require", "verify-ca", "verify-full"]:
@@ -147,38 +152,67 @@ class Settings(BaseSettings):
             "google": self.GOOGLE_API_KEY,
             "groq": self.GROQ_API_KEY,
         }
-        
+
         if self.LLM_PROVIDER in provider_keys and not provider_keys[self.LLM_PROVIDER]:
             if self.is_production:
-                raise ValueError(f"LLM_PROVIDER is '{self.LLM_PROVIDER}' but its API key is missing.")
+                raise ValueError(
+                    f"LLM_PROVIDER is '{self.LLM_PROVIDER}' but its API key is missing."
+                )
             else:
-                 structlog.get_logger().info("llm_provider_key_missing_non_prod", provider=self.LLM_PROVIDER)
+                structlog.get_logger().info(
+                    "llm_provider_key_missing_non_prod", provider=self.LLM_PROVIDER
+                )
 
     def _validate_billing_config(self) -> None:
         """Validates Paystack credentials (SEC-P0)."""
+        default_currency = (
+            str(self.PAYSTACK_DEFAULT_CHECKOUT_CURRENCY or "NGN").strip().upper()
+        )
+        if default_currency not in {"NGN", "USD"}:
+            raise ValueError(
+                "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY must be one of: NGN, USD."
+            )
+
         if self.is_production:
-            if not self.PAYSTACK_SECRET_KEY or self.PAYSTACK_SECRET_KEY.startswith("sk_test"):
-                 raise ValueError("PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production.")
+            if not self.PAYSTACK_SECRET_KEY or self.PAYSTACK_SECRET_KEY.startswith(
+                "sk_test"
+            ):
+                raise ValueError(
+                    "PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production."
+                )
             if not self.PAYSTACK_PUBLIC_KEY:
-                 raise ValueError("PAYSTACK_PUBLIC_KEY is required in production.")
+                raise ValueError("PAYSTACK_PUBLIC_KEY is required in production.")
+
+            if default_currency == "USD" and not self.PAYSTACK_ENABLE_USD_CHECKOUT:
+                raise ValueError(
+                    "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY cannot be USD when PAYSTACK_ENABLE_USD_CHECKOUT is false."
+                )
 
     def _validate_integration_config(self) -> None:
         """Validates SaaS integration constraints."""
         if self.SAAS_STRICT_INTEGRATIONS:
             # Check if any env-based integration settings are accidentally used
-            sconf = [self.SLACK_CHANNEL_ID, self.JIRA_BASE_URL, self.GITHUB_ACTIONS_TOKEN]
+            sconf = [
+                self.SLACK_CHANNEL_ID,
+                self.JIRA_BASE_URL,
+                self.GITHUB_ACTIONS_TOKEN,
+            ]
             if any(sconf) and self.is_production:
-                 raise ValueError("SAAS_STRICT_INTEGRATIONS forbids env-based settings in production.")
+                raise ValueError(
+                    "SAAS_STRICT_INTEGRATIONS forbids env-based settings in production."
+                )
 
     def _validate_environment_safety(self) -> None:
         """Validates network and deployment safety (SEC-A1, SEC-A2)."""
         if self.is_production or self.ENVIRONMENT == "staging":
             if not self.ADMIN_API_KEY or len(self.ADMIN_API_KEY) < 32:
-                 raise ValueError("ADMIN_API_KEY must be >= 32 chars in staging/production.")
+                raise ValueError(
+                    "ADMIN_API_KEY must be >= 32 chars in staging/production."
+                )
 
             # Safety Warnings (non-blocking but logged)
             logger = structlog.get_logger()
-            
+
             # CORS localhost check
             if any("localhost" in o or "127.0.0.1" in o for o in self.CORS_ORIGINS):
                 logger.warning("cors_localhost_in_production")
@@ -224,6 +258,14 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "groq"  # Options: openai, claude, google, groq
     ENABLE_DELTA_ANALYSIS: bool = True  # Innovation 1: Reduce token usage by 90%
     DELTA_ANALYSIS_DAYS: int = 3
+    # Disabled-by-default fairness guardrails for future "near-unlimited" tiers.
+    # Keep OFF until production evidence gates are met.
+    LLM_FAIR_USE_GUARDS_ENABLED: bool = False
+    LLM_FAIR_USE_PRO_DAILY_SOFT_CAP: int = 1200
+    LLM_FAIR_USE_ENTERPRISE_DAILY_SOFT_CAP: int = 4000
+    LLM_FAIR_USE_PER_MINUTE_CAP: int = 30
+    LLM_FAIR_USE_PER_TENANT_CONCURRENCY_CAP: int = 4
+    LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS: int = 180
 
     # Scheduler
     SCHEDULER_HOUR: int = 8
@@ -322,6 +364,8 @@ class Settings(BaseSettings):
     PII_ENCRYPTION_KEY: Optional[str] = None
     API_KEY_ENCRYPTION_KEY: Optional[str] = None
     ENCRYPTION_FALLBACK_KEYS: list[str] = []
+    ENCRYPTION_KEY_CACHE_TTL_SECONDS: int = 3600
+    ENCRYPTION_KEY_CACHE_MAX_SIZE: int = 1000
     BLIND_INDEX_KEY: Optional[str] = None  # SEC-06: Separation of keys
 
     # KDF Settings for password-to-key derivation (SEC-06)
@@ -343,8 +387,6 @@ class Settings(BaseSettings):
     # Paystack Billing (Nigeria Support)
     PAYSTACK_SECRET_KEY: Optional[str] = None
     PAYSTACK_PUBLIC_KEY: Optional[str] = None
-    EXCHANGERATE_API_KEY: Optional[str] = None  # Added for dynamic currency
-    FALLBACK_NGN_RATE: float = 1450.0  # SEC: Centralized financial fallback
     # Monthly plans
     PAYSTACK_PLAN_STARTER: Optional[str] = None
     PAYSTACK_PLAN_GROWTH: Optional[str] = None
@@ -355,6 +397,8 @@ class Settings(BaseSettings):
     PAYSTACK_PLAN_GROWTH_ANNUAL: Optional[str] = None
     PAYSTACK_PLAN_PRO_ANNUAL: Optional[str] = None
     PAYSTACK_PLAN_ENTERPRISE_ANNUAL: Optional[str] = None
+    PAYSTACK_DEFAULT_CHECKOUT_CURRENCY: str = "NGN"
+    PAYSTACK_ENABLE_USD_CHECKOUT: bool = False
 
     # Circuit Breaker & Safety Guardrails (Phase 12)
     CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 3
@@ -379,6 +423,17 @@ class Settings(BaseSettings):
     # Scanner Settings
     ZOMBIE_PLUGIN_TIMEOUT_SECONDS: int = 30
     ZOMBIE_REGION_TIMEOUT_SECONDS: int = 120
+    CLOUD_API_BUDGET_GOVERNOR_ENABLED: bool = True
+    CLOUD_API_BUDGET_ENFORCE: bool = True
+    # Daily per-tenant caps for expensive telemetry APIs.
+    # 0 disables capping for the API.
+    AWS_CLOUDWATCH_DAILY_CALL_BUDGET: int = 3000
+    GCP_MONITORING_DAILY_CALL_BUDGET: int = 3000
+    AZURE_MONITOR_DAILY_CALL_BUDGET: int = 3000
+    # Estimated API costs per call used only for observability metrics.
+    AWS_CLOUDWATCH_ESTIMATED_COST_PER_CALL_USD: float = 0.00001
+    GCP_MONITORING_ESTIMATED_COST_PER_CALL_USD: float = 0.0
+    AZURE_MONITOR_ESTIMATED_COST_PER_CALL_USD: float = 0.0
 
     model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
 

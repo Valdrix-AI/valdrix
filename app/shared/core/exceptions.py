@@ -154,6 +154,24 @@ class BudgetExceededError(ValdrixException):
         )
 
 
+class LLMFairUseExceededError(BudgetExceededError):
+    """
+    Raised when an LLM request is blocked by fair-use throughput guards.
+
+    Uses HTTP 429 semantics because these are retryable request-volume constraints,
+    not account-credit/budget payment failures.
+    """
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        ValdrixException.__init__(
+            self,
+            message,
+            code="llm_fair_use_exceeded",
+            status_code=429,
+            details=details,
+        )
+
+
 class KillSwitchTriggeredError(ValdrixException):
     """Raised when a remediation action is blocked by the safety kill switch."""
 

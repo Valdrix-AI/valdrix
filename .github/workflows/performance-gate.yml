@@ -13,6 +13,7 @@ on:
         type: choice
         options:
           - health
+          - health_deep
           - dashboard
           - ops
           - scale
@@ -96,4 +97,3 @@ jobs:
           name: perf-gate-evidence
           path: reports/performance/perf_gate_${{ github.run_id }}.json
           retention-days: 14
-

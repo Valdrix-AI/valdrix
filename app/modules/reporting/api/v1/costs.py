@@ -1055,11 +1055,13 @@ async def _compute_acceptance_kpis_payload(
         )
     )
 
-# User Access Review Proof (SOC2)
+    # User Access Review Proof (SOC2)
     from app.models.tenant import User
-    user_count_stmt = select(func.count(User.id)).where(User.tenant_id == tenant_id, User.is_active == True)
+    user_count_stmt = select(func.count(User.id)).where(
+        User.tenant_id == tenant_id, User.is_active
+    )
     active_user_count = await db.scalar(user_count_stmt) or 0
-    
+
     metrics.append(
         AcceptanceKpiMetric(
             key="user_access_review_proof",
@@ -1077,14 +1079,15 @@ async def _compute_acceptance_kpis_payload(
 
     # SEC-SOC2: Change Governance Proof
     from app.modules.governance.domain.security.audit_log import AuditLog, AuditEventType
+
     remediation_stmt = select(func.count(AuditLog.id)).where(
         AuditLog.tenant_id == tenant_id,
         AuditLog.event_type == AuditEventType.REMEDIATION_EXECUTED.value,
         AuditLog.event_timestamp >= datetime.combine(start_date, datetime.min.time()),
-        AuditLog.success == True
+        AuditLog.success,
     )
     remediation_count = await db.scalar(remediation_stmt) or 0
-    
+
     metrics.append(
         AcceptanceKpiMetric(
             key="change_governance_proof",
@@ -1092,7 +1095,7 @@ async def _compute_acceptance_kpis_payload(
             available=True,
             target="Remediation actions documented in audit trail",
             actual=f"{remediation_count} actions captured",
-            meets_target=True, # Informational mainly, but proof of existence
+            meets_target=True,  # Informational mainly, but proof of existence
             details={
                 "period_remediations": remediation_count,
                 "evidence_type": "Immutable Audit Log",
@@ -1367,8 +1370,17 @@ async def _compute_acceptance_kpis_payload(
         )
 
     available_metrics = [metric for metric in metrics if metric.available]
-    all_targets_met = bool(available_metrics) and all(
-        metric.meets_target for metric in available_metrics
+    informational_keys = {
+        "tenant_isolation_proof",
+        "encryption_health_proof",
+        "user_access_review_proof",
+        "change_governance_proof",
+    }
+    gating_metrics = [
+        metric for metric in available_metrics if metric.key not in informational_keys
+    ]
+    all_targets_met = bool(gating_metrics) and all(
+        metric.meets_target for metric in gating_metrics
     )
 
     return AcceptanceKpisResponse(

@@ -70,13 +70,23 @@ class HybridAdapter(BaseAdapter):
         token = self.credentials.api_key
         if not token:
             raise ExternalAPIError("Missing API token for hybrid native connector")
-        return token.get_secret_value().strip()
+        resolved = (
+            token.get_secret_value() if hasattr(token, "get_secret_value") else str(token)
+        )
+        if not resolved or not resolved.strip():
+            raise ExternalAPIError("Missing API token for hybrid native connector")
+        return resolved.strip()
 
     def _resolve_api_secret(self) -> str:
         token = self.credentials.api_secret
         if not token:
             raise ExternalAPIError("Missing API secret for hybrid native connector")
-        return token.get_secret_value().strip()
+        resolved = (
+            token.get_secret_value() if hasattr(token, "get_secret_value") else str(token)
+        )
+        if not resolved or not resolved.strip():
+            raise ExternalAPIError("Missing API secret for hybrid native connector")
+        return resolved.strip()
 
     def _iter_month_starts(
         self, start_date: datetime, end_date: datetime
@@ -161,14 +171,14 @@ class HybridAdapter(BaseAdapter):
         native_vendor = self._native_vendor
         if self._auth_method == "api_key" and native_vendor is None:
             supported = ", ".join(sorted(_LEDGER_HTTP_VENDOR_ALIASES))
-            self._last_error = (
+            self.last_error = (
                 f"Native Hybrid auth is not supported for vendor '{self._vendor}'. "
                 f"Supported vendors: {supported}, openstack/cloudkitty, vmware/vcenter. "
                 "Use auth_method manual/csv for custom vendors."
             )
             return False
         if self._auth_method not in {"manual", "csv", "api_key"}:
-            self._last_error = (
+            self.last_error = (
                 "Hybrid connector auth_method must be one of: manual, csv, api_key "
                 f"(got '{self._auth_method}')."
             )
@@ -211,27 +221,27 @@ class HybridAdapter(BaseAdapter):
 
         feed = self.credentials.spend_feed
         is_valid = self._validate_manual_feed(feed)
-        if not is_valid and self._last_error is None:
-            self._last_error = "Spend feed is missing or invalid."
+        if not is_valid and self.last_error is None:
+            self.last_error = "Spend feed is missing or invalid."
         return is_valid
 
     def _validate_manual_feed(self, feed: Any) -> bool:
         if not isinstance(feed, list) or not feed:
-            self._last_error = "Spend feed must contain at least one record for manual/csv verification."
+            self.last_error = "Spend feed must contain at least one record for manual/csv verification."
             return False
         for idx, entry in enumerate(feed):
             if not isinstance(entry, dict):
-                self._last_error = f"Spend feed entry #{idx + 1} must be a JSON object."
+                self.last_error = f"Spend feed entry #{idx + 1} must be a JSON object."
                 return False
             has_timestamp = entry.get("timestamp") or entry.get("date")
             if not has_timestamp:
-                self._last_error = (
+                self.last_error = (
                     f"Spend feed entry #{idx + 1} is missing timestamp/date."
                 )
                 return False
             amount = entry.get("cost_usd", entry.get("amount_usd"))
             if not is_number(amount):
-                self._last_error = f"Spend feed entry #{idx + 1} must include numeric cost_usd or amount_usd."
+                self.last_error = f"Spend feed entry #{idx + 1} must include numeric cost_usd or amount_usd."
                 return False
         return True
 
@@ -351,12 +361,10 @@ class HybridAdapter(BaseAdapter):
                 }
             }
         }
-        from app.shared.core.http import get_http_client
-
-        client = get_http_client(
+        async with httpx.AsyncClient(
             timeout=_NATIVE_TIMEOUT_SECONDS, verify=self._resolve_verify_ssl()
-        )
-        response = await client.post(auth_url, json=body)
+        ) as client:
+            response = await client.post(auth_url, json=body)
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -495,12 +503,10 @@ class HybridAdapter(BaseAdapter):
         base_url = self._resolve_vmware_base_url()
         endpoint = urljoin(base_url.rstrip("/") + "/", "rest/com/vmware/cis/session")
 
-        from app.shared.core.http import get_http_client
-
-        client = get_http_client(
+        async with httpx.AsyncClient(
             timeout=_NATIVE_TIMEOUT_SECONDS, verify=self._resolve_verify_ssl()
-        )
-        response = await client.post(endpoint, auth=(username, password))
+        ) as client:
+            response = await client.post(endpoint, auth=(username, password))
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -763,12 +769,10 @@ class HybridAdapter(BaseAdapter):
         last_error: Exception | None = None
         for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
             try:
-                from app.shared.core.http import get_http_client
-
-                client = get_http_client(
+                async with httpx.AsyncClient(
                     timeout=_NATIVE_TIMEOUT_SECONDS, verify=self._resolve_verify_ssl()
-                )
-                response = await client.get(url, headers=headers, params=params)
+                ) as client:
+                    response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as exc:

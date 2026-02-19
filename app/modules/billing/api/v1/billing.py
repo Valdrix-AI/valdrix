@@ -20,6 +20,7 @@ from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.db.session import get_db
 from app.shared.core.config import get_settings
 from app.shared.core.rate_limit import auth_limit
+from app.shared.core.currency import ExchangeRateUnavailableError
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Billing"])
@@ -89,6 +90,7 @@ class PricingPlanUpdate(BaseModel):
 class CheckoutRequest(BaseModel):
     tier: str  # starter, growth, pro, enterprise
     billing_cycle: str = "monthly"  # monthly, annual
+    currency: Optional[str] = None  # NGN (default), USD (feature-gated)
     callback_url: Optional[str] = None
 
 
@@ -359,10 +361,16 @@ async def create_checkout(
             email=user.email,
             callback_url=callback,
             billing_cycle=checkout_req.billing_cycle,
+            currency=checkout_req.currency,
         )
 
         return {"checkout_url": result["url"], "reference": result["reference"]}
 
+    except ExchangeRateUnavailableError as e:
+        logger.warning("checkout_rate_unavailable", error=str(e))
+        raise HTTPException(
+            503, "Live FX rate unavailable. Please try checkout again shortly."
+        ) from e
     except HTTPException:
         raise
     except ValueError as e:
@@ -531,9 +539,10 @@ async def get_exchange_rate(
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Get current exchange rate."""
+    """Get current exchange rate with billing safety health flags."""
     from app.models.pricing import ExchangeRate
     from sqlalchemy import select
+    from datetime import datetime, timezone
 
     result = await db.execute(
         select(ExchangeRate).where(
@@ -543,12 +552,57 @@ async def get_exchange_rate(
     rate_obj = result.scalar_one_or_none()
 
     if not rate_obj:
-        return {"rate": 1450.0, "provider": "fallback"}
+        return {
+            "rate": None,
+            "provider": "unavailable",
+            "last_updated": None,
+            "age_hours": None,
+            "is_stale": None,
+            "is_official_provider": None,
+            "billing_safe": False,
+            "warning": "No USD->NGN rate row available in cache",
+        }
+
+    now_utc = datetime.now(timezone.utc)
+    updated_at = rate_obj.last_updated
+    if updated_at and updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    age_hours = None
+    is_stale = None
+    if updated_at:
+        age_hours = round(
+            (now_utc - updated_at).total_seconds() / 3600,
+            2,
+        )
+        is_stale = age_hours > 24
+    provider = str(rate_obj.provider or "").strip().lower()
+    is_official_provider = provider == "cbn_nfem"
+    billing_safe = bool(is_official_provider and is_stale is False)
+    warning = None
+    if not is_official_provider:
+        warning = (
+            "Provider is not official CBN NFEM; strict billing will reject this rate."
+        )
+    elif is_stale:
+        warning = "CBN rate is older than 24h; strict billing will reject checkout."
+    if warning:
+        logger.warning(
+            "billing_fx_guardrail_triggered",
+            provider=provider or "unknown",
+            age_hours=age_hours,
+            is_stale=is_stale,
+            billing_safe=billing_safe,
+        )
 
     return {
         "rate": float(rate_obj.rate),
         "provider": rate_obj.provider,
-        "last_updated": rate_obj.last_updated.isoformat(),
+        "last_updated": updated_at.isoformat() if updated_at else None,
+        "age_hours": age_hours,
+        "is_stale": is_stale,
+        "is_official_provider": is_official_provider,
+        "billing_safe": billing_safe,
+        "warning": warning,
     }
 
 

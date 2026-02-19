@@ -51,7 +51,7 @@ class LLMUsageMetrics(BaseModel):
 class AWSMeteringMetrics(BaseModel):
     """AWS API usage metrics."""
 
-    cost_explorer_calls_today: int
+    cost_analysis_calls_today: int
     zombie_scans_today: int
     regions_scanned: int
     last_scan_at: str | None
@@ -237,7 +237,7 @@ async def _get_aws_metering(
                 BackgroundJob.job_type == JobType.FINOPS_ANALYSIS,
                 BackgroundJob.created_at >= today_start,
             )
-            .label("cost_explorer_calls"),
+            .label("cost_analysis_calls"),
             func.count(BackgroundJob.id)
             .filter(
                 BackgroundJob.job_type == JobType.ZOMBIE_SCAN,
@@ -252,7 +252,7 @@ async def _get_aws_metering(
     row = result.one()
 
     return AWSMeteringMetrics(
-        cost_explorer_calls_today=int(row.cost_explorer_calls or 0),
+        cost_analysis_calls_today=int(row.cost_analysis_calls or 0),
         zombie_scans_today=int(row.zombie_scans or 0),
         regions_scanned=4,  # Default regions
         last_scan_at=row.last_scan.isoformat() if row.last_scan else None,

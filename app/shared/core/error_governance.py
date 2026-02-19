@@ -30,17 +30,45 @@ def handle_exception(
 
     # 1. Classification & Sanitization
     from app.shared.core.config import get_settings
+
     settings = get_settings()
     is_prod = settings.ENVIRONMENT.lower() in ("production", "staging")
+    safe_codes = {
+        "auth_error",
+        "not_found",
+        "budget_exceeded",
+        "llm_fair_use_exceeded",
+        "kill_switch_triggered",
+    }
 
     if isinstance(exc, ValdrixException):
         valdrix_exc = exc
         # SEC-07: Sanitize message in production if it's not a known safe-to-leak type
         if is_prod:
-            # Only allow specific safe codes or manually verified safe messages
-            safe_codes = {"auth_error", "not_found", "budget_exceeded", "kill_switch_triggered"}
             if valdrix_exc.code not in safe_codes:
                 valdrix_exc.message = "An error occurred while processing your request"
+    elif exc.__class__.__name__ == "CsrfProtectError":
+        status_code = 403
+        raw_status = getattr(exc, "status_code", None)
+        if isinstance(raw_status, int):
+            status_code = raw_status
+        elif isinstance(raw_status, (tuple, list)) and raw_status:
+            head = raw_status[0]
+            if isinstance(head, int):
+                status_code = head
+        elif exc.args:
+            first = exc.args[0]
+            if isinstance(first, int):
+                status_code = first
+            elif isinstance(first, tuple) and first and isinstance(first[0], int):
+                status_code = first[0]
+
+        msg = "Invalid or missing CSRF token" if is_prod else str(exc)
+        valdrix_exc = ValdrixException(
+            message=msg,
+            code="csrf_error",
+            status_code=status_code,
+        )
     elif isinstance(exc, ValueError):
         # Business logic validation errors should be 400
         msg = "Invalid request parameters" if is_prod else str(exc)
@@ -103,16 +131,26 @@ def handle_exception(
         details=valdrix_exc.details,
     )
 
+    response_details = valdrix_exc.details
+    if is_prod and valdrix_exc.code not in safe_codes:
+        response_details = None
+
+    response_payload = {
+        "error": {
+            "message": valdrix_exc.message,
+            "code": valdrix_exc.code,
+            "id": error_id,
+            "details": response_details if response_details else None,
+        },
+        # Backward-compatibility for clients/tests expecting top-level error fields.
+        "message": valdrix_exc.message,
+        "code": valdrix_exc.code,
+        "id": error_id,
+        "details": response_details if response_details else None,
+    }
+
     # 5. Production Response (Sanitized)
     return JSONResponse(
         status_code=valdrix_exc.status_code,
-        content={
-            "error": {
-                "message": valdrix_exc.message,
-                "code": valdrix_exc.code,
-                "id": error_id,
-                # Details are only included if they are safe (already sanitized in Exception classes)
-                "details": valdrix_exc.details if valdrix_exc.details else None,
-            }
-        },
+        content=response_payload,
     )

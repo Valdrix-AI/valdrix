@@ -61,6 +61,8 @@ class FeatureFlag(str, Enum):
     AUDIT_LOGS = "audit_logs"
     HOURLY_SCANS = "hourly_scans"
     AI_ANALYSIS_DETAILED = "ai_analysis_detailed"
+    DOMAIN_DISCOVERY = "domain_discovery"
+    IDP_DEEP_SCAN = "idp_deep_scan"
     PRECISION_DISCOVERY = "precision_discovery"
     OWNER_ATTRIBUTION = "owner_attribution"
     GITOPS_REMEDIATION = "gitops_remediation"
@@ -93,6 +95,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             FeatureFlag.ALERTS,
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.LLM_ANALYSIS,
+            FeatureFlag.DOMAIN_DISCOVERY,
             FeatureFlag.GREENOPS,
             FeatureFlag.CARBON_TRACKING,
             FeatureFlag.UNIT_ECONOMICS,
@@ -105,6 +108,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "max_license_connections": 0,
             "max_platform_connections": 0,
             "max_hybrid_connections": 0,
+            "byok_enabled": True,
             "ai_insights_per_month": 0,
             "scan_frequency_hours": 168,
             "zombie_scans_per_day": 1,
@@ -117,7 +121,8 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
         "display_features": [
             "Single cloud provider (AWS) + core dashboards",
             "Weekly zombie scans + basic alerts",
-            "1 AI analysis/day (Groq default)",
+            "1 AI analysis/day",
+            "BYOK supported (no platform surcharge)",
             "30-day data retention",
             "Entry-tier limits with no credit card",
         ],
@@ -133,6 +138,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
             FeatureFlag.LLM_ANALYSIS,
+            FeatureFlag.DOMAIN_DISCOVERY,
             FeatureFlag.MULTI_REGION,
             FeatureFlag.CARBON_TRACKING,
             FeatureFlag.GREENOPS,
@@ -147,6 +153,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "max_license_connections": 0,
             "max_platform_connections": 0,
             "max_hybrid_connections": 0,
+            "byok_enabled": True,
             "ai_insights_per_month": 10,
             "llm_analyses_per_day": 5,
             "max_backfill_days": 0,
@@ -160,6 +167,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "Multi-account support",
             "Advanced budget alerts",
             "5 AI analyses/day",
+            "BYOK supported (no platform surcharge)",
             "Unit economics KPIs + ingestion SLA monitor",
             "Multi-region analysis",
             "90-day data retention",
@@ -179,6 +187,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
             FeatureFlag.LLM_ANALYSIS,
+            FeatureFlag.DOMAIN_DISCOVERY,
             FeatureFlag.MULTI_CLOUD,
             FeatureFlag.MULTI_REGION,
             FeatureFlag.CARBON_TRACKING,
@@ -203,6 +212,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "max_license_connections": 0,
             "max_platform_connections": 0,
             "max_hybrid_connections": 0,
+            "byok_enabled": True,
             "llm_analyses_per_day": 20,
             "max_backfill_days": 180,
             "retention_days": 365,
@@ -211,10 +221,11 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
         "cta": "Start with Growth",
         "display_features": [
             "Includes all Starter features",
-            "AI-driven savings insights",
+            "AI-driven savings analyses",
             "Chargeback/showback workflows",
             "Historical ingestion backfill",
             "Custom remediation guides",
+            "BYOK supported (no platform surcharge)",
             "Full multi-cloud support",
             "1-year data retention",
         ],
@@ -233,6 +244,8 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             FeatureFlag.ZOMBIE_SCAN,
             FeatureFlag.AI_INSIGHTS,
             FeatureFlag.LLM_ANALYSIS,
+            FeatureFlag.DOMAIN_DISCOVERY,
+            FeatureFlag.IDP_DEEP_SCAN,
             FeatureFlag.MULTI_CLOUD,
             FeatureFlag.MULTI_REGION,
             FeatureFlag.CARBON_TRACKING,
@@ -273,6 +286,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "max_license_connections": 10,
             "max_platform_connections": 10,
             "max_hybrid_connections": 10,
+            "byok_enabled": True,
             "ai_insights_per_month": 100,
             "llm_analyses_per_day": 100,
             "max_backfill_days": 730,
@@ -289,6 +303,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "Dedicated support engineer",
             "Compliance exports and audit evidence",
             "Custom GitOps remediation",
+            "BYOK supported (no platform surcharge)",
         ],
     },
     PricingTier.ENTERPRISE: {
@@ -303,6 +318,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "max_license_connections": 999,
             "max_platform_connections": 999,
             "max_hybrid_connections": 999,
+            "byok_enabled": True,
             "ai_insights_per_month": 999,
             "scan_frequency_hours": 1,
             "retention_days": None,
@@ -342,9 +358,7 @@ def get_tier_config(tier: PricingTier | str) -> dict[str, Any]:
     """Get configuration for a tier."""
     resolved = normalize_tier(tier)
     fallback = (
-        TIER_CONFIG.get(PricingTier.FREE)
-        or TIER_CONFIG.get(PricingTier.STARTER)
-        or {}
+        TIER_CONFIG.get(PricingTier.FREE) or TIER_CONFIG.get(PricingTier.STARTER) or {}
     )
     return TIER_CONFIG.get(resolved, fallback)
 

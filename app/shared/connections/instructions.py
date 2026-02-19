@@ -156,13 +156,13 @@ class ConnectionInstructionService:
         )
         snippet = (
             "# License / ITAM Cloud+ onboarding options\n"
-            "# 1) Native pull mode (recommended): Microsoft 365 via Microsoft Graph\n"
+            "# 1) Native pull mode: Microsoft 365, Google Workspace, GitHub, Slack, Zoom, Salesforce\n"
             "# 2) Manual/CSV feed mode for contract exports\n"
             "#\n"
             "# Tenant-scoped subject for API/OIDC trust:\n"
             f"tenant:{tenant_id}\n"
             "#\n"
-            "# Native Microsoft 365 connector payload:\n"
+            "# Example native connector payload (Microsoft 365):\n"
             f"{native_payload}\n"
             "#\n"
             "# Example license feed payload (JSON array):\n"
@@ -175,7 +175,10 @@ class ConnectionInstructionService:
             "subject": f"tenant:{tenant_id}",
             "snippet": snippet,
             "sample_feed": sample_payload,
-            "supported_vendors": "microsoft_365",
+            "supported_vendors": (
+                "microsoft_365, google_workspace, github, slack, zoom, salesforce "
+                "(native) or any (manual/csv)"
+            ),
             "native_connectors": license_catalog,
             "manual_feed_schema": {
                 "required_fields": ["timestamp|date", "cost_usd|amount_usd"],
@@ -527,5 +530,49 @@ class ConnectionInstructionService:
                     "sku_prices",
                     "currency",
                 ],
-            }
+            },
+            {
+                "vendor": "google_workspace",
+                "display_name": "Google Workspace",
+                "recommended_auth_method": "oauth",
+                "supported_auth_methods": ["oauth", "api_key", "manual", "csv"],
+                "required_connector_config_fields": [],
+                "optional_connector_config_fields": [
+                    "default_seat_price_usd",
+                    "sku_prices",
+                    "currency",
+                ],
+            },
+            {
+                "vendor": "github",
+                "display_name": "GitHub (License Governance)",
+                "recommended_auth_method": "api_key",
+                "supported_auth_methods": ["api_key", "oauth", "manual", "csv"],
+                "required_connector_config_fields": [],
+                "optional_connector_config_fields": ["github_org"],
+            },
+            {
+                "vendor": "slack",
+                "display_name": "Slack (License Governance)",
+                "recommended_auth_method": "api_key",
+                "supported_auth_methods": ["api_key", "oauth", "manual", "csv"],
+                "required_connector_config_fields": [],
+                "optional_connector_config_fields": ["slack_team_id"],
+            },
+            {
+                "vendor": "zoom",
+                "display_name": "Zoom (License Governance)",
+                "recommended_auth_method": "api_key",
+                "supported_auth_methods": ["api_key", "oauth", "manual", "csv"],
+                "required_connector_config_fields": [],
+                "optional_connector_config_fields": [],
+            },
+            {
+                "vendor": "salesforce",
+                "display_name": "Salesforce (License Governance)",
+                "recommended_auth_method": "oauth",
+                "supported_auth_methods": ["oauth", "api_key", "manual", "csv"],
+                "required_connector_config_fields": ["salesforce_instance_url"],
+                "optional_connector_config_fields": ["salesforce_api_version"],
+            },
         ]

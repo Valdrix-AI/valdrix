@@ -23,7 +23,6 @@ from botocore.exceptions import (
     EndpointConnectionError,
 )
 from app.shared.core.exceptions import AdapterError, ConfigurationError
-from app.models.aws_connection import AWSConnection
 
 if TYPE_CHECKING:
     pass
@@ -180,7 +179,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> List[Dict[str, Any]]:
         """
-        MultiTenantAWSAdapter no longer supports direct cost fetching via Cost Explorer.
+        MultiTenantAWSAdapter does not support Cost Explorer cost ingestion.
         Users must configure CUR for cost ingestion.
         """
         raise ConfigurationError(

@@ -21,7 +21,8 @@ import structlog
 
 from app.shared.db.session import get_db
 from app.shared.core.auth import CurrentUser, requires_role
-from app.shared.core.pricing import PricingTier
+from app.shared.core.config import get_settings
+from app.shared.core.pricing import PricingTier, get_tenant_tier
 from app.shared.core.ops_metrics import LLM_BUDGET_BURN_RATE
 from app.shared.core.cache import get_cache_service
 from app.models.tenant import Tenant
@@ -73,6 +74,28 @@ class LLMUsageMetrics(BaseModel):
     budget_utilization: float
 
 
+class LLMFairUseThresholds(BaseModel):
+    """Configured fair-use guard thresholds."""
+
+    pro_daily_soft_cap: int | None
+    enterprise_daily_soft_cap: int | None
+    per_minute_cap: int | None
+    per_tenant_concurrency_cap: int | None
+    concurrency_lease_ttl_seconds: int
+    enforced_tiers: list[str]
+
+
+class LLMFairUseRuntime(BaseModel):
+    """Tenant-scoped fair-use runtime state and thresholds."""
+
+    generated_at: str
+    guards_enabled: bool
+    tenant_tier: str
+    tier_eligible: bool
+    active_for_tenant: bool
+    thresholds: LLMFairUseThresholds
+
+
 class AWSConnectionHealth(BaseModel):
     """AWS connection status."""
 
@@ -95,6 +118,7 @@ class InvestorHealthDashboard(BaseModel):
 # Track startup time
 _startup_time = datetime.now(timezone.utc)
 HEALTH_DASHBOARD_CACHE_TTL = timedelta(seconds=20)
+FAIR_USE_RUNTIME_CACHE_TTL = timedelta(seconds=20)
 
 
 @router.get("", response_model=InvestorHealthDashboard)
@@ -157,6 +181,98 @@ async def get_investor_health_dashboard(
             cache_key,
             payload.model_dump(mode="json"),
             ttl=HEALTH_DASHBOARD_CACHE_TTL,
+        )
+    return payload
+
+
+def _positive_int_or_none(value: object) -> int | None:
+    """Normalize optional integer settings and treat non-positive values as disabled."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _coerce_int_with_minimum(value: object, *, default: int, minimum: int) -> int:
+    """Parse integer settings defensively and enforce a minimum bound."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(parsed, minimum)
+
+
+@router.get("/fair-use", response_model=LLMFairUseRuntime)
+async def get_llm_fair_use_runtime(
+    _user: Annotated[CurrentUser, Depends(requires_role("admin"))],
+    db: AsyncSession = Depends(get_db),
+) -> LLMFairUseRuntime:
+    """
+    Return tenant-scoped fair-use runtime status and configured thresholds.
+
+    This endpoint is intended for operations visibility in admin health.
+    """
+    now = datetime.now(timezone.utc)
+    tenant_scope = str(_user.tenant_id) if _user.tenant_id else "global"
+    cache_key = f"api:health-dashboard:fair-use:{tenant_scope}"
+    cache = get_cache_service()
+    if cache.enabled:
+        cached_payload = await cache.get(cache_key)
+        if isinstance(cached_payload, dict):
+            try:
+                return LLMFairUseRuntime.model_validate(cached_payload)
+            except Exception as exc:
+                logger.warning(
+                    "health_dashboard_fair_use_cache_decode_failed", error=str(exc)
+                )
+
+    settings = get_settings()
+    tenant_tier = PricingTier.FREE
+    if _user.tenant_id:
+        try:
+            tenant_tier = await get_tenant_tier(_user.tenant_id, db)
+        except Exception as exc:
+            logger.warning(
+                "health_dashboard_fair_use_tier_lookup_failed",
+                tenant_id=str(_user.tenant_id),
+                error=str(exc),
+            )
+
+    guards_enabled = bool(settings.LLM_FAIR_USE_GUARDS_ENABLED)
+    tier_eligible = tenant_tier in {PricingTier.PRO, PricingTier.ENTERPRISE}
+    active_for_tenant = guards_enabled and tier_eligible
+
+    threshold_payload = LLMFairUseThresholds(
+        pro_daily_soft_cap=_positive_int_or_none(settings.LLM_FAIR_USE_PRO_DAILY_SOFT_CAP),
+        enterprise_daily_soft_cap=_positive_int_or_none(
+            settings.LLM_FAIR_USE_ENTERPRISE_DAILY_SOFT_CAP
+        ),
+        per_minute_cap=_positive_int_or_none(settings.LLM_FAIR_USE_PER_MINUTE_CAP),
+        per_tenant_concurrency_cap=_positive_int_or_none(
+            settings.LLM_FAIR_USE_PER_TENANT_CONCURRENCY_CAP
+        ),
+        concurrency_lease_ttl_seconds=_coerce_int_with_minimum(
+            settings.LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS,
+            default=180,
+            minimum=30,
+        ),
+        enforced_tiers=[PricingTier.PRO.value, PricingTier.ENTERPRISE.value],
+    )
+
+    payload = LLMFairUseRuntime(
+        generated_at=now.isoformat(),
+        guards_enabled=guards_enabled,
+        tenant_tier=tenant_tier.value,
+        tier_eligible=tier_eligible,
+        active_for_tenant=active_for_tenant,
+        thresholds=threshold_payload,
+    )
+    if cache.enabled:
+        await cache.set(
+            cache_key,
+            payload.model_dump(mode="json"),
+            ttl=FAIR_USE_RUNTIME_CACHE_TTL,
         )
     return payload
 

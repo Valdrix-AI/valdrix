@@ -10,7 +10,7 @@ import json
 import tempfile
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, List, Optional, Generator, AsyncGenerator
+from typing import Any, Dict, List, AsyncGenerator, cast
 import aioboto3
 import pandas as pd
 import pyarrow.parquet as pq
@@ -27,6 +27,7 @@ class AWSCURAdapter(BaseAdapter):
     """
     Ingests AWS CUR (Cost and Usage Report) data from S3.
     """
+    _SUMMARY_RECORD_CAP = 50000
 
     def __init__(self, credentials: AWSCredentials):
         self.credentials = credentials
@@ -376,6 +377,8 @@ class AWSCURAdapter(BaseAdapter):
         by_region: dict[str, Decimal] = {}
         by_tag: dict[str, dict[str, Decimal]] = {}
         all_records: list[CostRecord] = []
+        record_cap = max(1, int(getattr(self, "_SUMMARY_RECORD_CAP", 50000)))
+        dropped_records = 0
 
         min_date_found = None
         max_date_found = None
@@ -421,8 +424,10 @@ class AWSCURAdapter(BaseAdapter):
 
                 try:
                     record = self._parse_row(row, col_map)
-                    if len(all_records) < 50000: # Safety valve for summary records
+                    if len(all_records) < record_cap:
                         all_records.append(record)
+                    else:
+                        dropped_records += 1
 
                     total_cost_usd += record.amount
                     by_service[record.service] = by_service.get(record.service, Decimal("0")) + record.amount
@@ -433,6 +438,16 @@ class AWSCURAdapter(BaseAdapter):
                         by_tag[tk][tv] = by_tag[tk].get(tv, Decimal("0")) + record.amount
                 except Exception:
                     continue
+
+        if dropped_records > 0:
+            logger.warning(
+                "cur_summary_record_cap_reached",
+                cap=record_cap,
+                dropped_records=dropped_records,
+                retained_records=len(all_records),
+                start=str(start_date) if start_date else None,
+                end=str(end_date) if end_date else None,
+            )
 
         return CloudUsageSummary(
             tenant_id="anonymous",
