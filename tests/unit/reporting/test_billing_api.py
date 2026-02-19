@@ -9,6 +9,7 @@ from app.models.pricing import PricingPlan, ExchangeRate
 from app.shared.core.auth import get_current_user, CurrentUser
 from app.shared.db.session import get_db
 from app.models.tenant import UserRole
+from app.shared.core.currency import ExchangeRateUnavailableError
 from uuid import uuid4
 
 transport = ASGITransport(app=app)
@@ -212,6 +213,27 @@ async def test_create_checkout_error(mock_db):
     assert response.status_code == 500
 
 
+@pytest.mark.asyncio
+async def test_create_checkout_rate_unavailable_returns_503(mock_db):
+    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
+        mock_settings.PAYSTACK_SECRET_KEY = "sk_test"
+        mock_settings.FRONTEND_URL = "https://app.valdrix.test"
+        mock_settings.CORS_ORIGINS = ["https://app.valdrix.test"]
+        mock_settings.ENVIRONMENT = "development"
+        with patch(
+            "app.modules.billing.domain.billing.paystack_billing.BillingService"
+        ) as mock_service_cls:
+            mock_service = mock_service_cls.return_value
+            mock_service.create_checkout_session.side_effect = (
+                ExchangeRateUnavailableError("rate stale")
+            )
+            async with AsyncClient(transport=transport, base_url="https://test") as ac:
+                response = await ac.post(
+                    "/api/v1/billing/checkout", json={"tier": "pro"}
+                )
+    assert response.status_code == 503
+
+
 # --- Cancellation Tests ---
 
 
@@ -274,7 +296,61 @@ async def test_get_exchange_rate_not_found(mock_db, mock_user):
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/api/v1/billing/admin/rates")
     assert response.status_code == 200
-    assert response.json()["provider"] == "fallback"
+    assert response.json()["provider"] == "unavailable"
+    assert response.json()["rate"] is None
+    assert response.json()["billing_safe"] is False
+    assert "warning" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_get_exchange_rate_non_official_provider_flags_unsafe(mock_db, mock_user):
+    from datetime import datetime, timezone
+
+    mock_user.role = UserRole.ADMIN
+    rate = MagicMock(spec=ExchangeRate)
+    rate.rate = 1500.0
+    rate.provider = "manual"
+    rate.last_updated = datetime.now(timezone.utc)
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = rate
+    mock_db.execute.return_value = mock_result
+
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
+        response = await ac.get("/api/v1/billing/admin/rates")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["is_official_provider"] is False
+    assert payload["billing_safe"] is False
+    assert payload["warning"] is not None
+
+
+@pytest.mark.asyncio
+async def test_get_exchange_rate_stale_official_provider_flags_unsafe(
+    mock_db, mock_user
+):
+    from datetime import datetime, timedelta, timezone
+
+    mock_user.role = UserRole.ADMIN
+    rate = MagicMock(spec=ExchangeRate)
+    rate.rate = 1500.0
+    rate.provider = "cbn_nfem"
+    rate.last_updated = datetime.now(timezone.utc) - timedelta(hours=25)
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = rate
+    mock_db.execute.return_value = mock_result
+
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
+        response = await ac.get("/api/v1/billing/admin/rates")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["is_official_provider"] is True
+    assert payload["is_stale"] is True
+    assert payload["billing_safe"] is False
+    assert payload["warning"] is not None
 
 
 # --- Pricing Plan Admin Tests ---
@@ -316,7 +392,12 @@ async def test_update_pricing_plan_not_found(mock_db, mock_user):
 async def test_handle_webhook_no_signature():
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.post("/api/v1/billing/webhook")
-    assert response.status_code in (401, 403, 422)  # Fastapi validation might hit first
+    assert response.status_code in (
+        401,
+        403,
+        415,
+        422,
+    )  # Header validation may hit first
 
 
 @pytest.mark.asyncio

@@ -45,7 +45,7 @@ def test_settings_production_validation():
                 KDF_SALT=FAKE_KDF_SALT,
                 CSRF_SECRET_KEY=None,
             )
-        assert "Input should be a valid string" in str(exc.value)
+        assert "CSRF_SECRET_KEY must be set to a secure value" in str(exc.value)
 
 
 def test_settings_production_encryption_key_length():
@@ -60,7 +60,7 @@ def test_settings_production_encryption_key_length():
             ENCRYPTION_KEY="short",
             KDF_SALT=FAKE_KDF_SALT,
         )
-    assert "ENCRYPTION_KEY must be at least 32" in str(exc.value)
+    assert "ENCRYPTION_KEY must be set to a secure value" in str(exc.value)
 
 
 def test_settings_production_ssl_mode():
@@ -76,7 +76,7 @@ def test_settings_production_ssl_mode():
             KDF_SALT=FAKE_KDF_SALT,
             DB_SSL_MODE="disable",  # Insecure for prod
         )
-    assert "DB_SSL_MODE must be 'require'" in str(exc.value)
+    assert "SECURITY ERROR: DB_SSL_MODE must be secure in production" in str(exc.value)
 
 
 def test_settings_admin_key_env_validation():
@@ -94,7 +94,7 @@ def test_settings_admin_key_env_validation():
                 KDF_SALT=FAKE_KDF_SALT,
                 ADMIN_API_KEY=None,  # Force it to None
             )
-        assert "ADMIN_API_KEY must be configured" in str(exc.value)
+        assert "ADMIN_API_KEY must be >= 32 chars" in str(exc.value)
 
 
 def test_settings_llm_provider_key_validation():
@@ -113,7 +113,7 @@ def test_settings_llm_provider_key_validation():
             KDF_SALT=FAKE_KDF_SALT,
             DB_SSL_MODE="require",  # Correct SSL mode for production
         )
-    assert "OPENAI_API_KEY is missing" in str(exc.value)
+    assert "LLM_PROVIDER is 'openai' but its API key is missing" in str(exc.value)
 
 
 def test_settings_is_production_property():

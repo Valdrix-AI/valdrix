@@ -9,6 +9,10 @@ def test_zombie_metrics_existence():
     # This will fail until we define them in ops_metrics.py
     assert hasattr(ops_metrics, "ZOMBIES_DETECTED")
     assert hasattr(ops_metrics, "POTENTIAL_SAVINGS")
+    assert hasattr(ops_metrics, "CLOUD_API_CALLS_TOTAL")
+    assert hasattr(ops_metrics, "CLOUD_API_BUDGET_DECISIONS_TOTAL")
+    assert hasattr(ops_metrics, "CLOUD_API_BUDGET_REMAINING")
+    assert hasattr(ops_metrics, "CLOUD_API_ESTIMATED_COST_USD")
 
 
 def test_zombie_metrics_behavior():
@@ -50,6 +54,40 @@ def test_existing_metrics_integrity():
         labels={"path": "/test", "method": "GET", "status_code": "500"},
     )
     assert val == 1.0
+
+
+def test_llm_fair_use_metrics_existence_and_behavior():
+    assert hasattr(ops_metrics, "LLM_FAIR_USE_DENIALS")
+    assert hasattr(ops_metrics, "LLM_FAIR_USE_EVALUATIONS")
+    assert hasattr(ops_metrics, "LLM_FAIR_USE_OBSERVED")
+
+    ops_metrics.LLM_FAIR_USE_DENIALS.labels(gate="unit_test", tenant_tier="pro").inc()
+    denial_val = REGISTRY.get_sample_value(
+        "valdrix_ops_llm_fair_use_denials_total",
+        labels={"gate": "unit_test", "tenant_tier": "pro"},
+    )
+    assert denial_val == 1.0
+
+    ops_metrics.LLM_FAIR_USE_EVALUATIONS.labels(
+        gate="unit_test",
+        outcome="allow",
+        tenant_tier="pro",
+    ).inc()
+    eval_val = REGISTRY.get_sample_value(
+        "valdrix_ops_llm_fair_use_evaluations_total",
+        labels={"gate": "unit_test", "outcome": "allow", "tenant_tier": "pro"},
+    )
+    assert eval_val == 1.0
+
+    ops_metrics.LLM_FAIR_USE_OBSERVED.labels(
+        gate="unit_test",
+        tenant_tier="pro",
+    ).set(3)
+    observed_val = REGISTRY.get_sample_value(
+        "valdrix_ops_llm_fair_use_observed",
+        labels={"gate": "unit_test", "tenant_tier": "pro"},
+    )
+    assert observed_val == 3.0
 
 
 def test_time_operation_records_db_duration():

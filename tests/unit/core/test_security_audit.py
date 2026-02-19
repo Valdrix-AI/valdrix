@@ -1,6 +1,7 @@
 import pytest
 import os
 import base64
+import time
 from typing import Any
 from unittest.mock import patch
 from cryptography.fernet import Fernet, MultiFernet
@@ -84,6 +85,30 @@ class TestEncryptionKeyManager:
         assert key1 != key3
         # Should be base64 urlsafe
         base64.urlsafe_b64decode(key1)
+
+    def test_cache_policy_uses_settings_values(self) -> None:
+        class _Settings:
+            ENCRYPTION_KEY_CACHE_TTL_SECONDS = 120
+            ENCRYPTION_KEY_CACHE_MAX_SIZE = 42
+
+        with patch("app.shared.core.security.get_settings", return_value=_Settings()):
+            assert EncryptionKeyManager._cache_ttl_seconds() == 120
+            assert EncryptionKeyManager._cache_max_size() == 42
+
+    def test_cached_entries_expire_using_ttl_policy(self) -> None:
+        class _Settings:
+            ENCRYPTION_KEY_CACHE_TTL_SECONDS = 60
+            ENCRYPTION_KEY_CACHE_MAX_SIZE = 20
+
+        EncryptionKeyManager.clear_key_caches()
+        with patch("app.shared.core.security.get_settings", return_value=_Settings()):
+            EncryptionKeyManager._set_cached("cache-key", b"payload")
+            with EncryptionKeyManager._cache_lock:
+                EncryptionKeyManager._key_cache["cache-key"] = (
+                    b"payload",
+                    time.monotonic() - 120,
+                )
+            assert EncryptionKeyManager._get_cached("cache-key") is None
 
     def test_create_fernet_for_key(self) -> None:
         master = Fernet.generate_key().decode()

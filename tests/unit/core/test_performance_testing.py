@@ -9,6 +9,7 @@ from app.shared.core.performance_testing import (
     BenchmarkResult,
     PerformanceRegressionDetector,
     LoadTestResult,
+    format_exception_message,
     generate_k6_script,
     run_comprehensive_performance_test,
 )
@@ -21,6 +22,16 @@ def test_calculate_metrics_no_requests():
     assert tester.results.total_requests == 0
     assert tester.results.throughput_rps == 0.0
     assert tester.results.avg_response_time == 0.0
+
+
+def test_format_exception_message_never_empty():
+    assert format_exception_message(Exception("network down")) == "Exception: network down"
+
+    class BlankError(Exception):
+        def __str__(self) -> str:
+            return ""
+
+    assert format_exception_message(BlankError()) == "BlankError"
 
 
 def test_calculate_metrics_small_sample():
@@ -94,7 +105,7 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def get(self, url):
+        async def get(self, url, **kwargs):
             tester._running = False
             return DummyResponse()
 
@@ -117,7 +128,7 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
     tester2._running = True
 
     class ExplodingClient(DummyClient):
-        async def get(self, url):
+        async def get(self, url, **kwargs):
             tester2._running = False
             raise Exception("network down")
 
@@ -160,7 +171,7 @@ async def test_simulate_user_records_metrics(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def get(self, url):
+        async def get(self, url, **kwargs):
             self.calls += 1
             if self.calls >= 2:
                 tester._running = False
@@ -219,7 +230,7 @@ async def test_simulate_user_records_exception_metrics(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return None
 
-        async def get(self, url):
+        async def get(self, url, **kwargs):
             tester._running = False
             raise Exception("network down")
 
@@ -248,6 +259,52 @@ async def test_simulate_user_records_exception_metrics(monkeypatch):
         mock_errors.labels.assert_called_once_with(
             path="/boom", method="GET", status_code="exception"
         )
+
+
+@pytest.mark.asyncio
+async def test_simulate_user_forwards_configured_headers(monkeypatch):
+    config = LoadTestConfig(
+        duration_seconds=1,
+        concurrent_users=1,
+        ramp_up_seconds=0,
+        endpoints=["/ok"],
+        headers={"Authorization": "Bearer token-123"},
+    )
+    tester = LoadTester(config)
+    tester._running = True
+    captured_headers: dict[str, str] = {}
+
+    class DummyResponse:
+        status_code = 200
+        text = "ok"
+
+        def raise_for_status(self):
+            return None
+
+    class HeaderCapturingClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url, **kwargs):
+            nonlocal captured_headers
+            captured_headers = dict(kwargs.get("headers", {}))
+            tester._running = False
+            return DummyResponse()
+
+    monkeypatch.setattr(
+        "app.shared.core.http.get_http_client",
+        lambda: HeaderCapturingClient(),
+    )
+    sleep_mock = AsyncMock()
+    monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
+
+    await tester._simulate_user(0, test_start_time=time.time())
+
+    assert tester.results.successful_requests == 1
+    assert captured_headers.get("Authorization") == "Bearer token-123"
 
 
 @pytest.mark.asyncio

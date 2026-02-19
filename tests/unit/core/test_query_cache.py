@@ -1,5 +1,6 @@
 import json
 from unittest.mock import AsyncMock
+from unittest.mock import patch
 
 import pytest
 
@@ -71,3 +72,57 @@ async def test_invalidate_tenant_cache_scans_and_deletes():
     redis.scan.assert_awaited()
     redis.delete.assert_any_await("k1", "k2")
     redis.delete.assert_any_await("k3")
+
+
+@pytest.mark.asyncio
+async def test_cached_query_waits_for_locked_result_and_avoids_duplicate_execution():
+    redis = AsyncMock()
+    cached = {"ok": True}
+    # 1st get: initial cache miss
+    # 2nd get: still missing while waiting on lock owner
+    # 3rd get: lock owner has populated cache
+    redis.get = AsyncMock(side_effect=[None, None, json.dumps(cached)])
+    redis.set = AsyncMock(return_value=False)  # lock acquisition denied
+    cache = QueryCache(redis_client=redis)
+
+    handler = AsyncMock(return_value={"ok": False})
+    wrapped = cache.cached_query()(handler)
+
+    with patch(
+        "app.shared.core.cache.asyncio.sleep", new=AsyncMock(return_value=None)
+    ):
+        result = await wrapped("db", "tenant-1")
+
+    assert result == cached
+    handler.assert_not_awaited()
+    # Should not release lock it never acquired.
+    redis.delete.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cached_query_does_not_release_foreign_lock_on_timeout_fallback():
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+
+    async def set_side_effect(*args, **kwargs):
+        # Lock acquisition and re-acquisition attempts fail.
+        if kwargs.get("nx"):
+            return False
+        # Cache set (non-lock write) succeeds.
+        return True
+
+    redis.set = AsyncMock(side_effect=set_side_effect)
+    cache = QueryCache(redis_client=redis)
+
+    handler = AsyncMock(return_value={"value": 7})
+    wrapped = cache.cached_query()(handler)
+
+    with patch(
+        "app.shared.core.cache.asyncio.sleep", new=AsyncMock(return_value=None)
+    ):
+        result = await wrapped("db", "tenant-1")
+
+    assert result == {"value": 7}
+    handler.assert_awaited_once()
+    # Critical: lock release must happen only when lock is owned.
+    redis.delete.assert_not_awaited()

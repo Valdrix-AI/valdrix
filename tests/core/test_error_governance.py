@@ -39,17 +39,17 @@ async def test_handle_valdrix_exception(mock_request):
 
 @pytest.mark.asyncio
 async def test_handle_generic_exception(mock_request):
-    """Verify that handle_exception wraps generic exceptions and logs them."""
+    """Verify that ValueError is classified as a 400 business validation error."""
     exc = ValueError("Secret error")
 
     with patch("app.shared.core.error_governance.logger") as mock_logger:
         response = handle_exception(mock_request, exc)
 
-        assert response.status_code == 500
+        assert response.status_code == 400
         data = response.body.decode()
-        assert "internal_error" in data
+        assert "value_error" in data
 
         # Verify structured logging
-        mock_logger.exception.assert_called_once()
-        args, kwargs = mock_logger.exception.call_args
+        mock_logger.warning.assert_called_once()
+        args, kwargs = mock_logger.warning.call_args
         assert kwargs["error"] == "Secret error"

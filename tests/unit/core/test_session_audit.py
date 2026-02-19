@@ -216,3 +216,68 @@ def test_db_ssl_modes_logic():
                 ctx = mock_ssl(cafile=mock_s.DB_SSL_CA_CERT_PATH)
                 ctx.check_hostname = ssl_mode == "verify-full"
                 assert ctx.check_hostname is True
+
+
+@pytest.mark.asyncio
+async def test_get_db_unknown_backend_fail_closed():
+    """Unresolved DB backend detection should not mark RLS context as set."""
+    request = MagicMock()
+    request.state.tenant_id = uuid4()
+
+    mock_session = AsyncMock()
+    mock_conn = MagicMock()
+    mock_conn.info = {}
+    mock_session.connection.return_value = mock_conn
+    mock_session.info = {}
+
+    mock_cm = MagicMock()
+    mock_cm.__aenter__.return_value = mock_session
+    mock_cm.__aexit__ = AsyncMock()
+
+    with (
+        patch("app.shared.db.session.async_session_maker", return_value=mock_cm),
+        patch(
+            "app.shared.db.session._resolve_session_backend",
+            return_value=("unknown", "unresolved"),
+        ),
+        patch("app.shared.db.session.logger") as mock_logger,
+    ):
+        async for session in get_db(request):
+            assert session.info["rls_context_set"] is False
+            assert mock_conn.info["rls_context_set"] is False
+            session.execute.assert_not_called()
+
+        mock_logger.error.assert_called_with(
+            "rls_session_backend_unknown_fail_closed",
+            source="unresolved",
+            tenant_id=str(request.state.tenant_id),
+        )
+
+
+@pytest.mark.asyncio
+async def test_set_session_tenant_id_unknown_backend_fail_closed():
+    """set_session_tenant_id should fail closed when backend resolution is unknown."""
+    mock_session = AsyncMock()
+    mock_conn = MagicMock()
+    mock_conn.info = {}
+    mock_session.connection.return_value = mock_conn
+    mock_session.info = {}
+    tenant_id = uuid4()
+
+    with (
+        patch(
+            "app.shared.db.session._resolve_session_backend",
+            return_value=("unknown", "unresolved"),
+        ),
+        patch("app.shared.db.session.logger") as mock_logger,
+    ):
+        await set_session_tenant_id(mock_session, tenant_id)
+
+    assert mock_session.info["rls_context_set"] is False
+    assert mock_conn.info["rls_context_set"] is False
+    mock_session.execute.assert_not_called()
+    mock_logger.error.assert_called_with(
+        "set_session_tenant_id_backend_unknown_fail_closed",
+        source="unresolved",
+        tenant_id=str(tenant_id),
+    )

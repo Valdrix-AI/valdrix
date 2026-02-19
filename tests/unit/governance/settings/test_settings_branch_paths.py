@@ -267,3 +267,25 @@ async def test_llm_get_update_and_models_paths(
         models = await llm.get_llm_models()
     assert models["groq"] == ["m1", "m2"]
     assert models["openai"] == ["o1"]
+
+
+@pytest.mark.asyncio
+async def test_llm_update_blocks_byok_when_tier_disables_entitlement(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    db.execute.return_value = _scalar_result(None)
+    update = llm.LLMSettingsUpdate(
+        monthly_limit_usd=10.0,
+        alert_threshold_percent=80,
+        hard_limit=False,
+        preferred_provider="openai",
+        preferred_model="gpt-4o-mini",
+        openai_api_key="sk-test",
+    )
+    with (
+        patch.object(llm, "get_tier_limit", return_value=False),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await llm.update_llm_settings(update, user, db)
+    assert exc.value.status_code == 403
+    assert "BYOK is not enabled" in exc.value.detail

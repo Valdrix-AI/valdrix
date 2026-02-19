@@ -49,6 +49,13 @@ class TestPricingDeep:
         """Invalid feature strings should return False."""
         assert is_feature_enabled(PricingTier.STARTER, "not_a_feature") is False
 
+    def test_discovery_feature_split_by_tier(self):
+        """Domain discovery is broad; IdP deep-scan is Pro+."""
+        assert is_feature_enabled(PricingTier.FREE, FeatureFlag.DOMAIN_DISCOVERY) is True
+        assert is_feature_enabled(PricingTier.GROWTH, FeatureFlag.DOMAIN_DISCOVERY) is True
+        assert is_feature_enabled(PricingTier.GROWTH, FeatureFlag.IDP_DEEP_SCAN) is False
+        assert is_feature_enabled(PricingTier.PRO, FeatureFlag.IDP_DEEP_SCAN) is True
+
     def test_get_tier_limit_unknown_limit(self):
         """Test limit check for unknown limit name."""
         assert get_tier_limit(PricingTier.STARTER, "invalid_limit") == 0

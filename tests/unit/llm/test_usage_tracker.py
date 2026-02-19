@@ -123,6 +123,7 @@ class TestUsageTracker:
                 prompt_tokens=1500,
                 completion_tokens=800,
                 provider="groq",
+                is_byok=False,
                 operation_id=None,
                 request_type="daily_analysis",
             )

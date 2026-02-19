@@ -43,4 +43,12 @@ def test_get_license_setup_snippet(mock_settings):
     assert "native_connectors" in result
     assert isinstance(result["native_connectors"], list)
     assert result["native_connectors"][0]["vendor"] == "microsoft_365"
+    assert any(
+        connector["vendor"] == "google_workspace"
+        for connector in result["native_connectors"]
+    )
+    assert any(
+        connector["vendor"] == "salesforce"
+        for connector in result["native_connectors"]
+    )
     assert "manual_feed_schema" in result

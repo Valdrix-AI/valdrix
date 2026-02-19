@@ -20,6 +20,7 @@ from app.shared.core.exceptions import ValdrixException
 from app.shared.db.session import get_db
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi_csrf_protect.exceptions import CsrfProtectError
 from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
@@ -80,6 +81,11 @@ async def test_not_found(lite_client: AsyncClient):
     assert response.status_code == 404
 
 
+def test_gzip_middleware_registered():
+    """API should register gzip middleware for larger responses."""
+    assert any(m.cls == GZipMiddleware for m in valdrix_app.user_middleware)
+
+
 def _make_request(path: str = "/boom", method: str = "GET") -> Request:
     scope = {
         "type": "http",
@@ -115,7 +121,7 @@ async def test_valdrix_exception_handler_records_metrics():
     request = _make_request(path="/fail", method="POST")
     exc = ValdrixException("boom", code="oops", status_code=418, details={"x": 1})
 
-    with patch("app.main.API_ERRORS_TOTAL") as mock_metric:
+    with patch("app.shared.core.error_governance.API_ERRORS_TOTAL") as mock_metric:
         response = await valdrix_exception_handler(request, exc)
         mock_metric.labels.assert_called_once_with(
             path="/fail", method="POST", status_code=418
@@ -147,13 +153,36 @@ async def test_http_exception_handler_records_metrics():
 
 
 @pytest.mark.asyncio
+async def test_http_exception_handler_sanitizes_5xx_in_production():
+    request = _make_request(path="/boom", method="GET")
+    exc = HTTPException(status_code=500, detail="database password leaked")
+
+    with (
+        patch("app.main.settings") as mock_settings,
+        patch("app.main.API_ERRORS_TOTAL") as mock_metric,
+    ):
+        mock_settings.ENVIRONMENT = "production"
+        response = await http_exception_handler(request, exc)
+        mock_metric.labels.assert_called_once_with(
+            path="/boom", method="GET", status_code=500
+        )
+
+    assert response.status_code == 500
+    from typing import cast
+    body = json.loads(cast(bytes, response.body))
+    assert body["code"] == "HTTP_ERROR"
+    assert body["message"] == "An unexpected internal error occurred"
+    assert "password" not in body["message"].lower()
+
+
+@pytest.mark.asyncio
 async def test_csrf_exception_handler_records_metrics():
     request = _make_request(path="/csrf", method="PUT")
     exc = CsrfProtectError(403, "csrf blocked")
 
     with (
         patch("app.main.CSRF_ERRORS") as mock_csrf,
-        patch("app.main.API_ERRORS_TOTAL") as mock_api,
+        patch("app.shared.core.error_governance.API_ERRORS_TOTAL") as mock_api,
     ):
         response = await csrf_protect_exception_handler(request, exc)
         mock_csrf.labels.assert_called_once_with(path="/csrf", method="PUT")

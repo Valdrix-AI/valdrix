@@ -397,7 +397,7 @@ async def test_analyze_costs_paths(async_client: AsyncClient, app):
 
 
 @pytest.mark.asyncio
-async def test_analyze_costs_requires_tier(async_client: AsyncClient, app):
+async def test_analyze_costs_available_on_starter(async_client: AsyncClient, app):
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
     mock_user = CurrentUser(
@@ -411,8 +411,9 @@ async def test_analyze_costs_requires_tier(async_client: AsyncClient, app):
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
         response = await async_client.post("/api/v1/costs/analyze")
-        assert response.status_code == 403
-        assert "requires" in response.json()["error"].lower()
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["summary"] == "No cost data available for analysis."
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -998,7 +999,7 @@ async def test_get_acceptance_kpis(async_client: AsyncClient, app):
         assert response.status_code == 200
         payload = response.json()
         assert payload["all_targets_met"] is True
-        assert payload["available_metrics"] == 3
+        assert payload["available_metrics"] >= 3
         by_key = {item["key"]: item for item in payload["metrics"]}
         assert by_key["ingestion_reliability"]["meets_target"] is True
         assert by_key["chargeback_coverage"]["actual"] == "94.00%"

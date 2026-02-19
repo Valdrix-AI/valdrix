@@ -64,7 +64,7 @@ def override_auth(app, auth_user):
 
 
 def test_tier_gates_are_enforced(auth_user):
-    from app.modules.governance.api.v1.settings.connections import (
+    from app.modules.governance.api.v1.settings.connections_helpers import (
         check_cloud_plus_tier,
         check_growth_tier,
     )

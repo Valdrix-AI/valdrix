@@ -1,8 +1,8 @@
-import pytest
 """
 Tests for Usage Metering API.
 """
 
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -41,7 +41,7 @@ async def test_get_usage_metrics_structure():
     )
 
     aws_metrics = AWSMeteringMetrics(
-        cost_explorer_calls_today=1,
+        cost_analysis_calls_today=1,
         zombie_scans_today=0,
         regions_scanned=1,
         last_scan_at=None,
@@ -133,7 +133,7 @@ async def test_get_usage_metrics_cache_hit_short_circuits_queries():
             }
         ],
         "aws": {
-            "cost_explorer_calls_today": 0,
+            "cost_analysis_calls_today": 0,
             "zombie_scans_today": 0,
             "regions_scanned": 4,
             "last_scan_at": None,
