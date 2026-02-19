@@ -1,0 +1,31 @@
+from app.modules.optimization.adapters.gcp.plugins import (
+    IdleVmsPlugin,
+    IdleGpuInstancesPlugin,
+    StoppedVmsPlugin,
+    IdleVertexEndpointsPlugin,
+    IdleVectorSearchPlugin,
+    OverprovisionedComputePlugin,
+    UnattachedDisksPlugin,
+    OldSnapshotsPlugin,
+    OrphanExternalIpsPlugin,
+    IdleCloudSqlPlugin,
+    EmptyGkeClusterPlugin,
+    IdleCloudRunPlugin,
+    IdleCloudFunctionsPlugin,
+)
+
+__all__ = [
+    "IdleVmsPlugin",
+    "IdleGpuInstancesPlugin",
+    "StoppedVmsPlugin",
+    "IdleVertexEndpointsPlugin",
+    "IdleVectorSearchPlugin",
+    "OverprovisionedComputePlugin",
+    "UnattachedDisksPlugin",
+    "OldSnapshotsPlugin",
+    "OrphanExternalIpsPlugin",
+    "IdleCloudSqlPlugin",
+    "EmptyGkeClusterPlugin",
+    "IdleCloudRunPlugin",
+    "IdleCloudFunctionsPlugin",
+]

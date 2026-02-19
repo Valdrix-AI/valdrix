@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
+import inspect
 from app.shared.adapters.aws_utils import map_aws_credentials
 
 
@@ -20,6 +21,62 @@ ESTIMATED_COSTS = {
     "redshift_cluster": 180.00,
     "nat_gateway": 32.40,
 }
+
+
+class _GuardedCloudWatchClient:
+    """Proxy CloudWatch client calls through the cloud API budget governor."""
+
+    _EXPENSIVE_OPS = {"get_metric_statistics", "get_metric_data"}
+
+    def __init__(self, client: Any):
+        self._client = client
+
+    @staticmethod
+    def _empty_payload_for(operation: str) -> dict[str, Any]:
+        if operation == "get_metric_statistics":
+            return {"Datapoints": []}
+        if operation == "get_metric_data":
+            return {"MetricDataResults": []}
+        return {}
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._client, name)
+        if name not in self._EXPENSIVE_OPS or not callable(attr):
+            return attr
+
+        async def guarded_call(*args: Any, **kwargs: Any) -> Any:
+            from app.modules.optimization.domain.cloud_api_budget import (
+                allow_expensive_cloud_api_call,
+            )
+
+            allowed = await allow_expensive_cloud_api_call(
+                "aws_cloudwatch",
+                operation=name,
+            )
+            if not allowed:
+                return self._empty_payload_for(name)
+
+            result = attr(*args, **kwargs)
+            if inspect.isawaitable(result):
+                return await result
+            return result
+
+        return guarded_call
+
+
+class _GuardedCloudWatchContext:
+    """Wrap aioboto3 client context manager to return a guarded CloudWatch client."""
+
+    def __init__(self, context_manager: Any):
+        self._context_manager = context_manager
+        self._client = None
+
+    async def __aenter__(self) -> _GuardedCloudWatchClient:
+        self._client = await self._context_manager.__aenter__()
+        return _GuardedCloudWatchClient(self._client)
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> Any:
+        return await self._context_manager.__aexit__(exc_type, exc, tb)
 
 
 class ZombiePlugin(ABC):
@@ -76,4 +133,7 @@ class ZombiePlugin(ABC):
 
         if config:
             kwargs["config"] = config
-        return session.client(service_name, **kwargs)
+        client_context = session.client(service_name, **kwargs)
+        if service_name == "cloudwatch":
+            return _GuardedCloudWatchContext(client_context)
+        return client_context

@@ -2,7 +2,6 @@ from typing import Annotated, Optional, Dict, Any
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from pydantic import BaseModel
 import structlog
 
@@ -11,12 +10,12 @@ from app.shared.db.session import get_db
 from app.models.remediation import (
     RemediationAction,
     RemediationRequest,
-    RemediationStatus,
 )
 from app.modules.optimization.domain import ZombieService, RemediationService
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
 from app.shared.core.rate_limit import rate_limit
+from app.shared.core.exceptions import ResourceNotFoundError, ValdrixException
 from app.models.background_job import JobType
 from app.modules.governance.domain.jobs.processor import enqueue_job
 
@@ -35,6 +34,7 @@ class RemediationRequestCreate(BaseModel):
     create_backup: bool = False
     backup_retention_days: int = 30
     backup_cost_estimate: float = 0
+    parameters: Optional[Dict[str, Any]] = None
 
 
 class ReviewRequest(BaseModel):
@@ -57,6 +57,7 @@ class PolicyPreviewCreate(BaseModel):
     confidence_score: float | None = None
     explainability_notes: str | None = None
     review_notes: str | None = None
+    parameters: Optional[Dict[str, Any]] = None
 
 
 # --- Endpoints ---
@@ -109,8 +110,6 @@ async def create_remediation_request(
     try:
         action_enum = RemediationAction(request.action)
     except ValueError:
-        from app.shared.core.exceptions import ValdrixException
-
         raise ValdrixException(
             message=f"Invalid action: {request.action}",
             code="invalid_remediation_action",
@@ -130,6 +129,7 @@ async def create_remediation_request(
         backup_cost_estimate=request.backup_cost_estimate,
         provider=request.provider,
         connection_id=request.connection_id,
+        parameters=request.parameters,
     )
     return {"status": "pending", "request_id": str(result.id)}
 
@@ -201,8 +201,6 @@ async def approve_remediation(
         )
         return {"status": "approved", "request_id": str(result.id)}
     except ValueError as e:
-        from app.shared.core.exceptions import ResourceNotFoundError
-
         raise ResourceNotFoundError(str(e), code="remediation_request_not_found")
 
 
@@ -245,8 +243,6 @@ async def preview_remediation_policy_payload(
     try:
         action_enum = RemediationAction(payload.action)
     except ValueError:
-        from app.shared.core.exceptions import ValdrixException
-
         raise ValdrixException(
             message=f"Invalid action: {payload.action}",
             code="invalid_remediation_action",
@@ -264,6 +260,7 @@ async def preview_remediation_policy_payload(
         confidence_score=payload.confidence_score,
         explainability_notes=payload.explainability_notes,
         review_notes=payload.review_notes,
+        parameters=payload.parameters,
     )
     return PolicyPreviewResponse(**preview)
 
@@ -288,84 +285,9 @@ async def execute_remediation(
     # Note: requires_feature(FeatureFlag.AUTO_REMEDIATION) also checks for isAdmin if we wanted,
     # but here we use requires_role("admin") explicitly for SEC-02.
 
-    from app.models.aws_connection import AWSConnection
-    from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
-
-    remediation_res = await db.execute(
-        select(RemediationRequest).where(
-            RemediationRequest.id == request_id,
-            RemediationRequest.tenant_id == tenant_id,
-        )
-    )
-    remediation_request = remediation_res.scalar_one_or_none()
-    if not remediation_request:
-        from app.shared.core.exceptions import ResourceNotFoundError
-
-        raise ResourceNotFoundError(f"Remediation request {request_id} not found")
-
-    try:
-        # Policy gate can deterministically block/escalate without cloud credentials.
-        # This keeps approval workflow validation independent from provider connectivity.
-        policy_service = RemediationService(db=db, region=region)
-        if remediation_request.status in {
-            RemediationStatus.APPROVED,
-            RemediationStatus.SCHEDULED,
-        }:
-            preview = await policy_service.preview_policy(
-                remediation_request, tenant_id
-            )
-            if preview.get("decision") in {"block", "escalate"}:
-                executed_request = await policy_service.execute(
-                    request_id, tenant_id, bypass_grace_period=bypass_grace_period
-                )
-                return {
-                    "status": executed_request.status.value,
-                    "request_id": str(executed_request.id),
-                }
-    except ValueError as e:
-        from app.shared.core.exceptions import ValdrixException
-
-        raise ValdrixException(
-            message=str(e), code="remediation_execution_failed", status_code=400
-        )
-
-    provider_norm = (
-        str(getattr(remediation_request, "provider", "aws") or "aws").strip().lower()
-    )
-    if provider_norm != "aws":
-        from app.shared.core.exceptions import ValdrixException
-
-        raise ValdrixException(
-            message="Direct remediation execution currently supports AWS only. Use GitOps remediation plans for non-AWS providers.",
-            code="remediation_provider_not_supported",
-            status_code=400,
-            details={"provider": provider_norm, "request_id": str(request_id)},
-        )
-
-    query = select(AWSConnection).where(AWSConnection.tenant_id == tenant_id)
-    if remediation_request.connection_id:
-        query = query.where(AWSConnection.id == remediation_request.connection_id)
-    # Prefer the most recently verified connection; fall back to deterministic PK order.
-    query = query.order_by(
-        AWSConnection.last_verified_at.desc(), AWSConnection.id.desc()
-    )
-
-    result = await db.execute(query)
-    connection = result.scalars().first()
-    if not connection:
-        from app.shared.core.exceptions import ValdrixException
-
-        raise ValdrixException(
-            message="No AWS connection found for this tenant. Setup is required first.",
-            code="aws_connection_missing",
-            status_code=400,
-        )
-
-    from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
-    aws_creds = map_aws_connection_to_credentials(connection)
-    adapter = MultiTenantAWSAdapter(aws_creds)
-    credentials = await adapter.get_credentials()
-    service = RemediationService(db=db, region=region, credentials=credentials)
+    # BE-REMED-Unified: Delegate execution entirely to RemediationService.
+    # It now handles multi-cloud credential resolution and strategy dispatch.
+    service = RemediationService(db=db, region=region)
 
     try:
         executed_request = await service.execute(
@@ -375,9 +297,10 @@ async def execute_remediation(
             "status": executed_request.status.value,
             "request_id": str(executed_request.id),
         }
-    except ValueError as e:
-        from app.shared.core.exceptions import ValdrixException
-
+    except ResourceNotFoundError as e:
+        raise ResourceNotFoundError(str(e))
+    except Exception as e:
+        logger.error("remediation_api_execution_failed", request_id=str(request_id), error=str(e))
         raise ValdrixException(
             message=str(e), code="remediation_execution_failed", status_code=400
         )

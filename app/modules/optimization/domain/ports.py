@@ -154,12 +154,26 @@ class BaseZombieDetector(ABC):
         self, plugin: ZombiePlugin
     ) -> tuple[str, list[dict[str, Any]]]:
         """Wraps plugin execution with a generic timeout."""
+        from app.modules.optimization.domain.cloud_api_budget import (
+            cloud_api_scan_context,
+        )
+
+        tenant_id = str(getattr(self.connection, "tenant_id", "unknown"))
+        connection_id = str(getattr(self.connection, "id", "unknown"))
+
         try:
             scan_coro = self._execute_plugin_scan(plugin)
 
             # Use global timeout from settings
             timeout = settings.ZOMBIE_PLUGIN_TIMEOUT_SECONDS
-            items = await asyncio.wait_for(scan_coro, timeout=timeout)
+            with cloud_api_scan_context(
+                tenant_id=tenant_id,
+                provider=self.provider_name,
+                connection_id=connection_id,
+                region=self.region,
+                plugin=plugin.category_key,
+            ):
+                items = await asyncio.wait_for(scan_coro, timeout=timeout)
             return plugin.category_key, items
 
         except asyncio.TimeoutError:

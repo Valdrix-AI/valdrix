@@ -137,3 +137,72 @@ class IdleGpuVmsPlugin(ZombiePlugin):
             return [vm for vm in all_vms if "GPU" in vm.get("resource_type", "")]
 
         return []
+
+
+@registry.register("azure")
+class StoppedVmsPlugin(ZombiePlugin):
+    """Detect Stopped/Deallocated VMs that still incur storage costs."""
+
+    @property
+    def category_key(self) -> str:
+        return "stopped_azure_vms"
+
+    async def scan(
+        self,
+        session: Any = None,
+        region: str = "global",
+        credentials: Any = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
+        """Scan for stopped VMs."""
+        subscription_id = str(kwargs.get("subscription_id") or session or "")
+        if not subscription_id:
+            return []
+
+        zombies = []
+        try:
+            client = ComputeManagementClient(credentials, subscription_id)
+
+            async for vm in client.virtual_machines.list_all():
+                # Check Power State
+                power_state = None
+                if vm.instance_view and vm.instance_view.statuses:
+                    power_state = next(
+                        (
+                            s.code
+                            for s in vm.instance_view.statuses
+                            if s.code and s.code.startswith("PowerState/")
+                        ),
+                        None,
+                    )
+
+                if power_state in ["PowerState/deallocated", "PowerState/stopped"]:
+                    # Get disk costs
+                    os_disk_size = (
+                        vm.storage_profile.os_disk.disk_size_gb or 30
+                        if vm.storage_profile and vm.storage_profile.os_disk
+                        else 0
+                    )
+                    # Rough estimate: $0.05/GB (Standard SSD/HDD mix)
+                    monthly_cost = os_disk_size * 0.05
+
+                    zombies.append(
+                        {
+                            "resource_id": vm.id,
+                            "resource_name": vm.name,
+                            "resource_type": "Virtual Machine (Stopped)",
+                            "location": vm.location,
+                            "status": power_state,
+                            "monthly_cost": round(monthly_cost, 2),
+                            "recommendation": "Delete VM and Disks if decommissioned",
+                            "action": "delete_vm",
+                            "confidence_score": 1.0,  # 100% sure it's stopped
+                            "explainability_notes": f"VM is {power_state}. You are still paying ~${round(monthly_cost, 2)}/mo for its attached disks.",
+                        }
+                    )
+        except Exception as e:
+            logger.warning("azure_stopped_vm_scan_error", error=str(e))
+
+        return zombies

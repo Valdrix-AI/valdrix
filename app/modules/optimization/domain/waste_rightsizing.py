@@ -133,6 +133,56 @@ CATEGORY_RULES: dict[str, DetectionRule] = {
         base_confidence=0.85,
         savings_factors=(0.85, 1.00, 1.05),
     ),
+    # Next-Gen AI/Search (Shadow AI + Vector DBs)
+    "idle_vertex_ai_endpoints": DetectionRule(
+        detection_class="idle_ai_ml",
+        required_action="undeploy_or_delete_vertex_endpoint",
+        base_confidence=0.90,
+        savings_factors=(0.95, 1.00, 1.05),
+    ),
+    "idle_vector_search_indices": DetectionRule(
+        detection_class="idle_ai_ml",
+        required_action="undeploy_index_endpoint",
+        base_confidence=0.88,
+        savings_factors=(0.90, 1.00, 1.05),
+    ),
+    "idle_azure_openai": DetectionRule(
+        detection_class="idle_ai_ml",
+        required_action="delete_unused_openai_deployment",
+        base_confidence=0.92,
+        savings_factors=(0.95, 1.00, 1.00),
+    ),
+    "idle_ai_search": DetectionRule(
+        detection_class="idle_ai_ml",
+        required_action="scaling_down_or_delete_search_service",
+        base_confidence=0.85,
+        savings_factors=(0.70, 0.90, 1.00),
+    ),
+    "idle_opensearch_domains": DetectionRule(
+        detection_class="idle_ai_ml",
+        required_action="snapshot_and_delete_opensearch",
+        base_confidence=0.88,
+        savings_factors=(0.60, 0.85, 1.00),
+    ),
+    # Rightsizing (Multi-Cloud)
+    "overprovisioned_ec2_instances": DetectionRule(
+        detection_class="over_provisioned_compute",
+        required_action="resize_ec2_instance",
+        base_confidence=0.85,
+        savings_factors=(0.40, 0.50, 0.60),
+    ),
+    "overprovisioned_azure_vms": DetectionRule(
+        detection_class="over_provisioned_compute",
+        required_action="resize_azure_vm",
+        base_confidence=0.85,
+        savings_factors=(0.40, 0.50, 0.60),
+    ),
+    "overprovisioned_gcp_instances": DetectionRule(
+        detection_class="over_provisioned_compute",
+        required_action="resize_gcp_instance",
+        base_confidence=0.85,
+        savings_factors=(0.40, 0.50, 0.60),
+    ),
 }
 
 _NON_CATEGORY_KEYS = {
@@ -234,6 +284,8 @@ def _build_recommendation(
             "mid": savings_mid,
             "high": savings_high,
         },
+        "explainability_notes": item.get("explainability_notes"),
+        "utilization_percent": item.get("utilization_percent"),
     }
 
 

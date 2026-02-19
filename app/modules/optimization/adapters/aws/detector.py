@@ -41,7 +41,7 @@ class AWSZombieDetector(BaseZombieDetector):
         return "aws"
 
     def _initialize_plugins(self) -> None:
-        """Register the standard suite of AWS detections."""
+        """Register every available AWS detection plugin from the registry."""
         self.plugins = registry.get_plugins_for_provider("aws")
 
     async def scan_all(
