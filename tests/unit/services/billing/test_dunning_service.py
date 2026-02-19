@@ -239,6 +239,9 @@ async def test_handle_retry_success_clears_state(mock_db, mock_subscription):
         assert mock_subscription.dunning_attempts == 0
         assert mock_subscription.status == SubscriptionStatus.ACTIVE.value
         mock_db.commit.assert_called()
+        
+        # Verify Tenant.plan sync
+        assert any("UPDATE tenant" in str(call.args[0]) and "plan" in str(call.args[0]) for call in mock_db.execute.call_args_list)
 
 
 @pytest.mark.asyncio
@@ -254,6 +257,9 @@ async def test_handle_final_failure_downgrades(mock_db, mock_subscription):
         assert mock_subscription.status == SubscriptionStatus.CANCELLED.value
         assert mock_subscription.canceled_at is not None
         mock_db.commit.assert_called()
+
+        # Verify Tenant.plan sync to FREE
+        assert any("UPDATE tenant" in str(call.args[0]) and "plan" in str(call.args[0]) for call in mock_db.execute.call_args_list)
 
 
 @pytest.mark.asyncio

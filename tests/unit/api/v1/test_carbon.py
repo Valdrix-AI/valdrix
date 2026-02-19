@@ -122,7 +122,16 @@ async def test_analyze_graviton_opportunities_success(
     db = AsyncMock()
 
     mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = MagicMock()
+    connection = MagicMock()
+    connection.aws_account_id = "123456789012"
+    connection.role_arn = "arn:aws:iam::123456789012:role/ValdrixRole"
+    connection.external_id = "external-id"
+    connection.region = "us-east-1"
+    connection.tenant_id = "tenant-123"
+    connection.cur_bucket_name = "cur-bucket"
+    connection.cur_report_name = "cur-report"
+    connection.cur_prefix = "cur-prefix"
+    mock_result.scalar_one_or_none.return_value = connection
     db.execute.return_value = mock_result
 
     mock_adapter = mock_adapter_class.return_value
@@ -138,12 +147,13 @@ async def test_analyze_graviton_opportunities_success(
 @pytest.mark.asyncio
 @patch("app.modules.reporting.api.v1.carbon.CarbonAwareScheduler")
 async def test_get_carbon_intensity_forecast(mock_scheduler_class):
+    request = MagicMock()
     user = MagicMock()
     mock_scheduler = mock_scheduler_class.return_value
     mock_scheduler.get_intensity_forecast = AsyncMock(return_value=[])
     mock_scheduler.get_region_intensity = AsyncMock(return_value=0.5)
 
-    response = await get_carbon_intensity_forecast(user, "us-east-1", 24)
+    response = await get_carbon_intensity_forecast(request, user, "us-east-1", 24)
     assert response["current_intensity"] == 0.5
 
 

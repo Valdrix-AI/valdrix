@@ -163,11 +163,11 @@ async def test_create_checkout_session_logs_and_reraises(
         service = BillingService(mock_db)
     with (
         patch(
-            "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate",
+            "app.shared.core.currency.ExchangeRateService.get_ngn_rate",
             new=AsyncMock(return_value=1500.0),
         ),
         patch(
-            "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn",
+            "app.shared.core.currency.ExchangeRateService.convert_usd_to_ngn",
             return_value=150000,
         ),
         patch.object(billing_mod.logger, "error") as mock_error,
@@ -251,11 +251,11 @@ async def test_charge_renewal_missing_user_returns_false(
             return_value="AUTH",
         ),
         patch(
-            "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate",
+            "app.shared.core.currency.ExchangeRateService.get_ngn_rate",
             new=AsyncMock(return_value=1500.0),
         ),
         patch(
-            "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn",
+            "app.shared.core.currency.ExchangeRateService.convert_usd_to_ngn",
             return_value=150000,
         ),
     ):
@@ -283,11 +283,11 @@ async def test_charge_renewal_email_decrypt_failure_returns_false(
             return_value="AUTH",
         ),
         patch(
-            "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate",
+            "app.shared.core.currency.ExchangeRateService.get_ngn_rate",
             new=AsyncMock(return_value=1500.0),
         ),
         patch(
-            "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn",
+            "app.shared.core.currency.ExchangeRateService.convert_usd_to_ngn",
             return_value=150000,
         ),
         patch("app.shared.core.security.decrypt_string", return_value=None),
@@ -316,11 +316,11 @@ async def test_charge_renewal_charge_exception_returns_false(
             return_value="AUTH",
         ),
         patch(
-            "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate",
+            "app.shared.core.currency.ExchangeRateService.get_ngn_rate",
             new=AsyncMock(return_value=1500.0),
         ),
         patch(
-            "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn",
+            "app.shared.core.currency.ExchangeRateService.convert_usd_to_ngn",
             return_value=150000,
         ),
         patch(
@@ -380,9 +380,11 @@ def test_verify_signature_missing_signature_or_secret(
 @pytest.mark.asyncio
 async def test_handle_unknown_event_returns_success(mock_db: MagicMock) -> None:
     handler = WebhookHandler(mock_db)
+    request = MagicMock()
+    request.headers = {"Content-Type": "application/json"}
     payload = json.dumps({"event": "unknown.event", "data": {}}).encode()
     with patch.object(handler, "verify_signature", return_value=True):
-        result = await handler.handle(payload, "sig")
+        result = await handler.handle(request, payload, "sig")
     assert result == {"status": "success"}
 
 
@@ -511,3 +513,120 @@ async def test_subscription_disable_and_invoice_failed_edge_paths(
 
     mock_db.execute.return_value = _scalar_result(None)
     await handler._handle_invoice_failed({"subscription_code": "SUB-NONE"})
+
+
+@pytest.mark.asyncio
+async def test_create_checkout_session_usd_disabled_rejected(
+    mock_db: MagicMock,
+    configured_settings: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        billing_mod.settings, "PAYSTACK_ENABLE_USD_CHECKOUT", False, raising=False
+    )
+    service = BillingService(mock_db)
+
+    with pytest.raises(ValueError, match="USD checkout is not enabled"):
+        await service.create_checkout_session(
+            tenant_id=uuid4(),
+            tier=PricingTier.STARTER,
+            email="user@example.com",
+            callback_url="https://callback.example.com",
+            currency="USD",
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_checkout_session_usd_enabled_uses_cents_without_fx_lookup(
+    mock_db: MagicMock,
+    configured_settings: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        billing_mod.settings, "PAYSTACK_ENABLE_USD_CHECKOUT", True, raising=False
+    )
+    service = BillingService(mock_db)
+    mock_db.execute.return_value = _scalar_result(None)
+    service.client.initialize_transaction = AsyncMock(
+        return_value={
+            "data": {"authorization_url": "https://pay.example/checkout", "reference": "REFUSD1"}
+        }
+    )
+
+    with (
+        patch(
+            "app.shared.core.currency.ExchangeRateService.get_ngn_rate",
+            new=AsyncMock(),
+        ) as mock_rate,
+        patch(
+            "app.shared.core.currency.ExchangeRateService.convert_usd_to_ngn",
+            return_value=999999,
+        ) as mock_convert,
+    ):
+        result = await service.create_checkout_session(
+            tenant_id=uuid4(),
+            tier=PricingTier.STARTER,
+            email="user@example.com",
+            callback_url="https://callback.example.com",
+            billing_cycle="monthly",
+            currency="USD",
+        )
+
+    assert result["reference"] == "REFUSD1"
+    mock_rate.assert_not_awaited()
+    mock_convert.assert_not_called()
+
+    assert service.client.initialize_transaction.await_args is not None
+    init_kwargs = service.client.initialize_transaction.await_args.kwargs
+    assert init_kwargs["amount_kobo"] == 2900  # $29.00 -> 2900 cents
+    assert init_kwargs["metadata"]["currency"] == "USD"
+    assert init_kwargs["metadata"]["exchange_rate"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_charge_renewal_uses_usd_without_fx_when_subscription_currency_usd(
+    mock_db: MagicMock,
+    configured_settings: None,
+) -> None:
+    service = BillingService(mock_db)
+    sub = MagicMock(
+        paystack_auth_code="enc-auth",
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER.value,
+        billing_currency="USD",
+    )
+    mock_user = MagicMock(email="enc-email")
+    mock_db.execute.side_effect = [
+        _scalar_result(MagicMock(price_usd=29.0)),
+        _scalar_result(mock_user),
+    ]
+
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            return_value="AUTH",
+        ),
+        patch("app.shared.core.security.decrypt_string", return_value="user@example.com"),
+        patch(
+            "app.shared.core.currency.ExchangeRateService.get_ngn_rate",
+            new=AsyncMock(),
+        ) as mock_rate,
+        patch(
+            "app.shared.core.currency.ExchangeRateService.convert_usd_to_ngn",
+            return_value=999999,
+        ) as mock_convert,
+        patch.object(
+            service.client,
+            "charge_authorization",
+            new=AsyncMock(return_value={"status": True, "data": {"status": "success"}}),
+        ) as mock_charge,
+    ):
+        ok = await service.charge_renewal(sub)
+
+    assert ok is True
+    mock_rate.assert_not_awaited()
+    mock_convert.assert_not_called()
+    assert mock_charge.await_args is not None
+    charge_kwargs = mock_charge.await_args.kwargs
+    assert charge_kwargs["amount_kobo"] == 2900
+    assert charge_kwargs["metadata"]["currency"] == "USD"

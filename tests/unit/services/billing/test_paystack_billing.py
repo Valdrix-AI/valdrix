@@ -96,23 +96,33 @@ class TestBillingService:
 
             with (
                 patch(
-                    "app.modules.billing.domain.billing.currency.ExchangeRateService.get_ngn_rate",
+                    "app.shared.core.currency.ExchangeRateService.get_ngn_rate",
                     return_value=1500.0,
                 ),
                 patch(
-                    "app.modules.billing.domain.billing.currency.ExchangeRateService.convert_usd_to_ngn",
+                    "app.shared.core.currency.ExchangeRateService.convert_usd_to_ngn",
                     return_value=1500000,
                 ),
+                patch(
+                    "app.modules.governance.domain.security.audit_log.AuditLogger.log",
+                    new_callable=AsyncMock,
+                ) as audit_log_mock,
             ):
-                mock_db.execute.return_value = MagicMock(
-                    scalar_one_or_none=lambda: None
-                )
+                mock_plan_res = MagicMock()
+                mock_plan_res.scalar_one_or_none.return_value = MagicMock(price_usd=10.0)
+                mock_db.execute.return_value = mock_plan_res
 
                 res = await service.create_checkout_session(
                     tenant_id, PricingTier.STARTER, "e@e.com", "http://callback"
                 )
                 assert res["url"] == "http://pay"
                 assert res["reference"] == "ref1"
+
+                # Verify Audit Log
+                audit_log_mock.assert_called_once()
+                _, kwargs = audit_log_mock.call_args
+                assert kwargs["event_type"].value == "billing.payment_initiated"
+                assert kwargs["details"]["exchange_rate"] == 1500.0
 
     @pytest.mark.asyncio
     async def test_charge_renewal_no_auth_code(self, mock_db, mock_settings):
@@ -148,12 +158,16 @@ class TestBillingService:
                     return_value="AUTH_123",
                 ),
                 patch(
-                    "app.modules.billing.domain.billing.currency.ExchangeRateService"
+                    "app.shared.core.currency.ExchangeRateService"
                 ) as MockExchangeService,
                 patch(
                     "app.shared.core.security.decrypt_string",
                     return_value="user@email.com",
                 ),
+                patch(
+                    "app.modules.governance.domain.security.audit_log.AuditLogger.log",
+                    new_callable=AsyncMock,
+                ) as audit_log_mock,
             ):
                 # Mock Exchange Service instance
                 mock_exchange = MockExchangeService.return_value
@@ -180,6 +194,11 @@ class TestBillingService:
                     res = await service.charge_renewal(sub)
 
                     assert res is True
+                    # Verify Audit Log
+                    audit_log_mock.assert_called_once()
+                    _, kwargs = audit_log_mock.call_args
+                    assert kwargs["event_type"].value == "billing.payment_received"
+                    assert kwargs["details"]["exchange_rate"] == 1500.0
                 assert sub.next_payment_date is not None
 
 

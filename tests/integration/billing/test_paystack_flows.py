@@ -63,9 +63,9 @@ async def test_data(db):
 @pytest.mark.anyio
 async def test_create_checkout_success(ac: AsyncClient, test_data, db):
     """Verify checkout session creation with dynamic exchange rate conversion."""
-    # 0. Mock Paystack Secret Key
-    respx.get(url__startswith="https://v6.exchangerate-api.com/v6").respond(
-        json={"result": "success", "conversion_rates": {"NGN": 1500.0}}
+    # 0. Mock CBN official NGN FX endpoint used by strict billing mode.
+    respx.get("https://www.cbn.gov.ng/api/GetAllNFEM_RatesGRAPH").respond(
+        json=[{"ratedate": "2026-02-15", "weightedAvgRate": "1500.0"}]
     )
 
     with (
@@ -138,7 +138,10 @@ async def test_webhook_charge_success_activates_subscription(
             SECRET,
         )
 
-        headers = {"x-paystack-signature": signature}
+        headers = {
+            "x-paystack-signature": signature,
+            "content-type": "application/json",
+        }
         response = await ac.post(
             "/api/v1/billing/webhook", content=payload_bytes, headers=headers
         )

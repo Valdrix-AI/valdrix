@@ -98,7 +98,7 @@ export default function() {
 
     // Simulate authenticated user flow
     if (AUTH_TOKEN) {
-        group('Cost Explorer', function() {
+        group('Cost API', function() {
             const start = Date.now();
             const res = http.get(`${BASE_URL}/costs`, { headers });
             check(res, {

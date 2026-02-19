@@ -2,18 +2,24 @@
 
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.modules.governance.api.v1.health_dashboard import get_investor_health_dashboard
+from app.modules.governance.api.v1.health_dashboard import (
+    get_investor_health_dashboard,
+    get_llm_fair_use_runtime,
+)
 from app.modules.governance.api.v1.health_dashboard import (
     AWSConnectionHealth,
     InvestorHealthDashboard,
     JobQueueHealth,
+    LLMFairUseRuntime,
     LLMUsageMetrics,
     TenantMetrics,
 )
+from app.shared.core.pricing import PricingTier
 
 
 class _DisabledCache:
@@ -189,4 +195,93 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
     job_queue_mock.assert_not_awaited()
     llm_mock.assert_not_awaited()
     aws_mock.assert_not_awaited()
+    assert cache.set_called is False
+
+
+@pytest.mark.asyncio
+async def test_get_llm_fair_use_runtime_handler_success():
+    """Fair-use runtime endpoint returns tenant-aware thresholds from settings."""
+    mock_admin = MagicMock()
+    mock_admin.role = "admin"
+    mock_admin.tenant_id = uuid.uuid4()
+    mock_db = AsyncMock()
+
+    mock_settings = SimpleNamespace(
+        LLM_FAIR_USE_GUARDS_ENABLED=True,
+        LLM_FAIR_USE_PRO_DAILY_SOFT_CAP=1200,
+        LLM_FAIR_USE_ENTERPRISE_DAILY_SOFT_CAP=4000,
+        LLM_FAIR_USE_PER_MINUTE_CAP=30,
+        LLM_FAIR_USE_PER_TENANT_CONCURRENCY_CAP=4,
+        LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS=180,
+    )
+
+    with (
+        patch(
+            "app.modules.governance.api.v1.health_dashboard.get_cache_service",
+            return_value=_DisabledCache(),
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard.get_settings",
+            return_value=mock_settings,
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
+    ):
+        response = await get_llm_fair_use_runtime(mock_admin, mock_db)
+
+    assert response.guards_enabled is True
+    assert response.tenant_tier == PricingTier.PRO.value
+    assert response.tier_eligible is True
+    assert response.active_for_tenant is True
+    assert response.thresholds.pro_daily_soft_cap == 1200
+    assert response.thresholds.per_minute_cap == 30
+    assert response.thresholds.per_tenant_concurrency_cap == 4
+
+
+@pytest.mark.asyncio
+async def test_get_llm_fair_use_runtime_returns_cached_payload():
+    """Fair-use runtime endpoint should bypass settings/tier lookups on cache hit."""
+    mock_admin = MagicMock()
+    mock_admin.role = "admin"
+    mock_admin.tenant_id = uuid.uuid4()
+    mock_db = AsyncMock()
+
+    cached_payload = LLMFairUseRuntime(
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        guards_enabled=False,
+        tenant_tier=PricingTier.FREE.value,
+        tier_eligible=False,
+        active_for_tenant=False,
+        thresholds={
+            "pro_daily_soft_cap": 1200,
+            "enterprise_daily_soft_cap": 4000,
+            "per_minute_cap": 30,
+            "per_tenant_concurrency_cap": 4,
+            "concurrency_lease_ttl_seconds": 180,
+            "enforced_tiers": [PricingTier.PRO.value, PricingTier.ENTERPRISE.value],
+        },
+    ).model_dump(mode="json")
+    cache = _CacheHit(cached_payload)
+
+    with (
+        patch(
+            "app.modules.governance.api.v1.health_dashboard.get_cache_service",
+            return_value=cache,
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard.get_settings",
+            return_value=MagicMock(),
+        ) as settings_mock,
+        patch(
+            "app.modules.governance.api.v1.health_dashboard.get_tenant_tier",
+            new=AsyncMock(),
+        ) as tier_mock,
+    ):
+        response = await get_llm_fair_use_runtime(mock_admin, mock_db)
+
+    assert response.generated_at == cached_payload["generated_at"]
+    settings_mock.assert_not_called()
+    tier_mock.assert_not_awaited()
     assert cache.set_called is False

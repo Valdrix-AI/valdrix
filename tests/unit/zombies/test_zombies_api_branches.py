@@ -1,11 +1,9 @@
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
 from app.modules.optimization.api.v1 import zombies
-from app.models.remediation import RemediationStatus
 from app.shared.core.auth import CurrentUser, UserRole
 from app.shared.core.exceptions import ResourceNotFoundError, ValdrixException
 from app.shared.core.pricing import PricingTier
@@ -14,14 +12,6 @@ from app.shared.core.pricing import PricingTier
 def _scalar_one_or_none_result(value: object) -> MagicMock:
     result = MagicMock()
     result.scalar_one_or_none.return_value = value
-    return result
-
-
-def _first_result(value: object) -> MagicMock:
-    result = MagicMock()
-    scalars = MagicMock()
-    scalars.first.return_value = value
-    result.scalars.return_value = scalars
     return result
 
 
@@ -159,18 +149,10 @@ async def test_execute_remediation_no_matching_request() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_remediation_missing_aws_connection() -> None:
+async def test_execute_remediation_wraps_service_error() -> None:
     tenant_id = uuid4()
     request_id = uuid4()
     db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _scalar_one_or_none_result(
-                SimpleNamespace(connection_id=None, status=RemediationStatus.PENDING)
-            ),
-            _first_result(None),
-        ]
-    )
     user = CurrentUser(
         id=uuid4(),
         email="admin@example.com",
@@ -179,29 +161,28 @@ async def test_execute_remediation_missing_aws_connection() -> None:
         tier=PricingTier.PRO,
     )
 
-    with pytest.raises(ValdrixException, match="No AWS connection found"):
-        await zombies.execute_remediation(
-            request=MagicMock(),
-            request_id=request_id,
-            tenant_id=tenant_id,
-            user=user,
-            db=db,
+    with patch(
+        "app.modules.optimization.api.v1.zombies.RemediationService"
+    ) as service_cls:
+        service = service_cls.return_value
+        service.execute = AsyncMock(
+            side_effect=ValueError("No AWS connection found for this tenant")
         )
+        with pytest.raises(ValdrixException, match="No AWS connection found"):
+            await zombies.execute_remediation(
+                request=MagicMock(),
+                request_id=request_id,
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+            )
 
 
 @pytest.mark.asyncio
 async def test_execute_remediation_value_error_is_wrapped() -> None:
     tenant_id = uuid4()
     request_id = uuid4()
-    remediation = SimpleNamespace(connection_id=None, status=RemediationStatus.PENDING)
-    connection = SimpleNamespace()
     db = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _scalar_one_or_none_result(remediation),
-            _first_result(connection),
-        ]
-    )
     user = CurrentUser(
         id=uuid4(),
         email="admin@example.com",
@@ -210,16 +191,9 @@ async def test_execute_remediation_value_error_is_wrapped() -> None:
         tier=PricingTier.PRO,
     )
 
-    with (
-        patch(
-            "app.shared.adapters.aws_multitenant.MultiTenantAWSAdapter"
-        ) as adapter_cls,
-        patch(
-            "app.modules.optimization.api.v1.zombies.RemediationService"
-        ) as service_cls,
-    ):
-        adapter = adapter_cls.return_value
-        adapter.get_credentials = AsyncMock(return_value={"access_key": "x"})
+    with patch(
+        "app.modules.optimization.api.v1.zombies.RemediationService"
+    ) as service_cls:
         service = service_cls.return_value
         service.execute = AsyncMock(side_effect=ValueError("grace period active"))
 

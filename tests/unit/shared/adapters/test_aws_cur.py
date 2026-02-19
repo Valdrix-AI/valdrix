@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime
+import pandas as pd
 from app.shared.adapters.aws_cur import AWSCURAdapter
 from app.shared.core.credentials import AWSCredentials
 
@@ -76,4 +76,49 @@ class TestAWSCURAdapter:
             assert success is True
             mock_s3.head_bucket.assert_awaited_with(Bucket=adapter.bucket_name)
 
+    async def test_process_parquet_streamingly_logs_when_record_cap_exceeded(self, mock_creds):
+        adapter = AWSCURAdapter(mock_creds)
+        adapter._SUMMARY_RECORD_CAP = 2
 
+        df = pd.DataFrame(
+            {
+                "lineItem/UsageStartDate": [
+                    "2026-02-01T00:00:00Z",
+                    "2026-02-01T01:00:00Z",
+                    "2026-02-01T02:00:00Z",
+                ],
+                "lineItem/UnblendedCost": ["1.0", "2.0", "3.0"],
+                "lineItem/CurrencyCode": ["USD", "USD", "USD"],
+                "lineItem/ProductCode": ["AmazonEC2", "AmazonEC2", "AmazonEC2"],
+                "product/region": ["us-east-1", "us-east-1", "us-east-1"],
+                "lineItem/UsageType": ["BoxUsage", "BoxUsage", "BoxUsage"],
+            }
+        )
+
+        class _FakeTable:
+            def to_pandas(self):
+                return df
+
+        class _FakeParquetFile:
+            num_row_groups = 1
+
+            def read_row_group(self, idx):
+                assert idx == 0
+                return _FakeTable()
+
+        with patch(
+            "app.shared.adapters.aws_cur.pq.ParquetFile",
+            return_value=_FakeParquetFile(),
+        ), patch("app.shared.adapters.aws_cur.logger.warning") as mock_warning:
+            summary = adapter._process_parquet_streamingly("/tmp/cur.parquet")
+
+        assert len(summary.records) == 2
+        assert summary.total_cost == 6
+        mock_warning.assert_any_call(
+            "cur_summary_record_cap_reached",
+            cap=2,
+            dropped_records=1,
+            retained_records=2,
+            start=None,
+            end=None,
+        )

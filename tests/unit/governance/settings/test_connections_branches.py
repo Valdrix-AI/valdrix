@@ -7,7 +7,12 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.modules.governance.api.v1.settings import connections as connections_api
+from app.modules.governance.api.v1.settings import connections_azure_gcp as cloud_api
+from app.modules.governance.api.v1.settings import connections_cloud_plus as cloud_plus_api
+from app.modules.governance.api.v1.settings import connections_helpers as connections_helpers
+from app.modules.governance.api.v1.settings import (
+    connections_setup_aws_discovery as aws_discovery_api,
+)
 from app.schemas.connections import (
     AWSConnectionCreate,
     AzureConnectionCreate,
@@ -58,13 +63,13 @@ def db() -> MagicMock:
 def test_require_tenant_id_raises_when_missing() -> None:
     missing_tenant_user = CurrentUser(id=uuid4(), email="u@example.com", tenant_id=None)
     with pytest.raises(HTTPException) as exc:
-        connections_api._require_tenant_id(missing_tenant_user)
+        connections_helpers._require_tenant_id(missing_tenant_user)
     assert exc.value.status_code == 404
 
 
 def test_enforce_growth_tier_rejects_free(user: CurrentUser) -> None:
     with pytest.raises(HTTPException) as exc:
-        connections_api._enforce_growth_tier(PricingTier.FREE, user)
+        connections_helpers._enforce_growth_tier(PricingTier.FREE, user)
     assert exc.value.status_code == 403
 
 
@@ -74,7 +79,7 @@ async def test_check_growth_tier_denied_for_free(
 ) -> None:
     user.tier = PricingTier.FREE
     with pytest.raises(HTTPException) as exc:
-        connections_api.check_growth_tier(user)
+        connections_helpers.check_growth_tier(user)
     assert exc.value.status_code == 403
     db.execute.assert_not_awaited()
 
@@ -85,7 +90,7 @@ async def test_check_growth_tier_denied_again(
 ) -> None:
     user.tier = PricingTier.FREE
     with pytest.raises(HTTPException) as exc:
-        connections_api.check_growth_tier(user)
+        connections_helpers.check_growth_tier(user)
     assert exc.value.status_code == 403  # GROWTH required
 
 
@@ -94,7 +99,7 @@ async def test_check_growth_tier_allows_growth(
     user: CurrentUser, db: MagicMock
 ) -> None:
     user.tier = PricingTier.GROWTH
-    connections_api.check_growth_tier(user)
+    connections_helpers.check_growth_tier(user)
 
 
 @pytest.mark.asyncio
@@ -109,7 +114,7 @@ async def test_create_aws_connection_duplicate_raises(
     )
     db.scalar.return_value = uuid4()
     with pytest.raises(HTTPException) as exc:
-        await connections_api.create_aws_connection(MagicMock(), payload, user, db)
+        await aws_discovery_api.create_aws_connection(MagicMock(), payload, user, db)
     assert exc.value.status_code == 409
 
 
@@ -119,7 +124,7 @@ async def test_delete_aws_connection_not_found(
 ) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
-        await connections_api.delete_aws_connection(uuid4(), user, db)
+        await aws_discovery_api.delete_aws_connection(uuid4(), user, db)
     assert exc.value.status_code == 404
 
 
@@ -131,7 +136,7 @@ async def test_sync_aws_org_requires_management_account(
         SimpleNamespace(is_management_account=False)
     )
     with pytest.raises(HTTPException) as exc:
-        await connections_api.sync_aws_org(uuid4(), user, db)
+        await aws_discovery_api.sync_aws_org(uuid4(), user, db)
     assert exc.value.status_code == 404
 
 
@@ -140,7 +145,7 @@ async def test_list_discovered_accounts_returns_empty_when_no_management_connect
     user: CurrentUser, db: MagicMock
 ) -> None:
     db.execute.return_value = _scalars_result([])
-    discovered = await connections_api.list_discovered_accounts(user, db)
+    discovered = await aws_discovery_api.list_discovered_accounts(user, db)
     assert discovered == []
 
 
@@ -152,7 +157,7 @@ async def test_link_discovered_account_not_authorized(
     row_result.one_or_none.return_value = None
     db.execute.return_value = row_result
     with pytest.raises(HTTPException) as exc:
-        await connections_api.link_discovered_account(uuid4(), user, db)
+        await aws_discovery_api.link_discovered_account(uuid4(), user, db)
     assert exc.value.status_code == 404
 
 
@@ -167,7 +172,7 @@ async def test_link_discovered_account_existing_connection_path(
     second = _scalar_result(SimpleNamespace(id=uuid4()))
     db.execute.side_effect = [first, second]
 
-    response = await connections_api.link_discovered_account(uuid4(), user, db)
+    response = await aws_discovery_api.link_discovered_account(uuid4(), user, db)
     assert response["status"] == "existing"
     assert discovered.status == "linked"
     db.commit.assert_awaited()
@@ -185,9 +190,9 @@ async def test_create_azure_connection_duplicate_raises(
         client_secret="secret",
     )
     db.scalar.return_value = SimpleNamespace(id=uuid4())
-    with patch.object(connections_api, "check_growth_tier", new=MagicMock()):
+    with patch.object(cloud_api, "check_growth_tier", new=MagicMock()):
         with pytest.raises(HTTPException) as exc:
-            await connections_api.create_azure_connection(
+            await cloud_api.create_azure_connection(
                 MagicMock(), payload, user, db
             )
     assert exc.value.status_code == 409
@@ -199,7 +204,7 @@ async def test_delete_azure_connection_not_found(
 ) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
-        await connections_api.delete_azure_connection(uuid4(), user, db)
+        await cloud_api.delete_azure_connection(uuid4(), user, db)
     assert exc.value.status_code == 404
 
 
@@ -215,10 +220,10 @@ async def test_create_gcp_connection_duplicate_raises(
     )
     db.scalar.return_value = SimpleNamespace(id=uuid4())
     with patch.object(
-        connections_api, "check_growth_tier", return_value=PricingTier.GROWTH
+        cloud_api, "check_growth_tier", return_value=PricingTier.GROWTH
     ):
         with pytest.raises(HTTPException) as exc:
-            await connections_api.create_gcp_connection(MagicMock(), payload, db, user)
+            await cloud_api.create_gcp_connection(MagicMock(), payload, db, user)
     assert exc.value.status_code == 409
 
 
@@ -234,7 +239,7 @@ async def test_create_gcp_connection_workload_identity_failure(
     db.scalar.return_value = None
     with (
         patch.object(
-            connections_api, "check_growth_tier", return_value=PricingTier.GROWTH
+            cloud_api, "check_growth_tier", return_value=PricingTier.GROWTH
         ),
         patch(
             "app.shared.connections.oidc.OIDCService.verify_gcp_access",
@@ -242,7 +247,7 @@ async def test_create_gcp_connection_workload_identity_failure(
         ),
     ):
         with pytest.raises(HTTPException) as exc:
-            await connections_api.create_gcp_connection(MagicMock(), payload, db, user)
+            await cloud_api.create_gcp_connection(MagicMock(), payload, db, user)
     assert exc.value.status_code == 400
     assert "verification failed" in exc.value.detail.lower()
 
@@ -253,7 +258,7 @@ async def test_delete_gcp_connection_not_found(
 ) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
-        await connections_api.delete_gcp_connection(uuid4(), user, db)
+        await cloud_api.delete_gcp_connection(uuid4(), user, db)
     assert exc.value.status_code == 404
 
 
@@ -263,7 +268,7 @@ async def test_check_cloud_plus_tier_denied_for_growth(
 ) -> None:
     user.tier = PricingTier.GROWTH
     with pytest.raises(HTTPException) as exc:
-        connections_api.check_cloud_plus_tier(user)
+        connections_helpers.check_cloud_plus_tier(user)
     assert exc.value.status_code == 403
 
 
@@ -272,7 +277,7 @@ async def test_check_cloud_plus_tier_allows_pro(
     user: CurrentUser, db: MagicMock
 ) -> None:
     user.tier = PricingTier.PRO
-    connections_api.check_cloud_plus_tier(user)
+    connections_helpers.check_cloud_plus_tier(user)
 
 
 @pytest.mark.asyncio
@@ -287,10 +292,12 @@ async def test_create_saas_connection_duplicate_raises(
     )
     db.scalar.return_value = uuid4()
     with patch.object(
-        connections_api, "check_cloud_plus_tier", return_value=PricingTier.PRO
+        cloud_plus_api, "check_cloud_plus_tier", return_value=PricingTier.PRO
     ):
         with pytest.raises(HTTPException) as exc:
-            await connections_api.create_saas_connection(MagicMock(), payload, user, db)
+            await cloud_plus_api.create_saas_connection(
+                MagicMock(), payload, user, db
+            )
     assert exc.value.status_code == 409
 
 
@@ -300,7 +307,7 @@ async def test_delete_saas_connection_not_found(
 ) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
-        await connections_api.delete_saas_connection(uuid4(), user, db)
+        await cloud_plus_api.delete_saas_connection(uuid4(), user, db)
     assert exc.value.status_code == 404
 
 
@@ -316,10 +323,10 @@ async def test_create_license_connection_duplicate_raises(
     )
     db.scalar.return_value = uuid4()
     with patch.object(
-        connections_api, "check_cloud_plus_tier", return_value=PricingTier.PRO
+        cloud_plus_api, "check_cloud_plus_tier", return_value=PricingTier.PRO
     ):
         with pytest.raises(HTTPException) as exc:
-            await connections_api.create_license_connection(
+            await cloud_plus_api.create_license_connection(
                 MagicMock(), payload, user, db
             )
     assert exc.value.status_code == 409
@@ -331,5 +338,5 @@ async def test_delete_license_connection_not_found(
 ) -> None:
     db.execute.return_value = _scalar_result(None)
     with pytest.raises(HTTPException) as exc:
-        await connections_api.delete_license_connection(uuid4(), user, db)
+        await cloud_plus_api.delete_license_connection(uuid4(), user, db)
     assert exc.value.status_code == 404

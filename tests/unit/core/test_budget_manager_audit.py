@@ -18,7 +18,7 @@ async def test_estimate_cost_standard():
 
 @pytest.mark.asyncio
 async def test_record_usage_byok_flat_fee():
-    """Verify that BYOK requests incur the flat platform fee ($0.50)."""
+    """Verify that BYOK requests incur no extra per-request surcharge."""
     db = AsyncMock()
     db.add = MagicMock()
     db.refresh = MagicMock()
@@ -29,6 +29,8 @@ async def test_record_usage_byok_flat_fee():
     mock_budget.monthly_limit_usd = Decimal("100.00")
     mock_budget.alert_threshold_percent = 80
     mock_budget.alert_sent_at = datetime.now(timezone.utc)
+    mock_budget.monthly_spend_usd = Decimal("0.00")
+    mock_budget.pending_reservations_usd = Decimal("0.00")
 
     exec_result = MagicMock()
     exec_result.scalar_one_or_none.return_value = mock_budget
@@ -58,7 +60,7 @@ async def test_record_usage_byok_flat_fee():
                 # Verify usage creation
                 MockUsage.assert_called_once()
                 _, kwargs = MockUsage.call_args
-                assert kwargs["cost_usd"] == Decimal("0.50")
+                assert kwargs["cost_usd"] == Decimal("0.00")
                 assert kwargs["is_byok"] is True
 
                 # Verify db.add was called
@@ -77,16 +79,18 @@ async def test_check_and_reserve_hard_limit():
     mock_budget = MagicMock()
     mock_budget.monthly_limit_usd = Decimal("5.00")
     mock_budget.hard_limit = True
+    mock_budget.monthly_spend_usd = Decimal("4.99")
+    mock_budget.pending_reservations_usd = Decimal("0.00")
+    mock_budget.budget_reset_at = datetime.now(timezone.utc)
 
-    # Mock usage of $4.99 (only $0.01 left)
-    MagicMock()
+    db.execute.return_value = MagicMock(scalar_one_or_none=lambda: mock_budget)
 
-    db.execute.side_effect = [
-        MagicMock(scalar_one_or_none=lambda: mock_budget),  # Budget fetch
-        MagicMock(scalar=lambda: Decimal("4.99")),  # Current usage fetch
-    ]
-
-    with pytest.raises(BudgetExceededError) as exc:
+    with (
+        patch.object(
+            LLMBudgetManager, "_enforce_daily_analysis_limit", new=AsyncMock()
+        ),
+        pytest.raises(BudgetExceededError) as exc,
+    ):
         await LLMBudgetManager.check_and_reserve(
             tenant_id=tenant_id,
             db=db,
@@ -109,11 +113,10 @@ async def test_budget_status_soft_limit():
     mock_budget.monthly_limit_usd = Decimal("100.00")
     mock_budget.alert_threshold_percent = 80
     mock_budget.hard_limit = False
+    mock_budget.monthly_spend_usd = Decimal("85.00")
+    mock_budget.pending_reservations_usd = Decimal("0.00")
 
-    db.execute.side_effect = [
-        MagicMock(scalar_one_or_none=lambda: mock_budget),  # Budget fetch
-        MagicMock(scalar=lambda: Decimal("85.00")),  # Current usage fetch (85% > 80%)
-    ]
+    db.execute.return_value = MagicMock(scalar_one_or_none=lambda: mock_budget)
 
     with patch("app.shared.llm.budget_manager.get_cache_service") as mock_cache:
         mock_cache.return_value.enabled = False

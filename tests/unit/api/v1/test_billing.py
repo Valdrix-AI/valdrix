@@ -81,6 +81,7 @@ async def test_create_checkout_success(
     checkout_req = MagicMock()
     checkout_req.tier = "starter"
     checkout_req.billing_cycle = "monthly"
+    checkout_req.currency = "USD"
     checkout_req.callback_url = None
 
     mock_billing = mock_billing_service_class.return_value
@@ -90,6 +91,8 @@ async def test_create_checkout_success(
 
     response = await create_checkout(MagicMock(), checkout_req, mock_user, mock_db)
     assert response["checkout_url"] == "http://checkout.url"
+    assert mock_billing.create_checkout_session.await_args is not None
+    assert mock_billing.create_checkout_session.await_args.kwargs["currency"] == "USD"
 
 
 @pytest.mark.asyncio
@@ -132,7 +135,8 @@ async def test_handle_webhook_success(
     # Mock headers as MagicMock so .get is synchronous
     request.headers = MagicMock()
     request.headers.get.side_effect = lambda k, default=None: {
-        "x-paystack-signature": "valid-sig"
+        "x-paystack-signature": "valid-sig",
+        "content-type": "application/json",
     }.get(k, default)
     request.client.host = "127.0.0.1"
     request.body.return_value = (
@@ -194,9 +198,7 @@ async def test_cancel_subscription_success(
 
 
 @pytest.mark.asyncio
-async def test_update_exchange_rate(
-    mock_db: AsyncMock, mock_user: MagicMock
-) -> None:
+async def test_update_exchange_rate(mock_db: AsyncMock, mock_user: MagicMock) -> None:
     req = MagicMock()
     req.rate = 1500.0
     req.provider = "manual"
@@ -212,14 +214,14 @@ async def test_update_exchange_rate(
 
 @pytest.mark.asyncio
 async def test_get_exchange_rate(mock_db: AsyncMock, mock_user: MagicMock) -> None:
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     mock_rate = ExchangeRate(
         from_currency="USD",
         to_currency="NGN",
         rate=1450.0,
         provider="manual",
-        last_updated=datetime.now(),
+        last_updated=datetime.now(timezone.utc),
     )
 
     mock_result = MagicMock()
@@ -228,6 +230,9 @@ async def test_get_exchange_rate(mock_db: AsyncMock, mock_user: MagicMock) -> No
 
     response = await get_exchange_rate(mock_user, mock_db)
     assert response["rate"] == 1450.0
+    assert response["is_official_provider"] is False
+    assert response["billing_safe"] is False
+    assert "official CBN NFEM" in response["warning"]
 
 
 @pytest.mark.asyncio

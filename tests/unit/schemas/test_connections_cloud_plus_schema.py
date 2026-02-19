@@ -80,6 +80,44 @@ def test_license_native_rejects_unsupported_vendor() -> None:
         )
 
 
+def test_license_native_accepts_google_workspace_vendor() -> None:
+    payload = LicenseConnectionCreate(
+        name="Google Workspace",
+        vendor="google_workspace",
+        auth_method="oauth",
+        api_key="token",
+        connector_config={},
+        license_feed=[],
+    )
+
+    assert payload.vendor == "google_workspace"
+
+
+def test_license_salesforce_native_requires_instance_url() -> None:
+    with pytest.raises(ValidationError):
+        LicenseConnectionCreate(
+            name="Salesforce License Native",
+            vendor="salesforce",
+            auth_method="oauth",
+            api_key="token",
+            connector_config={},
+            license_feed=[],
+        )
+
+
+def test_license_salesforce_native_accepts_instance_url() -> None:
+    payload = LicenseConnectionCreate(
+        name="Salesforce License Native",
+        vendor="salesforce",
+        auth_method="oauth",
+        api_key="token",
+        connector_config={"salesforce_instance_url": "https://acme.my.salesforce.com"},
+        license_feed=[],
+    )
+
+    assert payload.vendor == "salesforce"
+
+
 def test_license_rejects_negative_default_seat_price() -> None:
     with pytest.raises(ValidationError):
         LicenseConnectionCreate(

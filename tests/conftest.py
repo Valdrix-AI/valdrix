@@ -78,6 +78,7 @@ def _register_models():
     from app.models.carbon_settings import CarbonSettings  # noqa: F401
     from app.models.carbon_factors import CarbonFactorSet, CarbonFactorUpdateLog  # noqa: F401
     from app.models.discovered_account import DiscoveredAccount  # noqa: F401
+    from app.models.discovery_candidate import DiscoveryCandidate  # noqa: F401
     from app.shared.core.pricing import PricingTier  # noqa: F401
     from app.models.remediation_settings import RemediationSettings  # noqa: F401
     from app.models.optimization import OptimizationStrategy, StrategyRecommendation  # noqa: F401
