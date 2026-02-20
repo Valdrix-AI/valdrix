@@ -8,7 +8,7 @@ Manages the remediation approval workflow:
 4. execute() - System executes approved requests
 """
 
-from uuid import UUID, uuid4
+from uuid import UUID
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
 import inspect
@@ -33,7 +33,7 @@ from app.modules.governance.domain.security.audit_log import (  # noqa: F401
 )
 from app.modules.governance.domain.security.remediation_policy import (
     PolicyConfig,
-    RemediationPolicyEngine,
+    RemediationPolicyEngine,  # noqa: F401
 )
 from app.shared.adapters.aws_utils import map_aws_credentials
 from app.shared.core.config import get_settings
@@ -47,7 +47,7 @@ from app.shared.core.connection_state import (
 )
 from app.shared.core.pricing import (
     PricingTier,
-    get_tenant_tier,
+    get_tenant_tier,  # noqa: F401
 )
 from app.modules.optimization.domain.actions import RemediationActionFactory  # noqa: F401
 
