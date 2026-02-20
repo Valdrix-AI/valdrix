@@ -10,7 +10,8 @@ global:
   subdomain: api
 
 # -- Number of API replicas
-replicaCount: 3
+# Keep single-replica by default while core circuit-breaker state is process-local.
+replicaCount: 1
 
 image:
   # -- Container image repository
@@ -91,11 +92,11 @@ resources:
 
 autoscaling:
   # -- Enable HPA
-  enabled: true
+  enabled: false
   # -- Minimum replicas
-  minReplicas: 3
+  minReplicas: 1
   # -- Maximum replicas
-  maxReplicas: 20
+  maxReplicas: 1
   # -- Target CPU utilization
   targetCPUUtilizationPercentage: 70
   # -- Target memory utilization
@@ -119,7 +120,7 @@ affinity:
 env:
   ENVIRONMENT: production
   LOG_LEVEL: INFO
-  WORKERS: "4"
+  WEB_CONCURRENCY: "1"
 
 # -- Secrets to inject (must exist in cluster)
 existingSecrets:

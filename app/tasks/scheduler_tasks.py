@@ -24,93 +24,51 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 import inspect
+from uuid import UUID
+from app.shared.core.connection_state import (
+    is_connection_active,
+    resolve_connection_region,
+)
+from app.shared.core.connection_queries import list_active_connections_all_tenants
+from app.shared.core.provider import normalize_provider, resolve_provider_from_connection
 
 logger = structlog.get_logger()
 
 
 @asynccontextmanager
 async def _open_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Robust helper to obtain an async DB session from `async_session_maker`.
+    """Open a DB session using the production async session context manager."""
+    session_cm = async_session_maker()
+    if not hasattr(session_cm, "__aenter__") or not hasattr(session_cm, "__aexit__"):
+        raise TypeError(
+            "async_session_maker() must return an async context manager for AsyncSession"
+        )
 
-    This handles several shapes that tests/mocks may provide:
-    - a callable that returns an async context manager
-    - an AsyncMock/coroutine that resolves to a context manager
-    - a context manager instance directly
-    """
-    maker_result = async_session_maker()
-    # If the factory returned an awaitable that is NOT itself an async
-    # context manager (e.g. AsyncMock used as coroutine), await it.
-    if (
-        asyncio.iscoroutine(maker_result) or inspect.isawaitable(maker_result)
-    ) and not hasattr(maker_result, "__aenter__"):
-        maker_result = await maker_result
-
-    # If this is not an async context manager, treat it as a direct session object.
-    if not hasattr(maker_result, "__aenter__") or not hasattr(
-        maker_result, "__aexit__"
-    ):
-        session = maker_result
-        if (
-            asyncio.iscoroutine(session) or inspect.isawaitable(session)
-        ) and not hasattr(session, "__aenter__"):
-            session = await session
-        yield session
-        return
-
-    # Enter the async context manager explicitly so we only handle acquisition errors
-    # here; exceptions from caller code should propagate naturally to retry logic.
-    cm = maker_result
     try:
-        async with asyncio.timeout(10.0):  # 10s budget for getting a session
-            session = await cm.__aenter__()
-    except (asyncio.TimeoutError, Exception) as e:
-        logger.error("db_session_acquisition_failed", error=str(e), type=type(e).__name__)
+        async with asyncio.timeout(10.0):
+            async with session_cm as session:
+                yield session
+    except asyncio.TimeoutError as exc:
+        logger.error("db_session_acquisition_failed", error=str(exc), type="TimeoutError")
         raise
-
-    if (
-        asyncio.iscoroutine(session) or inspect.isawaitable(session)
-    ) and not hasattr(session, "__aenter__"):
-        session = await session
-
-    try:
-        yield session
-    except BaseException as exc:
-        suppress = await cm.__aexit__(type(exc), exc, exc.__traceback__)
-        if not suppress:
-            raise
-    else:
-        await cm.__aexit__(None, None, None)
 
 
 # Helper to run async code in sync Celery task
-def run_async(task_or_coro: Any, *args: Any, func: Any = None, **kwargs: Any) -> Any:
+def run_async(task_or_coro: Any, *args: Any, **kwargs: Any) -> Any:
     """
     Run an async callable/coroutine from sync code.
 
     Supported call patterns:
     - run_async(coroutine)
     - run_async(callable, *args, **kwargs)
-    - run_async(cohort_value, func=_cohort_analysis_logic)  # testing-friendly
     """
-    # If caller provided a helper `func` and the first arg is not awaitable/callable,
-    # treat the first positional as a parameter to `func` (used by tests).
-    if (
-        func is not None
-        and not asyncio.iscoroutine(task_or_coro)
-        and not callable(task_or_coro)
-    ):
-        return asyncio.run(func(task_or_coro, *args, **kwargs))
-
-    # If given an awaitable/coroutine object
     if asyncio.iscoroutine(task_or_coro) or inspect.isawaitable(task_or_coro):
         return asyncio.run(cast(Coroutine[Any, Any, Any], task_or_coro))
 
-    # If given a callable coroutine/function
     if callable(task_or_coro):
         return asyncio.run(task_or_coro(*args, **kwargs))
 
-    # Fallback: try to run it as-is
-    return asyncio.run(task_or_coro)
+    raise TypeError("run_async expects an awaitable or a callable async function")
 
 
 @shared_task(
@@ -135,7 +93,7 @@ def run_cohort_analysis(cohort_value: str) -> None:
             # Fallback to value-based construction (for numeric or other values)
             cohort = TenantCohort(cohort_value)
 
-    run_async(cohort, func=_cohort_analysis_logic)
+    run_async(_cohort_analysis_logic, cohort)
 
 
 async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
@@ -244,11 +202,10 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                     
                     # 5. Record Metrics
                     if jobs_enqueued > 0:
-                         # Update top-level metric with batch total
-                         # (Labels are job_type-specific, so we do it by type if needed, 
-                         # but for simplicity we skip granular label increments here 
-                         # to avoid drift in batch logic)
-                         pass
+                        BACKGROUND_JOBS_ENQUEUED.labels(
+                            job_type="cohort_scan",
+                            cohort=target_cohort.value,
+                        ).inc(jobs_enqueued)
 
                     logger.info(
                         "cohort_scan_enqueued",
@@ -298,9 +255,16 @@ def run_remediation_sweep() -> None:
     run_async(_remediation_sweep_logic)
 
 
-async def _remediation_sweep_logic() -> None:
-    from app.models.aws_connection import AWSConnection
+async def _load_active_remediation_connections(db: AsyncSession) -> list[Any]:
+    connections = await list_active_connections_all_tenants(
+        db,
+        with_for_update=True,
+        skip_locked=True,
+    )
+    return [conn for conn in connections if is_connection_active(conn)]
 
+
+async def _remediation_sweep_logic() -> None:
     job_name = "weekly_remediation_sweep"
     start_time = time.time()
     max_retries = 3
@@ -315,10 +279,7 @@ async def _remediation_sweep_logic() -> None:
                 ) and not hasattr(begin_ctx, "__aenter__"):
                     begin_ctx = await begin_ctx
                 async with begin_ctx:
-                    result = await db.execute(
-                        sa.select(AWSConnection).with_for_update(skip_locked=True)
-                    )
-                    connections = result.scalars().all()
+                    connections = await _load_active_remediation_connections(db)
 
                     now = datetime.now(timezone.utc)
                     bucket_str = now.strftime("%Y-W%U")
@@ -326,21 +287,52 @@ async def _remediation_sweep_logic() -> None:
                     orchestrator = SchedulerOrchestrator(async_session_maker)
 
                     for conn in connections:
+                        resolved_provider = resolve_provider_from_connection(conn)
+                        provider = normalize_provider(resolved_provider)
+                        if not provider:
+                            logger.warning(
+                                "remediation_sweep_skipping_unknown_provider",
+                                provider=resolved_provider or None,
+                                connection_id=str(getattr(conn, "id", "unknown")),
+                                tenant_id=str(getattr(conn, "tenant_id", "unknown")),
+                            )
+                            continue
+                        connection_id = getattr(conn, "id", None)
+                        tenant_id = getattr(conn, "tenant_id", None)
+                        if not isinstance(connection_id, UUID) or not isinstance(tenant_id, UUID):
+                            logger.warning(
+                                "remediation_sweep_skipping_invalid_connection_identity",
+                                provider=provider,
+                                connection_id=str(connection_id),
+                                tenant_id=str(tenant_id),
+                            )
+                            continue
+                        connection_region = resolve_connection_region(conn)
+
                         # Unified green window logic (H-2: Deduplicated scheduling logic)
                         # Carbon cache is now leveraged correctly within this task run.
-                        is_green = await orchestrator.is_low_carbon_window(conn.region)
+                        # Apply carbon-aware delay whenever a concrete region is known.
+                        is_green = True
+                        if connection_region != "global":
+                            is_green = await orchestrator.is_low_carbon_window(
+                                connection_region
+                            )
 
                         scheduled_time = now
                         if not is_green:
                             scheduled_time += timedelta(hours=4)
 
-                        dedup_key = f"{conn.tenant_id}:{conn.id}:{JobType.REMEDIATION.value}:{bucket_str}"
+                        dedup_key = (
+                            f"{tenant_id}:{provider}:{connection_id}:"
+                            f"{JobType.REMEDIATION.value}:{bucket_str}"
+                        )
                         jobs_to_insert.append({
                             "job_type": JobType.REMEDIATION.value,
-                            "tenant_id": conn.tenant_id,
+                            "tenant_id": tenant_id,
                             "payload": {
-                                "connection_id": str(conn.id),
-                                "region": conn.region,
+                                "provider": provider,
+                                "connection_id": str(connection_id),
+                                "region": connection_region,
                             },
                             "status": JobStatus.PENDING,
                             "scheduled_for": scheduled_time,
@@ -597,8 +589,6 @@ def run_maintenance_sweep() -> None:
 
 
 async def _maintenance_sweep_logic() -> None:
-    from sqlalchemy import text
-
     async with _open_db_session() as db:
         # 0. Finalize cost records
         try:
