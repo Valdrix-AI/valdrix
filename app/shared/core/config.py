@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     WEBHOOK_ALLOWED_DOMAINS: list[str] = []  # Allowlist for generic webhook retries
     WEBHOOK_REQUIRE_HTTPS: bool = True
     WEBHOOK_BLOCK_PRIVATE_IPS: bool = True
+    # Number of trusted reverse-proxy hops when resolving client IP from XFF.
+    # 1 = trust the nearest proxy and use the right-most forwarded address.
+    TRUSTED_PROXY_HOPS: int = 1
     SSE_MAX_CONNECTIONS_PER_TENANT: int = 5
     SSE_POLL_INTERVAL_SECONDS: int = 3
 
@@ -227,6 +230,9 @@ class Settings(BaseSettings):
 
     def _validate_environment_safety(self) -> None:
         """Validates network and deployment safety (SEC-A1, SEC-A2)."""
+        if self.TRUSTED_PROXY_HOPS < 1 or self.TRUSTED_PROXY_HOPS > 5:
+            raise ValueError("TRUSTED_PROXY_HOPS must be between 1 and 5.")
+
         if self.is_production or self.ENVIRONMENT == "staging":
             if not self.ADMIN_API_KEY or len(self.ADMIN_API_KEY) < 32:
                 raise ValueError(

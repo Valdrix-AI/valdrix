@@ -37,6 +37,15 @@ from app.shared.core.rate_limit import auth_limit, standard_limit
 from app.shared.core.currency import ExchangeRateUnavailableError
 
 logger = structlog.get_logger()
+__all__ = [
+    "router",
+    "BillingUsageResponse",
+    "CheckoutRequest",
+    "ExchangeRateUpdate",
+    "PricingPlanUpdate",
+    "SubscriptionResponse",
+]
+
 router = APIRouter(tags=["Billing"])
 
 
@@ -103,7 +112,7 @@ def _extract_client_ip(request: Request) -> str:
     """
     Resolve request source IP with defensive XFF parsing.
 
-    We prefer the right-most valid XFF entry (closest upstream hop) and
+    We resolve the address using a bounded trusted-proxy hop count and
     fall back to `request.client.host`.
     """
     fallback = request.client.host if request.client and request.client.host else "unknown"
@@ -112,12 +121,29 @@ def _extract_client_ip(request: Request) -> str:
         return fallback
 
     candidates = [part.strip() for part in xff.split(",") if part.strip()]
-    for raw in reversed(candidates):
+    valid_ips: list[str] = []
+    for raw in candidates:
         try:
-            return str(ipaddress.ip_address(raw))
+            valid_ips.append(str(ipaddress.ip_address(raw)))
         except ValueError:
             continue
-    return fallback
+    if not valid_ips:
+        return fallback
+
+    try:
+        trusted_hops = int(getattr(settings, "TRUSTED_PROXY_HOPS", 1))
+    except (TypeError, ValueError):
+        trusted_hops = 1
+    trusted_hops = min(max(trusted_hops, 1), 5)
+
+    # RFC 7239 style forwarding chains are left-to-right oldest->newest.
+    # Choose the address immediately before trusted proxy hops.
+    idx = len(valid_ips) - trusted_hops
+    if idx < 0:
+        return fallback
+    if idx >= len(valid_ips):
+        return valid_ips[-1]
+    return valid_ips[idx]
 
 
 @router.get("/plans")
