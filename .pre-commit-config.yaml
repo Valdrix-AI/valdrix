@@ -2,6 +2,14 @@
 # Install: uv sync --group dev && uv run pre-commit install
 
 repos:
+  - repo: local
+    hooks:
+      - id: check-local-env-live-secrets
+        name: check-local-env-live-secrets
+        entry: python3 scripts/security/check_local_env_for_live_secrets.py
+        language: system
+        pass_filenames: false
+
   # Ruff - Fast Python linter & formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.6
