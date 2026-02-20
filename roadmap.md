@@ -1,8 +1,9 @@
 # Valdrix Roadmap (Internal)
 
-Last updated: **February 15, 2026**
+Last updated: **February 20, 2026**
 
 Progress archive (shipped work + evidence):
+- `reports/roadmap/ROADMAP_PROGRESS_2026-02-20.md`
 - `reports/roadmap/ROADMAP_PROGRESS_2026-02-15.md`
 - `reports/roadmap/ROADMAP_PROGRESS_2026-02-14.md`
 - `reports/roadmap/ROADMAP_PROGRESS_2026-02-13.md`
@@ -54,9 +55,11 @@ Progress archive (shipped work + evidence):
 5. Persona-specific product experience hardening.
 
 ## Latest Sprint Shipped
-Full detail and evidence pointers live in `reports/roadmap/ROADMAP_PROGRESS_2026-02-15.md`.
+Full detail and evidence pointers live in `reports/roadmap/ROADMAP_PROGRESS_2026-02-20.md`.
 
 Highlights:
+- Acceptance evidence capture closure refreshed with full pass (`26/26`) using enterprise-tier sign-off run (`reports/acceptance/20260220T160636Z/manifest.json`).
+- SSO federation operator smoke + publish path validated end-to-end (tenant-scoped discovery, admin validation, audit evidence publish).
 - Enterprise close workflow v3 (invoice-linked reconciliation) + Ops dashboard workflow UX.
 - Enterprise identity hardening (SSO enforcement diagnostics, SCIM token flows, SCIM group mappings).
 - Performance scale evidence capture (load-test p95/error-rate + ingestion persistence benchmarks) + compliance pack inclusion.
@@ -85,3 +88,4 @@ Highlights:
 - Workflow integrations v2: implemented (Teams channel support + policy notification actions + test endpoint + acceptance evidence + compliance export metadata).
 - Real SSO federation v1: implemented (tenant-scoped discovery API + federated login start/callback + identity settings federation controls).
 - Real SSO federation v2 hardening: implemented (operator validation endpoint + audit-grade evidence capture endpoints + smoke test runner + docs/tests).
+- Acceptance sign-off bundle refresh (2026-02-20): implemented (full acceptance capture pass, SSO smoke publish pass, evidence archived in `reports/acceptance/20260220T160636Z`).
