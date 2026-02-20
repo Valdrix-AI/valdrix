@@ -24,7 +24,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -78,6 +78,15 @@ class Check:
     duration_ms: float | None = None
 
 
+def _exit_with_connectivity_error(base_url: str, exc: httpx.RequestError) -> NoReturn:
+    request_url = str(exc.request.url) if exc.request is not None else base_url
+    raise SystemExit(
+        "Connection failed while calling "
+        f"{request_url}. Ensure the API is running and --url/VALDRIX_API_URL is correct "
+        f"(current base URL: {base_url}). Underlying error: {exc.__class__.__name__}: {exc}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Smoke test SSO federation discovery + validation."
@@ -99,6 +108,12 @@ def main() -> int:
         action="store_true",
         help="Publish evidence into audit logs (admin only).",
     )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="HTTP timeout in seconds for each request (default: 30).",
+    )
     args = parser.parse_args()
 
     raw_url = str(args.url or "").strip()
@@ -111,6 +126,9 @@ def main() -> int:
     base_url = _require_valid_base_url(raw_url)
     token = str(args.token or "").strip()
     email = str(args.email).strip()
+    timeout_seconds = float(args.timeout)
+    if timeout_seconds <= 0:
+        raise SystemExit("--timeout must be > 0")
     if not email:
         raise SystemExit("--email is required")
 
@@ -131,17 +149,27 @@ def main() -> int:
     discovery_ok = False
     validation_ok = False
 
-    public_client = httpx.Client(timeout=15.0)
+    timeout = httpx.Timeout(timeout_seconds)
+    public_client = httpx.Client(timeout=timeout)
     admin_client = httpx.Client(
-        timeout=15.0, headers={"Authorization": f"Bearer {token}"} if token else None
+        timeout=timeout, headers={"Authorization": f"Bearer {token}"} if token else None
     )
 
     try:
+        # Preflight connectivity check for clearer operator feedback.
+        try:
+            public_client.get(_build_url(base_url, "/api/v1/public/csrf"))
+        except httpx.RequestError as exc:
+            _exit_with_connectivity_error(base_url, exc)
+
         # 1) Public discovery (no auth)
         t0 = time.perf_counter()
-        resp = public_client.post(
-            _build_url(base_url, "/api/v1/public/sso/discovery"), json={"email": email}
-        )
+        try:
+            resp = public_client.post(
+                _build_url(base_url, "/api/v1/public/sso/discovery"), json={"email": email}
+            )
+        except httpx.RequestError as exc:
+            _exit_with_connectivity_error(base_url, exc)
         dt_ms = (time.perf_counter() - t0) * 1000.0
         ok = resp.status_code == 200
         discovery_ok = bool(ok)
@@ -173,9 +201,12 @@ def main() -> int:
             )
         else:
             t0 = time.perf_counter()
-            resp2 = admin_client.get(
-                _build_url(base_url, "/api/v1/settings/identity/sso/validation")
-            )
+            try:
+                resp2 = admin_client.get(
+                    _build_url(base_url, "/api/v1/settings/identity/sso/validation")
+                )
+            except httpx.RequestError as exc:
+                _exit_with_connectivity_error(base_url, exc)
             dt_ms = (time.perf_counter() - t0) * 1000.0
             ok2 = resp2.status_code == 200
             validation_ok = bool(ok2)
@@ -296,9 +327,12 @@ def main() -> int:
             except Exception:
                 pass
 
-            resp3 = admin_client.post(
-                publish_url, json=evidence_payload, headers=publish_headers or None
-            )
+            try:
+                resp3 = admin_client.post(
+                    publish_url, json=evidence_payload, headers=publish_headers or None
+                )
+            except httpx.RequestError as exc:
+                _exit_with_connectivity_error(base_url, exc)
             if not resp3.is_success:
                 raise SystemExit(
                     f"Publish failed: HTTP {resp3.status_code}: {resp3.text}"

@@ -84,6 +84,7 @@ class CarbonFactorSet(Base):
         PG_UUID(),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     created_by_user: Mapped["User | None"] = relationship("User")
 
@@ -126,5 +127,6 @@ class CarbonFactorUpdateLog(Base):
         PG_UUID(),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     actor_user: Mapped["User | None"] = relationship("User")

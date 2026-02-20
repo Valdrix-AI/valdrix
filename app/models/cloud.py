@@ -29,7 +29,9 @@ class CloudAccount(Base):
     __tablename__ = "cloud_accounts"
 
     id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
-    tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    tenant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tenants.id"), nullable=False, index=True
+    )
 
     provider: Mapped[str] = mapped_column(String)  # 'aws', 'azure', 'gcp'
     name: Mapped[str] = mapped_column(String)  # e.g., "Production AWS"

@@ -183,6 +183,7 @@ class AuditLog(Base):
         Uuid(),
         ForeignKey("users.id"),
         nullable=True,  # Null for system actions
+        index=True,
     )
     actor_email: Mapped[Optional[str]] = mapped_column(
         StringEncryptedType(String(255), _encryption_key, AesEngine, "pkcs5"),

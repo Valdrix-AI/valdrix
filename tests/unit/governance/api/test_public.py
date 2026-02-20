@@ -2,6 +2,7 @@ import pytest
 from httpx import AsyncClient
 from unittest.mock import patch
 from sqlalchemy.ext.asyncio import AsyncSession
+from unittest.mock import AsyncMock
 
 from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
@@ -125,3 +126,37 @@ async def test_sso_discovery_not_configured(async_client: AsyncClient):
     payload = res.json()
     assert payload["available"] is False
     assert payload["reason"] == "sso_not_configured_for_domain"
+
+
+@pytest.mark.asyncio
+async def test_sso_discovery_backend_timeout(async_client: AsyncClient):
+    with patch(
+        "sqlalchemy.ext.asyncio.session.AsyncSession.execute",
+        new_callable=AsyncMock,
+        side_effect=TimeoutError,
+    ):
+        res = await async_client.post(
+            "/api/v1/public/sso/discovery",
+            json={"email": "user@example.com"},
+        )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["available"] is False
+    assert payload["reason"] == "sso_discovery_backend_timeout"
+
+
+@pytest.mark.asyncio
+async def test_sso_discovery_backend_error(async_client: AsyncClient):
+    with patch(
+        "sqlalchemy.ext.asyncio.session.AsyncSession.execute",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("db unavailable"),
+    ):
+        res = await async_client.post(
+            "/api/v1/public/sso/discovery",
+            json={"email": "user@example.com"},
+        )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["available"] is False
+    assert payload["reason"] == "sso_discovery_backend_error"

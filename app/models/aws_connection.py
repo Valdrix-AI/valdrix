@@ -21,7 +21,7 @@ Usage:
 from uuid import UUID, uuid4
 import secrets
 from typing import TYPE_CHECKING
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     String,
     ForeignKey,
@@ -140,7 +140,17 @@ class AWSConnection(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # created_at and updated_at inherited from Base
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     # Relationship to tenant
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="aws_connections")
