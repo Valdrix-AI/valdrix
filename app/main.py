@@ -1,8 +1,11 @@
 import asyncio
+import base64
+import hashlib
 import inspect
 import json
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Sequence, TypeVar, cast
 
 import structlog
@@ -11,7 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
@@ -331,9 +334,28 @@ setup_rate_limiting(valdrix_app)
 valdrix_app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
+def _compute_sri(file_path: str) -> str | None:
+    try:
+        digest = hashlib.sha384(Path(file_path).read_bytes()).digest()
+        return "sha384-" + base64.b64encode(digest).decode("ascii")
+    except Exception as exc:
+        logger.warning("docs_asset_sri_compute_failed", file_path=file_path, error=str(exc))
+        return None
+
+
+def _attach_sri(content: str, *, marker: str, sri_hash: str | None) -> str:
+    if not sri_hash or marker not in content:
+        return content
+    return content.replace(
+        marker,
+        f'{marker} integrity="{sri_hash}" crossorigin="anonymous"',
+        1,
+    )
+
+
 @valdrix_app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html() -> Any:
-    return get_swagger_ui_html(
+    response = get_swagger_ui_html(
         openapi_url=valdrix_app.openapi_url or "/openapi.json",
         title=valdrix_app.title + " - Swagger UI",
         oauth2_redirect_url=valdrix_app.swagger_ui_oauth2_redirect_url,
@@ -341,16 +363,35 @@ async def custom_swagger_ui_html() -> Any:
         swagger_css_url="/static/swagger-ui.css",
         swagger_favicon_url="/static/favicon.png",
     )
+    content = response.body.decode("utf-8")
+    content = _attach_sri(
+        content,
+        marker='src="/static/swagger-ui-bundle.js"',
+        sri_hash=_compute_sri("app/static/swagger-ui-bundle.js"),
+    )
+    content = _attach_sri(
+        content,
+        marker='href="/static/swagger-ui.css"',
+        sri_hash=_compute_sri("app/static/swagger-ui.css"),
+    )
+    return HTMLResponse(content=content, status_code=response.status_code)
 
 
 @valdrix_app.get("/redoc", include_in_schema=False)
 async def redoc_html() -> Any:
-    return get_redoc_html(
+    response = get_redoc_html(
         openapi_url=valdrix_app.openapi_url or "/openapi.json",
         title=valdrix_app.title + " - ReDoc",
         redoc_js_url="/static/redoc.standalone.js",
         redoc_favicon_url="/static/favicon.png",
     )
+    content = response.body.decode("utf-8")
+    content = _attach_sri(
+        content,
+        marker='src="/static/redoc.standalone.js"',
+        sri_hash=_compute_sri("app/static/redoc.standalone.js"),
+    )
+    return HTMLResponse(content=content, status_code=response.status_code)
 
 
 # Override handler to include metrics (SEC-03)

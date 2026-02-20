@@ -33,7 +33,16 @@ from app.shared.core.pricing import PricingTier
 from app.shared.core.security import encrypt_string, decrypt_string
 
 logger = structlog.get_logger()
-settings = get_settings()
+
+
+class _SettingsProxy:
+    """Lazy settings accessor to avoid stale module-level configuration."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_settings(), name)
+
+
+settings: Any = _SettingsProxy()
 PAYSTACK_CHECKOUT_CURRENCY = "NGN"
 PAYSTACK_FX_PROVIDER = "cbn_nfem"
 PAYSTACK_USD_FX_PROVIDER = "native_usd"

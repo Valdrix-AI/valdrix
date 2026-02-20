@@ -163,6 +163,9 @@ class Settings(BaseSettings):
         if not self.REDIS_URL and self.REDIS_HOST and self.REDIS_PORT:
             self.REDIS_URL = f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
 
+        if self.DB_SLOW_QUERY_THRESHOLD_SECONDS <= 0:
+            raise ValueError("DB_SLOW_QUERY_THRESHOLD_SECONDS must be > 0.")
+
     def _validate_llm_config(self) -> None:
         """Validates LLM provider keys based on selection."""
         provider_keys = {
@@ -353,6 +356,7 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 3600
     DB_ECHO: bool = False
+    DB_SLOW_QUERY_THRESHOLD_SECONDS: float = 0.2
     # Set true only when an external DB pooler (e.g. Supavisor transaction pooler)
     # is explicitly used and double-pooling is undesirable.
     DB_USE_NULL_POOL: bool = False
