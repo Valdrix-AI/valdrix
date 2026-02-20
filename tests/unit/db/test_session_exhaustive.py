@@ -1,6 +1,7 @@
 import pytest
 import time
 import importlib
+import re
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -273,8 +274,10 @@ class TestSessionExhaustive:
             # Simple SELECT 1 should pass
             session_mod.check_rls_policy(mock_conn, None, "SELECT 1", {}, None, False)
 
-            # Exempt table - PATCH THE CONSTANTS MODULE where it is imported from
-            with patch("app.shared.core.constants.RLS_EXEMPT_TABLES", ["audit_logs"]):
+            # Exempt table - patch compiled pattern in the session module.
+            with patch.object(
+                session_mod, "_RLS_EXEMPT_TABLE_PATTERN", re.compile(r"\b(audit_logs)\b")
+            ):
                 session_mod.check_rls_policy(
                     mock_conn, None, "SELECT * FROM audit_logs", {}, None, False
                 )
@@ -286,8 +289,10 @@ class TestSessionExhaustive:
         mock_conn.info = {"query_start_time": [start_time]}
 
         with patch("app.shared.db.session.logger") as mock_logger:
-            # We also need to patch SLOW_QUERY_THRESHOLD_SECONDS slightly to ensure trigger
-            with patch("app.shared.db.session.SLOW_QUERY_THRESHOLD_SECONDS", 0.1):
+            with patch(
+                "app.shared.db.session._get_slow_query_threshold_seconds",
+                return_value=0.1,
+            ):
                 session_mod.after_cursor_execute(
                     mock_conn, None, "SELECT *", {}, None, False
                 )
