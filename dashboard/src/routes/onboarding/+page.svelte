@@ -1520,7 +1520,7 @@
 							class="form-group pt-4 border-t border-ink-800 relative mt-4"
 							class:opacity-50={!['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 						>
-								<label class="flex items-center justify-between gap-3 cursor-pointer">
+							<label class="flex items-center justify-between gap-3 cursor-pointer">
 								<div class="flex items-center gap-3">
 									<input
 										type="checkbox"
@@ -1533,13 +1533,13 @@
 								{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 									<span class="badge badge-warning text-[10px]">Growth Tier +</span>
 								{/if}
-								</label>
-									<p class="text-xs text-ink-500 mt-2">
-										Enable this if this account is the Management Account of an AWS Organization.
-										Valdrix may discover likely member accounts and prefill linking suggestions for
-										review when organization permissions allow.
-									</p>
-								</div>
+							</label>
+							<p class="text-xs text-ink-500 mt-2">
+								Enable this if this account is the Management Account of an AWS Organization.
+								Valdrix may discover likely member accounts and prefill linking suggestions for
+								review when organization permissions allow.
+							</p>
+						</div>
 
 						{#if isManagementAccount}
 							<div class="form-group stagger-enter mt-4">
@@ -1881,13 +1881,13 @@
 						{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 							<span class="badge badge-warning text-[10px]">Growth Tier +</span>
 						{/if}
-						</label>
-							<p class="text-xs text-ink-500 mt-2">
-								Enable this if this account is the Management Account of an AWS Organization. Valdrix
-								may discover likely member accounts and prefill linking suggestions for review when
-								organization permissions allow.
-							</p>
-						{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
+					</label>
+					<p class="text-xs text-ink-500 mt-2">
+						Enable this if this account is the Management Account of an AWS Organization. Valdrix
+						may discover likely member accounts and prefill linking suggestions for review when
+						organization permissions allow.
+					</p>
+					{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
 						<p class="text-[10px] text-accent-400 mt-1">
 							⚡ Multi-account discovery requires Growth tier or higher.
 						</p>

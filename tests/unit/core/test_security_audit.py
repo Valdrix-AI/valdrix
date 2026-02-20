@@ -10,6 +10,7 @@ from app.shared.core.security import (
     encrypt_string,
     decrypt_string,
     generate_blind_index,
+    generate_secret_blind_index,
     generate_new_key,
 )
 
@@ -46,8 +47,9 @@ class TestEncryptionKeyManager:
         assert len(base64.b64decode(salt)) == 32
 
     def test_get_or_create_salt_existing(self, mock_settings: Any) -> None:
-        mock_settings.return_value.KDF_SALT = "existing_salt"
-        salt = EncryptionKeyManager.get_or_create_salt()
+        with patch.dict(os.environ, {}, clear=True):
+            mock_settings.return_value.KDF_SALT = "existing_salt"
+            salt = EncryptionKeyManager.get_or_create_salt()
         assert salt == "existing_salt"
 
     def test_get_or_create_salt_env(self) -> None:
@@ -66,12 +68,12 @@ class TestEncryptionKeyManager:
                     EncryptionKeyManager.get_or_create_salt()
 
     def test_get_or_create_salt_prod_fail(self) -> None:
-        with patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=True):
-            if "KDF_SALT" in os.environ:
-                del os.environ["KDF_SALT"]
-            with pytest.raises(
-                ValueError, match="CRITICAL: KDF_SALT environment variable not set"
-            ):
+        with (
+            patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=True),
+            patch("app.shared.core.security.get_settings") as mock_get_settings,
+        ):
+            mock_get_settings.return_value.KDF_SALT = None
+            with pytest.raises(ValueError, match="KDF_SALT is required"):
                 EncryptionKeyManager.get_or_create_salt()
 
     def test_derive_key(self) -> None:
@@ -110,6 +112,28 @@ class TestEncryptionKeyManager:
                 )
             assert EncryptionKeyManager._get_cached("cache-key") is None
 
+    def test_clear_key_caches_warm_rebuilds_entries(self) -> None:
+        primary = Fernet.generate_key().decode()
+        fallback = Fernet.generate_key().decode()
+        salt = EncryptionKeyManager.generate_salt()
+
+        class _Settings:
+            ENCRYPTION_KEY_CACHE_TTL_SECONDS = 300
+            ENCRYPTION_KEY_CACHE_MAX_SIZE = 100
+            ENCRYPTION_KEY = primary
+            PII_ENCRYPTION_KEY = None
+            API_KEY_ENCRYPTION_KEY = None
+            ENCRYPTION_FALLBACK_KEYS = [fallback]
+            KDF_SALT = salt
+
+        EncryptionKeyManager.clear_key_caches()
+        with patch("app.shared.core.security.get_settings", return_value=_Settings()):
+            EncryptionKeyManager.clear_key_caches(warm=True)
+            with EncryptionKeyManager._cache_lock:
+                assert any(
+                    key.startswith("fernet:") for key in EncryptionKeyManager._key_cache
+                )
+
     def test_create_fernet_for_key(self) -> None:
         master = Fernet.generate_key().decode()
         salt = EncryptionKeyManager.generate_salt()
@@ -118,7 +142,7 @@ class TestEncryptionKeyManager:
 
     def test_create_multi_fernet(self, mock_settings: Any) -> None:
         salt = EncryptionKeyManager.generate_salt()
-        primary = mock_settings.ENCRYPTION_KEY
+        primary = mock_settings.return_value.ENCRYPTION_KEY
         mf = EncryptionKeyManager.create_multi_fernet(primary, salt=salt)
         assert isinstance(mf, MultiFernet)
 
@@ -148,6 +172,10 @@ class TestEncryptionKeyManager:
         assert len(index) > 0
         # Deterministic check
         assert generate_blind_index(value) == index
+        # Tenant scoping should produce different deterministic hashes per tenant.
+        assert generate_blind_index(value, tenant_id="tenant-a") != generate_blind_index(
+            value, tenant_id="tenant-b"
+        )
 
     def test_generate_blind_index_none(self, mock_settings: Any) -> None:
         from typing import cast
@@ -226,6 +254,15 @@ def test_generate_blind_index(mock_settings: Any) -> None:
     assert len(idx1) == 64  # SHA256 hex
 
 
+def test_generate_secret_blind_index_tenant_scoping(mock_settings: Any) -> None:
+    secret = "AbC123TOKEN"
+    idx_a = generate_secret_blind_index(secret, tenant_id="tenant-a")
+    idx_b = generate_secret_blind_index(secret, tenant_id="tenant-b")
+    assert idx_a is not None
+    assert idx_b is not None
+    assert idx_a != idx_b
+
+
 def test_generate_new_key() -> None:
     key = generate_new_key()
     # Should be valid Fernet key
@@ -243,7 +280,7 @@ def test_decrypt_invalid_input() -> None:
 
 def test_fallback_keys_support(mock_settings: Any) -> None:
     fallback_key = Fernet.generate_key().decode()
-    mock_settings.ENCRYPTION_FALLBACK_KEYS = [fallback_key]
+    mock_settings.return_value.ENCRYPTION_FALLBACK_KEYS = [fallback_key]
 
     original = "fallback-secret"
     # Encrypt with primary
@@ -281,8 +318,8 @@ def test_internal_fernet_helpers(mock_settings: Any) -> None:
 def test_blind_index_edge_cases(mock_settings: Any) -> None:
     assert generate_blind_index("") is None
 
-    mock_settings.BLIND_INDEX_KEY = None
-    mock_settings.ENCRYPTION_KEY = None
+    mock_settings.return_value.BLIND_INDEX_KEY = None
+    mock_settings.return_value.ENCRYPTION_KEY = None
     assert generate_blind_index("val") is None
 
 

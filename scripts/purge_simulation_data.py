@@ -1,6 +1,5 @@
 import asyncio
 import sys
-import time
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.shared.core.config import get_settings

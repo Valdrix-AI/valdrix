@@ -18,7 +18,7 @@ def test_config_production_validation():
     }
 
     with pytest.raises(
-        ValueError, match="ENCRYPTION_KEY must be at least 32 characters"
+        ValueError, match="ENCRYPTION_KEY must be set to a secure value"
     ):
         Settings(**invalid_settings)
 

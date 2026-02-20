@@ -49,6 +49,22 @@ async def test_global_kill_switch_allowed(service, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_global_kill_switch_invalid_scope_falls_back_to_tenant(service, mock_db):
+    tenant_id = uuid4()
+    service._settings.REMEDIATION_KILL_SWITCH_THRESHOLD = 500.0
+    service._settings.REMEDIATION_KILL_SWITCH_SCOPE = "invalid_scope"
+
+    mock_result = MagicMock()
+    mock_result.scalar.return_value = Decimal("400.0")
+    mock_db.execute.return_value = mock_result
+
+    await service._check_global_kill_switch(tenant_id, Decimal("50.0"))
+    stmt = mock_db.execute.await_args.args[0]
+    where_text = str(stmt)
+    assert "remediation_requests.tenant_id" in where_text
+
+
+@pytest.mark.asyncio
 async def test_monthly_hard_cap_triggered(service, mock_db):
     tenant_id = uuid4()
 

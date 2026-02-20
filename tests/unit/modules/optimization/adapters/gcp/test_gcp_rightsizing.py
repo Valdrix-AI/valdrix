@@ -1,8 +1,7 @@
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 import sys
-from datetime import datetime
 
 # -----------------------------------------------------------------------------
 # Test: OverprovisionedComputePlugin
@@ -37,7 +36,7 @@ async def test_overprovisioned_compute_plugin_scan(mock_gcp_creds):
         mock_instance.status = "RUNNING"
         
         # Aggregated List returns items as dict {zone: list}
-        mock_agg_list = MagicMock()
+        MagicMock()
         # The client returns an iterable where each item has 'instances' attribute
         mock_page = MagicMock()
         mock_page.instances = [mock_instance]

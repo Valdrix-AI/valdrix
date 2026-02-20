@@ -21,7 +21,7 @@ async def test_execute_with_retry_succeeds_after_retries():
         nonlocal attempts
         attempts += 1
         if attempts < 3:
-            raise Exception("fail")
+            raise ConnectionError("fail")
         return "ok"
 
     with (
@@ -40,10 +40,10 @@ async def test_execute_with_retry_raises_after_exhaustion():
     manager = RetryManager("database")
 
     async def always_fail():
-        raise Exception("boom")
+        raise ConnectionError("boom")
 
     with patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep:
-        with pytest.raises(Exception, match="boom"):
+        with pytest.raises(ConnectionError, match="boom"):
             await manager.execute_with_retry(always_fail)
 
     assert mock_sleep.await_count == manager.config["max_attempts"] - 1

@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, AsyncMock, patch
 import pandas as pd
 from app.shared.adapters.aws_cur import AWSCURAdapter
@@ -15,6 +16,26 @@ def mock_creds():
 
 @pytest.mark.asyncio
 class TestAWSCURAdapter:
+    async def test_constructor_resolves_global_region_hint(self):
+        creds = AWSCredentials(
+            account_id="123456789012",
+            role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
+            external_id="ext-id",
+            region="global",
+        )
+
+        with patch(
+            "app.shared.adapters.aws_utils.get_settings",
+            return_value=SimpleNamespace(
+                AWS_SUPPORTED_REGIONS=["eu-west-1"],
+                AWS_DEFAULT_REGION="eu-west-1",
+            ),
+        ):
+            adapter = AWSCURAdapter(creds)
+
+        assert adapter._resolved_region == "eu-west-1"
+        assert adapter.bucket_name == "valdrix-cur-123456789012-eu-west-1"
+
     async def test_setup_cur_automation_creates_bucket_and_report(self, mock_creds):
         # Mock aioboto3 session and clients
         mock_s3 = AsyncMock()

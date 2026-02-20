@@ -26,6 +26,11 @@ describe('isPublicPath', () => {
 		expect(isPublicPath('/favicon.ico')).toBe(true);
 	});
 
+	it('treats legal pages as public', () => {
+		expect(isPublicPath('/terms')).toBe(true);
+		expect(isPublicPath('/privacy')).toBe(true);
+	});
+
 	it('protects app routes by default', () => {
 		expect(isPublicPath('/ops')).toBe(false);
 		expect(isPublicPath('/settings')).toBe(false);

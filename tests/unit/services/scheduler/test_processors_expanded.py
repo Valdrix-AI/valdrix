@@ -107,7 +107,9 @@ class TestSavingsProcessorExpanded:
         ]
 
         with patch("app.modules.optimization.domain.remediation.RemediationService"):
-            await processor.process_recommendations(mock_db, tenant_id, mock_result)
+            await processor.process_recommendations(
+                mock_db, tenant_id, mock_result, provider="aws"
+            )
             # Should not call remediation since autonomous_ready=False
 
     @pytest.mark.asyncio
@@ -135,7 +137,9 @@ class TestSavingsProcessorExpanded:
             mock_remediation.return_value = mock_rem_instance
             mock_rem_instance.create_request.return_value = MagicMock(id=uuid4())
 
-            await processor.process_recommendations(mock_db, tenant_id, mock_result)
+            await processor.process_recommendations(
+                mock_db, tenant_id, mock_result, provider="aws"
+            )
 
             mock_rem_instance.create_request.assert_called_once()
             mock_rem_instance.approve.assert_called_once()
@@ -160,7 +164,9 @@ class TestSavingsProcessorExpanded:
 
         with patch("app.modules.optimization.domain.remediation.RemediationService"):
             # Should not raise, just skip unsupported actions
-            await processor.process_recommendations(mock_db, tenant_id, mock_result)
+            await processor.process_recommendations(
+                mock_db, tenant_id, mock_result, provider="aws"
+            )
 
     def test_map_action_to_enum(self):
         """Test action string to enum mapping."""
@@ -197,5 +203,21 @@ class TestSavingsProcessorExpanded:
         assert (
             processor._map_action_to_enum("delete rds instance db-400")
             == RemediationAction.DELETE_RDS_INSTANCE
+        )
+        assert (
+            processor._map_action_to_enum("deallocate azure vm vm-500")
+            == RemediationAction.DEALLOCATE_AZURE_VM
+        )
+        assert (
+            processor._map_action_to_enum("stop gcp instance gce-600")
+            == RemediationAction.STOP_GCP_INSTANCE
+        )
+        assert (
+            processor._map_action_to_enum("revoke github seat user-700")
+            == RemediationAction.REVOKE_GITHUB_SEAT
+        )
+        assert (
+            processor._map_action_to_enum("manual review required")
+            == RemediationAction.MANUAL_REVIEW
         )
         assert processor._map_action_to_enum("unknown action") is None

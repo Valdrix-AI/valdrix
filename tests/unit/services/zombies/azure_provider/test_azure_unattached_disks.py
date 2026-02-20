@@ -23,6 +23,7 @@ async def test_azure_unattached_disks_scan_uses_cost_records(plugin):
 
         results = await plugin.scan(
             "sub-123",
+            "eastus",
             credentials=object(),
             cost_records=[{"ResourceId": "/subscriptions/sub-123/disks/disk-1"}],
         )

@@ -13,6 +13,9 @@ async def test_autonomous_dry_run_safety():
     tenant_id = uuid.uuid4()
     engine = AutonomousRemediationEngine(db, tenant_id)
     engine.auto_pilot_enabled = False  # Default is False (Dry run)
+    no_duplicate_result = MagicMock()
+    no_duplicate_result.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(return_value=no_duplicate_result)
 
     # Mock remediation service
     mock_service = AsyncMock()
@@ -27,6 +30,8 @@ async def test_autonomous_dry_run_safety():
         service=mock_service,
         resource_id="vol-123",
         resource_type="ebs_volume",
+        provider="aws",
+        connection_id=None,
         action=RemediationAction.DELETE_VOLUME,
         savings=10.0,
         confidence=1.0,  # 100% confidence
@@ -49,6 +54,9 @@ async def test_autonomous_auto_pilot_execution():
     tenant_id = uuid.uuid4()
     engine = AutonomousRemediationEngine(db, tenant_id)
     engine.auto_pilot_enabled = True  # Enable Auto-Pilot
+    no_duplicate_result = MagicMock()
+    no_duplicate_result.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(return_value=no_duplicate_result)
 
     mock_service = AsyncMock()
     mock_result = MagicMock()
@@ -60,6 +68,8 @@ async def test_autonomous_auto_pilot_execution():
         service=mock_service,
         resource_id="snap-123",
         resource_type="ebs_snapshot",
+        provider="aws",
+        connection_id=None,
         action=RemediationAction.DELETE_SNAPSHOT,
         savings=5.0,
         confidence=0.99,
@@ -80,6 +90,9 @@ async def test_autonomous_low_confidence_safety():
     tenant_id = uuid.uuid4()
     engine = AutonomousRemediationEngine(db, tenant_id)
     engine.auto_pilot_enabled = True  # Enable Auto-Pilot
+    no_duplicate_result = MagicMock()
+    no_duplicate_result.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(return_value=no_duplicate_result)
 
     mock_service = AsyncMock()
     mock_result = MagicMock()
@@ -91,6 +104,8 @@ async def test_autonomous_low_confidence_safety():
         service=mock_service,
         resource_id="vol-sus",
         resource_type="ebs_volume",
+        provider="aws",
+        connection_id=None,
         action=RemediationAction.DELETE_VOLUME,
         savings=10.0,
         confidence=0.80,
@@ -108,9 +123,9 @@ async def test_run_autonomous_sweep_returns_scan_failure_payload():
     tenant_id = uuid.uuid4()
     engine = AutonomousRemediationEngine(db, tenant_id)
 
-    with patch("app.shared.remediation.autonomous.AWSZombieDetector") as detector_cls:
-        detector = detector_cls.return_value
-        detector.scan_all = AsyncMock(side_effect=RuntimeError("scan failed"))
+    with patch("app.shared.remediation.autonomous.ZombieService") as service_cls:
+        service = service_cls.return_value
+        service.scan_for_tenant = AsyncMock(side_effect=RuntimeError("scan failed"))
 
         result = await engine.run_autonomous_sweep(
             region="us-east-1",
@@ -132,15 +147,36 @@ async def test_run_autonomous_sweep_processes_actionable_categories_only():
 
     scan_payload = {
         "unattached_volumes": [
-            {"resource_id": "vol-1", "monthly_waste": 12.5, "confidence_score": 0.9},
-            {"resource_id": "vol-2", "monthly_waste": 2.0, "confidence_score": 0.5},
+            {
+                "resource_id": "vol-1",
+                "provider": "aws",
+                "connection_id": str(uuid.uuid4()),
+                "monthly_waste": 12.5,
+                "confidence_score": 0.9,
+            },
+            {
+                "resource_id": "vol-2",
+                "provider": "aws",
+                "connection_id": str(uuid.uuid4()),
+                "monthly_waste": 2.0,
+                "confidence_score": 0.5,
+            },
         ],
-        "non_actionable_category": [{"resource_id": "x-1"}],
+        "idle_platform_services": [
+            {
+                "resource_id": "svc-1",
+                "provider": "platform",
+                "connection_id": str(uuid.uuid4()),
+                "monthly_waste": 4.1,
+                "confidence_score": 0.8,
+            }
+        ],
+        "non_actionable_category": [{"resource_id": "x-1", "provider": "aws"}],
     }
 
-    with patch("app.shared.remediation.autonomous.AWSZombieDetector") as detector_cls:
-        detector = detector_cls.return_value
-        detector.scan_all = AsyncMock(return_value=scan_payload)
+    with patch("app.shared.remediation.autonomous.ZombieService") as service_cls:
+        service = service_cls.return_value
+        service.scan_for_tenant = AsyncMock(return_value=scan_payload)
 
         result = await engine.run_autonomous_sweep(
             region="us-east-1",
@@ -148,6 +184,104 @@ async def test_run_autonomous_sweep_processes_actionable_categories_only():
         )
 
     assert result["mode"] == "dry_run"
-    assert result["scanned"] == 2
+    assert result["scanned"] == 3
     assert result["auto_executed"] == 0
-    assert engine._process_candidate.await_count == 2  # type: ignore[attr-defined]
+    assert engine._process_candidate.await_count == 3  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_run_autonomous_sweep_no_connections_returns_specific_error():
+    db = AsyncMock()
+    tenant_id = uuid.uuid4()
+    engine = AutonomousRemediationEngine(db, tenant_id)
+
+    with patch("app.shared.remediation.autonomous.ZombieService") as service_cls:
+        service = service_cls.return_value
+        service.scan_for_tenant = AsyncMock(
+            return_value={"error": "No cloud connections found.", "total_monthly_waste": 0.0}
+        )
+
+        result = await engine.run_autonomous_sweep(
+            region="us-east-1",
+            credentials={},
+        )
+
+    assert result["mode"] == "dry_run"
+    assert result["scanned"] == 0
+    assert result["auto_executed"] == 0
+    assert result["error"] == "no_connections_found"
+
+
+@pytest.mark.asyncio
+async def test_run_autonomous_sweep_filters_connection_scope():
+    db = AsyncMock()
+    tenant_id = uuid.uuid4()
+    engine = AutonomousRemediationEngine(db, tenant_id)
+    engine._process_candidate = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    target_connection = uuid.uuid4()
+    other_connection = uuid.uuid4()
+    scan_payload = {
+        "idle_platform_services": [
+            {
+                "resource_id": "svc-1",
+                "provider": "platform",
+                "connection_id": str(target_connection),
+            },
+            {
+                "resource_id": "svc-2",
+                "provider": "platform",
+                "connection_id": str(other_connection),
+            },
+        ]
+    }
+
+    with patch("app.shared.remediation.autonomous.ZombieService") as service_cls:
+        service = service_cls.return_value
+        service.scan_for_tenant = AsyncMock(return_value=scan_payload)
+
+        result = await engine.run_autonomous_sweep(
+            region="us-east-1",
+            credentials=None,
+            connection_id=str(target_connection),
+        )
+
+    assert result["scanned"] == 1
+    assert engine._process_candidate.await_count == 1  # type: ignore[attr-defined]
+
+
+def test_resolve_action_handles_saas_github_and_manual_review():
+    github_action = AutonomousRemediationEngine._resolve_action(
+        "saas",
+        "unused_license_seats",
+        {"action": "revoke_github_seat", "resource_type": "GitHub Seat"},
+    )
+    generic_action = AutonomousRemediationEngine._resolve_action(
+        "saas",
+        "idle_saas_subscriptions",
+        {"action": "review_saas_subscription", "resource_type": "SaaS Subscription"},
+    )
+
+    assert github_action == RemediationAction.REVOKE_GITHUB_SEAT
+    assert generic_action == RemediationAction.MANUAL_REVIEW
+
+
+@pytest.mark.parametrize(
+    ("provider", "category", "expected"),
+    [
+        ("azure", "idle_instances", RemediationAction.DEALLOCATE_AZURE_VM),
+        ("gcp", "idle_instances", RemediationAction.STOP_GCP_INSTANCE),
+        ("azure", "unattached_volumes", RemediationAction.MANUAL_REVIEW),
+        ("gcp", "old_snapshots", RemediationAction.MANUAL_REVIEW),
+        ("hybrid", "idle_hybrid_resources", RemediationAction.MANUAL_REVIEW),
+    ],
+)
+def test_resolve_action_covers_non_aws_provider_paths(
+    provider: str, category: str, expected: RemediationAction
+) -> None:
+    action = AutonomousRemediationEngine._resolve_action(
+        provider,
+        category,
+        {"action": "", "resource_type": "generic"},
+    )
+    assert action == expected

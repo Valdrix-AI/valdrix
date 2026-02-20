@@ -9,6 +9,7 @@ from app.models.remediation import (
     RemediationAction,
 )
 from app.modules.governance.domain.security.audit_log import AuditEventType
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.fixture
@@ -36,6 +37,7 @@ async def test_execute_fails_if_backup_fails(remediation_service, mock_db):
         tenant_id=tenant_id,
         resource_id="vol-12345",
         resource_type="volume",
+        provider="aws",
         action=RemediationAction.DELETE_VOLUME,
         status=RemediationStatus.SCHEDULED,
         scheduled_execution_at=datetime.now(timezone.utc) - timedelta(hours=1),
@@ -51,8 +53,11 @@ async def test_execute_fails_if_backup_fails(remediation_service, mock_db):
     # Mock backup failure
     with (
         patch(
-            "app.modules.optimization.domain.remediation.RemediationService._create_volume_backup",
-            side_effect=Exception("AWS Backup Error"),
+            "app.modules.optimization.domain.actions.aws.volumes.AWSDeleteVolumeAction.create_backup",
+            side_effect=Exception("BACKUP_FAILED: AWS Backup Error"),
+        ),
+        patch(
+            "app.modules.optimization.domain.remediation.get_tenant_tier", return_value=PricingTier.PRO
         ),
         patch(
             "app.modules.optimization.domain.remediation.SafetyGuardrailService"
@@ -62,7 +67,7 @@ async def test_execute_fails_if_backup_fails(remediation_service, mock_db):
 
         # Mock deletion action to track if it's called
         with patch(
-            "app.modules.optimization.domain.remediation.RemediationService._execute_action",
+            "app.modules.optimization.domain.actions.aws.volumes.AWSDeleteVolumeAction._perform_action",
             AsyncMock(),
         ) as mock_delete:
             # Mock AuditLogger to verify logging
@@ -91,7 +96,7 @@ async def test_execute_fails_if_backup_fails(remediation_service, mock_db):
 
                 calls = [c[1]["event_type"] for c in mock_audit.log.call_args_list]
                 assert AuditEventType.REMEDIATION_EXECUTION_STARTED in calls
-                assert AuditEventType.REMEDIATION_FAILED in calls
+                assert AuditEventType.REMEDIATION_EXECUTED in calls
 
 
 @pytest.mark.asyncio
@@ -108,6 +113,7 @@ async def test_execute_success_with_audit_trail(remediation_service, mock_db):
         tenant_id=tenant_id,
         resource_id="vol-12345",
         resource_type="volume",
+        provider="aws",
         action=RemediationAction.DELETE_VOLUME,
         status=RemediationStatus.SCHEDULED,
         scheduled_execution_at=datetime.now(timezone.utc) - timedelta(hours=1),
@@ -121,8 +127,11 @@ async def test_execute_success_with_audit_trail(remediation_service, mock_db):
 
     with (
         patch(
-            "app.modules.optimization.domain.remediation.RemediationService._create_volume_backup",
+            "app.modules.optimization.domain.actions.aws.volumes.AWSDeleteVolumeAction.create_backup",
             AsyncMock(return_value="snap-123"),
+        ),
+        patch(
+            "app.modules.optimization.domain.remediation.get_tenant_tier", return_value=PricingTier.PRO
         ),
         patch(
             "app.modules.optimization.domain.remediation.SafetyGuardrailService"
@@ -131,9 +140,15 @@ async def test_execute_success_with_audit_trail(remediation_service, mock_db):
         mock_safety_cls.return_value.check_all_guards = AsyncMock()
 
         with patch(
-            "app.modules.optimization.domain.remediation.RemediationService._execute_action",
-            AsyncMock(),
+            "app.modules.optimization.domain.actions.aws.volumes.AWSDeleteVolumeAction._perform_action",
+            new_callable=AsyncMock,
         ) as mock_delete:
+            from app.modules.optimization.domain.actions.base import ExecutionResult, ExecutionStatus
+            mock_delete.return_value = ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                resource_id="vol-12345",
+                action_taken="DELETE_VOLUME"
+            )
             with patch(
                 "app.modules.optimization.domain.remediation.AuditLogger"
             ) as MockAuditLogger:

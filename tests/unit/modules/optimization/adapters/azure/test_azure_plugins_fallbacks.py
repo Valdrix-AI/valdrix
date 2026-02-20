@@ -48,7 +48,7 @@ async def test_idle_vms_cost_records():
         mock_analyzer.return_value.find_idle_vms.return_value = [
             {"resource_id": "vm-1"}
         ]
-        zombies = await plugin.scan(subscription_id="sub-1", cost_records=[{"x": 1}])
+        zombies = await plugin.scan("sub-1", "eastus", cost_records=[{"x": 1}])
         assert zombies[0]["resource_id"] == "vm-1"
 
 
@@ -72,7 +72,7 @@ async def test_idle_vms_gpu_fallback():
         "app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient",
         return_value=client,
     ):
-        zombies = await plugin.scan(subscription_id="sub-1", credentials=MagicMock())
+        zombies = await plugin.scan("sub-1", "eastus", credentials=MagicMock())
         assert len(zombies) == 1
         assert zombies[0]["resource_id"] == "vm-1"
 
@@ -87,7 +87,7 @@ async def test_idle_gpu_vms_filters_gpu():
             {"resource_id": "vm-gpu", "resource_type": "Virtual Machine (GPU)"},
             {"resource_id": "vm-cpu", "resource_type": "Virtual Machine"},
         ]
-        zombies = await plugin.scan(subscription_id="sub-1", cost_records=[{"x": 1}])
+        zombies = await plugin.scan("sub-1", "eastus", cost_records=[{"x": 1}])
         assert len(zombies) == 1
         assert zombies[0]["resource_id"] == "vm-gpu"
 
@@ -101,7 +101,7 @@ async def test_idle_aks_cluster_cost_records():
         mock_analyzer.return_value.find_idle_aks_clusters.return_value = [
             {"resource_id": "aks-1"}
         ]
-        zombies = await plugin.scan(subscription_id="sub-1", cost_records=[{"x": 1}])
+        zombies = await plugin.scan("sub-1", "eastus", cost_records=[{"x": 1}])
         assert zombies[0]["resource_id"] == "aks-1"
 
 
@@ -114,7 +114,7 @@ async def test_unused_app_service_plans_cost_records():
         mock_analyzer.return_value.find_unused_app_service_plans.return_value = [
             {"resource_id": "plan-1"}
         ]
-        zombies = await plugin.scan(subscription_id="sub-1", cost_records=[{"x": 1}])
+        zombies = await plugin.scan("sub-1", "eastus", cost_records=[{"x": 1}])
         assert zombies[0]["resource_id"] == "plan-1"
 
 
@@ -148,7 +148,7 @@ async def test_unused_app_service_plans_fallback(monkeypatch):
     setattr(mgmt_mod, "web", web_mod)
     setattr(azure_mod, "mgmt", mgmt_mod)
 
-    zombies = await plugin.scan(subscription_id="sub-1", credentials=MagicMock())
+    zombies = await plugin.scan("sub-1", "eastus", credentials=MagicMock())
     assert len(zombies) == 1
     assert zombies[0]["resource_id"] == plan.id
 
@@ -162,7 +162,7 @@ async def test_idle_sql_databases_cost_records():
         mock_analyzer.return_value.find_idle_sql_databases.return_value = [
             {"resource_id": "db-1"}
         ]
-        zombies = await plugin.scan(subscription_id="sub-1", cost_records=[{"x": 1}])
+        zombies = await plugin.scan("sub-1", "eastus", cost_records=[{"x": 1}])
         assert zombies[0]["resource_id"] == "db-1"
 
 
@@ -199,7 +199,7 @@ async def test_idle_sql_databases_fallback(monkeypatch):
     setattr(mgmt_mod, "sql", sql_mod)
     setattr(azure_mod, "mgmt", mgmt_mod)
 
-    zombies = await plugin.scan(subscription_id="sub-1", credentials=MagicMock())
+    zombies = await plugin.scan("sub-1", "eastus", credentials=MagicMock())
     assert len(zombies) == 1
     assert zombies[0]["resource_id"] == "db-1"
 
@@ -237,17 +237,17 @@ async def test_orphan_network_resources_fallback():
         return_value=client,
     ):
         zombies = await OrphanPublicIpsPlugin().scan(
-            subscription_id="sub-1", credentials=MagicMock()
+            "sub-1", "eastus", credentials=MagicMock()
         )
         assert len(zombies) == 1
 
         zombies = await OrphanNicsPlugin().scan(
-            subscription_id="sub-1", credentials=MagicMock()
+            "sub-1", "eastus", credentials=MagicMock()
         )
         assert len(zombies) == 1
 
         zombies = await OrphanNsgsPlugin().scan(
-            subscription_id="sub-1", credentials=MagicMock()
+            "sub-1", "eastus", credentials=MagicMock()
         )
         assert len(zombies) == 1
 
@@ -281,7 +281,7 @@ async def test_idle_aks_cluster_fallback(monkeypatch):
     setattr(mgmt_mod, "containerservice", cs_mod)
     setattr(azure_mod, "mgmt", mgmt_mod)
 
-    zombies = await plugin.scan(subscription_id="sub-1", credentials=MagicMock())
+    zombies = await plugin.scan("sub-1", "eastus", credentials=MagicMock())
     assert len(zombies) == 1
     assert zombies[0]["resource_id"] == "aks-1"
 
@@ -312,12 +312,12 @@ async def test_unattached_disks_and_old_snapshots_fallback():
         return_value=client,
     ):
         zombies = await UnattachedDisksPlugin().scan(
-            subscription_id="sub-1", credentials=MagicMock()
+            "sub-1", "eastus", credentials=MagicMock()
         )
         assert len(zombies) == 1
 
         zombies = await OldSnapshotsPlugin().scan(
-            subscription_id="sub-1", credentials=MagicMock()
+            "sub-1", "eastus", credentials=MagicMock()
         )
         assert len(zombies) == 1
 
@@ -335,7 +335,7 @@ async def test_azure_fallbacks_handle_errors(monkeypatch):
         ) as mock_logger,
     ):
         zombies = await IdleVmsPlugin().scan(
-            subscription_id="sub-1", credentials=MagicMock()
+            "sub-1", "eastus", credentials=MagicMock()
         )
         assert zombies == []
         mock_logger.warning.assert_called_once()
@@ -363,7 +363,7 @@ async def test_azure_fallbacks_handle_errors(monkeypatch):
         "app.modules.optimization.adapters.azure.plugins.containers.logger"
     ) as mock_logger:
         zombies = await IdleAksClusterPlugin().scan(
-            subscription_id="sub-1", credentials=MagicMock()
+            "sub-1", "eastus", credentials=MagicMock()
         )
         assert zombies == []
         mock_logger.warning.assert_called_once()
@@ -383,7 +383,7 @@ async def test_azure_fallbacks_handle_errors(monkeypatch):
         "app.modules.optimization.adapters.azure.plugins.database.logger"
     ) as mock_logger:
         zombies = await IdleSqlDatabasesPlugin().scan(
-            subscription_id="sub-1", credentials=MagicMock()
+            "sub-1", "eastus", credentials=MagicMock()
         )
         assert zombies == []
         mock_logger.warning.assert_called_once()
@@ -400,19 +400,19 @@ async def test_azure_fallbacks_handle_errors(monkeypatch):
     ):
         assert (
             await OrphanPublicIpsPlugin().scan(
-                subscription_id="sub-1", credentials=MagicMock()
+                "sub-1", "eastus", credentials=MagicMock()
             )
             == []
         )
         assert (
             await OrphanNicsPlugin().scan(
-                subscription_id="sub-1", credentials=MagicMock()
+                "sub-1", "eastus", credentials=MagicMock()
             )
             == []
         )
         assert (
             await OrphanNsgsPlugin().scan(
-                subscription_id="sub-1", credentials=MagicMock()
+                "sub-1", "eastus", credentials=MagicMock()
             )
             == []
         )
@@ -430,13 +430,13 @@ async def test_azure_fallbacks_handle_errors(monkeypatch):
     ):
         assert (
             await UnattachedDisksPlugin().scan(
-                subscription_id="sub-1", credentials=MagicMock()
+                "sub-1", "eastus", credentials=MagicMock()
             )
             == []
         )
         assert (
             await OldSnapshotsPlugin().scan(
-                subscription_id="sub-1", credentials=MagicMock()
+                "sub-1", "eastus", credentials=MagicMock()
             )
             == []
         )

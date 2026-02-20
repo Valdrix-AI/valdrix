@@ -39,7 +39,7 @@ async def test_get_carbon_settings_creates_default(
     data = response.json()
     assert data["carbon_budget_kg"] == 100.0
     assert data["alert_threshold_percent"] == 80
-    assert data["default_region"] == "us-east-1"
+    assert data["default_region"] == "global"
 
     # Verify in DB
     result = await db_session.execute(select(CarbonSettings))
@@ -162,7 +162,7 @@ async def test_update_carbon_settings_invalid_email_recipients(
             json={
                 "carbon_budget_kg": 100.0,
                 "alert_threshold_percent": 80,
-                "default_region": "us-east-1",
+                "default_region": "global",
                 "email_enabled": True,
                 "email_recipients": "not-an-email",
             },
@@ -189,7 +189,7 @@ async def test_update_carbon_settings_requires_recipients_when_enabled(
             json={
                 "carbon_budget_kg": 100.0,
                 "alert_threshold_percent": 80,
-                "default_region": "us-east-1",
+                "default_region": "global",
                 "email_enabled": True,
                 "email_recipients": None,
             },

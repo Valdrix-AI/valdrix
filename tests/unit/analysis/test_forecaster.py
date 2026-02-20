@@ -217,7 +217,7 @@ class TestSymbolicForecasterForecasting:
                 assert result["confidence"] == "medium"  # 15 days < 30
                 assert result["model"] == "Prophet"
                 assert len(result["forecast"]) == 10
-                assert isinstance(result["accuracy_mape"], float)
+                assert isinstance(result["accuracy_mape"], Decimal)
 
     @pytest.mark.asyncio
     async def test_forecast_prophet_with_anomalies(self):
@@ -361,8 +361,15 @@ class TestSymbolicForecasterForecasting:
             assert result["region"] == "us-east-1"
 
             # Check carbon calculations (using us-east-1 intensity ~0.43 gCO2e/USD)
-            expected_carbon_kg = (110.50 + 112.25) * 0.43 / 1000
-            assert abs(result["total_forecasted_co2_kg"] - expected_carbon_kg) < 0.01
+            expected_carbon_kg = (
+                (Decimal("110.50") + Decimal("112.25"))
+                * Decimal("0.43")
+                / Decimal("1000")
+            )
+            assert (
+                abs(result["total_forecasted_co2_kg"] - expected_carbon_kg)
+                < Decimal("0.01")
+            )
 
             # Check individual entries have carbon data
             assert "carbon_g" in result["forecast"][0]
@@ -532,7 +539,7 @@ class TestSymbolicForecasterProductionQuality:
 
                 assert "total_forecasted_co2_kg" in result
                 assert result["region"] == region
-                assert isinstance(result["total_forecasted_co2_kg"], float)
+                assert isinstance(result["total_forecasted_co2_kg"], Decimal)
 
     def test_anomaly_marker_processing(self):
         """Test processing of anomaly markers for holidays."""

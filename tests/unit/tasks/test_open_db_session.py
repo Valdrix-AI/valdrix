@@ -26,40 +26,8 @@ async def test_open_db_session_with_context_manager():
 
 
 @pytest.mark.asyncio
-async def test_open_db_session_with_awaitable_context_manager():
-    session = MagicMock()
-    cm = DummyAsyncCM(session)
-
-    async def maker():
-        return cm
-
-    with patch("app.tasks.scheduler_tasks.async_session_maker", return_value=maker()):
-        async with _open_db_session() as got:
-            assert got is session
-
-
-@pytest.mark.asyncio
-async def test_open_db_session_with_direct_session():
-    class DummySession:
-        pass
-
-    session = DummySession()
-
-    with patch("app.tasks.scheduler_tasks.async_session_maker", return_value=session):
-        async with _open_db_session() as got:
-            assert got is session
-
-
-@pytest.mark.asyncio
-async def test_open_db_session_with_awaitable_session():
-    class DummySession:
-        pass
-
-    session = DummySession()
-
-    async def maker():
-        return session
-
-    with patch("app.tasks.scheduler_tasks.async_session_maker", return_value=maker()):
-        async with _open_db_session() as got:
-            assert got is session
+async def test_open_db_session_requires_async_context_manager():
+    with patch("app.tasks.scheduler_tasks.async_session_maker", return_value=object()):
+        with pytest.raises(TypeError):
+            async with _open_db_session():
+                pass

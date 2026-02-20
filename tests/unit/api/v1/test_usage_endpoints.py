@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.modules.reporting.api.v1.usage import (
     get_usage_metrics,
     LLMUsageMetrics,
-    AWSMeteringMetrics,
+    WorkloadMeteringMetrics,
     FeatureUsageMetrics,
 )
 
@@ -46,12 +46,13 @@ async def test_get_usage_metrics_handler_success():
             new=AsyncMock(return_value=[]),
         ),
         patch(
-            "app.modules.reporting.api.v1.usage._get_aws_metering",
+            "app.modules.reporting.api.v1.usage._get_workload_metering",
             new=AsyncMock(
-                return_value=AWSMeteringMetrics(
-                    cost_analysis_calls_today=5,
+                return_value=WorkloadMeteringMetrics(
+                    finops_analysis_jobs_today=5,
                     zombie_scans_today=2,
-                    regions_scanned=4,
+                    active_connection_count=4,
+                    active_provider_count=3,
                     last_scan_at=now.isoformat(),
                 )
             ),
@@ -72,5 +73,5 @@ async def test_get_usage_metrics_handler_success():
 
     assert response.tenant_id == tenant_id
     assert response.llm.tokens_used == 5000
-    assert response.aws.zombie_scans_today == 2
+    assert response.workloads.zombie_scans_today == 2
     assert response.features.total_remediations == 10

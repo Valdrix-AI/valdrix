@@ -1,6 +1,6 @@
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from app.modules.optimization.adapters.azure.plugins.compute import StoppedVmsPlugin
 
 @pytest.mark.asyncio
@@ -12,7 +12,7 @@ async def test_azure_stopped_vms_plugin():
     mock_creds = MagicMock()
 
     # Mock Compute Client
-    mock_client = AsyncMock()
+    mock_client = MagicMock()
     
     # Mock VM 1: Running (Should be ignored)
     vm_running = MagicMock()

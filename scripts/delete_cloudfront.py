@@ -20,7 +20,7 @@ def delete_cloudfront(distribution_id):
             status = dist_response['Distribution']['Status']
             
             if config['Enabled']:
-                print(f"Distribution is still enabled. Disabling...")
+                print("Distribution is still enabled. Disabling...")
                 config['Enabled'] = False
                 client.update_distribution(Id=distribution_id, IfMatch=etag, DistributionConfig=config)
                 time.sleep(5)
@@ -31,14 +31,14 @@ def delete_cloudfront(distribution_id):
                 time.sleep(15)
                 continue
                 
-            print(f"Distribution is disabled and deployed. Attempting deletion...")
+            print("Distribution is disabled and deployed. Attempting deletion...")
             client.delete_distribution(Id=distribution_id, IfMatch=etag)
             print(f"Successfully deleted {distribution_id}.")
             return True
             
         except ClientError as e:
             if e.response['Error']['Code'] == 'DistributionNotDisabled':
-                 print(f"AWS reports distribution not disabled yet. Retrying...")
+                 print("AWS reports distribution not disabled yet. Retrying...")
                  time.sleep(10)
                  continue
             elif e.response['Error']['Code'] == 'InvalidIfMatchVersion':

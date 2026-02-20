@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
+from types import SimpleNamespace
 from app.modules.governance.domain.security.iam_auditor import IAMAuditor
 
 
@@ -129,3 +130,18 @@ async def test_iam_auditor_least_privilege_compliance():
         assert report["status"] == "compliant"
         assert len(report["risks"]) == 0
         assert report["score"] == 100
+
+
+def test_iam_auditor_uses_configured_default_region() -> None:
+    creds = {"aws_access_key_id": "test", "aws_secret_access_key": "test"}
+    with (
+        patch(
+            "app.modules.governance.domain.security.iam_auditor.get_settings",
+            return_value=SimpleNamespace(AWS_DEFAULT_REGION="eu-west-2"),
+        ),
+        patch("aioboto3.Session") as mock_session_cls,
+    ):
+        IAMAuditor(creds)
+
+    assert mock_session_cls.call_args is not None
+    assert mock_session_cls.call_args.kwargs["region_name"] == "eu-west-2"

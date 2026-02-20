@@ -31,7 +31,7 @@ class TestOIDCDeep:
             mock_settings.return_value.API_URL = "https://api.test.ai"
             doc = await OIDCService.get_discovery_doc()
             assert doc["issuer"] == "https://api.test.ai"
-            assert "/oidc/jwks.json" in doc["jwks_uri"]
+            assert "/.well-known/jwks.json" in doc["jwks_uri"]
 
     @pytest.mark.asyncio
     @patch("app.shared.connections.oidc.async_session_maker")
@@ -119,12 +119,13 @@ class TestOIDCDeep:
                 new_callable=AsyncMock,
                 return_value="id-token",
             ),
-            patch("httpx.AsyncClient") as MockClient,
+            patch("app.shared.core.http.get_http_client") as mock_get_http_client,
         ):
-            mock_client = MockClient.return_value.__aenter__.return_value
+            mock_client = AsyncMock()
             mock_response = MagicMock(status_code=200)
             mock_response.json.return_value = {"access_token": "access-token"}
             mock_client.post = AsyncMock(return_value=mock_response)
+            mock_get_http_client.return_value = mock_client
 
             success, err = await OIDCService.verify_gcp_access("p1", "t1")
             assert success is True

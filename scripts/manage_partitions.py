@@ -8,7 +8,6 @@ import argparse
 import asyncio
 import json
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.db.session import async_session_maker
 from app.shared.core.maintenance import PartitionMaintenanceService
 

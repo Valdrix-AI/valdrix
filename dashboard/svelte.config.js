@@ -1,6 +1,13 @@
 import adapter from '@sveltejs/adapter-cloudflare';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
+const isDev = process.env.NODE_ENV !== 'production';
+const connectSrc = ['self', 'https://*.supabase.co', 'https://*.valdrix.ai'];
+
+if (isDev) {
+	connectSrc.push('http://localhost:*');
+}
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	// Consult https://svelte.dev/docs/kit/integrations
@@ -17,12 +24,7 @@ const config = {
 				'style-src': ['self', 'unsafe-inline'], // Tailwind needs this
 				'img-src': ['self', 'data:', 'https://*.supabase.co'],
 				'font-src': ['self', 'data:'],
-				'connect-src': [
-					'self',
-					'https://*.supabase.co',
-					'http://localhost:*',
-					'https://*.valdrix.ai'
-				],
+				'connect-src': connectSrc,
 				'object-src': ['none'],
 				'base-uri': ['self'],
 				'form-action': ['self'],

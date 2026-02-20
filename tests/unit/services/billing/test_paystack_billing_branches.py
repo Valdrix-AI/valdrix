@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -630,3 +631,95 @@ async def test_charge_renewal_uses_usd_without_fx_when_subscription_currency_usd
     charge_kwargs = mock_charge.await_args.kwargs
     assert charge_kwargs["amount_kobo"] == 2900
     assert charge_kwargs["metadata"]["currency"] == "USD"
+
+
+@pytest.mark.asyncio
+async def test_charge_renewal_uses_provider_next_payment_date_when_available(
+    mock_db: MagicMock,
+    configured_settings: None,
+) -> None:
+    service = BillingService(mock_db)
+    sub = MagicMock(
+        paystack_auth_code="enc-auth",
+        paystack_subscription_code="SUB_123",
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER.value,
+        billing_currency="USD",
+    )
+    mock_user = MagicMock(email="enc-email")
+    mock_db.execute.side_effect = [
+        _scalar_result(MagicMock(price_usd=29.0)),
+        _scalar_result(mock_user),
+    ]
+    provider_next = "2026-05-01T00:00:00Z"
+
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            return_value="AUTH",
+        ),
+        patch("app.shared.core.security.decrypt_string", return_value="user@example.com"),
+        patch.object(
+            service.client,
+            "charge_authorization",
+            new=AsyncMock(return_value={"status": True, "data": {"status": "success"}}),
+        ),
+        patch.object(
+            service.client,
+            "fetch_subscription",
+            new=AsyncMock(return_value={"data": {"next_payment_date": provider_next}}),
+        ) as mock_fetch,
+    ):
+        ok = await service.charge_renewal(sub)
+
+    assert ok is True
+    mock_fetch.assert_awaited_once_with("SUB_123")
+    assert sub.next_payment_date == datetime(2026, 5, 1, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_charge_renewal_fallback_uses_annual_cycle_when_metadata_declares_annual(
+    mock_db: MagicMock,
+    configured_settings: None,
+) -> None:
+    service = BillingService(mock_db)
+    existing_next = datetime.now(timezone.utc) + timedelta(days=2)
+    sub = MagicMock(
+        paystack_auth_code="enc-auth",
+        paystack_subscription_code=None,
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER.value,
+        billing_currency="USD",
+        next_payment_date=existing_next,
+    )
+    mock_user = MagicMock(email="enc-email")
+    mock_db.execute.side_effect = [
+        _scalar_result(MagicMock(price_usd=29.0)),
+        _scalar_result(mock_user),
+    ]
+
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            return_value="AUTH",
+        ),
+        patch("app.shared.core.security.decrypt_string", return_value="user@example.com"),
+        patch.object(
+            service.client,
+            "charge_authorization",
+            new=AsyncMock(
+                return_value={
+                    "status": True,
+                    "data": {
+                        "status": "success",
+                        "metadata": {"billing_cycle": "annual"},
+                    },
+                }
+            ),
+        ),
+    ):
+        ok = await service.charge_renewal(sub)
+
+    assert ok is True
+    assert sub.next_payment_date is not None
+    assert sub.next_payment_date >= existing_next + timedelta(days=364)

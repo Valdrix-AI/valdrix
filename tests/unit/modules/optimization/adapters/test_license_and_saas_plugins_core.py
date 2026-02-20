@@ -42,8 +42,8 @@ async def test_license_plugin_scan_handles_invalid_inputs() -> None:
     plugin = UnusedLicenseSeatsPlugin()
     assert plugin.category_key == "unused_license_seats"
 
-    assert await plugin.scan(cost_feed="not-a-list") == []
-    assert await plugin.scan(cost_feed=[None, "x", 123]) == []
+    assert await plugin.scan("billing-sub", "global", cost_feed="not-a-list") == []
+    assert await plugin.scan("billing-sub", "global", cost_feed=[None, "x", 123]) == []
 
 
 @pytest.mark.asyncio
@@ -52,6 +52,8 @@ async def test_license_plugin_scan_detects_unused_seats_and_inactive_contracts()
 ):
     plugin = UnusedLicenseSeatsPlugin()
     rows = await plugin.scan(
+        "billing-sub",
+        "global",
         cost_feed=[
             # ignored: monthly cost <= 0
             {"service": "Slack", "monthly_cost": 0},
@@ -90,8 +92,8 @@ async def test_saas_plugin_scan_handles_invalid_inputs() -> None:
     plugin = IdleSaaSSubscriptionsPlugin()
     assert plugin.category_key == "idle_saas_subscriptions"
 
-    assert await plugin.scan(cost_feed="not-a-list") == []
-    assert await plugin.scan(cost_feed=[None, "x", 123]) == []
+    assert await plugin.scan("billing-sub", "global", cost_feed="not-a-list") == []
+    assert await plugin.scan("billing-sub", "global", cost_feed=[None, "x", 123]) == []
 
 
 @pytest.mark.asyncio
@@ -100,6 +102,8 @@ async def test_saas_plugin_scan_detects_waste_from_seats_status_and_inactivity()
 ):
     plugin = IdleSaaSSubscriptionsPlugin()
     rows = await plugin.scan(
+        "saas-sub",
+        "global",
         cost_feed=[
             # unused seats waste
             {

@@ -2,7 +2,6 @@ import asyncio
 import sys
 from decimal import Decimal
 from datetime import date
-from typing import Any
 
 # Mock objects since we don't want a full DB env for a simple logic check
 class Record:

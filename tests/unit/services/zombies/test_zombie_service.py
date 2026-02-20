@@ -30,14 +30,13 @@ def zombie_service(db_session):
 @pytest.mark.asyncio
 async def test_scan_for_tenant_no_connections(zombie_service, db_session):
     tenant_id = uuid4()
-    user = MagicMock(tenant_id=tenant_id)
 
     # Mock all connection models returning empty lists
     mock_res = MagicMock()
     mock_res.scalars.return_value.all.return_value = []
     db_session.execute.return_value = mock_res
 
-    results = await zombie_service.scan_for_tenant(tenant_id, user)
+    results = await zombie_service.scan_for_tenant(tenant_id)
 
     assert results["total_monthly_waste"] == 0.0
     assert "No cloud connections found" in results["error"]
@@ -46,7 +45,6 @@ async def test_scan_for_tenant_no_connections(zombie_service, db_session):
 @pytest.mark.asyncio
 async def test_scan_for_tenant_parallel_success(zombie_service, db_session):
     tenant_id = uuid4()
-    user = MagicMock(tenant_id=tenant_id)
 
     # Mock AWS and GCP connections
     aws_conn = AWSConnection(id=uuid4(), tenant_id=tenant_id)
@@ -95,9 +93,7 @@ async def test_scan_for_tenant_parallel_success(zombie_service, db_session):
                         new_callable=AsyncMock,
                     ):
                         with patch("app.shared.core.ops_metrics.SCAN_LATENCY"):
-                            results = await zombie_service.scan_for_tenant(
-                                tenant_id, user
-                            )
+                            results = await zombie_service.scan_for_tenant(tenant_id)
 
                             assert (
                                 results["total_monthly_waste"] == 60.0
@@ -122,7 +118,6 @@ async def test_scan_for_tenant_parallel_success(zombie_service, db_session):
 @pytest.mark.asyncio
 async def test_scan_for_tenant_timeout_handling(zombie_service, db_session):
     tenant_id = uuid4()
-    user = MagicMock(tenant_id=tenant_id)
     aws_conn = AWSConnection(id=uuid4(), tenant_id=tenant_id)
 
     mock_res = MagicMock()
@@ -137,7 +132,7 @@ async def test_scan_for_tenant_timeout_handling(zombie_service, db_session):
     ):
         with patch("app.shared.core.ops_metrics.SCAN_TIMEOUTS"):
             with patch("asyncio.wait_for", side_effect=asyncio.TimeoutError()):
-                results = await zombie_service.scan_for_tenant(tenant_id, user)
+                results = await zombie_service.scan_for_tenant(tenant_id)
                 assert results.get("scan_timeout") is True
                 assert results.get("partial_results") is True
 
@@ -179,7 +174,6 @@ async def test_ai_enrichment_failure_handling(zombie_service, db_session):
 @pytest.mark.asyncio
 async def test_parallel_scan_exception_handling(zombie_service, db_session):
     tenant_id = uuid4()
-    user = MagicMock(tenant_id=tenant_id)
     aws_conn = AWSConnection(id=uuid4(), tenant_id=tenant_id)
 
     mock_res = MagicMock()
@@ -194,6 +188,6 @@ async def test_parallel_scan_exception_handling(zombie_service, db_session):
         "app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector",
         return_value=mock_detector,
     ):
-        results = await zombie_service.scan_for_tenant(tenant_id, user)
+        results = await zombie_service.scan_for_tenant(tenant_id)
         # Should finish successfully but with 0 waste due to error in provider
         assert results["total_monthly_waste"] == 0.0

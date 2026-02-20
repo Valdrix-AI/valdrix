@@ -15,6 +15,7 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from app.models.background_job import BackgroundJob, JobStatus, JobType
 from app.modules.governance.domain.jobs.processor import (
     JobProcessor,
@@ -317,6 +318,36 @@ class TestEnqueueJob:
             # Verify scheduled_for was passed
             call_kwargs = MockJob.call_args[1]
             assert call_kwargs["scheduled_for"] == future_time
+
+    @pytest.mark.asyncio
+    async def test_returns_existing_job_when_dedup_key_conflicts(self):
+        """Deduplicated enqueues should return the existing row, not fail."""
+        mock_db = MagicMock(spec=AsyncSession)
+        mock_db.bind = MagicMock()
+        mock_db.bind.url = "postgresql://test"
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock(
+            side_effect=[IntegrityError("dup", params=None, orig=None)]
+        )
+        mock_db.rollback = AsyncMock()
+
+        existing_job = MagicMock(spec=BackgroundJob)
+        existing_job.id = uuid4()
+        existing_job.tenant_id = uuid4()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_job
+        mock_db.execute = AsyncMock(return_value=mock_result)
+        result = await enqueue_job(
+            db=mock_db,
+            job_type=JobType.WEBHOOK_RETRY,
+            tenant_id=existing_job.tenant_id,
+            payload={"k": "v"},
+            deduplication_key="webhook:paystack:abc123",
+        )
+
+        assert result is existing_job
+        mock_db.rollback.assert_awaited_once()
+        mock_db.execute.assert_awaited_once()
 
 
 class TestJobBackoff:

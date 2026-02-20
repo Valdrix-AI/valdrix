@@ -26,13 +26,73 @@ export type ResilientRequestInit = RequestInit & {
  */
 function getCookie(name: string): string | undefined {
 	if (typeof document === 'undefined') return undefined;
-	const value = `; ${document.cookie}`;
-	const parts = value.split(`; ${name}=`);
-	if (parts.length === 2) return parts.pop()?.split(';').shift();
+	for (const cookiePart of document.cookie.split(';')) {
+		const [rawName, ...rawValue] = cookiePart.split('=');
+		if (!rawName) continue;
+		try {
+			const cookieName = decodeURIComponent(rawName.trim());
+			if (cookieName !== name) continue;
+			return decodeURIComponent(rawValue.join('='));
+		} catch {
+			continue;
+		}
+	}
 	return undefined;
 }
 
 let csrfPromise: Promise<string | undefined> | null = null;
+const DEV_TENANT_ID_CACHE_TTL_MS = 30000;
+let cachedTenantId: string | null = null;
+let cachedTenantIdExpiresAt = 0;
+
+function checkTenantIsolation(payload: unknown, tenantId: string): void {
+	const stack: unknown[] = [payload];
+	while (stack.length > 0) {
+		const current = stack.pop();
+		if (!current || typeof current !== 'object') continue;
+		if (Array.isArray(current)) {
+			for (const item of current) stack.push(item);
+			continue;
+		}
+		const record = current as Record<string, unknown>;
+		const payloadTenantId = record.tenant_id;
+		if (typeof payloadTenantId === 'string' && payloadTenantId !== tenantId) {
+			throw new Error('Security Error: Unauthorized data access');
+		}
+		for (const value of Object.values(record)) {
+			if (value && typeof value === 'object') {
+				stack.push(value);
+			}
+		}
+	}
+}
+
+async function getDevTenantId(): Promise<string | null> {
+	if (typeof window === 'undefined') return null;
+	const now = Date.now();
+	if (now < cachedTenantIdExpiresAt) return cachedTenantId;
+	const session = (await createSupabaseBrowserClient().auth.getSession()).data.session;
+	cachedTenantId =
+		typeof session?.user?.user_metadata?.tenant_id === 'string'
+			? session.user.user_metadata.tenant_id
+			: null;
+	cachedTenantIdExpiresAt = now + DEV_TENANT_ID_CACHE_TTL_MS;
+	return cachedTenantId;
+}
+
+async function validateTenantPayloadInDev(response: Response): Promise<void> {
+	if (!import.meta.env.DEV) return;
+	const contentType = response.headers.get('content-type') || '';
+	if (!contentType.toLowerCase().includes('application/json')) return;
+
+	const userTenantId = await getDevTenantId();
+	if (!userTenantId) return;
+
+	const clone = response.clone();
+	const data = await clone.json();
+	if (!data || typeof data !== 'object') return;
+	checkTenantIsolation(data, userTenantId);
+}
 
 export async function resilientFetch(
 	url: string | URL,
@@ -111,36 +171,11 @@ export async function resilientFetch(
 	}
 
 	if (response.ok) {
-		// FE-H6: Client-side Tenant Data Validation
-		// Extra layer of safety to ensure no data leakage
 		try {
-			const clone = response.clone();
-			const data = await clone.json();
-			const session = (await createSupabaseBrowserClient().auth.getSession()).data.session;
-			const userTenantId = session?.user?.user_metadata?.tenant_id;
-
-			if (userTenantId && data && typeof data === 'object') {
-				const checkTenant = (obj: Record<string, unknown> | Array<unknown>) => {
-					if (Array.isArray(obj)) {
-						obj.forEach((item) => {
-							if (item && typeof item === 'object') checkTenant(item as Record<string, unknown>);
-						});
-						return;
-					}
-
-					if (obj.tenant_id && userTenantId && obj.tenant_id !== userTenantId) {
-						throw new Error('Security Error: Unauthorized data access');
-					}
-					for (const k in obj) {
-						const val = obj[k];
-						if (val && typeof val === 'object') checkTenant(val as Record<string, unknown>);
-					}
-				};
-				checkTenant(data as Record<string, unknown> | Array<unknown>);
-			}
+			await validateTenantPayloadInDev(response);
 		} catch (e: unknown) {
 			if (e instanceof Error && e.message.startsWith('Security Error')) throw e;
-			// Ignore parsing errors for non-JSON responses
+			// Ignore non-JSON and malformed payloads in this defense-in-depth check.
 		}
 	}
 

@@ -39,6 +39,23 @@ def test_estimate_monthly_waste_uses_hourly():
     with patch(
         "app.modules.reporting.domain.pricing.service.PricingService.get_hourly_rate",
         return_value=2.0,
-    ):
+    ) as mock_hourly:
         waste = PricingService.estimate_monthly_waste("aws", "nat_gateway", quantity=3)
         assert waste == pytest.approx(2.0 * 730 * 3)
+        assert mock_hourly.call_args.args[3] == "global"
+
+
+def test_get_hourly_rate_default_region_is_provider_neutral():
+    with (
+        patch(
+            "app.modules.reporting.domain.pricing.service.DEFAULT_RATES",
+            {"aws": {"instance": {"default": 1.0}}},
+        ),
+        patch(
+            "app.modules.reporting.domain.pricing.service.REGION_MULTIPLIERS",
+            {"us-east-1": 1.25},
+        ),
+    ):
+        # Without an explicit region, pricing should not implicitly apply AWS us-east-1 multiplier.
+        rate = PricingService.get_hourly_rate("aws", "instance")
+        assert rate == pytest.approx(1.0)

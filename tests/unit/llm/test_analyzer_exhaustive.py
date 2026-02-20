@@ -98,7 +98,8 @@ async def test_load_system_prompt_success():
         ):
             with patch("os.path.exists", return_value=True):
                 analyzer = FinOpsAnalyzer(MagicMock())
-                assert "yaml_prompt" in analyzer.prompt.messages[0].prompt.template
+                prompt = await analyzer._get_prompt()
+                assert "yaml_prompt" in prompt.messages[0].prompt.template
 
 
 @pytest.mark.asyncio
@@ -106,7 +107,8 @@ async def test_load_system_prompt_fallback():
     # Fallback when file doesn't exist
     with patch("os.path.exists", return_value=False):
         analyzer = FinOpsAnalyzer(MagicMock())
-        assert "FinOps expert" in analyzer.prompt.messages[0].prompt.template
+        prompt = await analyzer._get_prompt()
+        assert "FinOps expert" in prompt.messages[0].prompt.template
 
 
 @pytest.mark.asyncio
@@ -185,7 +187,10 @@ async def test_analyze_budget_error_unexpected(mock_llm, usage_summary, mock_db)
 @pytest.mark.asyncio
 async def test_analyze_flow_success(mock_llm, usage_summary, mock_db, mock_forecaster):
     with patch.object(
-        FinOpsAnalyzer, "_load_system_prompt", return_value="System prompt"
+        FinOpsAnalyzer,
+        "_load_system_prompt_async",
+        new_callable=AsyncMock,
+        return_value="System prompt",
     ):
         analyzer = FinOpsAnalyzer(mock_llm, mock_db)
 
@@ -242,7 +247,12 @@ async def test_llm_invocation_primary_failure_fallback(
     mock_llm_factory, usage_summary, mock_db
 ):
     primary_llm = mock_llm_factory(should_fail=True)
-    with patch.object(FinOpsAnalyzer, "_load_system_prompt", return_value="System"):
+    with patch.object(
+        FinOpsAnalyzer,
+        "_load_system_prompt_async",
+        new_callable=AsyncMock,
+        return_value="System",
+    ):
         analyzer = FinOpsAnalyzer(primary_llm, mock_db)
 
     mock_cache = MagicMock()

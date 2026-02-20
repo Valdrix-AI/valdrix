@@ -21,6 +21,7 @@ async def test_gcp_unattached_disks_scan_uses_billing_records(plugin):
 
         results = await plugin.scan(
             "proj-123",
+            "us-central1",
             credentials=object(),
             billing_records=[{"resource_id": "projects/proj-123/disks/disk-1"}],
         )

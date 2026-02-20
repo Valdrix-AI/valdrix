@@ -1,6 +1,5 @@
 import boto3
 import sys
-import time
 
 def disable_cloudfront(distribution_id):
     client = boto3.client('cloudfront')

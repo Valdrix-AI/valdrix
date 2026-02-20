@@ -116,7 +116,7 @@ class TestSavingsProcessor:
         mock_result.recommendations = []
         tenant_id = uuid4()
         result = await processor.process_recommendations(
-            mock_db, tenant_id, mock_result
+            mock_db, tenant_id, mock_result, provider="aws"
         )
         # Should handle empty recommendations gracefully
         assert result is None or isinstance(result, list)
@@ -146,4 +146,6 @@ class TestSavingsProcessor:
             mock_service_instance.approve = AsyncMock()
             mock_service_instance.execute = AsyncMock()
             mock_service.return_value = mock_service_instance
-            await processor.process_recommendations(mock_db, tenant_id, mock_result)
+            await processor.process_recommendations(
+                mock_db, tenant_id, mock_result, provider="aws"
+            )

@@ -86,6 +86,7 @@ async def test_create_request_unauthorized_connection(remediation_service, db_se
             resource_type="type",
             action=RemediationAction.DELETE_VOLUME,
             estimated_savings=10.0,
+            provider="aws",
             connection_id=connection_id,
         )
 

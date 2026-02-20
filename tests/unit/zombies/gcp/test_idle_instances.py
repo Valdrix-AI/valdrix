@@ -18,6 +18,7 @@ async def test_gcp_idle_instances_scan_uses_billing_records():
 
         zombies = await plugin.scan(
             "proj-123",
+            "us-central1",
             credentials=object(),
             billing_records=[{"resource_id": "projects/proj-123/instances/vm-1"}],
         )
@@ -46,7 +47,7 @@ async def test_gcp_idle_instances_fallback_detects_running_gpu_vm():
         "app.modules.optimization.adapters.gcp.plugins.compute.compute_v1.InstancesClient",
         return_value=client,
     ):
-        zombies = await plugin.scan("proj-123", credentials=object())
+        zombies = await plugin.scan("proj-123", "us-central1", credentials=object())
 
     assert len(zombies) == 1
     assert zombies[0]["resource_name"] == "gpu-vm"
@@ -61,56 +62,50 @@ async def test_gcp_idle_instances_fallback_failure_returns_empty():
         "app.modules.optimization.adapters.gcp.plugins.compute.compute_v1.InstancesClient",
         side_effect=RuntimeError("gcp down"),
     ):
-        zombies = await plugin.scan("proj-123", credentials=object())
+        zombies = await plugin.scan("proj-123", "us-central1", credentials=object())
 
     assert zombies == []
-
-
-@pytest.mark.asyncio
-async def test_gcp_idle_instances_metrics_failure_falls_back():
-    plugin = GCPIdleInstancePlugin()
-    client = MagicMock()
-
-    inst = SimpleNamespace(
-        id=789,
-        name="idle-vm",
-        status="RUNNING",
-        machine_type="zones/us-central1-a/machineTypes/n1-standard-1",
-        guest_accelerators=[],
-        labels={},
-        cpu_platform="Intel",
-        creation_timestamp="2024-01-01T00:00:00Z",
-    )
-    response = SimpleNamespace(instances=[inst])
-    client.aggregated_list.return_value = [("zones/us-central1-a", response)]
-
-    monitoring_client = MagicMock()
-    monitoring_client.list_time_series.side_effect = RuntimeError("metrics down")
-
-    with _patch_monitoring_v3(), \
-         patch("app.modules.reporting.domain.pricing.service.PricingService.estimate_monthly_waste", return_value=75.0):
-        zombies = await plugin.scan(client, project_id="proj-1", monitoring_client=monitoring_client)
-
-    assert len(zombies) == 1
-    assert zombies[0]["monthly_waste"] == 75.0
 
 
 @pytest.mark.asyncio
 async def test_gcp_idle_instances_scan_exception_returns_empty():
-    plugin = GCPIdleInstancePlugin()
-    client = MagicMock()
-    client.aggregated_list.side_effect = RuntimeError("boom")
+    plugin = IdleVmsPlugin()
 
-    with _patch_monitoring_v3():
-        zombies = await plugin.scan(client, project_id="proj-1")
+    with patch(
+        "app.modules.optimization.adapters.gcp.plugins.compute.compute_v1.InstancesClient",
+        side_effect=RuntimeError("boom"),
+    ):
+        zombies = await plugin.scan("proj-1", "us-central1", credentials=object())
+
     assert zombies == []
 
 
 @pytest.mark.asyncio
-async def test_gcp_idle_instances_attribution_failure():
-    plugin = GCPIdleInstancePlugin()
-    logging_client = MagicMock()
-    logging_client.list_entries.side_effect = RuntimeError("audit down")
+async def test_gcp_idle_instances_non_gpu_fallback_is_ignored():
+    plugin = IdleVmsPlugin()
 
-    owner = await plugin._get_attribution(logging_client, instance_id=1, zone="us-central1-a")
-    assert owner == "attribution_failed"
+    instance = SimpleNamespace(
+        name="regular-vm",
+        status="RUNNING",
+        guest_accelerators=[],
+        machine_type="zones/us-central1-a/machineTypes/n1-standard-1",
+    )
+    response = SimpleNamespace(instances=[instance])
+    client = SimpleNamespace(
+        aggregated_list=lambda request: [("zones/us-central1-a", response)]
+    )
+
+    with patch(
+        "app.modules.optimization.adapters.gcp.plugins.compute.compute_v1.InstancesClient",
+        return_value=client,
+    ):
+        zombies = await plugin.scan("proj-1", "us-central1", credentials=object())
+
+    assert zombies == []
+
+
+@pytest.mark.asyncio
+async def test_gcp_idle_instances_missing_project_id_returns_empty():
+    plugin = IdleVmsPlugin()
+    zombies = await plugin.scan("", "us-central1", credentials=object())
+    assert zombies == []

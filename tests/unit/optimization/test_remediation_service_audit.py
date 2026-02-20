@@ -8,6 +8,8 @@ from app.modules.optimization.domain.remediation import (
     RemediationAction,
 )
 from app.models.remediation import RemediationRequest
+from app.modules.optimization.domain.actions.base import ExecutionResult, ExecutionStatus
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.fixture
@@ -45,6 +47,7 @@ async def test_create_remediation_request(mock_db, tenant_id, user_id):
         resource_type="EBS Volume",
         action=RemediationAction.DELETE_VOLUME,
         estimated_savings=15.5,
+        provider="aws",
     )
 
     assert request.tenant_id == tenant_id
@@ -53,6 +56,42 @@ async def test_create_remediation_request(mock_db, tenant_id, user_id):
     assert request.estimated_monthly_savings == Decimal("15.5")
     assert mock_db.add.called
     assert mock_db.commit.called
+
+
+@pytest.mark.asyncio
+async def test_create_request_overwrites_user_supplied_system_policy_context(
+    mock_db, tenant_id, user_id
+):
+    service = RemediationService(mock_db)
+
+    with patch.object(
+        service,
+        "_build_system_policy_context",
+        new_callable=AsyncMock,
+        return_value={
+            "source": "cloud_account",
+            "is_production": True,
+            "criticality": "high",
+        },
+    ):
+        request = await service.create_request(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            resource_id="vol-123",
+            resource_type="EBS Volume",
+            action=RemediationAction.DELETE_VOLUME,
+            estimated_savings=15.5,
+            provider="aws",
+            parameters={
+                "keep_this": "yes",
+                "_system_policy_context": {"is_production": False, "source": "user"},
+            },
+        )
+
+    assert request.action_parameters is not None
+    assert request.action_parameters["keep_this"] == "yes"
+    assert request.action_parameters["_system_policy_context"]["is_production"] is True
+    assert request.action_parameters["_system_policy_context"]["source"] == "cloud_account"
 
 
 @pytest.mark.asyncio
@@ -109,6 +148,7 @@ async def test_execute_approved_triggers_grace_period(mock_db, tenant_id):
         resource_id="vol-1",
         resource_type="volume",
         action=RemediationAction.DELETE_VOLUME,
+        provider="aws",
     )
     mock_res = MagicMock()
     mock_res.scalar_one_or_none.return_value = req
@@ -152,21 +192,23 @@ async def test_execute_immediate_action_success(mock_db, tenant_id):
     mock_res.scalar_one_or_none.return_value = req
     mock_db.execute.return_value = mock_res
 
-    mock_aws_client = AsyncMock()
-    mock_aws_client.delete_volume = AsyncMock()
-
-    mock_ctx = AsyncMock()
-    mock_ctx.__aenter__.return_value = mock_aws_client
-    mock_ctx.__aexit__.return_value = None
-
-    # Patch local names in remediation module
     with (
         patch(
             "app.modules.optimization.domain.remediation.SafetyGuardrailService"
         ) as MockSafety,
         patch("app.modules.optimization.domain.remediation.AuditLogger") as MockAudit,
-        patch.object(service, "_get_client", return_value=mock_ctx),
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
+        patch(
+            "app.modules.optimization.domain.remediation.get_tenant_tier",
+            new_callable=AsyncMock,
+            return_value=PricingTier.PRO,
+        ),
         patch("app.shared.core.notifications.NotificationDispatcher") as MockNotify,
+        patch.object(
+            service, "_resolve_credentials", new_callable=AsyncMock, return_value={}
+        ),
     ):  # Patch Source for this one as it is imported inside method
         mock_safety_instance = MockSafety.return_value
         # Ensure it returns valid result (None is fine as it returns nothing on success)
@@ -176,11 +218,20 @@ async def test_execute_immediate_action_success(mock_db, tenant_id):
         mock_audit_instance.log = AsyncMock()
 
         MockNotify.notify_remediation_completed = AsyncMock()
+        strategy = MagicMock()
+        strategy.execute = AsyncMock(
+            return_value=ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                resource_id=req.resource_id,
+                action_taken=req.action.value,
+            )
+        )
+        mock_get_strategy.return_value = strategy
 
         result = await service.execute(req.id, tenant_id, bypass_grace_period=True)
 
         assert result.status == RemediationStatus.COMPLETED
-        mock_aws_client.delete_volume.assert_called_with(VolumeId="vol-1")
+        strategy.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -196,27 +247,30 @@ async def test_execute_with_backup_aws_rds(mock_db, tenant_id):
         action=RemediationAction.DELETE_RDS_INSTANCE,
         create_backup=True,
         backup_retention_days=7,
+        provider="aws",
     )
     mock_res = MagicMock()
     mock_res.scalar_one_or_none.return_value = req
     mock_res.with_for_update.return_value = mock_res
     mock_db.execute.return_value = mock_res
 
-    mock_rds_client = AsyncMock()
-    mock_rds_client.create_db_snapshot = AsyncMock()
-    mock_rds_client.delete_db_instance = AsyncMock()
-
-    mock_ctx = AsyncMock()
-    mock_ctx.__aenter__.return_value = mock_rds_client
-    mock_ctx.__aexit__.return_value = None
-
     with (
         patch(
             "app.modules.optimization.domain.remediation.SafetyGuardrailService"
         ) as MockSafety,
         patch("app.modules.optimization.domain.remediation.AuditLogger") as MockAudit,
-        patch.object(service, "_get_client", return_value=mock_ctx),
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
+        patch(
+            "app.modules.optimization.domain.remediation.get_tenant_tier",
+            new_callable=AsyncMock,
+            return_value=PricingTier.PRO,
+        ),
         patch("app.shared.core.notifications.NotificationDispatcher") as MockNotify,
+        patch.object(
+            service, "_resolve_credentials", new_callable=AsyncMock, return_value={}
+        ),
     ):
         mock_safety_instance = MockSafety.return_value
         mock_safety_instance.check_all_guards = AsyncMock(return_value=None)
@@ -225,16 +279,23 @@ async def test_execute_with_backup_aws_rds(mock_db, tenant_id):
         mock_audit_instance.log = AsyncMock()
 
         MockNotify.notify_remediation_completed = AsyncMock()
-
-        await service.execute(req.id, tenant_id, bypass_grace_period=True)
-
-        # Verify backup call
-        assert mock_rds_client.create_db_snapshot.called
-        assert req.backup_resource_id.startswith("valdrix-backup-db-1")
-        # Verify deletion call
-        mock_rds_client.delete_db_instance.assert_called_with(
-            DBInstanceIdentifier="db-1", SkipFinalSnapshot=True
+        backup_id = "valdrix-backup-db-1-123456"
+        strategy = MagicMock()
+        strategy.execute = AsyncMock(
+            return_value=ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                resource_id=req.resource_id,
+                action_taken=req.action.value,
+                backup_id=backup_id,
+            )
         )
+        mock_get_strategy.return_value = strategy
+
+        result = await service.execute(req.id, tenant_id, bypass_grace_period=True)
+
+        assert result.status == RemediationStatus.COMPLETED
+        assert req.backup_resource_id == backup_id
+        strategy.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -323,3 +384,74 @@ async def test_generate_iac_plan_free_tier(mock_db, tenant_id):
     ):
         plan = await service.generate_iac_plan(req, tenant_id)
         assert "upgrade" in plan
+
+
+@pytest.mark.asyncio
+async def test_resolve_credentials_azure_uses_active_connection_when_id_missing(
+    mock_db, tenant_id
+):
+    service = RemediationService(mock_db, credentials={"fallback": "x"})
+    req = RemediationRequest(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        provider="azure",
+        action=RemediationAction.MANUAL_REVIEW,
+    )
+    req.connection_id = None
+
+    azure_conn = MagicMock()
+    azure_conn.azure_tenant_id = "tenant-123"
+    azure_conn.client_id = "client-123"
+    azure_conn.client_secret = "secret-123"
+    azure_conn.subscription_id = "sub-123"
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = azure_conn
+    mock_db.execute.return_value = mock_res
+
+    creds = await service._resolve_credentials(req)
+    assert creds["tenant_id"] == "tenant-123"
+    assert creds["client_id"] == "client-123"
+    assert "fallback" not in creds
+
+
+@pytest.mark.asyncio
+async def test_resolve_credentials_saas_falls_back_when_no_connection_id(
+    mock_db, tenant_id
+):
+    service = RemediationService(mock_db, credentials={"fallback_token": "abc"})
+    req = RemediationRequest(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        provider="saas",
+        action=RemediationAction.MANUAL_REVIEW,
+    )
+    req.connection_id = None
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_res
+
+    creds = await service._resolve_credentials(req)
+    assert creds == {"fallback_token": "abc"}
+
+
+@pytest.mark.asyncio
+async def test_resolve_credentials_requires_exact_connection_when_id_provided(
+    mock_db, tenant_id
+):
+    service = RemediationService(mock_db, credentials={"fallback_token": "abc"})
+    req = RemediationRequest(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        provider="platform",
+        action=RemediationAction.MANUAL_REVIEW,
+    )
+    req.connection_id = uuid4()
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_res
+
+    creds = await service._resolve_credentials(req)
+    assert creds == {}

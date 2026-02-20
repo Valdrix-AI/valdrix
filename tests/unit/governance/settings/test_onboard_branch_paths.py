@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.modules.governance.api.v1.settings.onboard import OnboardRequest, onboard
 from app.shared.core.auth import CurrentUser, UserRole
+from app.shared.core.exceptions import ConfigurationError
 
 
 def _request(scheme: str = "https", forwarded_proto: str | None = None) -> Request:
@@ -89,6 +90,66 @@ def _db(
                 "service_account_json": '{"type":"service_account"}',
             },
         ),
+        (
+            "saas",
+            {
+                "platform": "saas",
+                "vendor": "stripe",
+                "auth_method": "manual",
+                "spend_feed": [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "cost_usd": 12.3,
+                        "service": "Stripe",
+                    }
+                ],
+            },
+        ),
+        (
+            "license",
+            {
+                "platform": "license",
+                "vendor": "microsoft_365",
+                "auth_method": "manual",
+                "license_feed": [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "cost_usd": 8.4,
+                        "service": "Microsoft 365",
+                    }
+                ],
+            },
+        ),
+        (
+            "platform",
+            {
+                "platform": "platform",
+                "vendor": "datadog",
+                "auth_method": "manual",
+                "spend_feed": [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "cost_usd": 19.0,
+                        "service": "Datadog",
+                    }
+                ],
+            },
+        ),
+        (
+            "hybrid",
+            {
+                "platform": "hybrid",
+                "vendor": "vmware",
+                "auth_method": "manual",
+                "spend_feed": [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "cost_usd": 23.7,
+                        "service": "vSphere",
+                    }
+                ],
+            },
+        ),
     ],
 )
 async def test_onboard_cloud_platform_paths(
@@ -123,6 +184,89 @@ async def test_onboard_cloud_platform_paths(
     assert isinstance(response.tenant_id, UUID)
     assert get_adapter.called
     mock_adapter.verify_connection.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_onboard_aws_uses_configured_default_region_when_missing() -> None:
+    db = _db()
+    req = OnboardRequest(
+        tenant_name="aws-tenant",
+        cloud_config={
+            "platform": "aws",
+            "role_arn": "arn:aws:iam::123456789012:role/TestRole",
+        },
+    )
+    user = _current_user()
+    mock_settings = SimpleNamespace(
+        ENVIRONMENT="development",
+        AWS_DEFAULT_REGION="ap-south-1",
+    )
+    mock_adapter = AsyncMock()
+    mock_adapter.verify_connection.return_value = True
+    captured: dict[str, str] = {}
+
+    def _capture_adapter(connection: object) -> AsyncMock:
+        captured["region"] = str(getattr(connection, "region", ""))
+        return mock_adapter
+
+    with (
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.get_settings",
+            return_value=mock_settings,
+        ),
+        patch(
+            "app.shared.adapters.factory.AdapterFactory.get_adapter",
+            side_effect=_capture_adapter,
+        ),
+        patch("app.modules.governance.api.v1.settings.onboard.audit_log"),
+    ):
+        response = await onboard(_request(), req, user, db)
+
+    assert response.status == "onboarded"
+    assert captured["region"] == "ap-south-1"
+    mock_adapter.verify_connection.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_onboard_aws_falls_back_to_multitenant_verifier_when_cur_missing() -> None:
+    db = _db()
+    req = OnboardRequest(
+        tenant_name="aws-fallback-tenant",
+        cloud_config={
+            "platform": "aws",
+            "role_arn": "arn:aws:iam::123456789012:role/TestRole",
+            "external_id": "vx-onboard",
+            "aws_account_id": "123456789012",
+        },
+    )
+    user = _current_user()
+    mock_settings = SimpleNamespace(
+        ENVIRONMENT="development",
+        AWS_DEFAULT_REGION="eu-west-1",
+    )
+    mock_mt_adapter = AsyncMock()
+    mock_mt_adapter.verify_connection.return_value = True
+
+    with (
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.get_settings",
+            return_value=mock_settings,
+        ),
+        patch(
+            "app.shared.adapters.factory.AdapterFactory.get_adapter",
+            side_effect=ConfigurationError("CUR is required for cost ingestion"),
+        ),
+        patch(
+            "app.shared.adapters.aws_multitenant.MultiTenantAWSAdapter",
+            return_value=mock_mt_adapter,
+        ) as mock_mt_class,
+        patch("app.modules.governance.api.v1.settings.onboard.audit_log"),
+    ):
+        response = await onboard(_request(), req, user, db)
+
+    assert response.status == "onboarded"
+    mock_mt_class.assert_called_once()
+    mock_mt_adapter.verify_connection.assert_awaited_once()
 
 
 @pytest.mark.asyncio

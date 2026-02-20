@@ -1,15 +1,15 @@
 import asyncio
 import random
 import time
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 from uuid import uuid4
 from decimal import Decimal
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import text, func, select
 
 # Import models
 from app.models.cloud import CostRecord, CloudAccount
-from app.models.tenant import Tenant, User
+from app.models.tenant import Tenant
 from app.shared.core.config import get_settings
 
 async def seed_scale_data(engine, num_tenants=10, records_per_tenant=100000):

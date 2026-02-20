@@ -97,26 +97,26 @@ async def test_discover_resources_filters_by_type_and_region():
     res1 = SimpleNamespace(
         id="1",
         name="vm-1",
-        type="Microsoft.Compute/virtualMachines",
         location="eastus",
         tags={"env": "prod"},
+        hardware_profile=SimpleNamespace(vm_size="Standard_B2s"),
     )
     res2 = SimpleNamespace(
         id="2",
-        name="storage-1",
-        type="Microsoft.Storage/storageAccounts",
+        name="vm-2",
         location="westus",
         tags=None,
+        hardware_profile=SimpleNamespace(vm_size="Standard_B1s"),
     )
 
-    async def list_resources():
+    async def list_vms():
         yield res1
         yield res2
 
-    mock_client.resources.list = list_resources
+    mock_client.virtual_machines.list_all = list_vms
 
     with patch.object(
-        adapter, "_get_resource_client", AsyncMock(return_value=mock_client)
+        adapter, "_get_compute_client", AsyncMock(return_value=mock_client)
     ):
         results = await adapter.discover_resources(
             resource_type="compute", region="eastus"

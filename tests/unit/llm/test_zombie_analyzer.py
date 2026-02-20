@@ -30,6 +30,7 @@ def test_flatten_zombies(analyzer):
     raw_data = {
         "region": "us-east-1",
         "total_monthly_waste": 100.0,
+        "errors": [{"provider": "aws", "error": "simulated"}],
         "ec2_idle": [
             {"resource_id": "i-123", "cost": 50.0},
             {"resource_id": "i-456", "cost": 50.0},
@@ -43,6 +44,7 @@ def test_flatten_zombies(analyzer):
     assert flattened[0]["category"] == "ec2_idle"
     assert flattened[2]["category"] == "ebs_unattached"
     assert "total_monthly_waste" not in [item.get("category") for item in flattened]
+    assert "errors" not in [item.get("category") for item in flattened]
 
 
 @pytest.mark.asyncio
@@ -83,20 +85,26 @@ async def test_analyze_flow(analyzer, mock_llm):
             # Mock record_usage
             fresh_analyzer._record_usage = AsyncMock()
 
-            # Mock guardrails
+            # Mock guardrails + usage tracker to bypass budget authorization side effects
             with patch(
                 "app.shared.llm.guardrails.LLMGuardrails.validate_output"
             ) as mock_validate:
-                mock_validate.return_value.model_dump.return_value = {
-                    "summary": "Valid summary",
-                    "resources": [],
-                }
+                with patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls:
+                    mock_tracker = MagicMock()
+                    mock_tracker.authorize_request = AsyncMock(return_value=None)
+                    mock_tracker.record = AsyncMock(return_value=None)
+                    mock_tracker_cls.return_value = mock_tracker
 
-                result = await fresh_analyzer.analyze(
-                    detection_results={"ec2": [{"id": "i-1"}]},
-                    tenant_id=uuid4(),
-                    db=AsyncMock(),
-                )
+                    mock_validate.return_value.model_dump.return_value = {
+                        "summary": "Valid summary",
+                        "resources": [],
+                    }
 
-                assert result["summary"] == "Valid summary"
-                mock_chain.ainvoke.assert_awaited()
+                    result = await fresh_analyzer.analyze(
+                        detection_results={"ec2": [{"id": "i-1"}]},
+                        tenant_id=uuid4(),
+                        db=AsyncMock(),
+                    )
+
+                    assert result["summary"] == "Valid summary"
+                    mock_chain.ainvoke.assert_awaited()

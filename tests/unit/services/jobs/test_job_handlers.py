@@ -15,6 +15,13 @@ from app.modules.governance.domain.jobs.handlers.notifications import (
 )
 from app.modules.governance.domain.jobs.handlers.remediation import RemediationHandler
 from app.modules.governance.domain.jobs.handlers.finops import FinOpsAnalysisHandler
+from app.modules.governance.domain.jobs.handlers.analysis import (
+    ReportGenerationHandler,
+    ZombieAnalysisHandler,
+)
+from app.modules.governance.domain.jobs.handlers.license_governance import (
+    LicenseGovernanceHandler,
+)
 
 
 @pytest.fixture
@@ -92,6 +99,27 @@ async def test_zombie_scan_handler_success(mock_db, sample_job):
         assert result["total_waste"] == 50.0
         assert len(result["details"]) == 1
         assert result["details"][0]["provider"] == "aws"
+
+
+@pytest.mark.asyncio
+async def test_zombie_scan_handler_defaults_region_to_global(mock_db, sample_job):
+    """Missing region should preserve global-hint behavior for provider-specific discovery."""
+    handler = ZombieScanHandler()
+    sample_job.payload = {"provider": "aws"}
+
+    with patch("app.modules.optimization.domain.service.ZombieService") as mock_service_cls:
+        mock_service = AsyncMock()
+        mock_service.scan_for_tenant.return_value = {
+            "unattached_volumes": [],
+            "total_monthly_waste": 0.0,
+        }
+        mock_service_cls.return_value = mock_service
+
+        result = await handler.execute(sample_job, mock_db)
+
+        assert result["status"] == "completed"
+        assert mock_service.scan_for_tenant.await_count == 1
+        assert mock_service.scan_for_tenant.call_args.kwargs["region"] == "global"
 
 
 @pytest.mark.asyncio
@@ -220,26 +248,11 @@ async def test_remediation_handler_targeted(mock_db, sample_job):
     remediation_res = MagicMock()
     remediation_res.scalar_one_or_none.return_value = remediation_request
 
-    connection = MagicMock()
-    connection.id = uuid4()
-    connection.region = "us-east-1"
+    mock_db.execute.side_effect = [remediation_res]
 
-    conn_res = MagicMock()
-    conn_res.scalars.return_value.first.return_value = connection
-    mock_db.execute.side_effect = [remediation_res, conn_res]
-
-    with (
-        patch(
-            "app.shared.adapters.aws_multitenant.MultiTenantAWSAdapter"
-        ) as mock_adapter_cls,
-        patch(
-            "app.modules.optimization.domain.remediation.RemediationService"
-        ) as mock_service_cls,
-    ):
-        mock_adapter = AsyncMock()
-        mock_adapter.get_credentials.return_value = {"key": "val"}
-        mock_adapter_cls.return_value = mock_adapter
-
+    with patch(
+        "app.modules.optimization.domain.remediation.RemediationService"
+    ) as mock_service_cls:
         mock_service = AsyncMock()
         mock_result = MagicMock()
         mock_result.id = UUID(request_id)
@@ -258,44 +271,65 @@ async def test_remediation_handler_targeted(mock_db, sample_job):
 
 
 @pytest.mark.asyncio
+async def test_remediation_handler_targeted_missing_region_uses_global_hint(
+    mock_db, sample_job
+):
+    handler = RemediationHandler()
+    request_id = str(uuid4())
+    sample_job.payload = {"request_id": request_id}
+
+    remediation_request = MagicMock()
+    remediation_request.id = UUID(request_id)
+    remediation_request.tenant_id = sample_job.tenant_id
+    remediation_request.provider = "aws"
+    remediation_request.region = ""
+    remediation_request.status.value = "approved"
+    remediation_request.connection_id = None
+    remediation_request.scheduled_execution_at = None
+
+    remediation_res = MagicMock()
+    remediation_res.scalar_one_or_none.return_value = remediation_request
+    mock_db.execute.side_effect = [remediation_res]
+
+    with patch(
+        "app.modules.optimization.domain.remediation.RemediationService"
+    ) as mock_service_cls:
+        mock_service = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.id = UUID(request_id)
+        mock_result.status.value = "completed"
+        mock_service.execute.return_value = mock_result
+        mock_service_cls.return_value = mock_service
+
+        result = await handler.execute(sample_job, mock_db)
+
+        assert result["status"] == "completed"
+        mock_service_cls.assert_called_once_with(mock_db, region="global")
+
+
+@pytest.mark.asyncio
 async def test_remediation_handler_autonomous_sweep(mock_db, sample_job):
     """Test RemediationHandler autonomous sweep."""
     handler = RemediationHandler()
     sample_job.payload = {}
 
-    # Mock AWS connection exists
-    mock_conn = MagicMock()
-    mock_conn.id = uuid4()
-    mock_conn.region = "us-east-1"
-
-    mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = mock_conn
-    mock_db.execute.return_value = mock_result
-
     with patch(
-        "app.shared.adapters.aws_multitenant.MultiTenantAWSAdapter"
-    ) as mock_adapter_cls:
-        mock_adapter = AsyncMock()
-        mock_adapter.get_credentials.return_value = {"key": "val"}
-        mock_adapter_cls.return_value = mock_adapter
+        "app.shared.remediation.autonomous.AutonomousRemediationEngine"
+    ) as mock_engine_cls:
+        mock_engine = AsyncMock()
+        mock_engine.run_autonomous_sweep.return_value = {
+            "mode": "dry_run",
+            "scanned": 10,
+            "auto_executed": 0,
+        }
+        mock_engine_cls.return_value = mock_engine
 
-        with patch(
-            "app.shared.remediation.autonomous.AutonomousRemediationEngine"
-        ) as mock_engine_cls:
-            mock_engine = AsyncMock()
-            mock_engine.run_autonomous_sweep.return_value = {
-                "mode": "dry_run",
-                "scanned": 10,
-                "auto_executed": 0,
-            }
-            mock_engine_cls.return_value = mock_engine
+        result = await handler.execute(sample_job, mock_db)
 
-            result = await handler.execute(sample_job, mock_db)
-
-            assert result["status"] == "completed"
-            assert result["mode"] == "dry_run"
-            assert result["scanned"] == 10
-            mock_engine.run_autonomous_sweep.assert_called_once()
+        assert result["status"] == "completed"
+        assert result["mode"] == "dry_run"
+        assert result["scanned"] == 10
+        mock_engine.run_autonomous_sweep.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -350,3 +384,113 @@ async def test_finops_analysis_handler_success(mock_db, sample_job):
                 assert result["analysis_runs"] == 1
                 assert result["analysis_length"] > 0
                 mock_analyzer.analyze.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_license_governance_handler_success(mock_db, sample_job):
+    handler = LicenseGovernanceHandler()
+    expected_tenant = UUID(str(sample_job.tenant_id))
+
+    with patch(
+        "app.modules.governance.domain.jobs.handlers.license_governance.LicenseGovernanceService"
+    ) as mock_service_cls:
+        mock_service = AsyncMock()
+        mock_service.run_tenant_governance.return_value = {
+            "status": "completed",
+            "stats": {"requests_created": 2},
+        }
+        mock_service_cls.return_value = mock_service
+
+        result = await handler.execute(sample_job, mock_db)
+
+        assert result["status"] == "completed"
+        assert result["tenant_id"] == str(sample_job.tenant_id)
+        assert result["stats"]["requests_created"] == 2
+        mock_service.run_tenant_governance.assert_awaited_once_with(expected_tenant)
+
+
+@pytest.mark.asyncio
+async def test_license_governance_handler_requires_tenant_id(mock_db):
+    handler = LicenseGovernanceHandler()
+    sample_job = MagicMock(spec=BackgroundJob)
+    sample_job.tenant_id = None
+    sample_job.payload = {}
+
+    with pytest.raises(ValueError, match="tenant_id required"):
+        await handler.execute(sample_job, mock_db)
+
+
+@pytest.mark.asyncio
+async def test_zombie_analysis_handler_success(mock_db, sample_job):
+    handler = ZombieAnalysisHandler()
+    sample_job.payload = {"zombies": {"idle_instances": [{"resource_id": "i-1"}]}}
+
+    with (
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            new_callable=AsyncMock,
+        ) as mock_tier,
+        patch(
+            "app.shared.core.pricing.is_feature_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.shared.llm.factory.LLMFactory.create",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.shared.llm.zombie_analyzer.ZombieAnalyzer"
+        ) as mock_analyzer_cls,
+    ):
+        mock_tier.return_value = "pro"
+        mock_analyzer = AsyncMock()
+        mock_analyzer.analyze.return_value = {"summary": "ok", "resources": []}
+        mock_analyzer_cls.return_value = mock_analyzer
+
+        result = await handler.execute(sample_job, mock_db)
+
+        assert result["status"] == "completed"
+        assert result["tenant_id"] == str(sample_job.tenant_id)
+        assert result["analysis"]["summary"] == "ok"
+        mock_analyzer.analyze.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_zombie_analysis_handler_missing_payload(mock_db, sample_job):
+    handler = ZombieAnalysisHandler()
+    sample_job.payload = {}
+
+    with pytest.raises(ValueError, match="zombies payload required"):
+        await handler.execute(sample_job, mock_db)
+
+
+@pytest.mark.asyncio
+async def test_report_generation_handler_close_package(mock_db, sample_job):
+    handler = ReportGenerationHandler()
+    sample_job.payload = {"report_type": "close_package"}
+
+    with patch(
+        "app.modules.reporting.domain.reconciliation.CostReconciliationService"
+    ) as mock_recon_cls:
+        mock_recon = AsyncMock()
+        mock_recon.generate_close_package.return_value = {
+            "close_status": "ready",
+            "integrity_hash": "abc",
+        }
+        mock_recon_cls.return_value = mock_recon
+
+        result = await handler.execute(sample_job, mock_db)
+
+        assert result["status"] == "completed"
+        assert result["report_type"] == "close_package"
+        assert result["report"]["close_status"] == "ready"
+        mock_recon.generate_close_package.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_report_generation_handler_unsupported_type(mock_db, sample_job):
+    handler = ReportGenerationHandler()
+    sample_job.payload = {"report_type": "random_thing"}
+
+    with pytest.raises(ValueError, match="Unsupported report_type"):
+        await handler.execute(sample_job, mock_db)

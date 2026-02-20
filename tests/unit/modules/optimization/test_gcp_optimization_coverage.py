@@ -28,12 +28,12 @@ async def test_gcp_idle_vms_scan_fallback():
         mock_client_class.return_value = mock_client
 
         # 1. Standard VM (not flagged without billing data)
-        zombies = await plugin.scan(project_id="project-1")
+        zombies = await plugin.scan("project-1", "us-central1")
         assert len(zombies) == 0
 
         # 2. GPU VM (flagged as high value)
         mock_instance.guest_accelerators = ["nvidia-tesla-t4"]
-        zombies = await plugin.scan(project_id="project-1")
+        zombies = await plugin.scan("project-1", "us-central1")
         assert len(zombies) == 1
         assert "GPU" in zombies[0]["resource_type"]
         assert zombies[0]["resource_name"] == "vm-1"
@@ -55,7 +55,7 @@ async def test_gcp_idle_vms_scan_billing():
         ]
 
         zombies = await plugin.scan(
-            project_id="project-1", billing_records=billing_records
+            "project-1", "us-central1", billing_records=billing_records
         )
         assert len(zombies) == 1
         assert zombies[0]["resource_id"] == "vm-1"
@@ -78,11 +78,11 @@ async def test_gcp_gpu_instances_plugin():
         ]
 
         zombies = await plugin.scan(
-            project_id="project-1", billing_records=billing_records
+            "project-1", "us-central1", billing_records=billing_records
         )
         assert len(zombies) == 1
         assert zombies[0]["resource_id"] == "vm-1"
 
         # Test no billing records
-        zombies = await plugin.scan(project_id="project-1")
+        zombies = await plugin.scan("project-1", "us-central1")
         assert len(zombies) == 0

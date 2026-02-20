@@ -99,7 +99,7 @@ def test_generic_exception_handler(client):
 
     response = client.get("/test-generic-exc")
     assert response.status_code == 500
-    assert response.json()["code"] == "INTERNAL_ERROR"
+    assert response.json()["code"] == "internal_error"
 
 
 def test_docs_endpoints(client):

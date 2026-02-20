@@ -13,6 +13,7 @@ from app.models.tenant import Tenant
 from app.modules.reporting.domain.focus_export import FOCUS_V13_CORE_COLUMNS
 from app.shared.core.auth import CurrentUser, UserRole, get_current_user
 from app.shared.core.pricing import PricingTier
+from app.modules.reporting.api.v1 import costs as costs_api
 
 
 @pytest.mark.asyncio
@@ -138,5 +139,32 @@ async def test_focus_export_requires_compliance_exports_feature(
             params={"start_date": "2026-01-01", "end_date": "2026-01-01"},
         )
         assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_focus_export_rejects_date_window_beyond_limit(
+    async_client: AsyncClient,
+    app,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tenant_id = uuid.uuid4()
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        email="focus-export-window@valdrix.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    monkeypatch.setattr(costs_api.get_settings(), "FOCUS_EXPORT_MAX_DAYS", 1)
+    try:
+        response = await async_client.get(
+            "/api/v1/costs/export/focus",
+            params={"start_date": "2026-01-01", "end_date": "2026-01-03"},
+        )
+        assert response.status_code == 400
+        assert "Date window exceeds export limit" in response.text
     finally:
         app.dependency_overrides.pop(get_current_user, None)

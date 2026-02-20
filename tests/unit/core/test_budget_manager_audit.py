@@ -157,3 +157,5 @@ async def test_budget_alert_logic():
         assert "Usage" in kwargs["message"]
         assert kwargs["severity"] == "warning"
         assert mock_budget.alert_sent_at is not None
+        db.flush.assert_awaited_once()
+        db.commit.assert_awaited_once()

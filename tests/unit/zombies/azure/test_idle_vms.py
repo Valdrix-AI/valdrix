@@ -18,6 +18,7 @@ async def test_azure_idle_vms_scan_uses_cost_records():
 
         zombies = await plugin.scan(
             "sub-123",
+            "eastus",
             credentials=object(),
             cost_records=[
                 {"ResourceId": "/subscriptions/sub-123/virtualMachines/vm-1"}
@@ -62,7 +63,7 @@ async def test_azure_idle_vms_fallback_detects_running_gpu_vm():
         "app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient",
         return_value=client,
     ):
-        zombies = await plugin.scan("sub-123", credentials=object())
+        zombies = await plugin.scan("sub-123", "eastus", credentials=object())
 
     assert len(zombies) == 1
     assert zombies[0]["resource_name"] == "gpu-vm"
@@ -77,6 +78,6 @@ async def test_azure_idle_vms_fallback_failure_returns_empty():
         "app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient",
         side_effect=RuntimeError("azure down"),
     ):
-        zombies = await plugin.scan("sub-123", credentials=object())
+        zombies = await plugin.scan("sub-123", "eastus", credentials=object())
 
     assert zombies == []

@@ -62,7 +62,13 @@ async def test_get_aws_client_with_connection(mock_adapter_class, mock_get_sessi
     mock_session.client.return_value = mock_client
 
     mock_connection = MagicMock()
+    mock_connection.aws_account_id = "123456789012"
+    mock_connection.role_arn = "arn:aws:iam::123456789012:role/ValdrixAccessRole"
+    mock_connection.external_id = "external-id-123"
     mock_connection.region = "us-west-2"
+    mock_connection.cur_bucket_name = "cur-bucket"
+    mock_connection.cur_report_name = "cur-report"
+    mock_connection.cur_prefix = "cur-prefix"
 
     mock_adapter = mock_adapter_class.return_value
     mock_adapter.get_credentials = AsyncMock(return_value={"AccessKeyId": "AKIA"})

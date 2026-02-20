@@ -6,6 +6,8 @@ const CACHEABLE_GET_PREFIXES = ['/health/live', '/api/v1/billing/plans'];
 const EDGE_CACHE_S_MAXAGE_SECONDS = 60;
 const EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 120;
 const EDGE_CACHE_NAMESPACE = 'valdrix-edge-proxy';
+const JOB_STREAM_SUFFIX = '/jobs/stream';
+const SSE_TOKEN_QUERY_PARAM = 'sse_access_token';
 
 function resolveBackendOrigin(): string {
 	const privateOrigin = String(env.PRIVATE_API_ORIGIN || '').trim();
@@ -60,13 +62,23 @@ function buildUpstreamHeaders(requestHeaders: Headers): Headers {
 
 async function proxyRequest(event: Parameters<RequestHandler>[0]): Promise<Response> {
 	const backendOrigin = resolveBackendOrigin();
-	const rawPath = String(event.params.path || '').replace(/^\/+/, '');
 	const requestUrl = new URL(event.request.url);
+	const rawPath = String(event.params.path || '').replace(/^\/+/, '');
 	const targetPath = `/${rawPath}`;
+	const sseToken =
+		targetPath.endsWith(JOB_STREAM_SUFFIX) && !event.request.headers.get('authorization')
+			? requestUrl.searchParams.get(SSE_TOKEN_QUERY_PARAM)
+			: null;
+	if (sseToken) {
+		requestUrl.searchParams.delete(SSE_TOKEN_QUERY_PARAM);
+	}
 	const targetUrl = new URL(`${targetPath}${requestUrl.search}`, `${backendOrigin}/`);
 
 	const method = event.request.method.toUpperCase();
 	const requestHeaders = buildUpstreamHeaders(event.request.headers);
+	if (sseToken && !requestHeaders.has('authorization')) {
+		requestHeaders.set('authorization', `Bearer ${sseToken}`);
+	}
 
 	const shouldAttemptCache = isSafeCacheableRequest(method, targetPath, event.request.headers);
 	const cacheApi = typeof caches === 'undefined' ? null : await caches.open(EDGE_CACHE_NAMESPACE);

@@ -34,12 +34,12 @@
 			price_monthly: 29,
 			price_annual: 290,
 			period: '/mo',
-				description: 'For small teams getting started with cloud cost visibility.',
-				features: [
-					'Single cloud provider (AWS)',
-					'Cost dashboards + budget alerts',
-					'BYOK supported (no additional platform surcharge)'
-				],
+			description: 'For small teams getting started with cloud cost visibility.',
+			features: [
+				'Single cloud provider (AWS)',
+				'Cost dashboards + budget alerts',
+				'BYOK supported (no additional platform surcharge)'
+			],
 			cta: 'Start with Starter',
 			popular: false
 		},
@@ -49,12 +49,12 @@
 			price_monthly: 79,
 			price_annual: 790,
 			period: '/mo',
-				description: 'For growing teams who need AI-powered cost intelligence.',
-				features: [
-					'Multi-cloud support',
-					'AI analyses + GreenOps',
-					'BYOK supported (no additional platform surcharge)'
-				],
+			description: 'For growing teams who need AI-powered cost intelligence.',
+			features: [
+				'Multi-cloud support',
+				'AI analyses + GreenOps',
+				'BYOK supported (no additional platform surcharge)'
+			],
 			cta: 'Start with Growth',
 			popular: true
 		},
@@ -64,12 +64,12 @@
 			price_monthly: 199,
 			price_annual: 1990,
 			period: '/mo',
-				description: 'For teams who want automated optimization and full API access.',
-				features: [
-					'Automated remediation',
-					'Priority support + full API access',
-					'BYOK supported (no additional platform surcharge)'
-				],
+			description: 'For teams who want automated optimization and full API access.',
+			features: [
+				'Automated remediation',
+				'Priority support + full API access',
+				'BYOK supported (no additional platform surcharge)'
+			],
 			cta: 'Start with Pro',
 			popular: false
 		}
@@ -163,12 +163,12 @@
 
 <div class="pricing-page">
 	<!-- Hero Section -->
-		<div class="hero-section">
-			<h1 class="hero-title">Simple, Transparent Pricing</h1>
-			<p class="hero-subtitle">
-				Start with a <strong>permanent free tier</strong>. BYOK is available across current plans with no
-				additional platform surcharge.
-			</p>
+	<div class="hero-section">
+		<h1 class="hero-title">Simple, Transparent Pricing</h1>
+		<p class="hero-subtitle">
+			Start with a <strong>permanent free tier</strong>. BYOK is available across current plans with
+			no additional platform surcharge.
+		</p>
 
 		<!-- Cycle Toggle -->
 		<div class="cycle-toggle-container">
@@ -249,13 +249,13 @@
 	<!-- Enterprise Section -->
 	<div class="enterprise-section">
 		<div class="enterprise-content">
-				<h2>Enterprise</h2>
-				<p>For organizations with complex requirements and high cloud spend.</p>
-				<ul>
-					<li>Designed for high cloud spend</li>
-					<li>SSO (SAML/OIDC)</li>
-					<li>Dedicated support & SLA</li>
-					<li>Custom integrations</li>
+			<h2>Enterprise</h2>
+			<p>For organizations with complex requirements and high cloud spend.</p>
+			<ul>
+				<li>Designed for high cloud spend</li>
+				<li>SSO (SAML/OIDC)</li>
+				<li>Dedicated support & SLA</li>
+				<li>Custom integrations</li>
 			</ul>
 		</div>
 		<a href="mailto:enterprise@valdrix.io" class="enterprise-cta">Contact Sales</a>
@@ -282,33 +282,34 @@
 				</p>
 			</div>
 
-				<div class="faq-item">
-					<h3>Is BYOK available on every tier?</h3>
-					<p>
-						In the current lineup, Free, Starter, Growth, and Pro can use BYOK. Daily AI usage limits
-						still apply by tier.
-					</p>
-				</div>
+			<div class="faq-item">
+				<h3>Is BYOK available on every tier?</h3>
+				<p>
+					In the current lineup, Free, Starter, Growth, and Pro can use BYOK. Daily AI usage limits
+					still apply by tier.
+				</p>
+			</div>
 
-				<div class="faq-item">
-					<h3>Can I upgrade or downgrade anytime?</h3>
-					<p>
-						You can request plan changes at any time. Most changes take effect on your next billing cycle.
-					</p>
-				</div>
+			<div class="faq-item">
+				<h3>Can I upgrade or downgrade anytime?</h3>
+				<p>
+					You can request plan changes at any time. Most changes take effect on your next billing
+					cycle.
+				</p>
+			</div>
 
 			<div class="faq-item">
 				<h3>What cloud providers do you support?</h3>
 				<p>Starter supports AWS. Growth and Pro support AWS, Azure, and GCP.</p>
 			</div>
 
-				<div class="faq-item">
-					<h3>Is my data secure?</h3>
-					<p>
-						We use read-only cloud roles where supported, and connector secrets are stored encrypted at
-						rest.
-					</p>
-				</div>
+			<div class="faq-item">
+				<h3>Is my data secure?</h3>
+				<p>
+					We use read-only cloud roles where supported, and connector secrets are stored encrypted
+					at rest.
+				</p>
+			</div>
 		</div>
 	</div>
 </div>

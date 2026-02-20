@@ -157,6 +157,7 @@ class TestZombieAPIs:
             "resource_id": "i-test123",
             "resource_type": "ec2_instance",
             "action": "stop_instance",
+            "provider": "aws",
             "estimated_savings": 50.0,
         }
 
@@ -210,6 +211,7 @@ class TestZombieAPIs:
             "resource_id": "i-test123",
             "resource_type": "ec2_instance",
             "action": "invalid_action",
+            "provider": "aws",
             "estimated_savings": 50.0,
         }
 
@@ -520,7 +522,9 @@ class TestZombieAPIs:
         test_tenant,
         test_remediation_request,
     ):
-        """Test remediation execution fails without AWS connection."""
+        """Test remediation execution surfaces aws_connection_missing from service."""
+        from app.shared.core.exceptions import ValdrixException
+
         # Mock authentication by overriding the app's dependency
         from app.shared.core.auth import (
             get_current_user,
@@ -543,9 +547,20 @@ class TestZombieAPIs:
         ac.app.dependency_overrides[requires_role] = mock_requires_role
         ac.app.dependency_overrides[FeatureFlag.AUTO_REMEDIATION] = lambda: True
 
-        response = await ac.post(
-            f"/api/v1/zombies/execute/{test_remediation_request.id}"
-        )
+        with patch(
+            "app.modules.optimization.api.v1.zombies.RemediationService"
+        ) as mock_service_cls:
+            mock_service = AsyncMock()
+            mock_service.execute.side_effect = ValdrixException(
+                message="No AWS connection found for this tenant",
+                code="aws_connection_missing",
+                status_code=400,
+            )
+            mock_service_cls.return_value = mock_service
+
+            response = await ac.post(
+                f"/api/v1/zombies/execute/{test_remediation_request.id}?bypass_grace_period=true"
+            )
 
         assert response.status_code == 400
         data = response.json()
@@ -577,7 +592,8 @@ class TestZombieAPIs:
 
         test_remediation_request.status = RemediationStatus.APPROVED
         db.add(test_remediation_request)
-        await db.commit()
+        # Keep changes inside the shared test transaction to avoid session deadlocks.
+        await db.flush()
 
         async def mock_get_current_user():
             return mock_user
@@ -1030,6 +1046,7 @@ class TestAuthorizationAndAuthentication:
                 "resource_id": "test",
                 "resource_type": "ec2_instance",
                 "action": "stop_instance",
+                "provider": "aws",
                 "estimated_savings": 50.0,
             },
         )
@@ -1114,6 +1131,7 @@ class TestInputValidation:
             "resource_id": "i-test123",
             "resource_type": "ec2_instance",
             "action": "invalid_action_name",
+            "provider": "aws",
             "estimated_savings": 50.0,
         }
 

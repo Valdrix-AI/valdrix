@@ -20,8 +20,11 @@ def orchestrator(mock_session_maker):
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_job_assignment() -> None:
-    pass # Placeholder for the new test function
+async def test_license_governance_sweep_job_dispatch(orchestrator) -> None:
+    """Test license governance sweep dispatch."""
+    with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
+        await orchestrator.license_governance_sweep_job()
+        mock_send.assert_called_with("license.governance_sweep")
 
 
 @pytest.mark.asyncio

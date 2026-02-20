@@ -16,6 +16,7 @@ from app.modules.governance.domain.security.remediation_policy import (
     RemediationPolicyEngine,
 )
 from app.modules.optimization.domain.remediation import RemediationService
+from app.modules.optimization.domain.actions.base import ExecutionResult, ExecutionStatus
 
 
 def _request(
@@ -25,6 +26,7 @@ def _request(
     resource_type: str = "EC2 Instance",
     confidence_score: Decimal | None = Decimal("0.95"),
     review_notes: str | None = None,
+    action_parameters: dict[str, object] | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid4(),
@@ -42,6 +44,7 @@ def _request(
         backup_resource_id=None,
         estimated_monthly_savings=Decimal("25.0"),
         provider="aws",
+        action_parameters=action_parameters,
     )
 
 
@@ -69,6 +72,43 @@ def test_policy_engine_blocks_production_destructive_change() -> None:
     )
     assert evaluation.decision == PolicyDecision.BLOCK
     assert evaluation.rule_hits[0].rule_id == "protect-production-destructive"
+
+
+def test_policy_engine_blocks_destructive_change_with_explicit_policy_context() -> None:
+    evaluation = RemediationPolicyEngine().evaluate(
+        _request(
+            action=RemediationAction.DELETE_S3_BUCKET,
+            resource_id="bucket-123",
+            resource_type="S3 Bucket",
+            action_parameters={
+                "_system_policy_context": {
+                    "source": "cloud_account",
+                    "is_production": True,
+                    "criticality": "high",
+                }
+            },
+        )
+    )
+    assert evaluation.decision == PolicyDecision.BLOCK
+    assert evaluation.rule_hits[0].rule_id == "protect-production-destructive"
+
+
+def test_policy_engine_allows_destructive_change_with_explicit_non_prod_context() -> None:
+    evaluation = RemediationPolicyEngine().evaluate(
+        _request(
+            action=RemediationAction.DELETE_S3_BUCKET,
+            resource_id="prod-looking-bucket",
+            resource_type="S3 Bucket",
+            action_parameters={
+                "_system_policy_context": {
+                    "source": "cloud_account",
+                    "is_production": False,
+                    "criticality": "low",
+                }
+            },
+        )
+    )
+    assert evaluation.decision == PolicyDecision.ALLOW
 
 
 def test_policy_engine_escalates_gpu_changes_without_override() -> None:
@@ -124,16 +164,24 @@ async def test_execute_policy_block_short_circuits_action() -> None:
         patch(
             "app.modules.optimization.domain.remediation.SafetyGuardrailService"
         ) as mock_safety,
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
+        patch(
+            "app.modules.optimization.domain.remediation.get_tenant_tier",
+            new_callable=AsyncMock,
+            return_value=PricingTier.PRO,
+        ),
         patch.object(
-            service, "_execute_action", new_callable=AsyncMock
-        ) as mock_execute,
+            service, "_resolve_credentials", new_callable=AsyncMock, return_value={}
+        ),
     ):
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 
     assert result.status == RemediationStatus.FAILED
     assert "POLICY_BLOCK" in (result.execution_error or "")
-    mock_execute.assert_not_called()
+    mock_get_strategy.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -183,14 +231,17 @@ async def test_execute_policy_block_notifies_jira_for_pro_incident_tier() -> Non
             "app.shared.core.notifications.NotificationDispatcher.notify_policy_event",
             new_callable=AsyncMock,
         ) as mock_notify,
-        patch.object(service, "_execute_action", new_callable=AsyncMock),
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
     ):
-        mock_tier.return_value = PricingTier.PRO.value
+        mock_tier.return_value = PricingTier.PRO
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 
     assert result.status == RemediationStatus.FAILED
     mock_notify.assert_awaited_once()
+    mock_get_strategy.assert_not_called()
     kwargs = mock_notify.await_args.kwargs
     assert kwargs["notify_slack"] is False
     assert kwargs["notify_jira"] is True
@@ -230,15 +281,32 @@ async def test_execute_policy_warn_still_executes() -> None:
             "app.shared.core.notifications.NotificationDispatcher.notify_remediation_completed",
             new_callable=AsyncMock,
         ),
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
+        patch(
+            "app.modules.optimization.domain.remediation.get_tenant_tier",
+            new_callable=AsyncMock,
+            return_value=PricingTier.PRO,
+        ),
         patch.object(
-            service, "_execute_action", new_callable=AsyncMock
-        ) as mock_execute,
+            service, "_resolve_credentials", new_callable=AsyncMock, return_value={}
+        ),
     ):
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
+        strategy = MagicMock()
+        strategy.execute = AsyncMock(
+            return_value=ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                resource_id=request.resource_id,
+                action_taken=request.action.value,
+            )
+        )
+        mock_get_strategy.return_value = strategy
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 
     assert result.status == RemediationStatus.COMPLETED
-    mock_execute.assert_awaited_once()
+    strategy.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -274,18 +342,18 @@ async def test_execute_policy_escalate_sets_pending_escalation_state() -> None:
         patch(
             "app.modules.optimization.domain.remediation.SafetyGuardrailService"
         ) as mock_safety,
-        patch.object(
-            service, "_execute_action", new_callable=AsyncMock
-        ) as mock_execute,
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
     ):
-        mock_tier.return_value = PricingTier.GROWTH.value
+        mock_tier.return_value = PricingTier.GROWTH
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 
     assert result.status == RemediationStatus.PENDING_APPROVAL
     assert result.escalation_required is True
     assert "requires explicit GPU approval override" in (result.escalation_reason or "")
-    mock_execute.assert_not_called()
+    mock_get_strategy.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -338,7 +406,9 @@ async def test_execute_policy_escalation_does_not_notify_jira_without_incident_f
             "app.shared.core.notifications.NotificationDispatcher.notify_policy_event",
             new_callable=AsyncMock,
         ) as mock_notify,
-        patch.object(service, "_execute_action", new_callable=AsyncMock),
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
     ):
         mock_tier.return_value = "growth"
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
@@ -346,6 +416,7 @@ async def test_execute_policy_escalation_does_not_notify_jira_without_incident_f
 
     assert result.status == RemediationStatus.PENDING_APPROVAL
     mock_notify.assert_not_awaited()
+    mock_get_strategy.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -383,18 +454,18 @@ async def test_execute_policy_escalation_is_pending_even_without_escalation_feat
             "app.modules.optimization.domain.remediation.get_tenant_tier",
             new_callable=AsyncMock,
         ) as mock_tier,
-        patch.object(
-            service, "_execute_action", new_callable=AsyncMock
-        ) as mock_execute,
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
     ):
-        mock_tier.return_value = PricingTier.FREE.value
+        mock_tier.return_value = PricingTier.FREE
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 
     assert result.status == RemediationStatus.PENDING_APPROVAL
     assert result.escalation_required is True
     assert result.execution_error is None
-    mock_execute.assert_not_called()
+    mock_get_strategy.assert_not_called()
 
 
 @pytest.mark.asyncio

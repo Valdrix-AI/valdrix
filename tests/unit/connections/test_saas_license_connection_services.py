@@ -47,10 +47,12 @@ async def test_saas_verify_connection_success() -> None:
     db.execute = AsyncMock(return_value=_scalar_result(connection))
     db.commit = AsyncMock()
 
-    with patch("app.shared.connections.saas.SaaSAdapter") as adapter_cls:
-        adapter = adapter_cls.return_value
-        adapter.verify_connection = AsyncMock(return_value=True)
-        adapter.last_error = None
+    adapter = MagicMock()
+    adapter.verify_connection = AsyncMock(return_value=True)
+    adapter.last_error = None
+
+    with patch("app.shared.connections.saas.AdapterFactory") as factory:
+        factory.get_adapter.return_value = adapter
 
         service = SaaSConnectionService(db)
         result = await service.verify_connection(connection_id, tenant_id)
@@ -72,10 +74,12 @@ async def test_saas_verify_connection_failure_uses_adapter_message() -> None:
     db.execute = AsyncMock(return_value=_scalar_result(connection))
     db.commit = AsyncMock()
 
-    with patch("app.shared.connections.saas.SaaSAdapter") as adapter_cls:
-        adapter = adapter_cls.return_value
-        adapter.verify_connection = AsyncMock(return_value=False)
-        adapter.last_error = "Upstream rejected token"
+    adapter = MagicMock()
+    adapter.verify_connection = AsyncMock(return_value=False)
+    adapter.last_error = "Upstream rejected token"
+
+    with patch("app.shared.connections.saas.AdapterFactory") as factory:
+        factory.get_adapter.return_value = adapter
 
         service = SaaSConnectionService(db)
         result = await service.verify_connection(connection_id, tenant_id)
@@ -95,10 +99,12 @@ async def test_saas_verify_connection_failure_uses_default_message() -> None:
     db.execute = AsyncMock(return_value=_scalar_result(connection))
     db.commit = AsyncMock()
 
-    with patch("app.shared.connections.saas.SaaSAdapter") as adapter_cls:
-        adapter = adapter_cls.return_value
-        adapter.verify_connection = AsyncMock(return_value=False)
-        adapter.last_error = None
+    adapter = MagicMock()
+    adapter.verify_connection = AsyncMock(return_value=False)
+    adapter.last_error = None
+
+    with patch("app.shared.connections.saas.AdapterFactory") as factory:
+        factory.get_adapter.return_value = adapter
 
         service = SaaSConnectionService(db)
         result = await service.verify_connection(connection_id, tenant_id)
@@ -147,10 +153,12 @@ async def test_license_verify_connection_success() -> None:
     db.execute = AsyncMock(return_value=_scalar_result(connection))
     db.commit = AsyncMock()
 
-    with patch("app.shared.connections.license.LicenseAdapter") as adapter_cls:
-        adapter = adapter_cls.return_value
-        adapter.verify_connection = AsyncMock(return_value=True)
-        adapter.last_error = None
+    adapter = MagicMock()
+    adapter.verify_connection = AsyncMock(return_value=True)
+    adapter.last_error = None
+
+    with patch("app.shared.connections.license.AdapterFactory") as factory:
+        factory.get_adapter.return_value = adapter
 
         service = LicenseConnectionService(db)
         result = await service.verify_connection(connection_id, tenant_id)
@@ -172,10 +180,12 @@ async def test_license_verify_connection_failure_uses_default_message() -> None:
     db.execute = AsyncMock(return_value=_scalar_result(connection))
     db.commit = AsyncMock()
 
-    with patch("app.shared.connections.license.LicenseAdapter") as adapter_cls:
-        adapter = adapter_cls.return_value
-        adapter.verify_connection = AsyncMock(return_value=False)
-        adapter.last_error = None
+    adapter = MagicMock()
+    adapter.verify_connection = AsyncMock(return_value=False)
+    adapter.last_error = None
+
+    with patch("app.shared.connections.license.AdapterFactory") as factory:
+        factory.get_adapter.return_value = adapter
 
         service = LicenseConnectionService(db)
         result = await service.verify_connection(connection_id, tenant_id)
@@ -198,3 +208,4 @@ async def test_license_verify_connection_not_found_raises() -> None:
     service = LicenseConnectionService(db)
     with pytest.raises(ResourceNotFoundError):
         await service.verify_connection(connection_id, tenant_id)
+

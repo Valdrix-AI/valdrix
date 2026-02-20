@@ -773,8 +773,8 @@ async def test_license_get_json_error_paths_and_discover_resources() -> None:
     with patch(
         "app.shared.adapters.license.httpx.AsyncClient", return_value=non_dict_client
     ):
-        with pytest.raises(Exception):
-            await adapter._get_json("https://example.invalid", headers={})
+        payload = await adapter._get_json("https://example.invalid", headers={})
+    assert payload == {"value": []}
 
     assert await adapter.discover_resources("any") == []
 

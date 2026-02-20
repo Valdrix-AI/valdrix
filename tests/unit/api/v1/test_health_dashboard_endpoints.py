@@ -12,9 +12,12 @@ from app.modules.governance.api.v1.health_dashboard import (
     get_llm_fair_use_runtime,
 )
 from app.modules.governance.api.v1.health_dashboard import (
-    AWSConnectionHealth,
+    CloudConnectionHealth,
+    CloudPlusConnectionHealth,
+    CloudPlusProviderHealth,
     InvestorHealthDashboard,
     JobQueueHealth,
+    LicenseGovernanceHealth,
     LLMFairUseRuntime,
     LLMUsageMetrics,
     TenantMetrics,
@@ -100,12 +103,86 @@ async def test_get_investor_health_dashboard_handler_success():
             ),
         ),
         patch(
-            "app.modules.governance.api.v1.health_dashboard._get_aws_connection_health",
+            "app.modules.governance.api.v1.health_dashboard._get_cloud_connection_health",
             new=AsyncMock(
-                return_value=AWSConnectionHealth(
-                    total_connections=5,
-                    verified_connections=4,
-                    failed_connections=1,
+                return_value=CloudConnectionHealth(
+                    total_connections=9,
+                    active_connections=7,
+                    inactive_connections=2,
+                    errored_connections=1,
+                    providers={
+                        "aws": CloudPlusProviderHealth(
+                            total_connections=5,
+                            active_connections=4,
+                            inactive_connections=1,
+                            errored_connections=1,
+                        ),
+                        "azure": CloudPlusProviderHealth(
+                            total_connections=2,
+                            active_connections=2,
+                            inactive_connections=0,
+                            errored_connections=0,
+                        ),
+                        "gcp": CloudPlusProviderHealth(
+                            total_connections=2,
+                            active_connections=1,
+                            inactive_connections=1,
+                            errored_connections=0,
+                        ),
+                    },
+                )
+            ),
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_cloud_plus_connection_health",
+            new=AsyncMock(
+                return_value=CloudPlusConnectionHealth(
+                    total_connections=8,
+                    active_connections=6,
+                    inactive_connections=2,
+                    errored_connections=1,
+                    providers={
+                        "saas": CloudPlusProviderHealth(
+                            total_connections=3,
+                            active_connections=2,
+                            inactive_connections=1,
+                            errored_connections=0,
+                        ),
+                        "license": CloudPlusProviderHealth(
+                            total_connections=2,
+                            active_connections=2,
+                            inactive_connections=0,
+                            errored_connections=0,
+                        ),
+                        "platform": CloudPlusProviderHealth(
+                            total_connections=2,
+                            active_connections=1,
+                            inactive_connections=1,
+                            errored_connections=1,
+                        ),
+                        "hybrid": CloudPlusProviderHealth(
+                            total_connections=1,
+                            active_connections=1,
+                            inactive_connections=0,
+                            errored_connections=0,
+                        ),
+                    },
+                )
+            ),
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_license_governance_health",
+            new=AsyncMock(
+                return_value=LicenseGovernanceHealth(
+                    window_hours=24,
+                    active_license_connections=3,
+                    requests_created_24h=12,
+                    requests_completed_24h=9,
+                    requests_failed_24h=1,
+                    requests_in_flight=2,
+                    completion_rate_percent=75.0,
+                    failure_rate_percent=8.33,
+                    avg_time_to_complete_hours=6.5,
                 )
             ),
         ),
@@ -116,7 +193,11 @@ async def test_get_investor_health_dashboard_handler_success():
     assert response.tenants.total_tenants == 10
     assert response.job_queue.pending_jobs == 1
     assert response.llm_usage.total_requests_24h == 1000
-    assert response.aws_connections.failed_connections == 1
+    assert response.cloud_connections.total_connections == 9
+    assert response.cloud_connections.providers["azure"].active_connections == 2
+    assert response.cloud_plus_connections.total_connections == 8
+    assert response.cloud_plus_connections.providers["platform"].errored_connections == 1
+    assert response.license_governance.requests_created_24h == 12
 
 
 @pytest.mark.asyncio
@@ -158,10 +239,74 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
             "estimated_cost_24h": 0.5,
             "budget_utilization": 15.0,
         },
-        aws_connections={
-            "total_connections": 2,
-            "verified_connections": 2,
-            "failed_connections": 0,
+        cloud_connections={
+            "total_connections": 4,
+            "active_connections": 3,
+            "inactive_connections": 1,
+            "errored_connections": 1,
+            "providers": {
+                "aws": {
+                    "total_connections": 2,
+                    "active_connections": 2,
+                    "inactive_connections": 0,
+                    "errored_connections": 0,
+                },
+                "azure": {
+                    "total_connections": 1,
+                    "active_connections": 0,
+                    "inactive_connections": 1,
+                    "errored_connections": 1,
+                },
+                "gcp": {
+                    "total_connections": 1,
+                    "active_connections": 1,
+                    "inactive_connections": 0,
+                    "errored_connections": 0,
+                },
+            },
+        },
+        cloud_plus_connections={
+            "total_connections": 4,
+            "active_connections": 3,
+            "inactive_connections": 1,
+            "errored_connections": 1,
+            "providers": {
+                "saas": {
+                    "total_connections": 1,
+                    "active_connections": 1,
+                    "inactive_connections": 0,
+                    "errored_connections": 0,
+                },
+                "license": {
+                    "total_connections": 1,
+                    "active_connections": 1,
+                    "inactive_connections": 0,
+                    "errored_connections": 0,
+                },
+                "platform": {
+                    "total_connections": 1,
+                    "active_connections": 0,
+                    "inactive_connections": 1,
+                    "errored_connections": 1,
+                },
+                "hybrid": {
+                    "total_connections": 1,
+                    "active_connections": 1,
+                    "inactive_connections": 0,
+                    "errored_connections": 0,
+                },
+            },
+        },
+        license_governance={
+            "window_hours": 24,
+            "active_license_connections": 1,
+            "requests_created_24h": 4,
+            "requests_completed_24h": 3,
+            "requests_failed_24h": 1,
+            "requests_in_flight": 0,
+            "completion_rate_percent": 75.0,
+            "failure_rate_percent": 25.0,
+            "avg_time_to_complete_hours": 2.0,
         },
     ).model_dump(mode="json")
     cache = _CacheHit(cached_payload)
@@ -184,9 +329,17 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
             new=AsyncMock(),
         ) as llm_mock,
         patch(
-            "app.modules.governance.api.v1.health_dashboard._get_aws_connection_health",
+            "app.modules.governance.api.v1.health_dashboard._get_cloud_connection_health",
             new=AsyncMock(),
-        ) as aws_mock,
+        ) as cloud_mock,
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_cloud_plus_connection_health",
+            new=AsyncMock(),
+        ) as cloud_plus_mock,
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_license_governance_health",
+            new=AsyncMock(),
+        ) as license_mock,
     ):
         response = await get_investor_health_dashboard(mock_admin, mock_db)
 
@@ -194,7 +347,9 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
     tenant_metrics_mock.assert_not_awaited()
     job_queue_mock.assert_not_awaited()
     llm_mock.assert_not_awaited()
-    aws_mock.assert_not_awaited()
+    cloud_mock.assert_not_awaited()
+    cloud_plus_mock.assert_not_awaited()
+    license_mock.assert_not_awaited()
     assert cache.set_called is False
 
 

@@ -10,7 +10,7 @@ async def test_oidc_discovery(async_client: AsyncClient):
         "issuer": "https://auth.valdrix.ai",
         "authorization_endpoint": "https://auth.valdrix.ai/oauth/authorize",
         "token_endpoint": "https://auth.valdrix.ai/oauth/token",
-        "jwks_uri": "https://auth.valdrix.ai/oidc/jwks.json",
+        "jwks_uri": "https://auth.valdrix.ai/.well-known/jwks.json",
     }
 
     with patch(
@@ -39,7 +39,7 @@ async def test_jwks_endpoint(async_client: AsyncClient):
     ) as mock_get:
         mock_get.return_value = mock_jwks
 
-        response = await async_client.get("/oidc/jwks.json")
+        response = await async_client.get("/.well-known/jwks.json")
 
         assert response.status_code == 200
         assert response.json() == mock_jwks

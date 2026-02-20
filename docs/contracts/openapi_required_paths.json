@@ -1,0 +1,69 @@
+{
+  "required_paths": {
+    "/api/v1/costs": [
+      "get"
+    ],
+    "/api/v1/costs/analyze": [
+      "post"
+    ],
+    "/api/v1/costs/anomalies": [
+      "get"
+    ],
+    "/api/v1/costs/export/focus": [
+      "get"
+    ],
+    "/api/v1/costs/forecast": [
+      "get"
+    ],
+    "/api/v1/costs/reconciliation/invoices": [
+      "get",
+      "post"
+    ],
+    "/api/v1/costs/reconciliation/invoices/{invoice_id}": [
+      "delete",
+      "patch"
+    ],
+    "/api/v1/public/assessment": [
+      "post"
+    ],
+    "/api/v1/public/csrf": [
+      "get"
+    ],
+    "/api/v1/public/sso/discovery": [
+      "post"
+    ],
+    "/api/v1/settings/connections/discovery/stage-a": [
+      "post"
+    ],
+    "/api/v1/settings/connections/discovery/deep-scan": [
+      "post"
+    ],
+    "/api/v1/settings/connections/discovery/candidates": [
+      "get"
+    ],
+    "/api/v1/settings/connections/discovery/candidates/{candidate_id}/accept": [
+      "post"
+    ],
+    "/api/v1/settings/connections/discovery/candidates/{candidate_id}/ignore": [
+      "post"
+    ],
+    "/api/v1/settings/connections/aws": [
+      "get",
+      "post"
+    ],
+    "/api/v1/settings/connections/azure": [
+      "get",
+      "post"
+    ],
+    "/api/v1/settings/connections/gcp": [
+      "get",
+      "post"
+    ],
+    "/api/v1/zombies": [
+      "get"
+    ],
+    "/api/v1/zombies/request": [
+      "post"
+    ]
+  }
+}

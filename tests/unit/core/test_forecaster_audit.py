@@ -73,5 +73,5 @@ def test_carbon_math_accuracy():
         )
 
         # 10 USD * 412.0 = 4120.0 grams = 4.12 kg
-        assert result["total_forecasted_co2_kg"] == 4.12
+        assert result["total_forecasted_co2_kg"] == Decimal("4.1200")
         assert result["region"] == "us-east-1"
