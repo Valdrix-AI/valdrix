@@ -166,6 +166,7 @@ class RemediationRequest(Base):
         PG_UUID(),
         ForeignKey("users.id"),
         nullable=False,
+        index=True,
     )
 
     # Audit trail - who approved/rejected
@@ -173,6 +174,7 @@ class RemediationRequest(Base):
         PG_UUID(),
         ForeignKey("users.id"),
         nullable=True,
+        index=True,
     )
     review_notes: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 

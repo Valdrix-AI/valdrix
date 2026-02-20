@@ -83,7 +83,7 @@ class StrategyRecommendation(Base):
         index=True,
     )
     strategy_id: Mapped[UUID] = mapped_column(
-        PG_UUID(), ForeignKey("optimization_strategies.id"), nullable=False
+        PG_UUID(), ForeignKey("optimization_strategies.id"), nullable=False, index=True
     )
 
     # Details of the recommendation

@@ -1,7 +1,10 @@
 import asyncio
 from logging.config import fileConfig
 from typing import Any
+import re
 
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 
@@ -59,21 +62,60 @@ target_metadata = Base.metadata
 # ... etc.
 
 
+_COST_RECORD_PARTITION_RE = re.compile(r"^cost_records_\d{4}_\d{2}$")
+
+
+def _is_ignored_partition_table(name: str) -> bool:
+    if name.startswith("audit_logs_p"):
+        return True
+    if _COST_RECORD_PARTITION_RE.match(name):
+        return True
+    return False
+
+
 def include_object(obj, name, type_, reflected, compare_to):
     """
     Skip partitioned tables and other objects we don't want Alembic to manage.
     """
+    obj_name = name or ""
+
     if type_ == "table":
-        # Ignore audit log partitions (e.g., audit_logs_p2026_01)
-        if name.startswith("audit_logs_p"):
-            return False
-        # Ignore cost record partitions (managed by pg_partman or similar)
-        if name.startswith("cost_records_p"):
+        # Ignore partition child tables managed outside Alembic.
+        if _is_ignored_partition_table(obj_name):
             return False
         # Ignore materialized views (managed manually)
-        if name.startswith("mv_"):
+        if obj_name.startswith("mv_"):
             return False
+
+    # Some backends surface partition indexes/constraints independently.
+    # Skip objects attached to ignored partition tables.
+    if type_ in {"index", "foreign_key_constraint", "unique_constraint"}:
+        table_name = getattr(getattr(obj, "table", None), "name", None)
+        if isinstance(table_name, str) and _is_ignored_partition_table(table_name):
+            return False
+
     return True
+
+
+def compare_type(context, inspected_column, metadata_column, inspected_type, metadata_type):
+    """
+    Suppress type diffs that are semantically equivalent in this codebase.
+    """
+    inspected_name = type(inspected_type).__name__
+    metadata_name = type(metadata_type).__name__
+
+    # JSON/JSONB variants are handled with SQLAlchemy variants; autogen can report
+    # noisy JSON vs JSON(astext_type=Text()) changes for PostgreSQL.
+    if inspected_name in {"JSON", "JSONB"} and metadata_name in {"JSON", "JSONB"}:
+        return False
+    if isinstance(inspected_type, postgresql.JSON) and isinstance(metadata_type, sa.JSON):
+        return False
+
+    # SQLAlchemy-Utils encrypted type stores as text-ish DB types.
+    if metadata_name == "StringEncryptedType":
+        return False
+
+    return None
 
 
 def run_migrations_offline() -> None:
@@ -95,6 +137,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         include_object=include_object,
+        compare_type=compare_type,
     )
 
     with context.begin_transaction():
@@ -105,7 +148,8 @@ def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection, 
         target_metadata=target_metadata,
-        include_object=include_object
+        include_object=include_object,
+        compare_type=compare_type,
     )
 
     with context.begin_transaction():

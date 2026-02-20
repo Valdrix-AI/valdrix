@@ -215,7 +215,7 @@ class DiscoveryWizardService:
                         tenant_id=tenant_id,
                         domain=domain,
                         category=draft["category"],
-                        parameters=dict(draft.get("parameters") or {}),
+                        provider=draft["provider"],
                         source=draft["source"],
                         status="pending",
                         confidence_score=float(draft["confidence_score"]),

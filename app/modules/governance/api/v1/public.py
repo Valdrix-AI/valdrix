@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Dict, Literal
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -17,6 +19,7 @@ from app.shared.db.session import get_system_db
 
 router = APIRouter()
 assessment_service = FreeAssessmentService()
+logger = structlog.get_logger()
 
 
 def _normalize_email_domain(email: str) -> str:
@@ -113,7 +116,14 @@ async def discover_sso_federation(
         .where(SsoDomainMapping.domain == domain)
         .where(SsoDomainMapping.is_active.is_(True))
     )
-    rows = (await db.execute(stmt)).all()
+    try:
+        rows = (await asyncio.wait_for(db.execute(stmt), timeout=10.0)).all()
+    except TimeoutError:
+        logger.warning("sso_discovery_backend_timeout", domain=domain)
+        return SsoDiscoveryResponse(available=False, reason="sso_discovery_backend_timeout")
+    except Exception:
+        logger.exception("sso_discovery_backend_error", domain=domain)
+        return SsoDiscoveryResponse(available=False, reason="sso_discovery_backend_error")
     if not rows:
         return SsoDiscoveryResponse(
             available=False, reason="sso_not_configured_for_domain"

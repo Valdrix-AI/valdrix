@@ -7,7 +7,7 @@ from sqlalchemy import (
     Numeric,
     DateTime,
     Date,
-    ForeignKeyConstraint,
+    Index,
     Uuid as PG_UUID,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -44,13 +44,18 @@ class CostAuditLog(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    # Relationship
-    cost_record: Mapped["CostRecord"] = relationship("CostRecord")
+    # Relationship – DB-level FK was dropped (migration 53d52a0a90e0) because
+    # cost_records is range-partitioned on recorded_at.  We supply an explicit
+    # string-based primaryjoin so SQLAlchemy can resolve the join lazily.
+    cost_record: Mapped["CostRecord"] = relationship(
+        "CostRecord",
+        primaryjoin="and_(CostAuditLog.cost_record_id == CostRecord.id, "
+        "CostAuditLog.cost_recorded_at == CostRecord.recorded_at)",
+        foreign_keys="[CostAuditLog.cost_record_id, CostAuditLog.cost_recorded_at]",
+        viewonly=True,
+        lazy="select",
+    )
 
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["cost_record_id", "cost_recorded_at"],
-            ["cost_records.id", "cost_records.recorded_at"],
-            name="fk_cost_audit_logs_cost_record",
-        ),
+        Index("ix_cost_audit_logs_composite_record", "cost_record_id", "cost_recorded_at"),
     )

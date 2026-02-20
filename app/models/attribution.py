@@ -9,7 +9,7 @@ from sqlalchemy import (
     Numeric,
     DateTime,
     Date,
-    ForeignKeyConstraint,
+    Index,
     Uuid as PG_UUID,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -76,7 +76,7 @@ class CostAllocation(Base):
     recorded_at: Mapped[date] = mapped_column(Date, nullable=False, index=True)
 
     rule_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("attribution_rules.id"), nullable=True
+        ForeignKey("attribution_rules.id"), nullable=True, index=True
     )
 
     allocated_to: Mapped[str] = mapped_column(
@@ -97,9 +97,5 @@ class CostAllocation(Base):
     )
 
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["cost_record_id", "recorded_at"],
-            ["cost_records.id", "cost_records.recorded_at"],
-            name="fk_cost_allocations_cost_record",
-        ),
+        Index("ix_cost_allocations_composite_record", "cost_record_id", "recorded_at"),
     )
