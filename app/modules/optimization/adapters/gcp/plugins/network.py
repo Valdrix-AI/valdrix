@@ -6,6 +6,7 @@ Detects orphan external IPs using Compute API (free).
 
 from typing import List, Dict, Any
 from google.cloud import compute_v1
+from google.oauth2 import service_account
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -23,13 +24,43 @@ class OrphanExternalIpsPlugin(ZombiePlugin):
         return "orphan_gcp_ips"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for orphan external IPs using Compute API (free)."""
         project_id = str(kwargs.get("project_id") or session or "")
@@ -47,7 +78,10 @@ class OrphanExternalIpsPlugin(ZombiePlugin):
             return analyzer.find_orphan_ips()
 
         try:
-            client = compute_v1.AddressesClient(credentials=credentials)
+            gcp_creds = None
+            if credentials:
+                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            client = compute_v1.AddressesClient(credentials=gcp_creds)
             request = compute_v1.AggregatedListAddressesRequest(project=project_id)
 
             for region, response in client.aggregated_list(request=request):

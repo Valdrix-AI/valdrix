@@ -9,6 +9,52 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
+from app.shared.core.remediation_results import (
+    normalize_remediation_status,
+    parse_remediation_execution_error,
+)
+
+
+def _normalize_remediation_execution_result(
+    request_id: UUID,
+    remediation_status: str,
+    execution_error: str | None,
+) -> Dict[str, Any]:
+    """
+    Map remediation execution result to explicit job handler payload semantics.
+
+    - completed remediation => status=completed
+    - failed remediation => status=failed with parsed reason
+    - any other remediation state => status set to that state
+    """
+    if remediation_status == "completed":
+        return {
+            "status": "completed",
+            "mode": "targeted",
+            "request_id": str(request_id),
+            "remediation_status": remediation_status,
+        }
+
+    if remediation_status == "failed":
+        failure = parse_remediation_execution_error(execution_error)
+        response: Dict[str, Any] = {
+            "status": "failed",
+            "mode": "targeted",
+            "request_id": str(request_id),
+            "remediation_status": remediation_status,
+            "reason": failure.reason,
+            "error": failure.message,
+        }
+        if failure.status_code is not None:
+            response["status_code"] = failure.status_code
+        return response
+
+    return {
+        "status": remediation_status,
+        "mode": "targeted",
+        "request_id": str(request_id),
+        "remediation_status": remediation_status,
+    }
 
 
 class RemediationHandler(BaseJobHandler):
@@ -16,8 +62,6 @@ class RemediationHandler(BaseJobHandler):
 
     async def execute(self, job: BackgroundJob, db: AsyncSession) -> Dict[str, Any]:
         from app.shared.remediation.autonomous import AutonomousRemediationEngine
-        from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
-        from app.models.aws_connection import AWSConnection
         from app.models.remediation import RemediationRequest, RemediationStatus
 
         tenant_id = job.tenant_id
@@ -46,68 +90,13 @@ class RemediationHandler(BaseJobHandler):
                     code="remediation_request_not_found",
                 )
 
-            provider_norm = (
-                str(getattr(remediation_request, "provider", "aws") or "aws")
-                .strip()
-                .lower()
-            )
-            if provider_norm != "aws":
-                remediation_request.status = RemediationStatus.FAILED
-                remediation_request.execution_error = (
-                    "Direct remediation execution currently supports AWS only. "
-                    "Use GitOps remediation plans for non-AWS providers."
-                )
-                await db.commit()
-                await db.refresh(remediation_request)
-                return {
-                    "status": "failed",
-                    "mode": "targeted",
-                    "request_id": str(remediation_request.id),
-                    "remediation_status": remediation_request.status.value,
-                    "reason": "provider_not_supported",
-                }
-
-            # Resolve AWS connection for credentials (prefer request-scoped connection_id).
-            conn_query = select(AWSConnection).where(
-                AWSConnection.tenant_id == tenant_id
-            )
-            if getattr(remediation_request, "connection_id", None):
-                conn_query = conn_query.where(
-                    AWSConnection.id == remediation_request.connection_id
-                )
-            conn_query = conn_query.order_by(
-                AWSConnection.last_verified_at.desc(), AWSConnection.id.desc()
-            )
-            conn_res = await db.execute(conn_query)
-            connection = conn_res.scalars().first()
-
-            if not connection:
-                remediation_request.status = RemediationStatus.FAILED
-                remediation_request.execution_error = (
-                    "No AWS connection found for this tenant. Setup is required first."
-                )
-                await db.commit()
-                await db.refresh(remediation_request)
-                return {
-                    "status": "failed",
-                    "mode": "targeted",
-                    "request_id": str(remediation_request.id),
-                    "remediation_status": remediation_request.status.value,
-                    "reason": "aws_connection_missing",
-                }
-
-            from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
-            aws_creds = map_aws_connection_to_credentials(connection)
-            adapter = MultiTenantAWSAdapter(aws_creds)
-            creds = await adapter.get_credentials()
-
-            # Prefer request region for execution correctness; fall back to connection default.
+            # Prefer request region for execution correctness.
+            default_region = "global"
             exec_region = (
                 str(getattr(remediation_request, "region", "") or "").strip()
-                or str(getattr(connection, "region", "") or "").strip()
-                or "us-east-1"
+                or default_region
             )
-            service = RemediationService(db, region=exec_region, credentials=creds)
+            service = RemediationService(db, region=exec_region)
 
             # If a scheduled job runs early due to clock skew, reschedule instead of marking complete.
             scheduled_at = getattr(remediation_request, "scheduled_execution_at", None)
@@ -126,42 +115,24 @@ class RemediationHandler(BaseJobHandler):
                 }
 
             result = await service.execute(request_uuid, tenant_id)
-            return {
-                "status": "completed",
-                "mode": "targeted",
-                "request_id": str(result.id),
-                "remediation_status": result.status.value,
-            }
+            remediation_status = normalize_remediation_status(result.status)
+            return _normalize_remediation_execution_result(
+                request_id=result.id,
+                remediation_status=remediation_status,
+                execution_error=getattr(result, "execution_error", None),
+            )
 
         # 2. Autonomous Remediation Sweep
         conn_id = payload.get("connection_id")
-
-        # Get AWS connection
-        if conn_id:
-            db_res = await db.execute(
-                select(AWSConnection).where(
-                    AWSConnection.id == UUID(conn_id),
-                    AWSConnection.tenant_id == tenant_id,
-                )
-            )
-        else:
-            db_res = await db.execute(
-                select(AWSConnection).where(AWSConnection.tenant_id == tenant_id)
-            )
-        connection = db_res.scalars().first()
-
-        if not connection:
-            return {"status": "skipped", "reason": "no_aws_connection"}
-
-        from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
-        aws_creds = map_aws_connection_to_credentials(connection)
-        adapter = MultiTenantAWSAdapter(aws_creds)
-        creds = await adapter.get_credentials()
-
         engine = AutonomousRemediationEngine(db, str(tenant_id))
+        region = str(payload.get("region") or "global")
         results = await engine.run_autonomous_sweep(
-            region=connection.region, credentials=creds
+            region=region,
+            credentials=None,
+            connection_id=conn_id,
         )
+        if results.get("error") == "no_connections_found":
+            return {"status": "skipped", "reason": "no_connections_found"}
 
         return {
             "status": "completed",

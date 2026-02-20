@@ -1,6 +1,5 @@
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
-import aioboto3
 from botocore.exceptions import ClientError
 import structlog
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -17,13 +16,43 @@ class IdleRdsPlugin(ZombiePlugin):
         return "idle_rds_databases"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         dbs = []
@@ -141,13 +170,43 @@ class ColdRedshiftPlugin(ZombiePlugin):
         return "cold_redshift_clusters"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         days = 7
@@ -227,13 +286,43 @@ class IdleDynamoDbPlugin(ZombiePlugin):
         return "idle_dynamodb_tables"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         days = 7

@@ -1,6 +1,5 @@
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
-import aioboto3
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 import structlog
@@ -21,13 +20,43 @@ class OverprovisionedEc2Plugin(ZombiePlugin):
         return "overprovisioned_ec2_instances"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         
@@ -109,8 +138,8 @@ class OverprovisionedEc2Plugin(ZombiePlugin):
             
         return zombies
 
-    def _get_name_tag(self, instance):
+    def _get_name_tag(self, instance: Dict[str, Any]) -> str:
         for tag in instance.get("Tags", []):
             if tag["Key"] == "Name":
-                return tag["Value"]
-        return instance["InstanceId"]
+                return str(tag["Value"])
+        return str(instance.get("InstanceId", "unknown"))

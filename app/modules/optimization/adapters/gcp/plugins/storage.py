@@ -7,6 +7,7 @@ Detects unattached disks and old snapshots using Cloud Asset Inventory.
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from google.cloud import compute_v1
+from google.oauth2 import service_account
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -24,13 +25,43 @@ class UnattachedDisksPlugin(ZombiePlugin):
         return "unattached_gcp_disks"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for unattached disks using Compute API (free)."""
         project_id = str(kwargs.get("project_id") or session or "")
@@ -48,7 +79,10 @@ class UnattachedDisksPlugin(ZombiePlugin):
             return analyzer.find_unattached_disks()
 
         try:
-            client = compute_v1.DisksClient(credentials=credentials)
+            gcp_creds = None
+            if credentials:
+                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            client = compute_v1.DisksClient(credentials=gcp_creds)
             request = compute_v1.AggregatedListDisksRequest(project=project_id)
 
             for zone, response in client.aggregated_list(request=request):
@@ -96,13 +130,43 @@ class OldSnapshotsPlugin(ZombiePlugin):
         return "old_gcp_snapshots"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for snapshots older than retention period."""
         project_id = str(kwargs.get("project_id") or session or "")
@@ -115,7 +179,10 @@ class OldSnapshotsPlugin(ZombiePlugin):
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=age_days)
 
         try:
-            client = compute_v1.SnapshotsClient(credentials=credentials)
+            gcp_creds = None
+            if credentials:
+                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            client = compute_v1.SnapshotsClient(credentials=gcp_creds)
             request = compute_v1.ListSnapshotsRequest(project=project_id)
 
             for snapshot in client.list(request=request):

@@ -42,6 +42,8 @@ REGION_CARBON_INTENSITY = {
     "ap-southeast-1": 408,  # Singapore
     "ap-south-1": 708,  # Mumbai
     "ap-northeast-1": 506,  # Tokyo
+    # Synthetic global average for provider-agnostic defaults.
+    "global": 400,
     # Default for unknown regions
     "default": 400,
 }
@@ -85,6 +87,14 @@ LICENSE_SERVICE_ENERGY_FACTORS = {
     "default": 0.01,
 }
 
+PLATFORM_SERVICE_ENERGY_FACTORS = {
+    "default": 0.03,
+}
+
+HYBRID_SERVICE_ENERGY_FACTORS = {
+    "default": 0.03,
+}
+
 GENERIC_SERVICE_ENERGY_FACTORS = {
     "default": 0.03,
 }
@@ -95,6 +105,8 @@ SERVICE_ENERGY_FACTORS_BY_PROVIDER = {
     "gcp": GCP_SERVICE_ENERGY_FACTORS,
     "saas": SAAS_SERVICE_ENERGY_FACTORS,
     "license": LICENSE_SERVICE_ENERGY_FACTORS,
+    "platform": PLATFORM_SERVICE_ENERGY_FACTORS,
+    "hybrid": HYBRID_SERVICE_ENERGY_FACTORS,
     "generic": GENERIC_SERVICE_ENERGY_FACTORS,
 }
 
@@ -222,7 +234,7 @@ class CarbonCalculator:
         self._factors_checksum = compute_carbon_factor_checksum(payload)
 
     def _normalize_provider(self, provider: str | None) -> str:
-        provider_key = (provider or "aws").strip().lower()
+        provider_key = (provider or "generic").strip().lower()
         return provider_key if provider_key in self._energy_factors else "generic"
 
     def _resolve_energy_factor(self, provider: str, service: str | None) -> Decimal:
@@ -244,8 +256,8 @@ class CarbonCalculator:
     def calculate_from_costs(
         self,
         cost_data: List[Dict[str, Any]],
-        region: str = "us-east-1",
-        provider: str = "aws",
+        region: str = "global",
+        provider: str = "generic",
     ) -> Dict[str, Any]:
         """Cost-proxy calculation for grouped/flat usage inputs."""
         total_cost_usd = Decimal("0")
@@ -300,8 +312,8 @@ class CarbonCalculator:
     def calculate_from_records(
         self,
         records: List[Any],
-        region: str = "us-east-1",
-        provider: str = "aws",
+        region: str = "global",
+        provider: str = "generic",
     ) -> Dict[str, Any]:
         """
         High-precision calculation from record objects.
@@ -338,7 +350,7 @@ class CarbonCalculator:
         total_cost_usd: Decimal,
         total_energy_kwh: Decimal,
         region: str,
-        provider: str = "aws",
+        provider: str = "generic",
     ) -> Dict[str, Any]:
         """Shared logic for emissions calculation and result formatting."""
         total_energy_with_pue = total_energy_kwh * self._cloud_pue

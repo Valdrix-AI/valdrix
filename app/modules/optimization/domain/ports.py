@@ -28,7 +28,7 @@ class BaseZombieDetector(ABC):
     def __init__(
         self,
         region: str = "global",
-        credentials: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, Any]] = None,
         db: Optional[AsyncSession] = None,
         connection: Any = None,
     ):

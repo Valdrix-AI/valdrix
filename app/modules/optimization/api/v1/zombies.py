@@ -1,6 +1,7 @@
 from typing import Annotated, Optional, Dict, Any
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.params import Param
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 import structlog
@@ -10,17 +11,67 @@ from app.shared.db.session import get_db
 from app.models.remediation import (
     RemediationAction,
     RemediationRequest,
+    RemediationStatus,
 )
 from app.modules.optimization.domain import ZombieService, RemediationService
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
 from app.shared.core.rate_limit import rate_limit
 from app.shared.core.exceptions import ResourceNotFoundError, ValdrixException
+from app.shared.core.provider import normalize_provider
+from app.shared.core.remediation_results import (
+    normalize_remediation_status,
+    parse_remediation_execution_error,
+)
 from app.models.background_job import JobType
 from app.modules.governance.domain.jobs.processor import enqueue_job
 
 router = APIRouter(tags=["Cloud Hygiene (Zombies)"])
 logger = structlog.get_logger()
+DEFAULT_REGION_HINT = "global"
+
+
+def _coerce_region_hint(value: Any) -> str:
+    if isinstance(value, Param):
+        value = value.default
+    normalized = str(value or "").strip().lower()
+    return normalized or DEFAULT_REGION_HINT
+
+
+def _coerce_query_bool(value: Any, *, default: bool = False) -> bool:
+    if isinstance(value, Param):
+        value = value.default
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
+
+
+def _coerce_query_int(
+    value: Any,
+    *,
+    default: int,
+    minimum: int | None = None,
+) -> int:
+    if isinstance(value, Param):
+        value = value.default
+    if value is None:
+        coerced = default
+    else:
+        try:
+            coerced = int(value)
+        except (TypeError, ValueError):
+            coerced = default
+    if minimum is not None and coerced < minimum:
+        return minimum
+    return coerced
 
 
 def _parse_remediation_action(action: str) -> RemediationAction:
@@ -34,12 +85,28 @@ def _parse_remediation_action(action: str) -> RemediationAction:
         ) from exc
 
 
+def _raise_if_failed_execution(executed_request: RemediationRequest) -> None:
+    status_value = normalize_remediation_status(getattr(executed_request, "status", None))
+    if status_value != RemediationStatus.FAILED.value:
+        return
+
+    failure = parse_remediation_execution_error(
+        getattr(executed_request, "execution_error", None)
+    )
+
+    raise ValdrixException(
+        message=failure.message,
+        code=failure.reason,
+        status_code=failure.status_code or 400,
+    )
+
+
 # --- Schemas ---
 class RemediationRequestCreate(BaseModel):
     resource_id: str
     resource_type: str
     action: str
-    provider: str = "aws"
+    provider: str
     connection_id: Optional[UUID] = None
     estimated_savings: float
     create_backup: bool = False
@@ -64,7 +131,8 @@ class PolicyPreviewCreate(BaseModel):
     resource_id: str
     resource_type: str
     action: str
-    provider: str = "aws"
+    provider: str
+    connection_id: Optional[UUID] = None
     confidence_score: float | None = None
     explainability_notes: str | None = None
     review_notes: str | None = None
@@ -81,7 +149,7 @@ async def scan_zombies(
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db),
-    region: str = Query(default="us-east-1"),
+    region: str = Query(default=DEFAULT_REGION_HINT),
     analyze: bool = Query(
         default=False, description="Enable AI-powered analysis of detected zombies"
     ),
@@ -91,19 +159,28 @@ async def scan_zombies(
     Scan cloud accounts for zombie resources.
     If background=True, returns a job_id immediately.
     """
-    if background:
-        logger.info("enqueuing_zombie_scan", tenant_id=str(tenant_id), region=region)
+    region_hint = _coerce_region_hint(region)
+    analyze_enabled = _coerce_query_bool(analyze, default=False)
+    run_in_background = _coerce_query_bool(background, default=False)
+    if run_in_background:
+        logger.info(
+            "enqueuing_zombie_scan",
+            tenant_id=str(tenant_id),
+            region=region_hint,
+        )
         job = await enqueue_job(
             db=db,
             job_type=JobType.ZOMBIE_SCAN,
             tenant_id=tenant_id,
-            payload={"region": region, "analyze": analyze},
+            payload={"region": region_hint, "analyze": analyze_enabled},
         )
         return {"status": "pending", "job_id": str(job.id)}
 
     service = ZombieService(db=db)
     return await service.scan_for_tenant(
-        tenant_id=tenant_id, region=region, analyze=analyze
+        tenant_id=tenant_id,
+        region=region_hint,
+        analyze=analyze_enabled,
     )
 
 
@@ -115,12 +192,13 @@ async def create_remediation_request(
         CurrentUser, Depends(requires_feature(FeatureFlag.AUTO_REMEDIATION))
     ],
     db: AsyncSession = Depends(get_db),
-    region: str = Query(default="us-east-1"),
+    region: str = Query(default=DEFAULT_REGION_HINT),
 ) -> Dict[str, str]:
     """Create a remediation request. Requires Pro tier or higher."""
+    region_hint = _coerce_region_hint(region)
     action_enum = _parse_remediation_action(request.action)
 
-    service = RemediationService(db=db, region=region)
+    service = RemediationService(db=db, region=region_hint)
     result = await service.create_request(
         tenant_id=tenant_id,
         user_id=user.id,
@@ -143,13 +221,20 @@ async def list_pending_requests(
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db),
-    region: str = Query(default="us-east-1"),
+    region: str = Query(default=DEFAULT_REGION_HINT),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> Dict[str, Any]:
     """List open remediation requests (approval + execution queue)."""
-    service = RemediationService(db=db, region=region)
-    pending = await service.list_pending(tenant_id, limit=limit, offset=offset)
+    region_hint = _coerce_region_hint(region)
+    page_limit = _coerce_query_int(limit, default=50, minimum=1)
+    page_offset = _coerce_query_int(offset, default=0, minimum=0)
+    service = RemediationService(db=db, region=region_hint)
+    pending = await service.list_pending(
+        tenant_id,
+        limit=page_limit,
+        offset=page_offset,
+    )
     return {
         "pending_count": len(pending),
         "requests": [
@@ -159,8 +244,9 @@ async def list_pending_requests(
                 "resource_id": r.resource_id,
                 "resource_type": r.resource_type,
                 "action": r.action.value,
-                "provider": getattr(r, "provider", "aws"),
-                "region": getattr(r, "region", region),
+                "provider": normalize_provider(getattr(r, "provider", None))
+                or "unknown",
+                "region": getattr(r, "region", region_hint),
                 "connection_id": str(r.connection_id)
                 if getattr(r, "connection_id", None)
                 else None,
@@ -189,10 +275,11 @@ async def approve_remediation(
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
-    region: str = Query(default="us-east-1"),
+    region: str = Query(default=DEFAULT_REGION_HINT),
 ) -> Dict[str, str]:
     """Approve a request."""
-    service = RemediationService(db=db, region=region)
+    region_hint = _coerce_region_hint(region)
+    service = RemediationService(db=db, region=region_hint)
     try:
         result = await service.approve(
             request_id,
@@ -217,10 +304,11 @@ async def preview_remediation_policy(
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.POLICY_PREVIEW))],
     db: AsyncSession = Depends(get_db),
-    region: str = Query(default="us-east-1"),
+    region: str = Query(default=DEFAULT_REGION_HINT),
 ) -> PolicyPreviewResponse:
     """Preview deterministic remediation policy outcome before execution."""
-    service = RemediationService(db=db, region=region)
+    region_hint = _coerce_region_hint(region)
+    service = RemediationService(db=db, region=region_hint)
     remediation_request = await service.get_by_id(
         RemediationRequest, request_id, tenant_id
     )
@@ -239,12 +327,13 @@ async def preview_remediation_policy_payload(
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.POLICY_PREVIEW))],
     db: AsyncSession = Depends(get_db),
-    region: str = Query(default="us-east-1"),
+    region: str = Query(default=DEFAULT_REGION_HINT),
 ) -> PolicyPreviewResponse:
     """Preview deterministic policy outcome before a remediation request is created."""
+    region_hint = _coerce_region_hint(region)
     action_enum = _parse_remediation_action(payload.action)
 
-    service = RemediationService(db=db, region=region)
+    service = RemediationService(db=db, region=region_hint)
     preview = await service.preview_policy_input(
         tenant_id=tenant_id,
         user_id=user.id,
@@ -252,6 +341,7 @@ async def preview_remediation_policy_payload(
         resource_type=payload.resource_type,
         action=action_enum,
         provider=payload.provider,
+        connection_id=payload.connection_id,
         confidence_score=payload.confidence_score,
         explainability_notes=payload.explainability_notes,
         review_notes=payload.review_notes,
@@ -271,18 +361,23 @@ async def execute_remediation(
         Depends(requires_feature(FeatureFlag.AUTO_REMEDIATION, required_role="admin")),
     ],
     db: AsyncSession = Depends(get_db),
-    region: str = Query(default="us-east-1"),
+    region: str = Query(default=DEFAULT_REGION_HINT),
     bypass_grace_period: bool = Query(
         default=False, description="Bypass 24h grace period (emergency use)"
     ),
 ) -> Dict[str, str]:
     """Execute a remediation request. Requires Pro tier or higher and Admin role."""
-    service = RemediationService(db=db, region=region)
+    region_hint = _coerce_region_hint(region)
+    bypass_grace = _coerce_query_bool(bypass_grace_period, default=False)
+    service = RemediationService(db=db, region=region_hint)
 
     try:
         executed_request = await service.execute(
-            request_id, tenant_id, bypass_grace_period=bypass_grace_period
+            request_id,
+            tenant_id,
+            bypass_grace_period=bypass_grace,
         )
+        _raise_if_failed_execution(executed_request)
         return {
             "status": executed_request.status.value,
             "request_id": str(executed_request.id),

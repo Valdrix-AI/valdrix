@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from google.cloud import compute_v1
 from google.oauth2 import service_account
 from app.modules.optimization.domain.actions.base import BaseRemediationAction, RemediationContext
@@ -20,7 +20,7 @@ class BaseGCPAction(BaseRemediationAction):
         creds_info = context.credentials or {}
         if not creds_info:
             return None
-        return service_account.Credentials.from_service_account_info(creds_info)
+        return service_account.Credentials.from_service_account_info(creds_info)  # type: ignore[no-untyped-call]
 
     async def _get_instances_client(self, context: RemediationContext) -> compute_v1.InstancesClient:
         creds = await self._get_credentials(context)

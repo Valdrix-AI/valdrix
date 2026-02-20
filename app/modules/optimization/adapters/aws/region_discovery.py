@@ -94,7 +94,7 @@ class RegionDiscovery:
                         query="region:*", max_results=500
                     )
                     active_regions = sorted(
-                        list(set(r.get("region") for r in resources if r.get("region")))
+                        list({str(r.get("region")) for r in resources if r.get("region")})
                     )
 
                     if active_regions:

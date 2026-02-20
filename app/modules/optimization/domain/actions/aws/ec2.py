@@ -36,6 +36,8 @@ class AWSResizeInstanceAction(BaseAWSAction):
         return True
 
     async def _perform_action(self, resource_id: str, context: RemediationContext) -> ExecutionResult:
+        if not context.parameters:
+            raise ValueError("context.parameters missing")
         target_type = context.parameters["target_instance_type"]
         async with await self._get_client("ec2", context) as ec2:
             # AWS Resize requires instance to be stopped
@@ -59,4 +61,38 @@ class AWSResizeInstanceAction(BaseAWSAction):
                 resource_id=resource_id,
                 action_taken=RemediationAction.RESIZE_INSTANCE.value,
                 metadata={"target_type": target_type}
+            )
+@RemediationActionFactory.register("aws", RemediationAction.DELETE_SNAPSHOT)
+class AWSDeleteSnapshotAction(BaseAWSAction):
+    async def _perform_action(self, resource_id: str, context: RemediationContext) -> ExecutionResult:
+        async with await self._get_client("ec2", context) as ec2:
+            await ec2.delete_snapshot(SnapshotId=resource_id)
+            return ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                resource_id=resource_id,
+                action_taken=RemediationAction.DELETE_SNAPSHOT.value
+            )
+
+
+@RemediationActionFactory.register("aws", RemediationAction.RELEASE_ELASTIC_IP)
+class AWSReleaseElasticIpAction(BaseAWSAction):
+    async def _perform_action(self, resource_id: str, context: RemediationContext) -> ExecutionResult:
+        async with await self._get_client("ec2", context) as ec2:
+            await ec2.release_address(AllocationId=resource_id)
+            return ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                resource_id=resource_id,
+                action_taken=RemediationAction.RELEASE_ELASTIC_IP.value
+            )
+
+
+@RemediationActionFactory.register("aws", RemediationAction.DELETE_NAT_GATEWAY)
+class AWSDeleteNatGatewayAction(BaseAWSAction):
+    async def _perform_action(self, resource_id: str, context: RemediationContext) -> ExecutionResult:
+        async with await self._get_client("ec2", context) as ec2:
+            await ec2.delete_nat_gateway(NatGatewayId=resource_id)
+            return ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                resource_id=resource_id,
+                action_taken=RemediationAction.DELETE_NAT_GATEWAY.value
             )

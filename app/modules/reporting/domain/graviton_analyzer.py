@@ -86,36 +86,28 @@ class GravitonAnalyzer(ArmMigrationAnalyzer):
         # For AWS, MultiTenantAWSAdapter returns the instance type in the 'type' field
         return resource.get("type")
 
-    async def analyze_instances(self) -> Dict[str, Any]:
-        """
-        Legacy compatibility method for original GravitonAnalyzer interface.
-        """
-        return await self.analyze()
-
-    async def analyze(self) -> Dict[str, Any]:
+    async def analyze(self, tenant_id: Optional[Any] = None) -> Dict[str, Any]:
         """
         Scan EC2 instances and identify Graviton migration candidates.
         """
-        base_result = await super().analyze()
+        base_result = await super().analyze(tenant_id=tenant_id)
         
+        # Enrich candidates with energy_savings_percent for report consumers
+        for candidate in base_result.get("candidates", []):
+            candidate["energy_savings_percent"] = candidate.get("savings_percent", 0)
+
         # Enrich with AWS-specific metadata
         base_result.update({
             "already_graviton": base_result.get("arm_instances", 0),
             "potential_energy_reduction_percent": (
-                sum(c["savings_percent"] for c in base_result["candidates"])
-                / len(base_result["candidates"])
-                if base_result["candidates"]
+                sum(c["savings_percent"] for c in base_result.get("candidates", []))
+                / len(base_result.get("candidates", []))
+                if base_result.get("candidates")
                 else 0
             ),
             "compatible_workloads": COMPATIBLE_WORKLOADS,
             "requires_validation": REQUIRES_VALIDATION,
         })
-
-        logger.info(
-            "graviton_analysis_complete",
-            total=base_result.get("total_instances"),
-            candidates=base_result.get("migration_candidates"),
-        )
 
         return base_result
 

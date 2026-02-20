@@ -244,6 +244,100 @@ class BillingService:
             raise ValueError(f"Unsupported checkout currency: {resolved}")
         return resolved
 
+    @staticmethod
+    def _parse_paystack_datetime(value: Any) -> datetime | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
+    @staticmethod
+    def _infer_interval_days(charge_data: dict[str, Any]) -> int:
+        interval_raw: Any = None
+        plan_data = charge_data.get("plan")
+        if isinstance(plan_data, dict):
+            interval_raw = plan_data.get("interval")
+        if interval_raw is None:
+            metadata = charge_data.get("metadata")
+            if isinstance(metadata, dict):
+                interval_raw = metadata.get("billing_cycle")
+
+        interval = str(interval_raw or "").strip().lower()
+        if interval in {"annual", "annually", "year", "yearly"}:
+            return 365
+        return 30
+
+    async def _fetch_provider_next_payment_date(
+        self, subscription: TenantSubscription
+    ) -> datetime | None:
+        code_raw = getattr(subscription, "paystack_subscription_code", None)
+        if not isinstance(code_raw, str) or not code_raw.strip():
+            return None
+
+        try:
+            provider_payload = await self.client.fetch_subscription(code_raw.strip())
+        except Exception as exc:
+            logger.warning(
+                "renewal_fetch_subscription_failed",
+                tenant_id=str(subscription.tenant_id),
+                subscription_code=code_raw,
+                error=str(exc),
+            )
+            return None
+
+        if not isinstance(provider_payload, dict):
+            return None
+        data = provider_payload.get("data")
+        if not isinstance(data, dict):
+            return None
+
+        return (
+            self._parse_paystack_datetime(data.get("next_payment_date"))
+            or self._parse_paystack_datetime(data.get("next_payment"))
+            or self._parse_paystack_datetime(data.get("current_period_end"))
+        )
+
+    @staticmethod
+    def _compute_fallback_next_payment_date(
+        subscription: TenantSubscription, interval_days: int
+    ) -> datetime:
+        now = datetime.now(timezone.utc)
+        anchor = getattr(subscription, "next_payment_date", None)
+        if isinstance(anchor, datetime):
+            anchor_utc = anchor if anchor.tzinfo else anchor.replace(tzinfo=timezone.utc)
+            if anchor_utc < now - timedelta(days=interval_days):
+                anchor_utc = now
+        else:
+            anchor_utc = now
+
+        candidate = anchor_utc + timedelta(days=interval_days)
+        if candidate <= now:
+            candidate = now + timedelta(days=interval_days)
+        return candidate
+
+    async def _resolve_renewal_next_payment_date(
+        self, subscription: TenantSubscription, charge_data: dict[str, Any]
+    ) -> datetime:
+        provider_next_payment = await self._fetch_provider_next_payment_date(
+            subscription
+        )
+        if provider_next_payment is not None:
+            return provider_next_payment
+
+        payload_next_payment = self._parse_paystack_datetime(
+            charge_data.get("next_payment_date")
+        )
+        if payload_next_payment is not None:
+            return payload_next_payment
+
+        interval_days = self._infer_interval_days(charge_data)
+        return self._compute_fallback_next_payment_date(subscription, interval_days)
+
     async def create_checkout_session(
         self,
         tenant_id: UUID,
@@ -528,8 +622,10 @@ class BillingService:
             if response.get("status") and response["data"].get("status") == "success":
                 charge_data = response.get("data", {})
                 reference = charge_data.get("reference")
-                subscription.next_payment_date = datetime.now(timezone.utc) + timedelta(
-                    days=30
+                subscription.next_payment_date = (
+                    await self._resolve_renewal_next_payment_date(
+                        subscription, charge_data
+                    )
                 )
                 subscription.billing_currency = renewal_currency
                 subscription.last_charge_amount_subunits = amount_subunits

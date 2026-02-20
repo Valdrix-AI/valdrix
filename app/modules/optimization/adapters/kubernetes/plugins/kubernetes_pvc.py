@@ -19,13 +19,43 @@ class OrphanedPVCPlugin(ZombiePlugin):
         return "kubernetes"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Dict[str, str] | None = None,
-        config: Dict[str, Any] | None = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, str] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """
         Scans for Persistent Volume Claims (PVCs) that are 'Bound' but not mounted by any Pod.

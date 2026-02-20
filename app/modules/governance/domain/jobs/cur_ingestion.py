@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.aws_connection import AWSConnection
+from app.shared.adapters.aws_utils import resolve_aws_region_hint
 from app.shared.db.session import async_session_maker
 
 logger = structlog.get_logger()
@@ -68,11 +69,13 @@ class CURIngestionJob:
         """
         Ingest the latest CUR data for a connection.
         """
+        resolved_region = resolve_aws_region_hint(connection.region)
+
         # 1. Discover latest files (simplified for now: looking in standard bucket)
         # In production, we'd read the manifest file.
         bucket = (
             connection.cur_bucket_name
-            or f"valdrix-cur-{connection.aws_account_id}-{connection.region}"
+            or f"valdrix-cur-{connection.aws_account_id}-{resolved_region}"
         )
 
         # For demonstration, we assume a path. Real discovery would use s3.list_objects_v2
@@ -106,9 +109,10 @@ class CURIngestionJob:
         import json
 
         # 2026 Standard: Use regional endpoints and non-blocking patterns where possible
+        resolved_region = resolve_aws_region_hint(connection.region)
         s3 = boto3.client(
             "s3",
-            region_name=connection.region,
+            region_name=resolved_region,
             config=Config(retries={"max_attempts": 3, "mode": "standard"}),
         )
 

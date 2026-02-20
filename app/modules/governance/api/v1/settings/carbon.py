@@ -52,7 +52,8 @@ class CarbonSettingsUpdate(BaseModel):
         80, ge=0, le=100, description="Warning threshold %"
     )
     default_region: str = Field(
-        "us-east-1", description="Default AWS region for carbon intensity"
+        "global",
+        description="Default region hint for carbon intensity (for example, global, us-east-1, eu-west-1)",
     )
     email_enabled: bool = Field(
         False, description="Enable email notifications for carbon alerts"
@@ -106,7 +107,7 @@ async def get_carbon_settings(
             tenant_id=current_user.tenant_id,
             carbon_budget_kg=100.0,
             alert_threshold_percent=80,
-            default_region="us-east-1",
+            default_region="global",
             email_enabled=False,
             email_recipients=None,
         )

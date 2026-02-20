@@ -71,17 +71,12 @@ class CostReconciliationService:
     @staticmethod
     def _normalize_cloud_plus_source(source: str | None, provider: str) -> str:
         source_key = (source or "unknown").strip().lower()
-        if provider == "saas":
-            if source_key == "saas_feed":
+        if provider in {"saas", "license", "platform", "hybrid"}:
+            if source_key in {f"{provider}_feed", "feed"}:
                 return "feed"
-            if source_key.startswith("saas_"):
+            if source_key in {"native", f"{provider}_native"}:
                 return "native"
-            return "unknown"
-
-        if provider == "license":
-            if source_key == "license_feed":
-                return "feed"
-            if source_key.startswith("license_"):
+            if source_key.startswith(f"{provider}_"):
                 return "native"
             return "unknown"
 
@@ -931,14 +926,14 @@ class CostReconciliationService:
         comparison_basis = "explorer_vs_cur"
         expected_primary_source = "cur"
         expected_secondary_source = "explorer"
-        if normalized_provider in {"saas", "license"}:
+        if normalized_provider in {"saas", "license", "platform", "hybrid"}:
             comparison_basis = "native_vs_feed"
             expected_primary_source = "native"
             expected_secondary_source = "feed"
 
         for row in rows:
             service_name = str(getattr(row, "service", "") or "Unknown")
-            if normalized_provider in {"saas", "license"}:
+            if normalized_provider in {"saas", "license", "platform", "hybrid"}:
                 source_name = self._normalize_cloud_plus_source(
                     getattr(row, "source_adapter", None),
                     normalized_provider,

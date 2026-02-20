@@ -14,6 +14,7 @@ from app.models.tenant import Tenant, User, UserRole
 from app.shared.core.pricing import PricingTier
 from app.shared.core.config import get_settings
 from app.shared.core.rate_limit import auth_limit
+from app.shared.core.provider import normalize_provider
 
 logger = structlog.get_logger()
 
@@ -74,14 +75,52 @@ async def onboard(
                     detail="HTTPS is required when submitting cloud credentials.",
                 )
 
-        platform = onboard_req.cloud_config.get("platform", "").lower()
+        platform = normalize_provider(onboard_req.cloud_config.get("platform", ""))
+        default_aws_region = (
+            str(getattr(settings, "AWS_DEFAULT_REGION", "") or "").strip() or "us-east-1"
+        )
         logger.info("verifying_initial_cloud_connection", platform=platform)
 
         try:
             from app.shared.adapters.factory import AdapterFactory
+            from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+            from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
+            from app.shared.core.exceptions import ConfigurationError
             from app.models.aws_connection import AWSConnection
             from app.models.azure_connection import AzureConnection
             from app.models.gcp_connection import GCPConnection
+            from app.models.saas_connection import SaaSConnection
+            from app.models.license_connection import LicenseConnection
+            from app.models.platform_connection import PlatformConnection
+            from app.models.hybrid_connection import HybridConnection
+
+            def _as_dict(value: Any) -> dict[str, Any]:
+                return value if isinstance(value, dict) else {}
+
+            def _as_list(value: Any) -> list[dict[str, Any]]:
+                return value if isinstance(value, list) else []
+
+            def _build_verification_adapter(
+                temp_platform: str, temp_connection: Any
+            ) -> Any:
+                """
+                Build onboarding verification adapter.
+
+                AWS onboarding verification must work before CUR is configured.
+                """
+                if temp_platform != "aws":
+                    return AdapterFactory.get_adapter(temp_connection)
+
+                try:
+                    return AdapterFactory.get_adapter(temp_connection)
+                except ConfigurationError as exc:
+                    if "CUR" not in str(exc):
+                        raise
+                    return MultiTenantAWSAdapter(
+                        map_aws_connection_to_credentials(temp_connection)
+                    )
+
+            temp_tenant_id = UUID("00000000-0000-0000-0000-000000000000")
 
             # Create a mock/temporary connection object for verification
             conn: Any = None
@@ -89,11 +128,14 @@ async def onboard(
                 conn = AWSConnection(
                     role_arn=onboard_req.cloud_config.get("role_arn"),
                     external_id=onboard_req.cloud_config.get("external_id"),
-                    region=onboard_req.cloud_config.get("region", "us-east-1"),
+                    region=onboard_req.cloud_config.get(
+                        "region",
+                        default_aws_region,
+                    ),
                     aws_account_id=onboard_req.cloud_config.get(
                         "aws_account_id", "000000000000"
                     ),
-                    tenant_id=UUID("00000000-0000-0000-0000-000000000000"),  # Temp ID
+                    tenant_id=temp_tenant_id,  # Temp ID
                 )
             elif platform == "azure":
                 conn = AzureConnection(
@@ -101,7 +143,7 @@ async def onboard(
                     client_secret=onboard_req.cloud_config.get("client_secret"),
                     azure_tenant_id=onboard_req.cloud_config.get("azure_tenant_id"),
                     subscription_id=onboard_req.cloud_config.get("subscription_id"),
-                    tenant_id=UUID("00000000-0000-0000-0000-000000000000"),
+                    tenant_id=temp_tenant_id,
                 )
             elif platform == "gcp":
                 conn = GCPConnection(
@@ -109,13 +151,78 @@ async def onboard(
                     service_account_json=onboard_req.cloud_config.get(
                         "service_account_json"
                     ),
-                    tenant_id=UUID("00000000-0000-0000-0000-000000000000"),
+                    tenant_id=temp_tenant_id,
+                )
+            elif platform == "saas":
+                conn = SaaSConnection(
+                    name=str(onboard_req.cloud_config.get("name") or "onboarding-saas"),
+                    vendor=str(onboard_req.cloud_config.get("vendor") or "saas"),
+                    auth_method=str(
+                        onboard_req.cloud_config.get("auth_method") or "manual"
+                    ),
+                    api_key=onboard_req.cloud_config.get("api_key"),
+                    connector_config=_as_dict(
+                        onboard_req.cloud_config.get("connector_config")
+                    ),
+                    spend_feed=_as_list(onboard_req.cloud_config.get("spend_feed")),
+                    tenant_id=temp_tenant_id,
+                )
+            elif platform == "license":
+                conn = LicenseConnection(
+                    name=str(
+                        onboard_req.cloud_config.get("name") or "onboarding-license"
+                    ),
+                    vendor=str(onboard_req.cloud_config.get("vendor") or "license"),
+                    auth_method=str(
+                        onboard_req.cloud_config.get("auth_method") or "manual"
+                    ),
+                    api_key=onboard_req.cloud_config.get("api_key"),
+                    connector_config=_as_dict(
+                        onboard_req.cloud_config.get("connector_config")
+                    ),
+                    license_feed=_as_list(onboard_req.cloud_config.get("license_feed")),
+                    tenant_id=temp_tenant_id,
+                )
+            elif platform == "platform":
+                conn = PlatformConnection(
+                    name=str(
+                        onboard_req.cloud_config.get("name") or "onboarding-platform"
+                    ),
+                    vendor=str(onboard_req.cloud_config.get("vendor") or "platform"),
+                    auth_method=str(
+                        onboard_req.cloud_config.get("auth_method") or "manual"
+                    ),
+                    api_key=onboard_req.cloud_config.get("api_key"),
+                    api_secret=onboard_req.cloud_config.get("api_secret"),
+                    connector_config=_as_dict(
+                        onboard_req.cloud_config.get("connector_config")
+                    ),
+                    spend_feed=_as_list(onboard_req.cloud_config.get("spend_feed")),
+                    tenant_id=temp_tenant_id,
+                )
+            elif platform == "hybrid":
+                conn = HybridConnection(
+                    name=str(
+                        onboard_req.cloud_config.get("name") or "onboarding-hybrid"
+                    ),
+                    vendor=str(onboard_req.cloud_config.get("vendor") or "hybrid"),
+                    auth_method=str(
+                        onboard_req.cloud_config.get("auth_method") or "manual"
+                    ),
+                    api_key=onboard_req.cloud_config.get("api_key"),
+                    api_secret=onboard_req.cloud_config.get("api_secret"),
+                    connector_config=_as_dict(
+                        onboard_req.cloud_config.get("connector_config")
+                    ),
+                    spend_feed=_as_list(onboard_req.cloud_config.get("spend_feed")),
+                    tenant_id=temp_tenant_id,
                 )
             else:
-                raise HTTPException(400, f"Unsupported platform: {platform}")
+                raw_platform = onboard_req.cloud_config.get("platform")
+                raise HTTPException(400, f"Unsupported platform: {raw_platform}")
 
             if conn:
-                adapter = AdapterFactory.get_adapter(conn)
+                adapter = _build_verification_adapter(platform, conn)
                 if not await adapter.verify_connection():
                     raise HTTPException(
                         400,

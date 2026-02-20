@@ -2,7 +2,7 @@
 Usage Metering API - Tier 3: Polish
 
 Displays real-time usage metrics for tenants:
-- AWS API calls consumed
+- Workload analysis jobs consumed
 - LLM tokens used
 - Storage consumption
 - Feature usage
@@ -22,6 +22,7 @@ import structlog
 from app.shared.db.session import get_db
 from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.core.cache import get_cache_service
+from app.shared.core.connection_queries import list_tenant_connections
 from app.models.llm import LLMUsage, LLMBudget
 from app.models.background_job import BackgroundJob, JobType, JobStatus
 
@@ -48,12 +49,13 @@ class LLMUsageMetrics(BaseModel):
     utilization_percent: float
 
 
-class AWSMeteringMetrics(BaseModel):
-    """AWS API usage metrics."""
+class WorkloadMeteringMetrics(BaseModel):
+    """Provider-agnostic workload analysis metering metrics."""
 
-    cost_analysis_calls_today: int
+    finops_analysis_jobs_today: int
     zombie_scans_today: int
-    regions_scanned: int
+    active_connection_count: int
+    active_provider_count: int
     last_scan_at: str | None
 
 
@@ -86,7 +88,7 @@ class UsageResponse(BaseModel):
     period: str
     llm: LLMUsageMetrics
     usage: list[LLMUsageRecord]  # Added for dashboard
-    aws: AWSMeteringMetrics
+    workloads: WorkloadMeteringMetrics
     features: FeatureUsageMetrics
     generated_at: str
 
@@ -101,7 +103,7 @@ async def get_usage_metrics(
 
     Shows:
     - LLM token consumption vs budget
-    - AWS API call counts
+    - Workload analysis + scan job counts
     - Feature adoption
     - Recent LLM usage (last 20 records)
     """
@@ -124,8 +126,8 @@ async def get_usage_metrics(
     # Recent LLM Usage Records
     recent_usage = await _get_recent_llm_activity(db, tenant_id)
 
-    # AWS Metering
-    aws_metrics = await _get_aws_metering(db, tenant_id, today_start)
+    # Workload metering
+    workload_metrics = await _get_workload_metering(db, tenant_id, today_start)
 
     # Feature Usage
     feature_metrics = await _get_feature_usage(db, tenant_id)
@@ -135,7 +137,7 @@ async def get_usage_metrics(
         period="current_month",
         llm=llm_metrics,
         usage=recent_usage,
-        aws=aws_metrics,
+        workloads=workload_metrics,
         features=feature_metrics,
         generated_at=now.isoformat(),
     )
@@ -226,10 +228,10 @@ async def _get_llm_usage(
     )
 
 
-async def _get_aws_metering(
+async def _get_workload_metering(
     db: AsyncSession, tenant_id: UUID, today_start: datetime
-) -> AWSMeteringMetrics:
-    """Get AWS API usage for today."""
+) -> WorkloadMeteringMetrics:
+    """Get provider-agnostic workload job usage for today."""
     result = await db.execute(
         select(
             func.count(BackgroundJob.id)
@@ -251,10 +253,20 @@ async def _get_aws_metering(
     )
     row = result.one()
 
-    return AWSMeteringMetrics(
-        cost_analysis_calls_today=int(row.cost_analysis_calls or 0),
+    connections = await list_tenant_connections(db, tenant_id, active_only=True)
+    active_provider_count = len(
+        {
+            str(getattr(connection, "provider", "") or "").strip().lower()
+            for connection in connections
+            if str(getattr(connection, "provider", "") or "").strip()
+        }
+    )
+
+    return WorkloadMeteringMetrics(
+        finops_analysis_jobs_today=int(row.cost_analysis_calls or 0),
         zombie_scans_today=int(row.zombie_scans or 0),
-        regions_scanned=4,  # Default regions
+        active_connection_count=len(connections),
+        active_provider_count=active_provider_count,
         last_scan_at=row.last_scan.isoformat() if row.last_scan else None,
     )
 

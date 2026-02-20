@@ -1,11 +1,14 @@
-from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
-import aioboto3
-from app.modules.optimization.domain.plugin import ZombiePlugin
-from app.modules.optimization.domain.registry import registry
+from typing import Any, Dict
+
 import structlog
 
+from app.modules.optimization.domain.plugin import ZombiePlugin
+from app.modules.optimization.domain.registry import registry
+from app.modules.reporting.domain.pricing.service import PricingService
+
 logger = structlog.get_logger()
+
 
 @registry.register("aws")
 class IdleOpenSearchPlugin(ZombiePlugin):
@@ -13,125 +16,186 @@ class IdleOpenSearchPlugin(ZombiePlugin):
     def category_key(self) -> str:
         return "idle_opensearch_domains"
 
+    @staticmethod
+    def _as_positive_int(value: Any, *, default: int) -> int:
+        try:
+            parsed = int(value)
+            return parsed if parsed > 0 else default
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _client_id_from_domain(status: dict[str, Any]) -> str | None:
+        domain_id = str(status.get("DomainId") or "")
+        if not domain_id:
+            return None
+        parts = domain_id.split("/", 1)
+        return parts[0] if parts and parts[0] else None
+
+    @staticmethod
+    async def _metric_has_non_zero(
+        *,
+        cloudwatch: Any,
+        dimensions: list[dict[str, str]],
+        metric_name: str,
+        start_time: datetime,
+        end_time: datetime,
+        statistic: str,
+    ) -> bool:
+        metric = await cloudwatch.get_metric_statistics(
+            Namespace="AWS/ES",
+            MetricName=metric_name,
+            Dimensions=dimensions,
+            StartTime=start_time,
+            EndTime=end_time,
+            Period=86400,
+            Statistics=[statistic],
+        )
+        datapoints = metric.get("Datapoints")
+        if not isinstance(datapoints, list):
+            return False
+        for point in datapoints:
+            if not isinstance(point, dict):
+                continue
+            value = point.get(statistic)
+            if isinstance(value, (int, float)) and value > 0:
+                return True
+        return False
+
+    @staticmethod
+    def _estimate_monthly_cost(status: dict[str, Any], region: str) -> float:
+        cluster_config = status.get("ClusterConfig") or {}
+        if not isinstance(cluster_config, dict):
+            cluster_config = {}
+
+        instance_type = str(cluster_config.get("InstanceType") or "default").lower()
+        instance_count = IdleOpenSearchPlugin._as_positive_int(
+            cluster_config.get("InstanceCount"),
+            default=1,
+        )
+
+        monthly_cost = PricingService.estimate_monthly_waste(
+            provider="aws",
+            resource_type="opensearch",
+            resource_size=instance_type,
+            region=region,
+            quantity=float(instance_count),
+        )
+
+        dedicated_master_enabled = bool(cluster_config.get("DedicatedMasterEnabled"))
+        if dedicated_master_enabled:
+            master_type = str(
+                cluster_config.get("DedicatedMasterType") or "default"
+            ).lower()
+            master_count = IdleOpenSearchPlugin._as_positive_int(
+                cluster_config.get("DedicatedMasterCount"),
+                default=3,
+            )
+            monthly_cost += PricingService.estimate_monthly_waste(
+                provider="aws",
+                resource_type="opensearch_master",
+                resource_size=master_type,
+                region=region,
+                quantity=float(master_count),
+            )
+
+        return round(monthly_cost, 2)
+
     async def scan(
         self,
-        session: aioboto3.Session,
+        session: Any,
         region: str,
-        credentials: Dict[str, str] | None = None,
+        credentials: Dict[str, Any] | None = None,
         config: Any = None,
-        inventory: Any = None,  # Added missing param
+        inventory: Any = None,
         **kwargs: Any,
-    ) -> List[Dict[str, Any]]:
-        zombies = []
-        
+    ) -> list[dict[str, Any]]:
+        del inventory, kwargs
+        zombies: list[dict[str, Any]] = []
+
         try:
             async with self._get_client(
                 session, "opensearch", region, credentials, config=config
             ) as client, self._get_client(
                 session, "cloudwatch", region, credentials, config=config
             ) as cloudwatch:
-                
-                # 1. List Domains
                 response = await client.list_domain_names()
-                domain_names = response.get("DomainNames", [])
-                
+                domain_names = response.get("DomainNames")
+                if not isinstance(domain_names, list):
+                    return zombies
+
+                end_time = datetime.now(timezone.utc)
+                start_time = end_time - timedelta(days=7)
+
                 for domain_entry in domain_names:
-                    domain_name = domain_entry["DomainName"]
-                    
-                    # Get details for ARN/ID
+                    if not isinstance(domain_entry, dict):
+                        continue
+                    domain_name = str(domain_entry.get("DomainName") or "").strip()
+                    if not domain_name:
+                        continue
+
                     desc = await client.describe_domain(DomainName=domain_name)
-                    status = desc.get("DomainStatus", {})
-                    
+                    status = desc.get("DomainStatus")
+                    if not isinstance(status, dict):
+                        continue
                     if status.get("Deleted"):
                         continue
-                        
-                    arn = status.get("ARN")
-                    # Check metrics: SearchableDocuments (data exists?) vs SearchRequestRate (usage?)
-                    # If SearchableDocuments > 0 but Requests == 0 -> Zombie/Hoarder
-                    
-                    now = datetime.now(timezone.utc)
-                    start_time = now - timedelta(days=7)
-                    end_time = now
-                    
-                    # Check SearchableDocuments (Average)
-                    docs_metric = await cloudwatch.get_metric_statistics(
-                        Namespace="AWS/ES",
-                        MetricName="SearchableDocuments",
-                        Dimensions=[
-                            {"Name": "DomainName", "Value": domain_name},
-                            {"Name": "ClientId", "Value": status.get("DomainId", "").split("/")[0]} 
-                        ],
-                        StartTime=start_time,
-                        EndTime=end_time,
-                        Period=86400,
-                        Statistics=["Average"]
-                    )
-                    
-                    has_data = False
-                    if docs_metric.get("Datapoints"):
-                        for dp in docs_metric["Datapoints"]:
-                            if dp.get("Average", 0) > 0:
-                                has_data = True
-                                break
-                    
-                    if not has_data:
-                        # If no data, maybe it's just empty? 
-                        # Empty is also a zombie but "Idle" implies allocated resources doing nothing.
-                        # Let's consider valid use case: setup but forgot to load data?
-                        pass
 
-                    # Check SearchRequestRate or similar activity metric
-                    # AWS/ES metric: SearchRequestRate (requests per minute?) - verify exact metric name
-                    # Or 'CPUUtilization' < 1%?
-                    # Let's use SearchRequestRate as proxy for "Search Usage"
-                    
-                    req_metric = await cloudwatch.get_metric_statistics(
-                        Namespace="AWS/ES",
-                        MetricName="SearchRequestRate", # Check valid metric for OpenSearch
-                        Dimensions=[
-                             {"Name": "DomainName", "Value": domain_name},
-                             {"Name": "ClientId", "Value": status.get("DomainId", "").split("/")[0]}
-                        ],
-                        StartTime=start_time,
-                        EndTime=end_time,
-                        Period=86400,
-                        Statistics=["Sum"]
+                    arn = str(status.get("ARN") or "").strip()
+                    if not arn:
+                        continue
+
+                    dimensions = [{"Name": "DomainName", "Value": domain_name}]
+                    client_id = self._client_id_from_domain(status)
+                    if client_id:
+                        dimensions.append({"Name": "ClientId", "Value": client_id})
+
+                    has_data = await self._metric_has_non_zero(
+                        cloudwatch=cloudwatch,
+                        dimensions=dimensions,
+                        metric_name="SearchableDocuments",
+                        start_time=start_time,
+                        end_time=end_time,
+                        statistic="Average",
                     )
-                    
-                    has_requests = False
-                    if req_metric.get("Datapoints"):
-                        for dp in req_metric["Datapoints"]:
-                            if dp.get("Sum", 0) > 0:
-                                has_requests = True
-                                break
-                                
+
+                    # Metrics vary by engine/version; evaluate both canonical names.
+                    has_requests = await self._metric_has_non_zero(
+                        cloudwatch=cloudwatch,
+                        dimensions=dimensions,
+                        metric_name="SearchRate",
+                        start_time=start_time,
+                        end_time=end_time,
+                        statistic="Average",
+                    ) or await self._metric_has_non_zero(
+                        cloudwatch=cloudwatch,
+                        dimensions=dimensions,
+                        metric_name="SearchRequestRate",
+                        start_time=start_time,
+                        end_time=end_time,
+                        statistic="Sum",
+                    )
+
                     if has_data and not has_requests:
-                        # Zombie confirmed: Has data but no searches
-                        
-                        # Cost Estimate
-                        cluster_config = status.get("ClusterConfig", {})
-                        count = cluster_config.get("InstanceCount", 1)
-                        dedicated_master_enabled = cluster_config.get("DedicatedMasterEnabled", False)
-                        
-                        # Rough estimate (t3.small.search ~$0.036/hr * 730 * count)
-                        # TODO: Use pricing service
-                        monthly_cost = 30.0 * count # Placeholder
-                        if dedicated_master_enabled:
-                            monthly_cost += 50.0 
-                            
-                        zombies.append({
-                            "resource_id": arn,
-                            "resource_type": "AWS OpenSearch Domain",
-                            "resource_name": domain_name,
-                            "region": region,
-                            "monthly_cost": monthly_cost,
-                            "recommendation": "Snapshot and delete unused OpenSearch domain",
-                            "action": "snapshot_and_delete_opensearch",
-                            "confidence_score": 0.9,
-                            "explainability_notes": f"Domain '{domain_name}' has documents but 0 search requests in last 7 days."
-                        })
+                        zombies.append(
+                            {
+                                "resource_id": arn,
+                                "resource_type": "AWS OpenSearch Domain",
+                                "resource_name": domain_name,
+                                "region": region,
+                                "monthly_cost": self._estimate_monthly_cost(
+                                    status, region
+                                ),
+                                "recommendation": "Snapshot and delete unused OpenSearch domain",
+                                "action": "snapshot_and_delete_opensearch",
+                                "confidence_score": 0.9,
+                                "explainability_notes": (
+                                    f"Domain '{domain_name}' has indexed data but no search "
+                                    "activity in the last 7 days."
+                                ),
+                            }
+                        )
+        except Exception as exc:
+            logger.error("aws_opensearch_scan_error", error=str(exc))
 
-        except Exception as e:
-            logger.error("aws_opensearch_scan_error", error=str(e))
-            
         return zombies

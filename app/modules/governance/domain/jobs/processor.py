@@ -22,6 +22,7 @@ from uuid import UUID
 import structlog
 import asyncio
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.background_job import BackgroundJob, JobStatus
@@ -174,7 +175,6 @@ class JobProcessor:
             for job in jobs:
                 job.status = JobStatus.RUNNING.value
                 job.started_at = now
-                job.attempts += 1
                 # Optional: Add metadata for debugging
                 if job.result is None:
                     job.result = {}
@@ -309,6 +309,7 @@ async def enqueue_job(
     payload: Optional[Dict[str, Any]] = None,
     scheduled_for: Optional[datetime] = None,
     max_attempts: int = 3,
+    deduplication_key: str | None = None,
 ) -> BackgroundJob:
     """
     Enqueue a new background job.
@@ -325,6 +326,7 @@ async def enqueue_job(
         job_type=job_type.value if hasattr(job_type, "value") else job_type,
         tenant_id=tenant_id,
         payload=payload,
+        deduplication_key=deduplication_key,
         status=JobStatus.PENDING.value,
         scheduled_for=scheduled_for or datetime.now(timezone.utc),
         max_attempts=max_attempts,
@@ -332,14 +334,40 @@ async def enqueue_job(
     )
 
     db.add(job)
-    await db.commit()
-    await db.refresh(job)
+    try:
+        await db.commit()
+        await db.refresh(job)
+        # Expose insertion outcome for callers that need queueing semantics.
+        setattr(job, "_enqueue_created", True)
+    except IntegrityError:
+        await db.rollback()
+        if not deduplication_key:
+            raise
+
+        existing_result = await db.execute(
+            select(BackgroundJob).where(
+                BackgroundJob.deduplication_key == deduplication_key
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+        if existing is None:
+            raise
+        setattr(existing, "_enqueue_created", False)
+        logger.info(
+            "job_enqueued_deduplicated",
+            job_id=str(existing.id),
+            job_type=job_type,
+            tenant_id=str(existing.tenant_id) if existing.tenant_id else None,
+            deduplication_key=deduplication_key,
+        )
+        return existing
 
     logger.info(
         "job_enqueued",
         job_id=str(job.id),
         job_type=job_type,
         tenant_id=str(tenant_id) if tenant_id else None,
+        deduplication_key=deduplication_key,
     )
 
     return job

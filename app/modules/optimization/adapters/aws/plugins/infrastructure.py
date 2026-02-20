@@ -9,7 +9,6 @@ Detects commonly overlooked waste:
 
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
-import aioboto3
 from botocore.exceptions import ClientError
 import structlog
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -30,13 +29,43 @@ class StoppedInstancesWithEbsPlugin(ZombiePlugin):
         return "stopped_instances_with_ebs"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         days_stopped_threshold = 7
@@ -155,13 +184,43 @@ class UnusedLambdaPlugin(ZombiePlugin):
         return "unused_lambda_functions"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         days_threshold = 30  # Functions not invoked in 30 days
@@ -243,13 +302,43 @@ class OrphanVpcEndpointsPlugin(ZombiePlugin):
         return "orphan_vpc_endpoints"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         days = 7

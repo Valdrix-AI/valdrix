@@ -23,7 +23,7 @@ class PricingService:
         provider: str,
         resource_type: str,
         resource_size: str | None = None,
-        region: str = "us-east-1",
+        region: str = "global",
     ) -> float:
         """
         Returns the hourly rate for a resource.
@@ -33,7 +33,15 @@ class PricingService:
 
         rate = 0.0
         if isinstance(type_rates, dict):
-            rate = type_rates.get(resource_size, 0.0)
+            if resource_size is not None:
+                raw_size = str(resource_size).strip()
+                lower_size = raw_size.lower()
+                if lower_size in type_rates:
+                    rate = float(type_rates[lower_size] or 0.0)
+                elif raw_size in type_rates:
+                    rate = float(type_rates[raw_size] or 0.0)
+            if rate == 0.0:
+                rate = float(type_rates.get("default", 0.0) or 0.0)
         elif isinstance(type_rates, (float, int)):
             rate = type_rates
 
@@ -99,7 +107,7 @@ class PricingService:
         provider: str,
         resource_type: str,
         resource_size: str | None = None,
-        region: str = "us-east-1",
+        region: str = "global",
         quantity: float = 1.0,
     ) -> float:
         """Estimates monthly waste based on hourly rates."""

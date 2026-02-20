@@ -5,14 +5,13 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.params import Param
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.aws_connection import AWSConnection
-from app.models.azure_connection import AzureConnection
 from app.models.carbon_settings import CarbonSettings
-from app.models.gcp_connection import GCPConnection
 from app.models.carbon_factors import CarbonFactorSet, CarbonFactorUpdateLog
 from app.modules.reporting.domain.budget_alerts import CarbonBudgetService
 from app.modules.reporting.domain.calculator import CarbonCalculator
@@ -23,15 +22,18 @@ from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.adapters.factory import AdapterFactory
 from app.shared.core.auth import CurrentUser
 from app.shared.core.cache import get_cache_service
+from app.shared.core.connection_state import resolve_connection_region
+from app.shared.core.connection_queries import list_tenant_connections
 from app.shared.core.config import get_settings
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
 from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
+from app.shared.core.provider import SUPPORTED_PROVIDERS
 
 router = APIRouter(tags=["GreenOps & Carbon"])
 logger = structlog.get_logger()
-SUPPORTED_CARBON_PROVIDERS = {"aws", "azure", "gcp"}
+SUPPORTED_CARBON_PROVIDERS = set(SUPPORTED_PROVIDERS)
 CARBON_FOOTPRINT_CACHE_TTL = timedelta(minutes=5)
 CARBON_BUDGET_CACHE_TTL = timedelta(minutes=3)
 CARBON_GRAVITON_CACHE_TTL = timedelta(minutes=10)
@@ -127,37 +129,74 @@ def _normalize_provider(provider: str) -> str:
     return normalized
 
 
+def _resolve_region_hint(provider: str, requested_region: str) -> str:
+    """
+    Resolve region hint for cache keys.
+
+    API default is `global`; if no concrete region is supplied, we preserve
+    provider-aware defaults (`aws -> us-east-1`, others -> global).
+    """
+    region = requested_region.strip().lower()
+    if not region:
+        return "us-east-1" if provider == "aws" else "global"
+    if region == "global":
+        return "global"
+    if provider != "aws" and region == "us-east-1":
+        return "global"
+    return region
+
+
+def _resolve_calc_region(connection: Any, provider: str, requested_region: str) -> str:
+    """Resolve effective carbon region without leaking AWS defaults to other providers."""
+    region = requested_region.strip().lower()
+    if (
+        region
+        and region != "global"
+        and not (provider != "aws" and region == "us-east-1")
+    ):
+        return region
+    return resolve_connection_region(connection)
+
+
+def _coerce_query_str(value: Any, *, default: str) -> str:
+    if isinstance(value, Param):
+        value = value.default
+    normalized = str(value or "").strip()
+    return normalized or default
+
+
+def _coerce_query_int(
+    value: Any,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    if isinstance(value, Param):
+        value = value.default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if parsed < minimum:
+        return minimum
+    if parsed > maximum:
+        return maximum
+    return parsed
+
+
 async def _get_provider_connection(
     db: AsyncSession,
     tenant_id: UUID,
     provider: str,
 ) -> Any | None:
-    if provider == "aws":
-        result = await db.execute(
-            select(AWSConnection).where(AWSConnection.tenant_id == tenant_id).limit(1)
-        )
-        return result.scalar_one_or_none()
-    if provider == "azure":
-        result = await db.execute(
-            select(AzureConnection)
-            .where(
-                AzureConnection.tenant_id == tenant_id,
-                AzureConnection.is_active.is_(True),
-            )
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
-
-    result = await db.execute(
-        (
-            select(GCPConnection)
-            .where(
-                GCPConnection.tenant_id == tenant_id, GCPConnection.is_active.is_(True)
-            )
-            .limit(1)
-        )
+    connections = await list_tenant_connections(
+        db,
+        tenant_id=tenant_id,
+        active_only=True,
+        providers=[provider],
     )
-    return result.scalar_one_or_none()
+    return connections[0] if connections else None
 
 
 async def _fetch_provider_cost_data(
@@ -205,17 +244,20 @@ async def get_carbon_footprint(
     end_date: date,
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
     db: AsyncSession = Depends(get_db),
-    region: str = "us-east-1",
-    provider: str = "aws",
+    region: str = "global",
+    provider: str | None = None,
 ) -> Dict[str, Any]:
     """Calculates the estimated CO2 emissions. Requires Growth tier or higher."""
     if (end_date - start_date).days > 366:
         raise HTTPException(status_code=400, detail="Date range cannot exceed 1 year")
+    if not provider:
+        raise HTTPException(status_code=400, detail="provider is required")
 
     tenant_id = _require_tenant_id(user)
     normalized_provider = _normalize_provider(provider)
+    region_hint = _resolve_region_hint(normalized_provider, region)
     cache_key = (
-        f"api:carbon:footprint:{tenant_id}:{normalized_provider}:{region}:"
+        f"api:carbon:footprint:{tenant_id}:{normalized_provider}:{region_hint}:"
         f"{start_date.isoformat()}:{end_date.isoformat()}"
     )
     cached = await _read_cached_payload(cache_key)
@@ -232,10 +274,11 @@ async def get_carbon_footprint(
     cost_data = await _fetch_provider_cost_data(
         connection, normalized_provider, start_date, end_date
     )
+    calc_region = _resolve_calc_region(connection, normalized_provider, region)
     factor_payload = await CarbonFactorService(db).get_active_payload()
     calculator = CarbonCalculator(factor_payload)
     payload = calculator.calculate_from_costs(
-        cost_data, region=region, provider=normalized_provider
+        cost_data, region=calc_region, provider=normalized_provider
     )
     await _store_cached_payload(cache_key, payload, ttl=CARBON_FOOTPRINT_CACHE_TTL)
     return payload
@@ -245,14 +288,17 @@ async def get_carbon_footprint(
 async def get_carbon_budget(
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
     db: AsyncSession = Depends(get_db),
-    region: str = "us-east-1",
-    provider: str = "aws",
+    region: str = "global",
+    provider: str | None = None,
 ) -> Dict[str, Any]:
     """Get carbon budget status for the current month."""
+    if not provider:
+        raise HTTPException(status_code=400, detail="provider is required")
     tenant_id = _require_tenant_id(user)
     normalized_provider = _normalize_provider(provider)
     today = date.today()
-    cache_key = f"api:carbon:budget:{tenant_id}:{normalized_provider}:{region}:{today.isoformat()}"
+    region_hint = _resolve_region_hint(normalized_provider, region)
+    cache_key = f"api:carbon:budget:{tenant_id}:{normalized_provider}:{region_hint}:{today.isoformat()}"
     cached = await _read_cached_payload(cache_key)
     if cached is not None:
         return cached
@@ -274,11 +320,13 @@ async def get_carbon_budget(
     )
     carbon_settings = settings_result.scalar_one_or_none()
 
-    calc_region = region
+    calc_region = _resolve_calc_region(connection, normalized_provider, region)
+    requested_region = region.strip().lower()
     if (
         carbon_settings
-        and region == "us-east-1"
-        and carbon_settings.default_region != "us-east-1"
+        and normalized_provider == "aws"
+        and requested_region in {"", "global"}
+        and carbon_settings.default_region
     ):
         calc_region = carbon_settings.default_region
 
@@ -315,8 +363,9 @@ async def analyze_graviton_opportunities(
     region: str = Query(default="us-east-1"),
 ) -> Dict[str, Any]:
     """Analyze EC2 instances for Graviton migration opportunities (AWS only)."""
+    region_hint = _coerce_query_str(region, default="us-east-1")
     tenant_id = _require_tenant_id(user)
-    cache_key = f"api:carbon:graviton:{tenant_id}:{region}"
+    cache_key = f"api:carbon:graviton:{tenant_id}:{region_hint}"
     cached = await _read_cached_payload(cache_key)
     if cached is not None:
         return cached
@@ -334,10 +383,8 @@ async def analyze_graviton_opportunities(
     from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
     aws_creds = map_aws_connection_to_credentials(connection)
     adapter = MultiTenantAWSAdapter(aws_creds)
-    credentials = await adapter.get_credentials()
-
-    analyzer = GravitonAnalyzer(credentials=credentials, region=region)
-    payload = await analyzer.analyze_instances()
+    analyzer = GravitonAnalyzer(adapter=adapter, region=region_hint)
+    payload = await analyzer.analyze()
     await _store_cached_payload(cache_key, payload, ttl=CARBON_GRAVITON_CACHE_TTL)
     return payload
 
@@ -347,14 +394,16 @@ async def analyze_graviton_opportunities(
 async def get_carbon_intensity_forecast(
     request: Request,
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
-    region: str = Query(default="us-east-1"),
+    region: str = Query(default="global"),
     hours: int = Query(default=24, ge=1, le=72),
 ) -> Dict[str, Any]:
     """Get current and forecasted carbon intensity for a region."""
     # Consumed by slowapi decorator for keying; keep explicit for correctness.
     del request
+    region_hint = _coerce_query_str(region, default="global").lower()
+    forecast_hours = _coerce_query_int(hours, default=24, minimum=1, maximum=72)
 
-    cache_key = f"api:carbon:intensity:{region}:{hours}"
+    cache_key = f"api:carbon:intensity:{region_hint}:{forecast_hours}"
     cached = await _read_cached_payload(cache_key)
     if cached is not None:
         return cached
@@ -366,11 +415,11 @@ async def get_carbon_intensity_forecast(
     )
 
     forecast, current_intensity = await asyncio.gather(
-        scheduler.get_intensity_forecast(region, hours),
-        scheduler.get_region_intensity(region),
+        scheduler.get_intensity_forecast(region_hint, forecast_hours),
+        scheduler.get_region_intensity(region_hint),
     )
     payload = {
-        "region": region,
+        "region": region_hint,
         "current_intensity": current_intensity,
         "forecast": forecast,
         "source": "api" if not scheduler._use_static_data else "simulation",
@@ -382,11 +431,18 @@ async def get_carbon_intensity_forecast(
 @router.get("/schedule")
 async def get_green_schedule(
     user: Annotated[CurrentUser, Depends(requires_feature(FeatureFlag.GREENOPS))],
-    region: str = Query(default="us-east-1"),
+    region: str = Query(default="global"),
     duration_hours: int = Query(default=1, ge=1, le=24),
 ) -> Dict[str, Any]:
     """Find the optimal execution time for a workload."""
-    cache_key = f"api:carbon:schedule:{region}:{duration_hours}"
+    region_hint = _coerce_query_str(region, default="global").lower()
+    schedule_duration_hours = _coerce_query_int(
+        duration_hours,
+        default=1,
+        minimum=1,
+        maximum=24,
+    )
+    cache_key = f"api:carbon:schedule:{region_hint}:{schedule_duration_hours}"
     cached = await _read_cached_payload(cache_key)
     if cached is not None:
         return cached
@@ -397,9 +453,9 @@ async def get_green_schedule(
         electricitymaps_key=settings.ELECTRICITY_MAPS_API_KEY,
     )
 
-    optimal_time = await scheduler.get_optimal_execution_time(region)
+    optimal_time = await scheduler.get_optimal_execution_time(region_hint)
     payload = {
-        "region": region,
+        "region": region_hint,
         "optimal_start_time": optimal_time.isoformat() if optimal_time else None,
         "recommendation": (
             "Execute now"

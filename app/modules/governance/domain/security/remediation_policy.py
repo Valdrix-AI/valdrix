@@ -108,11 +108,16 @@ class RemediationPolicyEngine:
     )
 
     _GPU_OVERRIDE_MARKERS = ("gpu-approved", "gpu_override", "approved_gpu")
+    _SYSTEM_POLICY_CONTEXT_KEY = "_system_policy_context"
 
     def evaluate(
-        self, request: RemediationRequest, config: PolicyConfig | None = None
+        self,
+        request: RemediationRequest,
+        config: PolicyConfig | None = None,
+        is_production: bool = False,
     ) -> PolicyEvaluation:
         active_config = config or PolicyConfig()
+        self._is_production_override = is_production
         if not active_config.enabled:
             return PolicyEvaluation(decision=PolicyDecision.ALLOW)
 
@@ -213,6 +218,14 @@ class RemediationPolicyEngine:
         )
 
     def _looks_like_production(self, request: RemediationRequest) -> bool:
+        # SEC-HAR-12: Priority check on explicit flag
+        if getattr(self, "_is_production_override", False):
+            return True
+
+        explicit_signal = self._production_signal_from_context(request)
+        if explicit_signal is not None:
+            return explicit_signal
+
         text = " ".join(
             str(v or "")
             for v in (
@@ -222,6 +235,55 @@ class RemediationPolicyEngine:
             )
         ).lower()
         return any(marker in text for marker in self._PRODUCTION_MARKERS)
+
+    def _production_signal_from_context(
+        self, request: RemediationRequest
+    ) -> bool | None:
+        context = self._trusted_policy_context(request)
+        if not context:
+            return None
+
+        is_production_raw = context.get("is_production")
+        is_production = self._coerce_bool(is_production_raw)
+        if is_production is not None:
+            return is_production
+
+        environment_raw = context.get("environment")
+        if isinstance(environment_raw, str):
+            normalized_env = environment_raw.strip().lower()
+            if normalized_env in {"prod", "production", "live"}:
+                return True
+            if normalized_env in {"dev", "development", "staging", "stage", "test"}:
+                return False
+
+        return None
+
+    def _trusted_policy_context(self, request: RemediationRequest) -> dict[str, Any]:
+        action_parameters = getattr(request, "action_parameters", None)
+        if not isinstance(action_parameters, dict):
+            return {}
+
+        raw_context = action_parameters.get(self._SYSTEM_POLICY_CONTEXT_KEY)
+        if not isinstance(raw_context, dict):
+            return {}
+
+        return raw_context
+
+    def _coerce_bool(self, value: Any) -> bool | None:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            if value == 1:
+                return True
+            if value == 0:
+                return False
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "y", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "n", "off"}:
+                return False
+        return None
 
     def _is_gpu_sensitive(self, request: RemediationRequest) -> bool:
         action = getattr(request, "action", None)
@@ -250,7 +312,7 @@ class RemediationPolicyEngine:
         action_value = (
             action.value if isinstance(action, RemediationAction) else str(action)
         )
-        return {
+        evidence: dict[str, Any] = {
             "request_id": str(getattr(request, "id", "")),
             "tenant_id": str(getattr(request, "tenant_id", "")),
             "resource_id": str(getattr(request, "resource_id", "")),
@@ -259,3 +321,12 @@ class RemediationPolicyEngine:
             "requested_by_user_id": str(getattr(request, "requested_by_user_id", "")),
             "reviewed_by_user_id": str(getattr(request, "reviewed_by_user_id", "")),
         }
+        context = self._trusted_policy_context(request)
+        if context:
+            evidence["policy_context"] = {
+                "source": context.get("source"),
+                "is_production": context.get("is_production"),
+                "criticality": context.get("criticality"),
+                "environment": context.get("environment"),
+            }
+        return evidence

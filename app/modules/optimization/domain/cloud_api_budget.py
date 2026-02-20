@@ -4,6 +4,7 @@ import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from typing import Iterator
 from datetime import datetime, timezone
 
 import structlog
@@ -50,7 +51,7 @@ def cloud_api_scan_context(
     connection_id: str,
     region: str,
     plugin: str,
-):
+) -> Iterator[None]:
     token = _SCAN_CONTEXT.set(
         CloudAPIScanContext(
             tenant_id=tenant_id,

@@ -3,6 +3,11 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 from uuid import UUID
 from enum import Enum
+import structlog
+from app.shared.core.retry import tenacity_retry
+from app.shared.core.pricing import FeatureFlag, is_feature_enabled
+
+logger = structlog.get_logger()
 
 
 class ExecutionStatus(str, Enum):
@@ -26,7 +31,7 @@ class RemediationContext:
     tenant_id: UUID
     region: str
     tier: str = "free"  # PricingTier.value
-    credentials: Optional[Dict[str, str]] = None
+    credentials: Optional[Dict[str, Any]] = None
     db_session: Any = None  # AsyncSession
     settings: Optional[Any] = None
     create_backup: bool = False
@@ -34,11 +39,7 @@ class RemediationContext:
     parameters: Optional[Dict[str, Any]] = None
 
 
-import structlog
-from app.shared.core.retry import tenacity_retry
-from app.shared.core.pricing import FeatureFlag, is_feature_enabled
 
-logger = structlog.get_logger()
 
 class BaseRemediationAction(ABC):
     """
@@ -109,7 +110,7 @@ class BaseRemediationAction(ABC):
 
             # 3. Perform with retry
             @tenacity_retry("external_api")
-            async def wrapped_action():
+            async def wrapped_action() -> ExecutionResult:
                 return await self._perform_action(resource_id, context)
             
             result = await wrapped_action()

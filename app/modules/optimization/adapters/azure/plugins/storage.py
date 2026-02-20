@@ -7,6 +7,7 @@ Detects unattached disks and old snapshots using Resource Graph (free).
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from azure.mgmt.compute.aio import ComputeManagementClient
+from azure.identity.aio import ClientSecretCredential, DefaultAzureCredential
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -24,13 +25,43 @@ class UnattachedDisksPlugin(ZombiePlugin):
         return "unattached_azure_disks"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, str] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for unattached disks using Compute API (free)."""
         subscription_id = str(kwargs.get("subscription_id") or session or "")
@@ -50,7 +81,17 @@ class UnattachedDisksPlugin(ZombiePlugin):
             return analyzer.find_unattached_disks()
 
         try:
-            client = ComputeManagementClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            client = ComputeManagementClient(az_creds, subscription_id)
 
             async for disk in client.disks.list():
                 # Unattached disk has disk_state = "Unattached"
@@ -93,13 +134,43 @@ class OldSnapshotsPlugin(ZombiePlugin):
         return "old_azure_snapshots"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, str] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for snapshots older than retention period."""
         subscription_id = str(kwargs.get("subscription_id") or session or "")
@@ -114,7 +185,17 @@ class OldSnapshotsPlugin(ZombiePlugin):
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=age_days)
 
         try:
-            client = ComputeManagementClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            client = ComputeManagementClient(az_creds, subscription_id)
 
             async for snapshot in client.snapshots.list():
                 creation_time = snapshot.time_created

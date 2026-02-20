@@ -32,6 +32,8 @@ class AzureResizeVmAction(BaseAzureAction):
         return True
 
     async def _perform_action(self, resource_id: str, context: RemediationContext) -> ExecutionResult:
+        if not context.parameters:
+            raise ValueError("context.parameters missing")
         target_size = context.parameters["target_size"]
         parts = resource_id.split("/")
         rg_name = parts[parts.index("resourceGroups") + 1]
@@ -43,6 +45,9 @@ class AzureResizeVmAction(BaseAzureAction):
         vm = await client.virtual_machines.get(rg_name, vm_name)
         
         # 2. Update hardware profile
+        if not vm.hardware_profile:
+            from azure.mgmt.compute.models import HardwareProfile
+            vm.hardware_profile = HardwareProfile()
         vm.hardware_profile.vm_size = target_size
         
         # 3. Apply update (Azure will restart VM if needed)

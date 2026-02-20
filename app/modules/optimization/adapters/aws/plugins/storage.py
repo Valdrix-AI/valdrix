@@ -1,6 +1,5 @@
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
-import aioboto3
 from botocore.exceptions import ClientError
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
@@ -16,13 +15,43 @@ class UnattachedVolumesPlugin(ZombiePlugin):
         return "unattached_volumes"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         try:
@@ -150,13 +179,43 @@ class OldSnapshotsPlugin(ZombiePlugin):
         return "old_snapshots"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         days_old = 90
@@ -214,13 +273,43 @@ class IdleS3BucketsPlugin(ZombiePlugin):
         return "idle_s3_buckets"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         try:
@@ -269,13 +358,43 @@ class EmptyEfsPlugin(ZombiePlugin):
         return "empty_efs_volumes"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         days = 7
@@ -334,7 +453,6 @@ class EmptyEfsPlugin(ZombiePlugin):
                                     monthly_cost = size_gb * 0.30
                                     
                                     # If very small (<1MB), likely empty default
-                                    is_empty = size_gb < 0.001 
 
                                     zombies.append(
                                         {

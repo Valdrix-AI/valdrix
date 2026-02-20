@@ -26,5 +26,6 @@ class GCPTauAnalyzer(ArmMigrationAnalyzer):
 
     def get_instance_type_from_resource(self, resource: Dict[str, Any]) -> Optional[str]:
         # Extracted by GCPAdapter.discover_resources in metadata['machine_type']
-        metadata = resource.get("metadata", {})
-        return metadata.get("machine_type")
+        metadata: Dict[str, Any] = resource.get("metadata", {})
+        machine_type = metadata.get("machine_type")
+        return str(machine_type) if machine_type else None

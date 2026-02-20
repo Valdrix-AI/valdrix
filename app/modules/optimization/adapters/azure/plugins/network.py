@@ -6,6 +6,7 @@ Detects orphan public IPs, NICs, and NSGs using Azure Resource Graph (free).
 
 from typing import List, Dict, Any
 from azure.mgmt.network.aio import NetworkManagementClient
+from azure.identity.aio import ClientSecretCredential, DefaultAzureCredential
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -23,13 +24,43 @@ class OrphanPublicIpsPlugin(ZombiePlugin):
         return "orphan_azure_ips"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, str] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for orphan public IPs using Network API (free)."""
         subscription_id = str(kwargs.get("subscription_id") or session or "")
@@ -49,7 +80,17 @@ class OrphanPublicIpsPlugin(ZombiePlugin):
             return analyzer.find_orphan_public_ips()
 
         try:
-            client = NetworkManagementClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            client = NetworkManagementClient(az_creds, subscription_id)
 
             async for ip in client.public_ip_addresses.list_all():
                 # Public IP is orphan if ip_configuration is None
@@ -90,13 +131,43 @@ class OrphanNicsPlugin(ZombiePlugin):
         return "orphan_azure_nics"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, str] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for orphan NICs."""
         subscription_id = str(kwargs.get("subscription_id") or session or "")
@@ -109,7 +180,17 @@ class OrphanNicsPlugin(ZombiePlugin):
         zombies = []
 
         try:
-            client = NetworkManagementClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            client = NetworkManagementClient(az_creds, subscription_id)
 
             async for nic in client.network_interfaces.list_all():
                 # NIC is orphan if virtual_machine is None
@@ -142,13 +223,43 @@ class OrphanNsgsPlugin(ZombiePlugin):
         return "orphan_azure_nsgs"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, str] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for orphan NSGs."""
         subscription_id = str(kwargs.get("subscription_id") or session or "")
@@ -161,7 +272,17 @@ class OrphanNsgsPlugin(ZombiePlugin):
         zombies = []
 
         try:
-            client = NetworkManagementClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            client = NetworkManagementClient(az_creds, subscription_id)
 
             async for nsg in client.network_security_groups.list_all():
                 # NSG is orphan if not associated with any NIC or subnet
