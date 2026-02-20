@@ -36,7 +36,7 @@ async def test_gcp_container_plugins_billing_records():
             {"resource_id": "gke-1"}
         ]
         zombies = await EmptyGkeClusterPlugin().scan(
-            project_id="proj-1", billing_records=[{"x": 1}]
+            "proj-1", "us-central1", billing_records=[{"x": 1}]
         )
         assert zombies[0]["resource_id"] == "gke-1"
 
@@ -44,7 +44,7 @@ async def test_gcp_container_plugins_billing_records():
             {"resource_id": "run-1"}
         ]
         zombies = await IdleCloudRunPlugin().scan(
-            project_id="proj-1", billing_records=[{"x": 1}]
+            "proj-1", "us-central1", billing_records=[{"x": 1}]
         )
         assert zombies[0]["resource_id"] == "run-1"
 
@@ -58,7 +58,7 @@ async def test_gcp_cloud_sql_billing_records():
         mock_analyzer.return_value.find_idle_cloud_sql.return_value = [
             {"resource_id": "sql-1"}
         ]
-        zombies = await plugin.scan(project_id="proj-1", billing_records=[{"x": 1}])
+        zombies = await plugin.scan("proj-1", "us-central1", billing_records=[{"x": 1}])
         assert zombies[0]["resource_id"] == "sql-1"
 
 
@@ -95,7 +95,7 @@ async def test_gcp_gke_fallback(monkeypatch):
     )
     setattr(google_mod, "cloud", cloud_mod)
 
-    zombies = await plugin.scan(project_id="proj-1", credentials=MagicMock())
+    zombies = await plugin.scan("proj-1", "us-central1", credentials=MagicMock())
     assert len(zombies) == 1
     assert zombies[0]["resource_name"] == "empty"
 
@@ -128,7 +128,7 @@ async def test_gcp_cloud_sql_fallback(monkeypatch):
     )
     setattr(google_mod, "cloud", cloud_mod)
 
-    zombies = await plugin.scan(project_id="proj-1", credentials=MagicMock())
+    zombies = await plugin.scan("proj-1", "us-central1", credentials=MagicMock())
     assert len(zombies) == 1
     assert zombies[0]["resource_id"] == "projects/proj-1/instances/sql-1"
 
@@ -156,7 +156,7 @@ async def test_gcp_orphan_ips_fallback():
             return_value=MagicMock(),
         ),
     ):
-        zombies = await plugin.scan(project_id="proj-1", credentials=MagicMock())
+        zombies = await plugin.scan("proj-1", "us-central1", credentials=MagicMock())
         assert len(zombies) == 1
         assert zombies[0]["resource_name"] == "ip-1"
 
@@ -203,13 +203,13 @@ async def test_gcp_storage_fallbacks():
         ),
     ):
         zombies = await UnattachedDisksPlugin().scan(
-            project_id="proj-1", credentials=MagicMock()
+            "proj-1", "us-central1", credentials=MagicMock()
         )
         assert len(zombies) == 1
         assert zombies[0]["resource_name"] == "disk-1"
 
         zombies = await OldSnapshotsPlugin().scan(
-            project_id="proj-1", credentials=MagicMock()
+            "proj-1", "us-central1", credentials=MagicMock()
         )
         assert len(zombies) == 1
         assert zombies[0]["resource_name"] == "snap-1"
@@ -237,7 +237,7 @@ async def test_gcp_fallbacks_handle_errors(monkeypatch):
         "app.modules.optimization.adapters.gcp.plugins.containers.logger"
     ) as mock_logger:
         zombies = await EmptyGkeClusterPlugin().scan(
-            project_id="proj-1", credentials=MagicMock()
+            "proj-1", "us-central1", credentials=MagicMock()
         )
         assert zombies == []
         mock_logger.warning.assert_called_once()
@@ -256,7 +256,7 @@ async def test_gcp_fallbacks_handle_errors(monkeypatch):
         "app.modules.optimization.adapters.gcp.plugins.database.logger"
     ) as mock_logger:
         zombies = await IdleCloudSqlPlugin().scan(
-            project_id="proj-1", credentials=MagicMock()
+            "proj-1", "us-central1", credentials=MagicMock()
         )
         assert zombies == []
         mock_logger.warning.assert_called_once()
@@ -276,7 +276,7 @@ async def test_gcp_fallbacks_handle_errors(monkeypatch):
         ) as mock_logger,
     ):
         zombies = await OrphanExternalIpsPlugin().scan(
-            project_id="proj-1", credentials=MagicMock()
+            "proj-1", "us-central1", credentials=MagicMock()
         )
         assert zombies == []
         mock_logger.warning.assert_called_once()
@@ -305,13 +305,13 @@ async def test_gcp_fallbacks_handle_errors(monkeypatch):
     ):
         assert (
             await UnattachedDisksPlugin().scan(
-                project_id="proj-1", credentials=MagicMock()
+                "proj-1", "us-central1", credentials=MagicMock()
             )
             == []
         )
         assert (
             await OldSnapshotsPlugin().scan(
-                project_id="proj-1", credentials=MagicMock()
+                "proj-1", "us-central1", credentials=MagicMock()
             )
             == []
         )

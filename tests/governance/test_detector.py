@@ -99,6 +99,7 @@ async def test_create_remediation_request(
         resource_type="ec2_volume",
         action=RemediationAction.DELETE_VOLUME,
         estimated_savings=20.0,
+        provider="aws",
     )
 
     assert req.status == RemediationStatus.PENDING
@@ -129,6 +130,9 @@ async def test_execute_request_success(
         id=uuid4(),
         tenant_id=uuid4(),
         resource_id="vol-123",
+        resource_type="ebs_volume",
+        provider="aws",
+        region="us-east-1",
         action=RemediationAction.DELETE_VOLUME,
         status=RemediationStatus.APPROVED,
         create_backup=False,

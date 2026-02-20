@@ -117,12 +117,7 @@
 		if (selectedProvider === provider) return;
 
 		// Preserve date range if exists
-		let query = '';
-		if (startDate && endDate) {
-			query = `?start_date=${startDate}&end_date=${endDate}`;
-		} else {
-			query = '?';
-		}
+		let query = startDate && endDate ? `?start_date=${startDate}&end_date=${endDate}` : '?';
 
 		if (selectedProvider) {
 			query += query === '?' ? `provider=${selectedProvider}` : `&provider=${selectedProvider}`;

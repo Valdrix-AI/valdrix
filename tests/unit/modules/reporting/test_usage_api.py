@@ -25,7 +25,7 @@ async def test_get_usage_metrics_structure():
     # Import models locally to avoid circular imports if any, or just for clarity
     from app.modules.reporting.api.v1.usage import (
         LLMUsageMetrics,
-        AWSMeteringMetrics,
+        WorkloadMeteringMetrics,
         FeatureUsageMetrics,
     )
 
@@ -40,10 +40,11 @@ async def test_get_usage_metrics_structure():
         utilization_percent=10.0,
     )
 
-    aws_metrics = AWSMeteringMetrics(
-        cost_analysis_calls_today=1,
+    workload_metrics = WorkloadMeteringMetrics(
+        finops_analysis_jobs_today=1,
         zombie_scans_today=0,
-        regions_scanned=1,
+        active_connection_count=1,
+        active_provider_count=1,
         last_scan_at=None,
     )
 
@@ -78,12 +79,12 @@ async def test_get_usage_metrics_structure():
                 )
             ]
 
-            # Mock _get_aws_metering
+            # Mock _get_workload_metering
             with patch(
-                "app.modules.reporting.api.v1.usage._get_aws_metering",
+                "app.modules.reporting.api.v1.usage._get_workload_metering",
                 new_callable=AsyncMock,
-            ) as mock_aws:
-                mock_aws.return_value = aws_metrics
+            ) as mock_workloads:
+                mock_workloads.return_value = workload_metrics
 
                 # Mock _get_feature_usage
                 with patch(
@@ -132,10 +133,11 @@ async def test_get_usage_metrics_cache_hit_short_circuits_queries():
                 "request_type": "chat",
             }
         ],
-        "aws": {
-            "cost_analysis_calls_today": 0,
+        "workloads": {
+            "finops_analysis_jobs_today": 0,
             "zombie_scans_today": 0,
-            "regions_scanned": 4,
+            "active_connection_count": 4,
+            "active_provider_count": 3,
             "last_scan_at": None,
         },
         "features": {
@@ -170,9 +172,9 @@ async def test_get_usage_metrics_cache_hit_short_circuits_queries():
             new=AsyncMock(),
         ) as mock_recent,
         patch(
-            "app.modules.reporting.api.v1.usage._get_aws_metering",
+            "app.modules.reporting.api.v1.usage._get_workload_metering",
             new=AsyncMock(),
-        ) as mock_aws,
+        ) as mock_workloads,
         patch(
             "app.modules.reporting.api.v1.usage._get_feature_usage",
             new=AsyncMock(),
@@ -185,5 +187,5 @@ async def test_get_usage_metrics_cache_hit_short_circuits_queries():
     assert len(response.usage) == 1
     mock_llm.assert_not_awaited()
     mock_recent.assert_not_awaited()
-    mock_aws.assert_not_awaited()
+    mock_workloads.assert_not_awaited()
     mock_features.assert_not_awaited()

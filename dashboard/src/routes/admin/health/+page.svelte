@@ -35,10 +35,46 @@
 			estimated_cost_24h: number;
 			budget_utilization: number;
 		};
-		aws_connections: {
+		cloud_connections: {
 			total_connections: number;
-			verified_connections: number;
-			failed_connections: number;
+			active_connections: number;
+			inactive_connections: number;
+			errored_connections: number;
+			providers: Record<
+				string,
+				{
+					total_connections: number;
+					active_connections: number;
+					inactive_connections: number;
+					errored_connections: number;
+				}
+			>;
+		};
+		cloud_plus_connections: {
+			total_connections: number;
+			active_connections: number;
+			inactive_connections: number;
+			errored_connections: number;
+			providers: Record<
+				string,
+				{
+					total_connections: number;
+					active_connections: number;
+					inactive_connections: number;
+					errored_connections: number;
+				}
+			>;
+		};
+		license_governance: {
+			window_hours: number;
+			active_license_connections: number;
+			requests_created_24h: number;
+			requests_completed_24h: number;
+			requests_failed_24h: number;
+			requests_in_flight: number;
+			completion_rate_percent: number;
+			failure_rate_percent: number;
+			avg_time_to_complete_hours: number | null;
 		};
 	};
 
@@ -294,7 +330,7 @@
 				{formatDate(dashboard.system.last_check)}
 			</div>
 
-			<div class="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+			<div class="grid gap-5 md:grid-cols-2 lg:grid-cols-5">
 				<div class="card card-stat">
 					<div class="flex items-center justify-between mb-2">
 						<p class="text-xs text-ink-400 uppercase tracking-wide">System Uptime</p>
@@ -326,15 +362,33 @@
 				</div>
 				<div class="card card-stat">
 					<div class="flex items-center justify-between mb-2">
-						<p class="text-xs text-ink-400 uppercase tracking-wide">AWS Connections</p>
+						<p class="text-xs text-ink-400 uppercase tracking-wide">Cloud Connections</p>
 						<Cloud class="h-4 w-4 text-ink-400" />
 					</div>
 					<p class="text-3xl font-bold text-success-400">
-						{dashboard.aws_connections.verified_connections}/{dashboard.aws_connections
+						{dashboard.cloud_connections.active_connections}/{dashboard.cloud_connections
 							.total_connections}
 					</p>
 					<p class="text-xs text-ink-500 mt-1">
-						{dashboard.aws_connections.failed_connections} failed
+						AWS {dashboard.cloud_connections.providers?.aws?.active_connections ?? 0}/
+						{dashboard.cloud_connections.providers?.aws?.total_connections ?? 0} | Azure
+						{dashboard.cloud_connections.providers?.azure?.active_connections ?? 0}/
+						{dashboard.cloud_connections.providers?.azure?.total_connections ?? 0} | GCP
+						{dashboard.cloud_connections.providers?.gcp?.active_connections ?? 0}/
+						{dashboard.cloud_connections.providers?.gcp?.total_connections ?? 0}
+					</p>
+				</div>
+				<div class="card card-stat">
+					<div class="flex items-center justify-between mb-2">
+						<p class="text-xs text-ink-400 uppercase tracking-wide">Cloud+ Connections</p>
+						<Cloud class="h-4 w-4 text-ink-400" />
+					</div>
+					<p class="text-3xl font-bold text-accent-400">
+						{dashboard.cloud_plus_connections.active_connections}/{dashboard.cloud_plus_connections
+							.total_connections}
+					</p>
+					<p class="text-xs text-ink-500 mt-1">
+						{dashboard.cloud_plus_connections.errored_connections} errored
 					</p>
 				</div>
 			</div>
@@ -389,6 +443,56 @@
 							<span class="text-ink-400">P99</span>
 							<span>{formatMs(dashboard.job_queue.p99_processing_time_ms)}</span>
 						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="card space-y-4">
+				<h2 class="text-lg font-semibold">License Governance (24h)</h2>
+				<div class="grid grid-cols-2 gap-3 text-sm">
+					<div class="frosted-glass rounded-lg p-3">
+						<p class="text-ink-400 text-xs uppercase">Active Connections</p>
+						<p class="text-xl font-bold">
+							{dashboard.license_governance.active_license_connections}
+						</p>
+					</div>
+					<div class="frosted-glass rounded-lg p-3">
+						<p class="text-ink-400 text-xs uppercase">Requests Created</p>
+						<p class="text-xl font-bold">{dashboard.license_governance.requests_created_24h}</p>
+					</div>
+					<div class="frosted-glass rounded-lg p-3">
+						<p class="text-ink-400 text-xs uppercase">Completed</p>
+						<p class="text-xl font-bold text-success-400">
+							{dashboard.license_governance.requests_completed_24h}
+						</p>
+					</div>
+					<div class="frosted-glass rounded-lg p-3">
+						<p class="text-ink-400 text-xs uppercase">Failed</p>
+						<p class="text-xl font-bold text-danger-400">
+							{dashboard.license_governance.requests_failed_24h}
+						</p>
+					</div>
+				</div>
+				<div class="space-y-2 text-sm">
+					<div class="flex items-center justify-between">
+						<span class="text-ink-400">Completion rate</span>
+						<span>{dashboard.license_governance.completion_rate_percent.toFixed(2)}%</span>
+					</div>
+					<div class="flex items-center justify-between">
+						<span class="text-ink-400">Failure rate</span>
+						<span>{dashboard.license_governance.failure_rate_percent.toFixed(2)}%</span>
+					</div>
+					<div class="flex items-center justify-between">
+						<span class="text-ink-400">In-flight requests</span>
+						<span>{dashboard.license_governance.requests_in_flight}</span>
+					</div>
+					<div class="flex items-center justify-between">
+						<span class="text-ink-400">Avg completion time</span>
+						<span>
+							{dashboard.license_governance.avg_time_to_complete_hours === null
+								? 'n/a'
+								: `${dashboard.license_governance.avg_time_to_complete_hours.toFixed(2)}h`}
+						</span>
 					</div>
 				</div>
 			</div>

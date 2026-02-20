@@ -152,17 +152,12 @@ class TestWebhookStorage:
         self, mock_db, webhook_service, sample_paystack_payload
     ):
         """Test storing a new webhook."""
-        # Mock duplicate check
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-
-        # Mock enqueue_job
         with patch(
             "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
         ) as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
             mock_job.id = uuid.uuid4()
+            mock_job._enqueue_created = True
             mock_enqueue.return_value = mock_job
 
             job = await webhook_service.store_webhook(
@@ -180,19 +175,22 @@ class TestWebhookStorage:
     async def test_store_webhook_duplicate_returns_none(
         self, mock_db, webhook_service, sample_paystack_payload
     ):
-        """Test storing duplicate webhook returns None."""
-        # First mock for duplicate check - returns duplicate
-        mock_result = MagicMock()
-        mock_existing_job = MagicMock(spec=BackgroundJob)
-        mock_result.scalar_one_or_none.return_value = mock_existing_job
-        mock_db.execute.return_value = mock_result
+        """Test storing duplicate webhook returns None (already completed)."""
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
+        ) as mock_enqueue:
+            mock_existing = MagicMock(spec=BackgroundJob)
+            mock_existing.id = uuid.uuid4()
+            mock_existing.status = "completed"
+            mock_existing._enqueue_created = False
+            mock_enqueue.return_value = mock_existing
 
-        job = await webhook_service.store_webhook(
-            provider="paystack",
-            event_type="charge.success",
-            payload=sample_paystack_payload,
-            reference="txn_test_123",
-        )
+            job = await webhook_service.store_webhook(
+                provider="paystack",
+                event_type="charge.success",
+                payload=sample_paystack_payload,
+                reference="txn_test_123",
+            )
 
         assert job is None
 
@@ -201,14 +199,11 @@ class TestWebhookStorage:
         self, mock_db, webhook_service, sample_paystack_payload
     ):
         """Test that store_webhook extracts reference from payload if not provided."""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-
         with patch(
             "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
         ) as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
+            mock_job._enqueue_created = True
             mock_enqueue.return_value = mock_job
 
             # Don't provide reference, should extract from payload
@@ -222,20 +217,18 @@ class TestWebhookStorage:
             # Should call enqueue_job with payload containing idempotency_key
             call_args = mock_enqueue.call_args
             assert call_args is not None
+            assert "deduplication_key" in call_args.kwargs
 
     @pytest.mark.asyncio
     async def test_store_webhook_sets_max_attempts(
         self, mock_db, webhook_service, sample_paystack_payload
     ):
         """Test that webhook is enqueued with correct max attempts."""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-
         with patch(
             "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
         ) as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
+            mock_job._enqueue_created = True
             mock_enqueue.return_value = mock_job
 
             await webhook_service.store_webhook(
@@ -246,32 +239,30 @@ class TestWebhookStorage:
 
             call_args = mock_enqueue.call_args
             assert call_args[1]["max_attempts"] == WEBHOOK_MAX_ATTEMPTS
+            assert str(call_args[1]["deduplication_key"]).startswith("webhook:paystack:")
 
     @pytest.mark.asyncio
-    async def test_store_webhook_pending_returns_existing(
+    async def test_store_webhook_already_queued_returns_none(
         self, mock_db, webhook_service, sample_paystack_payload
     ):
-        """Test that pending webhook returns existing job instead of creating new."""
-        # First call for is_duplicate check - not found
-        # Second call for existing pending job check - found
-        mock_results = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
-            MagicMock(
-                scalar_one_or_none=MagicMock(return_value=MagicMock(spec=BackgroundJob))
-            ),
-        ]
+        """Queued duplicates should not be returned for in-request processing."""
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
+        ) as mock_enqueue:
+            mock_existing = MagicMock(spec=BackgroundJob)
+            mock_existing.id = uuid.uuid4()
+            mock_existing.status = "pending"
+            mock_existing._enqueue_created = False
+            mock_enqueue.return_value = mock_existing
 
-        mock_db.execute.side_effect = mock_results
+            job = await webhook_service.store_webhook(
+                provider="paystack",
+                event_type="charge.success",
+                payload=sample_paystack_payload,
+                reference="txn_test_123",
+            )
 
-        job = await webhook_service.store_webhook(
-            provider="paystack",
-            event_type="charge.success",
-            payload=sample_paystack_payload,
-            reference="txn_test_123",
-        )
-
-        # Should return the existing pending job
-        assert job is not None
+        assert job is None
 
 
 class TestPendingWebhooks:
@@ -332,14 +323,11 @@ class TestWebhookPayloadValidation:
         """Test storing webhook with minimal required data."""
         minimal_payload = {"data": {"reference": "test_ref"}}
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-
         with patch(
             "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
         ) as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
+            mock_job._enqueue_created = True
             mock_enqueue.return_value = mock_job
 
             job = await webhook_service.store_webhook(
@@ -355,14 +343,11 @@ class TestWebhookPayloadValidation:
         """Test storing webhook with empty payload."""
         empty_payload = {}
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-
         with patch(
             "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
         ) as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
+            mock_job._enqueue_created = True
             mock_enqueue.return_value = mock_job
 
             await webhook_service.store_webhook(
@@ -572,7 +557,7 @@ class TestWebhookConfiguration:
 
     def test_webhook_idempotency_ttl_is_reasonable(self):
         """Test that idempotency TTL is set to a reasonable value."""
-        assert WEBHOOK_IDEMPOTENCY_TTL_HOURS == 48
+        assert WEBHOOK_IDEMPOTENCY_TTL_HOURS == 72
         assert WEBHOOK_IDEMPOTENCY_TTL_HOURS > 0
 
 

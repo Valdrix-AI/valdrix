@@ -1,7 +1,6 @@
 
 import asyncio
 from app.modules.optimization.domain.registry import registry
-import app.modules.optimization.adapters.aws.plugins  # Trigger registration
 import structlog
 
 logger = structlog.get_logger()

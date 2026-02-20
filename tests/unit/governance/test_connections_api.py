@@ -156,6 +156,21 @@ async def test_create_aws_connection(ac, override_auth, auth_user, db):
 
 
 @pytest.mark.asyncio
+async def test_create_aws_connection_defaults_region_global(
+    ac, override_auth, auth_user, db
+):
+    payload = {
+        "aws_account_id": "210987654321",
+        "role_arn": "arn:aws:iam::210987654321:role/Valdrix",
+        "external_id": "vx-21098765432121098765432121098765",
+    }
+    resp = await ac.post("/api/v1/settings/connections/aws", json=payload)
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["region"] == "global"
+
+
+@pytest.mark.asyncio
 async def test_duplicate_aws_connection(ac, db, override_auth, auth_user):
     # Pre-create a connection
     conn = AWSConnection(
@@ -1117,6 +1132,7 @@ async def test_link_discovered_account(ac, db, override_auth, auth_user):
     new_conn = res.scalar_one()
     assert new_conn.tenant_id == auth_user.tenant_id
     assert new_conn.external_id == mgmt.external_id
+    assert new_conn.region == "global"
 
 
 @pytest.mark.asyncio

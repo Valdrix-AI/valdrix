@@ -309,7 +309,7 @@ async def test_tenant(db):
     """Create a test tenant for API tests."""
     from app.models.tenant import Tenant
 
-    tenant = Tenant(id=uuid4(), name="API Test Tenant", plan="pro")
+    tenant = Tenant(id=uuid4(), name="API Test Tenant", plan="pro", is_deleted=False)
     db.add(tenant)
     await db.commit()
     await db.refresh(tenant)

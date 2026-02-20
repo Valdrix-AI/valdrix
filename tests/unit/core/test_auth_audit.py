@@ -18,11 +18,20 @@ from app.models.tenant import UserRole
 from app.shared.core.pricing import PricingTier
 
 
+class _AsyncNullContext:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+
 # Mock settings
 @pytest.fixture(autouse=True)
 def mock_settings():
     with patch("app.shared.core.auth.get_settings") as mock:
         mock.return_value.SUPABASE_JWT_SECRET = "supersecretkey"
+        mock.return_value.JWT_SIGNING_KID = None
         yield mock
 
 
@@ -50,6 +59,13 @@ def test_create_access_token_with_delta():
     exp = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
     now = datetime.now(timezone.utc)
     assert (exp - now).total_seconds() <= 305
+
+
+def test_create_access_token_sets_kid_header_when_configured(mock_settings):
+    mock_settings.return_value.JWT_SIGNING_KID = "supabase-key-2026-01"
+    token = create_access_token({"sub": "kid-user"})
+    header = jwt.get_unverified_header(token)
+    assert header["kid"] == "supabase-key-2026-01"
 
 
 def test_decode_jwt_valid():
@@ -157,10 +173,12 @@ async def test_get_current_user_success():
         "engineering",
         True,
         PricingTier.PRO,
+        False,
     )
     mock_result_identity = MagicMock()
     mock_result_identity.scalar_one_or_none.return_value = None
     mock_db.execute.side_effect = [mock_result_auth, mock_result_identity]
+    mock_db.begin_nested = MagicMock(return_value=_AsyncNullContext())
 
     with patch(
         "app.shared.core.auth.set_session_tenant_id", new_callable=AsyncMock
@@ -190,6 +208,7 @@ async def test_get_current_user_not_found():
     mock_result = MagicMock()
     mock_result.one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
+    mock_db.begin_nested = MagicMock(return_value=_AsyncNullContext())
 
     request = MagicMock(spec=Request)
 

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from app.shared.adapters.gcp import GCPAdapter, validate_project_id
 from app.models.gcp_connection import GCPConnection
-from app.shared.core.exceptions import AdapterError
+from app.shared.core.exceptions import AdapterError, ConfigurationError
 
 
 def _connection(**kwargs):
@@ -30,7 +30,7 @@ def test_validate_project_id():
 
 def test_invalid_project_id_raises():
     conn = _connection(project_id="BAD_PROJECT")
-    with pytest.raises(ValueError):
+    with pytest.raises(ConfigurationError):
         GCPAdapter(conn)
 
 
@@ -84,7 +84,7 @@ async def test_get_cost_and_usage_invalid_table_path():
         )
     )
     with patch.object(adapter, "_get_bq_client", return_value=MagicMock()):
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             await adapter.get_cost_and_usage(
                 datetime(2024, 1, 1, tzinfo=timezone.utc),
                 datetime(2024, 1, 2, tzinfo=timezone.utc),

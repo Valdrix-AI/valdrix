@@ -94,13 +94,13 @@ def test_carbon_update_validates_email_dependencies() -> None:
 async def test_carbon_get_and_update_branches(user: CurrentUser, db: MagicMock) -> None:
     db.execute.return_value = _scalar_result(None)
     response = await carbon.get_carbon_settings(user, db)
-    assert response.default_region == "us-east-1"
+    assert response.default_region == "global"
     db.add.assert_called_once()
 
     existing = SimpleNamespace(
         carbon_budget_kg=100.0,
         alert_threshold_percent=80,
-        default_region="us-east-1",
+        default_region="global",
         email_enabled=False,
         email_recipients=None,
     )

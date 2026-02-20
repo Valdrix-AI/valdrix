@@ -1,9 +1,9 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 from app.modules.optimization.domain.actions.base import RemediationContext, ExecutionStatus, ExecutionResult
 from app.modules.optimization.domain.actions.aws.ec2 import AWSStopInstanceAction, AWSResizeInstanceAction
-from app.shared.core.pricing import PricingTier, FeatureFlag
+from app.shared.core.pricing import PricingTier
 
 @pytest.mark.asyncio
 async def test_tier_gating_free_tier_rejection():

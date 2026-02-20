@@ -23,7 +23,7 @@ async def analyze_inventory():
         partitions = [t.name for t in all_tables if any(x in t.name for x in ["_2026", "_2027", "_p2026", "_p2027"])]
         base_tables = [t.name for t in all_tables if t.name not in partitions]
         
-        print(f"\nDB Inventory Analysis:")
+        print("\nDB Inventory Analysis:")
         print(f"Total entries: {len(all_tables)}")
         print(f"Base Tables ({len(base_tables)}):")
         for t in sorted(base_tables):

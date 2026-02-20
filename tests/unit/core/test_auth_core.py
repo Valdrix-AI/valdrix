@@ -16,6 +16,14 @@ import jwt
 from datetime import datetime, timezone, timedelta
 
 
+class _AsyncNullContext:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+
 @pytest.fixture
 def mock_settings():
     with patch("app.shared.core.auth.get_settings") as mock:
@@ -67,7 +75,7 @@ async def test_get_current_user_success(mock_settings):
 
     # Mock DB response
     mock_res_auth = MagicMock()
-    # (id, tenant_id, role, persona, is_active, plan)
+    # (id, tenant_id, role, persona, is_active, plan, tenant_is_deleted)
     mock_res_auth.one_or_none.return_value = (
         user_id,
         tenant_id,
@@ -75,15 +83,17 @@ async def test_get_current_user_success(mock_settings):
         "engineering",
         True,
         PricingTier.GROWTH.value,
+        False,
     )
     mock_res_identity = MagicMock()
     mock_res_identity.scalar_one_or_none.return_value = None
     mock_db.execute.side_effect = [mock_res_auth, mock_res_identity]
+    mock_db.begin_nested = MagicMock(return_value=_AsyncNullContext())
 
     user = await get_current_user(mock_request, mock_credentials, mock_db)
 
     assert user.id == user_id
-    assert user.tier == "growth"
+    assert user.tier == PricingTier.GROWTH
     assert mock_request.state.tenant_id == tenant_id
 
 
@@ -102,6 +112,7 @@ async def test_get_current_user_not_found(mock_settings):
     mock_res = MagicMock()
     mock_res.one_or_none.return_value = None
     mock_db.execute.return_value = mock_res
+    mock_db.begin_nested = MagicMock(return_value=_AsyncNullContext())
 
     with pytest.raises(HTTPException) as exc:
         await get_current_user(MagicMock(spec=Request), mock_credentials, mock_db)

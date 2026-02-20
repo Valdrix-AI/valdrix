@@ -10,6 +10,8 @@ def test_celery_config():
     assert conf.accept_content == ["json"]
     assert conf.task_acks_late is True
     assert conf.task_reject_on_worker_lost is True
+    assert "app.tasks.scheduler_tasks" in conf.include
+    assert "app.tasks.license_tasks" in conf.include
 
     # Assert test mode settings (since we run in test env)
     # The app code has `if settings.TESTING: ...`

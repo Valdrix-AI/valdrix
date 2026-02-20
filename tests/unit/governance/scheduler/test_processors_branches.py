@@ -33,6 +33,8 @@ def _make_tenant() -> MagicMock:
     tenant.gcp_connections = []
     tenant.saas_connections = []
     tenant.license_connections = []
+    tenant.platform_connections = []
+    tenant.hybrid_connections = []
     return tenant
 
 
@@ -42,9 +44,11 @@ def test_collect_connections_and_row_normalization_branches() -> None:
     tenant.aws_connections = [MagicMock(provider="aws")]
     tenant.saas_connections = [MagicMock(provider="saas")]
     tenant.license_connections = [MagicMock(provider="license")]
+    tenant.platform_connections = [MagicMock(provider="platform")]
+    tenant.hybrid_connections = [MagicMock(provider="hybrid")]
 
     connections = processor._collect_connections(tenant)
-    assert len(connections) == 3
+    assert len(connections) == 5
 
     naive = datetime(2026, 1, 1, 12, 0, 0)
     assert processor._as_datetime(naive).tzinfo is not None
@@ -259,11 +263,16 @@ async def test_process_tenant_connection_timeout_and_error_paths(
         ("delete volume now", RemediationAction.DELETE_VOLUME),
         ("Stop Instance", RemediationAction.STOP_INSTANCE),
         ("terminate instance", RemediationAction.TERMINATE_INSTANCE),
+        ("deallocate azure vm", RemediationAction.DEALLOCATE_AZURE_VM),
+        ("stop gcp instance", RemediationAction.STOP_GCP_INSTANCE),
         ("resize this", RemediationAction.RESIZE_INSTANCE),
         ("delete snapshot old", RemediationAction.DELETE_SNAPSHOT),
         ("release elastic ip", RemediationAction.RELEASE_ELASTIC_IP),
         ("stop rds", RemediationAction.STOP_RDS_INSTANCE),
         ("delete rds", RemediationAction.DELETE_RDS_INSTANCE),
+        ("revoke github seat", RemediationAction.REVOKE_GITHUB_SEAT),
+        ("reclaim license seat", RemediationAction.RECLAIM_LICENSE_SEAT),
+        ("manual review required", RemediationAction.MANUAL_REVIEW),
         ("no match", None),
     ],
 )
@@ -297,7 +306,9 @@ async def test_savings_processor_non_safe_action_and_parse_fallback(
         remediation.approve = AsyncMock()
         remediation.execute = AsyncMock()
 
-        await processor.process_recommendations(mock_db, tenant_id, analysis_result)
+        await processor.process_recommendations(
+            mock_db, tenant_id, analysis_result, provider="aws"
+        )
 
     remediation.create_request.assert_awaited_once()
     remediation.approve.assert_not_awaited()
@@ -348,8 +359,87 @@ async def test_savings_processor_unsupported_and_execution_error(
         remediation.approve = AsyncMock()
         remediation.execute = AsyncMock()
 
-        await processor.process_recommendations(mock_db, tenant_id, analysis_result)
+        await processor.process_recommendations(
+            mock_db, tenant_id, analysis_result, provider="aws"
+        )
 
     remediation.create_request.assert_awaited_once()
     remediation.approve.assert_not_awaited()
     remediation.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_savings_processor_skips_invalid_provider_before_request(
+    mock_db: AsyncMock,
+) -> None:
+    processor = SavingsProcessor()
+    tenant_id = uuid4()
+    rec = MagicMock(
+        autonomous_ready=True,
+        confidence="high",
+        action="Stop Instance",
+        resource="i-custom",
+        resource_type="vm",
+        estimated_savings="$12/month",
+    )
+    analysis_result = MagicMock(recommendations=[rec])
+
+    with patch(
+        "app.modules.optimization.domain.remediation.RemediationService"
+    ) as remediation_cls:
+        remediation = remediation_cls.return_value
+        remediation.create_request = AsyncMock()
+        remediation.approve = AsyncMock()
+        remediation.execute = AsyncMock()
+
+        await processor.process_recommendations(
+            mock_db,
+            tenant_id,
+            analysis_result,
+            provider="custom_provider",
+        )
+
+    remediation.create_request.assert_not_awaited()
+    remediation.approve.assert_not_awaited()
+    remediation.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_savings_processor_forwards_provider_and_connection_id(
+    mock_db: AsyncMock,
+) -> None:
+    processor = SavingsProcessor()
+    tenant_id = uuid4()
+    connection_id = uuid4()
+    rec = MagicMock(
+        autonomous_ready=True,
+        confidence="high",
+        action="Stop Instance",
+        resource="resource-1",
+        resource_type="vm",
+        estimated_savings="$8/month",
+    )
+    analysis_result = MagicMock(recommendations=[rec])
+
+    created_request = MagicMock(id=uuid4())
+    executed_request = MagicMock(status=MagicMock(value="completed"))
+    with patch(
+        "app.modules.optimization.domain.remediation.RemediationService"
+    ) as remediation_cls:
+        remediation = remediation_cls.return_value
+        remediation.create_request = AsyncMock(return_value=created_request)
+        remediation.approve = AsyncMock()
+        remediation.execute = AsyncMock(return_value=executed_request)
+
+        await processor.process_recommendations(
+            mock_db,
+            tenant_id,
+            analysis_result,
+            provider="platform",
+            connection_id=connection_id,
+        )
+
+    remediation.create_request.assert_awaited_once()
+    forwarded_kwargs = remediation.create_request.await_args.kwargs
+    assert forwarded_kwargs["provider"] == "platform"
+    assert forwarded_kwargs["connection_id"] == connection_id

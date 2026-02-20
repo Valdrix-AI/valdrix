@@ -22,29 +22,38 @@ async def test_eip_scan_zombie_and_error():
     mock_session = MagicMock()
     mock_ec2 = AsyncMock()
     mock_ec2.__aenter__.return_value = mock_ec2  # Client IS the context manager
+    mock_ec2.get_paginator = MagicMock()
 
     plugin._get_client = MagicMock(return_value=mock_ec2)
 
+    paginator = MagicMock()
+    mock_ec2.get_paginator.return_value = paginator
+
     # 1. Success case with zombie
-    mock_ec2.describe_addresses.return_value = {
-        "Addresses": [
-            {
-                "PublicIp": "1.2.3.4",
-                "AllocationId": "eip-1",
-                "InstanceId": None,
-                "AssociationId": None,
-            }
-        ]
-    }
+    async def paginate_success():
+        yield {
+            "Addresses": [
+                {
+                    "PublicIp": "1.2.3.4",
+                    "AllocationId": "eip-1",
+                    "InstanceId": None,
+                    "AssociationId": None,
+                }
+            ]
+        }
+
+    paginator.paginate.side_effect = paginate_success
 
     zombies = await plugin.scan(mock_session, "us-east-1")
     assert len(zombies) == 1
     assert zombies[0]["resource_id"] == "eip-1"
 
     # 2. Error case
-    mock_ec2.describe_addresses.side_effect = ClientError(
-        {"Error": {"Code": "TestError", "Message": "msg"}}, "op"
-    )
+    async def paginate_error():
+        raise ClientError({"Error": {"Code": "TestError", "Message": "msg"}}, "op")
+        yield  # pragma: no cover
+
+    paginator.paginate.side_effect = paginate_error
     zombies = await plugin.scan(mock_session, "us-east-1")
     assert len(zombies) == 0
 
@@ -53,7 +62,7 @@ async def test_eip_scan_zombie_and_error():
 async def test_idle_instances_attribution():
     """Test CloudTrail lookup for instance attribution."""
     plugin = IdleInstancesPlugin()
-    mock_session = MagicMock()
+    MagicMock()
     mock_ct = AsyncMock()
     mock_ct.__aenter__.return_value = mock_ct
 
@@ -63,7 +72,7 @@ async def test_idle_instances_attribution():
         "Events": [{"EventName": "RunInstances", "Username": "test-user"}]
     }
 
-    owner = await plugin._get_attribution(mock_session, "us-east-1", "i-123")
+    owner = await plugin._get_attribution(mock_ct, "i-123")
     assert owner == "test-user"
 
 

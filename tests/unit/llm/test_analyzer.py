@@ -60,9 +60,10 @@ class TestFinOpsAnalyzer:
         assert analyzer.llm == mock_llm
         assert analyzer.db is None
         assert hasattr(analyzer, "prompt")
-        assert analyzer.prompt is not None
+        assert analyzer.prompt is None
 
-    def test_load_system_prompt_from_yaml(self, mock_llm):
+    @pytest.mark.asyncio
+    async def test_load_system_prompt_from_yaml(self, mock_llm):
         """Test loading system prompt from YAML file."""
         with (
             patch("os.path.exists", return_value=True),
@@ -74,16 +75,19 @@ class TestFinOpsAnalyzer:
             }
 
             analyzer = FinOpsAnalyzer(mock_llm)
+            prompt = await analyzer._get_prompt()
 
-            assert "Test system prompt from YAML" in str(analyzer.prompt)
+            assert "Test system prompt from YAML" in str(prompt)
 
-    def test_load_system_prompt_fallback(self, mock_llm):
+    @pytest.mark.asyncio
+    async def test_load_system_prompt_fallback(self, mock_llm):
         """Test fallback system prompt when YAML loading fails."""
         with patch("os.path.exists", return_value=False):
             analyzer = FinOpsAnalyzer(mock_llm)
+            prompt = await analyzer._get_prompt()
 
             # Should use fallback prompt
-            assert "You are a FinOps expert" in str(analyzer.prompt)
+            assert "You are a FinOps expert" in str(prompt)
 
     def test_strip_markdown_code_blocks(self, mock_llm):
         """Test stripping markdown code blocks from LLM responses."""
@@ -827,14 +831,16 @@ class TestFinOpsAnalyzerProductionQuality:
         assert len(errors) == 0
         assert len(results) == 5
 
-    def test_system_prompt_loading_robustness(self):
+    @pytest.mark.asyncio
+    async def test_system_prompt_loading_robustness(self):
         """Test system prompt loading handles various edge cases."""
         llm = MagicMock()
 
         # Test with non-existent file
         with patch("os.path.exists", return_value=False):
             analyzer = FinOpsAnalyzer(llm)
-            assert "You are a FinOps expert" in str(analyzer.prompt)
+            prompt = await analyzer._get_prompt()
+            assert "You are a FinOps expert" in str(prompt)
 
         # Test with YAML loading error
         with (
@@ -842,7 +848,8 @@ class TestFinOpsAnalyzerProductionQuality:
             patch("builtins.open", side_effect=Exception("File read error")),
         ):
             analyzer = FinOpsAnalyzer(llm)
-            assert "You are a FinOps expert" in str(analyzer.prompt)
+            prompt = await analyzer._get_prompt()
+            assert "You are a FinOps expert" in str(prompt)
 
         # Test with invalid YAML structure
         with (
@@ -851,7 +858,8 @@ class TestFinOpsAnalyzerProductionQuality:
             patch("yaml.safe_load", return_value={"invalid": "structure"}),
         ):
             analyzer = FinOpsAnalyzer(llm)
-            assert "You are a FinOps expert" in str(analyzer.prompt)
+            prompt = await analyzer._get_prompt()
+            assert "You are a FinOps expert" in str(prompt)
 
     @pytest.mark.asyncio
     async def test_budget_integration_edge_cases(self):

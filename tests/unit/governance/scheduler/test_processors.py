@@ -27,6 +27,10 @@ def mock_tenant():
     tenant.aws_connections = [conn]
     tenant.azure_connections = []
     tenant.gcp_connections = []
+    tenant.saas_connections = []
+    tenant.license_connections = []
+    tenant.platform_connections = []
+    tenant.hybrid_connections = []
     return tenant
 
 
@@ -179,6 +183,68 @@ async def test_process_tenant_saas_path_runs_zombie_detection(mock_db, mock_tena
 
 
 @pytest.mark.asyncio
+async def test_process_tenant_platform_path_runs_zombie_detection(mock_db, mock_tenant):
+    processor = AnalysisProcessor()
+    platform_conn = MagicMock()
+    platform_conn.id = uuid4()
+    platform_conn.provider = "platform"
+    mock_tenant.aws_connections = []
+    mock_tenant.azure_connections = []
+    mock_tenant.gcp_connections = []
+    mock_tenant.saas_connections = []
+    mock_tenant.license_connections = []
+    mock_tenant.platform_connections = [platform_conn]
+    mock_tenant.hybrid_connections = []
+
+    with (
+        patch(
+            "app.modules.governance.domain.scheduler.processors.AdapterFactory"
+        ) as mock_factory,
+        patch("app.modules.governance.domain.scheduler.processors.LLMFactory"),
+        patch(
+            "app.modules.governance.domain.scheduler.processors.FinOpsAnalyzer"
+        ) as MockAnalyzer,
+        patch(
+            "app.modules.governance.domain.scheduler.processors.ZombieDetectorFactory"
+        ) as mock_detector_factory,
+        patch("app.modules.governance.domain.scheduler.processors.CarbonCalculator"),
+        patch(
+            "app.modules.governance.domain.scheduler.processors.SavingsProcessor.process_recommendations",
+            new_callable=AsyncMock,
+        ) as process_recommendations,
+    ):
+        adapter = MagicMock()
+        adapter.get_cost_and_usage = AsyncMock(
+            return_value=[
+                {
+                    "timestamp": "2026-02-01T00:00:00+00:00",
+                    "service": "Datadog",
+                    "cost_usd": 41.0,
+                    "provider": "platform",
+                }
+            ]
+        )
+        mock_factory.get_adapter.return_value = adapter
+
+        analyzer = MockAnalyzer.return_value
+        analyzer.analyze = AsyncMock(
+            return_value={"insights": [], "recommendations": []}
+        )
+
+        detector = mock_detector_factory.get_detector.return_value
+        detector.scan_all = AsyncMock(return_value={"idle_platform_services": []})
+
+        await processor.process_tenant(mock_db, mock_tenant, date.today(), date.today())
+
+        mock_detector_factory.get_detector.assert_called_once()
+        detector.scan_all.assert_awaited_once()
+        process_recommendations.assert_awaited_once()
+        call_kwargs = process_recommendations.await_args.kwargs
+        assert call_kwargs["provider"] == "platform"
+        assert call_kwargs["connection_id"] == platform_conn.id
+
+
+@pytest.mark.asyncio
 async def test_governance_processor_execution(mock_db: AsyncMock) -> None:
     """Test autonomous savings execution."""
     processor = SavingsProcessor()
@@ -204,7 +270,9 @@ async def test_governance_processor_execution(mock_db: AsyncMock) -> None:
         service.approve = AsyncMock()
         service.execute = AsyncMock()
 
-        await processor.process_recommendations(mock_db, tenant_id, analysis_result)
+        await processor.process_recommendations(
+            mock_db, tenant_id, analysis_result, provider="aws"
+        )
 
         service.create_request.assert_awaited()
         service.approve.assert_awaited()

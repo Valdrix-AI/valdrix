@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import uuid4
 
@@ -259,6 +260,60 @@ async def test_sync_accounts_update_existing(mock_db, management_connection):
 
         mock_db.add.assert_not_called()
         mock_db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sync_accounts_uses_resolved_region_for_sts(mock_db, management_connection):
+    """STS should use resolved tenant/configured region when connection is global."""
+    management_connection.region = "global"
+
+    mock_sts_client = MagicMock()
+    mock_sts_client.assume_role = AsyncMock(
+        return_value={
+            "Credentials": {
+                "AccessKeyId": "ASIA...",
+                "SecretAccessKey": "secret...",
+                "SessionToken": "token...",
+            }
+        }
+    )
+    mock_sts_ctx = MagicMock()
+    mock_sts_ctx.__aenter__ = AsyncMock(return_value=mock_sts_client)
+    mock_sts_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    mock_org_client = MagicMock()
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = _async_iter([{"Accounts": []}])
+    mock_org_client.get_paginator.return_value = mock_paginator
+    mock_org_ctx = MagicMock()
+    mock_org_ctx.__aenter__ = AsyncMock(return_value=mock_org_client)
+    mock_org_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    mock_session = MagicMock()
+    mock_session.client.side_effect = [mock_sts_ctx, mock_org_ctx]
+
+    with (
+        patch(
+            "app.shared.connections.organizations.aioboto3.Session",
+            return_value=mock_session,
+        ),
+        patch(
+            "app.shared.adapters.aws_utils.get_settings",
+            return_value=SimpleNamespace(
+                AWS_SUPPORTED_REGIONS=["eu-west-1"],
+                AWS_DEFAULT_REGION="eu-west-1",
+            ),
+        ),
+    ):
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_db.execute.return_value = mock_result
+
+        await OrganizationsDiscoveryService.sync_accounts(mock_db, management_connection)
+
+    first_call = mock_session.client.call_args_list[0]
+    assert first_call.args[0] == "sts"
+    assert first_call.kwargs["region_name"] == "eu-west-1"
 
 
 # Helper for async iteration

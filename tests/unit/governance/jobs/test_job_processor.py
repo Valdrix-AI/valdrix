@@ -3,7 +3,11 @@ import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
 from datetime import datetime, timezone
-from app.modules.governance.domain.jobs.processor import JobProcessor, JobStatus
+from app.modules.governance.domain.jobs.processor import (
+    JobProcessor,
+    JobStatus,
+    MAX_JOB_RESULT_BYTES,
+)
 from app.models.background_job import BackgroundJob
 
 
@@ -38,7 +42,7 @@ async def test_process_pending_jobs_batch(job_processor):
     job2 = BackgroundJob(id=uuid4(), job_type="test_job", attempts=0, max_attempts=3)
 
     # Mock fetching jobs
-    job_processor._fetch_pending_jobs = AsyncMock(return_value=[job1, job2])
+    job_processor._fetch_and_lock_batch = AsyncMock(return_value=[job1, job2])
 
     # Mock individual processing to succeed
     async def mark_complete(job):
@@ -60,7 +64,7 @@ async def test_process_pending_jobs_batch(job_processor):
 @pytest.mark.asyncio
 async def test_process_pending_jobs_counts_failed(job_processor):
     job = BackgroundJob(id=uuid4(), job_type="test_job", attempts=0, max_attempts=3)
-    job_processor._fetch_pending_jobs = AsyncMock(return_value=[job])
+    job_processor._fetch_and_lock_batch = AsyncMock(return_value=[job])
 
     async def mark_failed(job):
         job.status = JobStatus.FAILED.value
@@ -79,7 +83,7 @@ async def test_process_pending_jobs_counts_failed(job_processor):
 @pytest.mark.asyncio
 async def test_process_pending_jobs_config_error(job_processor):
     job = BackgroundJob(id=uuid4(), job_type="test_job", attempts=0, max_attempts=3)
-    job_processor._fetch_pending_jobs = AsyncMock(return_value=[job])
+    job_processor._fetch_and_lock_batch = AsyncMock(return_value=[job])
     job_processor._process_single_job = AsyncMock(side_effect=KeyError("bad config"))
 
     results = await job_processor.process_pending_jobs(limit=1)
@@ -93,7 +97,7 @@ async def test_process_pending_jobs_config_error(job_processor):
 async def test_process_pending_jobs_db_error(job_processor):
     from sqlalchemy.exc import SQLAlchemyError
 
-    job_processor._fetch_pending_jobs = AsyncMock(
+    job_processor._fetch_and_lock_batch = AsyncMock(
         side_effect=SQLAlchemyError("db error")
     )
     results = await job_processor.process_pending_jobs(limit=1)
@@ -101,54 +105,6 @@ async def test_process_pending_jobs_db_error(job_processor):
     assert results["processed"] == 0
     assert results["failed"] == 0
     assert results["errors"]
-
-
-
-@pytest.mark.asyncio
-async def test_process_pending_jobs_counts_failed(job_processor):
-    job = BackgroundJob(id=uuid4(), job_type="test_job", attempts=0, max_attempts=3)
-    job_processor._fetch_pending_jobs = AsyncMock(return_value=[job])
-
-    async def mark_failed(job):
-        job.status = JobStatus.FAILED.value
-        job.error_message = "boom"
-
-    job_processor._process_single_job = AsyncMock(side_effect=mark_failed)
-
-    results = await job_processor.process_pending_jobs(limit=1)
-
-    assert results["processed"] == 1
-    assert results["succeeded"] == 0
-    assert results["failed"] == 1
-    assert results["errors"][0]["error"] == "boom"
-
-
-@pytest.mark.asyncio
-async def test_process_pending_jobs_config_error(job_processor):
-    job = BackgroundJob(id=uuid4(), job_type="test_job", attempts=0, max_attempts=3)
-    job_processor._fetch_pending_jobs = AsyncMock(return_value=[job])
-    job_processor._process_single_job = AsyncMock(side_effect=KeyError("bad config"))
-
-    results = await job_processor.process_pending_jobs(limit=1)
-
-    assert results["processed"] == 1
-    assert results["failed"] == 1
-    assert results["errors"][0]["type"] == "config"
-
-
-@pytest.mark.asyncio
-async def test_process_pending_jobs_db_error(job_processor):
-    from sqlalchemy.exc import SQLAlchemyError
-
-    job_processor._fetch_pending_jobs = AsyncMock(
-        side_effect=SQLAlchemyError("db error")
-    )
-    results = await job_processor.process_pending_jobs(limit=1)
-
-    assert results["processed"] == 0
-    assert results["failed"] == 0
-    assert results["errors"]
-
 
 @pytest.mark.asyncio
 async def test_process_single_job_success(job_processor, mock_db_session):
@@ -176,6 +132,35 @@ async def test_process_single_job_success(job_processor, mock_db_session):
         assert job.result == {"status": "ok"}
         assert job.attempts == 1
         mock_db_session.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_single_job_truncates_oversized_result(
+    job_processor, mock_db_session
+):
+    job = BackgroundJob(
+        id=uuid4(),
+        job_type="test_job",
+        attempts=0,
+        max_attempts=3,
+        status=JobStatus.PENDING.value,
+    )
+
+    oversized_result = {"blob": "x" * (MAX_JOB_RESULT_BYTES + 2048)}
+
+    with patch(
+        "app.modules.governance.domain.jobs.processor.get_handler_factory"
+    ) as mock_factory:
+        mock_handler = AsyncMock()
+        mock_handler.execute.return_value = oversized_result
+        mock_factory.return_value.return_value = mock_handler
+
+        await job_processor._process_single_job(job)
+
+        assert job.status == JobStatus.COMPLETED.value
+        assert isinstance(job.result, dict)
+        assert job.result["_truncated"] is True
+        assert int(job.result["_actual_bytes"]) > MAX_JOB_RESULT_BYTES
 
 
 @pytest.mark.asyncio

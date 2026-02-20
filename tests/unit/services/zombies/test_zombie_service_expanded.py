@@ -19,17 +19,13 @@ class TestZombieServiceExpanded:
     async def test_scan_for_tenant_no_connections(self, zombie_service, mock_db):
         """Test that scan returns empty results when no cloud connections exist."""
         tenant_id = uuid4()
-        user = MagicMock()
-        user.tier = "starter"
 
         with patch("app.modules.optimization.domain.service.select") as _:
             mock_conn_res = MagicMock()
             mock_conn_res.scalars.return_value.all.return_value = []
             mock_db.execute.return_value = mock_conn_res
 
-            result = await zombie_service.scan_for_tenant(
-                tenant_id, user, analyze=False
-            )
+            result = await zombie_service.scan_for_tenant(tenant_id, analyze=False)
             # Should return empty results with no errors
             assert result is not None
 

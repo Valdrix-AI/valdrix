@@ -39,15 +39,20 @@ async def test_unused_elastic_ips_plugin(mock_session):
     plugin = UnusedElasticIpsPlugin()
 
     mock_ec2 = MagicMock()
-    mock_ec2.describe_addresses = AsyncMock()
     mock_session.client.return_value.__aenter__.return_value = mock_ec2
 
-    mock_ec2.describe_addresses.return_value = {
-        "Addresses": [
-            {"PublicIp": "1.2.3.4", "AllocationId": "eipalloc-1"},  # Zombie
-            {"PublicIp": "5.6.7.8", "InstanceId": "i-123"},  # Not Zombie
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = AsyncIterator(
+        [
+            {
+                "Addresses": [
+                    {"PublicIp": "1.2.3.4", "AllocationId": "eipalloc-1"},  # Zombie
+                    {"PublicIp": "5.6.7.8", "InstanceId": "i-123"},  # Not Zombie
+                ]
+            }
         ]
-    }
+    )
+    mock_ec2.get_paginator.return_value = mock_paginator
 
     results = await plugin.scan(mock_session, "us-east-1")
     assert len(results) == 1

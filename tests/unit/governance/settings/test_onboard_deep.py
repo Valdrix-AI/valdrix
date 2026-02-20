@@ -104,6 +104,58 @@ async def test_onboard_with_cloud_config_multi(
             },
         ),
         ("gcp", {"project_id": "...", "service_account_json": "{}"}),
+        (
+            "saas",
+            {
+                "vendor": "stripe",
+                "auth_method": "manual",
+                "spend_feed": [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "cost_usd": 9.5,
+                    }
+                ],
+            },
+        ),
+        (
+            "license",
+            {
+                "vendor": "microsoft_365",
+                "auth_method": "manual",
+                "license_feed": [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "cost_usd": 4.2,
+                    }
+                ],
+            },
+        ),
+        (
+            "platform",
+            {
+                "vendor": "datadog",
+                "auth_method": "manual",
+                "spend_feed": [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "cost_usd": 14.1,
+                    }
+                ],
+            },
+        ),
+        (
+            "hybrid",
+            {
+                "vendor": "vmware",
+                "auth_method": "manual",
+                "spend_feed": [
+                    {
+                        "timestamp": "2026-01-01T00:00:00Z",
+                        "cost_usd": 17.8,
+                    }
+                ],
+            },
+        ),
     ]
 
     for platform, config in platforms:

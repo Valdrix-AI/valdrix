@@ -16,6 +16,8 @@ from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
 from app.models.saas_connection import SaaSConnection
 from app.models.license_connection import LicenseConnection
+from app.models.platform_connection import PlatformConnection
+from app.models.hybrid_connection import HybridConnection
 
 
 # Fixtures for mock connections
@@ -85,6 +87,30 @@ def mock_license_connection():
     return conn
 
 
+@pytest.fixture
+def mock_platform_connection():
+    """Create a mock platform connection."""
+    conn = MagicMock(spec=PlatformConnection)
+    conn.id = str(uuid.uuid4())
+    conn.tenant_id = str(uuid.uuid4())
+    conn.provider = "platform"
+    conn.name = "Test Platform Feed"
+    conn.last_ingested_at = None
+    return conn
+
+
+@pytest.fixture
+def mock_hybrid_connection():
+    """Create a mock hybrid connection."""
+    conn = MagicMock(spec=HybridConnection)
+    conn.id = str(uuid.uuid4())
+    conn.tenant_id = str(uuid.uuid4())
+    conn.provider = "hybrid"
+    conn.name = "Test Hybrid Feed"
+    conn.last_ingested_at = None
+    return conn
+
+
 class TestGetAllConnections:
     """Test the _get_all_connections internal method."""
 
@@ -97,6 +123,8 @@ class TestGetAllConnections:
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
             [mock_aws_connection],
+            [],
+            [],
             [],
             [],
             [],
@@ -135,6 +163,8 @@ class TestGetAllConnections:
         mock_gcp_connection,
         mock_saas_connection,
         mock_license_connection,
+        mock_platform_connection,
+        mock_hybrid_connection,
     ):
         """Test fetching connections from cloud and Cloud+ providers."""
         tenant_id = str(uuid.uuid4())
@@ -146,14 +176,14 @@ class TestGetAllConnections:
             mock_gcp_connection,
             mock_saas_connection,
             mock_license_connection,
+            mock_platform_connection,
+            mock_hybrid_connection,
         ]
         for conn in all_connections:
             conn.tenant_id = tenant_id
 
         query_result = MagicMock()
-        query_result.scalars.return_value.all.side_effect = [
-            [conn] for conn in all_connections
-        ]
+        query_result.scalars.return_value.all.side_effect = [[conn] for conn in all_connections]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
 
@@ -161,7 +191,15 @@ class TestGetAllConnections:
         connections = await service._get_all_connections(tenant_id)
 
         providers = {conn.provider for conn in connections}
-        assert providers == {"aws", "azure", "gcp", "saas", "license"}
+        assert providers == {
+            "aws",
+            "azure",
+            "gcp",
+            "saas",
+            "license",
+            "platform",
+            "hybrid",
+        }
 
 
 class TestCostIngestionNoConnections:
@@ -196,6 +234,8 @@ class TestCostIngestionWithConnections:
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
             [mock_aws_connection],
+            [],
+            [],
             [],
             [],
             [],
@@ -270,6 +310,8 @@ class TestCostIngestionWithConnections:
             [],
             [],
             [],
+            [],
+            [],
         ]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
@@ -313,11 +355,15 @@ class TestCostIngestionWithConnections:
         mock_db,
         mock_saas_connection,
         mock_license_connection,
+        mock_platform_connection,
+        mock_hybrid_connection,
     ):
         """Cloud+ connectors should participate in unified ingestion."""
         tenant_id = str(uuid.uuid4())
         mock_saas_connection.tenant_id = tenant_id
         mock_license_connection.tenant_id = tenant_id
+        mock_platform_connection.tenant_id = tenant_id
+        mock_hybrid_connection.tenant_id = tenant_id
 
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
@@ -326,6 +372,8 @@ class TestCostIngestionWithConnections:
             [],
             [mock_saas_connection],
             [mock_license_connection],
+            [mock_platform_connection],
+            [mock_hybrid_connection],
         ]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
@@ -361,9 +409,9 @@ class TestCostIngestionWithConnections:
             result = await service.ingest_costs_for_tenant(tenant_id)
 
             assert result["status"] == "completed"
-            assert result["connections_processed"] == 2
+            assert result["connections_processed"] == 4
             providers = {entry.get("provider") for entry in result["details"]}
-            assert providers == {"saas", "license"}
+            assert providers == {"saas", "license", "platform", "hybrid"}
 
     @pytest.mark.asyncio
     async def test_ingest_costs_connection_failure(self, mock_db, mock_aws_connection):
@@ -373,6 +421,8 @@ class TestCostIngestionWithConnections:
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
             [mock_aws_connection],
+            [],
+            [],
             [],
             [],
             [],
@@ -405,6 +455,8 @@ class TestCostIngestionWithConnections:
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
             [mock_aws_connection],
+            [],
+            [],
             [],
             [],
             [],
@@ -462,6 +514,8 @@ class TestCostIngestionWithConnections:
             [],
             [],
             [],
+            [],
+            [],
         ]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
@@ -496,6 +550,8 @@ class TestCloudAccountRegistry:
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
             [mock_aws_connection],
+            [],
+            [],
             [],
             [],
             [],
@@ -554,6 +610,8 @@ class TestAttributionTriggering:
             [],
             [],
             [],
+            [],
+            [],
         ]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
@@ -607,6 +665,8 @@ class TestAttributionTriggering:
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
             [mock_aws_connection],
+            [],
+            [],
             [],
             [],
             [],
@@ -673,6 +733,8 @@ class TestCostAggregation:
             [],
             [],
             [],
+            [],
+            [],
         ]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
@@ -727,6 +789,8 @@ class TestCostAggregation:
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
             [mock_aws_connection],
+            [],
+            [],
             [],
             [],
             [],
@@ -788,6 +852,8 @@ class TestConnectionMetadataUpdate:
             [],
             [],
             [],
+            [],
+            [],
         ]
         mock_db.execute = AsyncMock(return_value=query_result)
         mock_db.commit = AsyncMock()
@@ -837,6 +903,8 @@ class TestDaysParameter:
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
             [mock_aws_connection],
+            [],
+            [],
             [],
             [],
             [],
@@ -898,6 +966,8 @@ class TestResponseStructure:
         query_result = MagicMock()
         query_result.scalars.return_value.all.side_effect = [
             [mock_aws_connection],
+            [],
+            [],
             [],
             [],
             [],

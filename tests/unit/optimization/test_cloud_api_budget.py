@@ -133,3 +133,47 @@ def test_aws_detector_initializes_all_registered_plugins(monkeypatch: pytest.Mon
 
     detector = AWSZombieDetector(region="us-east-1")
     assert detector.plugins == dummy_plugins
+
+
+@pytest.mark.asyncio
+async def test_cloud_api_budget_governor_disabled_allows(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_settings = SimpleNamespace(
+        CLOUD_API_BUDGET_GOVERNOR_ENABLED=False,
+        CLOUD_API_BUDGET_ENFORCE=True,
+        AWS_CLOUDWATCH_DAILY_CALL_BUDGET=1,
+        GCP_MONITORING_DAILY_CALL_BUDGET=1,
+        AZURE_MONITOR_DAILY_CALL_BUDGET=1,
+        AWS_CLOUDWATCH_ESTIMATED_COST_PER_CALL_USD=0.001,
+        GCP_MONITORING_ESTIMATED_COST_PER_CALL_USD=0.001,
+        AZURE_MONITOR_ESTIMATED_COST_PER_CALL_USD=0.001,
+    )
+
+    import app.modules.optimization.domain.cloud_api_budget as budget_module
+
+    monkeypatch.setattr(budget_module, "get_settings", lambda: fake_settings)
+
+    governor = CloudAPIBudgetGovernor()
+    assert await governor.consume("gcp_monitoring", units=2, operation="list_time_series")
+
+
+@pytest.mark.asyncio
+async def test_cloud_api_budget_governor_ignores_non_positive_units(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_settings = SimpleNamespace(
+        CLOUD_API_BUDGET_GOVERNOR_ENABLED=True,
+        CLOUD_API_BUDGET_ENFORCE=True,
+        AWS_CLOUDWATCH_DAILY_CALL_BUDGET=1,
+        GCP_MONITORING_DAILY_CALL_BUDGET=1,
+        AZURE_MONITOR_DAILY_CALL_BUDGET=1,
+        AWS_CLOUDWATCH_ESTIMATED_COST_PER_CALL_USD=0.001,
+        GCP_MONITORING_ESTIMATED_COST_PER_CALL_USD=0.001,
+        AZURE_MONITOR_ESTIMATED_COST_PER_CALL_USD=0.001,
+    )
+
+    import app.modules.optimization.domain.cloud_api_budget as budget_module
+
+    monkeypatch.setattr(budget_module, "get_settings", lambda: fake_settings)
+
+    governor = CloudAPIBudgetGovernor()
+    assert await governor.consume("aws_cloudwatch", units=0, operation="get_metric_data")

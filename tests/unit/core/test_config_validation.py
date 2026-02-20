@@ -19,6 +19,10 @@ FAKE_KDF_SALT = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="
 class TestSettingsValidation:
     """Test settings validation and security checks."""
 
+    def test_enforce_rls_in_tests_default_enabled(self):
+        settings = Settings(TESTING=True, _env_file=None)
+        assert settings.ENFORCE_RLS_IN_TESTS is True
+
     def test_settings_missing_required_fields(self):
         """Test validation when required fields are missing."""
         # Ensure no env vars interfere and defaults apply
@@ -26,6 +30,20 @@ class TestSettingsValidation:
             with pytest.raises(ValidationError) as exc:
                 Settings(_env_file=None)
             assert "CSRF_SECRET_KEY must be set" in str(exc.value)
+
+    def test_settings_rejects_weak_blind_index_kdf_iterations(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    BLIND_INDEX_KDF_ITERATIONS=1000,
+                    _env_file=None,
+                )
+            assert "BLIND_INDEX_KDF_ITERATIONS must be >= 10000" in str(exc.value)
 
     def test_settings_invalid_ssl_mode(self):
         """Test validation with invalid SSL mode."""
@@ -44,10 +62,7 @@ class TestSettingsValidation:
                     DB_SSL_MODE="invalid_mode",
                     _env_file=None,
                 )
-            assert (
-                "SECURITY ERROR: DB_SSL_MODE must be 'require', 'verify-ca', or 'verify-full' in production"
-                in str(exc.value)
-            )
+            assert "DB_SSL_MODE must be secure in production" in str(exc.value)
 
     def test_settings_production_ssl_require_without_ca(self):
         """Test production SSL requirement without CA certificate."""
@@ -62,6 +77,7 @@ class TestSettingsValidation:
                     KDF_SALT=FAKE_KDF_SALT,
                     DEBUG=False,  # Production mode
                     TESTING=False,
+                    GROQ_API_KEY="g" * 32,
                     DB_SSL_MODE="verify-ca",
                     DB_SSL_CA_CERT_PATH=None,  # Missing CA cert
                     _env_file=None,
@@ -76,6 +92,7 @@ class TestSettingsValidation:
             settings = Settings(
                 ENVIRONMENT="production",
                 DATABASE_URL="postgresql+asyncpg://test",
+                REDIS_URL="redis://localhost:6379",
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
@@ -133,7 +150,52 @@ class TestSettingsValidation:
                 )
 
             assert "ADMIN_API_KEY" in str(exc.value)
-            assert "32 characters" in str(exc.value)
+            assert ">= 32 chars" in str(exc.value)
+
+    def test_settings_rejects_invalid_kill_switch_scope(self):
+        """Kill switch scope must be explicitly tenant or global."""
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    REMEDIATION_KILL_SWITCH_SCOPE="org",
+                    GROQ_API_KEY="g" * 32,
+                    _env_file=None,
+                )
+
+            assert "REMEDIATION_KILL_SWITCH_SCOPE must be one of" in str(exc.value)
+
+    def test_settings_blocks_global_kill_switch_scope_in_production_without_override(self):
+        """Production/staging must not use global scope unless explicitly overridden."""
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    ENVIRONMENT="production",
+                    DATABASE_URL="postgresql+asyncpg://test",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DEBUG=False,
+                    TESTING=False,
+                    GROQ_API_KEY="g" * 32,
+                    DB_SSL_MODE="require",
+                    ADMIN_API_KEY="a" * 32,
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    REMEDIATION_KILL_SWITCH_SCOPE="global",
+                    REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE=False,
+                    _env_file=None,
+                )
+
+            assert (
+                "REMEDIATION_KILL_SWITCH_SCOPE=global requires "
+                "REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE=true"
+            ) in str(exc.value)
 
     def test_settings_cors_origins_localhost_warning(self):
         """Test warning for localhost origins in production."""
@@ -153,6 +215,7 @@ class TestSettingsValidation:
                     API_URL="https://api.example.com",
                     FRONTEND_URL="https://app.example.com",
                     CORS_ORIGINS=["http://localhost:3000", "https://example.com"],
+                    REDIS_URL="redis://localhost:6379",
                     GROQ_API_KEY="g" * 32,
                     DB_SSL_MODE="require",
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
@@ -186,6 +249,7 @@ class TestSettingsValidation:
                     ENVIRONMENT="production",
                     API_URL="https://api.example.com",  # Set to HTTPS to isolate frontend warning
                     FRONTEND_URL="http://example.com",  # HTTP instead of HTTPS
+                    REDIS_URL="redis://localhost:6379",
                     GROQ_API_KEY="g" * 32,
                     DB_SSL_MODE="require",
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
@@ -200,7 +264,7 @@ class TestSettingsValidation:
                     args[0]
                     for args, kwargs in mock_logger.return_value.warning.call_args_list
                 ]
-                assert "frontend_url_not_https" in warning_calls
+                assert "insecure_url_in_production" in warning_calls
 
     def test_settings_llm_provider_key_missing(self):
         """Test validation when LLM provider is set but key is missing."""
@@ -223,7 +287,7 @@ class TestSettingsValidation:
                     _env_file=None,  # Ignore .env
                 )
 
-            assert "is missing in production" in str(exc.value)
+            assert "its API key is missing" in str(exc.value)
 
     def test_settings_llm_provider_key_present(self):
         """Test successful validation when LLM provider key is present."""
@@ -262,6 +326,7 @@ class TestSettingsValidation:
             settings_prod = Settings(
                 ENVIRONMENT="production",
                 DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                REDIS_URL="redis://localhost:6379",
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,  # Required in prod
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,  # Required in prod
@@ -324,9 +389,8 @@ class TestSettingsValidation:
                     SLACK_CHANNEL_ID="C0123456789",
                     _env_file=None,
                 )
-            assert (
-                "SAAS_STRICT_INTEGRATIONS forbids env-based integration settings in production"
-                in str(exc.value)
+            assert "SAAS_STRICT_INTEGRATIONS forbids env-based settings in production" in str(
+                exc.value
             )
 
     def test_settings_saas_strict_integrations_allows_shared_slack_bot_token(self):
@@ -335,6 +399,7 @@ class TestSettingsValidation:
             settings = Settings(
                 ENVIRONMENT="production",
                 DATABASE_URL="postgresql+asyncpg://test",
+                REDIS_URL="redis://localhost:6379",
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
@@ -351,3 +416,116 @@ class TestSettingsValidation:
                 _env_file=None,
             )
             assert settings.SAAS_STRICT_INTEGRATIONS is True
+
+    def test_settings_production_null_pool_requires_external_pooler_ack(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    ENVIRONMENT="production",
+                    DATABASE_URL="postgresql+asyncpg://test",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DEBUG=False,
+                    TESTING=False,
+                    DB_SSL_MODE="require",
+                    ADMIN_API_KEY="a" * 32,
+                    GROQ_API_KEY="g" * 32,
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    DB_USE_NULL_POOL=True,
+                    DB_EXTERNAL_POOLER=False,
+                    _env_file=None,
+                )
+            assert "DB_USE_NULL_POOL=true requires DB_EXTERNAL_POOLER=true" in str(
+                exc.value
+            )
+
+    def test_settings_multi_worker_requires_distributed_breaker_and_redis(self):
+        with patch.dict("os.environ", {"WEB_CONCURRENCY": "4"}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    ENVIRONMENT="production",
+                    DATABASE_URL="postgresql+asyncpg://test",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DEBUG=False,
+                    TESTING=False,
+                    DB_SSL_MODE="require",
+                    ADMIN_API_KEY="a" * 32,
+                    GROQ_API_KEY="g" * 32,
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    _env_file=None,
+                )
+            assert "WEB_CONCURRENCY > 1 requires CIRCUIT_BREAKER_DISTRIBUTED_STATE" in str(
+                exc.value
+            )
+
+    def test_settings_multi_worker_allowed_with_distributed_breaker_and_redis(self):
+        with patch.dict("os.environ", {"WEB_CONCURRENCY": "4"}, clear=True):
+            settings = Settings(
+                ENVIRONMENT="production",
+                DATABASE_URL="postgresql+asyncpg://test",
+                REDIS_URL="redis://localhost:6379",
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
+                DEBUG=False,
+                TESTING=False,
+                DB_SSL_MODE="require",
+                ADMIN_API_KEY="a" * 32,
+                GROQ_API_KEY="g" * 32,
+                PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                _env_file=None,
+            )
+            assert settings.CIRCUIT_BREAKER_DISTRIBUTED_STATE is True
+
+    def test_settings_production_requires_redis_for_rate_limiting(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    ENVIRONMENT="production",
+                    DATABASE_URL="postgresql+asyncpg://test",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DEBUG=False,
+                    TESTING=False,
+                    DB_SSL_MODE="require",
+                    ADMIN_API_KEY="a" * 32,
+                    GROQ_API_KEY="g" * 32,
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    _env_file=None,
+                )
+            assert "REDIS_URL is required for distributed rate limiting" in str(
+                exc.value
+            )
+
+    def test_settings_production_allows_in_memory_rate_limit_with_break_glass(self):
+        with patch.dict("os.environ", {}, clear=True):
+            settings = Settings(
+                ENVIRONMENT="production",
+                DATABASE_URL="postgresql+asyncpg://test",
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
+                DEBUG=False,
+                TESTING=False,
+                DB_SSL_MODE="require",
+                ADMIN_API_KEY="a" * 32,
+                GROQ_API_KEY="g" * 32,
+                PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                ALLOW_IN_MEMORY_RATE_LIMITS=True,
+                _env_file=None,
+            )
+            assert settings.ALLOW_IN_MEMORY_RATE_LIMITS is True

@@ -13,7 +13,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { base } from '$app/paths';
-	import { PUBLIC_API_URL } from '$env/static/public';
+	import { edgeApiPath } from '$lib/edgeProxy';
 
 	let email = $state('');
 	let password = $state('');
@@ -98,7 +98,7 @@
 				throw new Error('Enter your work email to continue with SSO.');
 			}
 
-			const res = await fetch(`${PUBLIC_API_URL}/public/sso/discovery`, {
+			const res = await fetch(edgeApiPath('/public/sso/discovery'), {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ email: email.trim().toLowerCase() })
@@ -282,7 +282,10 @@
 
 		<!-- Footer -->
 		<p class="text-center text-xs text-ink-500 mt-6 stagger-enter" style="animation-delay: 100ms;">
-			By continuing, you agree to our Terms and Privacy Policy.
+			By continuing, you agree to our
+			<a href={`${base}/terms`} class="text-accent-400 hover:underline">Terms</a>
+			and
+			<a href={`${base}/privacy`} class="text-accent-400 hover:underline">Privacy Policy</a>.
 		</p>
 	</div>
 </div>

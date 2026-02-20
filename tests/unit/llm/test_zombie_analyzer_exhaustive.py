@@ -29,12 +29,17 @@ async def test_zombie_analyzer_byok_resolution(zombie_analyzer):
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
+        patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
     ):  # Patch Guardrails
         mock_settings.return_value.ZOMBIE_PLUGIN_TIMEOUT_SECONDS = 30
         mock_guardrails.sanitize_input = AsyncMock(return_value=[])
         mock_guardrails.validate_output.return_value = MagicMock(
             model_dump=lambda: {"resources": []}
         )
+        mock_tracker = MagicMock()
+        mock_tracker.authorize_request = AsyncMock(return_value=None)
+        mock_tracker.record = AsyncMock(return_value=None)
+        mock_tracker_cls.return_value = mock_tracker
 
         # Mock LLM factory
         mock_factory_model = MagicMock()
@@ -77,11 +82,16 @@ async def test_zombie_analyzer_claude_byok(zombie_analyzer):
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
+        patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
     ):
         mock_guardrails.sanitize_input = AsyncMock(return_value=[])
         mock_guardrails.validate_output.return_value = MagicMock(
             model_dump=lambda: {"resources": []}
         )
+        mock_tracker = MagicMock()
+        mock_tracker.authorize_request = AsyncMock(return_value=None)
+        mock_tracker.record = AsyncMock(return_value=None)
+        mock_tracker_cls.return_value = mock_tracker
 
         mock_factory_model = MagicMock()
         mock_factory.create.return_value = mock_factory_model
@@ -102,8 +112,10 @@ async def test_zombie_analyzer_claude_byok(zombie_analyzer):
             {"ec2": [{"id": "i-1"}]}, tenant_id=tenant_id, db=mock_db
         )
 
-        # Verify factory called with claude and correct key
-        mock_factory.create.assert_called_with("claude", api_key="sk-ant-test")
+        # Verify factory called with claude, preferred model, and correct key
+        mock_factory.create.assert_called_with(
+            "claude", model="claude-3-opus", api_key="sk-ant-test"
+        )
 
 
 @pytest.mark.asyncio
@@ -124,11 +136,16 @@ async def test_zombie_analyzer_gemini_byok(zombie_analyzer):
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
+        patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
     ):
         mock_guardrails.sanitize_input = AsyncMock(return_value=[])
         mock_guardrails.validate_output.return_value = MagicMock(
             model_dump=lambda: {"resources": []}
         )
+        mock_tracker = MagicMock()
+        mock_tracker.authorize_request = AsyncMock(return_value=None)
+        mock_tracker.record = AsyncMock(return_value=None)
+        mock_tracker_cls.return_value = mock_tracker
 
         mock_factory_model = MagicMock()
         mock_factory.create.return_value = mock_factory_model
@@ -149,8 +166,10 @@ async def test_zombie_analyzer_gemini_byok(zombie_analyzer):
             {"ec2": [{"id": "i-1"}]}, tenant_id=tenant_id, db=mock_db
         )
 
-        # Verify factory called with google and correct key
-        mock_factory.create.assert_called_with("google", api_key="sk-goog-test")
+        # Verify factory called with google, preferred model, and correct key
+        mock_factory.create.assert_called_with(
+            "google", model="gemini-pro", api_key="sk-goog-test"
+        )
 
 
 @pytest.mark.asyncio
@@ -193,11 +212,16 @@ async def test_zombie_analyzer_groq_byok(zombie_analyzer):
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
+        patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
     ):
         mock_guardrails.sanitize_input = AsyncMock(return_value=[])
         mock_guardrails.validate_output.return_value = MagicMock(
             model_dump=lambda: {"resources": []}
         )
+        mock_tracker = MagicMock()
+        mock_tracker.authorize_request = AsyncMock(return_value=None)
+        mock_tracker.record = AsyncMock(return_value=None)
+        mock_tracker_cls.return_value = mock_tracker
 
         mock_factory_model = MagicMock()
         mock_factory.create.return_value = mock_factory_model
@@ -218,8 +242,10 @@ async def test_zombie_analyzer_groq_byok(zombie_analyzer):
             {"ec2": [{"id": "i-1"}]}, tenant_id=tenant_id, db=mock_db
         )
 
-        # Verify factory called with groq and correct key
-        mock_factory.create.assert_called_with("groq", api_key="sk-groq-test")
+        # Verify factory called with groq, preferred model, and correct key
+        mock_factory.create.assert_called_with(
+            "groq", model="llama-3", api_key="sk-groq-test"
+        )
 
 
 @pytest.mark.asyncio

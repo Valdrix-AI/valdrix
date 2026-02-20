@@ -25,23 +25,21 @@ def clean_session_module():
 class TestSessionExhaustive:
     """Exhaustive tests for db/session.py using reload."""
 
-    def test_missing_db_url_exits(self, clean_session_module):
-        """Test that missing DATABASE_URL triggers sys.exit."""
+    def test_missing_db_url_fails_on_runtime_init(self, clean_session_module):
+        """Test that missing DATABASE_URL fails when DB runtime initializes."""
         mock_settings = MagicMock()
         mock_settings.DATABASE_URL = ""
         mock_settings.DB_SSL_MODE = "disable"
-        mock_settings.TESTING = False  # MUST be False to trigger sys.exit
+        mock_settings.TESTING = False
         mock_settings.is_production = False
         mock_settings.DEBUG = True
 
-        # Patch at source so reload imports the mock
-        with (
-            patch("app.shared.core.config.get_settings", return_value=mock_settings),
-            patch("sys.exit", side_effect=SystemExit) as mock_exit,
-        ):
-            with pytest.raises(SystemExit):
-                importlib.reload(session_mod)
-            mock_exit.assert_called_with(1)
+        with patch("app.shared.core.config.get_settings", return_value=mock_settings):
+            importlib.reload(session_mod)
+            with pytest.raises(
+                ValueError, match="DATABASE_URL is not set. The application cannot start."
+            ):
+                session_mod._get_db_runtime()
 
     def test_ssl_modes_exhaustive(self, clean_session_module):
         """Test all SSL mode branches."""
@@ -85,8 +83,9 @@ class TestSessionExhaustive:
         mock_settings.is_production = True
 
         with patch("app.shared.core.config.get_settings", return_value=mock_settings):
+            importlib.reload(session_mod)
             with pytest.raises(ValueError, match="DB_SSL_CA_CERT_PATH is mandatory"):
-                importlib.reload(session_mod)
+                session_mod._get_db_runtime()
 
     def test_invalid_ssl_mode(self, clean_session_module):
         """Test error on invalid SSL mode."""
@@ -95,11 +94,10 @@ class TestSessionExhaustive:
         mock_settings.DB_SSL_MODE = "invalid"
         mock_settings.is_production = False
 
-        with (
-            patch("app.shared.core.config.get_settings", return_value=mock_settings),
-            pytest.raises(ValueError, match="Invalid DB_SSL_MODE"),
-        ):
+        with patch("app.shared.core.config.get_settings", return_value=mock_settings):
             importlib.reload(session_mod)
+            with pytest.raises(ValueError, match="Invalid DB_SSL_MODE"):
+                session_mod._get_db_runtime()
 
     def test_pool_settings_exhaustive(self, clean_session_module):
         """Test pool class and settings branches."""
@@ -118,6 +116,7 @@ class TestSessionExhaustive:
             patch("sqlalchemy.event.listens_for"),
         ):
             importlib.reload(session_mod)
+            session_mod._get_db_runtime()
             mock_create.assert_called()
             _, kwargs = mock_create.call_args
             assert kwargs["poolclass"].__name__ == "StaticPool"
@@ -138,9 +137,40 @@ class TestSessionExhaustive:
             patch("sqlalchemy.event.listens_for"),
         ):
             importlib.reload(session_mod)
+            session_mod._get_db_runtime()
             _, kwargs = mock_create.call_args
             # Now correctly expects StaticPool because safety swap defaults to SQLite memory
             assert kwargs["poolclass"].__name__ == "StaticPool"
+
+        # PostgreSQL queue pool by default
+        mock_settings_pg = MagicMock()
+        mock_settings_pg.DATABASE_URL = "postgresql+asyncpg://h/d"
+        mock_settings_pg.TESTING = False
+        mock_settings_pg.DB_SSL_MODE = "disable"
+        mock_settings_pg.is_production = False
+        mock_settings_pg.DB_USE_NULL_POOL = False
+        mock_settings_pg.DB_EXTERNAL_POOLER = False
+        mock_settings_pg.DB_POOL_SIZE = 11
+        mock_settings_pg.DB_MAX_OVERFLOW = 7
+        mock_settings_pg.DB_POOL_TIMEOUT = 9
+        mock_settings_pg.DB_POOL_RECYCLE = 60
+        mock_settings_pg.DB_ECHO = False
+
+        with (
+            patch(
+                "app.shared.core.config.get_settings",
+                return_value=mock_settings_pg,
+            ),
+            patch("sqlalchemy.ext.asyncio.create_async_engine") as mock_create,
+            patch("sqlalchemy.event.listens_for"),
+        ):
+            importlib.reload(session_mod)
+            session_mod._get_db_runtime()
+            _, kwargs = mock_create.call_args
+            assert "poolclass" not in kwargs
+            assert kwargs["pool_size"] == 11
+            assert kwargs["max_overflow"] == 7
+            assert kwargs["pool_timeout"] == 9
 
     def test_verify_ca_mode_requirements(self, clean_session_module):
         """Test verify-ca requirement for CA cert path."""
@@ -150,11 +180,10 @@ class TestSessionExhaustive:
         mock_settings.DB_SSL_CA_CERT_PATH = ""
         mock_settings.is_production = False
 
-        with (
-            patch("app.shared.core.config.get_settings", return_value=mock_settings),
-            pytest.raises(ValueError, match="DB_SSL_CA_CERT_PATH required"),
-        ):
+        with patch("app.shared.core.config.get_settings", return_value=mock_settings):
             importlib.reload(session_mod)
+            with pytest.raises(ValueError, match="DB_SSL_CA_CERT_PATH required"):
+                session_mod._get_db_runtime()
 
     def test_slow_query_event_registration(self, clean_session_module):
         """Verify event listeners are registered."""

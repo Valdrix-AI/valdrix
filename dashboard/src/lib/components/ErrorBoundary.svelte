@@ -2,7 +2,17 @@
 	import { onMount } from 'svelte';
 
 	let { children } = $props();
-	let error = $state(null);
+	let error = $state<Error | null>(null);
+
+	function asError(value: unknown): Error {
+		if (value instanceof Error) return value;
+		if (typeof value === 'string') return new Error(value);
+		return new Error('Unknown error');
+	}
+
+	function captureError(value: unknown) {
+		error = asError(value);
+	}
 
 	function reset() {
 		error = null;
@@ -10,21 +20,28 @@
 	}
 
 	onMount(() => {
-		const handleError = (e: ErrorEvent) => {
-			error = e.error || new Error('Unknown error');
-			return true; // prevent default browser logging if desired
+		const handleWindowError = (event: ErrorEvent) => {
+			captureError(event.error ?? event.message);
+		};
+		const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+			captureError(event.reason);
 		};
 
-		window.addEventListener('error', handleError);
-		return () => window.removeEventListener('error', handleError);
+		window.addEventListener('error', handleWindowError);
+		window.addEventListener('unhandledrejection', handleUnhandledRejection);
+		return () => {
+			window.removeEventListener('error', handleWindowError);
+			window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+		};
 	});
 </script>
 
 {#if error}
 	<div
-		class="p-8 m-4 bg-red-50 border border-red-200 rounded-lg text-red-900 shadow-sm flex flex-col items-center justify-center text-center"
+		class="p-8 m-4 rounded-lg border text-ink-100 shadow-sm flex flex-col items-center justify-center text-center"
+		style="border-color: rgb(244 63 94 / 0.3); background-color: rgb(244 63 94 / 0.1);"
 	>
-		<div class="w-12 h-12 mb-4 text-red-500">
+		<div class="w-12 h-12 mb-4 text-danger-400">
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				fill="none"
@@ -45,7 +62,8 @@
 		</p>
 		<button
 			onclick={reset}
-			class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors uppercase text-xs font-semibold tracking-wider shadow-sm"
+			class="px-4 py-2 text-white rounded-md transition-colors uppercase text-xs font-semibold tracking-wider shadow-sm"
+			style="background-color: var(--color-danger-500);"
 		>
 			Restart Dashboard
 		</button>

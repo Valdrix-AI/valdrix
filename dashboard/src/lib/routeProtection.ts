@@ -1,6 +1,12 @@
 import { base } from '$app/paths';
 
-const PUBLIC_EXACT_PATHS = new Set<string>(['/', '/robots.txt', '/sitemap.xml']);
+const PUBLIC_EXACT_PATHS = new Set<string>([
+	'/',
+	'/robots.txt',
+	'/sitemap.xml',
+	'/terms',
+	'/privacy'
+]);
 
 // Segment-safe prefixes: only match "/prefix" or "/prefix/...".
 const PUBLIC_SEGMENT_PREFIXES = [

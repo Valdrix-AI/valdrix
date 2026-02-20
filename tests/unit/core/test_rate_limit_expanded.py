@@ -148,6 +148,32 @@ def test_get_limiter_initialization():
         assert limiter is not None
 
 
+def test_get_limiter_rejects_in_memory_in_production() -> None:
+    mock_settings = SimpleNamespace(
+        REDIS_URL=None,
+        ENVIRONMENT="production",
+        ALLOW_IN_MEMORY_RATE_LIMITS=False,
+        RATELIMIT_ENABLED=True,
+    )
+    with patch("app.shared.core.rate_limit.get_settings", return_value=mock_settings):
+        with patch("app.shared.core.rate_limit._limiter", None):
+            with pytest.raises(RuntimeError):
+                get_limiter()
+
+
+def test_get_limiter_allows_break_glass_in_production() -> None:
+    mock_settings = SimpleNamespace(
+        REDIS_URL=None,
+        ENVIRONMENT="production",
+        ALLOW_IN_MEMORY_RATE_LIMITS=True,
+        RATELIMIT_ENABLED=True,
+    )
+    with patch("app.shared.core.rate_limit.get_settings", return_value=mock_settings):
+        with patch("app.shared.core.rate_limit._limiter", None):
+            limiter = get_limiter()
+            assert limiter is not None
+
+
 def test_setup_rate_limiting():
     """Test standard app setup for rate limiting."""
     app = MagicMock()

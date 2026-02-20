@@ -261,7 +261,7 @@ class TestRemediationIntegration:
         # Mock remediation service
         with (
             patch(
-                "app.modules.optimization.domain.remediation.RemediationService._get_client"
+                "app.modules.optimization.domain.actions.aws.base.BaseAWSAction._get_client"
             ) as mock_get_client,
             patch("app.shared.llm.budget_manager.LLMBudgetManager") as mock_budget_mgr,
             patch("app.shared.core.cache.get_cache_service"),
@@ -312,7 +312,7 @@ class TestRemediationIntegration:
 
         # Mock remediation service with AWS failure
         with patch(
-            "app.modules.optimization.domain.remediation.RemediationService._get_client"
+            "app.modules.optimization.domain.actions.aws.base.BaseAWSAction._get_client"
         ) as mock_get_client:
             mock_ec2_client = AsyncMock()
             mock_get_client.return_value.__aenter__.return_value = mock_ec2_client
@@ -352,7 +352,7 @@ class TestRemediationIntegration:
                 "app.modules.optimization.domain.remediation.SafetyGuardrailService"
             ) as mock_safety,
             patch(
-                "app.modules.optimization.domain.remediation.RemediationService._get_client"
+                "app.modules.optimization.domain.actions.aws.base.BaseAWSAction._get_client"
             ),
         ):
             mock_safety.return_value.check_all_guards = AsyncMock(
@@ -502,7 +502,7 @@ class TestTenantIsolationIntegration:
 
         # Mock remediation service
         with patch(
-            "app.modules.optimization.domain.remediation.RemediationService._get_client"
+            "app.modules.optimization.domain.actions.aws.base.BaseAWSAction._get_client"
         ) as mock_get_client:
             mock_ec2_client = AsyncMock()
             mock_get_client.return_value.__aenter__.return_value = mock_ec2_client
@@ -730,7 +730,7 @@ class TestErrorHandlingIntegration:
             return {"StoppingInstances": [{"InstanceId": kwargs["InstanceIds"][0]}]}
 
         with patch(
-            "app.modules.optimization.domain.remediation.RemediationService._get_client"
+            "app.modules.optimization.domain.actions.aws.base.BaseAWSAction._get_client"
         ) as mock_get_client:
             mock_ec2_client = AsyncMock()
             mock_get_client.return_value.__aenter__.return_value = mock_ec2_client

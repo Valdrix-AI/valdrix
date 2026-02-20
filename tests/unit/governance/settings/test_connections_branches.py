@@ -119,6 +119,31 @@ async def test_create_aws_connection_duplicate_raises(
 
 
 @pytest.mark.asyncio
+async def test_create_aws_connection_defaults_region_global(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    payload = AWSConnectionCreate(
+        aws_account_id="210987654321",
+        role_arn="arn:aws:iam::210987654321:role/TestRole",
+        external_id="vx-" + "b" * 32,
+    )
+    db.scalar.return_value = None
+    db.refresh.return_value = None
+
+    with patch.object(
+        aws_discovery_api, "_enforce_connection_limit", new=AsyncMock()
+    ):
+        response = await aws_discovery_api.create_aws_connection(
+            MagicMock(), payload, user, db
+        )
+
+    assert response.region == "global"
+    assert db.add.call_count == 1
+    created = db.add.call_args.args[0]
+    assert created.region == "global"
+
+
+@pytest.mark.asyncio
 async def test_delete_aws_connection_not_found(
     user: CurrentUser, db: MagicMock
 ) -> None:

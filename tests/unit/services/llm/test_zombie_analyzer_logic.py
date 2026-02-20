@@ -77,7 +77,12 @@ async def test_analyze_with_byok_config(mock_llm, mock_db):
         mock_chain.ainvoke.return_value = mock_response
         mock_or.return_value = mock_chain
         # Patch LLMFactory.create since it's called for BYOK
-        with patch("app.shared.llm.factory.LLMFactory.create") as mock_factory_create:
+        with (
+            patch("app.shared.llm.factory.LLMFactory.create") as mock_factory_create,
+            patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
+        ):
+            mock_tracker = AsyncMock()
+            mock_tracker_cls.return_value = mock_tracker
             mock_factory_create.return_value = mock_llm
             result = await analyzer.analyze(
                 detection_results, tenant_id=tenant_id, db=mock_db, provider="openai"
@@ -85,7 +90,9 @@ async def test_analyze_with_byok_config(mock_llm, mock_db):
             assert result["summary"] == "BYOK test"
             # Verify BYOK key was passed to factory
             mock_factory_create.assert_called_with(
-                "openai", api_key="sk-valid-key-long-enough-12345"
+                "openai",
+                model="gpt-4o",
+                api_key="sk-valid-key-long-enough-12345",
             )
 
 

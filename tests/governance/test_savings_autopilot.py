@@ -41,7 +41,9 @@ async def test_savings_processor_executes_autonomous_ready(db) -> None:
         mock_service.create_request.return_value = mock_request
 
         processor = SavingsProcessor()
-        await processor.process_recommendations(db, tenant_id, result)
+        await processor.process_recommendations(
+            db, tenant_id, result, provider="aws"
+        )
 
         # 3. Assertions
         mock_service.create_request.assert_called_once()
@@ -78,7 +80,9 @@ async def test_savings_processor_skips_non_autonomous(db):
     ) as mock_service_cls:
         mock_service = mock_service_cls.return_value
         processor = SavingsProcessor()
-        await processor.process_recommendations(db, tenant_id, result)
+        await processor.process_recommendations(
+            db, tenant_id, result, provider="aws"
+        )
 
         mock_service.create_request.assert_not_called()
 
@@ -110,7 +114,9 @@ async def test_savings_processor_does_not_auto_execute_destructive_actions(db):
         mock_service.create_request.return_value = mock_request
 
         processor = SavingsProcessor()
-        await processor.process_recommendations(db, tenant_id, result)
+        await processor.process_recommendations(
+            db, tenant_id, result, provider="aws"
+        )
 
         mock_service.create_request.assert_called_once()
         mock_service.approve.assert_not_called()

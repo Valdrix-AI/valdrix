@@ -22,7 +22,7 @@ from uuid import uuid4
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
-from app.models.tenant import Tenant, User, UserRole
+from app.models.tenant import Tenant, User
 
 
 @pytest_asyncio.fixture

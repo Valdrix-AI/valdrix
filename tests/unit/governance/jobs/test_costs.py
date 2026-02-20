@@ -56,7 +56,9 @@ async def test_cost_ingestion_with_connection(mock_job, mock_db):
         [],
         [],
         [],
-    ]  # AWS, Azure, GCP, SaaS, License
+        [],
+        [],
+    ]  # AWS, Azure, GCP, SaaS, License, Platform, Hybrid
     mock_db.execute.return_value = result
 
     # Mock Adapter and Persistence
@@ -140,7 +142,7 @@ async def test_cost_ingestion_honors_backfill_window(mock_db):
     conn.name = "AWS Backfill"
 
     result = MagicMock()
-    result.scalars.return_value.all.side_effect = [[conn], [], [], [], []]
+    result.scalars.return_value.all.side_effect = [[conn], [], [], [], [], [], []]
     mock_db.execute.return_value = result
 
     with (

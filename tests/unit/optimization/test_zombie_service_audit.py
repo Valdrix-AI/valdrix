@@ -1,5 +1,6 @@
 import pytest
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from app.modules.optimization.domain.service import ZombieService
@@ -96,6 +97,72 @@ async def test_scan_for_tenant_success(mock_db, tenant_id):
                             is True
                         )
                         mock_notify.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_scan_for_tenant_aws_global_region_fallback_uses_configured_default(
+    mock_db, tenant_id
+):
+    service = ZombieService(mock_db)
+
+    conn = MagicMock(spec=AWSConnection)
+    conn.id = uuid4()
+    conn.tenant_id = tenant_id
+    conn.name = "Prod-AWS"
+    conn.provider = "aws"
+    conn.region = "global"
+
+    mock_res_aws = MagicMock()
+    mock_res_aws.scalars.return_value.all.return_value = [conn]
+    mock_res_empty = MagicMock()
+    mock_res_empty.scalars.return_value.all.return_value = []
+    mock_db.execute.side_effect = [mock_res_aws, mock_res_empty, mock_res_empty]
+
+    mock_detector = AsyncMock()
+    mock_detector.provider_name = "aws"
+    mock_detector.get_credentials = AsyncMock(
+        return_value={
+            "AccessKeyId": "AKIA_TEST",
+            "SecretAccessKey": "SECRET_TEST",
+        }
+    )
+    mock_detector.scan_all.return_value = {"unattached_volumes": []}
+
+    mock_rd = MagicMock()
+    mock_rd.get_enabled_regions = AsyncMock(return_value=[])
+
+    with (
+        patch(
+            "app.shared.core.connection_state.get_settings",
+            return_value=SimpleNamespace(AWS_DEFAULT_REGION="eu-west-2"),
+        ),
+        patch(
+            "app.modules.optimization.domain.service.ZombieDetectorFactory.get_detector",
+            return_value=mock_detector,
+        ) as mock_factory,
+        patch(
+            "app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery",
+            return_value=mock_rd,
+        ),
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            return_value=PricingTier.FREE,
+        ),
+        patch("app.shared.core.ops_metrics.SCAN_LATENCY"),
+        patch(
+            "app.shared.core.notifications.NotificationDispatcher.notify_zombies"
+        ),
+    ):
+        await service.scan_for_tenant(tenant_id, region="global")
+
+    called_regions = [
+        str(call.kwargs.get("region"))
+        for call in mock_factory.call_args_list
+        if "region" in call.kwargs
+    ]
+    assert called_regions
+    assert "global" not in called_regions
+    assert "eu-west-2" in called_regions
 
 
 @pytest.mark.asyncio

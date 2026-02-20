@@ -50,13 +50,15 @@ class AsyncPaginator:
 async def test_unused_elastic_ips_detects_unattached(monkeypatch):
     plugin = UnusedElasticIpsPlugin()
     ec2 = MagicMock()
-    ec2.describe_addresses = AsyncMock(
-        return_value={
-            "Addresses": [
-                {"PublicIp": "1.1.1.1", "AllocationId": "eip-1"},
-                {"PublicIp": "2.2.2.2", "InstanceId": "i-123"},
-            ]
-        }
+    ec2.get_paginator.return_value = AsyncPaginator(
+        [
+            {
+                "Addresses": [
+                    {"PublicIp": "1.1.1.1", "AllocationId": "eip-1"},
+                    {"PublicIp": "2.2.2.2", "InstanceId": "i-123"},
+                ]
+            }
+        ]
     )
 
     monkeypatch.setattr(

@@ -41,7 +41,7 @@ async def test_execute_success(db):
         # Verify arguments passed to scan
         service.scan_for_tenant.assert_awaited_with(
             tenant_id=job.tenant_id,
-            region=["us-east-1"],
+            region="us-east-1",
             analyze=True,
             on_category_complete=ANY,
         )
@@ -79,3 +79,22 @@ async def test_execute_skipped_no_results(db):
         result = await handler.execute(job, db)
         assert result["status"] == "skipped"
         assert result["reason"] == "no_connections_found"
+
+
+@pytest.mark.asyncio
+async def test_execute_prefers_region_payload_key(db):
+    handler = ZombieScanHandler()
+    job = BackgroundJob(tenant_id=uuid4(), payload={"region": "eu-west-1"})
+
+    with patch("app.modules.optimization.domain.service.ZombieService") as MockService:
+        service = MockService.return_value
+        service.scan_for_tenant = AsyncMock(return_value={"total_monthly_waste": 0.0})
+
+        await handler.execute(job, db)
+
+        service.scan_for_tenant.assert_awaited_with(
+            tenant_id=job.tenant_id,
+            region="eu-west-1",
+            analyze=False,
+            on_category_complete=ANY,
+        )

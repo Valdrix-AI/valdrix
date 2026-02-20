@@ -1,6 +1,16 @@
 import pytest
 import httpx
+import respx
+
 from app.shared.core.http import get_http_client, init_http_client, close_http_client
+
+
+@pytest.fixture(autouse=True)
+async def cleanup_http_singleton():
+    """Ensure a clean singleton state for every test."""
+    await close_http_client()
+    yield
+    await close_http_client()
 
 
 @pytest.mark.asyncio
@@ -20,7 +30,6 @@ async def test_http_client_singleton():
     client3 = get_http_client()
     assert client3 is not client1
     assert client3.is_closed is False
-    await close_http_client()
 
 
 @pytest.mark.asyncio
@@ -29,30 +38,19 @@ async def test_http_client_production_settings():
     await init_http_client()
     client = get_http_client()
 
-    # Check http2
-    # Note: httpx doesn't always expose http2 attribute directly on client in a simple way
-    # but we can check the headers or internal state if needed.
-    # For now, we check the user agent we set.
-    # Check timeout
     assert client.timeout.read == 20.0
     assert client.headers["User-Agent"] == "Valdrix-AI/2026.02"
 
-    # Check limits via transport (if accessible and stable)
-    # We can at least verify the client is functional
-    response = await client.get("https://www.google.com")
-    assert response.status_code == 200
-
-    await close_http_client()
+    with respx.mock:
+        respx.get("https://www.google.com").mock(return_value=httpx.Response(200))
+        response = await client.get("https://www.google.com")
+        assert response.status_code == 200
 
 
 @pytest.mark.asyncio
 async def test_http_client_lazy_initialization():
     """Verify that get_http_client auto-initializes if init_http_client wasn't called."""
-    await close_http_client()  # Ensure clean state
-
     # This should trigger lazy initialization with default settings
     client = get_http_client()
     assert client is not None
-    assert client.timeout.read == 10.0  # Default in lazy init
-
-    await close_http_client()
+    assert client.timeout.read == 20.0  # Matches lazy-init default in http.py

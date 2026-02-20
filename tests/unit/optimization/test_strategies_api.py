@@ -2,6 +2,7 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
+from sqlalchemy import select, func
 
 from app.models.tenant import Tenant, User, UserRole
 from app.models.optimization import (
@@ -253,8 +254,9 @@ async def test_backtest_endpoint_returns_strategy_results(
 
         # Daily-resolution ledger rows (timestamp is optional). The service expands these
         # into hourly series for the backtest harness.
-        from datetime import date
+        from datetime import date, timedelta
         from decimal import Decimal
+        base_day = date.today() - timedelta(days=3)
 
         db.add_all(
             [
@@ -270,7 +272,7 @@ async def test_backtest_endpoint_returns_strategy_results(
                     canonical_mapping_version="focus-1.3-v1",
                     is_preliminary=False,
                     cost_status="FINAL",
-                    recorded_at=date(2026, 2, 10),
+                    recorded_at=base_day,
                     timestamp=None,
                 ),
                 CostRecord(
@@ -285,7 +287,7 @@ async def test_backtest_endpoint_returns_strategy_results(
                     canonical_mapping_version="focus-1.3-v1",
                     is_preliminary=False,
                     cost_status="FINAL",
-                    recorded_at=date(2026, 2, 11),
+                    recorded_at=base_day + timedelta(days=1),
                     timestamp=None,
                 ),
                 CostRecord(
@@ -300,7 +302,7 @@ async def test_backtest_endpoint_returns_strategy_results(
                     canonical_mapping_version="focus-1.3-v1",
                     is_preliminary=False,
                     cost_status="FINAL",
-                    recorded_at=date(2026, 2, 12),
+                    recorded_at=base_day + timedelta(days=2),
                     timestamp=None,
                 ),
             ]
@@ -328,6 +330,55 @@ async def test_backtest_endpoint_returns_strategy_results(
         assert payload["strategies"][0]["provider"] == "aws"
         assert payload["strategies"][0]["strategy_type"] == "savings_plan"
         assert "within_tolerance" in payload["strategies"][0]["backtest"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(require_tenant_access, None)
+
+
+@pytest.mark.asyncio
+async def test_backtest_provider_filter_no_results_does_not_seed_defaults(
+    async_client, db, app, member_user
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: member_user
+    app.dependency_overrides[require_tenant_access] = lambda: member_user.tenant_id
+    try:
+        before_count = await db.scalar(select(func.count(OptimizationStrategy.id)))
+        response = await async_client.get(
+            "/api/v1/strategies/backtest",
+            params={"provider": "saas", "days": 30},
+        )
+        after_count = await db.scalar(select(func.count(OptimizationStrategy.id)))
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "success"
+        assert payload["strategies"] == []
+        assert int(after_count or 0) == int(before_count or 0)
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(require_tenant_access, None)
+
+
+@pytest.mark.asyncio
+async def test_backtest_invalid_provider_rejected(
+    async_client, app, member_user
+) -> None:
+    app.dependency_overrides[get_current_user] = lambda: member_user
+    app.dependency_overrides[require_tenant_access] = lambda: member_user.tenant_id
+    try:
+        response = await async_client.get(
+            "/api/v1/strategies/backtest",
+            params={"provider": "oracle"},
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        message = str(
+            payload.get("detail")
+            or payload.get("message")
+            or payload.get("error")
+            or ""
+        )
+        assert "Unsupported provider" in message
     finally:
         app.dependency_overrides.pop(get_current_user, None)
         app.dependency_overrides.pop(require_tenant_access, None)

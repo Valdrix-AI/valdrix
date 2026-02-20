@@ -198,10 +198,9 @@ class TestCohortAnalysis:
             run_cohort_analysis("HIGH_VALUE")
 
             mock_run_async.assert_called_once()
-            # Should pass the correct cohort enum
             args = mock_run_async.call_args[0]
-            assert isinstance(args[0], TenantCohort)
-            assert args[0] == TenantCohort.HIGH_VALUE
+            assert callable(args[0])
+            assert args[1] == TenantCohort.HIGH_VALUE
 
 
 class TestRemediationSweep:
@@ -214,16 +213,21 @@ class TestRemediationSweep:
         mock_connection.id = uuid4()
         mock_connection.tenant_id = uuid4()
         mock_connection.region = "us-east-1"
+        mock_connection.provider = "aws"
+        mock_connection.status = "active"
 
         with (
             patch(
                 "app.tasks.scheduler_tasks.async_session_maker"
             ) as mock_session_maker,
-            patch("app.tasks.scheduler_tasks.BackgroundJob"),
             patch(
                 "app.tasks.scheduler_tasks.SchedulerOrchestrator"
             ) as mock_orchestrator_cls,
             patch("app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED"),
+            patch(
+                "app.tasks.scheduler_tasks._load_active_remediation_connections",
+                new_callable=AsyncMock,
+            ) as mock_load_connections,
         ):
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
@@ -235,10 +239,7 @@ class TestRemediationSweep:
             )
             mock_session.begin.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            # Mock connection query
-            mock_conn_result = MagicMock()
-            mock_conn_result.scalars.return_value.all.return_value = [mock_connection]
-            mock_session.execute.return_value = mock_conn_result
+            mock_load_connections.return_value = [mock_connection]
 
             # Mock orchestrator for green window check
             mock_orchestrator = MagicMock()
@@ -248,7 +249,7 @@ class TestRemediationSweep:
             # Mock job insertion
             mock_job_result = MagicMock()
             mock_job_result.rowcount = 1
-            mock_session.execute.side_effect = [mock_conn_result, mock_job_result]
+            mock_session.execute.return_value = mock_job_result
 
             await _remediation_sweep_logic()
 
@@ -262,6 +263,8 @@ class TestRemediationSweep:
         mock_connection.id = uuid4()
         mock_connection.tenant_id = uuid4()
         mock_connection.region = "us-east-1"
+        mock_connection.provider = "aws"
+        mock_connection.status = "active"
 
         with (
             patch(
@@ -270,6 +273,53 @@ class TestRemediationSweep:
             patch(
                 "app.tasks.scheduler_tasks.SchedulerOrchestrator"
             ) as mock_orchestrator_cls,
+            patch(
+                "app.tasks.scheduler_tasks._load_active_remediation_connections",
+                new_callable=AsyncMock,
+            ) as mock_load_connections,
+        ):
+            mock_session = AsyncMock()
+            mock_session_maker.return_value = mock_session
+
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+            mock_session.begin.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session
+            )
+            mock_session.begin.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_load_connections.return_value = [mock_connection]
+            mock_session.execute.return_value = MagicMock(rowcount=1)
+
+            # Mock orchestrator - not green window
+            mock_orchestrator = MagicMock()
+            mock_orchestrator.is_low_carbon_window = AsyncMock(return_value=False)
+            mock_orchestrator_cls.return_value = mock_orchestrator
+
+            await _remediation_sweep_logic()
+
+            # Should have scheduled job 4 hours later
+            # This is verified by checking the scheduled_for time in the job creation
+
+    @pytest.mark.asyncio
+    async def test_remediation_sweep_non_aws_skips_carbon_window_gate(self):
+        """Non-AWS connectors should enqueue remediation without carbon-window gating."""
+        mock_connection = MagicMock()
+        mock_connection.id = uuid4()
+        mock_connection.tenant_id = uuid4()
+        mock_connection.provider = "saas"
+        mock_connection.is_active = True
+
+        with (
+            patch(
+                "app.tasks.scheduler_tasks.async_session_maker"
+            ) as mock_session_maker,
+            patch(
+                "app.tasks.scheduler_tasks.SchedulerOrchestrator"
+            ) as mock_orchestrator_cls,
+            patch(
+                "app.tasks.scheduler_tasks._load_active_remediation_connections",
+                new_callable=AsyncMock,
+            ) as mock_load_connections,
         ):
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
@@ -281,20 +331,59 @@ class TestRemediationSweep:
             )
             mock_session.begin.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            # Mock connection query
-            mock_conn_result = MagicMock()
-            mock_conn_result.scalars.return_value.all.return_value = [mock_connection]
-            mock_session.execute.return_value = mock_conn_result
+            mock_load_connections.return_value = [mock_connection]
+            mock_session.execute.return_value = MagicMock(rowcount=1)
 
-            # Mock orchestrator - not green window
             mock_orchestrator = MagicMock()
             mock_orchestrator.is_low_carbon_window = AsyncMock(return_value=False)
             mock_orchestrator_cls.return_value = mock_orchestrator
 
             await _remediation_sweep_logic()
 
-            # Should have scheduled job 4 hours later
-            # This is verified by checking the scheduled_for time in the job creation
+            mock_orchestrator.is_low_carbon_window.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_remediation_sweep_non_aws_with_region_uses_carbon_window_gate(self):
+        """Non-AWS connectors with concrete regions should use carbon-window gating."""
+        mock_connection = MagicMock()
+        mock_connection.id = uuid4()
+        mock_connection.tenant_id = uuid4()
+        mock_connection.provider = "azure"
+        mock_connection.region = "westeurope"
+        mock_connection.is_active = True
+
+        with (
+            patch(
+                "app.tasks.scheduler_tasks.async_session_maker"
+            ) as mock_session_maker,
+            patch(
+                "app.tasks.scheduler_tasks.SchedulerOrchestrator"
+            ) as mock_orchestrator_cls,
+            patch(
+                "app.tasks.scheduler_tasks._load_active_remediation_connections",
+                new_callable=AsyncMock,
+            ) as mock_load_connections,
+        ):
+            mock_session = AsyncMock()
+            mock_session_maker.return_value = mock_session
+
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+            mock_session.begin.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session
+            )
+            mock_session.begin.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            mock_load_connections.return_value = [mock_connection]
+            mock_session.execute.return_value = MagicMock(rowcount=1)
+
+            mock_orchestrator = MagicMock()
+            mock_orchestrator.is_low_carbon_window = AsyncMock(return_value=False)
+            mock_orchestrator_cls.return_value = mock_orchestrator
+
+            await _remediation_sweep_logic()
+
+            mock_orchestrator.is_low_carbon_window.assert_called_once_with("westeurope")
 
     def test_run_remediation_sweep_task(self):
         """Test the Celery task wrapper for remediation sweep."""
@@ -910,6 +999,8 @@ class TestSchedulerTasksProductionQuality:
         mock_connection.id = uuid4()
         mock_connection.tenant_id = uuid4()
         mock_connection.region = "us-east-1"
+        mock_connection.provider = "aws"
+        mock_connection.status = "active"
 
         with (
             patch(
@@ -918,6 +1009,10 @@ class TestSchedulerTasksProductionQuality:
             patch(
                 "app.tasks.scheduler_tasks.SchedulerOrchestrator"
             ) as mock_orchestrator_cls,
+            patch(
+                "app.tasks.scheduler_tasks._load_active_remediation_connections",
+                new_callable=AsyncMock,
+            ) as mock_load_connections,
         ):
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
@@ -928,10 +1023,8 @@ class TestSchedulerTasksProductionQuality:
                 return_value=mock_session
             )
             mock_session.begin.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            mock_result = MagicMock()
-            mock_result.scalars.return_value.all.return_value = [mock_connection]
-            mock_session.execute.return_value = mock_result
+            mock_load_connections.return_value = [mock_connection]
+            mock_session.execute.return_value = MagicMock(rowcount=1)
 
             # Test green window
             mock_orchestrator = MagicMock()

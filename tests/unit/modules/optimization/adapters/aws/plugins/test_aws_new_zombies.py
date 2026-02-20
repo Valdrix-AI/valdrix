@@ -1,11 +1,25 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from datetime import datetime, timedelta, timezone
-from botocore.exceptions import ClientError
 
 from app.modules.optimization.adapters.aws.plugins.security import CustomerManagedKeysPlugin
 from app.modules.optimization.adapters.aws.plugins.network import IdleCloudFrontPlugin
+
+
+class AsyncIterator:
+    def __init__(self, items):
+        self._items = items
+        self._idx = 0
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if self._idx >= len(self._items):
+            raise StopAsyncIteration
+        item = self._items[self._idx]
+        self._idx += 1
+        return item
 
 
 
@@ -16,12 +30,13 @@ async def test_customer_managed_keys_plugin():
 
     # Mock KMS Client
     mock_kms = AsyncMock()
+    mock_kms.get_paginator = MagicMock()
     
     # Mock List Keys
     mock_paginator = MagicMock()
-    mock_paginator.paginate.return_value = [
-        {"Keys": [{"KeyId": "key-1"}, {"KeyId": "key-2"}]}
-    ]
+    mock_paginator.paginate.return_value = AsyncIterator(
+        [{"Keys": [{"KeyId": "key-1"}, {"KeyId": "key-2"}]}]
+    )
     mock_kms.get_paginator.return_value = mock_paginator
 
     # Mock Describe Key
@@ -60,6 +75,7 @@ async def test_idle_cloudfront_plugin():
 
     # Mock Clients
     mock_cf = AsyncMock()
+    mock_cf.get_paginator = MagicMock()
     mock_cw = AsyncMock()
 
     # Mock List Distributions
@@ -102,4 +118,3 @@ async def test_idle_cloudfront_plugin():
     assert len(zombies) == 1
     assert zombies[0]["resource_id"] == "dist-1"
     assert "99 requests" in zombies[0]["explainability_notes"]
-

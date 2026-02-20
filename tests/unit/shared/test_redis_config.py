@@ -3,6 +3,8 @@ import unittest
 from unittest.mock import patch
 from app.shared.core.config import Settings
 
+FAKE_KDF_SALT = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="
+
 
 class TestRedisConfig(unittest.TestCase):
     def test_redis_url_construction(self):
@@ -11,6 +13,9 @@ class TestRedisConfig(unittest.TestCase):
             "REDIS_HOST": "redis-test",
             "REDIS_PORT": "6380",
             "REDIS_URL": "",
+            "CSRF_SECRET_KEY": "c" * 32,
+            "ENCRYPTION_KEY": "k" * 32,
+            "KDF_SALT": FAKE_KDF_SALT,
             "SUPABASE_JWT_SECRET": "test_secret_32_chars_long_xxxxxxxx",
         }
         with patch.dict(os.environ, env, clear=True):
@@ -24,6 +29,9 @@ class TestRedisConfig(unittest.TestCase):
             "REDIS_HOST": "redis-test",
             "REDIS_PORT": "6380",
             "REDIS_URL": "redis://explicit-host:9999",
+            "CSRF_SECRET_KEY": "c" * 32,
+            "ENCRYPTION_KEY": "k" * 32,
+            "KDF_SALT": FAKE_KDF_SALT,
             "SUPABASE_JWT_SECRET": "test_secret_32_chars_long_xxxxxxxx",
         }
         with patch.dict(os.environ, env, clear=True):

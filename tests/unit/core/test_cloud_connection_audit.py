@@ -8,6 +8,9 @@ from app.models.azure_connection import AzureConnection
 from app.models.gcp_connection import GCPConnection
 from app.models.saas_connection import SaaSConnection
 from app.models.license_connection import LicenseConnection
+from app.models.platform_connection import PlatformConnection
+from app.models.hybrid_connection import HybridConnection
+from app.shared.core.exceptions import AdapterError
 
 
 @pytest.fixture
@@ -27,7 +30,7 @@ def service(mock_db):
 async def test_list_all_connections(service, mock_db):
     tenant_id = uuid4()
 
-    # Mock results for AWS, Azure, GCP, SaaS, License queries
+    # Mock results for AWS, Azure, GCP, SaaS, License, Platform, Hybrid queries
     mock_aws = [AWSConnection(id=uuid4(), tenant_id=tenant_id, aws_account_id="123")]
     mock_azure = [
         AzureConnection(id=uuid4(), tenant_id=tenant_id, subscription_id="sub-1")
@@ -53,6 +56,26 @@ async def test_list_all_connections(service, mock_db):
             license_feed=[],
         )
     ]
+    mock_platform = [
+        PlatformConnection(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            name="Datadog",
+            vendor="datadog",
+            auth_method="manual",
+            spend_feed=[],
+        )
+    ]
+    mock_hybrid = [
+        HybridConnection(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            name="OnPrem",
+            vendor="kubernetes",
+            auth_method="manual",
+            spend_feed=[],
+        )
+    ]
 
     # Map side effects to consecutive execute calls
     mock_res_aws = MagicMock()
@@ -70,12 +93,20 @@ async def test_list_all_connections(service, mock_db):
     mock_res_license = MagicMock()
     mock_res_license.scalars.return_value.all.return_value = mock_license
 
+    mock_res_platform = MagicMock()
+    mock_res_platform.scalars.return_value.all.return_value = mock_platform
+
+    mock_res_hybrid = MagicMock()
+    mock_res_hybrid.scalars.return_value.all.return_value = mock_hybrid
+
     mock_db.execute.side_effect = [
         mock_res_aws,
         mock_res_azure,
         mock_res_gcp,
         mock_res_saas,
         mock_res_license,
+        mock_res_platform,
+        mock_res_hybrid,
     ]
 
     connections = await service.list_all_connections(tenant_id)
@@ -85,6 +116,8 @@ async def test_list_all_connections(service, mock_db):
     assert len(connections["gcp"]) == 1
     assert len(connections["saas"]) == 1
     assert len(connections["license"]) == 1
+    assert len(connections["platform"]) == 1
+    assert len(connections["hybrid"]) == 1
     assert connections["aws"][0].aws_account_id == "123"
 
 
@@ -105,7 +138,7 @@ async def test_verify_connection_success_aws(service, mock_db):
     mock_adapter.verify_connection.return_value = True
 
     with patch(
-        "app.shared.adapters.factory.AdapterFactory.get_adapter",
+        "app.shared.core.cloud_connection.CloudConnectionService._build_verification_adapter",
         return_value=mock_adapter,
     ):
         with patch("app.shared.core.cloud_connection.audit_log") as mock_audit:
@@ -179,13 +212,13 @@ async def test_verify_connection_internal_error(service, mock_db):
     mock_db.execute.return_value = mock_res
 
     with patch(
-        "app.shared.adapters.factory.AdapterFactory.get_adapter",
+        "app.shared.core.cloud_connection.CloudConnectionService._build_verification_adapter",
         side_effect=Exception("API Error"),
     ):
-        with pytest.raises(HTTPException) as exc:
+        with pytest.raises(AdapterError) as exc:
             await service.verify_connection("aws", conn_id, tenant_id)
 
-        assert exc.value.status_code == 500
+        assert exc.value.status_code == 502
         assert connection.status == "error"
         assert connection.error_message == "API Error"
 
@@ -195,3 +228,15 @@ def test_get_aws_setup_templates():
     assert "magic_link" in templates
     assert "ext-123" in templates["magic_link"]
     assert "terraform_snippet" in templates
+
+
+def test_get_aws_setup_templates_falls_back_to_us_east_1_for_invalid_region():
+    with patch(
+        "app.shared.core.cloud_connection.get_settings",
+        return_value=MagicMock(
+            AWS_DEFAULT_REGION="global",
+            AWS_SUPPORTED_REGIONS=["us-east-1", "eu-west-1"],
+        ),
+    ):
+        templates = CloudConnectionService.get_aws_setup_templates("ext-123")
+    assert "region=us-east-1" in templates["magic_link"]

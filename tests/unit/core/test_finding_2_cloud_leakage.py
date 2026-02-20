@@ -33,7 +33,7 @@ async def test_verify_connection_sanitizes_raw_exceptions():
     mock_adapter.verify_connection.side_effect = Exception(raw_error)
 
     with patch(
-        "app.shared.core.cloud_connection.AdapterFactory.get_adapter",
+        "app.shared.core.cloud_connection.CloudConnectionService._build_verification_adapter",
         return_value=mock_adapter,
     ):
         with pytest.raises(AdapterError) as exc_info:
@@ -78,7 +78,7 @@ async def test_verify_connection_sanitizes_throttling_errors():
     )
 
     with patch(
-        "app.shared.core.cloud_connection.AdapterFactory.get_adapter",
+        "app.shared.core.cloud_connection.CloudConnectionService._build_verification_adapter",
         return_value=mock_adapter,
     ):
         with pytest.raises(AdapterError) as exc_info:
@@ -111,7 +111,7 @@ async def test_verify_connection_updates_status_on_error():
     mock_adapter.verify_connection.side_effect = Exception("Some cloud error")
 
     with patch(
-        "app.shared.core.cloud_connection.AdapterFactory.get_adapter",
+        "app.shared.core.cloud_connection.CloudConnectionService._build_verification_adapter",
         return_value=mock_adapter,
     ):
         with pytest.raises(AdapterError):

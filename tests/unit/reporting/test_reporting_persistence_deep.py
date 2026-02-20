@@ -169,6 +169,8 @@ async def test_check_for_significant_adjustments_with_audit_log(
             "timestamp": now,
             "service": "EC2",
             "region": "us-east-1",
+            "usage_type": "",
+            "resource_id": "",
             "cost_usd": 11.0,  # Significant change (>2% of 10.0)
         }
     ]
@@ -181,6 +183,8 @@ async def test_check_for_significant_adjustments_with_audit_log(
             timestamp=now,
             service="EC2",
             region="us-east-1",
+            usage_type="",
+            resource_id="",
             cost_usd=Decimal("10.00"),
             id=rec_id,
         )
@@ -252,6 +256,8 @@ async def test_check_for_significant_adjustments_significant(
             "timestamp": now,
             "service": "EC2",
             "region": "us-east-1",
+            "usage_type": "",
+            "resource_id": "",
             "cost_usd": 15.0,  # Significant adjustment from 10.0
         }
     ]
@@ -263,6 +269,8 @@ async def test_check_for_significant_adjustments_significant(
             timestamp=now,
             service="EC2",
             region="us-east-1",
+            usage_type="",
+            resource_id="",
             cost_usd=Decimal("10.00"),
             id=rec_id,
         )
@@ -416,7 +424,14 @@ async def test_check_for_significant_adjustments_zero_old_cost(
     now = datetime.now(timezone.utc)
 
     new_records = [
-        {"timestamp": now, "service": "EC2", "region": "us-east-1", "cost_usd": 5.0}
+        {
+            "timestamp": now,
+            "service": "EC2",
+            "region": "us-east-1",
+            "usage_type": "",
+            "resource_id": "",
+            "cost_usd": 5.0,
+        }
     ]
 
     mock_res = MagicMock()
@@ -425,6 +440,8 @@ async def test_check_for_significant_adjustments_zero_old_cost(
             timestamp=now,
             service="EC2",
             region="us-east-1",
+            usage_type="",
+            resource_id="",
             cost_usd=Decimal("0.00"),
             id=uuid4(),
         )

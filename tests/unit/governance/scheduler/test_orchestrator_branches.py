@@ -26,13 +26,16 @@ async def test_acquire_dispatch_lock_paths(
     import app.modules.governance.domain.scheduler.orchestrator as orchestrator_module
 
     monkeypatch.setattr(orchestrator_module.settings, "TESTING", False, raising=False)
+    monkeypatch.setattr(
+        orchestrator_module.settings, "SCHEDULER_LOCK_FAIL_OPEN", False, raising=False
+    )
     monkeypatch.setattr(orchestrator_module.os, "getenv", lambda _: None)
 
     with patch(
         "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
         return_value=None,
     ):
-        assert await orchestrator._acquire_dispatch_lock("demo") is True
+        assert await orchestrator._acquire_dispatch_lock("demo") is False
 
     redis = MagicMock()
     redis.set = AsyncMock(return_value=False)
@@ -43,6 +46,15 @@ async def test_acquire_dispatch_lock_paths(
         assert await orchestrator._acquire_dispatch_lock("demo") is False
 
     redis.set = AsyncMock(side_effect=RuntimeError("redis down"))
+    with patch(
+        "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
+        return_value=redis,
+    ):
+        assert await orchestrator._acquire_dispatch_lock("demo") is False
+
+    monkeypatch.setattr(
+        orchestrator_module.settings, "SCHEDULER_LOCK_FAIL_OPEN", True, raising=False
+    )
     with patch(
         "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
         return_value=redis,
@@ -102,23 +114,19 @@ async def test_fetch_live_carbon_intensity_success_and_cache(
     client = AsyncMock()
     client.get = AsyncMock(return_value=response)
 
-    async_cm = AsyncMock()
-    async_cm.__aenter__.return_value = client
-    async_cm.__aexit__.return_value = None
-
     with patch(
-        "app.modules.governance.domain.scheduler.orchestrator.httpx.AsyncClient",
-        return_value=async_cm,
+        "app.shared.core.http.get_http_client",
+        return_value=client,
     ):
         value = await orchestrator._fetch_live_carbon_intensity("us-east-1")
         assert value == 97.0
 
     with patch(
-        "app.modules.governance.domain.scheduler.orchestrator.httpx.AsyncClient"
-    ) as async_client:
+        "app.shared.core.http.get_http_client"
+    ) as get_http_client:
         cached_value = await orchestrator._fetch_live_carbon_intensity("us-east-1")
         assert cached_value == 97.0
-        async_client.assert_not_called()
+        get_http_client.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -146,23 +154,17 @@ async def test_fetch_live_carbon_intensity_none_and_exception_paths(
     response.json.return_value = {}
     client = AsyncMock()
     client.get = AsyncMock(return_value=response)
-    async_cm = AsyncMock()
-    async_cm.__aenter__.return_value = client
-    async_cm.__aexit__.return_value = None
     with patch(
-        "app.modules.governance.domain.scheduler.orchestrator.httpx.AsyncClient",
-        return_value=async_cm,
+        "app.shared.core.http.get_http_client",
+        return_value=client,
     ):
         assert await orchestrator._fetch_live_carbon_intensity("us-east-1") is None
 
     client = AsyncMock()
     client.get = AsyncMock(side_effect=httpx.HTTPError("boom"))
-    async_cm = AsyncMock()
-    async_cm.__aenter__.return_value = client
-    async_cm.__aexit__.return_value = None
     with patch(
-        "app.modules.governance.domain.scheduler.orchestrator.httpx.AsyncClient",
-        return_value=async_cm,
+        "app.shared.core.http.get_http_client",
+        return_value=client,
     ):
         assert await orchestrator._fetch_live_carbon_intensity("us-east-1") is None
 
@@ -198,6 +200,7 @@ async def test_sweep_jobs_skip_when_lock_not_acquired(
     with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
         await orchestrator.auto_remediation_job()
         await orchestrator.billing_sweep_job()
+        await orchestrator.license_governance_sweep_job()
         await orchestrator.maintenance_sweep_job()
     mock_send.assert_not_called()
 
@@ -232,7 +235,7 @@ def test_start_stop_and_status(orchestrator: SchedulerOrchestrator) -> None:
     orchestrator.scheduler = scheduler
 
     orchestrator.start()
-    assert scheduler.add_job.call_count == 7
+    assert scheduler.add_job.call_count == 9
     scheduler.start.assert_called_once()
 
     status = orchestrator.get_status()

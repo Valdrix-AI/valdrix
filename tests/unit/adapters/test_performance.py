@@ -1,9 +1,10 @@
 import pytest
-import time
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from datetime import datetime, timezone
 from app.shared.adapters.aws import AWSAdapter
 from app.models.aws_connection import AWSConnection
+from app.shared.core.credentials import AWSCredentials
+from app.shared.core.exceptions import ConfigurationError
 
 
 @pytest.fixture
@@ -20,62 +21,24 @@ def mock_connection():
 @pytest.mark.asyncio
 async def test_aws_adapter_streaming_performance(mock_connection):
     """
-    Benchmark AWS cost streaming with 1,000 mock records.
-    Requirement: Should handle >1k records/sec in isolation.
+    MultiTenantAWSAdapter no longer supports direct cost streaming.
+    It must fail fast and require CUR-based ingestion.
     """
-    adapter = AWSAdapter(connection=mock_connection)
-
-    # Mock credentials
-    adapter.get_credentials = AsyncMock(
-        return_value={
-            "AccessKeyId": "AK",
-            "SecretAccessKey": "SK",
-            "SessionToken": "ST",
-            "Expiration": datetime.now(timezone.utc),
-        }
+    adapter = AWSAdapter(
+        AWSCredentials(
+            account_id=mock_connection.aws_account_id,
+            role_arn=mock_connection.role_arn,
+            external_id=mock_connection.external_id,
+            region=mock_connection.region,
+            cur_bucket_name="cur-bucket",
+            cur_report_name="cur-report",
+            cur_prefix="cur-prefix",
+        )
     )
 
-    # Mocking large dataset response
-    mock_group = {
-        "Keys": ["AmazonEC2"],
-        "Metrics": {"AmortizedCost": {"Amount": "0.01", "Unit": "USD"}},
-    }
-    mock_response = {
-        "ResultsByTime": [
-            {
-                "TimePeriod": {"Start": "2026-01-01", "End": "2026-01-02"},
-                "Groups": [mock_group] * 1000,  # 1,000 records per page
-            }
-        ]
-    }
-
-    mock_client = AsyncMock()
-    mock_client.get_cost_and_usage.return_value = mock_response
-
-    class AsyncContextManagerMock:
-        async def __aenter__(self):
-            return mock_client
-
-        async def __aexit__(self, *args):
+    with pytest.raises(ConfigurationError, match="CUR"):
+        async for _ in adapter.stream_cost_and_usage(
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 2, tzinfo=timezone.utc),
+        ):
             pass
-
-    adapter.session.client = MagicMock(return_value=AsyncContextManagerMock())
-
-    start_time = time.perf_counter()
-
-    count = 0
-    async for _ in adapter.stream_cost_and_usage(
-        datetime(2026, 1, 1, tzinfo=timezone.utc),
-        datetime(2026, 1, 2, tzinfo=timezone.utc),
-    ):
-        count += 1
-
-    end_time = time.perf_counter()
-    duration = end_time - start_time
-
-    throughput = count / duration if duration > 0 else 0
-    print(f"\n[Performance] AWS Streaming Throughput: {throughput:.2f} records/sec")
-
-    assert count == 1000
-    # Target: >1000 records/sec
-    assert throughput > 1000

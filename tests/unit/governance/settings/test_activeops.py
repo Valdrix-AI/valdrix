@@ -1,6 +1,7 @@
 import pytest
 import uuid
 from httpx import AsyncClient
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.models.remediation_settings import RemediationSettings
 from app.models.tenant import UserRole
 from app.shared.core.auth import CurrentUser, get_current_user
@@ -75,5 +76,79 @@ async def test_update_activeops_settings(
         )
         assert response.status_code == 200
         assert response.json()["auto_pilot_enabled"] is True
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_reactivate_hard_cap_endpoint(async_client: AsyncClient, app):
+    user_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    mock_user = CurrentUser(
+        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch(
+            "app.modules.governance.api.v1.settings.activeops.BudgetHardCapService"
+        ) as service_cls:
+            service = MagicMock()
+            service.reverse_hard_cap = AsyncMock(return_value=4)
+            service_cls.return_value = service
+
+            response = await async_client.post(
+                "/api/v1/settings/activeops/hard-cap/reactivate",
+                json={"reason": "false-positive budget spike"},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "reactivated",
+            "restored_connections": 4,
+        }
+        service.reverse_hard_cap.assert_awaited_once_with(
+            tenant_id,
+            actor_id=user_id,
+            reason="false-positive budget spike",
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_reactivate_hard_cap_endpoint_returns_not_found(
+    async_client: AsyncClient, app
+):
+    user_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    mock_user = CurrentUser(
+        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch(
+            "app.modules.governance.api.v1.settings.activeops.BudgetHardCapService"
+        ) as service_cls:
+            service = MagicMock()
+            service.reverse_hard_cap = AsyncMock(
+                side_effect=ValueError("No hard-cap snapshot available for tenant")
+            )
+            service_cls.return_value = service
+
+            response = await async_client.post(
+                "/api/v1/settings/activeops/hard-cap/reactivate",
+                json={"reason": "operator override"},
+            )
+
+        assert response.status_code == 404
+        payload = response.json()
+        detail = payload.get("detail")
+        if detail is None and isinstance(payload.get("error"), dict):
+            detail = payload["error"].get("message")
+        if detail is None:
+            detail = str(payload)
+        assert "No hard-cap snapshot available for tenant" in detail
     finally:
         app.dependency_overrides.pop(get_current_user, None)

@@ -40,19 +40,17 @@ def test_region_carbon_intensity_comprehensive_data():
 
 
 def test_region_carbon_intensity_keys_production_format():
-    """Test that region keys follow AWS region naming conventions."""
+    """Test that region keys follow cloud provider region naming conventions."""
     for region in REGION_CARBON_INTENSITY.keys():
         if region == "global":
             continue  # Special case for global average
 
-        # AWS regions follow specific patterns
+        # Region keys should be normalized lowercase identifiers.
         assert isinstance(region, str)
         assert len(region) >= 5, f"Region {region} name too short"
-
-        # Should contain geographic indicator
-        geographic_indicators = ["us-", "eu-", "af-", "ap-", "ca-", "sa-", "me-"]
-        assert any(indicator in region for indicator in geographic_indicators), (
-            f"Region {region} doesn't follow AWS naming convention"
+        assert region == region.lower(), f"Region {region} must be lowercase"
+        assert all(c.isalnum() or c == "-" for c in region), (
+            f"Region {region} contains invalid characters"
         )
 
 
