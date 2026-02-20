@@ -1,9 +1,11 @@
 from functools import lru_cache
+from threading import Lock
 from typing import Optional
 import base64
+import os
 import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from app.shared.core.constants import AWS_SUPPORTED_REGIONS
 
 # Environment Constants (Finding #10)
@@ -21,36 +23,28 @@ def get_settings() -> "Settings":
     return Settings()
 
 
-class SecretReloader:
-    """
-    Zero Trust Logic: Periodically re-fetches secrets from
-    external providers (AWS Secrets Manager, Vault) without restarts.
-    """
+_settings_reload_lock = Lock()
 
-    def __init__(self, settings: "Settings"):
-        self.settings = settings
-        self.logger = structlog.get_logger()
 
-    async def reload_all(self) -> None:
-        """Atomically update sensitive keys in the singleton settings."""
-        self.logger.info("secret_reload_started")
+def reload_settings_from_environment() -> "Settings":
+    """
+    Atomically rebuild and replace cached settings from environment values.
+
+    This avoids mutating the cached singleton instance in-place.
+    """
+    logger = structlog.get_logger()
+    with _settings_reload_lock:
+        logger.info("settings_reload_started")
+        get_settings.cache_clear()
+        refreshed = get_settings()
         try:
-            # Logic to fetch from AWS Secrets Manager or Vault
-            # For now, we simulate a reload from environment (which would be
-            # updated by sidecar or mutation hook in K8s)
-            import os
+            from app.shared.core.security import EncryptionKeyManager
 
-            # Example: Atomic swap for critical keys
-            if "DATABASE_URL" in os.environ:
-                self.settings.DATABASE_URL = os.environ["DATABASE_URL"]
-
-            if "PAYSTACK_SECRET_KEY" in os.environ:
-                self.settings.PAYSTACK_SECRET_KEY = os.environ["PAYSTACK_SECRET_KEY"]
-
-            self.logger.info("secret_reload_completed")
-        except Exception as e:
-            self.logger.error("secret_reload_failed", error=str(e))
-            raise
+            EncryptionKeyManager.clear_key_caches(warm=True)
+        except Exception as cache_exc:  # pragma: no cover - defensive path
+            logger.warning("settings_reload_cache_refresh_failed", error=str(cache_exc))
+        logger.info("settings_reload_completed")
+        return refreshed
 
 
 class Settings(BaseSettings):
@@ -71,6 +65,9 @@ class Settings(BaseSettings):
     CSRF_SECRET_KEY: Optional[str] = None  # SEC-01: CSRF
     TESTING: bool = False
     RATELIMIT_ENABLED: bool = True
+    # In staging/production, distributed rate limiting is required by default.
+    # This override exists only for controlled break-glass situations.
+    ALLOW_IN_MEMORY_RATE_LIMITS: bool = False
     AUTOPILOT_BYPASS_GRACE_PERIOD: bool = False
     INTERNAL_JOB_SECRET: Optional[str] = None
     WEBHOOK_ALLOWED_DOMAINS: list[str] = []  # Allowlist for generic webhook retries
@@ -93,6 +90,7 @@ class Settings(BaseSettings):
         self._validate_llm_config()
         self._validate_billing_config()
         self._validate_integration_config()
+        self._validate_remediation_guardrails()
         self._validate_environment_safety()
 
         return self
@@ -111,6 +109,18 @@ class Settings(BaseSettings):
                 # Finding #C4: Explicitly reject placeholders or inadequate keys
                 raise ValueError(f"{name} must be set to a secure value (>= 32 chars).")
 
+        csrf_value = str(self.CSRF_SECRET_KEY or "").strip().lower()
+        if csrf_value in {
+            "dev_secret_key_change_me_in_prod",
+            "change_me",
+            "changeme",
+            "default",
+            "csrf_secret_key",
+        }:
+            raise ValueError(
+                "SECURITY ERROR: CSRF_SECRET_KEY must be set to a non-default secure value."
+            )
+
         # KDF_SALT validation (Base64 check)
         if not self.KDF_SALT:
             raise ValueError("KDF_SALT must be set (base64-encoded random 32 bytes).")
@@ -125,6 +135,8 @@ class Settings(BaseSettings):
             raise ValueError("ENCRYPTION_KEY_CACHE_TTL_SECONDS must be >= 60.")
         if self.ENCRYPTION_KEY_CACHE_MAX_SIZE < 10:
             raise ValueError("ENCRYPTION_KEY_CACHE_MAX_SIZE must be >= 10.")
+        if self.BLIND_INDEX_KDF_ITERATIONS < 10000:
+            raise ValueError("BLIND_INDEX_KDF_ITERATIONS must be >= 10000.")
 
     def _validate_database_config(self) -> None:
         """Validates database and redis connectivity settings."""
@@ -137,6 +149,14 @@ class Settings(BaseSettings):
             if self.DB_SSL_MODE not in ["require", "verify-ca", "verify-full"]:
                 raise ValueError(
                     f"SECURITY ERROR: DB_SSL_MODE must be secure in production (current: {self.DB_SSL_MODE})."
+                )
+            if self.DB_SSL_MODE in {"verify-ca", "verify-full"} and not self.DB_SSL_CA_CERT_PATH:
+                raise ValueError(
+                    "DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE is verify-ca or verify-full in production."
+                )
+            if self.DB_USE_NULL_POOL and not self.DB_EXTERNAL_POOLER:
+                raise ValueError(
+                    "DB_USE_NULL_POOL=true requires DB_EXTERNAL_POOLER=true in production."
                 )
 
         # Redis URL construction fallback
@@ -210,6 +230,30 @@ class Settings(BaseSettings):
                     "ADMIN_API_KEY must be >= 32 chars in staging/production."
                 )
 
+            web_concurrency_raw = os.getenv("WEB_CONCURRENCY", "1").strip()
+            try:
+                web_concurrency = int(web_concurrency_raw)
+            except ValueError:
+                web_concurrency = 1
+            if web_concurrency > 1 and (
+                not self.CIRCUIT_BREAKER_DISTRIBUTED_STATE or not self.REDIS_URL
+            ):
+                raise ValueError(
+                    "WEB_CONCURRENCY > 1 requires CIRCUIT_BREAKER_DISTRIBUTED_STATE=true "
+                    "and REDIS_URL configured in staging/production."
+                )
+
+            if (
+                self.RATELIMIT_ENABLED
+                and not self.REDIS_URL
+                and not self.ALLOW_IN_MEMORY_RATE_LIMITS
+            ):
+                raise ValueError(
+                    "REDIS_URL is required for distributed rate limiting in "
+                    "staging/production. Set ALLOW_IN_MEMORY_RATE_LIMITS=true only "
+                    "for temporary break-glass usage."
+                )
+
             # Safety Warnings (non-blocking but logged)
             logger = structlog.get_logger()
 
@@ -221,6 +265,27 @@ class Settings(BaseSettings):
             for url in [self.API_URL, self.FRONTEND_URL]:
                 if url and url.startswith("http://"):
                     logger.warning("insecure_url_in_production", url=url)
+
+    def _validate_remediation_guardrails(self) -> None:
+        """Validates safety guardrail configuration for remediation execution."""
+        normalized_scope = (
+            str(self.REMEDIATION_KILL_SWITCH_SCOPE or "tenant").strip().lower()
+        )
+        if normalized_scope not in {"tenant", "global"}:
+            raise ValueError(
+                "REMEDIATION_KILL_SWITCH_SCOPE must be one of: tenant, global."
+            )
+        self.REMEDIATION_KILL_SWITCH_SCOPE = normalized_scope
+
+        if (
+            self.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}
+            and normalized_scope == "global"
+            and not self.REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE
+        ):
+            raise ValueError(
+                "REMEDIATION_KILL_SWITCH_SCOPE=global requires "
+                "REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE=true in staging/production."
+            )
 
     # AWS Credentials
     AWS_ACCESS_KEY_ID: Optional[str] = None
@@ -270,6 +335,9 @@ class Settings(BaseSettings):
     # Scheduler
     SCHEDULER_HOUR: int = 8
     SCHEDULER_MINUTE: int = 0
+    # Scheduler distributed lock should fail-closed by default.
+    # Enable only as temporary emergency bypass.
+    SCHEDULER_LOCK_FAIL_OPEN: bool = False
 
     # Admin API Key
     ADMIN_API_KEY: Optional[str] = None
@@ -285,15 +353,20 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 3600
     DB_ECHO: bool = False
+    # Set true only when an external DB pooler (e.g. Supavisor transaction pooler)
+    # is explicitly used and double-pooling is undesirable.
+    DB_USE_NULL_POOL: bool = False
+    DB_EXTERNAL_POOLER: bool = False
     # Tests default to in-memory sqlite to avoid accidental side-effects on real databases.
     # Set true to allow tests to use DATABASE_URL (e.g., integration tests against Postgres).
     ALLOW_TEST_DATABASE_URL: bool = False
     # Enable RLS enforcement listener in tests when running against Postgres.
-    ENFORCE_RLS_IN_TESTS: bool = False
+    ENFORCE_RLS_IN_TESTS: bool = True
 
     # Supabase Auth
     SUPABASE_URL: Optional[str] = None
     SUPABASE_JWT_SECRET: Optional[str] = None  # Required for auth middleware
+    JWT_SIGNING_KID: Optional[str] = None
 
     # Notifications
     SAAS_STRICT_INTEGRATIONS: bool = False
@@ -374,6 +447,8 @@ class Settings(BaseSettings):
     # Generate: python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
     KDF_SALT: Optional[str] = None
     KDF_ITERATIONS: int = 100000
+    # Blind index key-stretching to slow offline guessing if key material is exposed.
+    BLIND_INDEX_KDF_ITERATIONS: int = 50000
 
     # Cache (Redis for production, in-memory for dev)
     REDIS_URL: Optional[str] = None  # e.g., redis://localhost:6379
@@ -405,10 +480,14 @@ class Settings(BaseSettings):
     CIRCUIT_BREAKER_RECOVERY_SECONDS: int = 300
     CIRCUIT_BREAKER_MAX_DAILY_SAVINGS: float = 1000.0
     CIRCUIT_BREAKER_CACHE_SIZE: int = 1000
-
+    CIRCUIT_BREAKER_DISTRIBUTED_STATE: bool = True
+    CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX: str = "valdrix:circuit"
     # REMEDIATION KILL SWITCH: Stop all deletions if daily cost impact hits $500
     REMEDIATION_KILL_SWITCH_THRESHOLD: float = 500.0
-    REMEDIATION_KILL_SWITCH_SCOPE: str = "tenant"  # tenant or global
+    REMEDIATION_KILL_SWITCH_SCOPE: str = Field(
+        default="tenant", description="Scope: global or tenant"
+    )
+    REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE: bool = False
     ENFORCE_REMEDIATION_DRY_RUN: bool = False
 
     # Multi-Currency & Localization (Phase 12)
@@ -434,6 +513,8 @@ class Settings(BaseSettings):
     AWS_CLOUDWATCH_ESTIMATED_COST_PER_CALL_USD: float = 0.00001
     GCP_MONITORING_ESTIMATED_COST_PER_CALL_USD: float = 0.0
     AZURE_MONITOR_ESTIMATED_COST_PER_CALL_USD: float = 0.0
+    # Bound export window size to keep CSV export queries predictable.
+    FOCUS_EXPORT_MAX_DAYS: int = 366
 
     model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
 
