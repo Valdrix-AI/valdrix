@@ -9,11 +9,9 @@ Manages the remediation approval workflow:
 """
 
 from uuid import UUID
-from decimal import Decimal
 from typing import List, Dict, Any, Optional
 import inspect
 import aioboto3
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.core.service import BaseService
 import structlog
@@ -23,9 +21,22 @@ from app.models.remediation import (
     RemediationStatus,
     RemediationAction,
 )
-from app.models.cloud import CloudAccount
 
-__all__ = ["RemediationService", "RemediationStatus", "RemediationAction"]
+__all__ = [
+    "RemediationService",
+    "RemediationStatus",
+    "RemediationAction",
+    "get_tenant_tier",
+    "RemediationPolicyEngine",
+    "get_connection_model",
+    "AuditLogger",
+    "SafetyGuardrailService",
+    "AuditEventType",
+    "RemediationActionFactory",
+    "resolve_connection_region",
+    "get_settings",
+    "resolve_connection_profile",
+]
 from app.models.remediation_settings import RemediationSettings
 from app.modules.governance.domain.security.audit_log import (  # noqa: F401
     AuditEventType,
@@ -37,14 +48,12 @@ from app.modules.governance.domain.security.remediation_policy import (
 )
 from app.shared.adapters.aws_utils import map_aws_credentials
 from app.shared.core.config import get_settings
-from app.shared.core.exceptions import ResourceNotFoundError
-from app.shared.core.safety_service import SafetyGuardrailService  # noqa: F401
-from app.shared.core.provider import normalize_provider
-from app.shared.core.connection_queries import get_connection_model
-from app.shared.core.connection_state import (
+from app.shared.core.connection_queries import get_connection_model  # noqa: F401
+from app.shared.core.connection_state import (  # noqa: F401
     resolve_connection_profile,
     resolve_connection_region,
 )
+from app.shared.core.safety_service import SafetyGuardrailService  # noqa: F401
 from app.shared.core.pricing import (
     PricingTier,
     get_tenant_tier,  # noqa: F401
@@ -118,85 +127,34 @@ class RemediationService(BaseService):
         connection_id: UUID | None = None,
         connection: Any | None = None,
     ) -> str:
-        """
-        Resolve a concrete AWS region from request hint + optional connection context.
+        from app.modules.optimization.domain.remediation_context import (
+            resolve_aws_region_hint,
+        )
 
-        `global` is treated as a non-concrete sentinel for cross-provider API defaults.
-        """
-        region_hint = str(self.region or "").strip().lower()
-        if region_hint and region_hint != "global":
-            return region_hint
-
-        if connection is not None:
-            connection_region = resolve_connection_region(connection)
-            if connection_region != "global":
-                return connection_region
-
-        if tenant_id and connection_id:
-            connection_model = get_connection_model("aws")
-            if connection_model is not None:
-                try:
-                    scoped = await self.get_by_id(connection_model, connection_id, tenant_id)
-                    if scoped is not None:
-                        scoped_region = resolve_connection_region(scoped)
-                        if scoped_region != "global":
-                            return scoped_region
-                except Exception as exc:
-                    logger.warning(
-                        "remediation_aws_region_resolution_failed",
-                        tenant_id=str(tenant_id),
-                        connection_id=str(connection_id),
-                        error=str(exc),
-                    )
-
-        return str(get_settings().AWS_DEFAULT_REGION or "").strip() or "us-east-1"
+        return await resolve_aws_region_hint(
+            self,
+            tenant_id=tenant_id,
+            connection_id=connection_id,
+            connection=connection,
+        )
 
     async def _get_remediation_settings(
         self, tenant_id: UUID
     ) -> RemediationSettings | None:
-        if tenant_id in self._remediation_settings_cache:
-            return self._remediation_settings_cache[tenant_id]
+        from app.modules.optimization.domain.remediation_context import (
+            get_remediation_settings,
+        )
 
-        try:
-            result = await self.db.execute(
-                select(RemediationSettings).where(
-                    RemediationSettings.tenant_id == tenant_id
-                )
-            )
-            settings = await self._scalar_one_or_none(result)
-            resolved = settings if isinstance(settings, RemediationSettings) else None
-            self._remediation_settings_cache[tenant_id] = resolved
-            return resolved
-        except Exception as exc:
-            logger.warning(
-                "remediation_settings_lookup_failed",
-                tenant_id=str(tenant_id),
-                error=str(exc),
-            )
-            self._remediation_settings_cache[tenant_id] = None
-            return None
+        return await get_remediation_settings(self, tenant_id)
 
     async def _build_policy_config(
         self, tenant_id: UUID
     ) -> tuple[PolicyConfig, RemediationSettings | None]:
-        settings = await self._get_remediation_settings(tenant_id)
-        if not settings:
-            return PolicyConfig(), None
+        from app.modules.optimization.domain.remediation_context import (
+            build_policy_config,
+        )
 
-        threshold_raw = getattr(
-            settings, "policy_low_confidence_warn_threshold", Decimal("0.90")
-        )
-        config = PolicyConfig(
-            enabled=bool(getattr(settings, "policy_enabled", True)),
-            block_production_destructive=bool(
-                getattr(settings, "policy_block_production_destructive", True)
-            ),
-            require_gpu_override=bool(
-                getattr(settings, "policy_require_gpu_override", True)
-            ),
-            low_confidence_warn_threshold=Decimal(str(threshold_raw)),
-        )
-        return config, settings
+        return await build_policy_config(self, tenant_id)
 
     async def _build_system_policy_context(
         self,
@@ -205,55 +163,16 @@ class RemediationService(BaseService):
         provider: str,
         connection_id: UUID | None,
     ) -> dict[str, Any]:
-        provider_norm = normalize_provider(provider)
-        if not provider_norm:
-            return {}
+        from app.modules.optimization.domain.remediation_context import (
+            build_system_policy_context,
+        )
 
-        if connection_id:
-            account_context: dict[str, Any] | None = None
-            account_result = await self.db.execute(
-                select(CloudAccount)
-                .where(CloudAccount.tenant_id == tenant_id)
-                .where(CloudAccount.id == connection_id)
-                .where(CloudAccount.provider == provider_norm)
-            )
-            account = await self._scalar_one_or_none(account_result)
-            if isinstance(account, CloudAccount):
-                account_context = {
-                    "source": "cloud_account",
-                    "connection_id": str(connection_id),
-                    "is_production": bool(getattr(account, "is_production", False)),
-                    "criticality": getattr(account, "criticality", None),
-                }
-                if account_context["is_production"] or account_context["criticality"]:
-                    return account_context
-
-            connection_model = get_connection_model(provider_norm)
-            if connection_model is not None:
-                connection_result = await self.db.execute(
-                    select(connection_model)
-                    .where(connection_model.tenant_id == tenant_id)
-                    .where(connection_model.id == connection_id)
-                )
-                connection = await self._scalar_one_or_none(connection_result)
-                if connection is not None:
-                    profile = resolve_connection_profile(connection)
-                    is_production = profile.get("is_production")
-                    return {
-                        "source": str(profile.get("source") or "connection_profile"),
-                        "connection_id": str(connection_id),
-                        "is_production": (
-                            is_production
-                            if isinstance(is_production, bool)
-                            else None
-                        ),
-                        "criticality": profile.get("criticality"),
-                    }
-
-            if account_context is not None:
-                return account_context
-
-        return {}
+        return await build_system_policy_context(
+            self,
+            tenant_id=tenant_id,
+            provider=provider,
+            connection_id=connection_id,
+        )
 
     def _sanitize_action_parameters(
         self,
