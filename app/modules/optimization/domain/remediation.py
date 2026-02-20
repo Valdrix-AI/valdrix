@@ -312,33 +312,11 @@ class RemediationService(BaseService):
     async def preview_policy(
         self, request: RemediationRequest, tenant_id: UUID
     ) -> dict[str, Any]:
-        provider = normalize_provider(getattr(request, "provider", None))
-        connection_id = getattr(request, "connection_id", None)
-        if provider:
-            await self._apply_system_policy_context(
-                request,
-                tenant_id=tenant_id,
-                provider=provider,
-                connection_id=connection_id,
-            )
+        from app.modules.optimization.domain.remediation_workflow import (
+            preview_policy_for_request,
+        )
 
-        tier = await get_tenant_tier(tenant_id, self.db)
-        policy_config, _ = await self._build_policy_config(tenant_id)
-        evaluation = RemediationPolicyEngine().evaluate(request, policy_config)
-        return {
-            "decision": evaluation.decision.value,
-            "summary": evaluation.summary,
-            "rule_hits": [hit.to_dict() for hit in evaluation.rule_hits],
-            "tier": tier.value,
-            "config": {
-                "enabled": policy_config.enabled,
-                "block_production_destructive": policy_config.block_production_destructive,
-                "require_gpu_override": policy_config.require_gpu_override,
-                "low_confidence_warn_threshold": float(
-                    policy_config.low_confidence_warn_threshold
-                ),
-            },
-        }
+        return await preview_policy_for_request(self, request, tenant_id)
 
     async def preview_policy_input(
         self,
@@ -355,49 +333,24 @@ class RemediationService(BaseService):
         parameters: Optional[Dict[str, Any]] = None,
         connection_id: Optional[UUID] = None,
     ) -> dict[str, Any]:
-        """
-        Evaluate policy for an in-memory remediation payload.
+        from app.modules.optimization.domain.remediation_workflow import (
+            preview_policy_input_payload,
+        )
 
-        This avoids persisting a request and enables pre-request dry-run previews.
-        """
-        provider_norm = normalize_provider(provider)
-        if not provider_norm:
-            raise ValueError("Invalid provider for policy preview")
-        preview_region = (
-            await self._resolve_aws_region_hint(
-                tenant_id=tenant_id,
-                connection_id=connection_id,
-            )
-            if provider_norm == "aws"
-            else "global"
-        )
-        system_context = await self._build_system_policy_context(
+        return await preview_policy_input_payload(
+            self,
             tenant_id=tenant_id,
-            provider=provider_norm,
-            connection_id=connection_id,
-        )
-        synthetic_request = RemediationRequest(
-            id=uuid4(),
-            tenant_id=tenant_id,
+            user_id=user_id,
             resource_id=resource_id,
             resource_type=resource_type,
-            provider=provider_norm,
-            connection_id=connection_id,
-            region=preview_region,
             action=action,
-            status=RemediationStatus.PENDING,
-            estimated_monthly_savings=Decimal("0"),
-            confidence_score=(
-                Decimal(str(confidence_score)) if confidence_score is not None else None
-            ),
+            provider=provider,
+            confidence_score=confidence_score,
             explainability_notes=explainability_notes,
-            requested_by_user_id=user_id,
             review_notes=review_notes,
-            action_parameters=self._sanitize_action_parameters(
-                parameters, system_policy_context=system_context
-            ),
+            parameters=parameters,
+            connection_id=connection_id,
         )
-        return await self.preview_policy(synthetic_request, tenant_id)
 
     async def create_request(
         self,
@@ -416,113 +369,41 @@ class RemediationService(BaseService):
         connection_id: Optional[UUID] = None,
         parameters: Optional[Dict[str, Any]] = None,
     ) -> RemediationRequest:
-        """Create a new remediation request (pending approval)."""
-        provider_norm = normalize_provider(provider)
-        if not provider_norm:
-            raise ValueError(f"Invalid provider: {provider}")
-        scoped_connection: Any | None = None
-
-        # P2: Resource Ownership Verification (connection scoped to tenant)
-        if connection_id:
-            try:
-                connection_model = get_connection_model(provider_norm)
-                if connection_model is None:
-                    raise ValueError(f"Invalid provider model for {provider_norm}")
-                scoped_connection = await self.get_by_id(
-                    connection_model, connection_id, tenant_id
-                )
-            except Exception as exc:
-                logger.warning(
-                    "remediation_connection_scope_failed",
-                    tenant_id=str(tenant_id),
-                    provider=provider_norm,
-                    connection_id=str(connection_id),
-                    error=str(exc),
-                )
-                raise ValueError(
-                    "Unauthorized: Connection does not belong to tenant"
-                ) from exc
-
-        request_region = (
-            await self._resolve_aws_region_hint(
-                tenant_id=tenant_id,
-                connection_id=connection_id,
-                connection=scoped_connection,
-            )
-            if provider_norm == "aws"
-            else "global"
+        from app.modules.optimization.domain.remediation_workflow import (
+            create_remediation_request,
         )
 
-        system_context = await self._build_system_policy_context(
+        return await create_remediation_request(
+            self,
             tenant_id=tenant_id,
-            provider=provider_norm,
-            connection_id=connection_id,
-        )
-
-        request = RemediationRequest(
-            tenant_id=tenant_id,
+            user_id=user_id,
             resource_id=resource_id,
             resource_type=resource_type,
-            region=request_region,
             action=action,
-            status=RemediationStatus.PENDING,
-            estimated_monthly_savings=Decimal(str(estimated_savings)),
-            confidence_score=(
-                Decimal(str(confidence_score)) if confidence_score is not None else None
-            ),
-            explainability_notes=explainability_notes,
+            estimated_savings=estimated_savings,
+            provider=provider,
             create_backup=create_backup,
             backup_retention_days=backup_retention_days,
-            backup_cost_estimate=Decimal(str(backup_cost_estimate))
-            if backup_cost_estimate
-            else None,
-            requested_by_user_id=user_id,
-            provider=provider_norm,
+            backup_cost_estimate=backup_cost_estimate,
+            confidence_score=confidence_score,
+            explainability_notes=explainability_notes,
             connection_id=connection_id,
-            action_parameters=self._sanitize_action_parameters(
-                parameters, system_policy_context=system_context
-            ),
+            parameters=parameters,
         )
-
-        self.db.add(request)
-        await self.db.commit()
-        await self.db.refresh(request)
-
-        logger.info(
-            "remediation_request_created",
-            request_id=str(request.id),
-            resource=resource_id,
-            action=action.value,
-            backup=create_backup,
-        )
-
-        return request
 
     async def list_pending(
         self, tenant_id: UUID, limit: int = 50, offset: int = 0
     ) -> List[RemediationRequest]:
-        """List open remediation requests for a tenant (actionable queue)."""
-        MAX_PAGE_SIZE = 200
-        limit = min(limit, MAX_PAGE_SIZE)
-        stmt = (
-            self._scoped_query(RemediationRequest, tenant_id)
-            .where(
-                RemediationRequest.status.in_(
-                    (
-                        RemediationStatus.PENDING,
-                        RemediationStatus.PENDING_APPROVAL,
-                        RemediationStatus.APPROVED,
-                        RemediationStatus.SCHEDULED,
-                        RemediationStatus.EXECUTING,
-                    )
-                )
-            )
-            .order_by(RemediationRequest.created_at.desc())
-            .offset(offset)
-            .limit(limit)
+        from app.modules.optimization.domain.remediation_workflow import (
+            list_pending_requests,
         )
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+
+        return await list_pending_requests(
+            self,
+            tenant_id,
+            limit=limit,
+            offset=offset,
+        )
 
     async def approve(
         self,
@@ -532,80 +413,18 @@ class RemediationService(BaseService):
         notes: Optional[str] = None,
         reviewer_role: Optional[str] = None,
     ) -> RemediationRequest:
-        """
-        Approve a remediation request.
-        Does NOT execute yet - that's a separate step for safety.
-        """
-        result = await self.db.execute(
-            select(RemediationRequest)
-            .where(RemediationRequest.id == request_id)
-            .where(RemediationRequest.tenant_id == tenant_id)
-            .with_for_update()
-        )  # with_for_update: enforce row lock for atomic execution
-        request = result.scalar_one_or_none()
-
-        if not request:
-            raise ResourceNotFoundError(f"Request {request_id} not found")
-
-        if request.status not in {
-            RemediationStatus.PENDING,
-            RemediationStatus.PENDING_APPROVAL,
-        }:
-            raise ValueError(f"Request is {request.status.value}, not pending approval")
-
-        if getattr(request, "escalation_required", False) is True:
-            normalized_role = (reviewer_role or "").strip().lower()
-            settings = await self._get_remediation_settings(tenant_id)
-            required_role = (
-                (
-                    (
-                        getattr(settings, "policy_escalation_required_role", "owner")
-                        if settings
-                        else "owner"
-                    )
-                    or "owner"
-                )
-                .strip()
-                .lower()
-            )
-            if required_role not in {"owner", "admin"}:
-                required_role = "owner"
-
-            role_allowed = (
-                normalized_role == "owner" or normalized_role == required_role
-            )
-            if not role_allowed:
-                raise ValueError(
-                    f"Escalated remediation requests require {required_role} approval."
-                )
-
-            # Resolve GPU escalation loops by embedding explicit override marker.
-            marker = "gpu-approved"
-            if notes:
-                if marker not in notes.lower():
-                    notes = f"{notes}\n[{marker}]"
-            else:
-                notes = f"Owner escalation approval [{marker}]"
-
-            request.escalation_required = False
-            request.escalation_reason = None
-
-        request.status = RemediationStatus.APPROVED
-        request.reviewed_by_user_id = reviewer_id
-        request.review_notes = notes
-        request.escalation_required = False
-        request.escalation_reason = None
-
-        await self.db.commit()
-        await self.db.refresh(request)
-
-        logger.info(
-            "remediation_approved",
-            request_id=str(request_id),
-            reviewer=str(reviewer_id),
+        from app.modules.optimization.domain.remediation_workflow import (
+            approve_request,
         )
 
-        return request
+        return await approve_request(
+            self,
+            request_id=request_id,
+            tenant_id=tenant_id,
+            reviewer_id=reviewer_id,
+            notes=notes,
+            reviewer_role=reviewer_role,
+        )
 
     async def reject(
         self,
@@ -614,40 +433,17 @@ class RemediationService(BaseService):
         reviewer_id: UUID,
         notes: Optional[str] = None,
     ) -> RemediationRequest:
-        """Reject a remediation request."""
-        result = await self.db.execute(
-            select(RemediationRequest)
-            .where(RemediationRequest.id == request_id)
-            .where(RemediationRequest.tenant_id == tenant_id)
-            .with_for_update()
-        )
-        request = result.scalar_one_or_none()
-
-        if not request:
-            raise ResourceNotFoundError(f"Request {request_id} not found")
-
-        if request.status not in {
-            RemediationStatus.PENDING,
-            RemediationStatus.PENDING_APPROVAL,
-        }:
-            raise ValueError(f"Request is {request.status.value}, not pending approval")
-
-        request.status = RemediationStatus.REJECTED
-        request.reviewed_by_user_id = reviewer_id
-        request.review_notes = notes
-        request.escalation_required = False
-        request.escalation_reason = None
-
-        await self.db.commit()
-        await self.db.refresh(request)
-
-        logger.info(
-            "remediation_rejected",
-            request_id=str(request_id),
-            reviewer=str(reviewer_id),
+        from app.modules.optimization.domain.remediation_workflow import (
+            reject_request,
         )
 
-        return request
+        return await reject_request(
+            self,
+            request_id=request_id,
+            tenant_id=tenant_id,
+            reviewer_id=reviewer_id,
+            notes=notes,
+        )
 
     async def execute(
         self, request_id: UUID, tenant_id: UUID, bypass_grace_period: bool = False
