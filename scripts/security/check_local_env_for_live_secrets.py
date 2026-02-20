@@ -16,6 +16,10 @@ PATTERNS: dict[str, re.Pattern[str]] = {
     "SLACK_BOT_TOKEN": re.compile(r"^xox[baprs]-[A-Za-z0-9-]+$"),
     "GROQ_API_KEY": re.compile(r"^gsk_[A-Za-z0-9]+$"),
     "OPENAI_API_KEY": re.compile(r"^sk-[A-Za-z0-9]+$"),
+    "AWS_ACCESS_KEY_ID": re.compile(r"^AKIA[0-9A-Z]{16}$"),
+    "AWS_SECRET_ACCESS_KEY": re.compile(r"^[A-Za-z0-9/+=]{40}$"),
+    "DATABASE_URL": re.compile(r"^postgres(?:ql(?:\+asyncpg)?)://[^:]+:[^@]+@.+$"),
+    "REDIS_URL": re.compile(r"^rediss?://.+$"),
 }
 
 

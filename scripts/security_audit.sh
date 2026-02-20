@@ -24,6 +24,12 @@ else
     grep -rE "(password|secret|key|token|auth|pwd)\s*=\s*['\"][^'\"]+['\"]" app/ || echo "No obvious hardcoded secrets found."
 fi
 
+# 3b. Local .env hygiene check (never prints secret values)
+if [ -f ".env" ]; then
+    echo "Running local .env live-secret pattern scan..."
+    uv run python scripts/security/check_local_env_for_live_secrets.py
+fi
+
 # 4. Frontend Audit
 if [ -d "dashboard" ]; then
     echo "Running Frontend Dependency Audit..."
