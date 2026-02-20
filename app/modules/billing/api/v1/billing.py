@@ -7,6 +7,7 @@ Provides:
 - POST /billing/webhook - Handle Paystack webhooks
 """
 
+import ipaddress
 from typing import Annotated, Optional, Dict, Any, List
 from urllib.parse import urlparse, urljoin, urlunparse
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,12 +19,21 @@ import structlog
 from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.db.session import get_db
 from app.shared.core.config import get_settings
-from app.shared.core.rate_limit import auth_limit
+from app.shared.core.rate_limit import auth_limit, standard_limit
 from app.shared.core.currency import ExchangeRateUnavailableError
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Billing"])
-settings = get_settings()
+
+
+class _SettingsProxy:
+    """Lazy settings accessor to avoid stale module-level configuration."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_settings(), name)
+
+
+settings: Any = _SettingsProxy()
 
 
 def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
@@ -75,6 +85,27 @@ def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
     return urlunparse(sanitized)
 
 
+def _extract_client_ip(request: Request) -> str:
+    """
+    Resolve request source IP with defensive XFF parsing.
+
+    We prefer the right-most valid XFF entry (closest upstream hop) and
+    fall back to `request.client.host`.
+    """
+    fallback = request.client.host if request.client and request.client.host else "unknown"
+    xff = request.headers.get("x-forwarded-for", "")
+    if not xff:
+        return fallback
+
+    candidates = [part.strip() for part in xff.split(",") if part.strip()]
+    for raw in reversed(candidates):
+        try:
+            return str(ipaddress.ip_address(raw))
+        except ValueError:
+            continue
+    return fallback
+
+
 class ExchangeRateUpdate(BaseModel):
     rate: float
     provider: str = "manual"
@@ -113,33 +144,45 @@ class BillingUsageResponse(BaseModel):
 
 
 @router.get("/plans")
-async def get_public_plans(db: AsyncSession = Depends(get_db)) -> List[Dict[str, Any]]:
+@standard_limit
+async def get_public_plans(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> List[Dict[str, Any]]:
     """
     Get public pricing plans for the landing page.
     No authentication required.
     Tries DB first, fallbacks to TIER_CONFIG.
     """
     from app.models.pricing import PricingPlan
-    from sqlalchemy import select
     from app.shared.core.pricing import TIER_CONFIG, PricingTier
 
     # 1. Try fetching from DB
     try:
-        result = await db.execute(select(PricingPlan).where(PricingPlan.is_active))
-        db_plans = result.scalars().all()
+        result = await db.execute(
+            select(
+                PricingPlan.id,
+                PricingPlan.name,
+                PricingPlan.price_usd,
+                PricingPlan.description,
+                PricingPlan.display_features,
+                PricingPlan.cta_text,
+                PricingPlan.is_popular,
+            ).where(PricingPlan.is_active.is_(True))
+        )
+        db_plans = result.mappings().all()
         if db_plans:
             return [
                 {
-                    "id": p.id,
-                    "name": p.name,
-                    "price_monthly": float(p.price_usd),
-                    "price_annual": float(p.price_usd)
+                    "id": str(p["id"]),
+                    "name": p["name"],
+                    "price_monthly": float(p["price_usd"]),
+                    "price_annual": float(p["price_usd"])
                     * 10,  # Standard 2-months-free fallback
                     "period": "/mo",
-                    "description": p.description,
-                    "features": p.display_features,
-                    "cta": p.cta_text,
-                    "popular": p.is_popular,
+                    "description": p["description"],
+                    "features": p["display_features"],
+                    "cta": p["cta_text"],
+                    "popular": bool(p["is_popular"]),
                 }
                 for p in db_plans
             ]
@@ -192,7 +235,6 @@ async def get_subscription(
         from app.modules.billing.domain.billing.paystack_billing import (
             TenantSubscription,
         )
-        from sqlalchemy import select
 
         result = await db.execute(
             select(TenantSubscription).where(
@@ -448,11 +490,12 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
 
         # BE-BILLING-1: Validate Paystack origin IP (Mandatory for SOC2/Security)
         PAYSTACK_IPS = {"52.31.139.75", "52.49.173.169", "52.214.14.220"}
-        # Check X-Forwarded-For (if behind proxy) or client host
-        host = request.client.host if request.client else "unknown"
-        client_ip = request.headers.get("x-forwarded-for", host).split(",")[0].strip()
+        client_ip = _extract_client_ip(request)
 
-        if settings.ENVIRONMENT == "production" and client_ip not in PAYSTACK_IPS:
+        if (
+            settings.ENVIRONMENT in {"production", "staging"}
+            and client_ip not in PAYSTACK_IPS
+        ):
             logger.warning("unauthorized_webhook_origin", ip=client_ip)
             raise HTTPException(403, "Unauthorized origin IP")
 
@@ -534,7 +577,6 @@ async def update_exchange_rate(
 ) -> Dict[str, Any]:
     """Manually update exchange rate."""
     from app.models.pricing import ExchangeRate
-    from sqlalchemy import select
     from datetime import datetime, timezone
 
     result = await db.execute(
@@ -569,7 +611,6 @@ async def get_exchange_rate(
 ) -> Dict[str, Any]:
     """Get current exchange rate with billing safety health flags."""
     from app.models.pricing import ExchangeRate
-    from sqlalchemy import select
     from datetime import datetime, timezone
 
     result = await db.execute(
@@ -645,7 +686,6 @@ async def update_pricing_plan(
 ) -> Dict[str, str]:
     """Update pricing plan details."""
     from app.models.pricing import PricingPlan
-    from sqlalchemy import select
 
     result = await db.execute(select(PricingPlan).where(PricingPlan.id == plan_id))
     plan = result.scalar_one_or_none()
