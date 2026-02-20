@@ -50,13 +50,23 @@ class SafetyGuardrailService:
         """Checks if the daily savings limit has been reached for the configured scope."""
         estimated_impact = estimated_impact or Decimal("0")
         today = datetime.now(timezone.utc).date()
+        configured_scope = str(
+            getattr(self._settings, "REMEDIATION_KILL_SWITCH_SCOPE", "tenant") or "tenant"
+        ).strip().lower()
+        if configured_scope not in {"tenant", "global"}:
+            logger.warning(
+                "invalid_remediation_kill_switch_scope_fallback",
+                configured_scope=configured_scope,
+                fallback_scope="tenant",
+            )
+            configured_scope = "tenant"
 
         query = (
             select(func.sum(RemediationRequest.estimated_monthly_savings))
             .where(RemediationRequest.status == RemediationStatus.COMPLETED)
             .where(func.date(RemediationRequest.executed_at) == today)
         )
-        if self._settings.REMEDIATION_KILL_SWITCH_SCOPE.lower() == "tenant":
+        if configured_scope == "tenant":
             query = query.where(RemediationRequest.tenant_id == tenant_id)
 
         result = await self.db.execute(query)
@@ -68,7 +78,7 @@ class SafetyGuardrailService:
             logger.error(
                 "global_kill_switch_triggered",
                 tenant_id=str(tenant_id),
-                scope=self._settings.REMEDIATION_KILL_SWITCH_SCOPE,
+                scope=configured_scope,
                 total_impact=float(total_impact),
                 threshold=float(threshold),
             )

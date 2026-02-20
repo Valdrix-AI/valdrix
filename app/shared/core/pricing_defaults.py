@@ -27,6 +27,20 @@ DEFAULT_RATES = {
         "redshift": 0.25,  # $0.25/hour per node
         "sagemaker": 0.15,  # $0.15/hour per endpoint instance
         "ecr": 0.10 / 720,  # $0.10/GB-month
+        # OpenSearch on-demand baseline rates (hourly)
+        "opensearch": {
+            "t3.small.search": 0.036,
+            "t3.medium.search": 0.072,
+            "m6g.large.search": 0.138,
+            "r6g.large.search": 0.192,
+            "default": 0.036,
+        },
+        # Dedicated master nodes for OpenSearch
+        "opensearch_master": {
+            "t3.small.search": 0.036,
+            "m6g.large.search": 0.138,
+            "default": 0.036,
+        },
     },
     "gcp": {
         "ip": 0.01,  # ~$7.20/month
@@ -49,6 +63,12 @@ DEFAULT_RATES = {
         },
         "disk": 0.05 / 730,
         "image": 0.03 / 730,
+        # Provisioned throughput unit approximation for Azure OpenAI.
+        # Note: exact billing varies by model/region and should be overridden by live catalogs.
+        "azure_openai_ptu": {
+            "ptu": 8.22,  # ~$6000/month
+            "default": 8.22,
+        },
     },
 }
 

@@ -25,7 +25,7 @@ from app.shared.llm.guardrails import LLMGuardrails, ZombieAnalysisResult
 
 logger = structlog.get_logger()
 
-ZOMBIE_ANALYSIS_PROMPT = """You are a Cloud FinOps expert analyzing zombie (unused/underutilized) AWS resources.
+ZOMBIE_ANALYSIS_PROMPT = """You are a Cloud+ FinOps expert analyzing zombie (unused/underutilized) resources across IaaS and Cloud+ providers.
 
 INPUT: A list of detected zombie resources with their metadata.
 
@@ -43,7 +43,7 @@ OUTPUT FORMAT (STRICT JSON ONLY):
     {{
       "resource_id": "the resource identifier",
       "resource_type": "type of resource",
-      "provider": "aws|azure|gcp",
+      "provider": "aws|azure|gcp|saas|license|platform|hybrid",
       "explanation": "Why this is a zombie - be specific and clear",
       "confidence": "high|medium|low",
       "confidence_score": 0.0-1.0,
@@ -63,7 +63,7 @@ OUTPUT FORMAT (STRICT JSON ONLY):
 
 IMPORTANT RULES:
 - Base conclusions ONLY on provided data
-- Preserve the Cloud Provider ("aws", "azure", or "gcp") for each resource
+- Preserve the Cloud Provider for each resource (aws|azure|gcp|saas|license|platform|hybrid)
 - Provide a numeric confidence_score (0.0 to 1.0) where 1.0 is highest
 - Be conservative with confidence ratings
 - Always explain the risk of deleting each resource
@@ -106,7 +106,20 @@ class ZombieAnalyzer:
         flattened = []
 
         # Skip metadata keys
-        skip_keys = {"region", "scanned_at", "total_monthly_waste"}
+        skip_keys = {
+            "region",
+            "scanned_at",
+            "total_monthly_waste",
+            "errors",
+            "details",
+            "scanned_connections",
+            "waste_rightsizing",
+            "architectural_inefficiency",
+            "ai_analysis",
+            "partial_scan",
+            "scan_timeout",
+            "partial_results",
+        }
 
         for category, items in detection_results.items():
             if category in skip_keys:

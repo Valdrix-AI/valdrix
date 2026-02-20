@@ -70,13 +70,21 @@ def get_limiter() -> Limiter:
     if _limiter is None:
         settings = get_settings()
         storage_uri = settings.REDIS_URL or "memory://"
-        
-        # SEC: Warn if production-like environment is missing distributed rate limiting
-        if not settings.REDIS_URL and settings.ENVIRONMENT.lower() in ("production", "staging"):
+        is_production_like = settings.ENVIRONMENT.lower() in ("production", "staging")
+        if (
+            is_production_like
+            and not settings.REDIS_URL
+            and not settings.ALLOW_IN_MEMORY_RATE_LIMITS
+        ):
+            raise RuntimeError(
+                "Distributed rate limiting is required in staging/production. "
+                "Set REDIS_URL (or explicitly ALLOW_IN_MEMORY_RATE_LIMITS=true for break-glass)."
+            )
+        if is_production_like and not settings.REDIS_URL:
             logger.warning(
-                "rate_limiting_in_memory_production",
-                msg="REDIS_URL is not set. Rate limiting will be per-process only. "
-                "This is NOT RECOMMENDED for production deployments with multiple workers."
+                "rate_limiting_in_memory_break_glass",
+                msg="REDIS_URL is not set. In-memory rate limiting is enabled via "
+                "ALLOW_IN_MEMORY_RATE_LIMITS and should be temporary.",
             )
             
         _limiter = Limiter(
@@ -220,6 +228,32 @@ REMEDIATION_LIMIT_PER_HOUR = 50  # Max remediations per tenant per hour
 _remediation_counts: dict[
     str, dict[str, float | int]
 ] = {}  # In-memory fallback when Redis unavailable
+_remediation_last_cleanup_at: float = 0.0
+_REMEDIATION_WINDOW_SECONDS = 3600
+_REMEDIATION_STALE_RETENTION_SECONDS = _REMEDIATION_WINDOW_SECONDS * 2
+_REMEDIATION_CLEANUP_INTERVAL_SECONDS = 300
+
+
+def _cleanup_stale_remediation_counts(current_time: float) -> None:
+    """
+    Prevent unbounded growth for local in-memory fallback rate-limit state.
+    """
+    global _remediation_last_cleanup_at
+    if (
+        current_time - _remediation_last_cleanup_at
+        < _REMEDIATION_CLEANUP_INTERVAL_SECONDS
+    ):
+        return
+
+    stale_before = current_time - _REMEDIATION_STALE_RETENTION_SECONDS
+    stale_keys = [
+        key
+        for key, value in _remediation_counts.items()
+        if float(value.get("window_start", 0.0)) < stale_before
+    ]
+    for key in stale_keys:
+        _remediation_counts.pop(key, None)
+    _remediation_last_cleanup_at = current_time
 
 
 async def check_remediation_rate_limit(
@@ -274,6 +308,7 @@ async def check_remediation_rate_limit(
     # Memory fallback for local/single-instance deployments
     current_time = time.time()
     window_key = f"{tenant_key}:{action}"
+    _cleanup_stale_remediation_counts(current_time)
 
     if window_key not in _remediation_counts:
         _remediation_counts[window_key] = {"count": 0, "window_start": current_time}
@@ -281,7 +316,7 @@ async def check_remediation_rate_limit(
     entry = _remediation_counts[window_key]
 
     # Reset window if expired (1 hour)
-    if current_time - entry["window_start"] > 3600:
+    if current_time - entry["window_start"] > _REMEDIATION_WINDOW_SECONDS:
         entry["count"] = 0
         entry["window_start"] = current_time
 

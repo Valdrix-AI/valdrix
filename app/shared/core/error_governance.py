@@ -131,7 +131,8 @@ def handle_exception(
         details=valdrix_exc.details,
     )
 
-    response_details = valdrix_exc.details
+    from typing import Optional, Dict, Any
+    response_details: Optional[Dict[str, Any]] = valdrix_exc.details
     if is_prod and valdrix_exc.code not in safe_codes:
         response_details = None
 
