@@ -1,187 +1,271 @@
 import ssl
+import time
 import uuid
+from dataclasses import dataclass
+import inspect
+from threading import Lock
+from typing import Any, AsyncGenerator, Dict, Optional, cast
 from uuid import UUID
-from typing import (
-    Any,
-    AsyncGenerator,
-    Dict,
-    Optional,
-    cast,
-)
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+
+import structlog
+from fastapi import Request
 from sqlalchemy import event, text
 from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.pool import StaticPool, NullPool
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.pool import NullPool, StaticPool
+
 from app.shared.core.config import get_settings
-import structlog
-import sys
-import time
-from fastapi import Request
 from app.shared.core.exceptions import ValdrixException
 from app.shared.core.ops_metrics import RLS_CONTEXT_MISSING, RLS_ENFORCEMENT_LATENCY
 
 logger = structlog.get_logger()
-settings = get_settings()
 
 # Ensure ORM mappings are registered for scripts/workers that import the DB layer
 # without importing `app/main.py`.
 import app.models  # noqa: F401, E402
 
-# Item 6: Critical Startup Error Handling
-if not settings.DATABASE_URL and not settings.TESTING:
-    logger.critical(
-        "startup_failed_missing_db_url",
-        msg="DATABASE_URL is not set. The application cannot start.",
+class _SettingsProxy:
+    """Lazy settings accessor to avoid import-time Settings construction."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_settings(), name)
+
+
+settings: Any = _SettingsProxy()
+
+
+@dataclass(slots=True)
+class _DBRuntime:
+    settings: Any
+    engine: AsyncEngine
+    session_maker: async_sessionmaker[AsyncSession]
+    effective_url: str
+
+
+_db_runtime: _DBRuntime | None = None
+_db_runtime_lock = Lock()
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def _normalize_db_url(raw_url: str) -> str:
+    url = (raw_url or "").strip()
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
+def _resolve_effective_url(settings_obj: Any) -> tuple[str, bool, bool]:
+    db_url = _normalize_db_url(str(getattr(settings_obj, "DATABASE_URL", "") or ""))
+    allow_test_database_url = _as_bool(
+        getattr(settings_obj, "ALLOW_TEST_DATABASE_URL", False)
     )
-    sys.exit(1)
-elif not settings.DATABASE_URL:
-    # During testing, we can lazily allow missing URL if it's swapped later
-    logger.debug("missing_db_url_in_testing_ignoring")
+    use_null_pool = _as_bool(getattr(settings_obj, "DB_USE_NULL_POOL", False))
+    external_pooler = _as_bool(getattr(settings_obj, "DB_EXTERNAL_POOLER", False))
 
-# Ensure DATABASE_URL is a string before string comparison
-db_url = settings.DATABASE_URL or ""
+    effective_url = db_url
+    is_testing = bool(getattr(settings_obj, "TESTING", False))
+    if is_testing and not db_url:
+        effective_url = "sqlite+aiosqlite:///:memory:"
+    elif is_testing and "sqlite" not in db_url and not allow_test_database_url:
+        # Safety: protect tests from accidental writes to real databases.
+        effective_url = "sqlite+aiosqlite:///:memory:"
 
-# Fix missing async driver in PostgreSQL URLs (common with Supabase/Neon copy-paste)
-if db_url.startswith("postgresql://"):
-    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return effective_url, use_null_pool, external_pooler
 
-# SSL Context: Configurable SSL modes for different environments
-# Options: disable, require, verify-ca, verify-full
-ssl_mode = settings.DB_SSL_MODE.lower()
-connect_args: dict[str, Any] = {}
 
-# Determine the actual URL to use. If testing, default to in-memory sqlite to avoid side-effects.
-# Determine the actual URL to use.
-# Default to in-memory sqlite in testing ONLY IF no explicit DATABASE_URL is provided,
-# OR if the provided URL is not sqlite and we want to prevent side-effects on real DBs
-# (unless explicitly allowed via a flag if we had one, but let's keep it safe for now).
-effective_url = db_url
-raw_allow_test_database_url = getattr(settings, "ALLOW_TEST_DATABASE_URL", False)
-if isinstance(raw_allow_test_database_url, bool):
-    allow_test_database_url = raw_allow_test_database_url
-elif isinstance(raw_allow_test_database_url, str):
-    allow_test_database_url = raw_allow_test_database_url.strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-else:
-    # Default to False for non-bool/non-string values (e.g. MagicMock in tests).
-    allow_test_database_url = False
-if settings.TESTING and not db_url:
-    effective_url = "sqlite+aiosqlite:///:memory:"
-elif (
-    settings.TESTING and "sqlite" not in db_url and not allow_test_database_url
-):
-    # Safety feature: swap non-sqlite to memory in testing to prevent accidental wipes.
-    # To test against real Postgres, you must use a sqlite URL or handle it elsewhere.
-    effective_url = "sqlite+aiosqlite:///:memory:"
+def _build_connect_args(settings_obj: Any, effective_url: str) -> dict[str, Any]:
+    connect_args: dict[str, Any] = {}
+    ssl_mode = str(getattr(settings_obj, "DB_SSL_MODE", "require")).lower()
 
-# Determine if we're using sqlite (for pool and connection settings)
-# Derived from effective_url to ensure testing overrides are caught
-is_sqlite = "sqlite" in effective_url
-
-if "postgresql" in effective_url:
-    connect_args["statement_cache_size"] = 0  # Required for Supavisor
-
-if ssl_mode == "disable":
-    # WARNING: Only for local development with no SSL
-    logger.warning(
-        "database_ssl_disabled",
-        msg="SSL disabled - INSECURE, do not use in production!",
-    )
     if "postgresql" in effective_url:
-        connect_args["ssl"] = False
+        connect_args["statement_cache_size"] = 0  # Required for Supavisor
 
-
-elif ssl_mode == "require":
-    # Item 2: Secure by Default - Try to use CA cert even in require mode if available
-    ssl_context = ssl.create_default_context()
-    if settings.DB_SSL_CA_CERT_PATH:
-        ssl_context.load_verify_locations(cafile=settings.DB_SSL_CA_CERT_PATH)
-        ssl_context.verify_mode = ssl.CERT_REQUIRED
-        logger.info(
-            "database_ssl_require_verified", ca_cert=settings.DB_SSL_CA_CERT_PATH
-        )
-    elif settings.is_production:
-        # Item 2: Prevent INSECURE FALLBACK in Production
-        logger.critical(
-            "database_ssl_require_failed_production",
-            msg="SSL CA verification is REQUIRED in production/staging.",
-        )
-        raise ValueError(
-            "DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE=require in production."
-        )
-    else:
-        # Fallback to no verification only in local/dev
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
+    if ssl_mode == "disable":
         logger.warning(
-            "database_ssl_require_insecure",
-            msg="SSL enabled but CA verification skipped. MitM risk!",
+            "database_ssl_disabled",
+            msg="SSL disabled - INSECURE, do not use in production!",
         )
-    if "postgresql" in effective_url:
-        connect_args["ssl"] = ssl_context
+        if "postgresql" in effective_url:
+            connect_args["ssl"] = False
+        return connect_args
 
+    if ssl_mode == "require":
+        ssl_context = ssl.create_default_context()
+        if getattr(settings_obj, "DB_SSL_CA_CERT_PATH", None):
+            ssl_context.load_verify_locations(cafile=settings_obj.DB_SSL_CA_CERT_PATH)
+            ssl_context.verify_mode = ssl.CERT_REQUIRED
+            logger.info(
+                "database_ssl_require_verified",
+                ca_cert=settings_obj.DB_SSL_CA_CERT_PATH,
+            )
+        elif bool(getattr(settings_obj, "is_production", False)):
+            logger.critical(
+                "database_ssl_require_failed_production",
+                msg="SSL CA verification is REQUIRED in production/staging.",
+            )
+            raise ValueError(
+                "DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE=require in production."
+            )
+        else:
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            logger.warning(
+                "database_ssl_require_insecure",
+                msg="SSL enabled but CA verification skipped. MitM risk!",
+            )
+        if "postgresql" in effective_url:
+            connect_args["ssl"] = ssl_context
+        return connect_args
 
-elif ssl_mode in ("verify-ca", "verify-full"):
-    if not settings.DB_SSL_CA_CERT_PATH:
-        raise ValueError(f"DB_SSL_CA_CERT_PATH required for ssl_mode={ssl_mode}")
-    ssl_context = ssl.create_default_context(cafile=settings.DB_SSL_CA_CERT_PATH)
-    ssl_context.verify_mode = ssl.CERT_REQUIRED
-    ssl_context.check_hostname = ssl_mode == "verify-full"
-    if "postgresql" in effective_url:
-        connect_args["ssl"] = ssl_context
-    logger.info(
-        "database_ssl_verified", mode=ssl_mode, ca_cert=settings.DB_SSL_CA_CERT_PATH
-    )
+    if ssl_mode in {"verify-ca", "verify-full"}:
+        ca_cert = getattr(settings_obj, "DB_SSL_CA_CERT_PATH", None)
+        if not ca_cert:
+            raise ValueError(f"DB_SSL_CA_CERT_PATH required for ssl_mode={ssl_mode}")
+        ssl_context = ssl.create_default_context(cafile=ca_cert)
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
+        ssl_context.check_hostname = ssl_mode == "verify-full"
+        if "postgresql" in effective_url:
+            connect_args["ssl"] = ssl_context
+        logger.info("database_ssl_verified", mode=ssl_mode, ca_cert=ca_cert)
+        return connect_args
 
-
-else:
     raise ValueError(
         f"Invalid DB_SSL_MODE: {ssl_mode}. Use: disable, require, verify-ca, verify-full"
     )
 
-# Engine: The connection pool manager
-# - echo: Logs SQL queries when DEBUG=True (disable in production for performance)
-# - pool_size: Number of persistent connections (10 for 10K+ user scaling)
-# - max_overflow: Extra connections allowed during traffic spikes (20 for burst handling)
-# - pool_pre_ping: Checks if connection is alive before using (prevents stale connections)
-# - pool_recycle: Recycle connections after 5 min (Supavisor/Neon compatibility)
-# Pool Configuration: Use NullPool for testing to avoid connection leaks across loops
-POOL_CONFIG: dict[str, Any] = {
-    "pool_recycle": settings.DB_POOL_RECYCLE,
-    "pool_pre_ping": True,  # Health check connections before use
-    "echo": settings.DB_ECHO,
-}
 
-if is_sqlite:
-    POOL_CONFIG["poolclass"] = StaticPool
-else:
-    POOL_CONFIG["poolclass"] = NullPool
+def _build_pool_config(
+    settings_obj: Any, effective_url: str, use_null_pool: bool, external_pooler: bool
+) -> dict[str, Any]:
+    is_sqlite = "sqlite" in effective_url
+    pool_config: dict[str, Any] = {
+        "pool_recycle": getattr(settings_obj, "DB_POOL_RECYCLE", 3600),
+        "pool_pre_ping": True,
+        "echo": bool(getattr(settings_obj, "DB_ECHO", False)),
+    }
 
-# Test-specific configuration
-if settings.TESTING:
-    if not is_sqlite:
-        POOL_CONFIG.update(
+    if is_sqlite:
+        pool_config["poolclass"] = StaticPool
+    elif use_null_pool:
+        pool_config["poolclass"] = NullPool
+        logger.warning(
+            "database_null_pool_enabled",
+            msg="NullPool enabled for external DB pooler mode.",
+            external_pooler=external_pooler,
+        )
+    else:
+        pool_config.update(
             {
-                "pool_size": 2,
-                "max_overflow": 2,
+                "pool_size": int(getattr(settings_obj, "DB_POOL_SIZE", 20)),
+                "max_overflow": int(getattr(settings_obj, "DB_MAX_OVERFLOW", 10)),
+                "pool_timeout": int(getattr(settings_obj, "DB_POOL_TIMEOUT", 30)),
             }
         )
-    POOL_CONFIG["pool_recycle"] = 60  # Shorter recycle for tests
 
-engine = create_async_engine(
-    effective_url,
-    **POOL_CONFIG,
-    connect_args=connect_args,
-)
+    if bool(getattr(settings_obj, "TESTING", False)):
+        if not is_sqlite and not use_null_pool:
+            pool_config.update({"pool_size": 2, "max_overflow": 2, "pool_timeout": 5})
+        pool_config["pool_recycle"] = 60
+
+    return pool_config
+
+
+def _register_engine_event_listeners(engine: AsyncEngine) -> None:
+    sync_engine = getattr(engine, "sync_engine", None)
+    # Test doubles/mocks may not support SQLAlchemy event registration.
+    if sync_engine is None or type(sync_engine).__module__.startswith("unittest.mock"):
+        logger.debug("db_engine_listener_registration_skipped_non_engine_target")
+        return
+    event.listen(sync_engine, "before_cursor_execute", before_cursor_execute)
+    event.listen(sync_engine, "after_cursor_execute", after_cursor_execute)
+
+
+def _build_db_runtime() -> _DBRuntime:
+    settings_obj = get_settings()
+    db_url = str(getattr(settings_obj, "DATABASE_URL", "") or "").strip()
+    if not db_url and not bool(getattr(settings_obj, "TESTING", False)):
+        raise ValueError("DATABASE_URL is not set. The application cannot start.")
+    if not db_url:
+        logger.debug("missing_db_url_in_testing_ignoring")
+
+    effective_url, use_null_pool, external_pooler = _resolve_effective_url(settings_obj)
+    connect_args = _build_connect_args(settings_obj, effective_url)
+    pool_config = _build_pool_config(
+        settings_obj, effective_url, use_null_pool, external_pooler
+    )
+    engine = create_async_engine(
+        effective_url,
+        **pool_config,
+        connect_args=connect_args,
+    )
+    _register_engine_event_listeners(engine)
+    session_maker = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    return _DBRuntime(
+        settings=settings_obj,
+        engine=engine,
+        session_maker=session_maker,
+        effective_url=effective_url,
+    )
+
+
+def _get_db_runtime() -> _DBRuntime:
+    global _db_runtime
+    runtime = _db_runtime
+    if runtime is not None:
+        return runtime
+    with _db_runtime_lock:
+        runtime = _db_runtime
+        if runtime is None:
+            runtime = _build_db_runtime()
+            _db_runtime = runtime
+    return runtime
+
+
+def reset_db_runtime() -> None:
+    """Test helper for forcing runtime re-initialization on next access."""
+    global _db_runtime
+    _db_runtime = None
+
+
+class _LazyEngineProxy:
+    """Backward-compatible engine symbol with lazy underlying initialization."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(_get_db_runtime().engine, name)
+
+
+class _LazySessionMakerProxy:
+    """Backward-compatible session maker symbol with lazy initialization."""
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return _get_db_runtime().session_maker(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(_get_db_runtime().session_maker, name)
+
+
+engine: Any = _LazyEngineProxy()
+async_session_maker: Any = _LazySessionMakerProxy()
 
 SLOW_QUERY_THRESHOLD_SECONDS = 0.2
 
 
-@event.listens_for(engine.sync_engine, "before_cursor_execute")
 def before_cursor_execute(
     conn: Connection,
     _cursor: Any,
@@ -194,7 +278,6 @@ def before_cursor_execute(
     conn.info.setdefault("query_start_time", []).append(time.perf_counter())
 
 
-@event.listens_for(engine.sync_engine, "after_cursor_execute")
 def after_cursor_execute(
     conn: Connection,
     _cursor: Any,
@@ -212,16 +295,6 @@ def after_cursor_execute(
             statement=statement[:200] + "..." if len(statement) > 200 else statement,
             parameters=str(parameters)[:100] if parameters else None,
         )
-
-
-# Session Factory: Creates new database sessions
-# - expire_on_commit=False: Prevents lazy loading issues in async code
-#   (objects remain accessible after commit without re-querying)
-async_session_maker = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
 
 
 def _session_uses_postgresql(session: AsyncSession) -> bool:
@@ -278,7 +351,13 @@ def _resolve_session_backend(session: AsyncSession) -> tuple[str, str]:
         logger.debug("session_bind_introspection_failed", error=str(e), exc_info=True)
 
     try:
-        runtime_bind = session.get_bind()
+        get_bind = getattr(session, "get_bind", None)
+        runtime_bind = None
+        if callable(get_bind):
+            if inspect.iscoroutinefunction(get_bind):
+                logger.debug("session_get_bind_is_coroutine_skipped")
+            else:
+                runtime_bind = get_bind()
         if runtime_bind is not None:
             dialect_name = getattr(getattr(runtime_bind, "dialect", None), "name", None)
             if isinstance(dialect_name, str) and dialect_name.strip():
@@ -292,14 +371,15 @@ def _resolve_session_backend(session: AsyncSession) -> tuple[str, str]:
     except Exception as e:
         logger.debug("session_runtime_bind_resolution_failed", error=str(e), exc_info=True)
 
-    fallback_backend = _backend_from_url(effective_url)
+    fallback_url, _, _ = _resolve_effective_url(get_settings())
+    fallback_backend = _backend_from_url(fallback_url)
     if fallback_backend is not None:
         logger.warning(
             "session_dialect_fallback_used",
             backend=fallback_backend,
-            source="effective_url",
+            source="configured_effective_url",
         )
-        return fallback_backend, "effective_url"
+        return fallback_backend, "configured_effective_url"
 
     return "unknown", "unresolved"
 
