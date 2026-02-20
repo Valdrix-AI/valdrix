@@ -155,7 +155,6 @@ class GCPAdapter(BaseAdapter):
 
     def _build_cost_query(self, table_path: str, include_credits: bool = True) -> str:
         """Constructs the BigQuery SQL for cost extraction."""
-        credit_filter = "" if include_credits else "AND cost_type != 'adjustment'"
         return f"""
             SELECT
                 service.description as service,

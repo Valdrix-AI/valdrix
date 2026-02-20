@@ -24,6 +24,7 @@ from app.shared.adapters.saas import SaaSAdapter
 from app.shared.adapters.license import LicenseAdapter
 from app.shared.adapters.platform import PlatformAdapter
 from app.shared.adapters.hybrid import HybridAdapter
+from app.shared.adapters.aws_utils import resolve_aws_region_hint
 from app.shared.core.exceptions import ConfigurationError
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
@@ -41,12 +42,14 @@ class AdapterFactory:
         Returns the appropriate adapter based on the connection type.
         """
         if isinstance(connection, AWSConnection):
+            resolved_region = resolve_aws_region_hint(getattr(connection, "region", ""))
+
             # Prefer CUR adapter for enterprise accounts if configured
             aws_creds = AWSCredentials(
                 account_id=connection.aws_account_id,
                 role_arn=connection.role_arn,
                 external_id=connection.external_id,
-                region=connection.region,
+                region=resolved_region,
                 cur_bucket_name=connection.cur_bucket_name,
                 cur_report_name=connection.cur_report_name,
                 cur_prefix=connection.cur_prefix,
@@ -81,10 +84,18 @@ class AdapterFactory:
             return GCPAdapter(gcp_creds)
 
         elif isinstance(connection, SaaSConnection):
+            connector_config = connection.connector_config or {}
             saas_creds = SaaSCredentials(
                 platform=connection.vendor,
-                api_key=SecretStr(connection.api_key or ""),
-                extra_config=connection.connector_config or {},
+                api_key=SecretStr(connection.api_key) if connection.api_key else None,
+                auth_method=connection.auth_method,
+                connector_config=connector_config,
+                spend_feed=connection.spend_feed or [],
+                extra_config={
+                    **connector_config,
+                    "auth_method": connection.auth_method,
+                    "spend_feed": connection.spend_feed or [],
+                },
             )
             return SaaSAdapter(saas_creds)
 
