@@ -3,6 +3,7 @@ import time
 import uuid
 from dataclasses import dataclass
 import inspect
+import re
 from threading import Lock
 from typing import Any, AsyncGenerator, Dict, Optional, cast
 from uuid import UUID
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool, StaticPool
 
 from app.shared.core.config import get_settings
+from app.shared.core.constants import RLS_EXEMPT_TABLES
 from app.shared.core.exceptions import ValdrixException
 from app.shared.core.ops_metrics import RLS_CONTEXT_MISSING, RLS_ENFORCEMENT_LATENCY
 
@@ -37,6 +39,10 @@ class _SettingsProxy:
 
 
 settings: Any = _SettingsProxy()
+
+_RLS_EXEMPT_TABLE_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(table.lower()) for table in RLS_EXEMPT_TABLES) + r")\b"
+)
 
 
 @dataclass(slots=True)
@@ -263,7 +269,14 @@ class _LazySessionMakerProxy:
 engine: Any = _LazyEngineProxy()
 async_session_maker: Any = _LazySessionMakerProxy()
 
-SLOW_QUERY_THRESHOLD_SECONDS = 0.2
+
+def _get_slow_query_threshold_seconds() -> float:
+    """Return configurable slow-query threshold with a safe fallback."""
+    try:
+        threshold = float(getattr(settings, "DB_SLOW_QUERY_THRESHOLD_SECONDS", 0.2))
+    except (TypeError, ValueError):
+        threshold = 0.2
+    return threshold if threshold > 0 else 0.2
 
 
 def before_cursor_execute(
@@ -288,10 +301,12 @@ def after_cursor_execute(
 ) -> None:
     """Log slow queries."""
     total = time.perf_counter() - conn.info["query_start_time"].pop(-1)
-    if total > SLOW_QUERY_THRESHOLD_SECONDS:
+    threshold = _get_slow_query_threshold_seconds()
+    if total > threshold:
         logger.warning(
             "slow_query_detected",
             duration_seconds=round(total, 3),
+            threshold_seconds=threshold,
             statement=statement[:200] + "..." if len(statement) > 200 else statement,
             parameters=str(parameters)[:100] if parameters else None,
         )
@@ -521,9 +536,6 @@ def check_rls_policy(
     if settings.TESTING and not settings.ENFORCE_RLS_IN_TESTS:
         return statement, parameters
 
-    # Skip internal/system queries or migrations
-    from app.shared.core.constants import RLS_EXEMPT_TABLES
-
     stmt_lower = statement.lower()
 
     # Only enforce for data-access statements. Transaction/session control statements
@@ -542,10 +554,7 @@ def check_rls_policy(
     ):
         return statement, parameters
 
-    import re
-
-    pattern = r"\b(" + "|".join(RLS_EXEMPT_TABLES) + r")\b"
-    if re.search(pattern, stmt_lower):
+    if _RLS_EXEMPT_TABLE_PATTERN.search(stmt_lower):
         return statement, parameters
 
     # Identify the state from the connection info
