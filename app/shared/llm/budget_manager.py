@@ -7,7 +7,8 @@ Implements atomic budget reservation/debit pattern to prevent cost overages.
 
 import structlog
 import asyncio
-from decimal import Decimal
+import inspect
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from enum import Enum
@@ -67,7 +68,7 @@ class LLMBudgetManager:
             return Decimal("0")
         try:
             return Decimal(str(v))
-        except (ValueError, TypeError, Exception):
+        except (ValueError, TypeError, InvalidOperation):
             logger.warning("invalid_decimal_conversion", value=str(v))
             return Decimal("0")
 
@@ -118,8 +119,7 @@ class LLMBudgetManager:
 
         This guard is evaluated before budget reservation to fail fast on plan limits.
         """
-        from app.shared.core.pricing import get_tenant_tier, get_tier_limit
-        from app.models.llm import LLMUsage
+        from app.shared.core.pricing import get_tier_limit
 
         tier = await get_tenant_tier(tenant_id, db)
         raw_limit = get_tier_limit(tier, "llm_analyses_per_day")
@@ -584,7 +584,7 @@ class LLMBudgetManager:
         except Exception as e:
             if concurrency_slot_acquired:
                 await cls._release_fair_use_inflight_slot(tenant_id)
-            logger.error(
+            logger.exception(
                 "budget_check_failed",
                 tenant_id=str(tenant_id),
                 model=model,
@@ -696,6 +696,18 @@ class LLMBudgetManager:
                 error=str(e),
                 error_type=type(e).__name__,
             )
+            rollback_fn = getattr(db, "rollback", None)
+            if callable(rollback_fn):
+                try:
+                    rollback_result = rollback_fn()
+                    if inspect.isawaitable(rollback_result):
+                        await rollback_result
+                except Exception as rollback_exc:
+                    logger.warning(
+                        "usage_recording_rollback_failed",
+                        tenant_id=str(tenant_id),
+                        error=str(rollback_exc),
+                    )
             # Don't fail the request if we can't record usage
             # (the usage is what matters, not the audit log)
         finally:
@@ -828,3 +840,5 @@ class LLMBudgetManager:
                 )
 
             budget.alert_sent_at = now
+            await db.flush()
+            await db.commit()

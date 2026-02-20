@@ -78,7 +78,7 @@ class ExchangeRateService:
             return None, 0.0, None
         # Backward compatibility with test fixtures that still seed 2-tuples.
         if len(raw) == 2:
-            rate, updated_at = raw  # type: ignore[misc]
+            rate, updated_at = raw
             return rate, float(updated_at), None
         rate, updated_at, provider = raw
         return rate, float(updated_at), provider

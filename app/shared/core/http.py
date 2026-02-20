@@ -5,6 +5,7 @@ Ensures singleton httpx.AsyncClient usage across both FastAPI lifespan
 and background workers to prevent socket exhaustion and optimize latency.
 """
 
+import inspect
 from typing import Optional
 import httpx
 import structlog
@@ -75,8 +76,27 @@ async def close_http_client() -> None:
     """
     Gracefully shuts down the global client, flushing all connection pools.
     """
-    global _client
-    if _client:
-        await _client.aclose()
-        logger.info("http_client_closed")
-        _client = None
+    global _client, _insecure_client
+
+    async def _close_one(client: object | None, label: str) -> None:
+        if not client:
+            return
+
+        close_result = None
+        aclose = getattr(client, "aclose", None)
+        if callable(aclose):
+            close_result = aclose()
+        else:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close_result = close()
+
+        if inspect.isawaitable(close_result):
+            await close_result
+
+        logger.info("http_client_closed", verify=label == "secure")
+
+    await _close_one(_client, "secure")
+    await _close_one(_insecure_client, "insecure")
+    _client = None
+    _insecure_client = None

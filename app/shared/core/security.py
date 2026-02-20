@@ -109,10 +109,48 @@ class EncryptionKeyManager:
             cls._key_cache[key] = (value, time.monotonic())
 
     @classmethod
-    def clear_key_caches(cls) -> None:
-        """Clear all cached keys. Call after key rotation."""
+    def clear_key_caches(cls, warm: bool = False) -> None:
+        """
+        Clear all cached keys.
+
+        Set ``warm=True`` after rotations to proactively rebuild hot entries and
+        avoid post-rotation latency spikes on first decrypt/encrypt requests.
+        """
         with cls._cache_lock:
             cls._key_cache.clear()
+        if warm:
+            cls.warm_key_caches_from_settings()
+
+    @classmethod
+    def warm_key_caches_from_settings(cls) -> None:
+        """
+        Warm key caches for active encryption keys from current settings.
+        """
+        settings = get_settings()
+        salt = settings.KDF_SALT
+        if not salt:
+            return
+
+        candidates = [
+            settings.ENCRYPTION_KEY,
+            settings.PII_ENCRYPTION_KEY,
+            settings.API_KEY_ENCRYPTION_KEY,
+            *list(settings.ENCRYPTION_FALLBACK_KEYS or []),
+        ]
+        seen: set[str] = set()
+        for raw_key in candidates:
+            key = str(raw_key or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            try:
+                cls.create_fernet_for_key(key, salt)
+            except Exception as exc:
+                logger.warning(
+                    "encryption_key_cache_warm_failed",
+                    key_fingerprint=hashlib.sha256(key.encode()).hexdigest()[:12],
+                    error=str(exc),
+                )
 
     @classmethod
     def derive_key(
@@ -123,7 +161,8 @@ class EncryptionKeyManager:
         iterations: int = KDF_ITERATIONS,
     ) -> bytes:
         """Derive an encryption key from master key using PBKDF2 (TTL-cached)."""
-        cache_key = f"dk:{salt}:{key_version}:{iterations}"
+        key_fingerprint = hashlib.sha256(master_key.encode()).hexdigest()
+        cache_key = f"dk:{key_fingerprint}:{salt}:{key_version}:{iterations}"
         cached = cls._get_cached(cache_key)
         if cached is not None:
             return cast(bytes, cached)
@@ -154,7 +193,8 @@ class EncryptionKeyManager:
 
     @classmethod
     def create_fernet_for_key(cls, master_key: str, salt: str) -> Fernet:
-        cache_key = f"fernet:{salt}"
+        key_fingerprint = hashlib.sha256(master_key.encode()).hexdigest()
+        cache_key = f"fernet:{key_fingerprint}:{salt}"
         cached = cls._get_cached(cache_key)
         if cached is not None:
             return cast(Fernet, cached)
@@ -329,14 +369,22 @@ def generate_blind_index(value: str, tenant_id: Any | None = None) -> str | None
     if not key_str:
         return None
 
-    key = key_str.encode()
+    # Derive tenant-scoped subkeys to reduce cross-tenant correlation and
+    # increase brute-force cost for deterministic blind indexes.
+    iterations = max(10000, int(getattr(settings, "BLIND_INDEX_KDF_ITERATIONS", 50000)))
+    tenant_scope = str(tenant_id).strip() if tenant_id is not None else "global"
+    subkey_salt = f"blind-index:v2:generic:{tenant_scope}".encode()
+    subkey_kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=subkey_salt,
+        iterations=iterations,
+    )
+    key = subkey_kdf.derive(key_str.encode())
     # Normalize and salt
     raw_value = str(value).strip().lower()
     if not raw_value:
         return None
-    if tenant_id:
-        raw_value = f"{tenant_id}:{raw_value}"
-        
     return hmac.new(key, raw_value.encode(), hashlib.sha256).hexdigest()
 
 
@@ -359,10 +407,17 @@ def generate_secret_blind_index(value: str, tenant_id: Any | None = None) -> str
     if not raw_value:
         return None
         
-    key = key_str.encode()
-    if tenant_id:
-        raw_value = f"{tenant_id}:{raw_value}"
-        
+    iterations = max(10000, int(getattr(settings, "BLIND_INDEX_KDF_ITERATIONS", 50000)))
+    tenant_scope = str(tenant_id).strip() if tenant_id is not None else "global"
+    subkey_salt = f"blind-index:v2:secret:{tenant_scope}".encode()
+    subkey_kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=subkey_salt,
+        iterations=iterations,
+    )
+    key = subkey_kdf.derive(key_str.encode())
+
     return hmac.new(key, raw_value.encode(), hashlib.sha256).hexdigest()
 
 
