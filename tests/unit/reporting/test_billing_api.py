@@ -54,18 +54,18 @@ def override_deps(mock_user, mock_db):
 
 @pytest.mark.asyncio
 async def test_get_public_plans_from_db(mock_db):
-    plan = MagicMock(spec=PricingPlan)
-    plan.id = "plan_1"
-    plan.name = "Starter"
-    plan.price_usd = 10.0
-    plan.description = "Test"
-    plan.display_features = []
-    plan.cta_text = "CTA"
-    plan.is_popular = False
-    plan.is_active = True
-
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [plan]
+    mock_result.mappings.return_value.all.return_value = [
+        {
+            "id": "plan_1",
+            "name": "Starter",
+            "price_usd": 10.0,
+            "description": "Test",
+            "display_features": [],
+            "cta_text": "CTA",
+            "is_popular": False,
+        }
+    ]
     mock_db.execute.return_value = mock_result
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/api/v1/billing/plans")
@@ -76,7 +76,7 @@ async def test_get_public_plans_from_db(mock_db):
 @pytest.mark.asyncio
 async def test_get_public_plans_fallback(mock_db):
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = []
+    mock_result.mappings.return_value.all.return_value = []
     mock_db.execute.return_value = mock_result
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/api/v1/billing/plans")
@@ -436,3 +436,30 @@ async def test_handle_webhook_unauthorized_ip():
                 "/api/v1/billing/webhook", headers={"X-Forwarded-For": "1.2.3.4"}
             )
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_handle_webhook_unauthorized_ip_staging():
+    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
+        mock_settings.ENVIRONMENT = "staging"
+        async with AsyncClient(transport=transport, base_url="https://test") as ac:
+            response = await ac.post(
+                "/api/v1/billing/webhook", headers={"X-Forwarded-For": "1.2.3.4"}
+            )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_handle_webhook_rightmost_forwarded_ip_is_used():
+    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
+        mock_settings.ENVIRONMENT = "production"
+        async with AsyncClient(transport=transport, base_url="https://test") as ac:
+            response = await ac.post(
+                "/api/v1/billing/webhook",
+                json={"event": "charge.success", "data": {"reference": "ref_123"}},
+                headers={
+                    "X-Forwarded-For": "1.2.3.4, 52.31.139.75",
+                    "Content-Type": "application/json",
+                },
+            )
+    assert response.status_code != 403

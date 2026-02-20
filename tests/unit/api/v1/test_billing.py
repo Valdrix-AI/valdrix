@@ -36,22 +36,21 @@ def mock_user() -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_get_public_plans_db_success(mock_db: AsyncMock) -> None:
-    mock_plan = PricingPlan(
-        id="starter",
-        name="Starter",
-        price_usd=29.0,
-        description="Test plan",
-        display_features=["Feature 1"],
-        cta_text="Start Now",
-        is_popular=False,
-        is_active=True,
-    )
-
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [mock_plan]
+    mock_result.mappings.return_value.all.return_value = [
+        {
+            "id": "starter",
+            "name": "Starter",
+            "price_usd": 29.0,
+            "description": "Test plan",
+            "display_features": ["Feature 1"],
+            "cta_text": "Start Now",
+            "is_popular": False,
+        }
+    ]
     mock_db.execute.return_value = mock_result
 
-    plans = await get_public_plans(mock_db)
+    plans = await get_public_plans(MagicMock(), mock_db)
 
     assert len(plans) == 1
     assert plans[0]["name"] == "Starter"
@@ -60,7 +59,7 @@ async def test_get_public_plans_db_success(mock_db: AsyncMock) -> None:
 @pytest.mark.asyncio
 async def test_get_public_plans_fallback_on_error(mock_db: AsyncMock) -> None:
     mock_db.execute.side_effect = Exception("DB Fail")
-    plans = await get_public_plans(mock_db)
+    plans = await get_public_plans(MagicMock(), mock_db)
     assert len(plans) > 0
 
 
