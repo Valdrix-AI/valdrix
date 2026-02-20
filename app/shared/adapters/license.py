@@ -89,6 +89,36 @@ class LicenseAdapter(BaseAdapter):
             raise ExternalAPIError("Missing API token for license native connector")
         return resolved.strip()
 
+    @staticmethod
+    def _normalize_text(value: Any) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
+
+    @staticmethod
+    def _normalize_email(value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip().lower()
+        if not normalized or "@" not in normalized:
+            return None
+        return normalized
+
+    @staticmethod
+    def _coerce_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"1", "true", "yes", "y", "on"}:
+                return True
+            if lowered in {"0", "false", "no", "n", "off"}:
+                return False
+        return False
+
     async def verify_connection(self) -> bool:
         self.last_error = None
         native_vendor = self._native_vendor
@@ -337,43 +367,50 @@ class LicenseAdapter(BaseAdapter):
     ) -> AsyncGenerator[dict[str, Any], None]:
         token = self._resolve_api_key()
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         # Standard Google Workspace SKUs to check if none specified
         sku_prices_raw = self._connector_config.get("sku_prices")
         sku_prices: dict[str, float] = {}
         if isinstance(sku_prices_raw, dict):
             for key, value in sku_prices_raw.items():
-                if isinstance(key, str):
+                if isinstance(key, str) and key.strip():
                     sku_prices[key.strip()] = as_float(value)
-        
+
         default_price = as_float(
-            self._connector_config.get("default_seat_price_usd"), default=12.0 # Business Standard default
+            self._connector_config.get("default_seat_price_usd"),
+            default=12.0,  # Business Standard default
         )
         default_currency = str(self._connector_config.get("currency") or "USD").upper()
         timestamp = (
             end_date if end_date.tzinfo else end_date.replace(tzinfo=timezone.utc)
         )
 
-        # Target Products/SKUs (Simplified for POC parity)
+        # Target Products/SKUs (simplified for connector parity)
         # In a full implementation, we'd list all assigned licenses via Directories API
-        target_skus = list(sku_prices.keys()) or ["Google-Apps-For-Business", "1010020027"] # Standard SKUs
-        
+        target_skus = list(sku_prices.keys()) or [
+            "Google-Apps-For-Business",
+            "1010020027",
+        ]
+        rows_emitted = 0
+        last_error: Exception | None = None
+
         for sku_id in target_skus:
             try:
                 # GET https://licensing.googleapis.com/licensing/v1/product/{productId}/sku/{skuId}/usage
-                # ProducID for Workspace is usually 'Google-Apps'
-                product_id = "Google-Apps" 
+                # ProductID for Workspace is usually 'Google-Apps'
+                product_id = "Google-Apps"
                 url = f"https://licensing.googleapis.com/licensing/v1/product/{product_id}/sku/{sku_id}/usage"
-                
+
                 payload = await self._get_json(url, headers=headers)
                 consumed_units = as_float(payload.get("totalUnits"), default=0.0)
-                
+
                 unit_price = sku_prices.get(sku_id, default_price)
                 total_cost = round(consumed_units * unit_price, 2)
 
                 if timestamp < start_date or timestamp > end_date:
                     continue
 
+                rows_emitted += 1
                 yield {
                     "provider": "license",
                     "service": sku_id,
@@ -393,9 +430,19 @@ class LicenseAdapter(BaseAdapter):
                         "unit_price_usd": unit_price,
                     },
                 }
-            except Exception as e:
-                logger.warning("google_workspace_sku_fetch_failed", sku_id=sku_id, error=str(e))
+            except (ExternalAPIError, httpx.HTTPError) as e:
+                last_error = e
+                logger.warning(
+                    "google_workspace_sku_fetch_failed",
+                    sku_id=sku_id,
+                    error=str(e),
+                )
                 continue
+
+        if rows_emitted == 0 and last_error is not None:
+            raise ExternalAPIError(
+                "Google Workspace native usage fetch failed for all configured SKUs"
+            ) from last_error
 
     async def _stream_microsoft_365_license_costs(
         self,
@@ -509,6 +556,10 @@ class LicenseAdapter(BaseAdapter):
                 if response.status_code == 204:
                     return {}
                 payload = response.json()
+                if isinstance(payload, list):
+                    # Some vendor APIs return top-level arrays (for example GitHub members/events).
+                    # Keep adapter callers on a dict contract.
+                    return {"value": payload}
                 if not isinstance(payload, dict):
                     raise ExternalAPIError(
                         "License connector API returned invalid payload shape"
@@ -617,6 +668,8 @@ class LicenseAdapter(BaseAdapter):
         Supported for: google_workspace, microsoft_365, github, slack, zoom, salesforce
         """
         native_vendor = self._native_vendor
+        if native_vendor is None:
+            return self._list_manual_feed_activity()
         if native_vendor == "google_workspace":
             return await self._list_google_workspace_activity()
         if native_vendor == "microsoft_365":
@@ -631,6 +684,101 @@ class LicenseAdapter(BaseAdapter):
             return await self._list_salesforce_activity()
             
         return []
+
+    def _list_manual_feed_activity(self) -> list[dict[str, Any]]:
+        """
+        Build user activity records from manual/csv license feeds.
+
+        Expected optional keys per feed row:
+        user_id/email/resource_id, last_active_at/last_login_at/timestamp, is_admin/role,
+        suspended/inactive/status.
+        """
+        feed = self.credentials.license_feed
+        if not isinstance(feed, list):
+            return []
+
+        consolidated: dict[str, dict[str, Any]] = {}
+        for entry in feed:
+            if not isinstance(entry, dict):
+                continue
+
+            user_id = self._normalize_text(
+                entry.get("user_id")
+                or entry.get("principal_id")
+                or entry.get("resource_id")
+                or entry.get("id")
+            )
+            email = self._normalize_email(entry.get("email"))
+            if email is None and user_id and "@" in user_id:
+                email = user_id.lower()
+
+            identity = user_id or email
+            if not identity:
+                continue
+
+            last_active_at = None
+            for candidate in (
+                entry.get("last_active_at"),
+                entry.get("last_login_at"),
+                entry.get("last_login"),
+                entry.get("last_activity_at"),
+                entry.get("last_seen_at"),
+                entry.get("timestamp"),
+                entry.get("date"),
+            ):
+                if candidate in (None, ""):
+                    continue
+                try:
+                    last_active_at = parse_timestamp(candidate)
+                except (TypeError, ValueError):
+                    continue
+                break
+
+            role = str(entry.get("role") or "").strip().lower()
+            is_admin = (
+                self._coerce_bool(entry.get("is_admin"))
+                or role in {"admin", "owner", "super_admin", "system administrator"}
+            )
+            status = str(entry.get("status") or "").strip().lower()
+            suspended = (
+                self._coerce_bool(entry.get("suspended"))
+                or self._coerce_bool(entry.get("inactive"))
+                or status in {"inactive", "suspended", "disabled", "deactivated"}
+            )
+
+            full_name = self._normalize_text(
+                entry.get("full_name")
+                or entry.get("display_name")
+                or entry.get("name")
+            )
+
+            current = consolidated.get(identity)
+            if current is None:
+                consolidated[identity] = {
+                    "user_id": user_id or email or identity,
+                    "email": email,
+                    "full_name": full_name,
+                    "last_active_at": last_active_at,
+                    "is_admin": is_admin,
+                    "suspended": suspended,
+                }
+                continue
+
+            if not current.get("email") and email:
+                current["email"] = email
+            if not current.get("full_name") and full_name:
+                current["full_name"] = full_name
+            if not current.get("user_id") and (user_id or email):
+                current["user_id"] = user_id or email
+            if last_active_at is not None:
+                existing_last = current.get("last_active_at")
+                if existing_last is None or last_active_at > existing_last:
+                    current["last_active_at"] = last_active_at
+
+            current["is_admin"] = bool(current.get("is_admin") or is_admin)
+            current["suspended"] = bool(current.get("suspended") or suspended)
+
+        return list(consolidated.values())
 
     async def _revoke_microsoft_365(self, resource_id: str, sku_id: str | None = None) -> bool:
         """
@@ -675,37 +823,46 @@ class LicenseAdapter(BaseAdapter):
         """
         token = self._resolve_api_key()
         headers = {"Authorization": f"Bearer {token}"}
-        
+
+        admin_upns_raw = self._connector_config.get("admin_upns", [])
+        admin_upns = {
+            item.strip().lower()
+            for item in admin_upns_raw
+            if isinstance(item, str) and item.strip()
+        }
+
         # We need signInActivity which requires Entra ID P1/P2
         url = "https://graph.microsoft.com/v1.0/users?$select=displayName,userPrincipalName,id,signInActivity,accountEnabled"
-        
+
         try:
             payload = await self._get_json(url, headers=headers)
             users_list = payload.get("value", [])
-            
+
             activity_records = []
             for user in users_list:
                 email = user.get("userPrincipalName")
                 display_name = user.get("displayName")
                 sign_in = user.get("signInActivity", {})
-                
+
                 # Use lastSuccessfulSignInDateTime or fallback to lastSignInDateTime
-                last_login_raw = sign_in.get("lastSuccessfulSignInDateTime") or sign_in.get("lastSignInDateTime")
-                
+                last_login_raw = sign_in.get(
+                    "lastSuccessfulSignInDateTime"
+                ) or sign_in.get("lastSignInDateTime")
+
                 last_active_at = None
                 if last_login_raw:
                     try:
                         last_active_at = parse_timestamp(last_login_raw)
-                    except Exception:
+                    except (ValueError, TypeError):
                         pass
-                
+
                 activity_records.append({
                     "user_id": user.get("id"),
                     "email": email,
                     "full_name": display_name,
                     "last_active_at": last_active_at,
-                    "is_admin": False, # Would need role assignments check for full parity
-                    "suspended": not user.get("accountEnabled", True)
+                    "is_admin": bool(email and email.lower() in admin_upns),
+                    "suspended": not user.get("accountEnabled", True),
                 })
             return activity_records
         except (ExternalAPIError, httpx.HTTPError) as e:
@@ -756,38 +913,52 @@ class LicenseAdapter(BaseAdapter):
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json",
         }
-        
+
         try:
             # 1. Fetch Org Members
             members_url = f"https://api.github.com/orgs/{org}/members"
             members_payload = await self._get_json(members_url, headers=headers)
-            members = members_payload.get("value", [])
-            
+            members = members_payload.get("value", members_payload.get("members", []))
+            if not isinstance(members, list):
+                members = []
+
             # 2. Fetch recent Org Events to find last activity for these members
             # This is a high-fidelity fallback for the Audit Log API (Enterprise only)
             events_url = f"https://api.github.com/orgs/{org}/events?per_page=100"
             events_payload = await self._get_json(events_url, headers=headers)
-            events = events_payload.get("value", [])
-            
-            last_event_per_user = {} # login -> timestamp
+            events = events_payload.get("value", events_payload.get("events", []))
+            if not isinstance(events, list):
+                events = []
+
+            last_event_per_user: dict[str, datetime] = {}  # login -> timestamp
             for event in events:
-                login = event.get("actor", {}).get("login")
+                if not isinstance(event, dict):
+                    continue
+                actor = event.get("actor")
+                login = actor.get("login") if isinstance(actor, dict) else None
                 created_at = event.get("created_at")
                 if login and created_at:
-                    ts = parse_timestamp(created_at)
+                    try:
+                        ts = parse_timestamp(created_at)
+                    except (ValueError, TypeError):
+                        continue
                     if login not in last_event_per_user or ts > last_event_per_user[login]:
                         last_event_per_user[login] = ts
 
             activity_records = []
             for member in members:
-                login = member.get("login")
+                if not isinstance(member, dict):
+                    continue
+                login = str(member.get("login") or "").strip()
+                if not login:
+                    continue
                 activity_records.append({
                     "user_id": login,
                     "email": login,
-                    "full_name": login,
+                    "full_name": member.get("name") or login,
                     "last_active_at": last_event_per_user.get(login),
                     "is_admin": member.get("site_admin", False),
-                    "suspended": False
+                    "suspended": False,
                 })
             return activity_records
         except (ExternalAPIError, httpx.HTTPError) as e:
@@ -824,11 +995,11 @@ class LicenseAdapter(BaseAdapter):
         token = self._resolve_api_key()
         headers = {"Authorization": f"Bearer {token}"}
         url = "https://api.zoom.us/v2/users"
-        
+
         try:
             payload = await self._get_json(url, headers=headers)
             users_list = payload.get("users", [])
-            
+
             activity_records = []
             for user in users_list:
                 last_login_raw = user.get("last_login_time")
@@ -836,7 +1007,7 @@ class LicenseAdapter(BaseAdapter):
                 if last_login_raw:
                     try:
                         last_active_at = parse_timestamp(last_login_raw)
-                    except Exception:
+                    except (ValueError, TypeError):
                         pass
                 
                 activity_records.append({
@@ -845,7 +1016,7 @@ class LicenseAdapter(BaseAdapter):
                     "full_name": f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
                     "last_active_at": last_active_at,
                     "is_admin": user.get("role_name") == "Owner",
-                    "suspended": user.get("status") == "inactive"
+                    "suspended": user.get("status") == "inactive",
                 })
             return activity_records
         except (ExternalAPIError, httpx.HTTPError) as e:
@@ -864,12 +1035,15 @@ class LicenseAdapter(BaseAdapter):
             "Content-Type": "application/json",
         }
         team_id = self._connector_config.get("slack_team_id")
+        if not team_id:
+            logger.warning("slack_revoke_failed_no_team_id", user_id=resource_id)
+            return False
         
         payload = {
             "team_id": team_id,
-            "user_id": resource_id
+            "user_id": resource_id,
         }
-        
+
         try:
             from app.shared.core.http import get_http_client
             client = get_http_client()
@@ -901,10 +1075,10 @@ class LicenseAdapter(BaseAdapter):
             if not payload.get("ok"):
                 logger.warning("slack_activity_fetch_failed", error=payload.get("error"))
                 return []
-                
+
             logs = payload.get("logins", [])
-            user_activity = {} # user_id -> last_timestamp
-            
+            user_activity: dict[str, int] = {}  # user_id -> last_timestamp
+
             for log in logs:
                 uid = log.get("user_id")
                 ts = log.get("date_last")
@@ -926,7 +1100,7 @@ class LicenseAdapter(BaseAdapter):
                     "full_name": user.get("real_name") or user.get("name"),
                     "last_active_at": last_active_at,
                     "is_admin": user.get("is_admin", False),
-                    "suspended": user.get("deleted", False)
+                    "suspended": user.get("deleted", False),
                 })
             return activity_records
         except (ExternalAPIError, httpx.HTTPError) as e:
@@ -979,7 +1153,7 @@ class LicenseAdapter(BaseAdapter):
         api_version = self._connector_config.get("salesforce_api_version", "v60.0")
 
         headers = {"Authorization": f"Bearer {token}"}
-        query = "SELECT+Id,Email,Name,LastLoginDate,IsActive,IsSystemAdmin+FROM+User"
+        query = "SELECT+Id,Email,Name,LastLoginDate,IsActive,Profile.Name+FROM+User"
         url = f"{instance_url}/services/data/{api_version}/query?q={query}"
         
         try:
@@ -993,7 +1167,7 @@ class LicenseAdapter(BaseAdapter):
                 if last_login_raw:
                     try:
                         last_active_at = parse_timestamp(last_login_raw)
-                    except Exception:
+                    except (ValueError, TypeError):
                         pass
                 
                 activity_records.append({
@@ -1001,7 +1175,7 @@ class LicenseAdapter(BaseAdapter):
                     "email": user.get("Email"),
                     "full_name": user.get("Name"),
                     "last_active_at": last_active_at,
-                    "is_admin": user.get("IsSystemAdmin", False),
+                    "is_admin": (user.get("Profile", {}) or {}).get("Name") == "System Administrator",
                     "suspended": not user.get("IsActive", True)
                 })
             return activity_records
@@ -1031,7 +1205,7 @@ class LicenseAdapter(BaseAdapter):
                 if last_login_raw:
                     try:
                         last_active_at = parse_timestamp(last_login_raw)
-                    except Exception:
+                    except (ValueError, TypeError):
                         pass
                 
                 activity_records.append({

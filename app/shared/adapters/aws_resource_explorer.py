@@ -10,7 +10,11 @@ import aioboto3
 import structlog
 from botocore.exceptions import ClientError
 from app.models.aws_connection import AWSConnection
-from app.shared.adapters.aws_utils import DEFAULT_BOTO_CONFIG, map_aws_credentials
+from app.shared.adapters.aws_utils import (
+    DEFAULT_BOTO_CONFIG,
+    map_aws_credentials,
+    resolve_aws_region_hint,
+)
 
 logger = structlog.get_logger()
 
@@ -35,7 +39,7 @@ class AWSResourceExplorerAdapter:
 
         return self.session.client(
             "resource-explorer-2",
-            region_name=self.connection.region,
+            region_name=resolve_aws_region_hint(self.connection.region),
             config=DEFAULT_BOTO_CONFIG,
             **map_aws_credentials(creds),
         )

@@ -16,6 +16,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 import structlog
 from app.shared.adapters.base import BaseAdapter
+from app.shared.adapters.aws_utils import resolve_aws_region_hint
 from app.shared.core.exceptions import ConfigurationError
 from app.shared.core.credentials import AWSCredentials
 from app.schemas.costs import CloudUsageSummary, CostRecord
@@ -31,11 +32,12 @@ class AWSCURAdapter(BaseAdapter):
 
     def __init__(self, credentials: AWSCredentials):
         self.credentials = credentials
+        self._resolved_region = resolve_aws_region_hint(credentials.region)
         self.session = aioboto3.Session()
         # Use dynamic bucket name from automated setup, fallback to connection-derived if needed
         self.bucket_name = (
             credentials.cur_bucket_name
-            or f"valdrix-cur-{credentials.account_id}-{credentials.region}"
+            or f"valdrix-cur-{credentials.account_id}-{self._resolved_region}"
         )
 
     async def verify_connection(self) -> bool:
@@ -44,7 +46,7 @@ class AWSCURAdapter(BaseAdapter):
             creds = await self._get_credentials()
             async with self.session.client(
                 "s3",
-                region_name=self.credentials.region,
+                region_name=self._resolved_region,
                 aws_access_key_id=creds["AccessKeyId"],
                 aws_secret_access_key=creds["SecretAccessKey"],
                 aws_session_token=creds["SessionToken"],
@@ -65,7 +67,7 @@ class AWSCURAdapter(BaseAdapter):
 
         async with self.session.client(
             "s3",
-            region_name=self.credentials.region,
+            region_name=self._resolved_region,
             aws_access_key_id=creds["AccessKeyId"],
             aws_secret_access_key=creds["SecretAccessKey"],
             aws_session_token=creds["SessionToken"],
@@ -85,13 +87,13 @@ class AWSCURAdapter(BaseAdapter):
 
                 # 2. Create bucket if needed
                 if not bucket_exists:
-                    if self.credentials.region == "us-east-1":
+                    if self._resolved_region == "us-east-1":
                         await s3.create_bucket(Bucket=self.bucket_name)
                     else:
                         await s3.create_bucket(
                             Bucket=self.bucket_name,
                             CreateBucketConfiguration={
-                                "LocationConstraint": self.credentials.region
+                                "LocationConstraint": self._resolved_region
                             },
                         )
 
@@ -148,7 +150,7 @@ class AWSCURAdapter(BaseAdapter):
                         "AdditionalSchemaElements": ["RESOURCES"],
                         "S3Bucket": self.bucket_name,
                         "S3Prefix": "cur",
-                        "S3Region": self.credentials.region,
+                        "S3Region": self._resolved_region,
                         "ReportVersioning": "OVERWRITE_REPORT",
                         "RefreshClosedReports": True,
                     }
@@ -255,7 +257,7 @@ class AWSCURAdapter(BaseAdapter):
 
         async with self.session.client(
             "s3",
-            region_name=self.credentials.region,
+            region_name=self._resolved_region,
             aws_access_key_id=creds["AccessKeyId"],
             aws_secret_access_key=creds["SecretAccessKey"],
             aws_session_token=creds["SessionToken"],
@@ -318,13 +320,25 @@ class AWSCURAdapter(BaseAdapter):
         master_summary = self._empty_summary()
         master_summary.start_date = start_date
         master_summary.end_date = end_date
+        per_file_record_cap = 10000
+        truncated_records_total = 0
         
         for file_key in files:
             file_summary = await self._ingest_single_file(file_key, start_date, end_date)
             
             # Merge aggregations
             master_summary.total_cost += file_summary.total_cost
-            master_summary.records.extend(file_summary.records[:10000]) # Cap per-file for memory
+            retained_records = file_summary.records[:per_file_record_cap]
+            master_summary.records.extend(retained_records)
+            truncated_count = max(0, len(file_summary.records) - len(retained_records))
+            if truncated_count > 0:
+                truncated_records_total += truncated_count
+                logger.warning(
+                    "cur_file_summary_records_truncated",
+                    file_key=file_key,
+                    cap=per_file_record_cap,
+                    truncated_records=truncated_count,
+                )
             
             for k, v in file_summary.by_service.items():
                 master_summary.by_service[k] = master_summary.by_service.get(k, Decimal("0")) + v
@@ -336,6 +350,14 @@ class AWSCURAdapter(BaseAdapter):
                     master_summary.by_tag[tk] = {}
                 for tv, tcost in tag_map.items():
                     master_summary.by_tag[tk][tv] = master_summary.by_tag[tk].get(tv, Decimal("0")) + tcost
+
+        if truncated_records_total > 0:
+            logger.warning(
+                "cur_master_summary_records_truncated",
+                cap_per_file=per_file_record_cap,
+                truncated_records_total=truncated_records_total,
+                files_processed=len(files),
+            )
                     
         return master_summary
 
@@ -344,7 +366,7 @@ class AWSCURAdapter(BaseAdapter):
         creds = await self._get_credentials()
         async with self.session.client(
             "s3",
-            region_name=self.credentials.region,
+            region_name=self._resolved_region,
             aws_access_key_id=creds["AccessKeyId"],
             aws_secret_access_key=creds["SecretAccessKey"],
             aws_session_token=creds["SessionToken"],
@@ -356,7 +378,8 @@ class AWSCURAdapter(BaseAdapter):
                     async with obj["Body"] as stream:
                         while True:
                             chunk = await stream.read(1024 * 1024 * 16) # 16MB chunks
-                            if not chunk: break
+                            if not chunk:
+                                break
                             tmp.write(chunk)
                     
                     return self._process_parquet_streamingly(tmp_path, start_date, end_date)
@@ -401,26 +424,32 @@ class AWSCURAdapter(BaseAdapter):
                 logger.warning("cur_row_group_read_failed", error=str(e), row_group=i)
                 continue
 
-            if df_chunk.empty: continue
+            if df_chunk.empty:
+                continue
 
             col_map = {k: next((c for c in v if c in df_chunk.columns), None) for k, v in CUR_COLUMNS.items()}
-            if not col_map.get("date") or not col_map.get("cost"): continue
+            if not col_map.get("date") or not col_map.get("cost"):
+                continue
 
             # Date Range check for optimization
             df_chunk[col_map["date"]] = pd.to_datetime(df_chunk[col_map["date"]])
             chunk_min = df_chunk[col_map["date"]].min().date()
             chunk_max = df_chunk[col_map["date"]].max().date()
             
-            if start_date and chunk_max < start_date: continue
-            if end_date and chunk_min > end_date: continue
+            if start_date and chunk_max < start_date:
+                continue
+            if end_date and chunk_min > end_date:
+                continue
 
             min_date_found = min(min_date_found, chunk_min) if min_date_found else chunk_min
             max_date_found = max(max_date_found, chunk_max) if max_date_found else chunk_max
 
             for _, row in df_chunk.iterrows():
                 row_date = row[col_map["date"]].date()
-                if start_date and row_date < start_date: continue
-                if end_date and row_date > end_date: continue
+                if start_date and row_date < start_date:
+                    continue
+                if end_date and row_date > end_date:
+                    continue
 
                 try:
                     record = self._parse_row(row, col_map)
@@ -430,11 +459,14 @@ class AWSCURAdapter(BaseAdapter):
                         dropped_records += 1
 
                     total_cost_usd += record.amount
-                    by_service[record.service] = by_service.get(record.service, Decimal("0")) + record.amount
-                    by_region[record.region] = by_region.get(record.region, Decimal("0")) + record.amount
+                    svc = record.service or "Unknown"
+                    reg = record.region or "Unknown"
+                    by_service[svc] = by_service.get(svc, Decimal("0")) + record.amount
+                    by_region[reg] = by_region.get(reg, Decimal("0")) + record.amount
 
                     for tk, tv in record.tags.items():
-                        if tk not in by_tag: by_tag[tk] = {}
+                        if tk not in by_tag:
+                            by_tag[tk] = {}
                         by_tag[tk][tv] = by_tag[tk].get(tv, Decimal("0")) + record.amount
                 except Exception:
                     continue

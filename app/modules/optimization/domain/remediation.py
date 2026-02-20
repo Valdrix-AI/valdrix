@@ -385,7 +385,13 @@ class RemediationService(BaseService):
         if provider == "gcp":
             service_account_json = getattr(connection, "service_account_json", None)
             if isinstance(service_account_json, dict):
-                return dict(service_account_json)
+                payload = dict(service_account_json)
+                payload.setdefault(
+                    "connection_id",
+                    str(getattr(connection, "id", connection_id or "")),
+                )
+                payload.setdefault("region", resolve_connection_region(connection))
+                return payload
             if isinstance(service_account_json, str) and service_account_json.strip():
                 try:
                     parsed = json.loads(service_account_json)
@@ -807,18 +813,15 @@ class RemediationService(BaseService):
         """
         Execute an approved remediation request through the registered action strategy.
         """
-        print(f"DEBUG: execute() started for {request_id}")
         start_time = time.time()
 
-        print("DEBUG: Fetching request from DB")
         result = await self.db.execute(
             select(RemediationRequest)
             .where(RemediationRequest.id == request_id)
             .where(RemediationRequest.tenant_id == tenant_id)
             .with_for_update()
         )
-        request = result.scalar_one_or_none()
-        print(f"DEBUG: Found request: {request}")
+        request = await self._scalar_one_or_none(result)
 
         if not request:
             raise ResourceNotFoundError(f"Request {request_id} not found")
@@ -1135,6 +1138,10 @@ class RemediationService(BaseService):
 
             credentials = await self._resolve_credentials(request)
             execution_region = getattr(request, "region", None) or self.region
+            if str(execution_region or "").strip().lower() in {"", "global"}:
+                credential_region = str((credentials or {}).get("region") or "").strip()
+                if credential_region and credential_region.lower() != "global":
+                    execution_region = credential_region
             if (
                 provider == "aws"
                 and str(execution_region or "").strip().lower() in {"", "global"}
