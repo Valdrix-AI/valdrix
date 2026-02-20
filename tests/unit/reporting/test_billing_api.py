@@ -11,6 +11,7 @@ from app.shared.db.session import get_db
 from app.models.tenant import UserRole
 from app.shared.core.currency import ExchangeRateUnavailableError
 from uuid import uuid4
+from types import SimpleNamespace
 
 transport = ASGITransport(app=app)
 
@@ -130,20 +131,19 @@ async def test_get_billing_usage_exposes_connection_counts_and_limits(
 
     async def execute_side_effect(statement, *args, **kwargs):
         sql = str(statement)
-        if "aws_connections" in sql:
-            value = 2
-        elif "azure_connections" in sql:
-            value = 1
-        elif "gcp_connections" in sql:
-            value = 0
-        elif "saas_connections" in sql:
-            value = 3
-        elif "license_connections" in sql:
-            value = 0
-        else:
-            value = 0
+        assert "aws_connections" in sql
+        assert "azure_connections" in sql
+        assert "gcp_connections" in sql
+        assert "saas_connections" in sql
+        assert "license_connections" in sql
         result = MagicMock()
-        result.scalar_one.return_value = value
+        result.all.return_value = [
+            SimpleNamespace(provider="aws", connected=2),
+            SimpleNamespace(provider="azure", connected=1),
+            SimpleNamespace(provider="gcp", connected=0),
+            SimpleNamespace(provider="saas", connected=3),
+            SimpleNamespace(provider="license", connected=0),
+        ]
         return result
 
     mock_db.execute.side_effect = execute_side_effect

@@ -16,7 +16,7 @@ from uuid import uuid4, UUID
 from enum import Enum
 from decimal import Decimal
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     JSON,
@@ -126,7 +126,7 @@ class RemediationRequest(Base):
     connection_id: Mapped[Optional[UUID]] = mapped_column(
         PG_UUID(), nullable=True
     )  # ID of the specific cloud connection
-    region: Mapped[str] = mapped_column(String(20), nullable=False, default="us-east-1")
+    region: Mapped[str] = mapped_column(String(20), nullable=False, default="global")
 
     # Action details
     action: Mapped[RemediationAction] = mapped_column(
@@ -193,7 +193,7 @@ class RemediationRequest(Base):
     )
 
     # Contextual parameters for the action (e.g., target instance type for resizing)
-    action_parameters: Mapped[Optional[dict]] = mapped_column(
+    action_parameters: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True
     )
 

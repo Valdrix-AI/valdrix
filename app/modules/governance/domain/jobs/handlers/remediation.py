@@ -9,6 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
+from app.shared.core.config import get_settings
+from app.shared.core.provider import normalize_provider
 from app.shared.core.remediation_results import (
     normalize_remediation_status,
     parse_remediation_execution_error,
@@ -91,7 +93,12 @@ class RemediationHandler(BaseJobHandler):
                 )
 
             # Prefer request region for execution correctness.
-            default_region = "global"
+            provider = normalize_provider(getattr(remediation_request, "provider", None))
+            default_region = (
+                str(get_settings().AWS_DEFAULT_REGION or "").strip() or "us-east-1"
+                if provider == "aws"
+                else "global"
+            )
             exec_region = (
                 str(getattr(remediation_request, "region", "") or "").strip()
                 or default_region

@@ -33,6 +33,10 @@ class CloudAccount(Base):
 
     provider: Mapped[str] = mapped_column(String)  # 'aws', 'azure', 'gcp'
     name: Mapped[str] = mapped_column(String)  # e.g., "Production AWS"
+    is_production: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+    criticality: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 

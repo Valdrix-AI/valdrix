@@ -16,6 +16,7 @@ Usage:
 """
 
 import sqlalchemy as sa
+import json
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 from uuid import UUID
@@ -38,6 +39,8 @@ MAX_JOBS_PER_BATCH = 10
 JOB_LOCK_TIMEOUT_MINUTES = 30
 BACKOFF_BASE_SECONDS = 60
 JOB_TIMEOUT_SECONDS = 300  # 5 minutes default timeout
+MAX_JOB_RESULT_BYTES = 256 * 1024
+MAX_JOB_RESULT_PREVIEW_CHARS = 4096
 
 
 class JobProcessor:
@@ -52,6 +55,43 @@ class JobProcessor:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    def _prepare_result_for_storage(self, job: BackgroundJob, result: Any) -> Any:
+        """Guard background_jobs.result against unbounded payload growth."""
+        if result is None:
+            return None
+
+        try:
+            serialized = json.dumps(result, default=str, separators=(",", ":"))
+        except Exception:
+            serialized = json.dumps(str(result))
+            result = str(result)
+
+        result_bytes = len(serialized.encode("utf-8"))
+        if result_bytes <= MAX_JOB_RESULT_BYTES:
+            return result
+
+        logger.warning(
+            "job_result_truncated",
+            job_id=str(job.id),
+            job_type=str(job.job_type),
+            result_bytes=result_bytes,
+            max_bytes=MAX_JOB_RESULT_BYTES,
+        )
+
+        preview = serialized[:MAX_JOB_RESULT_PREVIEW_CHARS]
+        summary: dict[str, Any] = {
+            "_truncated": True,
+            "_reason": "result_too_large",
+            "_actual_bytes": result_bytes,
+            "_max_bytes": MAX_JOB_RESULT_BYTES,
+            "_original_type": type(result).__name__,
+            "_preview_json": preview,
+            "_preview_truncated": len(serialized) > len(preview),
+        }
+        if isinstance(result, dict):
+            summary["_original_keys"] = list(result.keys())[:50]
+        return summary
 
     async def process_pending_jobs(
         self,
@@ -242,7 +282,7 @@ class JobProcessor:
             # Mark as completed
             job.status = JobStatus.COMPLETED.value
             job.completed_at = datetime.now(timezone.utc)
-            job.result = result
+            job.result = self._prepare_result_for_storage(job, result)
             job.error_message = None
 
             logger.info(

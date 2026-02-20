@@ -99,6 +99,8 @@ async def test_remediation_resolve_credentials_includes_saas_wiring() -> None:
     assert resolved["auth_method"] == "api_key"
     assert resolved["connector_config"]["instance_url"] == "https://api.stripe.com"
     assert len(resolved["spend_feed"]) == 1
+    assert resolved["region"] == "global"
+    assert resolved["connection_id"] == str(connection_id)
 
 
 def test_saas_credentials_support_connector_fields() -> None:

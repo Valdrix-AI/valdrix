@@ -12,7 +12,7 @@ celery_app = Celery(
     "valdrix_worker",
     broker=broker_url,
     backend=backend_url,
-    include=["app.tasks.scheduler_tasks"],
+    include=["app.tasks.scheduler_tasks", "app.tasks.license_tasks"],
 )
 
 # Configuration

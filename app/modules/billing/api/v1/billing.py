@@ -7,12 +7,11 @@ Provides:
 - POST /billing/webhook - Handle Paystack webhooks
 """
 
-import asyncio
 from typing import Annotated, Optional, Dict, Any, List
 from urllib.parse import urlparse, urljoin, urlunparse
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, union_all, literal
 from pydantic import BaseModel
 import structlog
 
@@ -264,14 +263,6 @@ async def get_billing_usage(
 
     tier = getattr(user, "tier", PricingTier.FREE)
 
-    async def _count(model: Any) -> int:
-        res = await db.execute(
-            select(func.count())
-            .select_from(model)
-            .where(model.tenant_id == user.tenant_id)
-        )
-        return int(res.scalar_one() or 0)
-
     def _usage_item(connected: int, limit_value: Any) -> ConnectionUsageItem:
         if limit_value is None:
             return ConnectionUsageItem(
@@ -300,13 +291,50 @@ async def get_billing_usage(
             utilization_percent=utilization,
         )
 
-    aws_count, azure_count, gcp_count, saas_count, license_count = await asyncio.gather(
-        _count(AWSConnection),
-        _count(AzureConnection),
-        _count(GCPConnection),
-        _count(SaaSConnection),
-        _count(LicenseConnection),
+    count_rows = union_all(
+        select(
+            literal("aws").label("provider"),
+            func.count().label("connected"),
+        )
+        .select_from(AWSConnection)
+        .where(AWSConnection.tenant_id == user.tenant_id),
+        select(
+            literal("azure").label("provider"),
+            func.count().label("connected"),
+        )
+        .select_from(AzureConnection)
+        .where(AzureConnection.tenant_id == user.tenant_id),
+        select(
+            literal("gcp").label("provider"),
+            func.count().label("connected"),
+        )
+        .select_from(GCPConnection)
+        .where(GCPConnection.tenant_id == user.tenant_id),
+        select(
+            literal("saas").label("provider"),
+            func.count().label("connected"),
+        )
+        .select_from(SaaSConnection)
+        .where(SaaSConnection.tenant_id == user.tenant_id),
+        select(
+            literal("license").label("provider"),
+            func.count().label("connected"),
+        )
+        .select_from(LicenseConnection)
+        .where(LicenseConnection.tenant_id == user.tenant_id),
     )
+    counts_subquery = count_rows.subquery()
+    counts_result = await db.execute(
+        select(counts_subquery.c.provider, counts_subquery.c.connected)
+    )
+    counts_map = {
+        str(row.provider): int(row.connected or 0) for row in counts_result.all()
+    }
+    aws_count = counts_map.get("aws", 0)
+    azure_count = counts_map.get("azure", 0)
+    gcp_count = counts_map.get("gcp", 0)
+    saas_count = counts_map.get("saas", 0)
+    license_count = counts_map.get("license", 0)
 
     connections: Dict[str, ConnectionUsageItem] = {
         "aws": _usage_item(aws_count, get_tier_limit(tier, "max_aws_accounts")),

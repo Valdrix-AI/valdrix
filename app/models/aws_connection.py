@@ -14,7 +14,7 @@ Usage:
         aws_account_id="123456789012",
         role_arn="arn:aws:iam::123456789012:role/ValdrixReadOnly",
         external_id="vx-abc123-xyz789",
-        region="us-east-1"
+        region="global"
     )
 """
 
@@ -94,9 +94,10 @@ class AWSConnection(Base):
         default=lambda: f"vx-{secrets.token_hex(16)}",
     )
 
-    # region: Default AWS region for resource discovery
+    # region: Region hint for resource discovery.
+    # "global" enables multi-region detection logic to resolve concrete regions later.
     region: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="us-east-1", index=True
+        String(20), nullable=False, default="global", index=True
     )
 
     # Connection Status
@@ -112,6 +113,11 @@ class AWSConnection(Base):
         Boolean, default=False, server_default="false"
     )
     organization_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    # SEC-HAR-12: Explicit Production Flag (Finding #1-Remediation)
+    is_production: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", index=True
+    )
 
     # Timestamps for tracking
     last_verified_at: Mapped[datetime | None] = mapped_column(
