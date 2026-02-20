@@ -469,8 +469,8 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
         )
 
         if job is None:
-            # Duplicate webhook, already processed
-            return {"status": "duplicate", "message": "Already processed"}
+            # Duplicate webhook (already queued or already processed).
+            return {"status": "duplicate", "message": "Already queued or processed"}
 
         # Process immediately (job stored for retry if fails)
         try:

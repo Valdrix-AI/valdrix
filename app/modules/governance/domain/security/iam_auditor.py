@@ -1,6 +1,7 @@
 import aioboto3
 from typing import List, Dict, Any
 import structlog
+from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 
@@ -11,15 +12,20 @@ class IAMAuditor:
     Aligns with FAANG Zero-Trust standards (2026).
     """
 
-    def __init__(self, credentials: Dict[str, str], region: str = "us-east-1"):
+    def __init__(self, credentials: Dict[str, str], region: str | None = None):
         """
         Initialize with AWS credentials.
         """
+        resolved_region = (
+            str(region or "").strip()
+            or str(get_settings().AWS_DEFAULT_REGION or "").strip()
+            or "us-east-1"
+        )
         self.session = aioboto3.Session(
             aws_access_key_id=credentials.get("aws_access_key_id"),
             aws_secret_access_key=credentials.get("aws_secret_access_key"),
             aws_session_token=credentials.get("aws_session_token"),
-            region_name=region,
+            region_name=resolved_region,
         )
 
     async def audit_current_role(self) -> Dict[str, Any]:

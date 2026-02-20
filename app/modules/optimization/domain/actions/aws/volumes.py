@@ -1,7 +1,6 @@
 import asyncio
 import time
-from botocore.exceptions import ClientError
-from typing import Any, Dict, Optional
+from typing import Optional
 from app.models.remediation import RemediationAction
 from app.modules.optimization.domain.actions.aws.base import BaseAWSAction
 from app.modules.optimization.domain.actions.base import ExecutionResult, ExecutionStatus, RemediationContext
@@ -45,12 +44,21 @@ class AWSDeleteVolumeAction(BaseAWSAction):
                         
                 # Wait for detachment (max 3 mins)
                 if attachments:
+                    detached = False
                     deadline = time.monotonic() + 180
                     while time.monotonic() < deadline:
                         v_info = await ec2.describe_volumes(VolumeIds=[resource_id])
-                        if not v_info.get("Volumes", [])[0].get("Attachments", []):
+                        current_attachments = v_info.get("Volumes", [])[0].get(
+                            "Attachments", []
+                        )
+                        if not current_attachments:
+                            detached = True
                             break
                         await asyncio.sleep(5)
+                    if not detached:
+                        raise ValueError(
+                            f"Volume {resource_id} did not detach within timeout"
+                        )
 
             # 2. Delete the volume
             await ec2.delete_volume(VolumeId=resource_id)

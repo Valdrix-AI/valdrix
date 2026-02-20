@@ -1,5 +1,4 @@
 from typing import List, Dict, Any
-import aioboto3
 from botocore.exceptions import ClientError
 import structlog
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -15,13 +14,43 @@ class CustomerManagedKeysPlugin(ZombiePlugin):
         return "customer_managed_kms_keys"
 
     async def scan(
-        self,
-        session: aioboto3.Session,
-        region: str,
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         zombies = []
         try:

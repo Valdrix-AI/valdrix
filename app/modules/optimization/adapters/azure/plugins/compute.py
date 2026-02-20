@@ -6,6 +6,7 @@ Detects idle VMs using Cost Management export data.
 
 from typing import List, Dict, Any
 from azure.mgmt.compute.aio import ComputeManagementClient
+from azure.identity.aio import ClientSecretCredential, DefaultAzureCredential
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -24,9 +25,9 @@ class IdleVmsPlugin(ZombiePlugin):
 
     async def scan(
         self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
+        session: Any,
+        region: str,
+        credentials: Dict[str, str] | None = None,
         config: Any = None,
         inventory: Any = None,
         **kwargs: Any,
@@ -56,7 +57,17 @@ class IdleVmsPlugin(ZombiePlugin):
         # Fallback: Use Resource Graph to identify GPU VMs for review
         zombies = []
         try:
-            client = ComputeManagementClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            client = ComputeManagementClient(az_creds, subscription_id)
 
             async for vm in client.virtual_machines.list_all():
                 # Check for GPU VMs (NC, ND, NV series)
@@ -111,9 +122,9 @@ class IdleGpuVmsPlugin(ZombiePlugin):
 
     async def scan(
         self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
+        session: Any,
+        region: str,
+        credentials: Dict[str, str] | None = None,
         config: Any = None,
         inventory: Any = None,
         **kwargs: Any,
@@ -149,9 +160,9 @@ class StoppedVmsPlugin(ZombiePlugin):
 
     async def scan(
         self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
+        session: Any,
+        region: str,
+        credentials: Dict[str, str] | None = None,
         config: Any = None,
         inventory: Any = None,
         **kwargs: Any,
@@ -163,7 +174,17 @@ class StoppedVmsPlugin(ZombiePlugin):
 
         zombies = []
         try:
-            client = ComputeManagementClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            client = ComputeManagementClient(az_creds, subscription_id)
 
             async for vm in client.virtual_machines.list_all():
                 # Check Power State
@@ -187,7 +208,6 @@ class StoppedVmsPlugin(ZombiePlugin):
                     )
                     # Rough estimate: $0.05/GB (Standard SSD/HDD mix)
                     monthly_cost = os_disk_size * 0.05
-
                     zombies.append(
                         {
                             "resource_id": vm.id,

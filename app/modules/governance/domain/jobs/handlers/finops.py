@@ -7,21 +7,16 @@ from decimal import Decimal
 from typing import Any, Dict, List
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.aws_connection import AWSConnection
 from app.models.background_job import BackgroundJob
-from app.models.azure_connection import AzureConnection
-from app.models.gcp_connection import GCPConnection
-from app.models.saas_connection import SaaSConnection
-from app.models.license_connection import LicenseConnection
-from app.models.platform_connection import PlatformConnection
-from app.models.hybrid_connection import HybridConnection
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
 from app.schemas.costs import CloudUsageSummary, CostRecord
 from app.shared.adapters.factory import AdapterFactory
+from app.shared.core.adapter_usage import fetch_daily_costs_if_supported
+from app.shared.core.connection_queries import list_tenant_connections
 from app.shared.core.config import get_settings
+from app.shared.core.provider import resolve_provider_from_connection
 from app.shared.llm.analyzer import FinOpsAnalyzer
 from app.shared.llm.factory import LLMFactory
 
@@ -74,22 +69,11 @@ class FinOpsAnalysisHandler(BaseJobHandler):
             raise ValueError("tenant_id required for finops_analysis")
 
         tenant_uuid = UUID(str(tenant_id))
-        connections: list[Any] = []
-        for connection_model in (
-            AWSConnection,
-            AzureConnection,
-            GCPConnection,
-            SaaSConnection,
-            LicenseConnection,
-            PlatformConnection,
-            HybridConnection,
-        ):
-            result = await db.execute(
-                select(connection_model).where(
-                    connection_model.tenant_id == tenant_uuid
-                )
-            )
-            connections.extend(result.scalars().all())
+        connections: list[Any] = await list_tenant_connections(
+            db,
+            tenant_id=tenant_uuid,
+            active_only=True,
+        )
 
         if not connections:
             return {"status": "skipped", "reason": "no_connections"}
@@ -106,26 +90,26 @@ class FinOpsAnalysisHandler(BaseJobHandler):
         analyzed_providers: set[str] = set()
 
         for connection in connections:
-            provider = str(getattr(connection, "provider", "aws")).lower()
+            provider = resolve_provider_from_connection(connection)
+            if not provider:
+                continue
             try:
                 adapter = AdapterFactory.get_adapter(connection)
 
-                if provider == "aws" and hasattr(adapter, "get_daily_costs"):
-                    usage_summary = await adapter.get_daily_costs(
-                        start_date,
-                        end_date,
-                        group_by_service=True,
-                    )
-                else:
+                usage_summary = await fetch_daily_costs_if_supported(
+                    adapter,
+                    start_date,
+                    end_date,
+                    group_by_service=True,
+                )
+                if usage_summary is None:
                     rows = await adapter.get_cost_and_usage(
                         start_dt, end_dt, granularity="DAILY"
                     )
                     records = _normalize_rows(rows)
                     if not records:
                         continue
-                    total_cost = sum(
-                        (record.amount for record in records), Decimal("0")
-                    )
+                    total_cost = sum((record.amount for record in records), Decimal("0"))
                     usage_summary = CloudUsageSummary(
                         tenant_id=str(tenant_uuid),
                         provider=provider,

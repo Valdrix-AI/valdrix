@@ -4,7 +4,7 @@ ActiveOps Settings API
 Manages autonomous remediation (ActiveOps) settings for tenants.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from app.shared.core.auth import CurrentUser, get_current_user, requires_role
 from app.shared.core.logging import audit_log
 from app.shared.db.session import get_db
 from app.models.remediation_settings import RemediationSettings
+from app.shared.remediation.hard_cap_service import BudgetHardCapService
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["ActiveOps"])
@@ -76,6 +77,20 @@ class ActiveOpsSettingsUpdate(BaseModel):
     )
 
 
+class HardCapReactivationRequest(BaseModel):
+    reason: str = Field(
+        ...,
+        min_length=5,
+        max_length=500,
+        description="Operator rationale for reactivating tenant connectors after hard-cap enforcement.",
+    )
+
+
+class HardCapReactivationResponse(BaseModel):
+    status: str
+    restored_connections: int
+
+
 # ============================================================
 # API Endpoints
 # ============================================================
@@ -117,6 +132,45 @@ async def get_activeops_settings(
         logger.info("activeops_settings_created", tenant_id=str(current_user.tenant_id))
 
     return ActiveOpsSettingsResponse.model_validate(settings)
+
+
+@router.post(
+    "/activeops/hard-cap/reactivate",
+    response_model=HardCapReactivationResponse,
+)
+async def reactivate_hard_cap(
+    data: HardCapReactivationRequest,
+    current_user: CurrentUser = Depends(requires_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> HardCapReactivationResponse:
+    """
+    Restore connection activity after a hard-cap enforcement event.
+    """
+    service = BudgetHardCapService(db)
+    tenant_id = current_user.tenant_id
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+
+    try:
+        restored_connections = await service.reverse_hard_cap(
+            tenant_id,
+            actor_id=current_user.id,
+            reason=data.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    logger.info(
+        "activeops_hard_cap_reactivated",
+        tenant_id=str(current_user.tenant_id),
+        actor_id=str(current_user.id),
+        restored_connections=restored_connections,
+    )
+
+    return HardCapReactivationResponse(
+        status="reactivated",
+        restored_connections=restored_connections,
+    )
 
 
 @router.put("/activeops", response_model=ActiveOpsSettingsResponse)

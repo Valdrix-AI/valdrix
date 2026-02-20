@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timezone
 from google.cloud import compute_v1
 from google.cloud import monitoring_v3
+from google.oauth2 import service_account
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.cloud_api_budget import (
     allow_expensive_cloud_api_call,
@@ -24,23 +25,57 @@ class OverprovisionedComputePlugin(ZombiePlugin):
         return "overprovisioned_gcp_instances"
 
     async def scan(
-        self,
-        session: str, 
-        credentials: Any,
-        region: str = "global",
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         project_id = session
         zombies = []
         
         try:
+            gcp_creds = None
+            if credentials:
+                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            
             # 1. List Instances (Aggregated List for all zones)
-            instances_client = compute_v1.InstancesClient(credentials=credentials)
+            instances_client = compute_v1.InstancesClient(credentials=gcp_creds)
             agg_list = instances_client.aggregated_list(project=project_id)
 
-            monitor_client = monitoring_v3.MetricServiceClient(credentials=credentials)
+            monitor_client = monitoring_v3.MetricServiceClient(credentials=gcp_creds)
             project_name = f"projects/{project_id}"
 
             for zone_path, page in agg_list:

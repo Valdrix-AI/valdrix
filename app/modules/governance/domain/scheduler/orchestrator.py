@@ -38,15 +38,6 @@ class SchedulerOrchestrator:
         "ap-northeast-1": "JP-TK",
     }
 
-    REGION_TO_ELECTRICITYMAP_ZONE = {
-        "us-east-1": "US-MIDA-PJM",
-        "us-west-2": "US-NW-BPAT",
-        "eu-west-1": "IE",
-        "eu-central-1": "DE",
-        "ap-southeast-1": "SG",
-        "ap-northeast-1": "JP-TK",
-    }
-
     def __init__(self, session_maker: async_sessionmaker[AsyncSession]):
         self.scheduler = AsyncIOScheduler()
         self.session_maker = session_maker
@@ -69,7 +60,17 @@ class SchedulerOrchestrator:
 
         redis = get_redis_client()
         if redis is None:
-            return True
+            if settings.SCHEDULER_LOCK_FAIL_OPEN:
+                logger.warning(
+                    "scheduler_dispatch_lock_unavailable_fail_open",
+                    job=job_name,
+                )
+                return True
+            logger.error(
+                "scheduler_dispatch_lock_unavailable_fail_closed",
+                job=job_name,
+            )
+            return False
 
         lock_key = f"scheduler:dispatch-lock:{job_name}"
         try:
@@ -79,11 +80,19 @@ class SchedulerOrchestrator:
                 return False
             return True
         except Exception as exc:
-            # Fail-open: if lock infrastructure fails, keep scheduler functional.
-            logger.warning(
-                "scheduler_dispatch_lock_error", job=job_name, error=str(exc)
+            if settings.SCHEDULER_LOCK_FAIL_OPEN:
+                logger.warning(
+                    "scheduler_dispatch_lock_error_fail_open",
+                    job=job_name,
+                    error=str(exc),
+                )
+                return True
+            logger.error(
+                "scheduler_dispatch_lock_error_fail_closed",
+                job=job_name,
+                error=str(exc),
             )
-            return True
+            return False
 
     async def cohort_analysis_job(self, target_cohort: TenantCohort) -> None:
         """
@@ -108,7 +117,7 @@ class SchedulerOrchestrator:
         self._last_run_success = True
         self._last_run_time = datetime.now(timezone.utc).isoformat()
 
-    async def is_low_carbon_window(self, region: str = "us-east-1") -> bool:
+    async def is_low_carbon_window(self, region: str = "global") -> bool:
         """
         Series-A (Phase 4): Carbon-Aware Scheduling.
         Returns True if the current time is a 'Green Window' for the region.
@@ -117,12 +126,13 @@ class SchedulerOrchestrator:
         - 10 AM to 4 PM (10:00 - 16:00) usually has high solar output.
         - 12 AM to 5 AM (00:00 - 05:00) usually has low grid demand.
         """
-        live_intensity = await self._fetch_live_carbon_intensity(region)
+        region_hint = str(region or "").strip().lower() or "global"
+        live_intensity = await self._fetch_live_carbon_intensity(region_hint)
         if live_intensity is not None:
             is_green = live_intensity <= settings.CARBON_LOW_INTENSITY_THRESHOLD
             logger.info(
                 "scheduler_green_window_check_live",
-                region=region,
+                region=region_hint,
                 live_intensity=live_intensity,
                 threshold=settings.CARBON_LOW_INTENSITY_THRESHOLD,
                 is_green=is_green,
@@ -137,21 +147,22 @@ class SchedulerOrchestrator:
             "scheduler_green_window_check_fallback",
             hour=hour,
             is_green=is_green,
-            region=region,
+            region=region_hint,
         )
         return is_green
 
     async def _fetch_live_carbon_intensity(self, region: str) -> float | None:
+        region_hint = str(region or "").strip().lower() or "global"
         api_key = settings.ELECTRICITY_MAPS_API_KEY
         if not api_key:
             return None
 
-        zone = self.REGION_TO_ELECTRICITYMAP_ZONE.get(region)
+        zone = self.REGION_TO_ELECTRICITYMAP_ZONE.get(region_hint)
         if not zone:
             return None
 
         now = time.time()
-        cached = self._carbon_cache.get(region)
+        cached = self._carbon_cache.get(region_hint)
         if cached and (now - cached[1]) < 600:
             return cached[0]
 
@@ -170,11 +181,13 @@ class SchedulerOrchestrator:
             if intensity is None:
                 return None
             value = float(intensity)
-            self._carbon_cache[region] = (value, now)
+            self._carbon_cache[region_hint] = (value, now)
             return value
         except Exception as exc:
             logger.warning(
-                "live_carbon_intensity_fetch_failed", region=region, error=str(exc)
+                "live_carbon_intensity_fetch_failed",
+                region=region_hint,
+                error=str(exc),
             )
             return None
 
@@ -216,6 +229,22 @@ class SchedulerOrchestrator:
         except Exception as e:
             logger.warning(
                 "scheduler_celery_unavailable", error=str(e), job="acceptance"
+            )
+
+    async def license_governance_sweep_job(self) -> None:
+        """Dispatches tenant-wide license governance sweep."""
+        logger.info("scheduler_dispatching_license_governance_sweep")
+        if not await self._acquire_dispatch_lock("license_governance_sweep"):
+            return
+        try:
+            from app.shared.core.celery_app import celery_app
+
+            celery_app.send_task("license.governance_sweep")
+        except Exception as e:
+            logger.warning(
+                "scheduler_celery_unavailable",
+                error=str(e),
+                job="license_governance",
             )
 
     async def detect_stuck_jobs(self) -> None:
@@ -317,6 +346,13 @@ class SchedulerOrchestrator:
             self.acceptance_sweep_job,
             trigger=CronTrigger(hour=5, minute=0, timezone="UTC"),
             id="daily_acceptance_sweep",
+            replace_existing=True,
+        )
+        # License governance: Daily 6AM UTC
+        self.scheduler.add_job(
+            self.license_governance_sweep_job,
+            trigger=CronTrigger(hour=6, minute=0, timezone="UTC"),
+            id="daily_license_governance_sweep",
             replace_existing=True,
         )
         # Stuck Job Detector: Every hour

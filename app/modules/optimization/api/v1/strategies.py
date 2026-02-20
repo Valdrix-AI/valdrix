@@ -1,7 +1,7 @@
 from typing import Annotated, Any, Dict, List
 from uuid import UUID
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, ConfigDict
@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from app.shared.core.auth import CurrentUser, require_tenant_access
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
+from app.shared.core.provider import normalize_provider, SUPPORTED_PROVIDERS
 from app.shared.db.session import get_db
 from app.modules.optimization.domain.service import OptimizationService
 from app.models.optimization import (
@@ -139,17 +140,29 @@ async def backtest_strategies(
     """
     _ = user  # dependency enforces tier gating
     service = OptimizationService(db=db)
+    provider_filter = provider.strip().lower() if provider else None
+    if provider_filter:
+        normalized_provider = normalize_provider(provider_filter)
+        if not normalized_provider:
+            supported = ", ".join(sorted(SUPPORTED_PROVIDERS))
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported provider '{provider}'. Use one of: {supported}",
+            )
+        provider_filter = normalized_provider
 
     query = select(OptimizationStrategy).where(OptimizationStrategy.is_active.is_(True))
-    if provider:
-        query = query.where(OptimizationStrategy.provider == provider.strip().lower())
+    if provider_filter:
+        query = query.where(OptimizationStrategy.provider == provider_filter)
     if strategy_type:
         query = query.where(OptimizationStrategy.type == strategy_type.strip().lower())
 
     result = await db.execute(query)
     strategies = list(result.scalars().all())
-    if not strategies:
+    if not strategies and not provider_filter and not strategy_type:
         strategies = await service._seed_default_strategies()
+    elif not strategies:
+        return StrategyBacktestResponse(status="success", strategies=[])
 
     out: list[StrategyBacktestRead] = []
     for strat in strategies:

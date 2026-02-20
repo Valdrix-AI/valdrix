@@ -23,13 +23,43 @@ class IdleCloudSqlPlugin(ZombiePlugin):
         return "idle_gcp_cloud_sql"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for idle Cloud SQL instances via billing data."""
         project_id = str(kwargs.get("project_id") or session or "")

@@ -38,6 +38,14 @@ def _as_float(value: Decimal | float | int | None) -> float:
     return float(value)
 
 
+def _as_utc_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 class SavingsProofBreakdownItem(BaseModel):
     provider: str
     opportunity_monthly_usd: float
@@ -163,7 +171,9 @@ class SavingsProofService:
         )
         completed_rems: list[RemediationRequest] = []
         for item in completed_rems_all:
-            completed_at = item.executed_at or item.updated_at or item.created_at
+            completed_at = _as_utc_datetime(
+                item.executed_at or item.updated_at or item.created_at
+            )
             if completed_at is None:
                 continue
             if window_start <= completed_at <= window_end:

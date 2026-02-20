@@ -29,13 +29,43 @@ class IdleSaaSSubscriptionsPlugin(ZombiePlugin):
         return "idle_saas_subscriptions"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Dict[str, str] | None = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         cost_feed = kwargs.get("cost_feed") or []
         if not isinstance(cost_feed, list):

@@ -108,6 +108,11 @@ class AuditEventType(str, Enum):
     BILLING_PAYMENT_RECEIVED = "billing.payment_received"
     BILLING_PAYMENT_FAILED = "billing.payment_failed"
 
+    # Budget hard-cap enforcement
+    BUDGET_HARD_CAP_ENFORCEMENT_BLOCKED = "budget.hard_cap_enforcement_blocked"
+    BUDGET_HARD_CAP_ENFORCED = "budget.hard_cap_enforced"
+    BUDGET_HARD_CAP_REVERSED = "budget.hard_cap_reversed"
+
     # Integration acceptance evidence
     INTEGRATION_TEST_SLACK = "integration_test.slack"
     INTEGRATION_TEST_JIRA = "integration_test.jira"

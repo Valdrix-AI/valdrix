@@ -30,5 +30,6 @@ class AzureAmpereAnalyzer(ArmMigrationAnalyzer):
 
     def get_instance_type_from_resource(self, resource: Dict[str, Any]) -> Optional[str]:
         # Extracted by AzureAdapter.discover_resources in metadata['size']
-        metadata = resource.get("metadata", {})
-        return metadata.get("size")
+        metadata: Dict[str, Any] = resource.get("metadata", {})
+        size = metadata.get("size")
+        return str(size) if size else None

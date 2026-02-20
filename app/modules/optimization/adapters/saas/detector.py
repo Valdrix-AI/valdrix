@@ -51,10 +51,23 @@ class SaaSZombieDetector(BaseZombieDetector):
             or getattr(self.connection, "cost_feed", None)
             or []
         )
+        connector_config = getattr(self.connection, "connector_config", None)
+        config = connector_config if isinstance(connector_config, dict) else {}
+        credentials = self.credentials if isinstance(self.credentials, dict) else {}
+        if not credentials:
+            credentials = {
+                "vendor": str(getattr(self.connection, "vendor", "") or ""),
+                "auth_method": str(getattr(self.connection, "auth_method", "") or ""),
+                "api_key": str(getattr(self.connection, "api_key", "") or ""),
+                "connector_config": config,
+                "spend_feed": cost_feed if isinstance(cost_feed, list) else [],
+            }
+
         results = await plugin.scan(
             session=None,
             region="global",
-            credentials=self.credentials,
+            credentials=credentials,
+            config=config,
             cost_feed=cost_feed,
             connection=self.connection,
         )

@@ -24,6 +24,13 @@ from app.modules.governance.domain.jobs.handlers.dunning import DunningHandler
 from app.modules.governance.domain.jobs.handlers.acceptance import (
     AcceptanceSuiteCaptureHandler,
 )
+from app.modules.governance.domain.jobs.handlers.analysis import (
+    ReportGenerationHandler,
+    ZombieAnalysisHandler,
+)
+from app.modules.governance.domain.jobs.handlers.license_governance import (
+    LicenseGovernanceHandler,
+)
 
 
 # Global registry of job handlers
@@ -42,6 +49,9 @@ HANDLER_REGISTRY: Dict[str, Type[BaseJobHandler]] = {
     JobType.NOTIFICATION.value: NotificationHandler,
     JobType.WEBHOOK_RETRY.value: WebhookRetryHandler,
     JobType.DUNNING.value: DunningHandler,
+    JobType.ZOMBIE_ANALYSIS.value: ZombieAnalysisHandler,
+    JobType.REPORT_GENERATION.value: ReportGenerationHandler,
+    JobType.LICENSE_GOVERNANCE.value: LicenseGovernanceHandler,
 }
 
 

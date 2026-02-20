@@ -6,6 +6,7 @@ Detects idle VMs and GPU instances using BigQuery billing export data.
 
 from typing import List, Dict, Any
 from google.cloud import compute_v1
+from google.oauth2 import service_account
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -24,9 +25,9 @@ class IdleVmsPlugin(ZombiePlugin):
 
     async def scan(
         self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
+        session: Any,
+        region: str,
+        credentials: Dict[str, Any] | None = None,
         config: Any = None,
         inventory: Any = None,
         **kwargs: Any,
@@ -53,15 +54,29 @@ class IdleVmsPlugin(ZombiePlugin):
 
         # Fallback: Use Cloud Asset Inventory + basic heuristics
         zombies = []
+        print(f"DEBUG: Entering fallback for {project_id}")
         try:
-            client = compute_v1.InstancesClient(credentials=credentials)
-            request = compute_v1.AggregatedListInstancesRequest(project=project_id)
-
+            gcp_creds = None
+            if credentials:
+                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            print("DEBUG: Instantiating InstancesClient")
+            client = compute_v1.InstancesClient(credentials=gcp_creds)
+            print(f"DEBUG: Creating request for project {project_id}")
+            try:
+                request = compute_v1.AggregatedListInstancesRequest(project=project_id)
+            except AttributeError:
+                print("DEBUG: AggregatedListInstancesRequest not found in compute_v1")
+                # Fallback to simple dict if needed, or check types
+                request = {"project": project_id} 
+            
+            print(f"DEBUG: Calling aggregated_list with request {request}")
             for zone, response in client.aggregated_list(request=request):
                 if not response.instances:
                     continue
 
+                print(f"DEBUG: Processing zone {zone}")
                 for instance in response.instances:
+                    print(f"DEBUG: Checking instance {instance.name}, status {instance.status}")
                     if instance.status != "RUNNING":
                         continue
 
@@ -71,6 +86,7 @@ class IdleVmsPlugin(ZombiePlugin):
                         or "a2-" in instance.machine_type
                         or "g2-" in instance.machine_type
                     )
+                    print(f"DEBUG: is_gpu={is_gpu}")
 
                     # Without metrics, flag GPU instances for review
                     if is_gpu:
@@ -104,9 +120,9 @@ class IdleGpuInstancesPlugin(ZombiePlugin):
 
     async def scan(
         self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
+        session: Any,
+        region: str,
+        credentials: Dict[str, Any] | None = None,
         config: Any = None,
         inventory: Any = None,
         **kwargs: Any,
@@ -141,9 +157,9 @@ class StoppedVmsPlugin(ZombiePlugin):
 
     async def scan(
         self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
+        session: Any,
+        region: str,
+        credentials: Dict[str, Any] | None = None,
         config: Any = None,
         inventory: Any = None,
         **kwargs: Any,
@@ -155,7 +171,10 @@ class StoppedVmsPlugin(ZombiePlugin):
 
         zombies = []
         try:
-            client = compute_v1.InstancesClient(credentials=credentials)
+            gcp_creds = None
+            if credentials:
+                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            client = compute_v1.InstancesClient(credentials=gcp_creds)
             request = compute_v1.AggregatedListInstancesRequest(project=project_id)
 
             for zone, response in client.aggregated_list(request=request):

@@ -221,6 +221,7 @@ class FocusV13ExportService:
             .join(CloudAccount, CostRecord.account_id == CloudAccount.id)
             .where(*filters)
             .order_by(CostRecord.recorded_at.asc(), CostRecord.timestamp.asc())
+            .execution_options(stream_results=True)
         )
 
         # Use streaming where supported; SQLite in tests still works with execute().
@@ -234,7 +235,7 @@ class FocusV13ExportService:
             logger.debug("focus_export_stream_fallback_to_execute")
 
         sync_result = await self.db.execute(stmt)
-        for cost_record, account in sync_result.all():
+        for cost_record, account in sync_result:
             yield self._row_to_focus(cost_record, account, contexts)
 
     async def _load_account_contexts(

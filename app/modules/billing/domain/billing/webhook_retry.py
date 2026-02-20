@@ -101,34 +101,6 @@ class WebhookRetryService:
         )
         idempotency_key = self._generate_idempotency_key(provider, event_type, ref)
 
-        # Check for duplicate
-        if await self.is_duplicate(idempotency_key):
-            logger.info(
-                "webhook_duplicate_ignored",
-                provider=provider,
-                event_type=event_type,
-                idempotency_key=idempotency_key,
-            )
-            return None
-
-        # Check for existing pending job
-        result = await self.db.execute(
-            select(BackgroundJob).where(
-                BackgroundJob.job_type == JobType.WEBHOOK_RETRY,
-                BackgroundJob.payload["idempotency_key"].as_string() == idempotency_key,
-                BackgroundJob.status.in_([JobStatus.PENDING, JobStatus.RUNNING]),
-            )
-        )
-        existing = result.scalar_one_or_none()
-
-        if existing:
-            logger.info(
-                "webhook_already_queued",
-                job_id=str(existing.id),
-                status=existing.status,
-            )
-            return existing
-
         # Store new webhook job
         job_payload = {
             "provider": provider,
@@ -145,7 +117,28 @@ class WebhookRetryService:
             job_type=JobType.WEBHOOK_RETRY,
             payload=job_payload,
             max_attempts=WEBHOOK_MAX_ATTEMPTS,
+            deduplication_key=f"webhook:{provider}:{idempotency_key}",
         )
+
+        created = bool(getattr(job, "_enqueue_created", True))
+        if not created:
+            job_status = (
+                job.status.value if hasattr(job.status, "value") else str(job.status)
+            )
+            log_event = (
+                "webhook_duplicate_ignored"
+                if job_status == JobStatus.COMPLETED.value
+                else "webhook_already_queued"
+            )
+            logger.info(
+                log_event,
+                job_id=str(job.id),
+                provider=provider,
+                event_type=event_type,
+                idempotency_key=idempotency_key,
+                status=job_status,
+            )
+            return None
 
         logger.info(
             "webhook_stored",

@@ -11,8 +11,9 @@ Manages the remediation approval workflow:
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 from decimal import Decimal
-from typing import List, Dict, Any, Optional, cast
+from typing import List, Dict, Any, Optional
 import hashlib
+import inspect
 import json
 import re
 import aioboto3
@@ -27,11 +28,7 @@ from app.models.remediation import (
     RemediationStatus,
     RemediationAction,
 )
-from app.models.aws_connection import AWSConnection
-from app.models.azure_connection import AzureConnection
-from app.models.gcp_connection import GCPConnection
-from app.models.saas_connection import SaaSConnection
-from app.models.license_connection import LicenseConnection
+from app.models.cloud import CloudAccount
 
 __all__ = ["RemediationService", "RemediationStatus", "RemediationAction"]
 from app.models.remediation_settings import RemediationSettings
@@ -48,6 +45,12 @@ from app.shared.adapters.aws_utils import map_aws_credentials
 from app.shared.core.safety_service import SafetyGuardrailService
 from app.shared.core.config import get_settings
 from app.shared.core.exceptions import ResourceNotFoundError
+from app.shared.core.provider import normalize_provider
+from app.shared.core.connection_queries import get_connection_model
+from app.shared.core.connection_state import (
+    resolve_connection_profile,
+    resolve_connection_region,
+)
 from app.shared.core.pricing import (
     FeatureFlag,
     PricingTier,
@@ -72,17 +75,20 @@ class RemediationService(BaseService):
     """
 
     # Mapping CamelCase to snake_case for aioboto3 credentials - DEPRECATED: Use aws_utils
+    _SYSTEM_POLICY_CONTEXT_KEY = "_system_policy_context"
 
     def __init__(
         self,
         db: AsyncSession,
-        region: str = "us-east-1",
-        credentials: Optional[Dict[str, str]] = None,
+        region: str = "global",
+        credentials: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(db)
         self.region = region
         self.credentials = credentials
         self.session = aioboto3.Session()
+        # Request-scoped cache for repeated policy/settings lookups in the same service lifecycle.
+        self._remediation_settings_cache: dict[UUID, RemediationSettings | None] = {}
 
     async def _get_client(self, service_name: str) -> Any:
         """Helper to get aioboto3 client with optional credentials and endpoint override."""
@@ -98,23 +104,85 @@ class RemediationService(BaseService):
 
         return self.session.client(service_name, **kwargs)
 
+    @staticmethod
+    async def _scalar_one_or_none(result: Any) -> Any:
+        """
+        Safe scalar extractor for SQLAlchemy results and async test doubles.
+
+        Production SQLAlchemy result objects expose a synchronous
+        `scalar_one_or_none()`, while AsyncMock-heavy tests can return awaitables.
+        """
+        extractor = getattr(result, "scalar_one_or_none", None)
+        if not callable(extractor):
+            return None
+        value = extractor()
+        if inspect.isawaitable(value):
+            return await value
+        return value
+
+    async def _resolve_aws_region_hint(
+        self,
+        *,
+        tenant_id: UUID | None = None,
+        connection_id: UUID | None = None,
+        connection: Any | None = None,
+    ) -> str:
+        """
+        Resolve a concrete AWS region from request hint + optional connection context.
+
+        `global` is treated as a non-concrete sentinel for cross-provider API defaults.
+        """
+        region_hint = str(self.region or "").strip().lower()
+        if region_hint and region_hint != "global":
+            return region_hint
+
+        if connection is not None:
+            connection_region = resolve_connection_region(connection)
+            if connection_region != "global":
+                return connection_region
+
+        if tenant_id and connection_id:
+            connection_model = get_connection_model("aws")
+            if connection_model is not None:
+                try:
+                    scoped = await self.get_by_id(connection_model, connection_id, tenant_id)
+                    if scoped is not None:
+                        scoped_region = resolve_connection_region(scoped)
+                        if scoped_region != "global":
+                            return scoped_region
+                except Exception as exc:
+                    logger.warning(
+                        "remediation_aws_region_resolution_failed",
+                        tenant_id=str(tenant_id),
+                        connection_id=str(connection_id),
+                        error=str(exc),
+                    )
+
+        return str(get_settings().AWS_DEFAULT_REGION or "").strip() or "us-east-1"
+
     async def _get_remediation_settings(
         self, tenant_id: UUID
     ) -> RemediationSettings | None:
+        if tenant_id in self._remediation_settings_cache:
+            return self._remediation_settings_cache[tenant_id]
+
         try:
             result = await self.db.execute(
                 select(RemediationSettings).where(
                     RemediationSettings.tenant_id == tenant_id
                 )
             )
-            settings = result.scalar_one_or_none()
-            return settings if isinstance(settings, RemediationSettings) else None
+            settings = await self._scalar_one_or_none(result)
+            resolved = settings if isinstance(settings, RemediationSettings) else None
+            self._remediation_settings_cache[tenant_id] = resolved
+            return resolved
         except Exception as exc:
             logger.warning(
                 "remediation_settings_lookup_failed",
                 tenant_id=str(tenant_id),
                 error=str(exc),
             )
+            self._remediation_settings_cache[tenant_id] = None
             return None
 
     async def _build_policy_config(
@@ -139,94 +207,273 @@ class RemediationService(BaseService):
         )
         return config, settings
 
+    async def _build_system_policy_context(
+        self,
+        *,
+        tenant_id: UUID,
+        provider: str,
+        connection_id: UUID | None,
+    ) -> dict[str, Any]:
+        provider_norm = normalize_provider(provider)
+        if not provider_norm:
+            return {}
+
+        if connection_id:
+            account_context: dict[str, Any] | None = None
+            account_result = await self.db.execute(
+                select(CloudAccount)
+                .where(CloudAccount.tenant_id == tenant_id)
+                .where(CloudAccount.id == connection_id)
+                .where(CloudAccount.provider == provider_norm)
+            )
+            account = await self._scalar_one_or_none(account_result)
+            if isinstance(account, CloudAccount):
+                account_context = {
+                    "source": "cloud_account",
+                    "connection_id": str(connection_id),
+                    "is_production": bool(getattr(account, "is_production", False)),
+                    "criticality": getattr(account, "criticality", None),
+                }
+                if account_context["is_production"] or account_context["criticality"]:
+                    return account_context
+
+            connection_model = get_connection_model(provider_norm)
+            if connection_model is not None:
+                connection_result = await self.db.execute(
+                    select(connection_model)
+                    .where(connection_model.tenant_id == tenant_id)
+                    .where(connection_model.id == connection_id)
+                )
+                connection = await self._scalar_one_or_none(connection_result)
+                if connection is not None:
+                    profile = resolve_connection_profile(connection)
+                    is_production = profile.get("is_production")
+                    return {
+                        "source": str(profile.get("source") or "connection_profile"),
+                        "connection_id": str(connection_id),
+                        "is_production": (
+                            is_production
+                            if isinstance(is_production, bool)
+                            else None
+                        ),
+                        "criticality": profile.get("criticality"),
+                    }
+
+            if account_context is not None:
+                return account_context
+
+        return {}
+
+    def _sanitize_action_parameters(
+        self,
+        parameters: Optional[Dict[str, Any]],
+        *,
+        system_policy_context: Optional[dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        safe_parameters: Dict[str, Any] = (
+            dict(parameters) if isinstance(parameters, dict) else {}
+        )
+        safe_parameters.pop(self._SYSTEM_POLICY_CONTEXT_KEY, None)
+
+        if system_policy_context:
+            safe_parameters[self._SYSTEM_POLICY_CONTEXT_KEY] = dict(
+                system_policy_context
+            )
+
+        return safe_parameters or None
+
+    def _strip_system_policy_context(
+        self, parameters: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        safe_parameters: Dict[str, Any] = (
+            dict(parameters) if isinstance(parameters, dict) else {}
+        )
+        safe_parameters.pop(self._SYSTEM_POLICY_CONTEXT_KEY, None)
+        return safe_parameters
+
+    async def _apply_system_policy_context(
+        self,
+        request: RemediationRequest,
+        *,
+        tenant_id: UUID,
+        provider: str,
+        connection_id: UUID | None,
+    ) -> dict[str, Any]:
+        system_context = await self._build_system_policy_context(
+            tenant_id=tenant_id,
+            provider=provider,
+            connection_id=connection_id,
+        )
+        request.action_parameters = self._sanitize_action_parameters(
+            getattr(request, "action_parameters", None),
+            system_policy_context=system_context,
+        )
+        return system_context
+
     async def _resolve_credentials(self, request: RemediationRequest) -> Dict[str, Any]:
         """Resolve provider credentials from the tenant connection bound to the request."""
+        provider = normalize_provider(getattr(request, "provider", None))
+        tenant_id = getattr(request, "tenant_id", None)
         connection_id = getattr(request, "connection_id", None)
-        if not connection_id:
-            return dict(self.credentials or {})
+        fallback_credentials = dict(self.credentials or {})
+        missing_connection_result = fallback_credentials if not connection_id else {}
 
-        provider = (getattr(request, "provider", "") or "").strip().lower()
+        if tenant_id is None:
+            return fallback_credentials
+        if not provider:
+            return fallback_credentials
+
+        connection_model = get_connection_model(provider)
+        if connection_model is None:
+            return fallback_credentials
+
+        def _coerce_dict(value: Any) -> dict[str, Any]:
+            return dict(value) if isinstance(value, dict) else {}
+
+        def _coerce_list(value: Any) -> list[Any]:
+            return list(value) if isinstance(value, list) else []
+
+        stmt = select(connection_model).where(connection_model.tenant_id == tenant_id)
+        if connection_id:
+            stmt = stmt.where(connection_model.id == connection_id)
+        else:
+            if hasattr(connection_model, "status"):
+                stmt = stmt.where(connection_model.status == "active")
+            elif hasattr(connection_model, "is_active"):
+                stmt = stmt.where(connection_model.is_active.is_(True))
+
+            order_clauses = []
+            if hasattr(connection_model, "last_verified_at"):
+                order_clauses.append(connection_model.last_verified_at.desc())
+            order_clauses.append(connection_model.id.desc())
+            stmt = stmt.order_by(*order_clauses)
+
+        result = await self.db.execute(stmt)
+        connection = await self._scalar_one_or_none(result)
+        if connection is None:
+            return missing_connection_result
 
         if provider == "aws":
-            aws_result = await self.db.execute(
-                select(AWSConnection).where(AWSConnection.id == connection_id)
-            )
-            aws_conn = cast(Optional[AWSConnection], aws_result.scalar_one_or_none())
-            if aws_conn:
-                return {
-                    "role_arn": aws_conn.role_arn,
-                    "external_id": aws_conn.external_id,
-                    "region": aws_conn.region,
-                }
-            return {}
+            role_arn = getattr(connection, "role_arn", None)
+            external_id = getattr(connection, "external_id", None)
+            if not role_arn or not external_id:
+                return missing_connection_result
+            connection_region = resolve_connection_region(connection)
+            return {
+                "role_arn": role_arn,
+                "external_id": external_id,
+                "region": connection_region,
+                "connection_id": str(getattr(connection, "id", connection_id or "")),
+            }
 
         if provider == "azure":
-            azure_result = await self.db.execute(
-                select(AzureConnection).where(AzureConnection.id == connection_id)
-            )
-            azure_conn = cast(
-                Optional[AzureConnection], azure_result.scalar_one_or_none()
-            )
-            if azure_conn:
-                return {
-                    "tenant_id": azure_conn.azure_tenant_id,
-                    "client_id": azure_conn.client_id,
-                    "client_secret": azure_conn.client_secret,
-                    "subscription_id": azure_conn.subscription_id,
-                }
-            return {}
+            tenant = getattr(connection, "azure_tenant_id", None)
+            client_id = getattr(connection, "client_id", None)
+            client_secret = getattr(connection, "client_secret", None)
+            subscription_id = getattr(connection, "subscription_id", None)
+            if not all([tenant, client_id, client_secret, subscription_id]):
+                return missing_connection_result
+            return {
+                "tenant_id": tenant,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "subscription_id": subscription_id,
+                "region": resolve_connection_region(connection),
+                "connection_id": str(getattr(connection, "id", connection_id or "")),
+            }
 
         if provider == "gcp":
-            gcp_result = await self.db.execute(
-                select(GCPConnection).where(GCPConnection.id == connection_id)
-            )
-            gcp_conn = cast(Optional[GCPConnection], gcp_result.scalar_one_or_none())
-            if gcp_conn and gcp_conn.service_account_json:
+            service_account_json = getattr(connection, "service_account_json", None)
+            if isinstance(service_account_json, dict):
+                return dict(service_account_json)
+            if isinstance(service_account_json, str) and service_account_json.strip():
                 try:
-                    parsed = json.loads(gcp_conn.service_account_json)
+                    parsed = json.loads(service_account_json)
                     if isinstance(parsed, dict):
-                        return dict(parsed)
+                        payload = dict(parsed)
+                        payload.setdefault(
+                            "connection_id",
+                            str(getattr(connection, "id", connection_id or "")),
+                        )
+                        payload.setdefault("region", resolve_connection_region(connection))
+                        return payload
                 except (TypeError, ValueError) as exc:
                     logger.warning(
                         "remediation_invalid_gcp_service_account_json",
                         connection_id=str(connection_id),
                         error=str(exc),
                     )
-            return {}
+            return missing_connection_result
 
         if provider == "saas":
-            saas_result = await self.db.execute(
-                select(SaaSConnection).where(SaaSConnection.id == connection_id)
-            )
-            saas_conn = cast(Optional[SaaSConnection], saas_result.scalar_one_or_none())
-            if saas_conn:
-                return {
-                    "vendor": saas_conn.vendor,
-                    "api_key": saas_conn.api_key,
-                    "connector_config": dict(saas_conn.connector_config or {}),
-                }
-            return {}
+            return {
+                "vendor": getattr(connection, "vendor", None),
+                "auth_method": getattr(connection, "auth_method", None),
+                "api_key": getattr(connection, "api_key", None),
+                "connector_config": _coerce_dict(
+                    getattr(connection, "connector_config", None)
+                ),
+                "spend_feed": _coerce_list(getattr(connection, "spend_feed", None)),
+                "connection_id": str(getattr(connection, "id", connection_id or "")),
+                "region": resolve_connection_region(connection),
+            }
 
         if provider == "license":
-            license_result = await self.db.execute(
-                select(LicenseConnection).where(LicenseConnection.id == connection_id)
-            )
-            license_conn = cast(
-                Optional[LicenseConnection], license_result.scalar_one_or_none()
-            )
-            if license_conn:
-                return {
-                    "vendor": license_conn.vendor,
-                    "api_key": license_conn.api_key,
-                    "connector_config": dict(license_conn.connector_config or {}),
-                }
-            return {}
+            return {
+                "vendor": getattr(connection, "vendor", None),
+                "auth_method": getattr(connection, "auth_method", None),
+                "api_key": getattr(connection, "api_key", None),
+                "connector_config": _coerce_dict(
+                    getattr(connection, "connector_config", None)
+                ),
+                "license_feed": _coerce_list(getattr(connection, "license_feed", None)),
+                "connection_id": str(getattr(connection, "id", connection_id or "")),
+                "region": resolve_connection_region(connection),
+            }
 
-        return {}
+        if provider == "platform":
+            return {
+                "vendor": getattr(connection, "vendor", None),
+                "auth_method": getattr(connection, "auth_method", None),
+                "api_key": getattr(connection, "api_key", None),
+                "api_secret": getattr(connection, "api_secret", None),
+                "connector_config": _coerce_dict(
+                    getattr(connection, "connector_config", None)
+                ),
+                "spend_feed": _coerce_list(getattr(connection, "spend_feed", None)),
+                "connection_id": str(getattr(connection, "id", connection_id or "")),
+                "region": resolve_connection_region(connection),
+            }
+
+        if provider == "hybrid":
+            return {
+                "vendor": getattr(connection, "vendor", None),
+                "auth_method": getattr(connection, "auth_method", None),
+                "api_key": getattr(connection, "api_key", None),
+                "api_secret": getattr(connection, "api_secret", None),
+                "connector_config": _coerce_dict(
+                    getattr(connection, "connector_config", None)
+                ),
+                "spend_feed": _coerce_list(getattr(connection, "spend_feed", None)),
+                "connection_id": str(getattr(connection, "id", connection_id or "")),
+                "region": resolve_connection_region(connection),
+            }
+
+        return fallback_credentials
 
     async def preview_policy(
         self, request: RemediationRequest, tenant_id: UUID
     ) -> dict[str, Any]:
+        provider = normalize_provider(getattr(request, "provider", None))
+        connection_id = getattr(request, "connection_id", None)
+        if provider:
+            await self._apply_system_policy_context(
+                request,
+                tenant_id=tenant_id,
+                provider=provider,
+                connection_id=connection_id,
+            )
+
         tier = await get_tenant_tier(tenant_id, self.db)
         policy_config, _ = await self._build_policy_config(tenant_id)
         evaluation = RemediationPolicyEngine().evaluate(request, policy_config)
@@ -253,24 +500,42 @@ class RemediationService(BaseService):
         resource_id: str,
         resource_type: str,
         action: RemediationAction,
-        provider: str = "aws",
+        provider: str,
         confidence_score: float | None = None,
         explainability_notes: str | None = None,
         review_notes: str | None = None,
         parameters: Optional[Dict[str, Any]] = None,
+        connection_id: Optional[UUID] = None,
     ) -> dict[str, Any]:
         """
         Evaluate policy for an in-memory remediation payload.
 
         This avoids persisting a request and enables pre-request dry-run previews.
         """
+        provider_norm = normalize_provider(provider)
+        if not provider_norm:
+            raise ValueError("Invalid provider for policy preview")
+        preview_region = (
+            await self._resolve_aws_region_hint(
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+            )
+            if provider_norm == "aws"
+            else "global"
+        )
+        system_context = await self._build_system_policy_context(
+            tenant_id=tenant_id,
+            provider=provider_norm,
+            connection_id=connection_id,
+        )
         synthetic_request = RemediationRequest(
             id=uuid4(),
             tenant_id=tenant_id,
             resource_id=resource_id,
             resource_type=resource_type,
-            provider=provider,
-            region=self.region,
+            provider=provider_norm,
+            connection_id=connection_id,
+            region=preview_region,
             action=action,
             status=RemediationStatus.PENDING,
             estimated_monthly_savings=Decimal("0"),
@@ -280,7 +545,9 @@ class RemediationService(BaseService):
             explainability_notes=explainability_notes,
             requested_by_user_id=user_id,
             review_notes=review_notes,
-            action_parameters=parameters,
+            action_parameters=self._sanitize_action_parameters(
+                parameters, system_policy_context=system_context
+            ),
         )
         return await self.preview_policy(synthetic_request, tenant_id)
 
@@ -292,38 +559,30 @@ class RemediationService(BaseService):
         resource_type: str,
         action: RemediationAction,
         estimated_savings: float,
+        provider: str,
         create_backup: bool = False,
         backup_retention_days: int = 30,
         backup_cost_estimate: float = 0,
         confidence_score: Optional[float] = None,
         explainability_notes: Optional[str] = None,
-        provider: str = "aws",
         connection_id: Optional[UUID] = None,
         parameters: Optional[Dict[str, Any]] = None,
     ) -> RemediationRequest:
         """Create a new remediation request (pending approval)."""
-        provider_norm = (provider or "aws").strip().lower()
-        if provider_norm not in {"aws", "azure", "gcp", "saas", "license"}:
-            raise ValueError(f"Invalid provider: {provider_norm}")
+        provider_norm = normalize_provider(provider)
+        if not provider_norm:
+            raise ValueError(f"Invalid provider: {provider}")
+        scoped_connection: Any | None = None
 
         # P2: Resource Ownership Verification (connection scoped to tenant)
         if connection_id:
             try:
-                from app.models.aws_connection import AWSConnection
-                from app.models.azure_connection import AzureConnection
-                from app.models.gcp_connection import GCPConnection
-                from app.models.saas_connection import SaaSConnection
-                from app.models.license_connection import LicenseConnection
-
-                model_map = {
-                    "aws": AWSConnection,
-                    "azure": AzureConnection,
-                    "gcp": GCPConnection,
-                    "saas": SaaSConnection,
-                    "license": LicenseConnection,
-                }
-                connection_model = model_map[provider_norm]
-                await self.get_by_id(connection_model, connection_id, tenant_id)
+                connection_model = get_connection_model(provider_norm)
+                if connection_model is None:
+                    raise ValueError(f"Invalid provider model for {provider_norm}")
+                scoped_connection = await self.get_by_id(
+                    connection_model, connection_id, tenant_id
+                )
             except Exception as exc:
                 logger.warning(
                     "remediation_connection_scope_failed",
@@ -336,11 +595,27 @@ class RemediationService(BaseService):
                     "Unauthorized: Connection does not belong to tenant"
                 ) from exc
 
+        request_region = (
+            await self._resolve_aws_region_hint(
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+                connection=scoped_connection,
+            )
+            if provider_norm == "aws"
+            else "global"
+        )
+
+        system_context = await self._build_system_policy_context(
+            tenant_id=tenant_id,
+            provider=provider_norm,
+            connection_id=connection_id,
+        )
+
         request = RemediationRequest(
             tenant_id=tenant_id,
             resource_id=resource_id,
             resource_type=resource_type,
-            region=self.region,
+            region=request_region,
             action=action,
             status=RemediationStatus.PENDING,
             estimated_monthly_savings=Decimal(str(estimated_savings)),
@@ -356,7 +631,9 @@ class RemediationService(BaseService):
             requested_by_user_id=user_id,
             provider=provider_norm,
             connection_id=connection_id,
-            action_parameters=parameters,
+            action_parameters=self._sanitize_action_parameters(
+                parameters, system_policy_context=system_context
+            ),
         )
 
         self.db.add(request)
@@ -530,8 +807,10 @@ class RemediationService(BaseService):
         """
         Execute an approved remediation request through the registered action strategy.
         """
+        print(f"DEBUG: execute() started for {request_id}")
         start_time = time.time()
 
+        print("DEBUG: Fetching request from DB")
         result = await self.db.execute(
             select(RemediationRequest)
             .where(RemediationRequest.id == request_id)
@@ -539,6 +818,7 @@ class RemediationService(BaseService):
             .with_for_update()
         )
         request = result.scalar_one_or_none()
+        print(f"DEBUG: Found request: {request}")
 
         if not request:
             raise ResourceNotFoundError(f"Request {request_id} not found")
@@ -558,7 +838,9 @@ class RemediationService(BaseService):
         )
         resource_id = str(getattr(request, "resource_id", "") or "")
         resource_type = str(getattr(request, "resource_type", "unknown") or "unknown")
-        provider = str(getattr(request, "provider", "aws") or "aws").strip().lower()
+        provider = normalize_provider(getattr(request, "provider", None))
+        if not provider:
+            raise ValueError("Invalid or missing provider on remediation request")
         actor_id = str(getattr(request, "reviewed_by_user_id", None) or SYSTEM_USER_ID)
 
         action_raw = getattr(request, "action", None)
@@ -610,6 +892,12 @@ class RemediationService(BaseService):
                 tenant_id
             )
 
+            system_policy_context = await self._apply_system_policy_context(
+                request,
+                tenant_id=tenant_id,
+                provider=provider,
+                connection_id=getattr(request, "connection_id", None),
+            )
             policy_evaluation = RemediationPolicyEngine().evaluate(request, policy_config)
             policy_details: dict[str, Any] = {
                 "request_id": str(request_id),
@@ -617,6 +905,11 @@ class RemediationService(BaseService):
                 "stage": "pre_execution",
                 "tier": tier_value,
                 "policy": policy_evaluation.to_dict(),
+                "policy_context_source": (
+                    system_policy_context.get("source")
+                    if system_policy_context
+                    else None
+                ),
             }
             await audit_logger.log(
                 event_type=AuditEventType.POLICY_EVALUATED,
@@ -841,15 +1134,26 @@ class RemediationService(BaseService):
             )
 
             credentials = await self._resolve_credentials(request)
+            execution_region = getattr(request, "region", None) or self.region
+            if (
+                provider == "aws"
+                and str(execution_region or "").strip().lower() in {"", "global"}
+            ):
+                execution_region = await self._resolve_aws_region_hint(
+                    tenant_id=tenant_id,
+                    connection_id=getattr(request, "connection_id", None),
+                )
             context = RemediationContext(
                 db_session=self.db,
                 tenant_id=tenant_id,
                 tier=tier_value,
-                region=getattr(request, "region", None) or self.region,
+                region=execution_region,
                 credentials=credentials,
                 create_backup=bool(getattr(request, "create_backup", False)),
                 backup_retention_days=int(getattr(request, "backup_retention_days", 30) or 30),
-                parameters=dict(getattr(request, "action_parameters", None) or {}),
+                parameters=self._strip_system_policy_context(
+                    getattr(request, "action_parameters", None)
+                ),
             )
 
             strategy = RemediationActionFactory.get_strategy(provider, action)
@@ -1023,7 +1327,11 @@ class RemediationService(BaseService):
         return executed_ids
 
     async def generate_iac_plan(
-        self, request: RemediationRequest, tenant_id: UUID
+        self,
+        request: RemediationRequest,
+        tenant_id: UUID,
+        *,
+        tenant_tier: PricingTier | str | None = None,
     ) -> str:
         """
         Generates a Terraform decommissioning plan for the resource.
@@ -1037,9 +1345,13 @@ class RemediationService(BaseService):
             is_feature_enabled,
         )
 
-        tier = await get_tenant_tier(tenant_id, self.db)
+        resolved_tier = (
+            tenant_tier
+            if tenant_tier is not None
+            else await get_tenant_tier(tenant_id, self.db)
+        )
 
-        if not is_feature_enabled(tier, FeatureFlag.GITOPS_REMEDIATION):
+        if not is_feature_enabled(resolved_tier, FeatureFlag.GITOPS_REMEDIATION):
             return "# GitOps Remediation is a Pro-tier feature. Please upgrade to unlock IaC plans."
 
         resource_id = request.resource_id
@@ -1114,6 +1426,18 @@ class RemediationService(BaseService):
             planlines.append("    destroy = true")
             planlines.append("  }")
             planlines.append("}")
+        else:
+            # Cloud+ providers (SaaS/License/Platform/Hybrid) use a generic template.
+            planlines.append("# Option 1: Manual State Removal")
+            planlines.append(f"terraform state rm cloud_resource.{tf_id}")
+            planlines.append("")
+            planlines.append("# Option 2: Terraform 'removed' block")
+            planlines.append("removed {")
+            planlines.append(f"  from = cloud_resource.{tf_id}")
+            planlines.append("  lifecycle {")
+            planlines.append("    destroy = true")
+            planlines.append("  }")
+            planlines.append("}")
 
         return "\n".join(planlines)
 
@@ -1138,6 +1462,11 @@ class RemediationService(BaseService):
         self, requests: List[RemediationRequest], tenant_id: UUID
     ) -> str:
         """Generates a combined IaC plan for multiple resources."""
-        plans = [await self.generate_iac_plan(req, tenant_id) for req in requests]
+        # Resolve tier once to avoid N+1 tenant-plan lookups in bulk workflows.
+        tenant_tier = await get_tenant_tier(tenant_id, self.db)
+        plans = [
+            await self.generate_iac_plan(req, tenant_id, tenant_tier=tenant_tier)
+            for req in requests
+        ]
         header = f"# Valdrix Bulk IaC Remediation Plan\n# Generated: {datetime.now(timezone.utc).isoformat()}\n\n"
         return header + "\n\n" + "\n" + "-" * 40 + "\n".join(plans)

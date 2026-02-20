@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.monitor import MonitorManagementClient
+from azure.identity import ClientSecretCredential, DefaultAzureCredential
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.cloud_api_budget import (
     allow_expensive_cloud_api_call,
@@ -24,34 +25,80 @@ class OverprovisionedVmPlugin(ZombiePlugin):
         return "overprovisioned_azure_vms"
 
     async def scan(
-        self,
-        session: str, 
-        credentials: Any,
-        region: str = "global",
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, str] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         subscription_id = session
         zombies = []
         
         try:
-            compute_client = ComputeManagementClient(credentials, subscription_id)
-            monitor_client = MonitorManagementClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            compute_client = ComputeManagementClient(az_creds, subscription_id)
+            monitor_client = MonitorManagementClient(az_creds, subscription_id)
             
             vms = compute_client.virtual_machines.list_all()
 
             for vm in vms:
                 try:
+                    resource_id = str(vm.id or "")
+                    if not resource_id:
+                        continue
+                    
+                    rg_name = resource_id.split("/")[4]
                     instance_view = compute_client.virtual_machines.instance_view(
-                        vm.id.split("/")[4],
-                        vm.name
+                        resource_group_name=rg_name,
+                        vm_name=str(vm.name or "")
                     )
                     is_running = False
-                    for status in instance_view.statuses:
-                        if status.code == "PowerState/running":
-                            is_running = True
-                            break
+                    if instance_view and instance_view.statuses:
+                        for status in instance_view.statuses:
+                            if status.code == "PowerState/running":
+                                is_running = True
+                                break
                     
                     if not is_running:
                         continue
@@ -82,7 +129,7 @@ class OverprovisionedVmPlugin(ZombiePlugin):
                     continue
 
                 metrics_data = monitor_client.metrics.list(
-                    resource_uri=vm.id,
+                    resource_uri=str(vm.id or ""),
                     timespan=timespan,
                     interval="P1D", # Daily resolution
                     metricnames="Percentage CPU",
@@ -98,24 +145,26 @@ class OverprovisionedVmPlugin(ZombiePlugin):
                     for metric in metrics_data.value:
                         if metric.name.value == "Percentage CPU":
                             for ts in metric.timeseries:
-                                for point in ts.data:
-                                    if point.maximum is not None:
-                                        has_data = True
-                                        if point.maximum > max_cpu_observed:
-                                            max_cpu_observed = point.maximum
-                                        if point.maximum >= threshold:
-                                            below_threshold = False
+                                if ts.data:
+                                    for point in ts.data:
+                                        if point.maximum is not None:
+                                            has_data = True
+                                            if point.maximum > max_cpu_observed:
+                                                max_cpu_observed = point.maximum
+                                            if point.maximum >= threshold:
+                                                below_threshold = False
                 
                 if has_data and below_threshold:
                     monthly_cost = 0.0 # Placeholder
                     
+                    vm_size = vm.hardware_profile.vm_size if vm.hardware_profile else "unknown"
                     zombies.append({
                         "resource_id": vm.id,
                         "resource_type": "Azure Virtual Machine",
                         "resource_name": vm.name,
                         "region": vm.location,
                         "monthly_cost": monthly_cost,
-                        "recommendation": f"Resize {vm.hardware_profile.vm_size} (Max CPU {max_cpu_observed:.1f}%)",
+                        "recommendation": f"Resize {vm_size} (Max CPU {max_cpu_observed:.1f}%)",
                         "action": "resize_azure_vm",
                         # Fact-based confidence input
                         "utilization_percent": max_cpu_observed,

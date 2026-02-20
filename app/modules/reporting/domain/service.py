@@ -24,6 +24,7 @@ from app.models.hybrid_connection import HybridConnection
 from app.models.cloud import CloudAccount
 from app.shared.core.service import BaseService
 from app.shared.core.async_utils import maybe_call
+from app.shared.core.connection_state import resolve_connection_profile
 
 logger = structlog.get_logger()
 
@@ -69,6 +70,14 @@ class ReportingService(BaseService):
 
         # 1. Sync CloudAccount registry
         for conn in connections:
+            profile = resolve_connection_profile(conn)
+            profile_is_production = profile.get("is_production")
+            is_production = (
+                bool(profile_is_production)
+                if isinstance(profile_is_production, bool)
+                else False
+            )
+            criticality = profile.get("criticality")
             stmt = (
                 pg_insert(CloudAccount)
                 .values(
@@ -76,6 +85,8 @@ class ReportingService(BaseService):
                     tenant_id=conn.tenant_id,
                     provider=conn.provider,
                     name=getattr(conn, "name", f"{conn.provider.upper()} Connection"),
+                    is_production=is_production,
+                    criticality=criticality if isinstance(criticality, str) else None,
                     is_active=True,
                 )
                 .on_conflict_do_update(
@@ -84,6 +95,10 @@ class ReportingService(BaseService):
                         "provider": conn.provider,
                         "name": getattr(
                             conn, "name", f"{conn.provider.upper()} Connection"
+                        ),
+                        "is_production": is_production,
+                        "criticality": (
+                            criticality if isinstance(criticality, str) else None
                         ),
                     },
                 )

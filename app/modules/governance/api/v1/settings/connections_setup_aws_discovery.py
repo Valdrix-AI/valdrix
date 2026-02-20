@@ -313,7 +313,9 @@ async def link_discovered_account(
         aws_account_id=discovered.account_id,
         role_arn=role_arn,
         external_id=mgmt.external_id,
-        region="us-east-1",
+        # Keep discovered member accounts provider-neutral by default so
+        # downstream AWS scans can perform multi-region discovery.
+        region="global",
         status="pending",
     )
     db.add(connection)

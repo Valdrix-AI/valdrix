@@ -1,7 +1,8 @@
 from typing import List, Dict, Any
 from datetime import datetime, timezone
-from google.cloud import aiplatform
+from google.cloud import aiplatform_v1
 from google.cloud import monitoring_v3
+from google.oauth2 import service_account
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.cloud_api_budget import (
     allow_expensive_cloud_api_call,
@@ -18,13 +19,43 @@ class IdleVectorSearchPlugin(ZombiePlugin):
         return "idle_vector_search_indices"
 
     async def scan(
-        self,
-        session: str,
-        credentials: Any,
-        region: str = "global",
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, Any] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         project_id = session
         zombies = []
@@ -33,15 +64,19 @@ class IdleVectorSearchPlugin(ZombiePlugin):
         endpoint_client_options = {"api_endpoint": f"{target_region}-aiplatform.googleapis.com"}
 
         try:
+            gcp_creds = None
+            if credentials:
+                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            
             # 1. List Index Endpoints (Vector Search)
-            client = aiplatform.IndexEndpointServiceClient(
+            client = aiplatform_v1.IndexEndpointServiceClient(
                 client_options=endpoint_client_options, 
-                credentials=credentials
+                credentials=gcp_creds
             )
             parent = f"projects/{project_id}/locations/{target_region}"
             index_endpoints = client.list_index_endpoints(parent=parent)
             
-            monitor_client = monitoring_v3.MetricServiceClient(credentials=credentials)
+            monitor_client = monitoring_v3.MetricServiceClient(credentials=gcp_creds)
             project_name = f"projects/{project_id}"
 
             for ie in index_endpoints:

@@ -9,6 +9,7 @@ import asyncio
 if TYPE_CHECKING:
     from app.shared.llm.guardrails import FinOpsAnalysisResult
     from app.models.remediation import RemediationAction
+    from uuid import UUID
 from app.models.tenant import Tenant
 from app.shared.llm.factory import LLMFactory
 from app.shared.llm.analyzer import FinOpsAnalyzer
@@ -16,7 +17,15 @@ from app.modules.reporting.domain.calculator import CarbonCalculator
 from app.modules.optimization.domain.factory import ZombieDetectorFactory
 from app.shared.adapters.factory import AdapterFactory
 from app.schemas.costs import CloudUsageSummary, CostRecord
+from app.shared.core.adapter_usage import fetch_daily_costs_if_supported
+from app.shared.core.connection_state import is_connection_active, resolve_connection_region
+from app.shared.core.connection_queries import CONNECTION_MODEL_PAIRS
 from app.shared.core.config import get_settings
+from app.shared.core.provider import (
+    SUPPORTED_PROVIDERS,
+    normalize_provider,
+    resolve_provider_from_connection,
+)
 
 logger = structlog.get_logger()
 
@@ -29,18 +38,12 @@ class AnalysisProcessor:
 
     @staticmethod
     def _collect_connections(tenant: Tenant) -> list[Any]:
-        aws_connections = list(getattr(tenant, "aws_connections", []) or [])
-        azure_connections = list(getattr(tenant, "azure_connections", []) or [])
-        gcp_connections = list(getattr(tenant, "gcp_connections", []) or [])
-        saas_connections = list(getattr(tenant, "saas_connections", []) or [])
-        license_connections = list(getattr(tenant, "license_connections", []) or [])
-        return [
-            *aws_connections,
-            *azure_connections,
-            *gcp_connections,
-            *saas_connections,
-            *license_connections,
-        ]
+        connections: list[Any] = []
+        for provider, _model in CONNECTION_MODEL_PAIRS:
+            relation_name = f"{provider}_connections"
+            provider_connections = list(getattr(tenant, relation_name, []) or [])
+            connections.extend(provider_connections)
+        return [conn for conn in connections if is_connection_active(conn)]
 
     @staticmethod
     def _as_datetime(value: Any) -> datetime:
@@ -118,24 +121,30 @@ class AnalysisProcessor:
             llm = LLMFactory.create(self.settings.LLM_PROVIDER)
             analyzer = FinOpsAnalyzer(llm)
             carbon_calc = CarbonCalculator()
-            latest_analysis_result: dict[str, Any] | None = None
+            savings_processor = SavingsProcessor()
             start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
             end_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
 
             for conn in connections:
                 try:
                     async def _run_analysis() -> None:
-                        nonlocal latest_analysis_result
-                        provider = str(getattr(conn, "provider", "aws")).lower()
+                        provider = resolve_provider_from_connection(conn)
+                        if not provider:
+                            logger.warning(
+                                "tenant_connection_provider_unresolved",
+                                tenant_id=str(tenant.id),
+                                connection_id=str(getattr(conn, "id", "unknown")),
+                            )
+                            return
                         adapter = AdapterFactory.get_adapter(conn)
 
-                        if provider == "aws" and hasattr(adapter, "get_daily_costs"):
-                            usage_summary = await adapter.get_daily_costs(
-                                start_date,
-                                end_date,
-                                group_by_service=True,
-                            )
-                        else:
+                        usage_summary = await fetch_daily_costs_if_supported(
+                            adapter,
+                            start_date,
+                            end_date,
+                            group_by_service=True,
+                        )
+                        if usage_summary is None:
                             rows = await adapter.get_cost_and_usage(
                                 start_dt,
                                 end_dt,
@@ -160,10 +169,28 @@ class AnalysisProcessor:
                             provider=provider,
                         )
                         if isinstance(analysis_result, dict):
-                            latest_analysis_result = analysis_result
+                            try:
+                                from app.shared.llm.guardrails import FinOpsAnalysisResult
+
+                                parsed_result = FinOpsAnalysisResult(**analysis_result)
+                                await savings_processor.process_recommendations(
+                                    db,
+                                    tenant.id,
+                                    parsed_result,
+                                    provider=provider,
+                                    connection_id=getattr(conn, "id", None),
+                                )
+                            except Exception as savings_exc:
+                                logger.error(
+                                    "savings_autopilot_failed",
+                                    tenant_id=str(tenant.id),
+                                    provider=provider,
+                                    connection_id=str(getattr(conn, "id", "unknown")),
+                                    error=str(savings_exc),
+                                )
 
                         # 2. Carbon Calculation
-                        calc_region = str(getattr(conn, "region", "") or "global")
+                        calc_region = resolve_connection_region(conn)
                         normalized_rows = [
                             {
                                 "cost_usd": float(record.amount),
@@ -186,14 +213,13 @@ class AnalysisProcessor:
                             "gcp",
                             "saas",
                             "license",
+                            "platform",
+                            "hybrid",
                         }:
-                            detector_region = (
-                                calc_region if provider == "aws" else "global"
-                            )
                             try:
                                 detector = ZombieDetectorFactory.get_detector(
                                     conn,
-                                    region=detector_region,
+                                    region=calc_region,
                                     db=db,
                                 )
                                 zombie_result = await detector.scan_all()
@@ -265,23 +291,6 @@ class AnalysisProcessor:
                         error=str(e),
                     )
 
-            # 3. Savings Autopilot using latest in-memory analysis result.
-            if latest_analysis_result:
-                try:
-                    from app.shared.llm.guardrails import FinOpsAnalysisResult
-
-                    parsed_result = FinOpsAnalysisResult(**latest_analysis_result)
-                    savings_processor = SavingsProcessor()
-                    await savings_processor.process_recommendations(
-                        db, tenant.id, parsed_result
-                    )
-                except Exception as e:
-                    logger.error(
-                        "savings_autopilot_failed",
-                        tenant_id=str(tenant.id),
-                        error=str(e),
-                    )
-
         except Exception as e:
             logger.error(
                 "tenant_processing_failed", tenant_id=str(tenant.id), error=str(e)
@@ -292,7 +301,13 @@ class SavingsProcessor:
     """Executes high-confidence, low-risk autonomous savings."""
 
     async def process_recommendations(
-        self, db: AsyncSession, tenant_id: UUID, analysis_result: "FinOpsAnalysisResult"
+        self,
+        db: AsyncSession,
+        tenant_id: UUID,
+        analysis_result: "FinOpsAnalysisResult",
+        *,
+        provider: str,
+        connection_id: Optional["UUID"] = None,
     ) -> None:
         """Filters for 'autonomous_ready' items and executes them."""
         from uuid import UUID as PyUUID
@@ -302,6 +317,15 @@ class SavingsProcessor:
 
         remediation = RemediationService(db)
         settings = get_settings()
+        provider_norm = normalize_provider(provider)
+        if provider_norm not in SUPPORTED_PROVIDERS:
+            logger.warning(
+                "autonomous_savings_skipped_unsupported_provider",
+                tenant_id=str(tenant_id),
+                provider=str(provider or ""),
+            )
+            return
+
         # System User ID for autonomous actions
         system_user_id = PyUUID("00000000-0000-0000-0000-000000000000")
 
@@ -310,6 +334,8 @@ class SavingsProcessor:
             RemediationAction.STOP_INSTANCE,
             RemediationAction.RESIZE_INSTANCE,
             RemediationAction.STOP_RDS_INSTANCE,
+            RemediationAction.DEALLOCATE_AZURE_VM,
+            RemediationAction.STOP_GCP_INSTANCE,
         }
 
         for rec in analysis_result.recommendations:
@@ -358,6 +384,8 @@ class SavingsProcessor:
                         resource_type=rec.resource_type or "unknown",
                         action=action_enum,
                         estimated_savings=savings_val,
+                        provider=provider_norm,
+                        connection_id=connection_id,
                         explainability_notes=f"Savings Autopilot: {rec.action}. High confidence, low risk.",
                     )
 
@@ -369,11 +397,30 @@ class SavingsProcessor:
                             system_user_id,
                             notes="AUTO_APPROVED: Savings Autopilot",
                         )
-                        await remediation.execute(
+                        execution_result = await remediation.execute(
                             request.id,
                             tenant_id,
                             bypass_grace_period=settings.AUTOPILOT_BYPASS_GRACE_PERIOD,
                         )
+                        result_status = (
+                            execution_result.status.value
+                            if hasattr(execution_result.status, "value")
+                            else str(execution_result.status)
+                        )
+                        if result_status == "failed":
+                            execution_error = (
+                                getattr(execution_result, "execution_error", None)
+                                or "Autonomous remediation execution failed."
+                            )
+                            raise ValueError(execution_error)
+                        if result_status != "completed":
+                            logger.info(
+                                "autonomous_savings_deferred",
+                                tenant_id=str(tenant_id),
+                                request_id=str(request.id),
+                                status=result_status,
+                            )
+                            continue
                     else:
                         # Never auto-execute destructive actions; leave for human review
                         logger.warning(
@@ -399,6 +446,10 @@ class SavingsProcessor:
         from app.models.remediation import RemediationAction
 
         s = action_str.lower()
+        if "deallocate" in s and "azure" in s:
+            return RemediationAction.DEALLOCATE_AZURE_VM
+        if "stop gcp instance" in s or "stop compute engine" in s:
+            return RemediationAction.STOP_GCP_INSTANCE
         if "delete volume" in s:
             return RemediationAction.DELETE_VOLUME
         if "stop instance" in s:
@@ -415,4 +466,10 @@ class SavingsProcessor:
             return RemediationAction.STOP_RDS_INSTANCE
         if "delete rds" in s:
             return RemediationAction.DELETE_RDS_INSTANCE
+        if "revoke github seat" in s:
+            return RemediationAction.REVOKE_GITHUB_SEAT
+        if "reclaim license" in s or "reclaim seat" in s:
+            return RemediationAction.RECLAIM_LICENSE_SEAT
+        if "manual review" in s:
+            return RemediationAction.MANUAL_REVIEW
         return None

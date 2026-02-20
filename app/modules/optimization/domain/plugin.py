@@ -99,7 +99,7 @@ class ZombiePlugin(ABC):
         self,
         session: Any,
         region: str,
-        credentials: Dict[str, str] | None = None,
+        credentials: Dict[str, Any] | None = None,
         config: Any = None,
         inventory: Any = None,
         **kwargs: Any,
@@ -116,7 +116,7 @@ class ZombiePlugin(ABC):
         session: Any,
         service_name: str,
         region: str,
-        credentials: Dict[str, str] | None = None,
+        credentials: Dict[str, Any] | None = None,
         config: Any = None,
     ) -> Any:
         """Helper to get AWS client with optional credentials and config."""

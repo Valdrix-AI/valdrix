@@ -169,7 +169,7 @@ class IngestionPersistenceEvidencePayload(BaseModel):
     """
 
     runner: str = "scripts/benchmark_ingestion_persistence.py"
-    provider: str = "aws"
+    provider: str = "multi"
     account_id: str | None = None
     records_requested: int
     records_saved: int
@@ -3749,6 +3749,10 @@ async def request_data_erasure(
         from app.models.aws_connection import AWSConnection
         from app.models.azure_connection import AzureConnection
         from app.models.gcp_connection import GCPConnection
+        from app.models.saas_connection import SaaSConnection
+        from app.models.license_connection import LicenseConnection
+        from app.models.platform_connection import PlatformConnection
+        from app.models.hybrid_connection import HybridConnection
         from app.models.llm import LLMUsage, LLMBudget
         from app.models.notification_settings import NotificationSettings
         from app.models.background_job import BackgroundJob
@@ -3849,6 +3853,18 @@ async def request_data_erasure(
         )
         await db.execute(
             delete(GCPConnection).where(GCPConnection.tenant_id == tenant_id)
+        )
+        await db.execute(
+            delete(SaaSConnection).where(SaaSConnection.tenant_id == tenant_id)
+        )
+        await db.execute(
+            delete(LicenseConnection).where(LicenseConnection.tenant_id == tenant_id)
+        )
+        await db.execute(
+            delete(PlatformConnection).where(PlatformConnection.tenant_id == tenant_id)
+        )
+        await db.execute(
+            delete(HybridConnection).where(HybridConnection.tenant_id == tenant_id)
         )
 
         await db.execute(

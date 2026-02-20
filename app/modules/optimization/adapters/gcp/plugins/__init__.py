@@ -16,7 +16,6 @@ from .containers import (
 from .ai import IdleVertexEndpointsPlugin
 from .search import IdleVectorSearchPlugin
 from .rightsizing import OverprovisionedComputePlugin
-from .rightsizing import OverprovisionedComputePlugin
 
 __all__ = [
     "IdleVmsPlugin",

@@ -22,7 +22,7 @@ class AWSZombieDetector(BaseZombieDetector):
     def __init__(
         self,
         region: str = "us-east-1",
-        credentials: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, Any]] = None,
         db: Optional[AsyncSession] = None,
         connection: Any = None,
     ) -> None:

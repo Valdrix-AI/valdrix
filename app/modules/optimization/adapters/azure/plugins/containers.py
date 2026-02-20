@@ -9,6 +9,7 @@ import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
+from azure.identity.aio import ClientSecretCredential, DefaultAzureCredential
 
 logger = structlog.get_logger()
 
@@ -22,13 +23,43 @@ class IdleAksClusterPlugin(ZombiePlugin):
         return "idle_azure_aks"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, str] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for AKS clusters with control plane costs but no nodes."""
         subscription_id = str(kwargs.get("subscription_id") or session or "")
@@ -51,7 +82,17 @@ class IdleAksClusterPlugin(ZombiePlugin):
         try:
             from azure.mgmt.containerservice.aio import ContainerServiceClient
 
-            client = ContainerServiceClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            client = ContainerServiceClient(az_creds, subscription_id)
 
             async for cluster in client.managed_clusters.list():
                 total_nodes = sum(
@@ -93,13 +134,43 @@ class UnusedAppServicePlansPlugin(ZombiePlugin):
         return "unused_azure_app_service_plans"
 
     async def scan(
-        self,
-        session: Any = None,
-        region: str = "global",
-        credentials: Any = None,
-        config: Any = None,
-        inventory: Any = None,
-        **kwargs: Any,
+
+
+    
+
+    self,
+
+
+    
+
+    session: Any,
+
+
+    
+
+    region: str,
+
+
+    
+
+    credentials: Dict[str, str] | None = None,
+
+
+    
+
+    config: Any = None,
+
+
+    
+
+    inventory: Any = None,
+
+
+    
+
+    **kwargs: Any,
+
+
     ) -> List[Dict[str, Any]]:
         """Scan for App Service Plans with no apps deployed."""
         subscription_id = str(kwargs.get("subscription_id") or session or "")
@@ -121,15 +192,29 @@ class UnusedAppServicePlansPlugin(ZombiePlugin):
         try:
             from azure.mgmt.web.aio import WebSiteManagementClient
 
-            client = WebSiteManagementClient(credentials, subscription_id)
+            az_creds: ClientSecretCredential | DefaultAzureCredential
+            if credentials:
+                az_creds = ClientSecretCredential(
+                    tenant_id=credentials.get("tenant_id", ""),
+                    client_id=credentials.get("client_id", ""),
+                    client_secret=credentials.get("client_secret", ""),
+                )
+            else:
+                az_creds = DefaultAzureCredential()
+
+            client = WebSiteManagementClient(az_creds, subscription_id)
 
             async for plan in client.app_service_plans.list():
                 # Check if plan has any apps
                 apps = []
+                resource_id = str(plan.id or "")
+                if not resource_id:
+                    continue
+                rg_name = resource_id.split("/")[4]
                 async for app in client.web_apps.list_by_resource_group(
-                    resource_group_name=plan.id.split("/")[4]
+                    resource_group_name=rg_name
                 ):
-                    if app.server_farm_id and plan.id in app.server_farm_id:
+                    if app.server_farm_id and plan.id and plan.id in app.server_farm_id:
                         apps.append(app)
 
                 if len(apps) == 0 and plan.sku and plan.sku.tier != "Free":
@@ -140,7 +225,7 @@ class UnusedAppServicePlansPlugin(ZombiePlugin):
                         "Premium": 146,
                         "PremiumV2": 180,
                     }
-                    estimated_cost = tier_costs.get(plan.sku.tier, 50)
+                    estimated_cost = tier_costs.get(str(plan.sku.tier or ""), 50)
 
                     zombies.append(
                         {

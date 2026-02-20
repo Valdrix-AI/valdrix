@@ -7,11 +7,12 @@ from typing import Any, AsyncGenerator, AsyncIterator, Dict
 from datetime import datetime, timezone, timedelta, date, time
 from decimal import Decimal
 from uuid import UUID
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
 from app.shared.core.async_utils import maybe_await
+from app.shared.core.connection_queries import list_tenant_connections
+from app.shared.core.connection_state import resolve_connection_profile
 
 logger = structlog.get_logger()
 
@@ -53,13 +54,6 @@ class CostIngestionHandler(BaseJobHandler):
     async def execute(self, job: BackgroundJob, db: AsyncSession) -> Dict[str, Any]:
         from app.shared.adapters.factory import AdapterFactory
         from app.modules.reporting.domain.persistence import CostPersistenceService
-        from app.models.aws_connection import AWSConnection
-        from app.models.azure_connection import AzureConnection
-        from app.models.gcp_connection import GCPConnection
-        from app.models.saas_connection import SaaSConnection
-        from app.models.license_connection import LicenseConnection
-        from app.models.platform_connection import PlatformConnection
-        from app.models.hybrid_connection import HybridConnection
         from app.models.cloud import CloudAccount
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -83,44 +77,12 @@ class CostIngestionHandler(BaseJobHandler):
         if start_date > end_date:
             raise ValueError("start_date must be <= end_date")
 
-        # 1. Get Connections from all providers
-        connections: list[Any] = []
-
-        # AWS
-        aws_result = await db.execute(
-            select(AWSConnection).where(AWSConnection.tenant_id == tenant_id)
+        # 1. Load active connections across all providers (provider-neutral path).
+        connections: list[Any] = await list_tenant_connections(
+            db,
+            tenant_id=tenant_id,
+            active_only=True,
         )
-        connections.extend(aws_result.scalars().all())
-        # Azure
-        azure_result = await db.execute(
-            select(AzureConnection).where(AzureConnection.tenant_id == tenant_id)
-        )
-        connections.extend(azure_result.scalars().all())
-        # GCP
-        gcp_result = await db.execute(
-            select(GCPConnection).where(GCPConnection.tenant_id == tenant_id)
-        )
-        connections.extend(gcp_result.scalars().all())
-        # SaaS
-        saas_result = await db.execute(
-            select(SaaSConnection).where(SaaSConnection.tenant_id == tenant_id)
-        )
-        connections.extend(saas_result.scalars().all())
-        # License
-        license_result = await db.execute(
-            select(LicenseConnection).where(LicenseConnection.tenant_id == tenant_id)
-        )
-        connections.extend(license_result.scalars().all())
-        # Platform
-        platform_result = await db.execute(
-            select(PlatformConnection).where(PlatformConnection.tenant_id == tenant_id)
-        )
-        connections.extend(platform_result.scalars().all())
-        # Hybrid
-        hybrid_result = await db.execute(
-            select(HybridConnection).where(HybridConnection.tenant_id == tenant_id)
-        )
-        connections.extend(hybrid_result.scalars().all())
 
         if not connections:
             return {"status": "skipped", "reason": "no_active_connections"}
@@ -130,6 +92,14 @@ class CostIngestionHandler(BaseJobHandler):
         total_records_ingested = 0
 
         for conn in connections:
+            profile = resolve_connection_profile(conn)
+            profile_is_production = profile.get("is_production")
+            is_production = (
+                bool(profile_is_production)
+                if isinstance(profile_is_production, bool)
+                else False
+            )
+            criticality = profile.get("criticality")
             stmt = (
                 pg_insert(CloudAccount)
                 .values(
@@ -137,6 +107,8 @@ class CostIngestionHandler(BaseJobHandler):
                     tenant_id=conn.tenant_id,
                     provider=conn.provider,
                     name=getattr(conn, "name", f"{conn.provider.upper()} Connection"),
+                    is_production=is_production,
+                    criticality=criticality if isinstance(criticality, str) else None,
                     is_active=True,
                 )
                 .on_conflict_do_update(
@@ -145,6 +117,10 @@ class CostIngestionHandler(BaseJobHandler):
                         "provider": conn.provider,
                         "name": getattr(
                             conn, "name", f"{conn.provider.upper()} Connection"
+                        ),
+                        "is_production": is_production,
+                        "criticality": (
+                            criticality if isinstance(criticality, str) else None
                         ),
                     },
                 )

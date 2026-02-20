@@ -6,15 +6,15 @@ Provides real-time operational health metrics for investor due diligence:
 - Active tenant metrics
 - Job queue health
 - LLM usage and budget status
-- AWS connection status
+- Core cloud and Cloud+ connection status
 
 Endpoint: GET /admin/health-dashboard
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 import structlog
@@ -28,6 +28,17 @@ from app.shared.core.cache import get_cache_service
 from app.models.tenant import Tenant
 from app.models.background_job import BackgroundJob, JobStatus
 from app.models.aws_connection import AWSConnection
+from app.models.azure_connection import AzureConnection
+from app.models.gcp_connection import GCPConnection
+from app.models.saas_connection import SaaSConnection
+from app.models.license_connection import LicenseConnection
+from app.models.platform_connection import PlatformConnection
+from app.models.hybrid_connection import HybridConnection
+from app.models.remediation import (
+    RemediationAction,
+    RemediationRequest,
+    RemediationStatus,
+)
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Investor Health"])
@@ -96,12 +107,47 @@ class LLMFairUseRuntime(BaseModel):
     thresholds: LLMFairUseThresholds
 
 
-class AWSConnectionHealth(BaseModel):
-    """AWS connection status."""
+class CloudPlusProviderHealth(BaseModel):
+    """Connection health snapshot for one Cloud+ provider."""
 
     total_connections: int
-    verified_connections: int
-    failed_connections: int
+    active_connections: int
+    inactive_connections: int
+    errored_connections: int
+
+
+class CloudPlusConnectionHealth(BaseModel):
+    """Aggregated Cloud+ connection status across providers."""
+
+    total_connections: int
+    active_connections: int
+    inactive_connections: int
+    errored_connections: int
+    providers: dict[str, CloudPlusProviderHealth]
+
+
+class CloudConnectionHealth(BaseModel):
+    """Aggregated core-cloud connection status for AWS/Azure/GCP."""
+
+    total_connections: int
+    active_connections: int
+    inactive_connections: int
+    errored_connections: int
+    providers: dict[str, CloudPlusProviderHealth]
+
+
+class LicenseGovernanceHealth(BaseModel):
+    """License governance execution metrics."""
+
+    window_hours: int
+    active_license_connections: int
+    requests_created_24h: int
+    requests_completed_24h: int
+    requests_failed_24h: int
+    requests_in_flight: int
+    completion_rate_percent: float
+    failure_rate_percent: float
+    avg_time_to_complete_hours: float | None
 
 
 class InvestorHealthDashboard(BaseModel):
@@ -112,7 +158,9 @@ class InvestorHealthDashboard(BaseModel):
     tenants: TenantMetrics
     job_queue: JobQueueHealth
     llm_usage: LLMUsageMetrics
-    aws_connections: AWSConnectionHealth
+    cloud_connections: CloudConnectionHealth
+    cloud_plus_connections: CloudPlusConnectionHealth
+    license_governance: LicenseGovernanceHealth
 
 
 # Track startup time
@@ -134,7 +182,7 @@ async def get_investor_health_dashboard(
     - Tenant growth and engagement metrics
     - Job queue health
     - LLM usage and costs
-    - AWS connection reliability
+    - Cloud + Cloud+ connection reliability
     """
     now = datetime.now(timezone.utc)
     tenant_scope = str(_user.tenant_id) if _user.tenant_id else "global"
@@ -165,8 +213,10 @@ async def get_investor_health_dashboard(
     # LLM Usage
     llm_usage = await _get_llm_usage_metrics(db, now)
 
-    # AWS Connection Health
-    aws_connections = await _get_aws_connection_health(db)
+    # Connection Health
+    cloud_connections = await _get_cloud_connection_health(db)
+    cloud_plus_connections = await _get_cloud_plus_connection_health(db)
+    license_governance = await _get_license_governance_health(db, now)
 
     payload = InvestorHealthDashboard(
         generated_at=now.isoformat(),
@@ -174,7 +224,9 @@ async def get_investor_health_dashboard(
         tenants=tenants,
         job_queue=job_queue,
         llm_usage=llm_usage,
-        aws_connections=aws_connections,
+        cloud_connections=cloud_connections,
+        cloud_plus_connections=cloud_plus_connections,
+        license_governance=license_governance,
     )
     if cache.enabled:
         await cache.set(
@@ -185,7 +237,7 @@ async def get_investor_health_dashboard(
     return payload
 
 
-def _positive_int_or_none(value: object) -> int | None:
+def _positive_int_or_none(value: Any) -> int | None:
     """Normalize optional integer settings and treat non-positive values as disabled."""
     try:
         parsed = int(value)
@@ -194,7 +246,7 @@ def _positive_int_or_none(value: object) -> int | None:
     return parsed if parsed > 0 else None
 
 
-def _coerce_int_with_minimum(value: object, *, default: int, minimum: int) -> int:
+def _coerce_int_with_minimum(value: Any, *, default: int, minimum: int) -> int:
     """Parse integer settings defensively and enforce a minimum bound."""
     try:
         parsed = int(value)
@@ -440,23 +492,203 @@ async def _get_llm_usage_metrics(db: AsyncSession, now: datetime) -> LLMUsageMet
     )
 
 
-async def _get_aws_connection_health(db: AsyncSession) -> AWSConnectionHealth:
-    """Calculate AWS connection health metrics."""
+async def _get_cloud_plus_provider_health(
+    db: AsyncSession, model: Any
+) -> CloudPlusProviderHealth:
+    """Compute active/inactive/error counts for a single Cloud+ connection model."""
+    result = await db.execute(
+        select(
+            func.count(model.id).label("total_connections"),
+            func.count(model.id)
+            .filter(model.is_active.is_(True))
+            .label("active_connections"),
+            func.count(model.id)
+            .filter(
+                and_(
+                    model.error_message.is_not(None),
+                    func.length(func.trim(model.error_message)) > 0,
+                )
+            )
+            .label("errored_connections"),
+        )
+    )
+    row = result.one()
+    total = int(row.total_connections or 0)
+    active = int(row.active_connections or 0)
+    inactive = max(total - active, 0)
+    errored = min(int(row.errored_connections or 0), total)
+    return CloudPlusProviderHealth(
+        total_connections=total,
+        active_connections=active,
+        inactive_connections=inactive,
+        errored_connections=errored,
+    )
+
+
+async def _get_aws_provider_health(db: AsyncSession) -> CloudPlusProviderHealth:
+    """Compute provider-style health for AWS status model."""
     result = await db.execute(
         select(
             func.count(AWSConnection.id).label("total_connections"),
             func.count(AWSConnection.id)
             .filter(AWSConnection.status == "active")
-            .label("verified_connections"),
+            .label("active_connections"),
+            func.count(AWSConnection.id)
+            .filter(AWSConnection.status == "error")
+            .label("errored_connections"),
         )
     )
     row = result.one()
     total = int(row.total_connections or 0)
-    verified = int(row.verified_connections or 0)
-    failed = max(total - verified, 0)
-
-    return AWSConnectionHealth(
+    active = int(row.active_connections or 0)
+    inactive = max(total - active, 0)
+    errored = min(int(row.errored_connections or 0), total)
+    return CloudPlusProviderHealth(
         total_connections=total,
-        verified_connections=verified,
-        failed_connections=failed,
+        active_connections=active,
+        inactive_connections=inactive,
+        errored_connections=errored,
+    )
+
+
+async def _get_cloud_connection_health(db: AsyncSession) -> CloudConnectionHealth:
+    """Aggregate health for AWS, Azure, and GCP connectors."""
+    providers: dict[str, CloudPlusProviderHealth] = {
+        "aws": await _get_aws_provider_health(db),
+        "azure": await _get_cloud_plus_provider_health(db, AzureConnection),
+        "gcp": await _get_cloud_plus_provider_health(db, GCPConnection),
+    }
+    totals = {
+        "total_connections": 0,
+        "active_connections": 0,
+        "inactive_connections": 0,
+        "errored_connections": 0,
+    }
+    for snapshot in providers.values():
+        totals["total_connections"] += snapshot.total_connections
+        totals["active_connections"] += snapshot.active_connections
+        totals["inactive_connections"] += snapshot.inactive_connections
+        totals["errored_connections"] += snapshot.errored_connections
+
+    return CloudConnectionHealth(providers=providers, **totals)
+
+
+async def _get_cloud_plus_connection_health(db: AsyncSession) -> CloudPlusConnectionHealth:
+    """Aggregate health for SaaS, license, platform, and hybrid connectors."""
+    provider_models: dict[str, Any] = {
+        "saas": SaaSConnection,
+        "license": LicenseConnection,
+        "platform": PlatformConnection,
+        "hybrid": HybridConnection,
+    }
+    providers: dict[str, CloudPlusProviderHealth] = {}
+    totals = {
+        "total_connections": 0,
+        "active_connections": 0,
+        "inactive_connections": 0,
+        "errored_connections": 0,
+    }
+
+    for provider, model in provider_models.items():
+        snapshot = await _get_cloud_plus_provider_health(db, model)
+        providers[provider] = snapshot
+        totals["total_connections"] += snapshot.total_connections
+        totals["active_connections"] += snapshot.active_connections
+        totals["inactive_connections"] += snapshot.inactive_connections
+        totals["errored_connections"] += snapshot.errored_connections
+
+    return CloudPlusConnectionHealth(providers=providers, **totals)
+
+
+async def _get_license_governance_health(
+    db: AsyncSession, now: datetime, *, window_hours: int = 24
+) -> LicenseGovernanceHealth:
+    """Calculate license governance throughput and reliability over a rolling window."""
+    window_start = now - timedelta(hours=window_hours)
+    in_flight_statuses = (
+        RemediationStatus.PENDING,
+        RemediationStatus.PENDING_APPROVAL,
+        RemediationStatus.APPROVED,
+        RemediationStatus.SCHEDULED,
+        RemediationStatus.EXECUTING,
+    )
+
+    active_connections = int(
+        await db.scalar(
+            select(func.count(LicenseConnection.id)).where(LicenseConnection.is_active)
+        )
+        or 0
+    )
+
+    counts_result = await db.execute(
+        select(
+            func.count(RemediationRequest.id).label("created_requests"),
+            func.count(RemediationRequest.id)
+            .filter(RemediationRequest.status == RemediationStatus.COMPLETED)
+            .label("completed_requests"),
+            func.count(RemediationRequest.id)
+            .filter(RemediationRequest.status == RemediationStatus.FAILED)
+            .label("failed_requests"),
+            func.count(RemediationRequest.id)
+            .filter(RemediationRequest.status.in_(in_flight_statuses))
+            .label("in_flight_requests"),
+        ).where(
+            RemediationRequest.action == RemediationAction.RECLAIM_LICENSE_SEAT,
+            RemediationRequest.created_at >= window_start,
+        )
+    )
+    counts_row = counts_result.one()
+    created_requests = int(counts_row.created_requests or 0)
+    completed_requests = int(counts_row.completed_requests or 0)
+    failed_requests = int(counts_row.failed_requests or 0)
+    in_flight_requests = int(counts_row.in_flight_requests or 0)
+
+    completion_rate = (
+        round((completed_requests / created_requests) * 100.0, 2)
+        if created_requests > 0
+        else 0.0
+    )
+    failure_rate = (
+        round((failed_requests / created_requests) * 100.0, 2)
+        if created_requests > 0
+        else 0.0
+    )
+
+    completed_rows = (
+        await db.execute(
+            select(RemediationRequest.created_at, RemediationRequest.executed_at).where(
+                RemediationRequest.action == RemediationAction.RECLAIM_LICENSE_SEAT,
+                RemediationRequest.status == RemediationStatus.COMPLETED,
+                RemediationRequest.created_at >= window_start,
+                RemediationRequest.executed_at.is_not(None),
+            )
+        )
+    ).all()
+    completion_hours: list[float] = []
+    for created_at, executed_at in completed_rows:
+        if created_at is None or executed_at is None:
+            continue
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        if executed_at.tzinfo is None:
+            executed_at = executed_at.replace(tzinfo=timezone.utc)
+        if executed_at >= created_at:
+            completion_hours.append((executed_at - created_at).total_seconds() / 3600.0)
+
+    avg_time_to_complete_hours = (
+        round(sum(completion_hours) / len(completion_hours), 2)
+        if completion_hours
+        else None
+    )
+
+    return LicenseGovernanceHealth(
+        window_hours=window_hours,
+        active_license_connections=active_connections,
+        requests_created_24h=created_requests,
+        requests_completed_24h=completed_requests,
+        requests_failed_24h=failed_requests,
+        requests_in_flight=in_flight_requests,
+        completion_rate_percent=completion_rate,
+        failure_rate_percent=failure_rate,
+        avg_time_to_complete_hours=avg_time_to_complete_hours,
     )

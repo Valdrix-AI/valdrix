@@ -8,7 +8,6 @@ for cloud providers to verify Valdrix identity tokens.
 from typing import Any, Dict
 from fastapi import APIRouter, Request
 from app.shared.connections.oidc import OIDCService
-from app.shared.core.auth import get_current_user_from_jwt, CurrentUser
 from app.shared.core.rate_limit import auth_limit
 import structlog
 
@@ -23,7 +22,6 @@ async def oidc_discovery(request: Request) -> Dict[str, Any]:
     return await OIDCService.get_discovery_doc()
 
 
-@router.get("/.well-known/jwks.json")
 @router.get("/.well-known/jwks.json")
 @auth_limit
 async def oidc_jwks(request: Request) -> Dict[str, Any]:

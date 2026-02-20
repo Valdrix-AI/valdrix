@@ -1,5 +1,5 @@
 import aioboto3
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from app.modules.optimization.domain.actions.base import BaseRemediationAction, RemediationContext
 from app.shared.adapters.aws_utils import map_aws_credentials
 from app.shared.core.config import get_settings
@@ -11,7 +11,7 @@ class BaseAWSAction(BaseRemediationAction):
     Provides aioboto3 client management.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.session = aioboto3.Session()
 
     async def _get_client(self, service_name: str, context: RemediationContext) -> Any:
