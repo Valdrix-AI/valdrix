@@ -37,7 +37,7 @@ class CarbonSettings(Base):
     Configurable values:
     - carbon_budget_kg: Monthly CO2 limit in kg
     - alert_threshold_percent: Percentage at which to send warning
-    - default_region: Default AWS region for carbon intensity
+    - default_region: Default region hint for carbon intensity
     - email_enabled: Whether to send email notifications
     - email_recipients: Comma-separated list of email addresses
     """
@@ -58,7 +58,7 @@ class CarbonSettings(Base):
     )  # % before warning
 
     # Region configuration
-    default_region: Mapped[str] = mapped_column(String, default="us-east-1")
+    default_region: Mapped[str] = mapped_column(String, default="global")
 
     # Email notification settings
     email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

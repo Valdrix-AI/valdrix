@@ -49,7 +49,10 @@ class GCPCredentials(CloudCredentials):
 class SaaSCredentials(CloudCredentials):
     """Generic SaaS API Credentials."""
     platform: str
-    api_key: SecretStr
+    api_key: Optional[SecretStr] = None
+    auth_method: str = "manual"
+    connector_config: Dict[str, Any] = Field(default_factory=dict)
+    spend_feed: list[dict[str, Any]] = Field(default_factory=list)
     base_url: Optional[str] = None
     extra_config: Dict[str, Any] = Field(default_factory=dict)
 

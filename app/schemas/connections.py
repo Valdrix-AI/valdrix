@@ -68,7 +68,9 @@ class AWSConnectionCreate(BaseModel):
         ..., pattern=r"^vx-[a-f0-9]{32}$", description="External ID from setup step"
     )
     region: str = Field(
-        default="us-east-1", max_length=20, description="Default AWS region for resource discovery"
+        default="global",
+        max_length=20,
+        description="Region hint for resource discovery (use global for multi-region detection)",
     )
     is_management_account: bool = Field(
         default=False,

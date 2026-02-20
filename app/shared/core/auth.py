@@ -63,7 +63,17 @@ def create_access_token(
     if not settings.SUPABASE_JWT_SECRET:
         raise ValueError("SUPABASE_JWT_SECRET is not configured")
 
-    encoded_jwt = jwt.encode(to_encode, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
+    encode_headers: dict[str, str] | None = None
+    signing_kid = str(getattr(settings, "JWT_SIGNING_KID", "") or "").strip()
+    if signing_kid:
+        encode_headers = {"kid": signing_kid}
+
+    encoded_jwt = jwt.encode(
+        to_encode,
+        settings.SUPABASE_JWT_SECRET,
+        algorithm="HS256",
+        headers=encode_headers,
+    )
     return encoded_jwt
 
 

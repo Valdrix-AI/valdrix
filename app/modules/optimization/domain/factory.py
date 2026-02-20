@@ -61,7 +61,7 @@ class ZombieDetectorFactory:
                 "spend_feed": spend_feed if isinstance(spend_feed, list) else [],
             }
             return SaaSZombieDetector(
-                region="global",
+                region=effective_region or "global",
                 connection=connection,
                 credentials=credentials,
                 db=db,
@@ -82,7 +82,7 @@ class ZombieDetectorFactory:
                 "license_feed": license_feed if isinstance(license_feed, list) else [],
             }
             return LicenseZombieDetector(
-                region="global",
+                region=effective_region or "global",
                 connection=connection,
                 credentials=credentials,
                 db=db,
@@ -104,7 +104,7 @@ class ZombieDetectorFactory:
                 "spend_feed": spend_feed if isinstance(spend_feed, list) else [],
             }
             return PlatformZombieDetector(
-                region="global",
+                region=effective_region or "global",
                 connection=connection,
                 credentials=credentials,
                 db=db,
@@ -124,7 +124,7 @@ class ZombieDetectorFactory:
                 "spend_feed": spend_feed if isinstance(spend_feed, list) else [],
             }
             return HybridZombieDetector(
-                region="global",
+                region=effective_region or "global",
                 connection=connection,
                 credentials=credentials,
                 db=db,

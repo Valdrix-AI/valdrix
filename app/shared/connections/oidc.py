@@ -27,7 +27,7 @@ class OIDCService:
         base_url = settings.API_URL.rstrip("/")
         return {
             "issuer": base_url,
-            "jwks_uri": f"{base_url}/oidc/jwks.json",
+            "jwks_uri": f"{base_url}/.well-known/jwks.json",
             "authorization_endpoint": f"{base_url}/oidc/auth",  # Placeholder for standard compliance
             "token_endpoint": f"{base_url}/api/v1/public/oidc/token",  # Placeholder for federated exchange
             "scopes_supported": ["openid", "profile", "email"],

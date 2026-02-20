@@ -37,6 +37,11 @@ def test_factory_registration():
     assert isinstance(terminate_strategy, AWSTerminateInstanceAction)
 
 
+def test_factory_registration_is_provider_case_insensitive():
+    stop_strategy = RemediationActionFactory.get_strategy(" AWS ", RemediationAction.STOP_INSTANCE)
+    assert isinstance(stop_strategy, AWSStopInstanceAction)
+
+
 def test_factory_invalid_lookup():
     with pytest.raises(ValueError, match="No remediation strategy registered"):
         RemediationActionFactory.get_strategy("azure", RemediationAction.STOP_INSTANCE)

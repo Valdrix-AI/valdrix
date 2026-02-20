@@ -26,8 +26,11 @@ class RemediationActionFactory:
         return fallback
 
     @classmethod
-    def register(cls, provider: str, action: RemediationAction) -> Callable[[Type[BaseRemediationAction]], Type[BaseRemediationAction]]:
+    def register(
+        cls, provider: str, action: RemediationAction
+    ) -> Callable[[Type[BaseRemediationAction]], Type[BaseRemediationAction]]:
         """Decorator to register a strategy for a provider and action."""
+
         def wrapper(strategy_cls: Type[BaseRemediationAction]) -> Type[BaseRemediationAction]:
             provider_key = cls._provider_key(provider)
             registry_key = (provider_key, action.value)
@@ -43,7 +46,9 @@ class RemediationActionFactory:
         return wrapper
 
     @classmethod
-    def get_strategy(cls, provider: str, action: RemediationAction) -> BaseRemediationAction:
+    def get_strategy(
+        cls, provider: str, action: RemediationAction
+    ) -> BaseRemediationAction:
         """
         Returns an instance of the strategy for the given provider and action.
         """

@@ -74,6 +74,8 @@ async def test_remediation_resolve_credentials_includes_license_wiring() -> None
     assert resolved["auth_method"] == "manual"
     assert resolved["connector_config"] == {"default_seat_price_usd": 9.5}
     assert resolved["license_feed"] == [{"user_id": "feed-user-1"}]
+    assert resolved["region"] == "global"
+    assert resolved["connection_id"] == str(connection_id)
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,8 @@ from sqlalchemy import select
 from typing import Any
 import structlog
 from app.models.aws_connection import AWSConnection
-from app.shared.adapters.factory import AdapterFactory
+from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
 from app.shared.core.exceptions import ResourceNotFoundError, AdapterError
 
 logger = structlog.get_logger()
@@ -13,6 +14,15 @@ logger = structlog.get_logger()
 class AWSConnectionService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _build_verification_adapter(connection: AWSConnection) -> MultiTenantAWSAdapter:
+        """
+        Build an AWS verification adapter that only validates STS AssumeRole.
+
+        Verification must not depend on CUR ingestion state.
+        """
+        return MultiTenantAWSAdapter(map_aws_connection_to_credentials(connection))
 
     @staticmethod
     def get_setup_templates(external_id: str) -> dict[str, Any]:
@@ -44,8 +54,8 @@ class AWSConnectionService:
         if not connection:
             raise ResourceNotFoundError(f"AWS Connection {connection_id} not found")
 
-        adapter = AdapterFactory.get_adapter(connection)
         try:
+            adapter = self._build_verification_adapter(connection)
             success = await adapter.verify_connection()
             if success:
                 connection.status = "active"

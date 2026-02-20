@@ -21,7 +21,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.shared.core.app_routes import register_api_routers, register_lifecycle_routes
-from app.shared.core.config import get_settings
+from app.shared.core.config import get_settings, reload_settings_from_environment
 from app.shared.core.logging import setup_logging
 from app.shared.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
 from app.shared.core.security_metrics import CSRF_ERRORS, RATE_LIMIT_EXCEEDED
@@ -63,14 +63,18 @@ F = TypeVar("F", bound=Callable[..., Any])
 _csrf_load_config = cast(Callable[[F], F], CsrfProtect.load_config)
 
 
-# type: ignore[name-defined] - Justification: validator used via decorator signature
 @_csrf_load_config
 def get_csrf_config() -> CsrfSettings:
     """
     Lazy initialization of CSRF settings to avoid module-load race conditions
     with environment configuration (Finding #5).
     """
-    return CsrfSettings(secret_key=settings.CSRF_SECRET_KEY or "")
+    if settings.CSRF_SECRET_KEY:
+        return CsrfSettings(secret_key=settings.CSRF_SECRET_KEY)
+    if settings.TESTING:
+        # Deterministic non-empty key for tests only.
+        return CsrfSettings(secret_key="test_csrf_secret_key_for_local_tests_only_123")
+    raise ValueError("CSRF_SECRET_KEY must be configured")
 
 
 logger = structlog.get_logger()
@@ -105,6 +109,9 @@ EmissionsTracker = _load_emissions_tracker()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global settings
+    settings = reload_settings_from_environment()
+
     # Setup: Initialize scheduler and emissions tracker
     logger.info("app_starting", app_name=settings.APP_NAME)
 
@@ -413,7 +420,7 @@ valdrix_app.add_middleware(RequestIDMiddleware)
 # CORS - added LAST so it processes FIRST
 # This ensures OPTIONS preflight requests are handled before other middleware
 # Security Hardening: allow_credentials=True requires specific origins (no wildcards)
-if settings.CORS_ORIGINS and "*" in settings.CORS_ORIGINS and True:
+if settings.CORS_ORIGINS and "*" in settings.CORS_ORIGINS:
     # If credentials allowed, we MUST NOT use wildcard origins in production
     # This check ensures we default to a safe state if misconfigured.
     logger.error("insecure_cors_config_detected", msg="allow_credentials=True with '*' origin is forbidden")

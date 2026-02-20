@@ -261,7 +261,7 @@ class SymbolicForecaster:
 
     @staticmethod
     async def forecast_carbon(
-        history: List[Any], region: str = "us-east-1", days: int = 30
+        history: List[Any], region: str = "global", days: int = 30
     ) -> Dict[str, Any]:
         """
         Project future carbon emissions based on cost trends.

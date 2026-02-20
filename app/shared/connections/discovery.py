@@ -215,7 +215,7 @@ class DiscoveryWizardService:
                         tenant_id=tenant_id,
                         domain=domain,
                         category=draft["category"],
-                        provider=draft["provider"],
+                        parameters=dict(draft.get("parameters") or {}),
                         source=draft["source"],
                         status="pending",
                         confidence_score=float(draft["confidence_score"]),
@@ -851,7 +851,7 @@ class DiscoveryWizardService:
             ):
                 existing["confidence_score"] = float(draft["confidence_score"])
                 existing["source"] = str(draft.get("source", existing.get("source")))
-                existing["details"] = dict(draft.get("details", existing.get("details")))
+                existing["details"] = dict(draft.get("details") or existing.get("details") or {})
                 existing["connection_target"] = draft.get(
                     "connection_target", existing.get("connection_target")
                 )

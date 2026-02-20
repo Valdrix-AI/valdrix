@@ -56,6 +56,11 @@ class GCPConnection(Base):
         StringEncryptedType(Text, get_encryption_key, AesEngine, "pkcs5"), nullable=True
     )
 
+    # SEC-HAR-12: Explicit Production Flag (Finding #1-Remediation)
+    is_production: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", index=True
+    )
+
     # Auth Method: "secret" or "workload_identity"
     auth_method: Mapped[str] = mapped_column(
         String, default="secret", server_default="secret"

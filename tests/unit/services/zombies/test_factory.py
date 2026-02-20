@@ -79,12 +79,28 @@ def test_get_detector_saas_provider_attr():
     assert detector.provider_name == "saas"
 
 
+def test_get_detector_saas_honors_explicit_region_hint():
+    conn = MagicMock()
+    conn.provider = "saas"
+    detector = ZombieDetectorFactory.get_detector(conn, region="eu-west-1")
+    assert type(detector).__name__ == "SaaSZombieDetector"
+    assert detector.region == "eu-west-1"
+
+
 def test_get_detector_license_provider_attr():
     conn = MagicMock()
     conn.provider = "license"
     detector = ZombieDetectorFactory.get_detector(conn)
     assert type(detector).__name__ == "LicenseZombieDetector"
     assert detector.provider_name == "license"
+
+
+def test_get_detector_platform_honors_explicit_region_hint():
+    conn = MagicMock()
+    conn.provider = "platform"
+    detector = ZombieDetectorFactory.get_detector(conn, region="ap-southeast-1")
+    assert type(detector).__name__ == "PlatformZombieDetector"
+    assert detector.region == "ap-southeast-1"
 
 
 def test_get_detector_platform_provider_attr():
@@ -101,6 +117,14 @@ def test_get_detector_hybrid_provider_attr():
     detector = ZombieDetectorFactory.get_detector(conn)
     assert type(detector).__name__ == "HybridZombieDetector"
     assert detector.provider_name == "hybrid"
+
+
+def test_get_detector_hybrid_honors_explicit_region_hint():
+    conn = MagicMock()
+    conn.provider = "hybrid"
+    detector = ZombieDetectorFactory.get_detector(conn, region="us-central1")
+    assert type(detector).__name__ == "HybridZombieDetector"
+    assert detector.region == "us-central1"
 
 
 def test_get_detector_azure_provider_attr_without_class_name():

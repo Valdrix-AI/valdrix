@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from prometheus_client import Gauge
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.db.session import get_db
+from app.shared.db.session import get_system_db
 
 SYSTEM_HEALTH = Gauge(
     "valdrix_system_health",
@@ -32,7 +32,7 @@ def register_lifecycle_routes(
         return {"status": "healthy"}
 
     @app.get("/health", tags=["Lifecycle"])
-    async def health_check(db: Annotated[AsyncSession, Depends(get_db)]) -> Any:
+    async def health_check(db: Annotated[AsyncSession, Depends(get_system_db)]) -> Any:
         """
         Enhanced health check for load balancers.
         Checks DB, Redis, and AWS STS reachability.

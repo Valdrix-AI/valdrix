@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.aws_connection import AWSConnection
 from app.models.discovered_account import DiscoveredAccount
+from app.shared.adapters.aws_utils import DEFAULT_BOTO_CONFIG, resolve_aws_region_hint
 
 logger = structlog.get_logger()
 
@@ -28,7 +29,12 @@ class OrganizationsDiscoveryService:
         # Step 1: Assume role for management account
         try:
             session = aioboto3.Session()
-            async with session.client("sts", region_name="us-east-1") as sts:
+            sts_region = resolve_aws_region_hint(getattr(connection, "region", None))
+            async with session.client(
+                "sts",
+                region_name=sts_region,
+                config=DEFAULT_BOTO_CONFIG,
+            ) as sts:
                 role = await sts.assume_role(
                     RoleArn=connection.role_arn,
                     RoleSessionName="ValdrixDiscovery",
@@ -39,7 +45,9 @@ class OrganizationsDiscoveryService:
             # Step 2: Use assumed credentials for organizations
             async with session.client(
                 "organizations",
+                # Organizations remains a global control-plane API in commercial partitions.
                 region_name="us-east-1",
+                config=DEFAULT_BOTO_CONFIG,
                 aws_access_key_id=creds["AccessKeyId"],
                 aws_secret_access_key=creds["SecretAccessKey"],
                 aws_session_token=creds["SessionToken"],

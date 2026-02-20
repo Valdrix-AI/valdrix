@@ -14,15 +14,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException
 
-from app.models.aws_connection import AWSConnection
-from app.models.azure_connection import AzureConnection
-from app.models.gcp_connection import GCPConnection
-from app.models.saas_connection import SaaSConnection
-from app.models.license_connection import LicenseConnection
-from app.models.platform_connection import PlatformConnection
-from app.models.hybrid_connection import HybridConnection
 from app.shared.adapters.factory import AdapterFactory
+from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
+from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
+from app.shared.core.connection_queries import (
+    CONNECTION_MODEL_PAIRS,
+    get_connection_model,
+    list_tenant_connections,
+)
+from app.shared.core.config import get_settings
 from app.shared.core.logging import audit_log
+from app.shared.core.provider import normalize_provider, resolve_provider_from_connection
 
 logger = structlog.get_logger()
 
@@ -31,83 +33,30 @@ class CloudConnectionService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _build_verification_adapter(provider: str, connection: Any) -> Any:
+        """
+        Build a verification adapter for a connection.
+
+        AWS verification must validate STS assume-role even before CUR is configured,
+        so it intentionally bypasses CUR-only adapter selection.
+        """
+        if provider == "aws":
+            return MultiTenantAWSAdapter(map_aws_connection_to_credentials(connection))
+        return AdapterFactory.get_adapter(connection)
+
     async def list_all_connections(
         self, tenant_id: UUID
-    ) -> dict[
-        str,
-        list[
-            AWSConnection
-            | AzureConnection
-            | GCPConnection
-            | SaaSConnection
-            | LicenseConnection
-            | PlatformConnection
-            | HybridConnection
-        ],
-    ]:
+    ) -> dict[str, list[Any]]:
         """Lists all cloud connections for a tenant, grouped by provider."""
-        results: dict[
-            str,
-            list[
-                AWSConnection
-                | AzureConnection
-                | GCPConnection
-                | SaaSConnection
-                | LicenseConnection
-                | PlatformConnection
-                | HybridConnection
-            ],
-        ] = {
-            "aws": [],
-            "azure": [],
-            "gcp": [],
-            "saas": [],
-            "license": [],
-            "platform": [],
-            "hybrid": [],
+        results: dict[str, list[Any]] = {
+            provider: [] for provider, _ in CONNECTION_MODEL_PAIRS
         }
-
-        # AWS
-        aws_q = await self.db.execute(
-            select(AWSConnection).where(AWSConnection.tenant_id == tenant_id)
-        )
-        results["aws"] = list(aws_q.scalars().all())
-
-        # Azure
-        azure_q = await self.db.execute(
-            select(AzureConnection).where(AzureConnection.tenant_id == tenant_id)
-        )
-        results["azure"] = list(azure_q.scalars().all())
-
-        # GCP
-        gcp_q = await self.db.execute(
-            select(GCPConnection).where(GCPConnection.tenant_id == tenant_id)
-        )
-        results["gcp"] = list(gcp_q.scalars().all())
-
-        # SaaS
-        saas_q = await self.db.execute(
-            select(SaaSConnection).where(SaaSConnection.tenant_id == tenant_id)
-        )
-        results["saas"] = list(saas_q.scalars().all())
-
-        # License
-        license_q = await self.db.execute(
-            select(LicenseConnection).where(LicenseConnection.tenant_id == tenant_id)
-        )
-        results["license"] = list(license_q.scalars().all())
-
-        # Platform
-        platform_q = await self.db.execute(
-            select(PlatformConnection).where(PlatformConnection.tenant_id == tenant_id)
-        )
-        results["platform"] = list(platform_q.scalars().all())
-
-        # Hybrid
-        hybrid_q = await self.db.execute(
-            select(HybridConnection).where(HybridConnection.tenant_id == tenant_id)
-        )
-        results["hybrid"] = list(hybrid_q.scalars().all())
+        connections = await list_tenant_connections(self.db, tenant_id, active_only=False)
+        for connection in connections:
+            provider = normalize_provider(resolve_provider_from_connection(connection))
+            if provider in results:
+                results[provider].append(connection)
 
         return results
 
@@ -118,86 +67,27 @@ class CloudConnectionService:
         Generic entry point for connection verification.
         Delegates to provider-specific logic while maintaining a common interface.
         """
-        provider_lower = provider.lower()
-        if provider_lower not in {
-            "aws",
-            "azure",
-            "gcp",
-            "saas",
-            "license",
-            "platform",
-            "hybrid",
-        }:
+        provider_norm = normalize_provider(provider)
+        if not provider_norm:
             raise HTTPException(
                 status_code=400, detail=f"Unsupported provider: {provider}"
             )
 
-        connection: (
-            AWSConnection
-            | AzureConnection
-            | GCPConnection
-            | SaaSConnection
-            | LicenseConnection
-            | PlatformConnection
-            | HybridConnection
-            | None
+        model = get_connection_model(provider_norm)
+        if model is None:
+            raise HTTPException(
+                status_code=400, detail=f"Unsupported provider: {provider}"
+            )
+        result = await self.db.execute(
+            select(model).where(model.id == connection_id, model.tenant_id == tenant_id)
         )
-        if provider_lower == "aws":
-            result = await self.db.execute(
-                select(AWSConnection).where(
-                    AWSConnection.id == connection_id,
-                    AWSConnection.tenant_id == tenant_id,
-                )
-            )
-        elif provider_lower == "azure":
-            result = await self.db.execute(
-                select(AzureConnection).where(
-                    AzureConnection.id == connection_id,
-                    AzureConnection.tenant_id == tenant_id,
-                )
-            )
-        elif provider_lower == "gcp":
-            result = await self.db.execute(
-                select(GCPConnection).where(
-                    GCPConnection.id == connection_id,
-                    GCPConnection.tenant_id == tenant_id,
-                )
-            )
-        elif provider_lower == "saas":
-            result = await self.db.execute(
-                select(SaaSConnection).where(
-                    SaaSConnection.id == connection_id,
-                    SaaSConnection.tenant_id == tenant_id,
-                )
-            )
-        elif provider_lower == "license":
-            result = await self.db.execute(
-                select(LicenseConnection).where(
-                    LicenseConnection.id == connection_id,
-                    LicenseConnection.tenant_id == tenant_id,
-                )
-            )
-        elif provider_lower == "platform":
-            result = await self.db.execute(
-                select(PlatformConnection).where(
-                    PlatformConnection.id == connection_id,
-                    PlatformConnection.tenant_id == tenant_id,
-                )
-            )
-        else:
-            result = await self.db.execute(
-                select(HybridConnection).where(
-                    HybridConnection.id == connection_id,
-                    HybridConnection.tenant_id == tenant_id,
-                )
-            )
         connection = result.scalar_one_or_none()
 
         if not connection:
             raise HTTPException(status_code=404, detail="Connection not found")
 
         try:
-            adapter = AdapterFactory.get_adapter(connection)
+            adapter = self._build_verification_adapter(provider_norm, connection)
             is_valid = await adapter.verify_connection()
 
             from datetime import datetime, timezone
@@ -219,7 +109,7 @@ class CloudConnectionService:
 
                 await self.db.commit()
                 audit_log(
-                    f"{provider}_connection_verified",
+                    f"{provider_norm}_connection_verified",
                     "system",
                     str(tenant_id),
                     {"id": str(connection_id)},
@@ -227,16 +117,8 @@ class CloudConnectionService:
 
                 return {
                     "status": "active",
-                    "provider": provider,
-                    "account_id": getattr(
-                        connection,
-                        "aws_account_id",
-                        getattr(
-                            connection,
-                            "subscription_id",
-                            getattr(connection, "project_id", None),
-                        ),
-                    ),
+                    "provider": provider_norm,
+                    "account_id": self._resolve_connection_reference(connection),
                 }
             else:
                 if hasattr(connection, "status"):
@@ -245,7 +127,8 @@ class CloudConnectionService:
                     connection.is_active = False
                 await self.db.commit()
                 raise HTTPException(
-                    status_code=400, detail=f"{provider.upper()} verification failed"
+                    status_code=400,
+                    detail=f"{provider_norm.upper()} verification failed",
                 )
 
         except HTTPException:
@@ -274,10 +157,43 @@ class CloudConnectionService:
             raise adapter_err
 
     @staticmethod
+    def _resolve_connection_reference(connection: Any) -> str | None:
+        """
+        Return the most useful provider-specific connection reference for API clients.
+
+        Priority:
+        - core-cloud native identifiers
+        - Cloud+ vendor/name
+        - connection UUID
+        """
+        for attr in ("aws_account_id", "subscription_id", "project_id", "vendor", "name"):
+            value = getattr(connection, attr, None)
+            if isinstance(value, str):
+                cleaned = value.strip()
+                if cleaned:
+                    return cleaned
+        connection_id = getattr(connection, "id", None)
+        return str(connection_id) if connection_id is not None else None
+
+    @staticmethod
+    def _resolve_aws_console_region() -> str:
+        settings = get_settings()
+        configured = str(getattr(settings, "AWS_DEFAULT_REGION", "") or "").strip()
+        supported = {
+            str(region).strip()
+            for region in getattr(settings, "AWS_SUPPORTED_REGIONS", [])
+            if str(region).strip()
+        }
+        if configured and configured in supported:
+            return configured
+        return "us-east-1"
+
+    @staticmethod
     def get_aws_setup_templates(external_id: str) -> dict[str, str]:
         """AWS specific onboarding templates."""
+        console_region = CloudConnectionService._resolve_aws_console_region()
         return {
-            "magic_link": f"https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=ValdrixAccess&templateURL=https://valdrix-public.s3.amazonaws.com/templates/aws-access.yaml&param_ExternalId={external_id}",
+            "magic_link": f"https://console.aws.amazon.com/cloudformation/home?region={console_region}#/stacks/create/review?stackName=ValdrixAccess&templateURL=https://valdrix-public.s3.amazonaws.com/templates/aws-access.yaml&param_ExternalId={external_id}",
             "cfn_template": "https://valdrix-public.s3.amazonaws.com/templates/aws-access.yaml",
             "terraform_snippet": (
                 'resource "aws_iam_role" "valdrix_access" {\n'
