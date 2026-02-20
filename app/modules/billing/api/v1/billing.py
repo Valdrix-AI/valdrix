@@ -205,7 +205,7 @@ async def get_billing_usage(
     This surfaces how close a tenant is to connection limits (AWS/Azure/GCP/SaaS/License),
     so upgrades are explainable and enforceable.
     """
-    from app.shared.core.pricing import PricingTier, get_tier_limit
+    from app.shared.core.pricing import PricingTier
 
     tier = getattr(user, "tier", PricingTier.FREE)
     connections = await load_billing_usage(
