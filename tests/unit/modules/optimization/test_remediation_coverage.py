@@ -177,9 +177,6 @@ async def test_remediation_with_backup_and_verify(remediation_service, mock_db):
         with patch(
             "app.shared.core.notifications.NotificationDispatcher.notify_remediation_completed",
             new=AsyncMock(),
-        ), patch(
-            "app.shared.core.notifications.NotificationDispatcher.notify_remediation_started",
-            new=AsyncMock(),
         ):
             await remediation_service.execute(
                 remediation_id, mock_remediation.tenant_id, bypass_grace_period=True

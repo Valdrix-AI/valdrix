@@ -7,7 +7,6 @@ from typing import Any
 from uuid import UUID
 
 from app.models.remediation import RemediationRequest
-from app.shared.core.pricing import FeatureFlag, PricingTier, get_tenant_tier, is_feature_enabled
 
 
 def sanitize_tf_identifier(provider: str, resource_type: str, resource_id: str) -> str:
@@ -30,12 +29,18 @@ async def generate_iac_plan_for_request(
     request: RemediationRequest,
     tenant_id: UUID,
     *,
-    tenant_tier: PricingTier | str | None = None,
+    tenant_tier: str | Any | None = None,
 ) -> str:
     """
     Generates a Terraform decommissioning plan for the resource.
     Supports `state rm` and `removed` blocks for GitOps workflows.
     """
+    from app.shared.core.pricing import (
+        FeatureFlag,
+        get_tenant_tier,
+        is_feature_enabled,
+    )
+
     resolved_tier = (
         tenant_tier
         if tenant_tier is not None
@@ -116,6 +121,8 @@ async def bulk_generate_iac_plan_for_requests(
     requests: list[RemediationRequest],
     tenant_id: UUID,
 ) -> str:
+    from app.shared.core.pricing import get_tenant_tier
+
     tenant_tier = await get_tenant_tier(tenant_id, service.db)
     plans = [
         await generate_iac_plan_for_request(service, req, tenant_id, tenant_tier=tenant_tier)
