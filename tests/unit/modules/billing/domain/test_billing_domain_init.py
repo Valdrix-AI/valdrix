@@ -19,7 +19,7 @@ def test_billing_domain_init_import_error_branch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Exercise the ImportError guard without mutating the real imported module.
+    The module should fail fast when required billing implementation imports fail.
     """
     import app.modules.billing.domain.billing as billing_domain
 
@@ -41,6 +41,5 @@ def test_billing_domain_init_import_error_branch(
     )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    assert getattr(module, "__all__", None) == []
+    with pytest.raises(ImportError, match="forced for test"):
+        spec.loader.exec_module(module)

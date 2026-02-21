@@ -191,11 +191,14 @@ class TestBudgetCheck:
         mock_result.scalar.return_value = Decimal("0")
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        tracker = UsageTracker(mock_db)
         tenant_id = uuid4()
 
-        # Should not raise, should return silently
-        await tracker._check_budget_and_alert(tenant_id)
+        from app.shared.llm.budget_manager import LLMBudgetManager
+
+        # Should not raise, should return silently.
+        await LLMBudgetManager._check_budget_and_alert(
+            tenant_id, mock_db, Decimal("0.01")
+        )
 
     @pytest.mark.asyncio
     async def test_no_alert_under_threshold(self):
@@ -213,14 +216,9 @@ class TestBudgetCheck:
         mock_result.scalar.return_value = Decimal("5.00")  # 50%
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        tracker = UsageTracker(mock_db)
+        from app.shared.llm.budget_manager import LLMBudgetManager
 
-        # Mock get_monthly_usage to return $5 (50% of limit)
-        with patch.object(
-            tracker,
-            "get_monthly_usage",
-            new_callable=AsyncMock,
-            return_value=Decimal("5.00"),
-        ):
-            # Should not alert since under threshold
-            await tracker._check_budget_and_alert(uuid4())
+        # Should not alert since under threshold.
+        await LLMBudgetManager._check_budget_and_alert(
+            uuid4(), mock_db, Decimal("0.01")
+        )

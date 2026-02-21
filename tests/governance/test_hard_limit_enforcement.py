@@ -8,7 +8,7 @@ from app.models.remediation import (
     RemediationAction,
 )
 from app.modules.optimization.domain.remediation_service import RemediationService
-from app.shared.llm.usage_tracker import BudgetStatus
+from app.shared.llm.budget_manager import BudgetStatus
 
 
 @pytest.mark.asyncio
@@ -38,9 +38,10 @@ async def test_enforce_hard_limit_auto_executes(db):
     mock_execute_result.scalars.return_value = mock_scalars
     db.execute.return_value = mock_execute_result
 
-    # 3. Mock UsageTracker to return HARD_LIMIT
+    # 3. Mock budget manager to return HARD_LIMIT.
     with patch(
-        "app.shared.llm.usage_tracker.UsageTracker.check_budget", new_callable=AsyncMock
+        "app.shared.llm.budget_manager.LLMBudgetManager.check_budget",
+        new_callable=AsyncMock,
     ) as mock_check:
         mock_check.return_value = BudgetStatus.HARD_LIMIT
 
@@ -65,9 +66,10 @@ async def test_enforce_hard_limit_ignores_low_confidence(db):
     """Verify that low-confidence requests are NOT auto-executed even if budget hit."""
     tenant_id = uuid4()
 
-    # Mock UsageTracker to return HARD_LIMIT
+    # Mock budget manager to return HARD_LIMIT.
     with patch(
-        "app.shared.llm.usage_tracker.UsageTracker.check_budget", new_callable=AsyncMock
+        "app.shared.llm.budget_manager.LLMBudgetManager.check_budget",
+        new_callable=AsyncMock,
     ) as mock_check:
         mock_check.return_value = BudgetStatus.HARD_LIMIT
 

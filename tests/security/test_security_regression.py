@@ -166,8 +166,8 @@ async def test_error_sanitization_middleware(ac: AsyncClient):
 
     # Generic fields must exist (current canonical error schema).
     assert data["error"]["message"] == "An unexpected internal error occurred"
-    assert "error_id" in data
-    assert data["code"] == "internal_error"
+    assert data["error"]["id"]
+    assert data["error"]["code"] == "internal_error"
 
     # Secret information must NOT exist
     assert "SECRET_VALUE_SHOULD_NOT_LEAK_12345" not in str(data)

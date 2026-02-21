@@ -13,6 +13,16 @@ import os
 import sys
 from unittest.mock import MagicMock, AsyncMock, patch
 
+# Set test environment BEFORE any app imports (Crucial for lru_cache behavior)
+os.environ.setdefault("TESTING", "true")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret-for-testing-at-least-32-bytes")
+os.environ.setdefault("ENCRYPTION_KEY", "32-byte-long-test-encryption-key")
+os.environ.setdefault("CSRF_SECRET_KEY", "test-csrf-secret-key-at-least-32-bytes")
+os.environ.setdefault("KDF_SALT", "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=")
+os.environ.setdefault("DB_SSL_MODE", "disable")
+os.environ.setdefault("is_production", "false")
+
 # Mock heavy dependencies only if they cause issues in specific environments
 # sys.modules["codecarbon"] = MagicMock()
 # sys.modules["pandas"] = MagicMock()
@@ -40,17 +50,7 @@ if TYPE_CHECKING:
 
 # Import test isolation utilities
 
-# Set test environment BEFORE any app imports
-# Use environment variables with safe defaults for testing
-# In a real CI/CD pipeline, these would be injected via secrets manager
-os.environ.setdefault("TESTING", "true")
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("SUPABASE_JWT_SECRET", os.getenv("TEST_SUPABASE_JWT_SECRET", "test-jwt-secret-for-testing-at-least-32-bytes"))
-os.environ.setdefault("ENCRYPTION_KEY", os.getenv("TEST_ENCRYPTION_KEY", "32-byte-long-test-encryption-key"))
-os.environ.setdefault("CSRF_SECRET_KEY", os.getenv("TEST_CSRF_SECRET_KEY", "test-csrf-secret-key-at-least-32-bytes"))
-os.environ.setdefault("KDF_SALT", os.getenv("TEST_KDF_SALT", "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="))
-os.environ.setdefault("DB_SSL_MODE", "disable")
-os.environ.setdefault("is_production", "false")
+# Environment variables are already set at the top
 
 # Import all models to register them in SQLAlchemy mapper globally for all tests
 
@@ -449,18 +449,40 @@ def set_testing_env():
 
 
 @pytest.fixture(autouse=True)
+def clean_dependency_overrides(app):
+    """Ensure dependency overrides are cleared after every test to prevent state bleeding."""
+    # We yield first, so the test runs. Then we clear overrides.
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
 def reset_settings_cache():
-    """Prevent settings cache leakage across tests."""
+    """Ensure settings are fresh for every test to prevent leakage."""
     from app.shared.core.config import get_settings
+    from app.shared.db.session import reset_db_runtime
     import sys
 
+    # 1. Clear the lru_cache
     get_settings.cache_clear()
+
+    # 2. Reset the singleton if it was modified in-place
+    # (Finding #L2: attribute-level mutation survives cache_clear if refs are held)
+    settings = get_settings()
+    settings.TESTING = True
+
+    # 3. Reset DB runtime
+    reset_db_runtime()
+
     yield
+
+    # Teardown: ensure we don't leave it in a broken state
     get_settings.cache_clear()
-    # Reset app.main module-level settings if it was imported
+    reset_db_runtime()
+    
+    # 4. Sync app.main if it exists
     if "app.main" in sys.modules:
         import app.main as app_main
-
         app_main.settings = get_settings()
 
 
