@@ -15,6 +15,23 @@ from app.modules.optimization.domain.registry import registry
 logger = structlog.get_logger()
 
 
+def _build_gcp_credentials(credentials: Any) -> Any | None:
+    """Best-effort conversion of service-account JSON credentials."""
+    if not credentials:
+        return None
+    if not isinstance(credentials, dict):
+        logger.warning(
+            "gcp_credentials_invalid_type",
+            credentials_type=type(credentials).__name__,
+        )
+        return None
+    try:
+        return service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+    except Exception as exc:
+        logger.warning("gcp_credentials_parse_failed", error=str(exc))
+        return None
+
+
 @registry.register("gcp")
 class IdleVmsPlugin(ZombiePlugin):
     """Detect idle Compute Engine VMs via billing data."""
@@ -54,29 +71,21 @@ class IdleVmsPlugin(ZombiePlugin):
 
         # Fallback: Use Cloud Asset Inventory + basic heuristics
         zombies = []
-        print(f"DEBUG: Entering fallback for {project_id}")
         try:
-            gcp_creds = None
-            if credentials:
-                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
-            print("DEBUG: Instantiating InstancesClient")
+            gcp_creds = _build_gcp_credentials(credentials)
             client = compute_v1.InstancesClient(credentials=gcp_creds)
-            print(f"DEBUG: Creating request for project {project_id}")
+            request: Any
             try:
                 request = compute_v1.AggregatedListInstancesRequest(project=project_id)
             except AttributeError:
-                print("DEBUG: AggregatedListInstancesRequest not found in compute_v1")
                 # Fallback to simple dict if needed, or check types
-                request = {"project": project_id} 
-            
-            print(f"DEBUG: Calling aggregated_list with request {request}")
+                request = {"project": project_id}
+
             for zone, response in client.aggregated_list(request=request):
                 if not response.instances:
                     continue
 
-                print(f"DEBUG: Processing zone {zone}")
                 for instance in response.instances:
-                    print(f"DEBUG: Checking instance {instance.name}, status {instance.status}")
                     if instance.status != "RUNNING":
                         continue
 
@@ -86,7 +95,6 @@ class IdleVmsPlugin(ZombiePlugin):
                         or "a2-" in instance.machine_type
                         or "g2-" in instance.machine_type
                     )
-                    print(f"DEBUG: is_gpu={is_gpu}")
 
                     # Without metrics, flag GPU instances for review
                     if is_gpu:
@@ -171,9 +179,7 @@ class StoppedVmsPlugin(ZombiePlugin):
 
         zombies = []
         try:
-            gcp_creds = None
-            if credentials:
-                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            gcp_creds = _build_gcp_credentials(credentials)
             client = compute_v1.InstancesClient(credentials=gcp_creds)
             request = compute_v1.AggregatedListInstancesRequest(project=project_id)
 

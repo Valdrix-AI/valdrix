@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import structlog
@@ -12,7 +12,6 @@ from app.models.remediation import (
     RemediationRequest,
     RemediationStatus,
 )
-from app.shared.core.connection_queries import get_connection_model
 from app.shared.core.exceptions import ResourceNotFoundError
 from app.shared.core.provider import normalize_provider
 
@@ -34,7 +33,7 @@ async def preview_policy_for_request(
             connection_id=connection_id,
         )
 
-    from app.modules.optimization.domain import remediation as remediation_module
+    import app.modules.optimization.domain.remediation as remediation_module
 
     tier = await remediation_module.get_tenant_tier(tenant_id, service.db)
     policy_config, _ = await service._build_policy_config(tenant_id)
@@ -114,7 +113,10 @@ async def preview_policy_input_payload(
             parameters, system_policy_context=system_context
         ),
     )
-    return await preview_policy_for_request(service, synthetic_request, tenant_id)
+    return cast(
+        dict[str, Any],
+        await service.preview_policy(synthetic_request, tenant_id),
+    )
 
 
 async def create_remediation_request(
@@ -142,8 +144,10 @@ async def create_remediation_request(
     scoped_connection: Any | None = None
 
     if connection_id:
+        import app.modules.optimization.domain.remediation as remediation_module
+
         try:
-            connection_model = get_connection_model(provider_norm)
+            connection_model = remediation_module.get_connection_model(provider_norm)
             if connection_model is None:
                 raise ValueError(f"Invalid provider model for {provider_norm}")
             scoped_connection = await service.get_by_id(
@@ -267,10 +271,11 @@ async def approve_request(
         .where(RemediationRequest.tenant_id == tenant_id)
         .with_for_update()
     )
-    request = await service._scalar_one_or_none(result)
+    request_value = await service._scalar_one_or_none(result)
 
-    if not request:
+    if request_value is None:
         raise ResourceNotFoundError(f"Request {request_id} not found")
+    request = cast(RemediationRequest, request_value)
 
     if request.status not in {
         RemediationStatus.PENDING,
@@ -345,10 +350,11 @@ async def reject_request(
         .where(RemediationRequest.tenant_id == tenant_id)
         .with_for_update()
     )
-    request = await service._scalar_one_or_none(result)
+    request_value = await service._scalar_one_or_none(result)
 
-    if not request:
+    if request_value is None:
         raise ResourceNotFoundError(f"Request {request_id} not found")
+    request = cast(RemediationRequest, request_value)
 
     if request.status not in {
         RemediationStatus.PENDING,
