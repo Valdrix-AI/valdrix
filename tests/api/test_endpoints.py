@@ -47,8 +47,8 @@ class TestZombieAPIs:
         with patch(
             "app.modules.optimization.api.v1.zombies.ZombieService"
         ) as mock_service_cls:
-            mock_service = AsyncMock()
-            mock_service.scan_for_tenant.return_value = {
+            mock_service = mock_service_cls.return_value
+            mock_service.scan_for_tenant = AsyncMock(return_value={
                 "zombies_found": 2,
                 "total_potential_savings": 150.00,
                 "zombies": [
@@ -63,8 +63,7 @@ class TestZombieAPIs:
                         "monthly_cost": 75.00,
                     },
                 ],
-            }
-            mock_service_cls.return_value = mock_service
+            })
 
             response = await ac.get("/api/v1/zombies", params={"region": "us-east-1"})
 
@@ -184,11 +183,10 @@ class TestZombieAPIs:
         with patch(
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
-            mock_service = AsyncMock()
+            mock_service = mock_service_cls.return_value
             mock_result = MagicMock()
             mock_result.id = uuid4()
-            mock_service.create_request.return_value = mock_result
-            mock_service_cls.return_value = mock_service
+            mock_service.create_request = AsyncMock(return_value=mock_result)
 
             response = await ac.post("/api/v1/zombies/request", json=request_data)
 
@@ -238,7 +236,7 @@ class TestZombieAPIs:
 
         assert response.status_code == 400
         data = response.json()
-        assert "invalid_remediation_action" in data.get("code", "")
+        assert "invalid_remediation_action" in data.get("error", {}).get("code", "")
 
         # Clean up overrides
         ac.app.dependency_overrides.pop(get_current_user, None)
@@ -266,9 +264,8 @@ class TestZombieAPIs:
         with patch(
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
-            mock_service = AsyncMock()
-            mock_service.list_pending.return_value = [test_remediation_request]
-            mock_service_cls.return_value = mock_service
+            mock_service = mock_service_cls.return_value
+            mock_service.list_pending = AsyncMock(return_value=[test_remediation_request])
 
             response = await ac.get("/api/v1/zombies/pending")
 
@@ -371,11 +368,10 @@ class TestZombieAPIs:
         with patch(
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
-            mock_service = AsyncMock()
+            mock_service = mock_service_cls.return_value
             mock_result = MagicMock()
             mock_result.id = test_remediation_request.id
-            mock_service.approve.return_value = mock_result
-            mock_service_cls.return_value = mock_service
+            mock_service.approve = AsyncMock(return_value=mock_result)
 
             response = await ac.post(
                 f"/api/v1/zombies/approve/{test_remediation_request.id}",
@@ -487,13 +483,12 @@ class TestZombieAPIs:
                 "app.shared.adapters.aws_multitenant.MultiTenantAWSAdapter"
             ) as mock_adapter_cls,
         ):
-            mock_service = AsyncMock()
+            mock_service = mock_service_cls.return_value
             mock_executed_request = MagicMock()
             mock_executed_request.status.value = "completed"
             mock_executed_request.id = test_remediation_request.id
-            mock_service.execute.return_value = mock_executed_request
-            mock_service.get_by_id.return_value = aws_conn
-            mock_service_cls.return_value = mock_service
+            mock_service.execute = AsyncMock(return_value=mock_executed_request)
+            mock_service.get_by_id = AsyncMock(return_value=aws_conn)
 
             mock_adapter = AsyncMock()
             mock_credentials = MagicMock()
@@ -564,7 +559,7 @@ class TestZombieAPIs:
 
         assert response.status_code == 400
         data = response.json()
-        assert "aws_connection_missing" in data.get("code", "")
+        assert "aws_connection_missing" in data.get("error", {}).get("code", "")
 
         # Clean up overrides
         ac.app.dependency_overrides.pop(get_current_user, None)
@@ -612,13 +607,12 @@ class TestZombieAPIs:
         with patch(
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
-            mock_service = AsyncMock()
-            mock_service.preview_policy.return_value = {"decision": "escalate"}
+            mock_service = mock_service_cls.return_value
+            mock_service.preview_policy = AsyncMock(return_value={"decision": "escalate"})
             mock_result = MagicMock()
             mock_result.status.value = "pending_approval"
             mock_result.id = test_remediation_request.id
-            mock_service.execute.return_value = mock_result
-            mock_service_cls.return_value = mock_service
+            mock_service.execute = AsyncMock(return_value=mock_result)
 
             response = await ac.post(
                 f"/api/v1/zombies/execute/{test_remediation_request.id}"
@@ -656,10 +650,9 @@ class TestZombieAPIs:
         with patch(
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
-            mock_service = AsyncMock()
-            mock_service.get_by_id.return_value = test_remediation_request
-            mock_service.generate_iac_plan.return_value = "# Valdrix GitOps Remediation Plan\n# Resource: i-test123 (ec2_instance)\n# Savings: $50.00/mo\n# Action: stop_instance\n\n# Option 1: Manual State Removal\nterraform state rm cloud_resource.i_test123\n\n# Option 2: Terraform 'removed' block (Recommended for TF 1.7+)\nremoved {\n  from = cloud_resource.i_test123\n  lifecycle {\n    destroy = true\n  }\n}"
-            mock_service_cls.return_value = mock_service
+            mock_service = mock_service_cls.return_value
+            mock_service.get_by_id = AsyncMock(return_value=test_remediation_request)
+            mock_service.generate_iac_plan = AsyncMock(return_value="# Valdrix GitOps Remediation Plan\n# Resource: i-test123 (ec2_instance)\n# Savings: $50.00/mo\n# Action: stop_instance\n\n# Option 1: Manual State Removal\nterraform state rm cloud_resource.i_test123\n\n# Option 2: Terraform 'removed' block (Recommended for TF 1.7+)\nremoved {\n  from = cloud_resource.i_test123\n  lifecycle {\n    destroy = true\n  }\n}")
 
             response = await ac.get(
                 f"/api/v1/zombies/plan/{test_remediation_request.id}"
@@ -733,9 +726,9 @@ class TestZombieAPIs:
         with patch(
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
-            mock_service = AsyncMock()
-            mock_service.get_by_id.return_value = test_remediation_request
-            mock_service.preview_policy.return_value = {
+            mock_service = mock_service_cls.return_value
+            mock_service.get_by_id = AsyncMock(return_value=test_remediation_request)
+            mock_service.preview_policy = AsyncMock(return_value={
                 "decision": "allow",
                 "summary": "No policy rules triggered.",
                 "tier": "pro",
@@ -746,8 +739,7 @@ class TestZombieAPIs:
                     "require_gpu_override": True,
                     "low_confidence_warn_threshold": 0.9,
                 },
-            }
-            mock_service_cls.return_value = mock_service
+            })
 
             response = await ac.get(
                 f"/api/v1/zombies/policy-preview/{test_remediation_request.id}"
@@ -782,8 +774,8 @@ class TestZombieAPIs:
         with patch(
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
-            mock_service = AsyncMock()
-            mock_service.preview_policy_input.return_value = {
+            mock_service = mock_service_cls.return_value
+            mock_service.preview_policy_input = AsyncMock(return_value={
                 "decision": "escalate",
                 "summary": "GPU-related remediation requires explicit GPU approval override.",
                 "tier": "pro",
@@ -794,8 +786,7 @@ class TestZombieAPIs:
                     "require_gpu_override": True,
                     "low_confidence_warn_threshold": 0.9,
                 },
-            }
-            mock_service_cls.return_value = mock_service
+            })
 
             response = await ac.post(
                 "/api/v1/zombies/policy-preview",
@@ -846,7 +837,7 @@ class TestZombieAPIs:
         )
         assert response.status_code == 400
         payload = response.json()
-        assert "invalid_remediation_action" in payload.get("code", "")
+        assert "invalid_remediation_action" in payload.get("error", {}).get("code", "")
 
         ac.app.dependency_overrides.pop(get_current_user, None)
         ac.app.dependency_overrides.pop(require_tenant_access, None)
@@ -948,11 +939,10 @@ class TestAuthorizationAndAuthentication:
         with patch(
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
-            mock_service = AsyncMock()
+            mock_service = mock_service_cls.return_value
             # Simulate high-level isolation: even if the user provides an ID from tenant B,
             # the service (scoped by tenant A) will not find it.
-            mock_service.get_by_id.return_value = None
-            mock_service_cls.return_value = mock_service
+            mock_service.get_by_id = AsyncMock(return_value=None)
 
             # Try to get a plan for a resource that belongs to tenant B
             # (In reality, the ID would be from a tenant B record)
@@ -1139,7 +1129,7 @@ class TestInputValidation:
 
         assert response.status_code == 400
         data = response.json()
-        assert "invalid_remediation_action" in data.get("code", "")
+        assert "invalid_remediation_action" in data.get("error", {}).get("code", "")
 
         # Clean up overrides
         ac.app.dependency_overrides.pop(get_current_user, None)

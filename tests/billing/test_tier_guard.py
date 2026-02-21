@@ -15,9 +15,8 @@ from app.shared.core.pricing import (
     PricingTier,
     FeatureFlag,
     TIER_CONFIG as TIER_FEATURES,
-    TIER_LIMITS,
-    has_feature,
-    get_limit,
+    is_feature_enabled,
+    get_tier_limit,
     get_tenant_tier,
     TierGuard,
 )
@@ -29,34 +28,36 @@ class TestFeatureAccess:
 
     def test_free_tier_has_basic_features(self):
         """Free tier should have zombie scan, cost, carbon tracking."""
-        assert has_feature(PricingTier.FREE, FeatureFlag.ZOMBIE_SCAN)
-        assert has_feature(PricingTier.FREE, FeatureFlag.COST_TRACKING)
-        assert has_feature(PricingTier.FREE, FeatureFlag.CARBON_TRACKING)
+        assert is_feature_enabled(PricingTier.FREE, FeatureFlag.ZOMBIE_SCAN)
+        assert is_feature_enabled(PricingTier.FREE, FeatureFlag.COST_TRACKING)
+        assert is_feature_enabled(PricingTier.FREE, FeatureFlag.CARBON_TRACKING)
 
     def test_free_tier_no_ai_insights(self):
         """Free tier should NOT have AI insights."""
-        assert not has_feature(PricingTier.FREE, FeatureFlag.AI_INSIGHTS)
+        assert not is_feature_enabled(PricingTier.FREE, FeatureFlag.AI_INSIGHTS)
 
     def test_starter_tier_has_ai_insights(self):
         """Starter tier should have AI insights."""
-        assert has_feature(PricingTier.STARTER, FeatureFlag.AI_INSIGHTS)
-        assert has_feature(PricingTier.STARTER, FeatureFlag.MULTI_REGION)
+        assert is_feature_enabled(PricingTier.STARTER, FeatureFlag.AI_INSIGHTS)
+        assert is_feature_enabled(PricingTier.STARTER, FeatureFlag.MULTI_REGION)
 
     def test_starter_no_slack(self):
         """Starter tier should NOT have Slack integration."""
-        assert not has_feature(PricingTier.STARTER, FeatureFlag.SLACK_INTEGRATION)
+        assert not is_feature_enabled(
+            PricingTier.STARTER, FeatureFlag.SLACK_INTEGRATION
+        )
 
     def test_professional_tier_full_features(self):
         """Professional tier should have Slack, hourly scans, audit logs."""
-        assert has_feature(PricingTier.PRO, FeatureFlag.SLACK_INTEGRATION)
-        assert has_feature(PricingTier.PRO, FeatureFlag.HOURLY_SCANS)
-        assert has_feature(PricingTier.PRO, FeatureFlag.AUDIT_LOGS)
-        assert has_feature(PricingTier.PRO, FeatureFlag.AI_ANALYSIS_DETAILED)
+        assert is_feature_enabled(PricingTier.PRO, FeatureFlag.SLACK_INTEGRATION)
+        assert is_feature_enabled(PricingTier.PRO, FeatureFlag.HOURLY_SCANS)
+        assert is_feature_enabled(PricingTier.PRO, FeatureFlag.AUDIT_LOGS)
+        assert is_feature_enabled(PricingTier.PRO, FeatureFlag.AI_ANALYSIS_DETAILED)
 
     def test_enterprise_tier_all_features(self):
         """Enterprise tier should have all features."""
         for flag in FeatureFlag:
-            assert has_feature(PricingTier.ENTERPRISE, flag), (
+            assert is_feature_enabled(PricingTier.ENTERPRISE, flag), (
                 f"Enterprise missing {flag}"
             )
 
@@ -66,29 +67,29 @@ class TestTierLimits:
 
     def test_free_tier_limits(self):
         """Free tier should have restrictive limits."""
-        assert get_limit(PricingTier.FREE, "max_aws_accounts") == 1
-        assert get_limit(PricingTier.FREE, "ai_insights_per_month") == 0
-        assert get_limit(PricingTier.FREE, "scan_frequency_hours") == 168
+        assert get_tier_limit(PricingTier.FREE, "max_aws_accounts") == 1
+        assert get_tier_limit(PricingTier.FREE, "ai_insights_per_month") == 0
+        assert get_tier_limit(PricingTier.FREE, "scan_frequency_hours") == 168
 
     def test_starter_tier_limits(self):
         """Starter tier should have reasonable limits."""
-        assert get_limit(PricingTier.STARTER, "max_aws_accounts") == 5
-        assert get_limit(PricingTier.STARTER, "ai_insights_per_month") == 10
+        assert get_tier_limit(PricingTier.STARTER, "max_aws_accounts") == 5
+        assert get_tier_limit(PricingTier.STARTER, "ai_insights_per_month") == 10
 
     def test_professional_tier_limits(self):
         """Professional tier should have generous limits."""
-        assert get_limit(PricingTier.PRO, "max_aws_accounts") == 25
-        assert get_limit(PricingTier.PRO, "ai_insights_per_month") == 100
-        assert get_limit(PricingTier.PRO, "scan_frequency_hours") == 1
+        assert get_tier_limit(PricingTier.PRO, "max_aws_accounts") == 25
+        assert get_tier_limit(PricingTier.PRO, "ai_insights_per_month") == 100
+        assert get_tier_limit(PricingTier.PRO, "scan_frequency_hours") == 1
 
     def test_enterprise_tier_unlimited(self):
         """Enterprise tier should have unlimited (999) limits."""
-        assert get_limit(PricingTier.ENTERPRISE, "max_aws_accounts") == 999
-        assert get_limit(PricingTier.ENTERPRISE, "ai_insights_per_month") == 999
+        assert get_tier_limit(PricingTier.ENTERPRISE, "max_aws_accounts") == 999
+        assert get_tier_limit(PricingTier.ENTERPRISE, "ai_insights_per_month") == 999
 
     def test_unknown_limit_returns_zero(self):
         """Unknown limit key should return 0."""
-        assert get_limit(PricingTier.STARTER, "nonexistent_limit") == 0
+        assert get_tier_limit(PricingTier.STARTER, "nonexistent_limit") == 0
 
 
 class TestGetTenantTier:
@@ -194,7 +195,7 @@ class TestTierFeatureMatrix:
     def test_all_tiers_have_limits(self):
         """All pricing tiers should have limit definitions."""
         for tier in PricingTier:
-            assert tier in TIER_LIMITS, f"Missing limits for {tier}"
+            assert tier in TIER_FEATURES, f"Missing limits for {tier}"
 
     def test_higher_tier_superset(self):
         """Higher tiers should have all features of lower tiers."""

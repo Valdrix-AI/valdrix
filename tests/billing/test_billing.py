@@ -69,7 +69,7 @@ class TestBillingService:
         from app.modules.billing.domain.billing.paystack_billing import BillingService
 
         with patch(
-            "app.modules.billing.domain.billing.paystack_billing.settings"
+            "app.modules.billing.domain.billing.paystack_shared.settings"
         ) as mock_settings:
             # Mock settings to avoid Paystack key validation
             mock_settings.PAYSTACK_SECRET_KEY = "test-secret-key"

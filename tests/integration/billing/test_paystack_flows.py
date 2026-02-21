@@ -71,7 +71,7 @@ async def test_create_checkout_success(ac: AsyncClient, test_data, db):
     with (
         patch("app.modules.billing.api.v1.billing.settings") as api_settings,
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.settings"
+            "app.modules.billing.domain.billing.paystack_shared.settings"
         ) as billing_settings,
     ):
         api_settings.PAYSTACK_SECRET_KEY = "test-secret-key"
@@ -134,7 +134,7 @@ async def test_webhook_charge_success_activates_subscription(
     # Temporarily ensure secret key is set for test
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(
-            "app.modules.billing.domain.billing.paystack_billing.settings.PAYSTACK_SECRET_KEY",
+            "app.modules.billing.domain.billing.paystack_shared.settings.PAYSTACK_SECRET_KEY",
             SECRET,
         )
 

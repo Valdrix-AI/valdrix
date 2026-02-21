@@ -122,7 +122,7 @@ class TestZombieDetectionIntegration:
             mock_reserve.return_value = Decimal("1.50")
             mock_sanitize.return_value = {"test": "data"}
             mock_forecast.return_value = {"forecast": "test"}
-            mock_setup.return_value = (None, "groq", "llama-3.3-70b-versatile", None)
+            mock_setup.return_value = ("groq", "llama-3.3-70b-versatile", None)
 
             # Mock LLM response with zombie detection results
             mock_invoke.return_value = (
@@ -444,7 +444,7 @@ class TestTenantIsolationIntegration:
             # Setup mocks
             mock_sanitize.return_value = {"test": "data"}
             mock_forecast.return_value = {"forecast": "test"}
-            mock_setup.return_value = (None, "groq", "llama-3.3-70b-versatile", None)
+            mock_setup.return_value = ("groq", "llama-3.3-70b-versatile", None)
 
             # Mock LLM response specific to tenant1
             mock_invoke.return_value = (
@@ -627,7 +627,7 @@ class TestPerformanceIntegration:
             # Setup mocks
             mock_sanitize.return_value = {"test": "data"}
             mock_forecast.return_value = {"forecast": "test"}
-            mock_setup.return_value = (None, "groq", "llama-3.3-70b-versatile", None)
+            mock_setup.return_value = ("groq", "llama-3.3-70b-versatile", None)
             mock_invoke.return_value = (
                 '{"summary": "Large dataset analysis"}',
                 {"token_usage": {"prompt_tokens": 500, "completion_tokens": 500}},
@@ -684,7 +684,7 @@ class TestErrorHandlingIntegration:
             patch.object(
                 analyzer,
                 "_setup_client_and_usage",
-                return_value=(None, "groq", "llama-3.3-70b-versatile", None),
+                return_value=("groq", "llama-3.3-70b-versatile", None),
             ),
             patch.object(
                 analyzer, "_invoke_llm", return_value=("LLM service unavailable", {})

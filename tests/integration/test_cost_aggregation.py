@@ -39,7 +39,7 @@ async def test_cost_aggregation_and_filtering(ac: AsyncClient, db: AsyncSession,
 
         await db.execute(
             text(
-                f"INSERT INTO tenants (id, name, plan) VALUES ('{tenant_id}', 'Test Tenant', 'enterprise') ON CONFLICT DO NOTHING"
+                f"INSERT INTO tenants (id, name, plan, is_deleted) VALUES ('{tenant_id}', 'Test Tenant', 'enterprise', false) ON CONFLICT DO NOTHING"
             )
         )
         await db.commit()

@@ -191,7 +191,7 @@ async def test_stream_ingestion_preserves_final_and_audits_restatements(db):
         tenant_id=str(tenant.id),
         account_id=str(account.id),
         reconciliation_run_id=run_id,
-        is_preliminary=True,
+        is_preliminary=False,
     )
 
     updated = await db.scalar(

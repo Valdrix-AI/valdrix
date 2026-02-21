@@ -3,7 +3,7 @@ from uuid import uuid4
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch, MagicMock
 from app.shared.llm.analyzer import FinOpsAnalyzer
-from app.shared.llm.usage_tracker import BudgetStatus
+from app.shared.llm.budget_manager import BudgetStatus
 from app.schemas.costs import CloudUsageSummary
 from datetime import date
 
@@ -21,17 +21,18 @@ async def test_graceful_degradation_soft_limit():
     # Setup Analyzer
     analyzer = FinOpsAnalyzer(llm=mock_llm)
 
-    # Mock UsageTracker and Budget
     tenant_id = uuid4()
-    usage_tracker_mock = MagicMock()
-    usage_tracker_mock.check_budget = AsyncMock(return_value=BudgetStatus.SOFT_LIMIT)
 
     # Patch dependencies in analyzer
     from app.shared.llm.budget_manager import LLMBudgetManager
     from app.shared.analysis.forecaster import SymbolicForecaster
 
-    with patch("app.shared.llm.analyzer.UsageTracker", return_value=usage_tracker_mock):
-        with patch("app.shared.llm.analyzer.LLMFactory.create") as mock_factory:
+    with patch("app.shared.llm.analyzer.LLMFactory.create") as mock_factory:
+        with patch.object(
+            LLMBudgetManager,
+            "check_budget",
+            AsyncMock(return_value=BudgetStatus.SOFT_LIMIT),
+        ):
             with patch.object(
                 LLMBudgetManager,
                 "check_and_reserve",
@@ -98,22 +99,24 @@ async def test_hard_limit_blocking():
     analyzer = FinOpsAnalyzer(llm=mock_llm)
 
     tenant_id = uuid4()
-    usage_tracker_mock = MagicMock()
-    usage_tracker_mock.check_budget = AsyncMock(return_value=BudgetStatus.HARD_LIMIT)
 
     from app.shared.llm.budget_manager import LLMBudgetManager, BudgetExceededError
 
-    with patch("app.shared.llm.analyzer.UsageTracker", return_value=usage_tracker_mock):
-        summary = CloudUsageSummary(
-            tenant_id=str(tenant_id),
-            provider="aws",
-            start_date=date.today(),
-            end_date=date.today(),
-            total_cost=Decimal("0"),
-            records=[],
-        )
+    summary = CloudUsageSummary(
+        tenant_id=str(tenant_id),
+        provider="aws",
+        start_date=date.today(),
+        end_date=date.today(),
+        total_cost=Decimal("0"),
+        records=[],
+    )
 
-        with pytest.raises(BudgetExceededError) as excinfo:
+    with pytest.raises(BudgetExceededError) as excinfo:
+        with patch.object(
+            LLMBudgetManager,
+            "check_budget",
+            AsyncMock(return_value=BudgetStatus.HARD_LIMIT),
+        ):
             with patch.object(
                 LLMBudgetManager,
                 "check_and_reserve",
@@ -121,4 +124,4 @@ async def test_hard_limit_blocking():
             ):
                 await analyzer.analyze(summary, tenant_id=tenant_id, db=mock_db)
 
-        assert "Hard Limit" in str(excinfo.value)
+    assert "Hard Limit" in str(excinfo.value)
