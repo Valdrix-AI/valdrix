@@ -402,9 +402,9 @@ async def _get_job_queue_health(db: AsyncSession, now: datetime) -> JobQueueHeal
     ) * 1000
 
     # Determine if we are on Postgres for percentile support
-    from app.shared.db.session import engine
+    from app.shared.db.session import get_engine
 
-    is_postgres = engine.url.get_backend_name().startswith("postgresql")
+    is_postgres = get_engine().url.get_backend_name().startswith("postgresql")
 
     if is_postgres:
         metrics = await db.execute(

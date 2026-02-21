@@ -13,16 +13,14 @@ Supported resources:
 
 from __future__ import annotations
 
-import re
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,157 +32,37 @@ from app.modules.governance.domain.security.audit_log import AuditEventType, Aud
 from app.shared.core.pricing import FeatureFlag, is_feature_enabled, normalize_tier
 from app.shared.core.security import generate_secret_blind_index
 from app.shared.db import session as db_session
+from app.modules.governance.api.v1.scim_models import (
+    ScimGroupCreate,
+    ScimGroupPut,
+    ScimGroupRef,
+    ScimListResponse,
+    ScimMemberRef,
+    ScimPatchOperation,
+    ScimPatchRequest,
+    ScimUserCreate,
+    ScimUserPut,
+)
+from app.modules.governance.api.v1.scim_schemas import (
+    SCIM_ERROR_SCHEMA,
+    SCIM_GROUP_SCHEMA,
+    SCIM_LIST_SCHEMA,
+    SCIM_USER_SCHEMA,
+    resource_types_response,
+    scim_group_schema_resource as _scim_group_schema_resource,
+    scim_user_schema_resource as _scim_user_schema_resource,
+    service_provider_config,
+)
+from app.modules.governance.api.v1.scim_utils import (
+    normalize_scim_group as _normalize_scim_group,
+    parse_group_filter as _parse_group_filter,
+    parse_member_filter_from_path as _parse_member_filter_from_path,
+    parse_user_filter as _parse_user_filter,
+    parse_uuid as _parse_uuid,
+)
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["SCIM"])
-
-# SCIM schemas / message constants
-SCIM_ERROR_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:Error"
-SCIM_LIST_SCHEMA = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
-SCIM_USER_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:User"
-SCIM_GROUP_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Group"
-SCIM_SCHEMA_SCHEMA = "urn:ietf:params:scim:schemas:core:2.0:Schema"
-
-
-def _scim_user_schema_resource(*, base_url: str) -> dict[str, Any]:
-    # Minimal schema definition sufficient for IdP discovery.
-    return {
-        "schemas": [SCIM_SCHEMA_SCHEMA],
-        "id": SCIM_USER_SCHEMA,
-        "name": "User",
-        "description": "Valdrix user account",
-        "attributes": [
-            {
-                "name": "userName",
-                "type": "string",
-                "multiValued": False,
-                "required": True,
-                "caseExact": False,
-                "mutability": "readWrite",
-                "returned": "default",
-            },
-            {
-                "name": "active",
-                "type": "boolean",
-                "multiValued": False,
-                "required": False,
-                "mutability": "readWrite",
-                "returned": "default",
-            },
-            {
-                "name": "emails",
-                "type": "complex",
-                "multiValued": True,
-                "required": False,
-                "mutability": "readWrite",
-                "returned": "default",
-                "subAttributes": [
-                    {
-                        "name": "value",
-                        "type": "string",
-                        "multiValued": False,
-                        "required": False,
-                    },
-                    {
-                        "name": "primary",
-                        "type": "boolean",
-                        "multiValued": False,
-                        "required": False,
-                    },
-                    {
-                        "name": "type",
-                        "type": "string",
-                        "multiValued": False,
-                        "required": False,
-                    },
-                ],
-            },
-            {
-                # We accept `groups` in user payloads and also support Group resources for IdPs
-                # that manage membership via /Groups.
-                "name": "groups",
-                "type": "complex",
-                "multiValued": True,
-                "required": False,
-                "mutability": "readWrite",
-                "returned": "default",
-                "subAttributes": [
-                    {
-                        "name": "value",
-                        "type": "string",
-                        "multiValued": False,
-                        "required": False,
-                    },
-                    {
-                        "name": "display",
-                        "type": "string",
-                        "multiValued": False,
-                        "required": False,
-                    },
-                ],
-            },
-        ],
-        "meta": {
-            "resourceType": "Schema",
-            "location": f"{base_url.rstrip('/')}/scim/v2/Schemas/{SCIM_USER_SCHEMA}",
-        },
-    }
-
-
-def _scim_group_schema_resource(*, base_url: str) -> dict[str, Any]:
-    # Minimal schema definition sufficient for IdP discovery.
-    return {
-        "schemas": [SCIM_SCHEMA_SCHEMA],
-        "id": SCIM_GROUP_SCHEMA,
-        "name": "Group",
-        "description": "Valdrix SCIM group",
-        "attributes": [
-            {
-                "name": "displayName",
-                "type": "string",
-                "multiValued": False,
-                "required": True,
-                "caseExact": False,
-                "mutability": "readWrite",
-                "returned": "default",
-            },
-            {
-                "name": "externalId",
-                "type": "string",
-                "multiValued": False,
-                "required": False,
-                "caseExact": False,
-                "mutability": "readWrite",
-                "returned": "default",
-            },
-            {
-                "name": "members",
-                "type": "complex",
-                "multiValued": True,
-                "required": False,
-                "mutability": "readWrite",
-                "returned": "default",
-                "subAttributes": [
-                    {
-                        "name": "value",
-                        "type": "string",
-                        "multiValued": False,
-                        "required": False,
-                    },
-                    {
-                        "name": "display",
-                        "type": "string",
-                        "multiValued": False,
-                        "required": False,
-                    },
-                ],
-            },
-        ],
-        "meta": {
-            "resourceType": "Schema",
-            "location": f"{base_url.rstrip('/')}/scim/v2/Schemas/{SCIM_GROUP_SCHEMA}",
-        },
-    }
 
 
 class ScimError(Exception):
@@ -373,99 +251,6 @@ async def _load_group_member_refs_map(
             {"value": str(user_id), "display": str(email or "")}
         )
     return mapping
-
-
-class ScimListResponse(BaseModel):
-    schemas: list[str] = Field(default_factory=lambda: [SCIM_LIST_SCHEMA])
-    totalResults: int
-    startIndex: int
-    itemsPerPage: int
-    Resources: list[dict[str, Any]]
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class ScimEmail(BaseModel):
-    value: EmailStr
-    primary: bool | None = None
-    type: str | None = None
-
-    model_config = ConfigDict(extra="ignore")
-
-
-class ScimGroupRef(BaseModel):
-    value: str | None = None
-    display: str | None = None
-
-    model_config = ConfigDict(extra="ignore")
-
-
-class ScimMemberRef(BaseModel):
-    value: str | None = None
-    display: str | None = None
-
-    model_config = ConfigDict(extra="ignore")
-
-
-class ScimGroupCreate(BaseModel):
-    displayName: str = Field(min_length=1, max_length=255)
-    externalId: str | None = Field(default=None, max_length=255)
-    members: list[ScimMemberRef] | None = None
-
-    model_config = ConfigDict(extra="ignore")
-
-
-class ScimGroupPut(BaseModel):
-    displayName: str = Field(min_length=1, max_length=255)
-    externalId: str | None = Field(default=None, max_length=255)
-    members: list[ScimMemberRef] | None = None
-
-    model_config = ConfigDict(extra="ignore")
-
-
-class ScimUserCreate(BaseModel):
-    userName: EmailStr
-    active: bool = True
-    emails: list[ScimEmail] | None = None
-    groups: list[ScimGroupRef] | None = None
-
-    model_config = ConfigDict(extra="ignore")
-
-
-class ScimUserPut(BaseModel):
-    userName: EmailStr
-    active: bool = True
-    emails: list[ScimEmail] | None = None
-    groups: list[ScimGroupRef] | None = None
-
-    model_config = ConfigDict(extra="ignore")
-
-
-class ScimPatchOperation(BaseModel):
-    op: Literal["add", "replace", "remove"]
-    path: str | None = None
-    value: Any | None = None
-
-    model_config = ConfigDict(extra="ignore")
-
-
-class ScimPatchRequest(BaseModel):
-    Operations: list[ScimPatchOperation] = Field(default_factory=list)
-
-    model_config = ConfigDict(extra="ignore")
-
-
-def _normalize_scim_group(value: str) -> str:
-    return str(value or "").strip().lower()
-
-
-def _parse_uuid(value: str | None) -> UUID | None:
-    if not value:
-        return None
-    try:
-        return UUID(str(value))
-    except ValueError:
-        return None
 
 
 async def _get_or_create_scim_group(
@@ -854,24 +639,7 @@ async def _apply_scim_group_mappings(
 
 @router.get("/ServiceProviderConfig")
 async def get_service_provider_config() -> dict[str, Any]:
-    # Minimal ServiceProviderConfig for IdP compatibility.
-    return {
-        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
-        "patch": {"supported": True},
-        "bulk": {"supported": False, "maxOperations": 0, "maxPayloadSize": 0},
-        "filter": {"supported": True, "maxResults": 200},
-        "changePassword": {"supported": False},
-        "sort": {"supported": False},
-        "etag": {"supported": False},
-        "authenticationSchemes": [
-            {
-                "type": "oauthbearertoken",
-                "name": "OAuth Bearer Token",
-                "description": "Tenant-scoped SCIM bearer token",
-                "specUri": "https://www.rfc-editor.org/rfc/rfc6750",
-            }
-        ],
-    }
+    return service_provider_config()
 
 
 @router.get("/Schemas")
@@ -907,62 +675,7 @@ async def get_schema(request: Request, schema_id: str) -> JSONResponse:
 
 @router.get("/ResourceTypes")
 async def get_resource_types() -> dict[str, Any]:
-    return {
-        "schemas": [SCIM_LIST_SCHEMA],
-        "totalResults": 2,
-        "startIndex": 1,
-        "itemsPerPage": 2,
-        "Resources": [
-            {
-                "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ResourceType"],
-                "id": "User",
-                "name": "User",
-                "endpoint": "/Users",
-                "schema": SCIM_USER_SCHEMA,
-            },
-            {
-                "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ResourceType"],
-                "id": "Group",
-                "name": "Group",
-                "endpoint": "/Groups",
-                "schema": SCIM_GROUP_SCHEMA,
-            },
-        ],
-    }
-
-
-def _parse_user_filter(filter_value: str) -> str | None:
-    # Support: userName eq "email@domain.com"
-    filter_value = (filter_value or "").strip()
-    if not filter_value:
-        return None
-    m = re.match(r'(?i)^userName\s+eq\s+"([^"]+)"\s*$', filter_value)
-    if m:
-        return m.group(1).strip()
-    m = re.match(r"(?i)^userName\s+eq\s+([^\s]+)\s*$", filter_value)
-    if m:
-        return m.group(1).strip().strip('"')
-    return None
-
-
-def _parse_group_filter(filter_value: str) -> tuple[str, str] | None:
-    """
-    Support:
-    - displayName eq "Group Name"
-    - externalId eq "idp-external-id"
-    """
-    filter_value = (filter_value or "").strip()
-    if not filter_value:
-        return None
-
-    for attr in ("displayName", "externalId"):
-        m = re.match(rf'(?i)^{attr}\s+eq\s+"([^"]+)"\s*$', filter_value)
-        if m:
-            return (attr, m.group(1).strip())
-        m = re.match(rf"(?i)^{attr}\s+eq\s+([^\s]+)\s*$", filter_value)
-        if m:
-            return (attr, m.group(1).strip().strip('"'))
-    return None
+    return resource_types_response()
 
 
 @router.get("/Users")
@@ -1654,18 +1367,6 @@ async def put_group(
             members=member_map.get(group.id, []),
         ),
     )
-
-
-def _parse_member_filter_from_path(path: str) -> UUID | None:
-    """
-    Support Okta/Azure-style member remove path:
-      members[value eq "uuid"]
-    """
-    path = (path or "").strip()
-    m = re.match(r'(?i)^members\[value\s+eq\s+"([^"]+)"\]\s*$', path)
-    if not m:
-        return None
-    return _parse_uuid(m.group(1).strip())
 
 
 @router.patch("/Groups/{group_id}")

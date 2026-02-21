@@ -1,8 +1,7 @@
 """
 Scheduler Service - Package Entry Point
 
-This file maintains backward compatibility by proxying calls to the
-refactored SchedulerOrchestrator in the .orchestrator sub-module.
+Exports the scheduler orchestrator and cohort utilities used by governance jobs.
 """
 
 from .orchestrator import SchedulerOrchestrator, SchedulerService

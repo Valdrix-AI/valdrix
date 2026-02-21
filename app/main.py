@@ -30,11 +30,12 @@ from app.shared.core.middleware import RequestIDMiddleware, SecurityHeadersMiddl
 from app.shared.core.security_metrics import CSRF_ERRORS, RATE_LIMIT_EXCEEDED
 from app.shared.core.ops_metrics import API_ERRORS_TOTAL
 from app.shared.core.sentry import init_sentry
+from app.shared.core.runtime_dependencies import validate_runtime_dependencies
 
 # SchedulerService imported lazily in lifespan() to avoid Celery blocking on startup
 from app.shared.core.timeout import TimeoutMiddleware
 from app.shared.core.tracing import setup_tracing
-from app.shared.db.session import async_session_maker, engine
+from app.shared.db.session import async_session_maker, get_engine
 from app.shared.core.exceptions import ValdrixException
 from app.shared.core.rate_limit import (
     setup_rate_limiting,
@@ -50,7 +51,6 @@ from app.modules.governance.api.v1.scim import (
 
 # Configure logging and Sentry
 setup_logging()
-init_sentry()
 settings = get_settings()
 
 
@@ -114,6 +114,8 @@ EmissionsTracker = _load_emissions_tracker()
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global settings
     settings = reload_settings_from_environment()
+    validate_runtime_dependencies(settings)
+    init_sentry()
 
     # Setup: Initialize scheduler and emissions tracker
     logger.info("app_starting", app_name=settings.APP_NAME)
@@ -143,7 +145,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Lazy import to avoid Celery blocking on module load
     from app.modules.governance.domain.scheduler import SchedulerService
 
-    scheduler = SchedulerService(session_maker=async_session_maker)
+    scheduler = SchedulerService(session_maker=cast(Any, async_session_maker))
     if not settings.TESTING and settings.REDIS_URL:
         scheduler.start()
         logger.info("scheduler_started")
@@ -200,15 +202,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Shutting down...")
 
     # Close HTTP pool first (prevents new requests while shutting down)
-    await close_http_client()
+    try:
+        await close_http_client()
+    except RuntimeError as exc:
+        logger.warning("http_client_close_skipped_loop_closed", error=str(exc))
 
     scheduler.stop()
     if tracker:
         tracker.stop()
 
     # Final DB Cleanup
-    await engine.dispose()
-    logger.info("db_engine_disposed")
+    try:
+        await get_engine().dispose()
+        logger.info("db_engine_disposed")
+    except RuntimeError as exc:
+        logger.warning("db_engine_dispose_skipped_loop_closed", error=str(exc))
 
 
 # Application instance
@@ -363,7 +371,7 @@ async def custom_swagger_ui_html() -> Any:
         swagger_css_url="/static/swagger-ui.css",
         swagger_favicon_url="/static/favicon.png",
     )
-    content = response.body.decode("utf-8")
+    content = bytes(response.body).decode("utf-8")
     content = _attach_sri(
         content,
         marker='src="/static/swagger-ui-bundle.js"',
@@ -385,7 +393,7 @@ async def redoc_html() -> Any:
         redoc_js_url="/static/redoc.standalone.js",
         redoc_favicon_url="/static/favicon.png",
     )
-    content = response.body.decode("utf-8")
+    content = bytes(response.body).decode("utf-8")
     content = _attach_sri(
         content,
         marker='src="/static/redoc.standalone.js"',
@@ -505,18 +513,17 @@ async def csrf_protect_middleware(
         if auth_header and auth_header.strip().lower().startswith("bearer "):
             return await call_next(request)
 
-        if request.url.path.startswith("/api/v1"):
-            csrf = CsrfProtect()
-            try:
-                await csrf.validate_csrf(request)
-            except CsrfProtectError as e:
-                # Log and block
-                logger.warning(
-                    "csrf_validation_failed",
-                    path=request.url.path,
-                    method=request.method,
-                )
-                return await csrf_protect_exception_handler(request, e)
+        csrf = CsrfProtect()
+        try:
+            await csrf.validate_csrf(request)
+        except CsrfProtectError as e:
+            # Log and block
+            logger.warning(
+                "csrf_validation_failed",
+                path=request.url.path,
+                method=request.method,
+            )
+            return await csrf_protect_exception_handler(request, e)
 
     return await call_next(request)
 

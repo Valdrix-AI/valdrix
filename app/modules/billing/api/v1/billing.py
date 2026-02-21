@@ -47,16 +47,7 @@ __all__ = [
 ]
 
 router = APIRouter(tags=["Billing"])
-
-
-class _SettingsProxy:
-    """Lazy settings accessor to avoid stale module-level configuration."""
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(get_settings(), name)
-
-
-settings: Any = _SettingsProxy()
+settings = get_settings()
 
 
 def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:

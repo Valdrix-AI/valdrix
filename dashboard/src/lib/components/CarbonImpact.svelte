@@ -7,7 +7,7 @@
 			percent_of_home_month: number | string;
 		};
 	}
-	export let carbon: CarbonData | null | undefined;
+	let { carbon }: { carbon: CarbonData | null | undefined } = $props();
 </script>
 
 {#if carbon?.equivalencies}

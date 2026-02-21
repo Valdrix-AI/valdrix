@@ -620,7 +620,7 @@ class OptimizationService(BaseService):
         """
         Seed a minimal set of default strategies so the product works out-of-the-box.
 
-        This is safe for a new project: no backward-compat logic, no per-tenant strategy config yet.
+        This keeps the initial strategy surface deterministic without per-tenant overrides.
         """
         from app.models.optimization import OptimizationStrategy, StrategyType
 

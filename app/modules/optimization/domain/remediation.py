@@ -385,7 +385,7 @@ class RemediationService(BaseService):
     async def enforce_hard_limit(self, tenant_id: UUID) -> List[UUID]:
         """
         Enforce hard limits for a tenant.
-        1. Checks budget status via UsageTracker.
+        1. Checks budget status via LLMBudgetManager.
         2. If HARD_LIMIT is reached:
            - Automatically executes only high-confidence, low-risk pending requests.
            - Uses AUTOPILOT_BYPASS_GRACE_PERIOD setting (default fail-safe is no bypass).

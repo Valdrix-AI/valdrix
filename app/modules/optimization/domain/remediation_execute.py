@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import structlog
@@ -41,7 +41,7 @@ async def execute_remediation_request(
         .where(RemediationRequest.tenant_id == tenant_id)
         .with_for_update()
     )
-    request = await service._scalar_one_or_none(result)
+    request = cast(RemediationRequest | None, await service._scalar_one_or_none(result))
 
     if not request:
         raise ResourceNotFoundError(f"Request {request_id} not found")

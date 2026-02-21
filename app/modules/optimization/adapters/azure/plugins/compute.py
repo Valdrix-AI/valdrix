@@ -15,6 +15,19 @@ from app.modules.optimization.domain.registry import registry
 logger = structlog.get_logger()
 
 
+def _resolve_azure_credentials(credentials: Any) -> Any:
+    if isinstance(credentials, dict):
+        return ClientSecretCredential(
+            tenant_id=credentials.get("tenant_id", ""),
+            client_id=credentials.get("client_id", ""),
+            client_secret=credentials.get("client_secret", ""),
+        )
+    if credentials is not None:
+        # Allow already-instantiated credential objects.
+        return credentials
+    return DefaultAzureCredential()
+
+
 @registry.register("azure")
 class IdleVmsPlugin(ZombiePlugin):
     """Detect idle Azure VMs via cost export data."""
@@ -57,15 +70,7 @@ class IdleVmsPlugin(ZombiePlugin):
         # Fallback: Use Resource Graph to identify GPU VMs for review
         zombies = []
         try:
-            az_creds: ClientSecretCredential | DefaultAzureCredential
-            if credentials:
-                az_creds = ClientSecretCredential(
-                    tenant_id=credentials.get("tenant_id", ""),
-                    client_id=credentials.get("client_id", ""),
-                    client_secret=credentials.get("client_secret", ""),
-                )
-            else:
-                az_creds = DefaultAzureCredential()
+            az_creds = _resolve_azure_credentials(credentials)
 
             client = ComputeManagementClient(az_creds, subscription_id)
 
@@ -174,15 +179,7 @@ class StoppedVmsPlugin(ZombiePlugin):
 
         zombies = []
         try:
-            az_creds: ClientSecretCredential | DefaultAzureCredential
-            if credentials:
-                az_creds = ClientSecretCredential(
-                    tenant_id=credentials.get("tenant_id", ""),
-                    client_id=credentials.get("client_id", ""),
-                    client_secret=credentials.get("client_secret", ""),
-                )
-            else:
-                az_creds = DefaultAzureCredential()
+            az_creds = _resolve_azure_credentials(credentials)
 
             client = ComputeManagementClient(az_creds, subscription_id)
 

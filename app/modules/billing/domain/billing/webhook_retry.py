@@ -186,7 +186,6 @@ async def process_paystack_webhook(
         return {"status": "error", "reason": "Missing payload"}
 
     payload = job.payload
-    webhook_data = payload.get("payload", {})
     raw_payload = payload.get("raw_payload")
     signature = payload.get("signature")
 
@@ -223,19 +222,12 @@ async def process_paystack_webhook(
             )
             return {"status": "error", "reason": "invalid_raw_payload"}
     else:
-        # Backward compatibility path for already-queued jobs without raw payload/signature.
-        # Fail closed in production/staging environments.
-        settings = get_settings()
-        if settings.ENVIRONMENT in {"production", "staging"}:
-            logger.critical(
-                "paystack_retry_missing_signature_material",
-                job_id=str(job.id),
-                event_type=payload.get("event_type"),
-            )
-            return {"status": "error", "reason": "missing_signature_material"}
-
-        event = webhook_data.get("event", payload.get("event_type"))
-        data = webhook_data.get("data", {})
+        logger.critical(
+            "paystack_retry_missing_signature_material",
+            job_id=str(job.id),
+            event_type=payload.get("event_type"),
+        )
+        return {"status": "error", "reason": "missing_signature_material"}
 
     result = {"status": "processed", "event": event}
 
