@@ -54,14 +54,8 @@ class HybridAnalysisScheduler:
         self._settings_getter = get_settings
         self._analyzer_cls = FinOpsAnalyzer
 
-    @property
-    def analyzer(self) -> FinOpsAnalyzer:
-        """Backward-compatible analyzer accessor."""
-        return self._get_analyzer()
-
-    @analyzer.setter
-    def analyzer(self, value: FinOpsAnalyzer) -> None:
-        """Allow explicit analyzer injection in tests and specialized flows."""
+    def set_analyzer(self, value: FinOpsAnalyzer) -> None:
+        """Inject an analyzer instance explicitly."""
         self._analyzer = value
 
     def _get_analyzer(self) -> FinOpsAnalyzer:

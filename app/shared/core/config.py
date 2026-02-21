@@ -318,7 +318,7 @@ class Settings(BaseSettings):
     # Claude/Anthropic Credentials
     CLAUDE_API_KEY: Optional[str] = None
     CLAUDE_MODEL: str = "claude-3-7-sonnet"
-    ANTHROPIC_API_KEY: Optional[str] = None  # Added for Phase 28 compatibility
+    ANTHROPIC_API_KEY: Optional[str] = None
 
     # Google Gemini Credentials
     GOOGLE_API_KEY: Optional[str] = None
@@ -332,6 +332,13 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "groq"  # Options: openai, claude, google, groq
     ENABLE_DELTA_ANALYSIS: bool = True  # Innovation 1: Reduce token usage by 90%
     DELTA_ANALYSIS_DAYS: int = 3
+    # Forecasting policy in strict environments (staging/production):
+    # false -> require Prophet at startup (default)
+    # true  -> allow temporary Holt-Winters break-glass fallback
+    FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK: bool = False
+    # Break-glass audit metadata when fallback is enabled in strict env.
+    FORECASTER_BREAK_GLASS_REASON: Optional[str] = None
+    FORECASTER_BREAK_GLASS_EXPIRES_AT: Optional[str] = None
     # Disabled-by-default fairness guardrails for future "near-unlimited" tiers.
     # Keep OFF until production evidence gates are met.
     LLM_FAIR_USE_GUARDS_ENABLED: bool = False
@@ -462,7 +469,7 @@ class Settings(BaseSettings):
 
     # Cache (Redis for production, in-memory for dev)
     REDIS_URL: Optional[str] = None  # e.g., redis://localhost:6379
-    REDIS_HOST: Optional[str] = None  # Added for K8s compatibility
+    REDIS_HOST: Optional[str] = None
     REDIS_PORT: Optional[str] = "6379"
 
     # Upstash Redis (Serverless - Free tier: 10K commands/day)

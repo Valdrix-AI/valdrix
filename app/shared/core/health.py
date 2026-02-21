@@ -28,14 +28,14 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 
-class HealthCheckService:
+class HealthService:
     """Comprehensive health check service for all system components."""
 
     def __init__(self, db: AsyncSession | None = None):
         self.db = db
 
     async def check_all(self) -> Dict[str, Any]:
-        """Alias for comprehensive_health_check for backward compatibility with tests/main."""
+        """Run system health checks and return a lifecycle-friendly payload."""
         health = await self.comprehensive_health_check()
 
         # Format for tests which expect specific keys at root
@@ -404,11 +404,7 @@ class HealthCheckService:
             return {"status": "error", "error": str(e)}
 
 
-# Backward compatibility
-HealthService = HealthCheckService
-
-
 async def get_health_status(db: AsyncSession | None = None) -> Dict[str, Any]:
     """Get comprehensive health status for monitoring."""
-    service = HealthCheckService(db)
+    service = HealthService(db)
     return await service.comprehensive_health_check()

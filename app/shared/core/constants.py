@@ -39,7 +39,6 @@ class LLMProvider(str, Enum):
     OPENAI = "openai"
     GROQ = "groq"
     ANTHROPIC = "anthropic"
-    CLAUDE = "anthropic"  # Alias for backward compatibility in config
     GOOGLE = "google"
     AZURE = "azure"
 

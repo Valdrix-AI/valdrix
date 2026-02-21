@@ -44,9 +44,8 @@ def handle_exception(
     if isinstance(exc, ValdrixException):
         valdrix_exc = exc
         # SEC-07: Sanitize message in production if it's not a known safe-to-leak type
-        if is_prod:
-            if valdrix_exc.code not in safe_codes:
-                valdrix_exc.message = "An error occurred while processing your request"
+        if is_prod and valdrix_exc.code not in safe_codes:
+            valdrix_exc.message = "An error occurred while processing your request"
     elif exc.__class__.__name__ == "CsrfProtectError":
         status_code = 403
         raw_status = getattr(exc, "status_code", None)
@@ -85,8 +84,8 @@ def handle_exception(
             path=request.url.path,
         )
     else:
-        # Generic internal error for everything else
-        msg = "An unexpected internal error occurred" if is_prod else str(exc)
+        # Always sanitize unhandled exceptions to avoid leaking secrets via message bodies.
+        msg = "An unexpected internal error occurred"
         valdrix_exc = ValdrixException(
             message=msg,
             code="internal_error",
@@ -142,12 +141,7 @@ def handle_exception(
             "code": valdrix_exc.code,
             "id": error_id,
             "details": response_details if response_details else None,
-        },
-        # Backward-compatibility for clients/tests expecting top-level error fields.
-        "message": valdrix_exc.message,
-        "code": valdrix_exc.code,
-        "id": error_id,
-        "details": response_details if response_details else None,
+        }
     }
 
     # 5. Production Response (Sanitized)

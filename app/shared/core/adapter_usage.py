@@ -22,15 +22,11 @@ async def fetch_daily_costs_if_supported(
     if daily_method is None or not callable(daily_method):
         return None
 
-    try:
-        result = daily_method(
-            start_date,
-            end_date,
-            group_by_service=group_by_service,
-        )
-    except TypeError:
-        # Incompatible signature => treat as unsupported and fallback.
-        return None
+    result = daily_method(
+        start_date,
+        end_date,
+        group_by_service=group_by_service,
+    )
 
     if inspect.isawaitable(result):
         return await result

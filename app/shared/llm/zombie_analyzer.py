@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.shared.core.config import get_settings
-from app.shared.llm.usage_tracker import UsageTracker
+from app.shared.llm.budget_manager import LLMBudgetManager
 from app.shared.llm.guardrails import LLMGuardrails, ZombieAnalysisResult
 
 logger = structlog.get_logger()
@@ -176,13 +176,14 @@ class ZombieAnalyzer:
 
         # 3b. Pre-authorize usage against tier/budget guardrails.
         if tenant_id and db:
-            tracker = UsageTracker(db)
-            await tracker.authorize_request(
+            prompt_tokens = max(500, len(formatted_data) // 4)
+            await LLMBudgetManager.check_and_reserve(
                 tenant_id=tenant_id,
+                db=db,
                 provider=effective_provider,
                 model=effective_model,
-                input_text=formatted_data,
-                max_output_tokens=1200,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=1200,
             )
 
         # 4. Invoke LLM
@@ -282,13 +283,13 @@ class ZombieAnalyzer:
             input_tokens = usage_metadata.get("prompt_tokens", 0)
             output_tokens = usage_metadata.get("completion_tokens", 0)
 
-            tracker = UsageTracker(db)
-            await tracker.record(
+            await LLMBudgetManager.record_usage(
                 tenant_id=tenant_id,
+                db=db,
                 provider=provider,
                 model=model,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
                 is_byok=is_byok,
                 request_type="zombie_analysis",
             )

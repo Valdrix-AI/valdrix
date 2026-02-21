@@ -91,7 +91,8 @@ def get_limiter() -> Limiter:
             key_func=context_aware_key,
             storage_uri=storage_uri,
             strategy="fixed-window",
-            enabled=getattr(settings, "RATELIMIT_ENABLED", True),
+            enabled=getattr(settings, "RATELIMIT_ENABLED", True)
+            and not getattr(settings, "TESTING", False),
         )
     return _limiter
 
@@ -147,8 +148,10 @@ def rate_limit(
     limit: str | Callable[[Request], str] = "100/minute",
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator to apply rate limiting to an endpoint."""
-    if get_settings().TESTING:
-        return lambda func: func
+    # Finding #L3: If we bypass the decorator here based on settings.TESTING,
+    # it captures the state at import time. Instead, we always return the 
+    # limiter's decorator, which internally checks its 'enabled' status 
+    # during each request.
     return cast(
         Callable[[Callable[..., Any]], Callable[..., Any]], get_limiter().limit(limit)
     )
@@ -193,23 +196,14 @@ def get_analysis_limit(request: Optional[Request] = None) -> str:
     return limits.get(tier, "1/hour")
 
 
-# Backward-compatible decorators for imports expecting callable
-# Usage: @auth_limit (as decorator, no parentheses)
-def _make_limit_decorator(
-    limit_str: str,
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Creates a decorator that applies the given rate limit."""
-
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        # Apply the rate limit at decoration time
-        return rate_limit(limit_str)(func)
-
-    return decorator
+def standard_limit(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Apply the standard API limit decorator."""
+    return rate_limit(STANDARD_LIMIT)(func)
 
 
-# Non-parenthesized decorators (default limits)
-standard_limit = _make_limit_decorator(STANDARD_LIMIT)
-auth_limit = _make_limit_decorator(AUTH_LIMIT)
+def auth_limit(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Apply the authenticated-route API limit decorator."""
+    return rate_limit(AUTH_LIMIT)(func)
 
 
 # Dynamic analysis limit decorator

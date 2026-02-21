@@ -76,10 +76,6 @@ class ExchangeRateService:
         raw = _RATES_CACHE.get(currency)
         if raw is None:
             return None, 0.0, None
-        # Backward compatibility with test fixtures that still seed 2-tuples.
-        if len(raw) == 2:
-            rate, updated_at = raw
-            return rate, float(updated_at), None
         rate, updated_at, provider = raw
         return rate, float(updated_at), provider
 
@@ -388,44 +384,46 @@ class ExchangeRateService:
             (ngn_amount * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP)
         )
 
+    async def list_cached_rates(self) -> dict[str, Decimal]:
+        """
+        Return cached USD base rates from DB cache with in-memory fallback.
+        """
+        rates: dict[str, Decimal] = {"USD": Decimal("1.0")}
+        try:
+            async with self._session_scope() as session:
+                result = await session.execute(
+                    select(ExchangeRate).where(ExchangeRate.from_currency == "USD")
+                )
+                rows = result.scalars().all()
+                for row in rows:
+                    code = str(row.to_currency or "").strip().upper()
+                    if not code:
+                        continue
+                    try:
+                        rates[code] = Decimal(str(row.rate))
+                    except Exception:
+                        continue
+        except Exception as exc:
+            logger.warning("exchange_rate_list_cached_failed", error=str(exc))
 
-async def fetch_public_exchange_rates() -> dict[str, Decimal]:
-    """
-    Compatibility helper used by tests and diagnostics.
-    Returns cached USD base rates from DB cache (with L1 fallback).
-    """
-    rates: dict[str, Decimal] = {"USD": Decimal("1.0")}
-    service = ExchangeRateService()
-    try:
-        async with service._session_scope() as session:
-            result = await session.execute(
-                select(ExchangeRate).where(ExchangeRate.from_currency == "USD")
-            )
-            rows = result.scalars().all()
-            for row in rows:
-                code = str(row.to_currency or "").strip().upper()
-                if not code:
-                    continue
-                try:
-                    rates[code] = Decimal(str(row.rate))
-                except Exception:
-                    continue
-    except Exception as exc:
-        logger.warning("public_rate_fetch_failed", error=str(exc))
+        for code, payload in _RATES_CACHE.items():
+            raw_rate: Any = payload[0] if isinstance(payload, tuple) and payload else None
+            if isinstance(raw_rate, Decimal):
+                rates[str(code).upper()] = raw_rate
 
-    # L1 fallback keeps diagnostics available when DB access is unavailable.
-    for code, payload in _RATES_CACHE.items():
-        raw_rate: Any = payload[0] if isinstance(payload, tuple) and payload else None
-        if isinstance(raw_rate, Decimal):
-            rates[str(code).upper()] = raw_rate
-
-    return rates
+        return rates
 
 
 async def get_exchange_rate(to_currency: str, *, strict: bool = False) -> Decimal:
     """Convenience function for existing call sites."""
     service = ExchangeRateService()
     return await service.get_rate(to_currency, strict=strict)
+
+
+async def list_exchange_rates() -> dict[str, Decimal]:
+    """Return cached exchange rates for diagnostics and internal APIs."""
+    service = ExchangeRateService()
+    return await service.list_cached_rates()
 
 
 async def convert_usd(
