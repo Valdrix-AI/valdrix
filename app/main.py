@@ -145,7 +145,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Lazy import to avoid Celery blocking on module load
     from app.modules.governance.domain.scheduler import SchedulerService
 
-    scheduler = SchedulerService(session_maker=cast(Any, async_session_maker))
+    scheduler = SchedulerService(session_maker=async_session_maker)
     if not settings.TESTING and settings.REDIS_URL:
         scheduler.start()
         logger.info("scheduler_started")

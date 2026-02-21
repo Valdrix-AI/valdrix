@@ -6,8 +6,9 @@ import time
 import os
 import structlog
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
-from typing import Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Dict, Any, Protocol
+from contextlib import AbstractAsyncContextManager
 
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.processors import AnalysisProcessor
@@ -26,6 +27,13 @@ SCHEDULER_LOCK_BASE_ID = 48293021
 # Metrics are now imported from app.modules.governance.domain.scheduler.metrics
 
 
+class AsyncSessionFactory(Protocol):
+    """Call signature for objects that open AsyncSession context managers."""
+
+    def __call__(self) -> AbstractAsyncContextManager[AsyncSession]:
+        ...
+
+
 class SchedulerOrchestrator:
     """Manages APScheduler and job distribution."""
 
@@ -38,7 +46,7 @@ class SchedulerOrchestrator:
         "ap-northeast-1": "JP-TK",
     }
 
-    def __init__(self, session_maker: async_sessionmaker[AsyncSession]):
+    def __init__(self, session_maker: "AsyncSessionFactory"):
         self.scheduler = AsyncIOScheduler()
         self.session_maker = session_maker
         self.processor = AnalysisProcessor()
@@ -391,7 +399,7 @@ class SchedulerService(SchedulerOrchestrator):
     Scheduler API used by app lifecycle and admin routes.
     """
 
-    def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(self, session_maker: "AsyncSessionFactory") -> None:
         super().__init__(session_maker)
         logger.info("scheduler_service_initialized", implementation="modular")
 
