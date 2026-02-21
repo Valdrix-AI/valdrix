@@ -44,10 +44,11 @@ async def test_idle_vertex_endpoints_plugin_scan(mock_gcp_creds):
         mock_monitor.list_time_series.return_value = [] 
 
         with patch(
-            "app.modules.optimization.adapters.gcp.plugins.ai.aiplatform.EndpointServiceClient",
+            "app.modules.optimization.adapters.gcp.plugins.ai.aiplatform_v1.EndpointServiceClient",
             return_value=mock_client,
             create=True,
         ), \
+             patch("app.modules.optimization.adapters.gcp.plugins.ai.service_account", MagicMock()), \
              patch("app.modules.optimization.adapters.gcp.plugins.ai.monitoring_v3.MetricServiceClient", return_value=mock_monitor):
             
             zombies = await plugin.scan(
@@ -98,10 +99,11 @@ async def test_idle_vector_search_plugin_scan(mock_gcp_creds):
         mock_monitor.list_time_series.return_value = [] 
 
         with patch(
-            "app.modules.optimization.adapters.gcp.plugins.search.aiplatform.IndexEndpointServiceClient",
+            "app.modules.optimization.adapters.gcp.plugins.search.aiplatform_v1.IndexEndpointServiceClient",
             return_value=mock_client,
             create=True,
         ), \
+             patch("app.modules.optimization.adapters.gcp.plugins.search.service_account", MagicMock()), \
              patch("app.modules.optimization.adapters.gcp.plugins.search.monitoring_v3.MetricServiceClient", return_value=mock_monitor):
 
             zombies = await plugin.scan(

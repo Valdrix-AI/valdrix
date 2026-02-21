@@ -15,7 +15,7 @@ from app.shared.core.currency import (
 @pytest.fixture(autouse=True)
 def clear_cache():
     _RATES_CACHE.clear()
-    _RATES_CACHE["USD"] = (Decimal("1.0"), time.time())
+    _RATES_CACHE["USD"] = (Decimal("1.0"), time.time(), "internal")
     with patch("app.shared.core.cache.get_cache_service") as mock_cache_cls:
         mock_cache_cls.return_value.enabled = False
         yield

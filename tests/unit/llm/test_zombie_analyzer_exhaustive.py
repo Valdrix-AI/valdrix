@@ -29,17 +29,20 @@ async def test_zombie_analyzer_byok_resolution(zombie_analyzer):
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
-        patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+            new=AsyncMock(return_value=None),
+        ),
     ):  # Patch Guardrails
         mock_settings.return_value.ZOMBIE_PLUGIN_TIMEOUT_SECONDS = 30
         mock_guardrails.sanitize_input = AsyncMock(return_value=[])
         mock_guardrails.validate_output.return_value = MagicMock(
             model_dump=lambda: {"resources": []}
         )
-        mock_tracker = MagicMock()
-        mock_tracker.authorize_request = AsyncMock(return_value=None)
-        mock_tracker.record = AsyncMock(return_value=None)
-        mock_tracker_cls.return_value = mock_tracker
 
         # Mock LLM factory
         mock_factory_model = MagicMock()
@@ -82,16 +85,19 @@ async def test_zombie_analyzer_claude_byok(zombie_analyzer):
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
-        patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+            new=AsyncMock(return_value=None),
+        ),
     ):
         mock_guardrails.sanitize_input = AsyncMock(return_value=[])
         mock_guardrails.validate_output.return_value = MagicMock(
             model_dump=lambda: {"resources": []}
         )
-        mock_tracker = MagicMock()
-        mock_tracker.authorize_request = AsyncMock(return_value=None)
-        mock_tracker.record = AsyncMock(return_value=None)
-        mock_tracker_cls.return_value = mock_tracker
 
         mock_factory_model = MagicMock()
         mock_factory.create.return_value = mock_factory_model
@@ -136,16 +142,19 @@ async def test_zombie_analyzer_gemini_byok(zombie_analyzer):
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
-        patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+            new=AsyncMock(return_value=None),
+        ),
     ):
         mock_guardrails.sanitize_input = AsyncMock(return_value=[])
         mock_guardrails.validate_output.return_value = MagicMock(
             model_dump=lambda: {"resources": []}
         )
-        mock_tracker = MagicMock()
-        mock_tracker.authorize_request = AsyncMock(return_value=None)
-        mock_tracker.record = AsyncMock(return_value=None)
-        mock_tracker_cls.return_value = mock_tracker
 
         mock_factory_model = MagicMock()
         mock_factory.create.return_value = mock_factory_model
@@ -212,16 +221,19 @@ async def test_zombie_analyzer_groq_byok(zombie_analyzer):
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
-        patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+            new=AsyncMock(return_value=None),
+        ),
     ):
         mock_guardrails.sanitize_input = AsyncMock(return_value=[])
         mock_guardrails.validate_output.return_value = MagicMock(
             model_dump=lambda: {"resources": []}
         )
-        mock_tracker = MagicMock()
-        mock_tracker.authorize_request = AsyncMock(return_value=None)
-        mock_tracker.record = AsyncMock(return_value=None)
-        mock_tracker_cls.return_value = mock_tracker
 
         mock_factory_model = MagicMock()
         mock_factory.create.return_value = mock_factory_model
@@ -275,7 +287,14 @@ async def test_usage_tracking_exception(zombie_analyzer):
     zombie_analyzer.prompt.__or__.return_value = mock_chain
 
     with (
-        patch("app.shared.llm.zombie_analyzer.UsageTracker") as MockTracker,
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+            new=AsyncMock(side_effect=Exception("DB Error")),
+        ),
         patch("app.shared.llm.factory.LLMFactory", new_callable=MagicMock),
         patch("app.shared.llm.zombie_analyzer.get_settings"),
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
@@ -284,11 +303,6 @@ async def test_usage_tracking_exception(zombie_analyzer):
         mock_guardrails.validate_output.return_value = MagicMock(
             model_dump=lambda: {"resources": []}
         )
-
-        # Mock tracker to raise exception
-        mock_tracker_instance = AsyncMock()
-        mock_tracker_instance.record.side_effect = Exception("DB Error")
-        MockTracker.return_value = mock_tracker_instance
 
         mock_db = AsyncMock()
         mock_db.execute.return_value = MagicMock(scalar_one_or_none=lambda: None)

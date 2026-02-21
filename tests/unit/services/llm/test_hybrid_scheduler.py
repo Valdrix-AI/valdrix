@@ -22,11 +22,12 @@ def scheduler(mock_db, mock_cache):
     with patch(
         "app.shared.llm.hybrid_scheduler.get_cache_service", return_value=mock_cache
     ):
-        # Patch the original locations for in-function imports
-        with patch("app.shared.llm.factory.LLMFactory") as mock_factory:
-            with patch("app.shared.core.config.get_settings") as mock_settings:
+        with patch(
+            "app.shared.llm.hybrid_scheduler.LLMFactory.create"
+        ) as mock_factory_create:
+            with patch("app.shared.llm.hybrid_scheduler.get_settings") as mock_settings:
                 with patch("app.shared.llm.hybrid_scheduler.FinOpsAnalyzer"):
-                    mock_factory.create.return_value = MagicMock()
+                    mock_factory_create.return_value = MagicMock()
                     mock_settings.return_value.LLM_PROVIDER = "groq"
                     return HybridAnalysisScheduler(mock_db)
 
@@ -117,17 +118,17 @@ async def test_run_full_analysis_logic(scheduler):
     """Test internal _run_full_analysis logic."""
     tenant_id = uuid4()
     costs = [{"service": "EC2", "cost": 10}]
+    mock_analyzer = MagicMock()
+    mock_analyzer.analyze = AsyncMock(
+        return_value='{"insights": ["Full analysis"], "trends": []}'
+    )
+    scheduler.set_analyzer(mock_analyzer)
 
-    with patch.object(
-        scheduler.analyzer, "analyze", new_callable=AsyncMock
-    ) as mock_analyze:
-        mock_analyze.return_value = '{"insights": ["Full analysis"], "trends": []}'
+    result = await scheduler._run_full_analysis(tenant_id, costs)
 
-        result = await scheduler._run_full_analysis(tenant_id, costs)
-
-        assert result["insights"] == ["Full analysis"]
-        assert result["analysis_type"] == "full_30_day"
-        mock_analyze.assert_called_once()
+    assert result["insights"] == ["Full analysis"]
+    assert result["analysis_type"] == "full_30_day"
+    mock_analyzer.analyze.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -157,6 +158,7 @@ async def test_run_delta_analysis_significant(scheduler):
     """Test delta analysis when changes are significant."""
     tenant_id = uuid4()
     costs = [{"service": "EC2", "cost": 20}]
+    scheduler.set_analyzer(MagicMock())
 
     with patch.object(
         scheduler.delta_service, "compute_delta", new_callable=AsyncMock
@@ -200,17 +202,15 @@ def test_merge_with_full(scheduler):
 async def test_run_full_analysis_json_error(scheduler):
     """Test _run_full_analysis handles JSON decode error."""
     tenant_id = uuid4()
+    mock_analyzer = MagicMock()
+    mock_analyzer.analyze = AsyncMock(return_value="invalid json")
+    scheduler.set_analyzer(mock_analyzer)
 
-    with patch.object(
-        scheduler.analyzer, "analyze", new_callable=AsyncMock
-    ) as mock_analyze:
-        mock_analyze.return_value = "invalid json"
+    result = await scheduler._run_full_analysis(tenant_id, [])
 
-        result = await scheduler._run_full_analysis(tenant_id, [])
-
-        assert "raw_analysis" in result
-        assert result["raw_analysis"] == "invalid json"
-        assert result["analysis_type"] == "full_30_day"
+    assert "raw_analysis" in result
+    assert result["raw_analysis"] == "invalid json"
+    assert result["analysis_type"] == "full_30_day"
 
 
 @pytest.mark.asyncio

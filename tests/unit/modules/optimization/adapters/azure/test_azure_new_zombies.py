@@ -44,6 +44,7 @@ async def test_azure_stopped_vms_plugin():
     with patch("app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient", return_value=mock_client):
         zombies = await plugin.scan(
             session="sub-1", # Acts as subscription_id fallback
+            region="global",
             credentials=mock_creds,
             subscription_id="sub-1"
         )

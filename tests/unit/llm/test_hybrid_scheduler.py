@@ -73,7 +73,7 @@ async def test_run_delta_analysis_happy_path_with_mocked_provider():
         mock_get_cache.return_value = mock_cache
 
         scheduler = HybridAnalysisScheduler(AsyncMock())
-        scheduler.analyzer = MagicMock()
+        scheduler.set_analyzer(MagicMock())
 
         delta = MagicMock()
         delta.has_significant_changes = True
@@ -103,7 +103,7 @@ async def test_run_delta_analysis_provider_timeout_failure():
         mock_get_cache.return_value = mock_cache
 
         scheduler = HybridAnalysisScheduler(AsyncMock())
-        scheduler.analyzer = MagicMock()
+        scheduler.set_analyzer(MagicMock())
 
         delta = MagicMock()
         delta.has_significant_changes = True

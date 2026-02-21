@@ -82,14 +82,12 @@ class TestFinOpsAnalyzerExpanded:
         tenant_id = uuid4()
         db = AsyncMock()
 
-        from app.shared.llm.usage_tracker import BudgetStatus
+        from app.shared.llm.budget_manager import BudgetStatus
 
-        with patch("app.shared.llm.analyzer.UsageTracker") as mock_tracker:
-            mock_tracker_instance = AsyncMock()
-            mock_tracker_instance.check_budget.return_value = BudgetStatus.SOFT_LIMIT
-            mock_tracker_instance.authorize_request = AsyncMock()
-            mock_tracker.return_value = mock_tracker_instance
-
+        with patch(
+            "app.shared.llm.analyzer.LLMBudgetManager.check_budget",
+            AsyncMock(return_value=BudgetStatus.SOFT_LIMIT),
+        ):
             mock_res = MagicMock()
             mock_res.scalar_one_or_none.return_value = None
             db.execute.return_value = mock_res
@@ -103,17 +101,21 @@ class TestFinOpsAnalyzerExpanded:
                     ("google", "gemini-1.5-flash"),
                     ("anthropic", "claude-3-5-haiku"),
                 ]:
-                    _, _, eff_model, _ = await analyzer._setup_client_and_usage(
-                        tenant_id, db, provider, None, input_text="test"
+                    eff_provider, eff_model, byok_key = (
+                        await analyzer._setup_client_and_usage(
+                            tenant_id, db, provider, None, input_text="test"
+                        )
                     )
+                    assert eff_provider == provider
                     assert eff_model == expected_model
+                    assert byok_key is None
 
     @pytest.mark.asyncio
     async def test_setup_client_invalid_provider_fallback(self, mock_llm):
         analyzer = FinOpsAnalyzer(mock_llm)
         with patch("app.shared.llm.analyzer.get_settings") as mock_settings:
             mock_settings.return_value.LLM_PROVIDER = "openai"
-            _, provider, _, _ = await analyzer._setup_client_and_usage(
+            provider, _, _ = await analyzer._setup_client_and_usage(
                 None, None, "INVALID", None
             )
             assert provider == "openai"
@@ -121,7 +123,7 @@ class TestFinOpsAnalyzerExpanded:
     @pytest.mark.asyncio
     async def test_setup_client_unsupported_model_fallback(self, mock_llm):
         analyzer = FinOpsAnalyzer(mock_llm)
-        _, _, model, _ = await analyzer._setup_client_and_usage(
+        _, model, _ = await analyzer._setup_client_and_usage(
             None, None, "openai", "UNKNOWN_MODEL"
         )
         assert model == "gpt-4"  # First in VALID_MODELS["openai"]

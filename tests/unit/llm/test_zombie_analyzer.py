@@ -89,11 +89,16 @@ async def test_analyze_flow(analyzer, mock_llm):
             with patch(
                 "app.shared.llm.guardrails.LLMGuardrails.validate_output"
             ) as mock_validate:
-                with patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls:
-                    mock_tracker = MagicMock()
-                    mock_tracker.authorize_request = AsyncMock(return_value=None)
-                    mock_tracker.record = AsyncMock(return_value=None)
-                    mock_tracker_cls.return_value = mock_tracker
+                with (
+                    patch(
+                        "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+                        new=AsyncMock(return_value=None),
+                    ),
+                    patch(
+                        "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+                        new=AsyncMock(return_value=None),
+                    ),
+                ):
 
                     mock_validate.return_value.model_dump.return_value = {
                         "summary": "Valid summary",

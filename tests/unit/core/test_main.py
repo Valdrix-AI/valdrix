@@ -131,7 +131,7 @@ async def test_valdrix_exception_handler_records_metrics():
         assert response.status_code == 418
         from typing import cast
         body = json.loads(cast(bytes, response.body))
-        assert body["code"] == "oops"
+        assert body["error"]["code"] == "oops"
 
 
 @pytest.mark.asyncio
@@ -195,7 +195,7 @@ async def test_csrf_exception_handler_records_metrics():
         assert response.status_code == 403
         from typing import cast
         body = json.loads(cast(bytes, response.body))
-        assert body["code"] == "csrf_error"
+        assert body["error"]["code"] == "csrf_error"
 
 
 @pytest.mark.asyncio
@@ -291,7 +291,7 @@ async def test_csrf_middleware_enforces_when_cookie_present_and_no_bearer():
         assert response.status_code == 400
         from typing import cast
         body = json.loads(cast(bytes, response.body))
-        assert body["code"] == "csrf_error"
+        assert body["error"]["code"] == "csrf_error"
     finally:
         main_mod.settings.TESTING = original_testing
 

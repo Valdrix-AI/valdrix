@@ -52,11 +52,11 @@ def configured_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_email_hash_normalizes_and_truncates() -> None:
-    assert billing_mod._email_hash(None) is None
-    digest = billing_mod._email_hash("  USER@Example.COM ")
+    assert billing_mod.email_hash(None) is None
+    digest = billing_mod.email_hash("  USER@Example.COM ")
     assert digest is not None
     assert len(digest) == 12
-    assert digest == billing_mod._email_hash("user@example.com")
+    assert digest == billing_mod.email_hash("user@example.com")
 
 
 @pytest.mark.asyncio
@@ -138,7 +138,7 @@ async def test_create_checkout_session_invalid_tier_raises(
     mock_db: MagicMock,
     configured_settings: None,
 ) -> None:
-    with patch("app.modules.billing.domain.billing.paystack_billing.PaystackClient"):
+    with patch("app.modules.billing.domain.billing.paystack_service_impl.PaystackClient"):
         service = BillingService(mock_db)
     with patch("app.shared.core.pricing.TIER_CONFIG", {}):
         with pytest.raises(ValueError, match="Invalid tier"):
@@ -156,7 +156,7 @@ async def test_create_checkout_session_logs_and_reraises(
     configured_settings: None,
 ) -> None:
     with patch(
-        "app.modules.billing.domain.billing.paystack_billing.PaystackClient"
+        "app.modules.billing.domain.billing.paystack_service_impl.PaystackClient"
     ) as mock_client_cls:
         mock_client_cls.return_value.initialize_transaction = AsyncMock(
             side_effect=RuntimeError("boom")
@@ -191,7 +191,7 @@ async def test_charge_renewal_returns_false_when_auth_decryption_fails(
         paystack_auth_code="enc", tenant_id=uuid4(), tier=PricingTier.STARTER.value
     )
     with patch(
-        "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+        "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
         return_value=None,
     ):
         assert await service.charge_renewal(sub) is False
@@ -206,7 +206,7 @@ async def test_charge_renewal_invalid_tier_value_returns_false(
     sub = MagicMock(paystack_auth_code="enc", tenant_id=uuid4(), tier="not-a-tier")
     mock_db.execute.return_value = _scalar_result(None)
     with patch(
-        "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+        "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
         return_value="AUTH",
     ):
         assert await service.charge_renewal(sub) is False
@@ -224,7 +224,7 @@ async def test_charge_renewal_missing_tier_config_returns_false(
     mock_db.execute.return_value = _scalar_result(None)
     with (
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
             return_value="AUTH",
         ),
         patch("app.shared.core.pricing.TIER_CONFIG", {}),
@@ -248,7 +248,7 @@ async def test_charge_renewal_missing_user_returns_false(
 
     with (
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
             return_value="AUTH",
         ),
         patch(
@@ -280,7 +280,7 @@ async def test_charge_renewal_email_decrypt_failure_returns_false(
 
     with (
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
             return_value="AUTH",
         ),
         patch(
@@ -313,7 +313,7 @@ async def test_charge_renewal_charge_exception_returns_false(
 
     with (
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
             return_value="AUTH",
         ),
         patch(
@@ -443,7 +443,7 @@ async def test_handle_charge_success_email_fallback_paths(
     with (
         patch("app.shared.core.security.generate_blind_index", return_value="BIDX"),
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.encrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.encrypt_string",
             return_value="enc-auth",
         ),
     ):
@@ -604,7 +604,7 @@ async def test_charge_renewal_uses_usd_without_fx_when_subscription_currency_usd
 
     with (
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
             return_value="AUTH",
         ),
         patch("app.shared.core.security.decrypt_string", return_value="user@example.com"),
@@ -655,7 +655,7 @@ async def test_charge_renewal_uses_provider_next_payment_date_when_available(
 
     with (
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
             return_value="AUTH",
         ),
         patch("app.shared.core.security.decrypt_string", return_value="user@example.com"),
@@ -700,7 +700,7 @@ async def test_charge_renewal_fallback_uses_annual_cycle_when_metadata_declares_
 
     with (
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
             return_value="AUTH",
         ),
         patch("app.shared.core.security.decrypt_string", return_value="user@example.com"),

@@ -99,8 +99,9 @@ async def test_run_analysis_full_flow(scheduler):
     tenant_id = uuid.uuid4()
     costs = [{"cost": 100}]
 
+    analyzer = scheduler._get_analyzer()
     # Mock analyzer result
-    scheduler.analyzer.analyze.return_value = json.dumps(
+    analyzer.analyze.return_value = json.dumps(
         {"trends": ["up"], "savings": 100}
     )
 
@@ -108,7 +109,7 @@ async def test_run_analysis_full_flow(scheduler):
 
     assert result["analysis_type"] == "full_30_day"
     assert result["trends"] == ["up"]
-    scheduler.analyzer.analyze.assert_called_once()
+    analyzer.analyze.assert_called_once()
     scheduler.cache.set.assert_called_once()
 
 
@@ -187,7 +188,7 @@ async def test_run_analysis_automatic_full(scheduler):
 
     # Mock should_run_full_analysis to return True
     with patch.object(scheduler, "should_run_full_analysis", return_value=True):
-        scheduler.analyzer.analyze.return_value = json.dumps({"trends": ["up"]})
+        scheduler._get_analyzer().analyze.return_value = json.dumps({"trends": ["up"]})
 
         result = await scheduler.run_analysis(tenant_id, costs)
 
@@ -201,7 +202,7 @@ async def test_json_decode_error_handling(scheduler):
     costs = [{"cost": 100}]
 
     # Test Full Analysis JSON Error
-    scheduler.analyzer.analyze.return_value = "Not JSON"
+    scheduler._get_analyzer().analyze.return_value = "Not JSON"
     result = await scheduler._run_full_analysis(tenant_id, costs)
     assert result["raw_analysis"] == "Not JSON"
 

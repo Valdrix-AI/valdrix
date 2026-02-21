@@ -184,7 +184,7 @@ class TestFinOpsAnalyzerAnalysis:
             mock_reserve.return_value = Decimal("1.50")
             mock_sanitize.return_value = {"test": "data"}
             mock_forecast.return_value = {"forecast": "test"}
-            mock_setup.return_value = (None, "groq", "llama-3.3-70b-versatile", None)
+            mock_setup.return_value = ("groq", "llama-3.3-70b-versatile", None)
             mock_invoke.return_value = (
                 '{"summary": "test"}',
                 {"token_usage": {"prompt_tokens": 500, "completion_tokens": 500}},
@@ -270,7 +270,7 @@ class TestFinOpsAnalyzerAnalysis:
             patch.object(
                 analyzer,
                 "_setup_client_and_usage",
-                return_value=(None, "groq", "llama-3.3-70b-versatile", None),
+                return_value=("groq", "llama-3.3-70b-versatile", None),
             ),
             patch.object(analyzer, "_invoke_llm", side_effect=Exception("LLM failed")),
         ):
@@ -375,18 +375,15 @@ class TestFinOpsAnalyzerClientSetup:
             mock_result.scalar_one_or_none.return_value = None  # No budget
             mock_db.execute.return_value = mock_result
 
-            # Setup UsageTracker mock to return AsyncMock for check_budget
-            with patch("app.shared.llm.analyzer.UsageTracker") as mock_usage_tracker:
-                mock_tracker_instance = MagicMock()
-                mock_tracker_instance.check_budget = AsyncMock(return_value="OK")
-                mock_usage_tracker.return_value = mock_tracker_instance
-
+            with patch(
+                "app.shared.llm.analyzer.LLMBudgetManager.check_budget",
+                AsyncMock(return_value="OK"),
+            ):
                 result = await analyzer._setup_client_and_usage(
                     tenant_id, mock_db, None, None
                 )
 
-                usage_tracker, provider, model, byok_key = result
-                assert usage_tracker == mock_tracker_instance
+                provider, model, byok_key = result
                 assert provider == "groq"
                 assert model == "llama-3.3-70b-versatile"
                 assert byok_key is None
@@ -403,16 +400,12 @@ class TestFinOpsAnalyzerClientSetup:
         mock_budget.openai_api_key = "sk-test123"
 
         with (
-            patch("app.shared.llm.analyzer.UsageTracker") as mock_usage_tracker,
+            patch(
+                "app.shared.llm.analyzer.LLMBudgetManager.check_budget",
+                AsyncMock(return_value=MagicMock()),
+            ),
             patch("app.shared.llm.analyzer.get_settings"),
         ):
-            mock_tracker_instance = MagicMock()
-            # Make check_budget awaitable
-            mock_tracker_instance.check_budget = AsyncMock(
-                return_value=MagicMock()
-            )  # Not HARD_LIMIT
-            mock_usage_tracker.return_value = mock_tracker_instance
-
             # Mock database query
             mock_result = MagicMock()
             mock_result.scalar_one_or_none.return_value = mock_budget
@@ -422,8 +415,7 @@ class TestFinOpsAnalyzerClientSetup:
                 tenant_id, mock_db, None, None
             )
 
-            usage_tracker, provider, model, byok_key = result
-            assert usage_tracker == mock_tracker_instance
+            provider, model, byok_key = result
             assert provider == "openai"
             assert model == "gpt-4"
             assert byok_key == "sk-test123"
@@ -433,17 +425,12 @@ class TestFinOpsAnalyzerClientSetup:
         """Test client setup fails on budget hard limit."""
         tenant_id = uuid4()
 
-        from app.shared.llm.usage_tracker import BudgetStatus
+        from app.shared.llm.budget_manager import BudgetStatus
 
-        # Ensure UsageTracker is mocked properly
-        with patch("app.shared.llm.analyzer.UsageTracker") as mock_usage_tracker:
-            mock_tracker_instance = MagicMock()
-            # Explicitly make check_budget an AsyncMock
-            mock_tracker_instance.check_budget = AsyncMock(
-                return_value=BudgetStatus.HARD_LIMIT
-            )
-            mock_usage_tracker.return_value = mock_tracker_instance
-
+        with patch(
+            "app.shared.llm.analyzer.LLMBudgetManager.check_budget",
+            AsyncMock(return_value=BudgetStatus.HARD_LIMIT),
+        ):
             with pytest.raises(
                 BudgetExceededError, match="Monthly LLM budget exceeded"
             ):
@@ -456,7 +443,7 @@ class TestFinOpsAnalyzerClientSetup:
         """Test client setup degrades to cheaper models on soft limit."""
         tenant_id = uuid4()
 
-        from app.shared.llm.usage_tracker import BudgetStatus
+        from app.shared.llm.budget_manager import BudgetStatus
 
         # Mock budget preferring expensive model
         mock_budget = MagicMock()
@@ -464,15 +451,12 @@ class TestFinOpsAnalyzerClientSetup:
         mock_budget.preferred_model = "gpt-4"
 
         with (
-            patch("app.shared.llm.analyzer.UsageTracker") as mock_usage_tracker,
+            patch(
+                "app.shared.llm.analyzer.LLMBudgetManager.check_budget",
+                AsyncMock(return_value=BudgetStatus.SOFT_LIMIT),
+            ),
             patch("app.shared.llm.analyzer.get_settings") as mock_settings,
         ):
-            mock_tracker_instance = MagicMock()
-            mock_tracker_instance.check_budget = AsyncMock(
-                return_value=BudgetStatus.SOFT_LIMIT
-            )
-            mock_usage_tracker.return_value = mock_tracker_instance
-
             mock_settings_obj = MagicMock()
             mock_settings.return_value = mock_settings_obj
 
@@ -485,7 +469,7 @@ class TestFinOpsAnalyzerClientSetup:
                 tenant_id, mock_db, None, None
             )
 
-            _, provider, model, _ = result
+            provider, model, _ = result
             assert provider == "openai"
             assert model == "gpt-4o-mini"  # Degraded to cheaper model
 
@@ -893,7 +877,7 @@ class TestFinOpsAnalyzerProductionQuality:
             patch.object(
                 analyzer,
                 "_setup_client_and_usage",
-                return_value=(None, "groq", "llama-3.3-70b-versatile", None),
+                return_value=("groq", "llama-3.3-70b-versatile", None),
             ),
             patch.object(
                 analyzer,

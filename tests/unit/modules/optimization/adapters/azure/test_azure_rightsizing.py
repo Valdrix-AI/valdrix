@@ -76,6 +76,7 @@ async def test_overprovisioned_vm_plugin_scan(mock_azure_creds):
             
             zombies = await plugin.scan(
                 session="sub-id",
+                region="global",
                 credentials=mock_azure_creds
             )
 

@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.shared.core.health import HealthCheckService
+from app.shared.core.health import HealthService
 
 
 @pytest.mark.asyncio
 async def test_check_all_formats_expected_keys():
-    service = HealthCheckService()
+    service = HealthService()
     health = {
         "status": "healthy",
         "timestamp": "t",
@@ -30,7 +30,7 @@ async def test_check_all_formats_expected_keys():
 
 @pytest.mark.asyncio
 async def test_handle_check_errors_wraps_exception():
-    service = HealthCheckService()
+    service = HealthService()
 
     async def fail():
         raise RuntimeError("boom")
@@ -42,7 +42,7 @@ async def test_handle_check_errors_wraps_exception():
 
 @pytest.mark.asyncio
 async def test_check_aws_status_codes():
-    service = HealthCheckService()
+    service = HealthService()
 
     class FakeResponse:
         def __init__(self, code):

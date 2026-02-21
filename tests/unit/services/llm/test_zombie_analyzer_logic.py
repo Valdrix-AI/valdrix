@@ -79,10 +79,15 @@ async def test_analyze_with_byok_config(mock_llm, mock_db):
         # Patch LLMFactory.create since it's called for BYOK
         with (
             patch("app.shared.llm.factory.LLMFactory.create") as mock_factory_create,
-            patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls,
+            patch(
+                "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+                new=AsyncMock(return_value=None),
+            ),
         ):
-            mock_tracker = AsyncMock()
-            mock_tracker_cls.return_value = mock_tracker
             mock_factory_create.return_value = mock_llm
             result = await analyzer.analyze(
                 detection_results, tenant_id=tenant_id, db=mock_db, provider="openai"
@@ -133,19 +138,26 @@ async def test_analyze_usage_tracking(mock_llm, mock_db):
         mock_chain = AsyncMock()
         mock_chain.ainvoke.return_value = mock_response
         mock_or.return_value = mock_chain
-        with patch("app.shared.llm.zombie_analyzer.UsageTracker") as mock_tracker_cls:
-            mock_tracker = AsyncMock()
-            mock_tracker_cls.return_value = mock_tracker
+        with (
+            patch(
+                "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+                new=AsyncMock(return_value=None),
+            ) as mock_record_usage,
+        ):
             # Setup mock_db execution result correctly
             mock_result = MagicMock()
             mock_result.scalar_one_or_none.return_value = None
             mock_db.execute.return_value = mock_result
             await analyzer.analyze(detection_results, tenant_id=tenant_id, db=mock_db)
-            # Verify usage tracker was called with correct tokens
-            mock_tracker.record.assert_called_once()
-            args = mock_tracker.record.call_args.kwargs
-            assert args["input_tokens"] == 100
-            assert args["output_tokens"] == 50
+            # Verify usage tracking was called with correct tokens
+            mock_record_usage.assert_called_once()
+            args = mock_record_usage.call_args.kwargs
+            assert args["prompt_tokens"] == 100
+            assert args["completion_tokens"] == 50
 
 
 @pytest.mark.asyncio

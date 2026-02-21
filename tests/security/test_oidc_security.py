@@ -57,7 +57,7 @@ async def test_oidc_discovery(async_client):
 
 @pytest.mark.asyncio
 async def test_oidc_jwks(async_client):
-    response = await async_client.get("/oidc/jwks.json")
+    response = await async_client.get("/.well-known/jwks.json")
     assert response.status_code == 200
     assert "keys" in response.json()
 

@@ -40,7 +40,8 @@ async def test_gcp_stopped_vms_plugin():
     # Patch the client class
     with patch("app.modules.optimization.adapters.gcp.plugins.compute.compute_v1.InstancesClient", return_value=mock_client):
         zombies = await plugin.scan(
-            project_id="proj-1",
+            session="proj-1",
+            region="global",
             credentials=mock_creds
         )
 

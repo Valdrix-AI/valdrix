@@ -60,6 +60,7 @@ async def test_overprovisioned_compute_plugin_scan(mock_gcp_creds):
             
             zombies = await plugin.scan(
                 session="project-id",
+                region="global",
                 credentials=mock_gcp_creds
             )
 

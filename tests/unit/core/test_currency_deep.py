@@ -10,16 +10,16 @@ from app.shared.core.currency import (
     ExchangeRateUnavailableError,
     _RATES_CACHE,
     convert_usd,
-    fetch_public_exchange_rates,
     format_currency,
     get_exchange_rate,
+    list_exchange_rates,
 )
 
 
 @pytest.fixture(autouse=True)
 def clear_cache():
     _RATES_CACHE.clear()
-    _RATES_CACHE["USD"] = (Decimal("1.0"), time.time())
+    _RATES_CACHE["USD"] = (Decimal("1.0"), time.time(), "internal")
     with patch("app.shared.core.cache.get_cache_service") as mock_cache_cls:
         mock_cache_cls.return_value.enabled = False
         yield
@@ -41,12 +41,12 @@ class TestCurrencyDeep:
             yield session
 
         with patch.object(ExchangeRateService, "_session_scope", fake_scope):
-            rates = await fetch_public_exchange_rates()
+            rates = await list_exchange_rates()
             assert rates["EUR"] == Decimal("0.95")
 
     @pytest.mark.asyncio
     async def test_fetch_public_rates_failure_falls_back_to_l1(self):
-        _RATES_CACHE["EUR"] = (Decimal("0.91"), time.time())
+        _RATES_CACHE["EUR"] = (Decimal("0.91"), time.time(), "internal")
 
         @asynccontextmanager
         async def broken_scope(self):
@@ -54,7 +54,7 @@ class TestCurrencyDeep:
             yield  # pragma: no cover
 
         with patch.object(ExchangeRateService, "_session_scope", broken_scope):
-            rates = await fetch_public_exchange_rates()
+            rates = await list_exchange_rates()
             assert rates["EUR"] == Decimal("0.91")
 
     @pytest.mark.asyncio
@@ -75,7 +75,7 @@ class TestCurrencyDeep:
 
     @pytest.mark.asyncio
     async def test_get_exchange_rate_cached_l1(self):
-        _RATES_CACHE["EUR"] = (Decimal("0.90"), time.time())
+        _RATES_CACHE["EUR"] = (Decimal("0.90"), time.time(), "internal")
         rate = await get_exchange_rate("EUR")
         assert rate == Decimal("0.90")
 
