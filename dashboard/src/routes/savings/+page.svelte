@@ -10,11 +10,11 @@
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { onMount } from 'svelte';
 	import { SvelteURLSearchParams } from 'svelte/reactivity';
-	import { PUBLIC_API_URL } from '$env/static/public';
 	import { base } from '$app/paths';
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
 	import { filenameFromContentDispositionHeader } from '$lib/utils';
 
@@ -131,10 +131,7 @@
 			if (provider) params.set('provider', provider);
 			params.set('response_format', 'json');
 
-			const res = await getWithTimeout(
-				`${PUBLIC_API_URL}/savings/proof?${params.toString()}`,
-				headers
-			);
+			const res = await getWithTimeout(edgeApiPath(`/savings/proof?${params.toString()}`), headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(
@@ -169,7 +166,7 @@
 			params.set('response_format', 'json');
 
 			const res = await getWithTimeout(
-				`${PUBLIC_API_URL}/savings/proof/drilldown?${params.toString()}`,
+				edgeApiPath(`/savings/proof/drilldown?${params.toString()}`),
 				headers
 			);
 			if (!res.ok) {
@@ -199,10 +196,7 @@
 			if (provider) params.set('provider', provider);
 			params.set('response_format', 'csv');
 
-			const res = await getWithTimeout(
-				`${PUBLIC_API_URL}/savings/proof?${params.toString()}`,
-				headers
-			);
+			const res = await getWithTimeout(edgeApiPath(`/savings/proof?${params.toString()}`), headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to export savings report.');
