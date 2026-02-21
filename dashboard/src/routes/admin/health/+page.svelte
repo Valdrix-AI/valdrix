@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Activity, RefreshCw, Server, Wallet, Cloud } from '@lucide/svelte';
 	import AuthGate from '$lib/components/AuthGate.svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
 
 	type HealthDashboard = {
@@ -135,7 +135,7 @@
 		try {
 			const res = await fetchWithTimeout(
 				fetch,
-				`${PUBLIC_API_URL}/admin/health-dashboard`,
+				edgeApiPath('/admin/health-dashboard'),
 				{
 					headers: {
 						Authorization: `Bearer ${accessToken}`
@@ -181,7 +181,7 @@
 			try {
 				const fairUseRes = await fetchWithTimeout(
 					fetch,
-					`${PUBLIC_API_URL}/admin/health-dashboard/fair-use`,
+					edgeApiPath('/admin/health-dashboard/fair-use'),
 					{
 						headers: {
 							Authorization: `Bearer ${accessToken}`

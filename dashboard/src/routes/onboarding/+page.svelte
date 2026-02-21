@@ -3,8 +3,8 @@
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { base } from '$app/paths';
-	import { PUBLIC_API_URL } from '$env/static/public';
 
 	type CloudPlusAuthMethod = 'manual' | 'api_key' | 'oauth' | 'csv';
 	type CloudPlusProvider = 'saas' | 'license';
@@ -123,8 +123,6 @@
 	let error = $state('');
 	let success = $state(false);
 	let copied = $state(false);
-
-	const API_URL = PUBLIC_API_URL || '';
 
 	const growthAndAbove = ['growth', 'pro', 'enterprise'];
 	const cloudPlusAllowed = ['pro', 'enterprise'];
@@ -249,7 +247,7 @@
 			}
 
 			const res = await api.post(
-				`${API_URL}/settings/connections/discovery/stage-a`,
+				edgeApiPath('/settings/connections/discovery/stage-a'),
 				{ email: normalizedEmail },
 				{
 					headers: { Authorization: `Bearer ${token}` }
@@ -303,7 +301,7 @@
 			}
 
 			const res = await api.post(
-				`${API_URL}/settings/connections/discovery/deep-scan`,
+				edgeApiPath('/settings/connections/discovery/deep-scan'),
 				{
 					domain,
 					idp_provider: discoveryIdpProvider,
@@ -348,7 +346,7 @@
 				throw new Error('Please log in first');
 			}
 			const res = await api.post(
-				`${API_URL}/settings/connections/discovery/candidates/${candidate.id}/${action}`,
+				edgeApiPath(`/settings/connections/discovery/candidates/${candidate.id}/${action}`),
 				undefined,
 				{
 					headers: { Authorization: `Bearer ${token}` }
@@ -627,7 +625,7 @@
 
 		try {
 			const res = await api.post(
-				`${API_URL}/settings/onboard`,
+				edgeApiPath('/settings/onboard'),
 				{ tenant_name: 'My Organization' },
 				{
 					headers: {
@@ -672,7 +670,7 @@
 								? '/settings/connections/saas/setup'
 								: '/settings/connections/license/setup';
 
-			const res = await api.post(`${API_URL}${endpoint}`, undefined, {
+			const res = await api.post(edgeApiPath(endpoint), undefined, {
 				headers: {
 					Authorization: `Bearer ${token}`
 				}
@@ -836,7 +834,7 @@
 					throw new Error('Please log in first');
 				}
 				const res = await api.post(
-					`${API_URL}/settings/connections/azure`,
+					edgeApiPath('/settings/connections/azure'),
 					{
 						name: `Azure-${azureSubscriptionId.slice(0, 8)}`,
 						azure_tenant_id: azureTenantId,
@@ -859,7 +857,7 @@
 
 				// Explicit verify step
 				const verifyRes = await api.post(
-					`${API_URL}/settings/connections/azure/${connection.id}/verify`,
+					edgeApiPath(`/settings/connections/azure/${connection.id}/verify`),
 					undefined,
 					{
 						headers: { Authorization: `Bearer ${token}` }
@@ -891,7 +889,7 @@
 					throw new Error('Please log in first');
 				}
 				const res = await api.post(
-					`${API_URL}/settings/connections/gcp`,
+					edgeApiPath('/settings/connections/gcp'),
 					{
 						name: `GCP-${gcpProjectId}`,
 						project_id: gcpProjectId,
@@ -915,7 +913,7 @@
 
 				// Explicit verify step
 				const verifyRes = await api.post(
-					`${API_URL}/settings/connections/gcp/${connection.id}/verify`,
+					edgeApiPath(`/settings/connections/gcp/${connection.id}/verify`),
 					undefined,
 					{
 						headers: { Authorization: `Bearer ${token}` }
@@ -979,7 +977,7 @@
 								license_feed: feed
 							};
 
-				const res = await api.post(`${API_URL}/settings/connections/${createPath}`, payload, {
+				const res = await api.post(edgeApiPath(`/settings/connections/${createPath}`), payload, {
 					headers: {
 						Authorization: `Bearer ${token}`
 					}
@@ -991,7 +989,7 @@
 
 				const connection = await res.json();
 				const verifyRes = await api.post(
-					`${API_URL}/settings/connections/${createPath}/${connection.id}/verify`,
+					edgeApiPath(`/settings/connections/${createPath}/${connection.id}/verify`),
 					undefined,
 					{
 						headers: { Authorization: `Bearer ${token}` }
@@ -1040,7 +1038,7 @@
 			}
 
 			const createRes = await api.post(
-				`${API_URL}/settings/connections/aws`,
+				edgeApiPath('/settings/connections/aws'),
 				{
 					aws_account_id: awsAccountId,
 					role_arn: roleArn,
@@ -1064,7 +1062,7 @@
 			const connection = await createRes.json();
 
 			const verifyRes = await api.post(
-				`${API_URL}/settings/connections/aws/${connection.id}/verify`,
+				edgeApiPath(`/settings/connections/aws/${connection.id}/verify`),
 				undefined,
 				{
 					headers: { Authorization: `Bearer ${token}` }
