@@ -9,7 +9,7 @@
 
 <script lang="ts">
 	import AuthGate from '$lib/components/AuthGate.svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
 
 	let { data } = $props();
@@ -62,7 +62,7 @@
 		try {
 			const res = await fetchWithTimeout(
 				fetch,
-				`${PUBLIC_API_URL}/usage`,
+				edgeApiPath('/usage'),
 				{
 					headers: {
 						Authorization: `Bearer ${accessToken}`

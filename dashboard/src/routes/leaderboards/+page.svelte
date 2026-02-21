@@ -12,7 +12,7 @@
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import AuthGate from '$lib/components/AuthGate.svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
 
 	let { data } = $props();
@@ -75,7 +75,7 @@
 		try {
 			const res = await fetchWithTimeout(
 				fetch,
-				`${PUBLIC_API_URL}/leaderboards?period=${currentPeriod}`,
+				edgeApiPath(`/leaderboards?period=${currentPeriod}`),
 				{
 					headers: {
 						Authorization: `Bearer ${accessToken}`
