@@ -42,9 +42,14 @@ async def enforce_hard_limit_for_tenant(service: Any, tenant_id: UUID) -> list[U
         .order_by(RemediationRequest.estimated_monthly_savings.desc())
     )
     scalars_result = result.scalars()
-    requests_result = scalars_result.all()
-    if inspect.isawaitable(requests_result):
-        requests_result = await requests_result
+    if inspect.isawaitable(scalars_result):
+        scalars_result = await scalars_result
+    if callable(getattr(scalars_result, "all", None)):
+        requests_result = scalars_result.all()
+        if inspect.isawaitable(requests_result):
+            requests_result = await requests_result
+    else:
+        requests_result = scalars_result
     if not requests_result:
         requests: list[RemediationRequest] = []
     else:
