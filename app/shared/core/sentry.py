@@ -23,19 +23,30 @@ import structlog
 
 logger = structlog.get_logger()
 
-# Optional import - Sentry is only used in production
+# Optional import - resolved once at module import, but only enforced when DSN is set.
+SENTRY_IMPORT_ERROR: str | None = None
+SENTRY_AVAILABLE = False
+sentry_sdk: Any | None = None
+FastApiIntegration: Any | None = None
+SqlalchemyIntegration: Any | None = None
+LoggingIntegration: Any | None = None
+
 try:
-    import sentry_sdk
-    from sentry_sdk.integrations.fastapi import FastApiIntegration
-    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
-    from sentry_sdk.integrations.logging import LoggingIntegration
+    import sentry_sdk as _sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration as _FastApiIntegration
+    from sentry_sdk.integrations.sqlalchemy import (
+        SqlalchemyIntegration as _SqlalchemyIntegration,
+    )
+    from sentry_sdk.integrations.logging import LoggingIntegration as _LoggingIntegration
+
+    sentry_sdk = _sentry_sdk
+    FastApiIntegration = _FastApiIntegration
+    SqlalchemyIntegration = _SqlalchemyIntegration
+    LoggingIntegration = _LoggingIntegration
 
     SENTRY_AVAILABLE = True
-except ImportError:
-    SENTRY_AVAILABLE = False
-    logger.info(
-        "sentry_sdk_not_installed", message="Install sentry-sdk for error tracking"
-    )
+except ImportError as exc:
+    SENTRY_IMPORT_ERROR = str(exc)
 
 
 def init_sentry() -> bool:
@@ -45,18 +56,46 @@ def init_sentry() -> bool:
     Returns:
         True if Sentry was initialized, False otherwise
     """
-    if not SENTRY_AVAILABLE:
-        logger.info("sentry_disabled", reason="sentry-sdk not installed")
-        return False
-
     dsn = os.getenv("SENTRY_DSN")
 
     if not dsn:
         logger.info("sentry_disabled", reason="SENTRY_DSN not set")
         return False
 
+    if not SENTRY_AVAILABLE:
+        environment = str(os.getenv("ENVIRONMENT", "development")).strip().lower()
+        strict_env = environment in {"production", "staging"}
+        error_message = (
+            "SENTRY_DSN is configured but sentry-sdk is not installed. "
+            "Install sentry-sdk or unset SENTRY_DSN."
+        )
+        logger.error(
+            "sentry_dependency_missing",
+            environment=environment,
+            strict_env=strict_env,
+            import_error=SENTRY_IMPORT_ERROR,
+        )
+        if strict_env:
+            raise RuntimeError(error_message)
+        logger.warning("sentry_disabled", reason=error_message)
+        return False
+
+    assert sentry_sdk is not None
+
     environment = os.getenv("ENVIRONMENT", "development")
     release = os.getenv("APP_VERSION", "0.1.0")
+    integrations: list[Any] = []
+    if FastApiIntegration is not None:
+        integrations.append(FastApiIntegration(transaction_style="endpoint"))
+    if SqlalchemyIntegration is not None:
+        integrations.append(SqlalchemyIntegration())
+    if LoggingIntegration is not None:
+        integrations.append(
+            LoggingIntegration(
+                level=None,  # Capture all as breadcrumbs
+                event_level=40,  # Only ERROR+ as events
+            )
+        )
 
     sentry_sdk.init(
         dsn=dsn,
@@ -66,14 +105,7 @@ def init_sentry() -> bool:
         traces_sample_rate=0.1 if environment == "production" else 1.0,
         profiles_sample_rate=0.1 if environment == "production" else 1.0,
         # Integrations
-        integrations=[
-            FastApiIntegration(transaction_style="endpoint"),
-            SqlalchemyIntegration(),
-            LoggingIntegration(
-                level=None,  # Capture all as breadcrumbs
-                event_level=40,  # Only ERROR+ as events
-            ),
-        ],
+        integrations=integrations,
         # Data scrubbing
         send_default_pii=False,
         # Before send hook for filtering
@@ -118,7 +150,7 @@ def capture_message(message: str, level: str = "info", **extras: Any) -> None:
     """
     Capture a custom message in Sentry.
     """
-    if not SENTRY_AVAILABLE:
+    if not SENTRY_AVAILABLE or sentry_sdk is None:
         return
 
     with sentry_sdk.push_scope() as scope:
@@ -129,7 +161,7 @@ def capture_message(message: str, level: str = "info", **extras: Any) -> None:
 
 def capture_exception(error: Exception, **extras: Any) -> None:
     """Capture an exception in Sentry with optional extra context."""
-    if not SENTRY_AVAILABLE:
+    if not SENTRY_AVAILABLE or sentry_sdk is None:
         return
 
     with sentry_sdk.push_scope() as scope:
@@ -144,7 +176,7 @@ def set_user(
     """
     Set user context for Sentry events.
     """
-    if not SENTRY_AVAILABLE:
+    if not SENTRY_AVAILABLE or sentry_sdk is None:
         return
 
     sentry_sdk.set_user(
@@ -160,7 +192,7 @@ def set_tenant_context(tenant_id: str, tenant_name: str | None = None) -> None:
     """
     Set tenant context for multi-tenant error tracking.
     """
-    if not SENTRY_AVAILABLE:
+    if not SENTRY_AVAILABLE or sentry_sdk is None:
         return
 
     sentry_sdk.set_tag("tenant_id", tenant_id)
