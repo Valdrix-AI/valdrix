@@ -34,7 +34,7 @@ test.describe('Dashboard Sniper Console Reliability', () => {
 
 	test('should display the main headline', async ({ page }) => {
 		await page.goto('/');
-		await expect(page.locator('h1')).toContainText(/Cloud (Cost|Intelligence)/i);
+		await expect(page.locator('h1')).toContainText(/Cloud Cost Intelligence/i);
 	});
 
 	test('should redirect to login when accessing protected page unauthenticated', async ({
