@@ -27,7 +27,7 @@ async def test_analyzer_multi_provider_fallback():
         with patch.object(
             analyzer,
             "_setup_client_and_usage",
-            return_value=(None, "groq", "llama-3.3-70b-versatile", None),
+            return_value=("groq", "llama-3.3-70b-versatile", None),
         ):
             with patch(
                 "app.shared.llm.budget_manager.LLMBudgetManager.check_and_reserve",
@@ -81,7 +81,7 @@ async def test_analyzer_byok_injection(mock_usage_summary):
             with patch.object(
                 analyzer, "_setup_client_and_usage", new_callable=AsyncMock
             ) as mock_setup:
-                mock_setup.return_value = (None, "openai", "gpt-4o", "sk-tenant-key")
+                mock_setup.return_value = ("openai", "gpt-4o", "sk-tenant-key")
 
                 # Mock _invoke_llm directly to bypass factory complexity and coroutine errors
                 with patch.object(

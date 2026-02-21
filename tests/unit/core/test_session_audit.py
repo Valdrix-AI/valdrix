@@ -82,6 +82,7 @@ def test_slow_query_logging():
             mock_logger.warning.assert_called_with(
                 "slow_query_detected",
                 duration_seconds=ANY,
+                threshold_seconds=ANY,
                 statement=ANY,
                 parameters=ANY,
             )

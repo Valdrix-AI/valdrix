@@ -25,7 +25,7 @@ def mock_db():
 @pytest.fixture
 def billing_service(mock_db):
     with patch(
-        "app.modules.billing.domain.billing.paystack_billing.settings"
+        "app.modules.billing.domain.billing.paystack_shared.settings"
     ) as mock_settings:
         mock_settings.PAYSTACK_SECRET_KEY = "test-key"
         return BillingService(mock_db)
@@ -43,7 +43,7 @@ async def test_charge_renewal_success(billing_service, mock_db):
 
     with (
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
             return_value="AUTH_123",
         ),
         patch(
@@ -52,7 +52,7 @@ async def test_charge_renewal_success(billing_service, mock_db):
             return_value=1500.0,
         ),
         patch(
-            "app.modules.billing.domain.billing.paystack_billing.PaystackClient.charge_authorization"
+            "app.modules.billing.domain.billing.paystack_service_impl.PaystackClient.charge_authorization"
         ) as mock_charge,
     ):
         mock_charge.return_value = {"status": True, "data": {"status": "success"}}
@@ -91,7 +91,7 @@ async def test_webhook_handler_invalid_signature(mock_db):
     mock_request.headers = {"Content-Type": "application/json"}
 
     with patch(
-        "app.modules.billing.domain.billing.paystack_billing.settings"
+        "app.modules.billing.domain.billing.paystack_shared.settings"
     ) as mock_settings:
         mock_settings.PAYSTACK_SECRET_KEY = "secret"
 
@@ -125,7 +125,7 @@ async def test_webhook_handle_charge_success(mock_db):
         mock_db.execute.return_value = mock_result
 
         with patch(
-            "app.modules.billing.domain.billing.paystack_billing.encrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.encrypt_string",
             return_value="encrypted-auth",
         ):
             response = await handler.handle(mock_request, payload, "valid-sig")

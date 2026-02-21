@@ -25,7 +25,7 @@ def mock_lifespan_deps():
         patch(
             "app.modules.governance.domain.scheduler.SchedulerService"
         ) as mock_scheduler,
-        patch("app.main.engine", new=_EngineStub()),
+        patch("app.main.get_engine", return_value=_EngineStub()),
     ):
         yield {
             "makedirs": mock_makedirs,
@@ -87,7 +87,7 @@ def test_valdrix_exception_handler(client):
 
     response = client.get("/test-valdrix-exc")
     assert response.status_code == 418
-    assert response.json()["code"] == "test_code"
+    assert response.json()["error"]["code"] == "test_code"
 
 
 def test_generic_exception_handler(client):
@@ -99,7 +99,7 @@ def test_generic_exception_handler(client):
 
     response = client.get("/test-generic-exc")
     assert response.status_code == 500
-    assert response.json()["code"] == "internal_error"
+    assert response.json()["error"]["code"] == "internal_error"
 
 
 def test_docs_endpoints(client):
@@ -107,6 +107,7 @@ def test_docs_endpoints(client):
     with patch("app.main.get_swagger_ui_html") as mock_swagger:
         mock_swagger.return_value = MagicMock()
         mock_swagger.return_value.body = b"<html></html>"
+        mock_swagger.return_value.status_code = 200
         response = client.get("/docs")
         assert response.status_code == 200
 
@@ -114,5 +115,6 @@ def test_docs_endpoints(client):
     with patch("app.main.get_redoc_html") as mock_redoc:
         mock_redoc.return_value = MagicMock()
         mock_redoc.return_value.body = b"<html></html>"
+        mock_redoc.return_value.status_code = 200
         response = client.get("/redoc")
         assert response.status_code == 200

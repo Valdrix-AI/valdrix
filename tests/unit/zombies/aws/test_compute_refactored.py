@@ -135,7 +135,7 @@ async def test_iac_plan_generation():
     tenant_id = uuid4()
 
     with patch(
-        "app.shared.core.pricing.get_tenant_tier", new_callable=AsyncMock
+        "app.modules.optimization.domain.remediation.get_tenant_tier", new_callable=AsyncMock
     ) as mock_tier:
         mock_tier.return_value = PricingTier.PRO
 

@@ -363,27 +363,31 @@ class TestProcessPaystackWebhook:
     @pytest.mark.asyncio
     async def test_process_paystack_webhook_charge_success(self, mock_db):
         """Test processing charge.success webhook."""
+        payload_data = {
+            "event": "charge.success",
+            "data": {
+                "id": 123,
+                "reference": "txn_123",
+                "amount": 50000,
+                "status": "success",
+            },
+        }
         mock_job = MagicMock(spec=BackgroundJob)
         mock_job.id = uuid.uuid4()
         mock_job.payload = {
             "provider": "paystack",
             "event_type": "charge.success",
-            "payload": {
-                "event": "charge.success",
-                "data": {
-                    "id": 123,
-                    "reference": "txn_123",
-                    "amount": 50000,
-                    "status": "success",
-                },
-            },
+            "payload": payload_data,
+            "raw_payload": json.dumps(payload_data),
+            "signature": "sig",
         }
 
         with patch(
             "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
         ) as mock_handler_class:
-            mock_handler = AsyncMock()
+            mock_handler = MagicMock()
             mock_handler_class.return_value = mock_handler
+            mock_handler.verify_signature.return_value = True
             mock_handler._handle_charge_success = AsyncMock()
 
             result = await process_paystack_webhook(mock_job, mock_db)
@@ -395,20 +399,24 @@ class TestProcessPaystackWebhook:
     @pytest.mark.asyncio
     async def test_process_paystack_webhook_subscription_create(self, mock_db):
         """Test processing subscription.create webhook."""
+        payload_data = {
+            "event": "subscription.create",
+            "data": {"id": 456, "customer_id": 1, "plan": "premium"},
+        }
         mock_job = MagicMock(spec=BackgroundJob)
         mock_job.payload = {
             "event_type": "subscription.create",
-            "payload": {
-                "event": "subscription.create",
-                "data": {"id": 456, "customer_id": 1, "plan": "premium"},
-            },
+            "payload": payload_data,
+            "raw_payload": json.dumps(payload_data),
+            "signature": "sig",
         }
 
         with patch(
             "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
         ) as mock_handler_class:
-            mock_handler = AsyncMock()
+            mock_handler = MagicMock()
             mock_handler_class.return_value = mock_handler
+            mock_handler.verify_signature.return_value = True
             mock_handler._handle_subscription_create = AsyncMock()
 
             result = await process_paystack_webhook(mock_job, mock_db)
@@ -419,17 +427,21 @@ class TestProcessPaystackWebhook:
     @pytest.mark.asyncio
     async def test_process_paystack_webhook_subscription_disable(self, mock_db):
         """Test processing subscription.disable webhook."""
+        payload_data = {"event": "subscription.disable", "data": {"id": 789}}
         mock_job = MagicMock(spec=BackgroundJob)
         mock_job.payload = {
             "event_type": "subscription.disable",
-            "payload": {"event": "subscription.disable", "data": {"id": 789}},
+            "payload": payload_data,
+            "raw_payload": json.dumps(payload_data),
+            "signature": "sig",
         }
 
         with patch(
             "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
         ) as mock_handler_class:
-            mock_handler = AsyncMock()
+            mock_handler = MagicMock()
             mock_handler_class.return_value = mock_handler
+            mock_handler.verify_signature.return_value = True
             mock_handler._handle_subscription_disable = AsyncMock()
 
             result = await process_paystack_webhook(mock_job, mock_db)
@@ -440,20 +452,24 @@ class TestProcessPaystackWebhook:
     @pytest.mark.asyncio
     async def test_process_paystack_webhook_invoice_failed(self, mock_db):
         """Test processing invoice.payment_failed webhook."""
+        payload_data = {
+            "event": "invoice.payment_failed",
+            "data": {"inv_id": 111, "status": "failed"},
+        }
         mock_job = MagicMock(spec=BackgroundJob)
         mock_job.payload = {
             "event_type": "invoice.payment_failed",
-            "payload": {
-                "event": "invoice.payment_failed",
-                "data": {"inv_id": 111, "status": "failed"},
-            },
+            "payload": payload_data,
+            "raw_payload": json.dumps(payload_data),
+            "signature": "sig",
         }
 
         with patch(
             "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
         ) as mock_handler_class:
-            mock_handler = AsyncMock()
+            mock_handler = MagicMock()
             mock_handler_class.return_value = mock_handler
+            mock_handler.verify_signature.return_value = True
             mock_handler._handle_invoice_failed = AsyncMock()
 
             result = await process_paystack_webhook(mock_job, mock_db)
@@ -464,17 +480,21 @@ class TestProcessPaystackWebhook:
     @pytest.mark.asyncio
     async def test_process_paystack_webhook_unknown_event(self, mock_db):
         """Test processing unknown event type."""
+        payload_data = {"event": "unknown.event", "data": {}}
         mock_job = MagicMock(spec=BackgroundJob)
         mock_job.payload = {
             "event_type": "unknown.event",
-            "payload": {"event": "unknown.event", "data": {}},
+            "payload": payload_data,
+            "raw_payload": json.dumps(payload_data),
+            "signature": "sig",
         }
 
         with patch(
             "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
         ) as mock_handler_class:
-            mock_handler = AsyncMock()
+            mock_handler = MagicMock()
             mock_handler_class.return_value = mock_handler
+            mock_handler.verify_signature.return_value = True
 
             result = await process_paystack_webhook(mock_job, mock_db)
 
@@ -531,16 +551,10 @@ class TestProcessPaystackWebhook:
             "payload": {"event": "charge.success", "data": {}},
         }
 
-        with (
-            patch(
-                "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
-            ) as mock_handler_class,
-            patch(
-                "app.modules.billing.domain.billing.webhook_retry.get_settings"
-            ) as mock_get_settings,
-        ):
+        with patch(
+            "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
+        ) as mock_handler_class:
             mock_handler_class.return_value = AsyncMock()
-            mock_get_settings.return_value = MagicMock(ENVIRONMENT="production")
             result = await process_paystack_webhook(mock_job, mock_db)
 
         assert result["status"] == "error"
@@ -579,10 +593,13 @@ class TestWebhookIntegration:
         ) as mock_enqueue:
             mock_job = MagicMock(spec=BackgroundJob)
             mock_job.id = uuid.uuid4()
+            raw_payload = json.dumps(sample_paystack_payload)
             mock_job.payload = {
                 "provider": "paystack",
                 "event_type": "charge.success",
                 "payload": sample_paystack_payload,
+                "raw_payload": raw_payload,
+                "signature": "sig",
             }
             mock_enqueue.return_value = mock_job
 
@@ -600,8 +617,9 @@ class TestWebhookIntegration:
             with patch(
                 "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
             ) as mock_handler_class:
-                mock_handler = AsyncMock()
+                mock_handler = MagicMock()
                 mock_handler_class.return_value = mock_handler
+                mock_handler.verify_signature.return_value = True
                 mock_handler._handle_charge_success = AsyncMock()
 
                 result = await process_paystack_webhook(mock_job, mock_db)

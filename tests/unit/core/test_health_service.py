@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.shared.core.health import HealthCheckService
+from app.shared.core.health import HealthService
 
 
 @pytest.mark.asyncio
 async def test_calculate_overall_health():
-    service = HealthCheckService()
+    service = HealthService()
 
     assert service._calculate_overall_health([{"status": "healthy"}]) == "healthy"
     assert (
@@ -26,7 +26,7 @@ async def test_calculate_overall_health():
 
 @pytest.mark.asyncio
 async def test_check_system_resources_degraded():
-    service = HealthCheckService()
+    service = HealthService()
 
     mem = MagicMock(percent=90, used=8 * 1024**3, available=2 * 1024**3)
     disk = MagicMock(percent=95, free=10 * 1024**3)
@@ -44,7 +44,7 @@ async def test_check_system_resources_degraded():
 
 @pytest.mark.asyncio
 async def test_check_cache_disabled():
-    service = HealthCheckService()
+    service = HealthService()
     cache = MagicMock()
     cache.enabled = False
 
@@ -56,7 +56,7 @@ async def test_check_cache_disabled():
 
 @pytest.mark.asyncio
 async def test_check_cache_success():
-    service = HealthCheckService()
+    service = HealthService()
     cache = MagicMock()
     cache.enabled = True
     cache.set = AsyncMock(return_value=True)
@@ -70,7 +70,7 @@ async def test_check_cache_success():
 
 @pytest.mark.asyncio
 async def test_check_circuit_breakers_open():
-    service = HealthCheckService()
+    service = HealthService()
 
     breakers = {"cb1": {"state": "open"}, "cb2": {"state": "closed"}}
     with patch(
@@ -84,7 +84,7 @@ async def test_check_circuit_breakers_open():
 
 @pytest.mark.asyncio
 async def test_check_circuit_breakers_empty():
-    service = HealthCheckService()
+    service = HealthService()
 
     with patch("app.shared.core.health.get_all_circuit_breakers", return_value={}):
         result = await service._check_circuit_breakers()
@@ -94,7 +94,7 @@ async def test_check_circuit_breakers_empty():
 
 @pytest.mark.asyncio
 async def test_check_background_jobs_no_db():
-    service = HealthCheckService(db=None)
+    service = HealthService(db=None)
     result = await service._check_background_jobs()
     assert result["status"] == "unknown"
 
@@ -102,7 +102,7 @@ async def test_check_background_jobs_no_db():
 @pytest.mark.asyncio
 async def test_check_background_jobs_stuck():
     db = AsyncMock()
-    service = HealthCheckService(db=db)
+    service = HealthService(db=db)
 
     stuck_result = MagicMock()
     stuck_result.scalar.return_value = 3
@@ -116,7 +116,7 @@ async def test_check_background_jobs_stuck():
 @pytest.mark.asyncio
 async def test_check_background_jobs_stats():
     db = AsyncMock()
-    service = HealthCheckService(db=db)
+    service = HealthService(db=db)
 
     stuck_result = MagicMock()
     stuck_result.scalar.return_value = 0

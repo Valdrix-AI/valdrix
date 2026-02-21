@@ -27,7 +27,7 @@ def mock_db():
 
 @pytest.fixture
 def mock_settings():
-    with patch("app.modules.billing.domain.billing.paystack_billing.settings") as m:
+    with patch("app.modules.billing.domain.billing.paystack_shared.settings") as m:
         m.PAYSTACK_SECRET_KEY = "sk_test_123"
         m.PAYSTACK_PLAN_STARTER = "PLN_1"
         m.PAYSTACK_PLAN_GROWTH = "PLN_2"
@@ -39,7 +39,7 @@ def mock_settings():
 class TestPaystackClient:
     @pytest.mark.asyncio
     async def test_paystack_client_init_error(self):
-        with patch("app.modules.billing.domain.billing.paystack_billing.settings") as m:
+        with patch("app.modules.billing.domain.billing.paystack_shared.settings") as m:
             m.PAYSTACK_SECRET_KEY = None
             with pytest.raises(ValueError, match="PAYSTACK_SECRET_KEY not configured"):
                 PaystackClient()
@@ -71,7 +71,7 @@ class TestBillingService:
     async def test_create_checkout_session_free_error(self, mock_db, mock_settings):
         # Patch client initialization or handle it carefully
         with patch(
-            "app.modules.billing.domain.billing.paystack_billing.PaystackClient"
+            "app.modules.billing.domain.billing.paystack_service_impl.PaystackClient"
         ):
             service = BillingService(mock_db)
             with pytest.raises(ValueError, match="Cannot checkout free tier"):
@@ -83,7 +83,7 @@ class TestBillingService:
     async def test_create_checkout_session_success(self, mock_db, mock_settings):
         tenant_id = uuid4()
         with patch(
-            "app.modules.billing.domain.billing.paystack_billing.PaystackClient"
+            "app.modules.billing.domain.billing.paystack_service_impl.PaystackClient"
         ) as MockClient:
             mock_client_instance = MockClient.return_value
             mock_client_instance.initialize_transaction = AsyncMock(
@@ -127,7 +127,7 @@ class TestBillingService:
     @pytest.mark.asyncio
     async def test_charge_renewal_no_auth_code(self, mock_db, mock_settings):
         with patch(
-            "app.modules.billing.domain.billing.paystack_billing.PaystackClient"
+            "app.modules.billing.domain.billing.paystack_service_impl.PaystackClient"
         ):
             service = BillingService(mock_db)
             sub = MagicMock()
@@ -139,7 +139,7 @@ class TestBillingService:
     async def test_charge_renewal_success(self, mock_db, mock_settings):
         tenant_id = uuid4()
         with patch(
-            "app.modules.billing.domain.billing.paystack_billing.PaystackClient"
+            "app.modules.billing.domain.billing.paystack_service_impl.PaystackClient"
         ) as MockClient:
             mock_client_instance = MockClient.return_value
             mock_client_instance.charge_authorization = AsyncMock(
@@ -154,7 +154,7 @@ class TestBillingService:
 
             with (
                 patch(
-                    "app.modules.billing.domain.billing.paystack_billing.decrypt_string",
+                    "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
                     return_value="AUTH_123",
                 ),
                 patch(
@@ -189,7 +189,7 @@ class TestBillingService:
                 mock_db.execute.side_effect = [mock_plan_res, mock_user_res]
 
                 with patch(
-                    "app.modules.billing.domain.billing.paystack_billing.logger"
+                    "app.modules.billing.domain.billing.paystack_shared.logger"
                 ):
                     res = await service.charge_renewal(sub)
 
@@ -243,7 +243,7 @@ class TestWebhookHandler:
         signature = hmac.new(b"sk_test_123", payload, hashlib.sha512).hexdigest()
 
         with patch(
-            "app.modules.billing.domain.billing.paystack_billing.encrypt_string",
+            "app.modules.billing.domain.billing.paystack_shared.encrypt_string",
             return_value="encrypted_auth",
         ):
             mock_db.execute.return_value = MagicMock(scalar_one_or_none=lambda: None)

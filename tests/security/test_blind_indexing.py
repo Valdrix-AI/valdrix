@@ -24,9 +24,10 @@ def test_tenant_blind_index_listener():
 
 
 def test_user_blind_index_listener():
-    user = User(id=uuid.uuid4(), tenant_id=uuid.uuid4(), email="user@valdrix.ai")
-    assert user.email_bidx == generate_blind_index("user@valdrix.ai")
+    tenant_id = uuid.uuid4()
+    user = User(id=uuid.uuid4(), tenant_id=tenant_id, email="user@valdrix.ai")
+    assert user.email_bidx == generate_blind_index("user@valdrix.ai", tenant_id=tenant_id)
 
     # Test update
     user.email = "new@valdrix.ai"
-    assert user.email_bidx == generate_blind_index("new@valdrix.ai")
+    assert user.email_bidx == generate_blind_index("new@valdrix.ai", tenant_id=tenant_id)

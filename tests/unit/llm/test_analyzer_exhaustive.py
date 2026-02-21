@@ -44,6 +44,7 @@ def mock_db():
     res.scalar_one_or_none.return_value = None
     res.scalar.return_value = 0.0
     db.execute.return_value = res
+    db.add = MagicMock()
     db.flush = AsyncMock()
     return db
 
@@ -209,9 +210,6 @@ async def test_analyze_flow_success(mock_llm, usage_summary, mock_db, mock_forec
             res.model_dump.return_value = {"insights": ["Good"]}
             return res
 
-    mock_tracker = MagicMock()
-    mock_tracker.check_budget = AsyncMock(return_value="ok")
-
     with (
         patch(
             "app.shared.llm.analyzer.LLMBudgetManager.check_and_reserve",
@@ -222,7 +220,10 @@ async def test_analyze_flow_success(mock_llm, usage_summary, mock_db, mock_forec
             new_callable=AsyncMock,
         ) as mock_record,
         patch("app.shared.llm.analyzer.get_cache_service", return_value=mock_cache),
-        patch("app.shared.llm.analyzer.UsageTracker", return_value=mock_tracker),
+        patch(
+            "app.shared.llm.analyzer.LLMBudgetManager.check_budget",
+            new_callable=AsyncMock,
+        ) as mock_check_budget,
         patch("app.shared.llm.analyzer.LLMGuardrails", new=MockGuardrails),
         patch(
             "app.shared.llm.analyzer.SymbolicForecaster.forecast",
@@ -232,6 +233,7 @@ async def test_analyze_flow_success(mock_llm, usage_summary, mock_db, mock_forec
     ):
         mock_reserve.return_value = Decimal("0.01")
         mock_record.return_value = None
+        mock_check_budget.return_value = "ok"
         mock_forecast.return_value = {"forecast": "data"}
 
         mock_settings.return_value.LLM_PROVIDER = "openai"
@@ -271,16 +273,16 @@ async def test_llm_invocation_primary_failure_fallback(
             res.model_dump.return_value = {"insights": ["fallback"]}
             return res
 
-    mock_tracker = MagicMock()
-    mock_tracker.check_budget = AsyncMock(return_value="ok")
-
     with (
         patch("app.shared.llm.analyzer.get_cache_service", return_value=mock_cache),
         patch(
             "app.shared.llm.analyzer.LLMFactory.create", return_value=fallback_llm
         ) as mock_factory,
         patch("app.shared.llm.analyzer.LLMGuardrails", new=MockGuardrails),
-        patch("app.shared.llm.analyzer.UsageTracker", return_value=mock_tracker),
+        patch(
+            "app.shared.llm.analyzer.LLMBudgetManager.check_budget",
+            new_callable=AsyncMock,
+        ) as mock_check_budget,
         patch(
             "app.shared.llm.analyzer.SymbolicForecaster.forecast",
             new_callable=AsyncMock,
@@ -296,6 +298,7 @@ async def test_llm_invocation_primary_failure_fallback(
         ),
     ):
         mock_reserve.return_value = Decimal("0.01")
+        mock_check_budget.return_value = "ok"
         mock_forecast.return_value = {"forecast": "data"}
 
         mock_settings.return_value.LLM_PROVIDER = "openai"
@@ -363,7 +366,7 @@ async def test_analyze_force_refresh(mock_llm, usage_summary, mock_db):
         patch.object(
             analyzer,
             "_setup_client_and_usage",
-            return_value=(None, "groq", "llama-3.3-70b-versatile", None),
+            return_value=("groq", "llama-3.3-70b-versatile", None),
         ),
         patch.object(analyzer, "_invoke_llm", new_callable=AsyncMock) as mock_invoke,
         patch.object(
@@ -419,7 +422,7 @@ async def test_analyze_with_delta_analysis_enabled(
         patch.object(
             analyzer,
             "_setup_client_and_usage",
-            return_value=(None, "groq", "llama-3.3-70b-versatile", None),
+            return_value=("groq", "llama-3.3-70b-versatile", None),
         ),
         patch.object(analyzer, "_invoke_llm", new_callable=AsyncMock) as mock_invoke,
         patch.object(
@@ -573,7 +576,7 @@ async def test_analyze_usage_recording_failure(
         patch.object(
             analyzer,
             "_setup_client_and_usage",
-            return_value=(None, "groq", "llama-3.3-70b-versatile", None),
+            return_value=("groq", "llama-3.3-70b-versatile", None),
         ),
         patch.object(analyzer, "_invoke_llm", return_value=("{}", {})),
         patch.object(analyzer, "_process_analysis_results", return_value={}),

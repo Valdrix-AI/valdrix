@@ -91,6 +91,7 @@ def test_slow_query_logging():
         mock_logger.warning.assert_called_with(
             "slow_query_detected",
             duration_seconds=pytest.approx(1.0, rel=0.1),
+            threshold_seconds=pytest.approx(0.2, rel=0.1),
             statement="SELECT * FROM large_table",
             parameters=None,
         )

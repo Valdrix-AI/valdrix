@@ -48,30 +48,27 @@ class TestSentryDeep:
 
     @patch("app.shared.core.sentry.SENTRY_AVAILABLE", True)
     def test_capture_message(self):
-        import sentry_sdk
+        with patch("app.shared.core.sentry.sentry_sdk", create=True) as mock_sentry:
+            mock_scope = MagicMock()
+            mock_sentry.push_scope.return_value.__enter__.return_value = mock_scope
 
-        mock_scope = MagicMock()
-        sentry_sdk.push_scope.return_value.__enter__.return_value = mock_scope
+            capture_message("test message", level="error", extra_key="extra_val")
 
-        capture_message("test message", level="error", extra_key="extra_val")
-
-        mock_scope.set_extra.assert_called_with("extra_key", "extra_val")
-        sentry_sdk.capture_message.assert_called_with("test message", "error")
+            mock_scope.set_extra.assert_called_with("extra_key", "extra_val")
+            mock_sentry.capture_message.assert_called_with("test message", "error")
 
     @patch("app.shared.core.sentry.SENTRY_AVAILABLE", True)
     def test_set_user(self):
-        import sentry_sdk
-
-        set_user("user-1", tenant_id="tenant-1", email="test@test.com")
-        sentry_sdk.set_user.assert_called_with(
-            {"id": "user-1", "tenant_id": "tenant-1", "email": "test@test.com"}
-        )
+        with patch("app.shared.core.sentry.sentry_sdk", create=True) as mock_sentry:
+            set_user("user-1", tenant_id="tenant-1", email="test@test.com")
+            mock_sentry.set_user.assert_called_with(
+                {"id": "user-1", "tenant_id": "tenant-1", "email": "test@test.com"}
+            )
 
     @patch("app.shared.core.sentry.SENTRY_AVAILABLE", True)
     def test_set_tenant_context(self):
-        import sentry_sdk
-
-        set_tenant_context("tenant-123", "Tenant Name")
-        assert sentry_sdk.set_tag.call_count >= 2
-        sentry_sdk.set_tag.assert_any_call("tenant_id", "tenant-123")
-        sentry_sdk.set_tag.assert_any_call("tenant_name", "Tenant Name")
+        with patch("app.shared.core.sentry.sentry_sdk", create=True) as mock_sentry:
+            set_tenant_context("tenant-123", "Tenant Name")
+            assert mock_sentry.set_tag.call_count >= 2
+            mock_sentry.set_tag.assert_any_call("tenant_id", "tenant-123")
+            mock_sentry.set_tag.assert_any_call("tenant_name", "Tenant Name")
