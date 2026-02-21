@@ -253,7 +253,7 @@ describe('IdentitySettingsCard', () => {
 		});
 
 		const [url, payload] = putMock.mock.calls[0] as [string, Record<string, unknown>];
-		expect(url).toBe('https://api.test/api/v1/settings/identity');
+		expect(url).toBe('/api/edge/api/v1/settings/identity');
 		expect(payload.sso_federation_enabled).toBe(false);
 		expect(payload.sso_federation_mode).toBe('domain');
 		expect(payload.scim_group_mappings).toEqual([

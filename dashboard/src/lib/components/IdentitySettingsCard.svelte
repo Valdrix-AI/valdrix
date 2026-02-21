@@ -4,6 +4,7 @@
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { base } from '$app/paths';
 	import { api } from '$lib/api';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
 	import { z } from 'zod';
 
@@ -245,7 +246,7 @@
 				return;
 			}
 			const headers = await getHeaders();
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/settings/identity`, headers);
+			const res = await getWithTimeout(edgeApiPath('/settings/identity'), headers);
 			if (res.status === 403) {
 				settings = null;
 				return;
@@ -285,7 +286,7 @@
 				return;
 			}
 			const headers = await getHeaders();
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/settings/identity/diagnostics`, headers);
+			const res = await getWithTimeout(edgeApiPath('/settings/identity/diagnostics'), headers);
 			if (res.status === 403) {
 				diagnostics = null;
 				return;
@@ -316,7 +317,7 @@
 			if (!scimTokenInput.trim()) return;
 			const headers = await getHeaders();
 			const res = await api.post(
-				`${PUBLIC_API_URL}/settings/identity/scim/test-token`,
+				edgeApiPath('/settings/identity/scim/test-token'),
 				{ scim_token: scimTokenInput.trim() },
 				{ headers }
 			);
@@ -365,7 +366,7 @@
 			const validated = IdentitySettingsUpdateSchema.parse(payload);
 
 			const headers = await getHeaders();
-			const res = await api.put(`${PUBLIC_API_URL}/settings/identity`, validated, { headers });
+			const res = await api.put(edgeApiPath('/settings/identity'), validated, { headers });
 			if (!res.ok) {
 				const data = await res.json().catch(() => ({}));
 				throw new Error(extractErrorMessage(data, 'Failed to save identity settings'));
@@ -399,7 +400,7 @@
 		try {
 			const headers = await getHeaders();
 			const res = await api.post(
-				`${PUBLIC_API_URL}/settings/identity/rotate-scim-token`,
+				edgeApiPath('/settings/identity/rotate-scim-token'),
 				{},
 				{ headers }
 			);

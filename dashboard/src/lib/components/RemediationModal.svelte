@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { AlertTriangle, Clock } from '@lucide/svelte';
 	import { api } from '$lib/api';
-	import { PUBLIC_API_URL } from '$env/static/public';
+	import { edgeApiPath } from '$lib/edgeProxy';
 
 	type RemediationFinding = {
 		resource_id: string;
@@ -136,7 +136,7 @@
 			};
 			const action = deriveRemediationAction(finding);
 			const previewResponse = await api.post(
-				`${PUBLIC_API_URL}/zombies/policy-preview`,
+				edgeApiPath('/zombies/policy-preview'),
 				{
 					resource_id: finding.resource_id,
 					resource_type: finding.resource_type || 'unknown',
@@ -185,7 +185,7 @@
 			};
 			const action = deriveRemediationAction(finding);
 			const response = await api.post(
-				`${PUBLIC_API_URL}/zombies/request`,
+				edgeApiPath('/zombies/request'),
 				{
 					resource_id: finding.resource_id,
 					resource_type: finding.resource_type || 'unknown',
