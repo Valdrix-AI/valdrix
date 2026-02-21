@@ -1,7 +1,7 @@
 import jwt
 import hashlib
 from functools import lru_cache
-from typing import Any, Callable, Optional, cast
+from typing import Any, Awaitable, Callable, Optional, cast
 from uuid import UUID
 from fastapi import HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -22,7 +22,10 @@ __all__ = [
     "CurrentUser",
     "get_current_user",
     "get_current_user_from_jwt",
+    "bind_tenant_db_context",
+    "get_current_user_with_db_context",
     "requires_role",
+    "requires_role_with_db_context",
     "require_tenant_access",
     "UserRole",
     "UserPersona",
@@ -361,6 +364,31 @@ async def get_current_user(
         )
 
 
+async def bind_tenant_db_context(
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """
+    Ensure DB session tenant context is bound from authenticated user context.
+
+    This provides defense-in-depth for tenant-scoped routes, including test paths
+    where request-state based context propagation may be bypassed.
+    """
+    if user.tenant_id is None:
+        return
+    await set_session_tenant_id(db, user.tenant_id)
+
+
+async def get_current_user_with_db_context(
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CurrentUser:
+    """Return authenticated user after binding tenant context on the DB session."""
+    if user.tenant_id is not None:
+        await set_session_tenant_id(db, user.tenant_id)
+    return user
+
+
 @lru_cache(maxsize=128)
 def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
     """
@@ -401,6 +429,28 @@ def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
                 detail=f"Insufficient permissions. Required role: {required_role}",
             )
 
+        return user
+
+    return role_checker
+
+
+@lru_cache(maxsize=128)
+def requires_role_with_db_context(
+    required_role: str,
+) -> Callable[..., Awaitable[CurrentUser]]:
+    """
+    Role check + tenant DB context binding.
+
+    Use this dependency for handlers that execute tenant-scoped DB queries.
+    """
+    role_dependency = requires_role(required_role)
+
+    async def role_checker(
+        user: CurrentUser = Depends(role_dependency),
+        db: AsyncSession = Depends(get_db),
+    ) -> CurrentUser:
+        if user.tenant_id is not None:
+            await set_session_tenant_id(db, user.tenant_id)
         return user
 
     return role_checker

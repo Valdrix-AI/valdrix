@@ -14,7 +14,11 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.auth import (
+    CurrentUser,
+    get_current_user_with_db_context,
+    requires_role_with_db_context,
+)
 from app.shared.core.logging import audit_log
 from app.shared.core.pricing import FeatureFlag, is_feature_enabled, normalize_tier
 from app.shared.db.session import get_db
@@ -897,7 +901,7 @@ def _to_jira_policy_diagnostics(
 
 @router.get("/notifications", response_model=NotificationSettingsResponse)
 async def get_notification_settings(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_db_context),
     db: AsyncSession = Depends(get_db),
 ) -> NotificationSettingsResponse:
     """
@@ -941,7 +945,7 @@ async def get_notification_settings(
 @router.put("/notifications", response_model=NotificationSettingsResponse)
 async def update_notification_settings(
     data: NotificationSettingsUpdate,
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> NotificationSettingsResponse:
     """
@@ -1189,7 +1193,7 @@ async def update_notification_settings(
     response_model=PolicyNotificationDiagnosticsResponse,
 )
 async def get_policy_notification_diagnostics(
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> PolicyNotificationDiagnosticsResponse:
     """
@@ -1241,7 +1245,7 @@ async def get_policy_notification_diagnostics(
 
 @router.post("/notifications/test-slack")
 async def test_slack_notification(
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """
@@ -1270,7 +1274,7 @@ async def test_slack_notification(
 
 @router.post("/notifications/test-jira")
 async def test_jira_notification(
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """
@@ -1297,7 +1301,7 @@ async def test_jira_notification(
 
 @router.post("/notifications/test-teams")
 async def test_teams_notification(
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """
@@ -1324,7 +1328,7 @@ async def test_teams_notification(
 
 @router.post("/notifications/test-workflow")
 async def test_workflow_notification(
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     """
@@ -1355,7 +1359,7 @@ async def test_workflow_notification(
 )
 async def capture_notification_acceptance_evidence(
     payload: IntegrationAcceptanceCaptureRequest | None = None,
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> IntegrationAcceptanceCaptureResponse:
     """
@@ -1448,7 +1452,7 @@ async def capture_notification_acceptance_evidence(
     response_model=IntegrationAcceptanceEvidenceListResponse,
 )
 async def list_notification_acceptance_evidence(
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
     limit: int = 50,
     run_id: str | None = None,

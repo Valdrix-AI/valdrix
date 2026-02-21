@@ -39,12 +39,12 @@ async def generate_iac_plan_for_request(
         FeatureFlag,
         is_feature_enabled,
     )
-    import app.modules.optimization.domain.remediation as remediation_module
+    from app.modules.optimization.domain.remediation import get_tenant_tier
 
     resolved_tier = (
         tenant_tier
         if tenant_tier is not None
-        else await remediation_module.get_tenant_tier(tenant_id, service.db)
+        else await get_tenant_tier(tenant_id, service.db)
     )
 
     if not is_feature_enabled(resolved_tier, FeatureFlag.GITOPS_REMEDIATION):
@@ -121,9 +121,9 @@ async def bulk_generate_iac_plan_for_requests(
     requests: list[RemediationRequest],
     tenant_id: UUID,
 ) -> str:
-    import app.modules.optimization.domain.remediation as remediation_module
+    from app.modules.optimization.domain.remediation import get_tenant_tier
 
-    tenant_tier = await remediation_module.get_tenant_tier(tenant_id, service.db)
+    tenant_tier = await get_tenant_tier(tenant_id, service.db)
     plans = [
         await generate_iac_plan_for_request(service, req, tenant_id, tenant_tier=tenant_tier)
         for req in requests

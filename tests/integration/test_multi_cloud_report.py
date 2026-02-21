@@ -43,8 +43,15 @@ async def test_multi_cloud_unified_report(ac: AsyncClient, db: AsyncSession, moc
 
         await db.execute(
             text(
-                f"INSERT INTO tenants (id, name, plan) VALUES ('{tenant_id}', 'Unified Corp', 'enterprise') ON CONFLICT DO NOTHING"
-            )
+                "INSERT INTO tenants (id, name, plan, is_deleted) "
+                "VALUES (:tenant_id, :name, :plan, :is_deleted) ON CONFLICT DO NOTHING"
+            ),
+            {
+                "tenant_id": str(tenant_id),
+                "name": "Unified Corp",
+                "plan": "enterprise",
+                "is_deleted": False,
+            },
         )
         await db.commit()
 

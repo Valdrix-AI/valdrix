@@ -421,7 +421,12 @@ class AttributionEngine:
         return allocations
 
     async def apply_rules_to_tenant(
-        self, tenant_id: uuid.UUID, start_date: date, end_date: date
+        self,
+        tenant_id: uuid.UUID,
+        start_date: date,
+        end_date: date,
+        *,
+        commit: bool = True,
     ) -> Dict[str, int]:
         """
         Batch apply attribution rules to all cost records for a tenant within a date range.
@@ -468,7 +473,10 @@ class AttributionEngine:
             # bulk_insert_mappings would be preferred.
             self.db.add_all(all_allocations)
 
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
         logger.info(
             "batch_attribution_complete",
             tenant_id=str(tenant_id),

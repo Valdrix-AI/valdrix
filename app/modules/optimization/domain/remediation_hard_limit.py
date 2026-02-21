@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import inspect
 from typing import Any
 from uuid import UUID
 
@@ -40,7 +41,14 @@ async def enforce_hard_limit_for_tenant(service: Any, tenant_id: UUID) -> list[U
         .where(RemediationRequest.action.in_(safe_actions))
         .order_by(RemediationRequest.estimated_monthly_savings.desc())
     )
-    requests = result.scalars().all()
+    scalars_result = result.scalars()
+    requests_result = scalars_result.all()
+    if inspect.isawaitable(requests_result):
+        requests_result = await requests_result
+    if not requests_result:
+        requests: list[RemediationRequest] = []
+    else:
+        requests = list(requests_result)
 
     executed_ids: list[UUID] = []
     for req in requests:

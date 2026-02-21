@@ -11,10 +11,10 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { onMount } from 'svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
 	import { base } from '$app/paths';
 	import { invalidateAll } from '$app/navigation';
 	import { api } from '$lib/api';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import IdentitySettingsCard from '$lib/components/IdentitySettingsCard.svelte';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
@@ -94,7 +94,7 @@
 	async function loadSettings() {
 		try {
 			const headers = await getHeaders();
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/settings/notifications`, headers);
+			const res = await getWithTimeout(edgeApiPath('/settings/notifications'), headers);
 			if (res.ok) {
 				const loaded = await res.json();
 				settings = {
@@ -151,7 +151,7 @@
 		success = '';
 		try {
 			const headers = await getHeaders();
-			const res = await api.put(`${PUBLIC_API_URL}/settings/profile`, { persona }, { headers });
+			const res = await api.put(edgeApiPath('/settings/profile'), { persona }, { headers });
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to save persona.');
@@ -252,7 +252,7 @@
 			const validated = NotificationSettingsSchema.parse(payload);
 
 			const headers = await getHeaders();
-			const res = await api.put(`${PUBLIC_API_URL}/settings/notifications`, validated, { headers });
+			const res = await api.put(edgeApiPath('/settings/notifications'), validated, { headers });
 			if (!res.ok) {
 				const data = await res.json();
 				throw new Error(data.detail || 'Failed to save settings');
@@ -406,11 +406,7 @@
 
 		try {
 			const headers = await getHeaders();
-			const res = await api.post(
-				`${PUBLIC_API_URL}/settings/notifications/test-slack`,
-				{},
-				{ headers }
-			);
+			const res = await api.post(edgeApiPath('/settings/notifications/test-slack'), {}, { headers });
 
 			if (!res.ok) {
 				const data = await res.json();
@@ -433,11 +429,7 @@
 
 		try {
 			const headers = await getHeaders();
-			const res = await api.post(
-				`${PUBLIC_API_URL}/settings/notifications/test-jira`,
-				{},
-				{ headers }
-			);
+			const res = await api.post(edgeApiPath('/settings/notifications/test-jira'), {}, { headers });
 
 			if (!res.ok) {
 				const data = await res.json();
@@ -460,11 +452,7 @@
 
 		try {
 			const headers = await getHeaders();
-			const res = await api.post(
-				`${PUBLIC_API_URL}/settings/notifications/test-teams`,
-				{},
-				{ headers }
-			);
+			const res = await api.post(edgeApiPath('/settings/notifications/test-teams'), {}, { headers });
 
 			if (!res.ok) {
 				const data = await res.json();
@@ -487,11 +475,7 @@
 
 		try {
 			const headers = await getHeaders();
-			const res = await api.post(
-				`${PUBLIC_API_URL}/settings/notifications/test-workflow`,
-				{},
-				{ headers }
-			);
+			const res = await api.post(edgeApiPath('/settings/notifications/test-workflow'), {}, { headers });
 
 			if (!res.ok) {
 				const data = await res.json();
@@ -513,7 +497,7 @@
 		error = '';
 		try {
 			const headers = await getHeaders();
-			const res = await api.get(`${PUBLIC_API_URL}/settings/notifications/policy-diagnostics`, {
+			const res = await api.get(edgeApiPath('/settings/notifications/policy-diagnostics'), {
 				headers
 			});
 			if (!res.ok) {
@@ -545,7 +529,7 @@
 	async function loadCarbonSettings() {
 		try {
 			const headers = await getHeaders();
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/settings/carbon`, headers);
+			const res = await getWithTimeout(edgeApiPath('/settings/carbon'), headers);
 
 			if (res.ok) {
 				carbonSettings = await res.json();
@@ -574,7 +558,7 @@
 			CarbonSettingsSchema.parse(carbonSettings);
 
 			const headers = await getHeaders();
-			const res = await api.put(`${PUBLIC_API_URL}/settings/carbon`, carbonSettings, { headers });
+			const res = await api.put(edgeApiPath('/settings/carbon'), carbonSettings, { headers });
 
 			if (!res.ok) {
 				const data = await res.json();
@@ -599,7 +583,7 @@
 
 	async function loadModels() {
 		try {
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/settings/llm/models`);
+			const res = await getWithTimeout(edgeApiPath('/settings/llm/models'));
 			if (res.ok) {
 				providerModels = await res.json();
 			}
@@ -611,7 +595,7 @@
 	async function loadLLMSettings() {
 		try {
 			const headers = await getHeaders();
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/settings/llm`, headers);
+			const res = await getWithTimeout(edgeApiPath('/settings/llm'), headers);
 
 			if (res.ok) {
 				llmSettings = await res.json();
@@ -645,7 +629,7 @@
 			LLMSettingsSchema.parse(llmSettings);
 
 			const headers = await getHeaders();
-			const res = await api.put(`${PUBLIC_API_URL}/settings/llm`, llmSettings, { headers });
+			const res = await api.put(edgeApiPath('/settings/llm'), llmSettings, { headers });
 
 			if (!res.ok) {
 				const data = await res.json();
@@ -684,7 +668,7 @@
 	async function loadActiveOpsSettings() {
 		try {
 			const headers = await getHeaders();
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/settings/activeops`, headers);
+			const res = await getWithTimeout(edgeApiPath('/settings/activeops'), headers);
 
 			if (res.ok) {
 				activeOpsSettings = await res.json();
@@ -721,7 +705,7 @@
 			ActiveOpsSettingsSchema.parse(activeOpsSettings);
 
 			const headers = await getHeaders();
-			const res = await api.put(`${PUBLIC_API_URL}/settings/activeops`, activeOpsSettings, {
+			const res = await api.put(edgeApiPath('/settings/activeops'), activeOpsSettings, {
 				headers
 			});
 
@@ -751,7 +735,7 @@
 		safetyError = '';
 		try {
 			const headers = await getHeaders();
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/settings/safety`, headers);
+			const res = await getWithTimeout(edgeApiPath('/settings/safety'), headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to load safety status');
@@ -771,7 +755,7 @@
 		safetySuccess = '';
 		try {
 			const headers = await getHeaders();
-			const res = await api.post(`${PUBLIC_API_URL}/settings/safety/reset`, {}, { headers });
+			const res = await api.post(edgeApiPath('/settings/safety/reset'), {}, { headers });
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(

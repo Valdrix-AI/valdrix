@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant import User, UserPersona, UserRole
 from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLogger
-from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.auth import CurrentUser, get_current_user, get_current_user_with_db_context
 from app.shared.core.pricing import PricingTier
 from app.shared.db.session import get_db
 
@@ -67,7 +67,7 @@ async def get_profile(
 async def update_profile(
     payload: ProfileUpdateRequest,
     request: Request,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_db_context),
     db: AsyncSession = Depends(get_db),
 ) -> ProfileResponse:
     if not current_user.tenant_id:

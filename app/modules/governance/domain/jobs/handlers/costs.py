@@ -247,7 +247,10 @@ class CostIngestionHandler(BaseJobHandler):
                 attr_end = datetime.now(timezone.utc).date()
                 attr_start = attr_end - timedelta(days=30)
             await engine.apply_rules_to_tenant(
-                tenant_id, start_date=attr_start, end_date=attr_end
+                tenant_id,
+                start_date=attr_start,
+                end_date=attr_end,
+                commit=False,
             )
             logger.info("attribution_applied_post_ingestion", tenant_id=str(tenant_id))
         except Exception as e:

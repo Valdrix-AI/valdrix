@@ -155,6 +155,7 @@ async def test_remediation_lifecycle_full(
                 "resource_id": instance_id,
                 "resource_type": "EC2 Instance",
                 "action": "terminate_instance",
+                "provider": "aws",
                 "estimated_savings": 15.50,
             }
             response = await ac.post(

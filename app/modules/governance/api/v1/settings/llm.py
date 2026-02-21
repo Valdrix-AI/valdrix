@@ -11,7 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.auth import (
+    CurrentUser,
+    get_current_user_with_db_context,
+    requires_role_with_db_context,
+)
 from app.shared.core.logging import audit_log
 from app.shared.core.pricing import normalize_tier, get_tier_limit
 from app.shared.db.session import get_db
@@ -71,7 +75,7 @@ class LLMSettingsUpdate(BaseModel):
 
 @router.get("/llm", response_model=LLMSettingsResponse)
 async def get_llm_settings(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_db_context),
     db: AsyncSession = Depends(get_db),
 ) -> LLMSettingsResponse:
     """
@@ -118,7 +122,7 @@ async def get_llm_settings(
 @router.put("/llm", response_model=LLMSettingsResponse)
 async def update_llm_settings(
     data: LLMSettingsUpdate,
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> LLMSettingsResponse:
     """

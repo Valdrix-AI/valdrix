@@ -24,7 +24,7 @@ from app.modules.governance.api.v1.settings.connections_helpers import (
 from app.shared.connections.azure import AzureConnectionService
 from app.shared.connections.gcp import GCPConnectionService
 from app.shared.connections.oidc import OIDCService
-from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.auth import CurrentUser, requires_role_with_db_context
 from app.shared.core.logging import audit_log
 from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
@@ -41,7 +41,7 @@ router = APIRouter()
 async def create_azure_connection(
     request: Request,
     data: AzureConnectionCreate,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> AzureConnection:
     tenant_id = _require_tenant_id(current_user)
@@ -94,7 +94,7 @@ async def create_azure_connection(
 async def verify_azure_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     check_growth_tier(current_user)
@@ -105,7 +105,7 @@ async def verify_azure_connection(
 
 @router.get("/azure", response_model=list[AzureConnectionResponse])
 async def list_azure_connections(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> list[AzureConnection]:
     return await AzureConnectionService(db).list_connections(
@@ -116,7 +116,7 @@ async def list_azure_connections(
 @router.delete("/azure/{connection_id}", status_code=204)
 async def delete_azure_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)
@@ -147,7 +147,7 @@ async def create_gcp_connection(
     request: Request,
     data: GCPConnectionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
 ) -> GCPConnection:
     tenant_id = _require_tenant_id(current_user)
     plan = check_growth_tier(current_user)
@@ -210,7 +210,7 @@ async def create_gcp_connection(
 async def verify_gcp_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     check_growth_tier(current_user)
@@ -221,7 +221,7 @@ async def verify_gcp_connection(
 
 @router.get("/gcp", response_model=list[GCPConnectionResponse])
 async def list_gcp_connections(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> list[GCPConnection]:
     tenant_id = _require_tenant_id(current_user)
@@ -234,7 +234,7 @@ async def list_gcp_connections(
 @router.delete("/gcp/{connection_id}", status_code=204)
 async def delete_gcp_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)
