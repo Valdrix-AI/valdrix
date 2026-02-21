@@ -388,13 +388,12 @@ class SchedulerOrchestrator:
 
 class SchedulerService(SchedulerOrchestrator):
     """
-    Proxy class that exposes the scheduler API used by the app and admin routes.
-    Inherits orchestration logic from SchedulerOrchestrator.
+    Scheduler API used by app lifecycle and admin routes.
     """
 
     def __init__(self, session_maker: async_sessionmaker[AsyncSession]) -> None:
         super().__init__(session_maker)
-        logger.info("scheduler_proxy_initialized", refactor_version="1.0-modular")
+        logger.info("scheduler_service_initialized", implementation="modular")
 
     async def daily_analysis_job(self) -> None:
         """Run the daily full cohort scan sequence."""

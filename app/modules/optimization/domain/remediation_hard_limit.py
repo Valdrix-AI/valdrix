@@ -18,10 +18,9 @@ async def enforce_hard_limit_for_tenant(service: Any, tenant_id: UUID) -> list[U
     """
     Enforce hard limits for a tenant.
     """
-    from app.shared.llm.usage_tracker import BudgetStatus, UsageTracker
+    from app.shared.llm.budget_manager import BudgetStatus, LLMBudgetManager
 
-    tracker = UsageTracker(service.db)
-    status = await tracker.check_budget(tenant_id)
+    status = await LLMBudgetManager.check_budget(tenant_id, service.db)
     if status != BudgetStatus.HARD_LIMIT:
         return []
 

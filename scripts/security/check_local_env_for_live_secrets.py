@@ -13,6 +13,7 @@ from pathlib import Path
 
 PATTERNS: dict[str, re.Pattern[str]] = {
     "PAYSTACK_SECRET_KEY": re.compile(r"^sk_live_[A-Za-z0-9]+$"),
+    "PAYSTACK_PUBLIC_KEY": re.compile(r"^pk_live_[A-Za-z0-9]+$"),
     "SLACK_BOT_TOKEN": re.compile(r"^xox[baprs]-[A-Za-z0-9-]+$"),
     "GROQ_API_KEY": re.compile(r"^gsk_[A-Za-z0-9]+$"),
     "OPENAI_API_KEY": re.compile(r"^sk-[A-Za-z0-9]+$"),
@@ -32,15 +33,20 @@ def main() -> int:
     risky_keys: list[str] = []
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+        if not line or "=" not in line:
             continue
-        key, _, raw_value = line.partition("=")
+        is_commented = line.startswith("#")
+        content = line[1:].strip() if is_commented else line
+        if "=" not in content:
+            continue
+        key, _, raw_value = content.partition("=")
         key = key.strip()
         value = raw_value.strip().strip('"').strip("'")
 
         pattern = PATTERNS.get(key)
         if pattern and pattern.match(value):
-            risky_keys.append(key)
+            suffix = " (commented)" if is_commented else ""
+            risky_keys.append(f"{key}{suffix}")
 
     if risky_keys:
         deduped = sorted(set(risky_keys))

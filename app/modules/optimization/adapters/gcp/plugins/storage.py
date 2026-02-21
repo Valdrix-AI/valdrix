@@ -7,6 +7,7 @@ Detects unattached disks and old snapshots using Cloud Asset Inventory.
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from google.cloud import compute_v1
+from google.auth.credentials import Credentials as GoogleCredentials
 from google.oauth2 import service_account
 import structlog
 
@@ -14,6 +15,17 @@ from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
+
+
+def _resolve_gcp_credentials(credentials: Any) -> Any:
+    if credentials is None:
+        return None
+    if isinstance(credentials, dict):
+        return service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+    if isinstance(credentials, GoogleCredentials):
+        return credentials
+    # Allow already-instantiated credential-like objects (used in tests and adapters).
+    return credentials
 
 
 @registry.register("gcp")
@@ -79,9 +91,7 @@ class UnattachedDisksPlugin(ZombiePlugin):
             return analyzer.find_unattached_disks()
 
         try:
-            gcp_creds = None
-            if credentials:
-                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            gcp_creds = _resolve_gcp_credentials(credentials)
             client = compute_v1.DisksClient(credentials=gcp_creds)
             request = compute_v1.AggregatedListDisksRequest(project=project_id)
 
@@ -179,9 +189,7 @@ class OldSnapshotsPlugin(ZombiePlugin):
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=age_days)
 
         try:
-            gcp_creds = None
-            if credentials:
-                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
+            gcp_creds = _resolve_gcp_credentials(credentials)
             client = compute_v1.SnapshotsClient(credentials=gcp_creds)
             request = compute_v1.ListSnapshotsRequest(project=project_id)
 
