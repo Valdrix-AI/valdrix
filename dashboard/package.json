@@ -15,7 +15,8 @@
 		"lint": "prettier --check .",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"test:perf": "playwright test e2e/performance.spec.ts"
 	},
 	"devDependencies": {
 		"@lucide/svelte": "^0.562.0",

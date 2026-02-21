@@ -44,6 +44,29 @@ export function filenameFromContentDispositionHeader(
 	}
 }
 
+/**
+ * Normalize and validate a checkout redirect URL before client-side navigation.
+ * Blocks non-http(s) schemes (for example javascript:).
+ */
+export function normalizeCheckoutUrl(rawUrl: unknown, baseUrl: string): string {
+	if (typeof rawUrl !== 'string' || rawUrl.trim().length === 0) {
+		throw new Error('Checkout URL is missing or invalid.');
+	}
+
+	let parsed: URL;
+	try {
+		parsed = new URL(rawUrl, baseUrl);
+	} catch {
+		throw new Error('Checkout URL is malformed.');
+	}
+
+	if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+		throw new Error('Checkout URL must use http(s).');
+	}
+
+	return parsed.toString();
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type WithoutChild<T> = T extends { child?: any } ? Omit<T, 'child'> : T;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

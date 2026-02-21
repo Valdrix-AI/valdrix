@@ -1,38 +1,39 @@
-# sv
+# Valdrix Dashboard Frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit frontend for Valdrix.
 
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
+## Commands
 
 ```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
+pnpm run dev
+pnpm run build
+pnpm run lint
+pnpm run check
+pnpm run test:unit -- --run
+pnpm run test:e2e
+pnpm run test:perf
+pnpm run check:bundle
+pnpm audit --audit-level=high
 ```
 
-## Developing
+## E2E Auth in Test Mode
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+Playwright authenticated-route tests use a test-only auth bypass in `hooks.server.ts`.
 
-```sh
-npm run dev
+- It is active only when `TESTING=true`.
+- It requires header `x-valdrix-e2e-auth` matching `E2E_AUTH_SECRET`.
+- `playwright.config.ts` sets these values for the local E2E web server.
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
+This avoids hardcoded test credentials and removes auth-related E2E skips while keeping production behavior unchanged.
 
-## Building
+## Performance Gate
 
-To create a production version of your app:
+`pnpm run test:perf` runs `e2e/performance.spec.ts` and enforces baseline budgets for:
 
-```sh
-npm run build
-```
+- TTFB
+- FCP
+- LCP
+- CLS
+- DOM Complete
 
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+These checks are intended as a repeatable release gate for frontend performance regressions.
