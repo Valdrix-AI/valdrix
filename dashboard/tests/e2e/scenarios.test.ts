@@ -1,37 +1,42 @@
 import { test, expect } from '@playwright/test';
 
+const E2E_AUTH_HEADER_NAME = 'x-valdrix-e2e-auth';
+const E2E_AUTH_HEADER_VALUE = process.env.E2E_AUTH_SECRET || 'playwright';
+
 test.describe('Authentication Flow', () => {
-	test('should show landing page when not authenticated', async ({ page }) => {
+	test('shows landing page when not authenticated', async ({ page }) => {
 		await page.goto('/');
-		await expect(page.locator('h1')).toContainText('Cloud Cost Intelligence');
+		await expect(page.locator('h1')).toContainText(/Cloud Cost Intelligence/i);
 	});
 
-	test('should show sign in button', async ({ page }) => {
+	test('shows sign in button on login page', async ({ page }) => {
 		await page.goto('/auth/login');
-		const button = page.getByRole('button', { name: 'Sign In' }); // Correct path and casing
-		await expect(button).toBeVisible();
+		await expect(page.getByRole('button', { name: /Sign in/i })).toBeVisible();
 	});
 });
 
-test.describe('Dashboard (Mocked)', () => {
-	test.beforeEach(async () => {
-		// Mock authentication state (if possible via local storage or cookie,
-		// but for now we'll just visit the page and expect the unauthorized state
-		// OR mock the API responses if the page loads irrespective of auth check on client)
-		// Assuming client-side auth check redirects, we might simply test the public parts
-		// or we need to mock the supabase client.
-		// For this test, let's verify that IF we could bypass auth, the dashboard loads data.
-		// Since we can't easily mock Supabase client-side auth in this simple setup without
-		// extensive mocking of the Supabase JS library, we will focus on verifying
-		// the API interactions if we manually trigger them or if we test the components in isolation
-		// (which is more unit testing).
-		// However, we can test the LOGIN page flow interacting with the "backend" (mocked).
-		// Let's stick to testing what we can verify: redirects and UI presence.
+test.describe('Route Guards', () => {
+	test('redirects unauthenticated user from settings to login', async ({ page }) => {
+		await page.goto('/settings');
+		await expect(page).toHaveURL(/\/auth\/login/);
+	});
+});
+
+test.describe('Authenticated Route Access (test-mode)', () => {
+	test.beforeEach(async ({ page }) => {
+		await page.context().setExtraHTTPHeaders({
+			[E2E_AUTH_HEADER_NAME]: E2E_AUTH_HEADER_VALUE
+		});
 	});
 
-	// Since we are mocking, we can try to intercept the network requests
-	// but if the app redirects immediately due to no session, we can't test dashboard easily.
+	test('loads dashboard shell with authenticated heading', async ({ page }) => {
+		await page.goto('/');
+		await expect(page.locator('h1')).toContainText(/Dashboard/i);
+	});
 
-	// We will stick to the basic tests for now as requested: "Login flow".
-	// "Dashboard load" might be hard without a session.
+	test('loads settings page when test auth header is set', async ({ page }) => {
+		await page.goto('/settings');
+		await expect(page).toHaveURL(/\/settings$/);
+		await expect(page.locator('h1')).toContainText('Preferences');
+	});
 });
