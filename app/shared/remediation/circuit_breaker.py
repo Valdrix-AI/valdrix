@@ -20,10 +20,6 @@ class CircuitState(str, Enum):
     HALF_OPEN = "half_open"
 
 
-# Alias for backward compatibility
-CircuitBreakerStateEnum = CircuitState
-
-
 @dataclass
 class CircuitBreakerConfig:
     failure_threshold: int = 3

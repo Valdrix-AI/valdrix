@@ -43,11 +43,15 @@ class BaseAdapter(ABC):
         """Discover active resources of a specific type (for Zombie detection)."""
         raise NotImplementedError()
 
-    # Compatibility method for adapters that do not expose resource-level usage yet.
+    @abstractmethod
     async def get_resource_usage(
         self, _service_name: str, _resource_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        return []
+        """
+        Return normalized resource-level usage rows for the requested service/resource.
+        Implementations may return an empty list when the provider does not expose this data.
+        """
+        raise NotImplementedError()
 
 
 CostAdapter = BaseAdapter
