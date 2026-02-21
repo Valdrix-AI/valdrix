@@ -41,6 +41,7 @@ async def test_credential_isolation():
     mock_conn = MagicMock(spec=AWSConnection)
     mock_conn.role_arn = "arn:aws:iam::123456789012:role/ValdrixRole"
     mock_conn.external_id = "vx-abcdef"
+    mock_conn.account_id = "123456789012"
 
     adapter = MultiTenantAWSAdapter(mock_conn)
 
