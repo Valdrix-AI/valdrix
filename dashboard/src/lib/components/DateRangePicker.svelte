@@ -79,6 +79,7 @@
 	<div class="presets">
 		{#each presets as preset (preset.value)}
 			<button
+				type="button"
 				class="preset-btn"
 				class:active={value === preset.value && !showCustom}
 				onclick={() => selectPreset(preset.value)}
@@ -86,7 +87,9 @@
 				{preset.label}
 			</button>
 		{/each}
-		<button class="preset-btn" class:active={showCustom} onclick={toggleCustom}> 📅 Custom </button>
+		<button type="button" class="preset-btn" class:active={showCustom} onclick={toggleCustom}>
+			📅 Custom
+		</button>
 	</div>
 
 	<!-- Custom Date Range -->
@@ -103,6 +106,7 @@
 					<input type="date" id="end-date" bind:value={customEndDate} />
 				</div>
 				<button
+					type="button"
 					class="apply-btn"
 					disabled={!customStartDate || !customEndDate}
 					onclick={applyCustomRange}

@@ -4,6 +4,19 @@ import type { PageLoad } from './$types';
 
 const DASHBOARD_REQUEST_TIMEOUT_MS = 8000;
 
+function buildApiPath(
+	path: string,
+	params: Record<string, string | number | boolean | undefined>
+): string {
+	const query = new URLSearchParams();
+	for (const [key, value] of Object.entries(params)) {
+		if (value === undefined || value === null || value === '') continue;
+		query.set(key, String(value));
+	}
+	const suffix = query.toString();
+	return edgeApiPath(suffix.length > 0 ? `${path}?${suffix}` : path);
+}
+
 export const load: PageLoad = async ({ fetch, parent, url }) => {
 	const { session, user, subscription, profile } = await parent();
 
@@ -34,7 +47,6 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 	const hasChargeback = ['growth', 'pro', 'enterprise'].includes(tier);
 	const hasUnitEconomics = ['starter', 'growth', 'pro', 'enterprise', 'free'].includes(tier);
 
-	const providerQuery = provider ? `&provider=${provider}` : '';
 	const getWithTimeout = (input: string) =>
 		fetchWithTimeout(fetch, input, { headers }, DASHBOARD_REQUEST_TIMEOUT_MS);
 
@@ -46,36 +58,48 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 
 		const carbonPromise = wantsCarbon
 			? getWithTimeout(
-					edgeApiPath(`/carbon?start_date=${startDate}&end_date=${endDate}${providerQuery}`)
+					buildApiPath('/carbon', {
+						start_date: startDate,
+						end_date: endDate,
+						provider: provider || undefined
+					})
 				)
 			: Promise.resolve(null);
 
-		const zombiesProviderQuery = provider
-			? wantsZombiesAnalysis
-				? `&provider=${provider}`
-				: `?provider=${provider}`
-			: '';
-
-		const zombiesUrl = wantsZombiesAnalysis
-			? edgeApiPath(`/zombies?analyze=true${zombiesProviderQuery}`)
-			: edgeApiPath(`/zombies${zombiesProviderQuery}`);
+		const zombiesParams = new URLSearchParams();
+		if (wantsZombiesAnalysis) zombiesParams.set('analyze', 'true');
+		if (provider) zombiesParams.set('provider', provider);
+		const zombiesUrl =
+			zombiesParams.size > 0
+				? `${edgeApiPath('/zombies')}?${zombiesParams.toString()}`
+				: edgeApiPath('/zombies');
 
 		const results = await Promise.allSettled([
 			getWithTimeout(
-				edgeApiPath(`/costs?start_date=${startDate}&end_date=${endDate}${providerQuery}`)
+				buildApiPath('/costs', {
+					start_date: startDate,
+					end_date: endDate,
+					provider: provider || undefined
+				})
 			),
 			carbonPromise,
 			getWithTimeout(zombiesUrl),
 			hasChargeback && wantsAllocation
 				? getWithTimeout(
-						edgeApiPath(`/costs/attribution/summary?start_date=${startDate}&end_date=${endDate}`)
+						buildApiPath('/costs/attribution/summary', {
+							start_date: startDate,
+							end_date: endDate
+						})
 					)
 				: Promise.resolve(null),
 			hasUnitEconomics && wantsUnitEconomics
 				? getWithTimeout(
-						edgeApiPath(
-							`/costs/unit-economics?start_date=${startDate}&end_date=${endDate}${providerQuery}&alert_on_anomaly=false`
-						)
+						buildApiPath('/costs/unit-economics', {
+							start_date: startDate,
+							end_date: endDate,
+							provider: provider || undefined,
+							alert_on_anomaly: false
+						})
 					)
 				: Promise.resolve(null)
 		]);

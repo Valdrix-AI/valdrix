@@ -105,8 +105,14 @@
 
 	function handleDateChange(dates: { startDate: string; endDate: string }) {
 		if (dates.startDate === startDate && dates.endDate === endDate) return;
-		const providerQuery = provider ? `&provider=${provider}` : '';
-		goto(`${base}/?start_date=${dates.startDate}&end_date=${dates.endDate}${providerQuery}`, {
+		const params = new URLSearchParams({
+			start_date: dates.startDate,
+			end_date: dates.endDate
+		});
+		if (provider) {
+			params.set('provider', provider);
+		}
+		goto(`${base}/?${params.toString()}`, {
 			keepFocus: true,
 			noScroll: true,
 			replaceState: true
@@ -116,14 +122,18 @@
 	function handleProviderChange(selectedProvider: string) {
 		if (selectedProvider === provider) return;
 
-		// Preserve date range if exists
-		let query = startDate && endDate ? `?start_date=${startDate}&end_date=${endDate}` : '?';
-
-		if (selectedProvider) {
-			query += query === '?' ? `provider=${selectedProvider}` : `&provider=${selectedProvider}`;
+		const params = new URLSearchParams();
+		if (startDate && endDate) {
+			params.set('start_date', startDate);
+			params.set('end_date', endDate);
 		}
+		if (selectedProvider) {
+			params.set('provider', selectedProvider);
+		}
+		const query = params.toString();
+		const targetPath = query.length > 0 ? `${base}/?${query}` : `${base}/`;
 
-		goto(`${base}/${query}`, {
+		goto(targetPath, {
 			keepFocus: true,
 			noScroll: true,
 			replaceState: true

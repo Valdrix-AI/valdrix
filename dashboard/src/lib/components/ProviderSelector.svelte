@@ -10,6 +10,7 @@
 	}>();
 
 	let isOpen = $state(false);
+	let prefersReducedMotion = $state(false);
 
 	const providers = [
 		{ id: '', name: 'All Providers' },
@@ -35,8 +36,17 @@
 	}
 
 	onMount(() => {
+		const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+		const syncReducedMotion = () => {
+			prefersReducedMotion = mediaQuery.matches;
+		};
+		syncReducedMotion();
+		mediaQuery.addEventListener('change', syncReducedMotion);
 		document.addEventListener('click', handleClickOutside);
-		return () => document.removeEventListener('click', handleClickOutside);
+		return () => {
+			document.removeEventListener('click', handleClickOutside);
+			mediaQuery.removeEventListener('change', syncReducedMotion);
+		};
 	});
 </script>
 
@@ -64,7 +74,7 @@
 
 	{#if isOpen}
 		<div
-			transition:fly={{ y: 8, duration: 200 }}
+			transition:fly={{ y: 8, duration: prefersReducedMotion ? 0 : 200 }}
 			class="absolute right-0 mt-2 w-48 py-1.5 z-[100] rounded-xl bg-ink-900/95 backdrop-blur-xl border border-ink-700 shadow-2xl overflow-hidden ring-1 ring-white/5"
 			role="listbox"
 		>
@@ -97,7 +107,7 @@
 					</div>
 
 					{#if selectedProvider === p.id}
-						<div transition:fly={{ x: 4, duration: 150 }}>
+						<div transition:fly={{ x: 4, duration: prefersReducedMotion ? 0 : 150 }}>
 							<Check size={14} class="text-accent-400" />
 						</div>
 					{/if}

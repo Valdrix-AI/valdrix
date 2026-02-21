@@ -61,6 +61,7 @@
 			The dashboard encountered an unexpected error. This has been logged for our engineering team.
 		</p>
 		<button
+			type="button"
 			onclick={reset}
 			class="px-4 py-2 text-white rounded-md transition-colors uppercase text-xs font-semibold tracking-wider shadow-sm"
 			style="background-color: var(--color-danger-500);"
