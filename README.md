@@ -195,6 +195,15 @@ We're paranoid, so you don't have to be:
 - Cost Explorer is optional (Valdrix ingestion path is CUR + Resource Explorer 2)
 - An LLM API key (OpenAI, Anthropic, Google, or Groq)
 
+### Runtime Dependency Policy (Prod/Staging)
+- `tiktoken` is required for accurate token accounting and LLM budget enforcement.
+- If `SENTRY_DSN` is configured, `sentry-sdk` is required.
+- `prophet` is required by default in staging/production.
+- Temporary break-glass fallback is allowed only with:
+  - `FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=true`
+  - `FORECASTER_BREAK_GLASS_REASON` (auditable justification)
+  - `FORECASTER_BREAK_GLASS_EXPIRES_AT` (ISO-8601 UTC expiry)
+
 ### 1. Clone & Configure
 
 ```bash
