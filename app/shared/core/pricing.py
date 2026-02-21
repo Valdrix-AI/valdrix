@@ -337,10 +337,6 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
     },
 }
 
-# Alias for test compatibility
-TIER_LIMITS = TIER_CONFIG
-
-
 def normalize_tier(tier: PricingTier | str | None) -> PricingTier:
     """Map arbitrary tier values to a supported PricingTier."""
     if isinstance(tier, PricingTier):
@@ -376,10 +372,6 @@ def is_feature_enabled(tier: PricingTier | str, feature: str | FeatureFlag) -> b
     return feature in config.get("features", set())
 
 
-# Aliases for test compatibility
-has_feature = is_feature_enabled
-
-
 def get_tier_limit(tier: PricingTier | str, limit_name: str) -> Any:
     """Get a limit value for a tier (None = unlimited)."""
     config = get_tier_config(tier)
@@ -393,10 +385,6 @@ def get_tier_limit(tier: PricingTier | str, limit_name: str) -> Any:
     if isinstance(raw_limit, float):
         return int(raw_limit)
     return raw_limit
-
-
-# Aliases for test compatibility
-get_limit = get_tier_limit
 
 
 def requires_tier(

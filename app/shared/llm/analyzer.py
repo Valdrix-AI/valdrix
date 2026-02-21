@@ -23,7 +23,6 @@ from tenacity import (
 )
 
 from app.shared.core.config import get_settings
-from app.shared.llm.usage_tracker import UsageTracker
 from app.modules.notifications.domain import (
     get_slack_service,
     get_tenant_slack_service,
@@ -33,7 +32,7 @@ from app.shared.llm.guardrails import LLMGuardrails, FinOpsAnalysisResult
 from app.shared.analysis.forecaster import SymbolicForecaster
 from app.shared.llm.factory import LLMFactory
 from app.shared.core.exceptions import AIAnalysisError, BudgetExceededError
-from app.shared.llm.budget_manager import LLMBudgetManager
+from app.shared.llm.budget_manager import LLMBudgetManager, BudgetStatus
 from app.shared.core.constants import LLMProvider
 from opentelemetry import trace
 
@@ -243,7 +242,6 @@ class FinOpsAnalyzer:
             try:
                 # Note: _setup_client_and_usage might still be needed for BYOK keys
                 (
-                    usage_tracker,
                     effective_provider,
                     final_model,
                     byok_key,
@@ -366,9 +364,8 @@ class FinOpsAnalyzer:
         provider: Optional[str],
         model: Optional[str],
         input_text: Optional[str] = None,
-    ) -> tuple[Optional[UsageTracker], str, str, Optional[str]]:
+    ) -> tuple[str, str, Optional[str]]:
         """Handles budget checks and determines the effective LLM provider/model."""
-        usage_tracker = None
         byok_key = None
         budget = None
         budget_status = None
@@ -381,10 +378,7 @@ class FinOpsAnalyzer:
             return ""
 
         if tenant_id and db:
-            usage_tracker = UsageTracker(db)
-            from app.shared.llm.usage_tracker import BudgetStatus
-
-            budget_status = await usage_tracker.check_budget(tenant_id)
+            budget_status = await LLMBudgetManager.check_budget(tenant_id, db)
 
             if budget_status == BudgetStatus.HARD_LIMIT:
                 from app.shared.core.exceptions import BudgetExceededError
@@ -486,7 +480,7 @@ class FinOpsAnalyzer:
                     allowed_models[0] if allowed_models else "llama-3.3-70b-versatile"
                 )
 
-        return usage_tracker, effective_provider, effective_model, byok_key
+        return effective_provider, effective_model, byok_key
 
     async def _invoke_llm(
         self, formatted_data: str, provider: str, model: str, byok_key: Optional[str]

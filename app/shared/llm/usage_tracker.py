@@ -120,8 +120,6 @@ class UsageTracker:
         """
         DELEGATED: Use LLMBudgetManager.check_and_reserve
         """
-        from .usage_tracker import count_tokens
-
         input_tokens = count_tokens(input_text, model)
         await LLMBudgetManager.check_and_reserve(
             tenant_id=tenant_id,
@@ -158,13 +156,4 @@ class UsageTracker:
         """
         DELEGATED: Use LLMBudgetManager.check_budget
         """
-        return await LLMBudgetManager.check_budget(tenant_id, self.db)
-
-    async def _check_budget_and_alert(
-        self, tenant_id: UUID, last_cost: Decimal = Decimal("0")
-    ) -> None:
-        """Bridge method for delegating budget alerts to LLMBudgetManager."""
-        await LLMBudgetManager._check_budget_and_alert(tenant_id, self.db, last_cost)
-
-    async def _perform_check_v2(self, tenant_id: UUID) -> BudgetStatus:
         return await LLMBudgetManager.check_budget(tenant_id, self.db)
