@@ -406,7 +406,11 @@
 
 		try {
 			const headers = await getHeaders();
-			const res = await api.post(edgeApiPath('/settings/notifications/test-slack'), {}, { headers });
+			const res = await api.post(
+				edgeApiPath('/settings/notifications/test-slack'),
+				{},
+				{ headers }
+			);
 
 			if (!res.ok) {
 				const data = await res.json();
@@ -452,7 +456,11 @@
 
 		try {
 			const headers = await getHeaders();
-			const res = await api.post(edgeApiPath('/settings/notifications/test-teams'), {}, { headers });
+			const res = await api.post(
+				edgeApiPath('/settings/notifications/test-teams'),
+				{},
+				{ headers }
+			);
 
 			if (!res.ok) {
 				const data = await res.json();
@@ -475,7 +483,11 @@
 
 		try {
 			const headers = await getHeaders();
-			const res = await api.post(edgeApiPath('/settings/notifications/test-workflow'), {}, { headers });
+			const res = await api.post(
+				edgeApiPath('/settings/notifications/test-workflow'),
+				{},
+				{ headers }
+			);
 
 			if (!res.ok) {
 				const data = await res.json();

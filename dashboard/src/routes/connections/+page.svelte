@@ -1,11 +1,11 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
-	import { PUBLIC_API_URL } from '$env/static/public';
 	import { base } from '$app/paths';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
 
 	interface CloudConnection {
@@ -307,13 +307,9 @@
 							spend_feed: feed
 						};
 
-			const response = await api.post(
-				`${PUBLIC_API_URL}/settings/connections/${provider}`,
-				payload,
-				{
-					headers
-				}
-			);
+			const response = await api.post(edgeApiPath(`/settings/connections/${provider}`), payload, {
+				headers
+			});
 			const body = await response.json().catch(() => ({}));
 			if (!response.ok) {
 				throw new Error(
@@ -332,7 +328,7 @@
 			}
 
 			const verifyRes = await api.post(
-				`${PUBLIC_API_URL}/settings/connections/${provider}/${connectionId}/verify`,
+				edgeApiPath(`/settings/connections/${provider}/${connectionId}/verify`),
 				{},
 				{ headers }
 			);
@@ -389,7 +385,7 @@
 		try {
 			const headers = await getHeaders();
 			const response = await api.post(
-				`${PUBLIC_API_URL}/settings/connections/${provider}/${connectionId}/verify`,
+				edgeApiPath(`/settings/connections/${provider}/${connectionId}/verify`),
 				{},
 				{ headers }
 			);
@@ -433,13 +429,13 @@
 		try {
 			const headers = await getHeaders();
 			const results = await Promise.allSettled([
-				getWithTimeout(`${PUBLIC_API_URL}/settings/connections/aws`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/settings/connections/azure`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/settings/connections/gcp`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/settings/connections/saas`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/settings/connections/license`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/settings/connections/platform`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/settings/connections/hybrid`, headers)
+				getWithTimeout(edgeApiPath('/settings/connections/aws'), headers),
+				getWithTimeout(edgeApiPath('/settings/connections/azure'), headers),
+				getWithTimeout(edgeApiPath('/settings/connections/gcp'), headers),
+				getWithTimeout(edgeApiPath('/settings/connections/saas'), headers),
+				getWithTimeout(edgeApiPath('/settings/connections/license'), headers),
+				getWithTimeout(edgeApiPath('/settings/connections/platform'), headers),
+				getWithTimeout(edgeApiPath('/settings/connections/hybrid'), headers)
 			]);
 			const responseOrNull = (index: number): Response | null =>
 				results[index]?.status === 'fulfilled'
@@ -500,7 +496,7 @@
 		try {
 			const headers = await getHeaders();
 			const res = await getWithTimeout(
-				`${PUBLIC_API_URL}/settings/connections/aws/discovered`,
+				edgeApiPath('/settings/connections/aws/discovered'),
 				headers
 			);
 			if (res.ok) {
@@ -524,7 +520,7 @@
 		try {
 			const headers = await getHeaders();
 			const res = await api.post(
-				`${PUBLIC_API_URL}/settings/connections/aws/${awsConnection.id}/sync-org`,
+				edgeApiPath(`/settings/connections/aws/${awsConnection.id}/sync-org`),
 				{},
 				{ headers }
 			);
@@ -555,7 +551,7 @@
 		error = '';
 		try {
 			const headers = await getHeaders();
-			const res = await api.delete(`${PUBLIC_API_URL}/settings/connections/${provider}/${id}`, {
+			const res = await api.delete(edgeApiPath(`/settings/connections/${provider}/${id}`), {
 				headers
 			});
 
@@ -588,7 +584,7 @@
 		try {
 			const headers = await getHeaders();
 			const res = await api.post(
-				`${PUBLIC_API_URL}/settings/connections/aws/discovered/${discoveredId}/link`,
+				edgeApiPath(`/settings/connections/aws/discovered/${discoveredId}/link`),
 				{},
 				{ headers }
 			);

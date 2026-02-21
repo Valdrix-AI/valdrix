@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { buildCompliancePackPath } from '$lib/compliancePack';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { buildFocusExportPath } from '$lib/focusExport';
 	import { filenameFromContentDispositionHeader } from '$lib/utils';
 
@@ -82,7 +82,7 @@
 
 	async function loadEventTypes() {
 		const headers = getHeaders();
-		const res = await getWithTimeout(`${PUBLIC_API_URL}/audit/event-types`, headers);
+		const res = await getWithTimeout(edgeApiPath('/audit/event-types'), headers);
 		if (res.ok) {
 			const payload = await res.json();
 			eventTypes = payload.event_types || [];
@@ -104,10 +104,7 @@
 				queryParts.push(`event_type=${encodeURIComponent(selectedEventType)}`);
 			}
 
-			const res = await getWithTimeout(
-				`${PUBLIC_API_URL}/audit/logs?${queryParts.join('&')}`,
-				headers
-			);
+			const res = await getWithTimeout(edgeApiPath(`/audit/logs?${queryParts.join('&')}`), headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to load audit logs.');
@@ -129,7 +126,7 @@
 		error = '';
 		try {
 			const headers = getHeaders();
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/audit/logs/${id}`, headers);
+			const res = await getWithTimeout(edgeApiPath(`/audit/logs/${id}`), headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to load audit log detail.');
@@ -157,7 +154,7 @@
 			const headers = getHeaders();
 			const query = selectedEventType ? `event_type=${encodeURIComponent(selectedEventType)}` : '';
 
-			const res = await getWithTimeout(`${PUBLIC_API_URL}/audit/export?${query}`, headers);
+			const res = await getWithTimeout(edgeApiPath(`/audit/export?${query}`), headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to export audit logs.');
@@ -207,7 +204,7 @@
 				closeMaxRestatements: packCloseMaxRestatements
 			});
 
-			const res = await getWithTimeout(`${PUBLIC_API_URL}${path}`, headers);
+			const res = await getWithTimeout(edgeApiPath(path), headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(
@@ -251,7 +248,7 @@
 				provider: focusProvider,
 				includePreliminary: focusIncludePreliminary
 			});
-			const res = await getWithTimeout(`${PUBLIC_API_URL}${path}`, headers);
+			const res = await getWithTimeout(edgeApiPath(path), headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(
