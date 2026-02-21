@@ -2,9 +2,9 @@ name: Valdrix CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 # Performance: Cancel in-flight runs for same PR/branch
 concurrency:
@@ -82,7 +82,7 @@ jobs:
           uv run coverage report --include="app/modules/optimization/*" --fail-under=95
           uv run coverage report --include="app/modules/reporting/*" --fail-under=95
           uv run coverage report --include="app/shared/llm/hybrid_scheduler.py" --fail-under=95
-          
+
       - name: Upload Coverage Report
         uses: codecov/codecov-action@v4
         with:
@@ -298,18 +298,31 @@ jobs:
       - name: Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: 'valdrix:${{ github.sha }}'
-          format: 'table'
-          exit-code: '1'
+          image-ref: "valdrix:${{ github.sha }}"
+          format: "table"
+          exit-code: "1"
           ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
 
-  # JOB 5: E2E TESTS
-  e2e:
-    name: End-to-End Tests
+  # JOB 5: DASHBOARD BROWSER GATES (split e2e/a11y/perf)
+  dashboard-browser-gates:
+    name: Dashboard ${{ matrix.label }}
     runs-on: ubuntu-latest
     needs: [test]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: E2E Critical Paths
+            spec: e2e/critical-paths.spec.ts
+            artifact: playwright-report-critical
+          - label: Accessibility Gate
+            spec: e2e/a11y.spec.ts
+            artifact: playwright-report-a11y
+          - label: Performance Gate
+            spec: e2e/performance.spec.ts
+            artifact: playwright-report-perf
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
@@ -361,19 +374,19 @@ jobs:
         working-directory: ./dashboard
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run E2E Tests
+      - name: Run Playwright Suite
         working-directory: ./dashboard
-        run: pnpm exec playwright test e2e/critical-paths.spec.ts --reporter=html
+        run: pnpm exec playwright test ${{ matrix.spec }} --reporter=html
         env:
           # Playwright webServer config boots `vite preview` on 4173
           DASHBOARD_URL: http://localhost:4173
           API_URL: http://127.0.0.1:8000
-          
-      - name: Upload E2E Test Report
+
+      - name: Upload Playwright Report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: playwright-report
+          name: ${{ matrix.artifact }}
           path: dashboard/playwright-report/
           retention-days: 7
 
