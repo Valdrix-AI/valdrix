@@ -41,6 +41,8 @@ Generate and store:
 ```bash
 openssl rand -hex 32   # ENCRYPTION_KEY
 openssl rand -hex 16   # ADMIN_API_KEY
+openssl rand -hex 32   # CSRF_SECRET_KEY
+openssl rand -base64 32 # KDF_SALT (must decode to exactly 32 bytes)
 ```
 
 Also create:
@@ -57,7 +59,9 @@ Also create:
 |---|---|---|
 | `DATABASE_URL` | `postgresql://...` | Supabase pooled URL |
 | `SUPABASE_JWT_SECRET` | `...` | Supabase JWT secret |
+| `CSRF_SECRET_KEY` | `...` | >=32 chars, non-default |
 | `ENCRYPTION_KEY` | `...` | 64-char hex |
+| `KDF_SALT` | `...` | Base64, decodes to 32 bytes |
 | `ADMIN_API_KEY` | `...` | Admin secret |
 | `LLM_PROVIDER` | `groq` | Default managed provider |
 | `GROQ_API_KEY` | `gsk_...` | If not BYOK-only |
@@ -77,6 +81,16 @@ Also create:
 | `LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS` | `180` | Optional; lease self-heal window |
 
 5. Deploy and record your service URL.
+6. Run runtime preflight against the deployment env contract before traffic cutover:
+
+```bash
+uv run python scripts/validate_runtime_env.py --environment production
+```
+
+If `prophet` is intentionally not bundled in production/staging, set all of:
+- `FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=true`
+- `FORECASTER_BREAK_GLASS_REASON=<ticket/incident reference>`
+- `FORECASTER_BREAK_GLASS_EXPIRES_AT=<ISO-8601 UTC, future timestamp>`
 
 ## Step 4: Run Database Migrations
 

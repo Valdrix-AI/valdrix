@@ -25,6 +25,10 @@ Set these in production runtime (Koyeb/Kubernetes/etc):
 - `PAYSTACK_PUBLIC_KEY=pk_live_...`
 - `CORS_ORIGINS=[\"https://<your-frontend-domain>\"]`
 - `SAAS_STRICT_INTEGRATIONS=true`
+- If `prophet` is not bundled, set all break-glass vars:
+  - `FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=true`
+  - `FORECASTER_BREAK_GLASS_REASON=<incident/ticket reference>`
+  - `FORECASTER_BREAK_GLASS_EXPIRES_AT=<ISO-8601 UTC future timestamp>`
 
 ## 3. Strict SaaS integration rules
 
@@ -55,9 +59,10 @@ All tokens/secrets are stored in tenant notification settings.
 
 1. Deploy backend image/code.
 2. Run migrations: `uv run alembic upgrade head`
-3. Apply env vars above and restart app.
-4. Deploy frontend.
-5. Validate health and notification paths.
+3. Validate runtime contract: `uv run python scripts/validate_runtime_env.py --environment production`
+4. Apply env vars above and restart app.
+5. Deploy frontend.
+6. Validate health and notification paths.
 
 ## 6. Smoke tests after deploy
 
