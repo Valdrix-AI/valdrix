@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, TYPE_CHECKING, cast
 from uuid import UUID
 
@@ -15,6 +15,45 @@ from app.shared.llm.budget_fair_use import (
 
 if TYPE_CHECKING:
     from app.shared.llm.budget_manager import BudgetStatus
+
+
+def _coerce_decimal(value: Any) -> Decimal | None:
+    """Return Decimal for supported scalar types, otherwise None."""
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float, str)):
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+    return None
+
+
+def _coerce_bool(value: Any, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, Decimal)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def _coerce_threshold_percent(value: Any) -> Decimal:
+    threshold = _coerce_decimal(value)
+    if threshold is None:
+        return Decimal("80")
+    if threshold < 0:
+        return Decimal("0")
+    if threshold > 100:
+        return Decimal("100")
+    return threshold
 
 
 async def check_and_reserve_budget(
@@ -201,8 +240,6 @@ async def record_usage_entry(
             if inspect.isawaitable(budget_candidate):
                 budget_candidate = await budget_candidate
         budget = budget_candidate
-        if budget is not None and budget.__class__.__module__.startswith("unittest.mock"):
-            budget = None
 
         if is_byok:
             actual_cost_usd = manager_cls.BYOK_PLATFORM_FEE_USD
@@ -217,19 +254,18 @@ async def record_usage_entry(
             estimated_reservation = manager_cls.estimate_cost(
                 prompt_tokens, completion_tokens, model, provider
             )
-            pending = manager_cls._to_decimal(
-                getattr(budget, "pending_reservations_usd", Decimal("0"))
-            )
-            spend = manager_cls._to_decimal(
-                getattr(budget, "monthly_spend_usd", Decimal("0"))
-            )
+            pending_raw = getattr(budget, "pending_reservations_usd", Decimal("0"))
+            spend_raw = getattr(budget, "monthly_spend_usd", Decimal("0"))
+            pending = _coerce_decimal(pending_raw)
+            spend = _coerce_decimal(spend_raw)
 
-            budget.pending_reservations_usd = max(
-                Decimal("0.0"),
-                pending - estimated_reservation,
-            )
-            budget.monthly_spend_usd = spend + actual_cost_decimal
-            await db.flush()
+            if pending is not None and spend is not None:
+                budget.pending_reservations_usd = max(
+                    Decimal("0.0"),
+                    pending - estimated_reservation,
+                )
+                budget.monthly_spend_usd = spend + actual_cost_decimal
+                await db.flush()
 
         usage = manager_module.LLMUsage(
             tenant_id=tenant_id,
@@ -335,24 +371,24 @@ async def check_budget_state(
             budget = await budget
     if not budget:
         return manager_module.BudgetStatus.OK
-    if budget.__class__.__module__.startswith("unittest.mock"):
+
+    limit_raw = getattr(budget, "monthly_limit_usd", None)
+    spend_raw = getattr(budget, "monthly_spend_usd", Decimal("0"))
+    pending_raw = getattr(budget, "pending_reservations_usd", Decimal("0"))
+    limit_dec = _coerce_decimal(limit_raw)
+    spend_dec = _coerce_decimal(spend_raw)
+    pending_dec = _coerce_decimal(pending_raw)
+    if limit_dec is None or spend_dec is None or pending_dec is None:
         return manager_module.BudgetStatus.OK
 
-    if not (
-        hasattr(budget, "monthly_limit_usd")
-        and hasattr(budget, "monthly_spend_usd")
-        and hasattr(budget, "pending_reservations_usd")
-    ):
-        return manager_module.BudgetStatus.OK
-
-    limit = manager_cls._to_decimal(getattr(budget, "monthly_limit_usd", Decimal("0")))
-    current_usage = manager_cls._to_decimal(
-        getattr(budget, "monthly_spend_usd", Decimal("0"))
-    ) + manager_cls._to_decimal(getattr(budget, "pending_reservations_usd", Decimal("0")))
-    threshold = manager_cls._to_decimal(
+    limit = manager_cls._to_decimal(limit_dec)
+    current_usage = manager_cls._to_decimal(spend_dec) + manager_cls._to_decimal(
+        pending_dec
+    )
+    threshold = _coerce_threshold_percent(
         getattr(budget, "alert_threshold_percent", Decimal("80"))
     ) / Decimal("100")
-    hard_limit = bool(getattr(budget, "hard_limit", False))
+    hard_limit = _coerce_bool(getattr(budget, "hard_limit", False), default=False)
 
     if current_usage >= limit:
         if hard_limit:
@@ -393,8 +429,6 @@ async def check_budget_and_alert(
         budget = await budget
     if not budget:
         return
-    if budget.__class__.__module__.startswith("unittest.mock"):
-        return
 
     now = datetime.now(timezone.utc)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -406,8 +440,13 @@ async def check_budget_and_alert(
     )
     current_usage = manager_cls._to_decimal(result_usage.scalar())
 
-    limit = manager_cls._to_decimal(budget.monthly_limit_usd)
-    threshold_percent = manager_cls._to_decimal(budget.alert_threshold_percent)
+    limit_raw = getattr(budget, "monthly_limit_usd", None)
+    threshold_raw = getattr(budget, "alert_threshold_percent", Decimal("80"))
+    limit_dec = _coerce_decimal(limit_raw)
+    if limit_dec is None:
+        return
+    limit = manager_cls._to_decimal(limit_dec)
+    threshold_percent = _coerce_threshold_percent(threshold_raw)
     usage_percent = (current_usage / limit * 100) if limit > 0 else Decimal("0")
 
     alert_sent_at = getattr(budget, "alert_sent_at", None)

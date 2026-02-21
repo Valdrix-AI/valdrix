@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     UniqueConstraint,
     event,
+    text,
     Uuid as PG_UUID,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -78,7 +79,9 @@ class Tenant(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
-    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_deleted: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False, index=True
+    )
 
     # Relationships
     users: Mapped[List["User"]] = relationship(

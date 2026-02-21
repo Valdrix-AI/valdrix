@@ -381,11 +381,14 @@ def _resolve_session_backend(session: AsyncSession) -> tuple[str, str]:
     return "unknown", "unresolved"
 
 
-async def get_db(
+async def _get_db_impl(
     request: Request = cast(Request, None),
 ) -> AsyncGenerator[AsyncSession, None]:
     """
-    FastAPI dependency that provides a database session with RLS context.
+    Internal implementation for FastAPI DB dependency.
+
+    Wrapped by `get_db` to keep dependency callable identity stable across
+    module reloads (critical for dependency overrides).
     """
     async with async_session_maker() as session:
         rls_context_set = False
@@ -440,7 +443,17 @@ async def get_db(
             await session.close()
 
 
-async def get_system_db() -> AsyncGenerator[AsyncSession, None]:
+_get_db_impl_ref = _get_db_impl
+if "get_db" not in globals():
+
+    async def get_db(
+        request: Request = cast(Request, None),
+    ) -> AsyncGenerator[AsyncSession, None]:
+        async for session in _get_db_impl_ref(request):
+            yield session
+
+
+async def _get_system_db_impl() -> AsyncGenerator[AsyncSession, None]:
     """
     Provide a DB session for system/public operations that must not require a tenant context.
 
@@ -460,6 +473,14 @@ async def get_system_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
         finally:
             await session.close()
+
+
+_get_system_db_impl_ref = _get_system_db_impl
+if "get_system_db" not in globals():
+
+    async def get_system_db() -> AsyncGenerator[AsyncSession, None]:
+        async for session in _get_system_db_impl_ref():
+            yield session
 
 
 async def set_session_tenant_id(session: AsyncSession, tenant_id: Optional[UUID]) -> None:
