@@ -31,14 +31,7 @@ logger = structlog.get_logger()
 # without importing `app/main.py`.
 import app.models  # noqa: F401, E402
 
-class _SettingsProxy:
-    """Lazy settings accessor to avoid import-time Settings construction."""
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(get_settings(), name)
-
-
-settings: Any = _SettingsProxy()
+settings = get_settings()
 
 _RLS_EXEMPT_TABLE_PATTERN = re.compile(
     r"\b(" + "|".join(re.escape(table.lower()) for table in RLS_EXEMPT_TABLES) + r")\b"
@@ -249,25 +242,14 @@ def reset_db_runtime() -> None:
     _db_runtime = None
 
 
-class _LazyEngineProxy:
-    """Backward-compatible engine symbol with lazy underlying initialization."""
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(_get_db_runtime().engine, name)
+def get_engine() -> AsyncEngine:
+    """Return the active async engine."""
+    return _get_db_runtime().engine
 
 
-class _LazySessionMakerProxy:
-    """Backward-compatible session maker symbol with lazy initialization."""
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        return _get_db_runtime().session_maker(*args, **kwargs)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(_get_db_runtime().session_maker, name)
-
-
-engine: Any = _LazyEngineProxy()
-async_session_maker: Any = _LazySessionMakerProxy()
+def async_session_maker(*args: Any, **kwargs: Any) -> Any:
+    """Return a new async session from the active session factory."""
+    return _get_db_runtime().session_maker(*args, **kwargs)
 
 
 def _get_slow_query_threshold_seconds() -> float:
@@ -597,6 +579,7 @@ async def health_check() -> Dict[str, Any]:
     """Database health check for monitoring."""
     start_time = time.perf_counter()
     try:
+        db_engine = get_engine()
         async with async_session_maker() as session:
             # Item 4: Fast Health Check (No heavy joins/locks)
             await session.execute(text("SELECT 1"))
@@ -605,7 +588,9 @@ async def health_check() -> Dict[str, Any]:
         return {
             "status": "up",
             "latency_ms": round(latency, 2),
-            "engine": engine.dialect.name if hasattr(engine, "dialect") else "unknown",
+            "engine": (
+                db_engine.dialect.name if hasattr(db_engine, "dialect") else "unknown"
+            ),
         }
     except Exception as e:
         logger.error("database_health_check_failed", error=str(e))

@@ -336,3 +336,9 @@ class AzureAdapter(BaseAdapter):
             except Exception as e:
                 logger.error("azure_resource_discovery_failed", error=str(e))
                 return []
+
+    async def get_resource_usage(
+        self, _service_name: str, _resource_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        # Azure resource-level usage is not exposed by this adapter yet.
+        return []

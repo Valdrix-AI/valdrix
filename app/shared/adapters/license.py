@@ -517,41 +517,12 @@ class LicenseAdapter(BaseAdapter):
         headers: dict[str, str],
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Compatibility wrapper for GET endpoints used by tests and callers."""
-        return await self._request_json(
-            "GET",
-            url,
-            headers=headers,
-            params=params,
-        )
-
-    async def _request_json(
-        self,
-        method: str,
-        url: str,
-        *,
-        headers: dict[str, str],
-        params: dict[str, Any] | None = None,
-        json: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        """Execute a GET request and return a normalized JSON object payload."""
         last_error: Exception | None = None
-        method_name = method.strip().lower()
         for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
             try:
-                request_kwargs: dict[str, Any] = {"headers": headers}
-                if params is not None:
-                    request_kwargs["params"] = params
-                if json is not None and method_name != "get":
-                    request_kwargs["json"] = json
-
                 async with httpx.AsyncClient(timeout=_NATIVE_TIMEOUT_SECONDS) as client:
-                    request_fn = getattr(client, method_name, None)
-                    if callable(request_fn):
-                        response = await request_fn(url, **request_kwargs)
-                    else:
-                        response = await client.request(
-                            method, url, params=params, json=json, headers=headers
-                        )
+                    response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
                 if response.status_code == 204:
                     return {}
@@ -1225,4 +1196,10 @@ class LicenseAdapter(BaseAdapter):
     async def discover_resources(
         self, resource_type: str, region: str | None = None
     ) -> list[dict[str, Any]]:
+        return []
+
+    async def get_resource_usage(
+        self, _service_name: str, _resource_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        # License resource-level usage is not exposed by this adapter yet.
         return []

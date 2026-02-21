@@ -277,3 +277,9 @@ class MultiTenantAWSAdapter(BaseAdapter):
                     error=str(e),
                 )
                 return []
+
+    async def get_resource_usage(
+        self, _service_name: str, _resource_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        # Multi-tenant AWS adapter currently focuses on discovery, not usage metering.
+        return []

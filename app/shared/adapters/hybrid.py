@@ -820,3 +820,9 @@ class HybridAdapter(BaseAdapter):
         self, resource_type: str, region: str | None = None
     ) -> list[dict[str, Any]]:
         return []
+
+    async def get_resource_usage(
+        self, _service_name: str, _resource_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        # Hybrid resource-level usage is not exposed by this adapter yet.
+        return []

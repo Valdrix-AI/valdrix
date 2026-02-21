@@ -339,3 +339,9 @@ class GCPAdapter(BaseAdapter):
             except Exception as e:
                 logger.error("gcp_discovery_failed", error=str(e))
                 return []
+
+    async def get_resource_usage(
+        self, _service_name: str, _resource_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        # GCP resource-level usage is not exposed by this adapter yet.
+        return []
