@@ -9,9 +9,9 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { fetchWithTimeout } from '$lib/fetchWithTimeout';
 	import { normalizeCheckoutUrl } from '$lib/utils';
 
@@ -91,7 +91,7 @@
 
 			const res = await fetchWithTimeout(
 				fetch,
-				`${PUBLIC_API_URL}/billing/subscription`,
+				edgeApiPath('/billing/subscription'),
 				{
 					headers: { Authorization: `Bearer ${session.access_token}` }
 				},
@@ -114,7 +114,7 @@
 		try {
 			const res = await fetchWithTimeout(
 				fetch,
-				`${PUBLIC_API_URL}/billing/plans`,
+				edgeApiPath('/billing/plans'),
 				{},
 				BILLING_REQUEST_TIMEOUT_MS
 			);
@@ -135,7 +135,7 @@
 			if (!session) throw new Error('Not authenticated');
 
 			const res = await api.post(
-				`${PUBLIC_API_URL}/billing/checkout`,
+				edgeApiPath('/billing/checkout'),
 				{
 					tier,
 					billing_cycle: billingCycle

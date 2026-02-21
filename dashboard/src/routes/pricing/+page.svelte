@@ -11,10 +11,10 @@
 
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
-	import { PUBLIC_API_URL } from '$env/static/public';
 	import { assets, base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
+	import { edgeApiPath } from '$lib/edgeProxy';
 
 	import { onMount } from 'svelte';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
@@ -78,7 +78,7 @@
 
 	onMount(async () => {
 		try {
-			const res = await fetchWithTimeout(fetch, `${PUBLIC_API_URL}/billing/plans`, {}, 5000);
+			const res = await fetchWithTimeout(fetch, edgeApiPath('/billing/plans'), {}, 5000);
 			if (res.ok) {
 				const data = await res.json();
 				if (data && data.length > 0) {
@@ -110,7 +110,7 @@
 			if (!session) throw new Error('Not authenticated');
 
 			const res = await api.post(
-				`${PUBLIC_API_URL}/billing/checkout`,
+				edgeApiPath('/billing/checkout'),
 				{
 					tier: planId,
 					billing_cycle: billingCycle
