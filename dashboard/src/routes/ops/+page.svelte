@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
 	import {
 		buildUnitEconomicsUrl,
@@ -282,6 +282,7 @@
 	const initialUnitWindow = defaultDateWindow(30);
 	const initialCloseWindow = defaultDateWindow(30);
 	const OPS_REQUEST_TIMEOUT_MS = 10000;
+	const EDGE_API_BASE = edgeApiPath('').replace(/\/$/, '');
 
 	let { data } = $props();
 	let loading = $state(false);
@@ -415,7 +416,7 @@
 			window_hours: String(ingestionSlaWindowHours),
 			target_success_rate_percent: '95'
 		});
-		return `${PUBLIC_API_URL}/costs/ingestion/sla?${params.toString()}`;
+		return edgeApiPath(`/costs/ingestion/sla?${params.toString()}`);
 	}
 
 	function buildJobSloUrl(): string {
@@ -423,7 +424,7 @@
 			window_hours: String(jobSloWindowHours),
 			target_success_rate_percent: '95'
 		});
-		return `${PUBLIC_API_URL}/jobs/slo?${params.toString()}`;
+		return edgeApiPath(`/jobs/slo?${params.toString()}`);
 	}
 
 	function buildAcceptanceKpiUrl(responseFormat: 'json' | 'csv' = 'json'): string {
@@ -437,7 +438,7 @@
 			max_unit_anomalies: '0',
 			response_format: responseFormat
 		});
-		return `${PUBLIC_API_URL}/costs/acceptance/kpis?${params.toString()}`;
+		return edgeApiPath(`/costs/acceptance/kpis?${params.toString()}`);
 	}
 
 	function buildAcceptanceKpiCaptureUrl(): string {
@@ -450,12 +451,12 @@
 			chargeback_target_percent: '90',
 			max_unit_anomalies: '0'
 		});
-		return `${PUBLIC_API_URL}/costs/acceptance/kpis/capture?${params.toString()}`;
+		return edgeApiPath(`/costs/acceptance/kpis/capture?${params.toString()}`);
 	}
 
 	function buildAcceptanceKpiHistoryUrl(limit = 50): string {
 		const params = new URLSearchParams({ limit: String(limit) });
-		return `${PUBLIC_API_URL}/costs/acceptance/kpis/evidence?${params.toString()}`;
+		return edgeApiPath(`/costs/acceptance/kpis/evidence?${params.toString()}`);
 	}
 
 	function acceptanceBadgeClass(metric: AcceptanceKpiMetric): string {
@@ -488,7 +489,7 @@
 
 	function buildAcceptanceEvidenceUrl(limit = 100): string {
 		const params = new URLSearchParams({ limit: String(limit) });
-		return `${PUBLIC_API_URL}/settings/notifications/acceptance-evidence?${params.toString()}`;
+		return edgeApiPath(`/settings/notifications/acceptance-evidence?${params.toString()}`);
 	}
 
 	function hasSelectedAcceptanceChannels(): boolean {
@@ -630,13 +631,13 @@
 		try {
 			const headers = getHeaders();
 			const results = await Promise.allSettled([
-				getWithTimeout(`${PUBLIC_API_URL}/zombies/pending`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/jobs/status`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/jobs/list?limit=20`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/strategies/recommendations?status=open`, headers),
-				getWithTimeout(`${PUBLIC_API_URL}/costs/unit-economics/settings`, headers),
+				getWithTimeout(edgeApiPath('/zombies/pending'), headers),
+				getWithTimeout(edgeApiPath('/jobs/status'), headers),
+				getWithTimeout(edgeApiPath('/jobs/list?limit=20'), headers),
+				getWithTimeout(edgeApiPath('/strategies/recommendations?status=open'), headers),
+				getWithTimeout(edgeApiPath('/costs/unit-economics/settings'), headers),
 				getWithTimeout(
-					buildUnitEconomicsUrl(PUBLIC_API_URL, unitStartDate, unitEndDate, unitAlertOnAnomaly),
+					buildUnitEconomicsUrl(EDGE_API_BASE, unitStartDate, unitEndDate, unitAlertOnAnomaly),
 					headers
 				),
 				getWithTimeout(buildIngestionSlaUrl(), headers),
@@ -762,7 +763,7 @@
 		try {
 			const headers = getHeaders();
 			const res = await api.post(
-				`${PUBLIC_API_URL}/settings/notifications/acceptance-evidence/capture`,
+				edgeApiPath('/settings/notifications/acceptance-evidence/capture'),
 				{
 					include_slack: captureIncludeSlack,
 					include_jira: captureIncludeJira,
@@ -804,7 +805,7 @@
 	async function captureIntegrationAcceptanceOrThrow(): Promise<IntegrationAcceptanceCaptureResponse> {
 		const headers = getHeaders();
 		const res = await api.post(
-			`${PUBLIC_API_URL}/settings/notifications/acceptance-evidence/capture`,
+			edgeApiPath('/settings/notifications/acceptance-evidence/capture'),
 			{
 				include_slack: captureIncludeSlack,
 				include_jira: captureIncludeJira,
@@ -875,9 +876,9 @@
 		try {
 			const headers = getHeaders();
 			const [settingsRes, unitRes] = await Promise.all([
-				api.get(`${PUBLIC_API_URL}/costs/unit-economics/settings`, { headers }),
+				api.get(edgeApiPath('/costs/unit-economics/settings'), { headers }),
 				api.get(
-					buildUnitEconomicsUrl(PUBLIC_API_URL, unitStartDate, unitEndDate, unitAlertOnAnomaly),
+					buildUnitEconomicsUrl(EDGE_API_BASE, unitStartDate, unitEndDate, unitAlertOnAnomaly),
 					{
 						headers
 					}
@@ -1021,7 +1022,7 @@
 		if (closeProvider !== 'all') {
 			params.push(`provider=${encodeURIComponent(closeProvider)}`);
 		}
-		return `${PUBLIC_API_URL}/costs/reconciliation/close-package?${params.join('&')}`;
+		return edgeApiPath(`/costs/reconciliation/close-package?${params.join('&')}`);
 	}
 
 	function buildRestatementUrl(responseFormat: 'json' | 'csv' = 'json'): string {
@@ -1033,7 +1034,7 @@
 		if (closeProvider !== 'all') {
 			params.push(`provider=${encodeURIComponent(closeProvider)}`);
 		}
-		return `${PUBLIC_API_URL}/costs/reconciliation/restatements?${params.join('&')}`;
+		return edgeApiPath(`/costs/reconciliation/restatements?${params.join('&')}`);
 	}
 
 	function parseFilenameFromDisposition(disposition: string | null, fallback: string): string {
@@ -1146,7 +1147,7 @@
 				status: invoiceForm.status.trim() || undefined,
 				notes: invoiceForm.notes.trim() || undefined
 			};
-			const res = await api.post(`${PUBLIC_API_URL}/costs/reconciliation/invoices`, payload, {
+			const res = await api.post(edgeApiPath('/costs/reconciliation/invoices'), payload, {
 				headers
 			});
 			if (!res.ok) {
@@ -1175,7 +1176,7 @@
 		try {
 			const headers = getHeaders();
 			const res = await api.delete(
-				`${PUBLIC_API_URL}/costs/reconciliation/invoices/${encodeURIComponent(invoiceId)}`,
+				edgeApiPath(`/costs/reconciliation/invoices/${encodeURIComponent(invoiceId)}`),
 				{ headers }
 			);
 			if (!res.ok) {
@@ -1354,7 +1355,7 @@
 				default_customer_volume: Number(unitSettings.default_customer_volume),
 				anomaly_threshold_percent: Number(unitSettings.anomaly_threshold_percent)
 			};
-			const res = await api.put(`${PUBLIC_API_URL}/costs/unit-economics/settings`, payload, {
+			const res = await api.put(edgeApiPath('/costs/unit-economics/settings'), payload, {
 				headers
 			});
 			if (!res.ok) {
@@ -1394,7 +1395,7 @@
 		remediationModalSuccess = '';
 		try {
 			const headers = getHeaders();
-			const res = await api.get(`${PUBLIC_API_URL}/zombies/policy-preview/${selectedRequest.id}`, {
+			const res = await api.get(edgeApiPath(`/zombies/policy-preview/${selectedRequest.id}`), {
 				headers
 			});
 			if (!res.ok) {
@@ -1434,7 +1435,7 @@
 		try {
 			const headers = getHeaders();
 			const res = await api.post(
-				`${PUBLIC_API_URL}/zombies/approve/${requestId}`,
+				edgeApiPath(`/zombies/approve/${requestId}`),
 				{ notes: 'Approved from Ops Center' },
 				{ headers }
 			);
@@ -1471,8 +1472,8 @@
 		try {
 			const headers = getHeaders();
 			const url = bypassGracePeriod
-				? `${PUBLIC_API_URL}/zombies/execute/${requestId}?bypass_grace_period=true`
-				: `${PUBLIC_API_URL}/zombies/execute/${requestId}`;
+				? edgeApiPath(`/zombies/execute/${requestId}?bypass_grace_period=true`)
+				: edgeApiPath(`/zombies/execute/${requestId}`);
 			const res = await api.post(url, undefined, { headers });
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
@@ -1507,7 +1508,7 @@
 		success = '';
 		try {
 			const headers = getHeaders();
-			const res = await api.post(`${PUBLIC_API_URL}/jobs/process?limit=10`, undefined, { headers });
+			const res = await api.post(edgeApiPath('/jobs/process?limit=10'), undefined, { headers });
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to process jobs.');
@@ -1529,7 +1530,7 @@
 		success = '';
 		try {
 			const headers = getHeaders();
-			const res = await api.post(`${PUBLIC_API_URL}/strategies/refresh`, undefined, { headers });
+			const res = await api.post(edgeApiPath('/strategies/refresh'), undefined, { headers });
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to refresh recommendations.');
@@ -1551,7 +1552,7 @@
 		success = '';
 		try {
 			const headers = getHeaders();
-			const res = await api.post(`${PUBLIC_API_URL}/strategies/apply/${id}`, undefined, {
+			const res = await api.post(edgeApiPath(`/strategies/apply/${id}`), undefined, {
 				headers
 			});
 			if (!res.ok) {

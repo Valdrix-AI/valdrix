@@ -15,8 +15,8 @@
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
+	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
-	import { PUBLIC_API_URL } from '$env/static/public';
 
 	let { data } = $props();
 
@@ -116,25 +116,25 @@
 			const [carbonRes, gravitonRes, budgetRes, intensityRes] = await Promise.all([
 				fetchWithTimeout(
 					fetch,
-					`${PUBLIC_API_URL}/carbon?start_date=${startDate}&end_date=${endDate}&region=${region}`,
+					edgeApiPath(`/carbon?start_date=${startDate}&end_date=${endDate}&region=${region}`),
 					{ headers },
 					GREENOPS_TIMEOUT_MS
 				),
 				fetchWithTimeout(
 					fetch,
-					`${PUBLIC_API_URL}/carbon/graviton?region=${region}`,
+					edgeApiPath(`/carbon/graviton?region=${region}`),
 					{ headers },
 					GREENOPS_TIMEOUT_MS
 				),
 				fetchWithTimeout(
 					fetch,
-					`${PUBLIC_API_URL}/carbon/budget?region=${region}`,
+					edgeApiPath(`/carbon/budget?region=${region}`),
 					{ headers },
 					GREENOPS_TIMEOUT_MS
 				),
 				fetchWithTimeout(
 					fetch,
-					`${PUBLIC_API_URL}/carbon/intensity?region=${region}&hours=24`,
+					edgeApiPath(`/carbon/intensity?region=${region}&hours=24`),
 					{ headers },
 					GREENOPS_TIMEOUT_MS
 				)
@@ -173,7 +173,7 @@
 
 	async function getOptimalSchedule() {
 		const res = await api.get(
-			`${PUBLIC_API_URL}/carbon/schedule?region=${selectedRegion}&duration_hours=${workloadDuration}`
+			edgeApiPath(`/carbon/schedule?region=${selectedRegion}&duration_hours=${workloadDuration}`)
 		);
 		if (res.ok) {
 			scheduleResult = await res.json();
