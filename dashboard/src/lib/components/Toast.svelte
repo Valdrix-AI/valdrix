@@ -2,8 +2,10 @@
 	import { fade, fly } from 'svelte/transition';
 	import { backOut } from 'svelte/easing';
 	import { uiState, type Toast } from '$lib/stores/ui.svelte';
+	import { onMount } from 'svelte';
 
 	let { toast } = $props<{ toast: Toast }>();
+	let prefersReducedMotion = $state(false);
 
 	function getIcon(type: Toast['type']) {
 		switch (type) {
@@ -34,18 +36,35 @@
 				return 'border-ink-700 bg-ink-800 text-ink-100';
 		}
 	}
+
+	function getAriaRole(type: Toast['type']): 'alert' | 'status' {
+		return type === 'error' || type === 'warning' || type === 'rate-limit' ? 'alert' : 'status';
+	}
+
+	onMount(() => {
+		const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+		const syncReducedMotion = () => {
+			prefersReducedMotion = mediaQuery.matches;
+		};
+		syncReducedMotion();
+		mediaQuery.addEventListener('change', syncReducedMotion);
+		return () => mediaQuery.removeEventListener('change', syncReducedMotion);
+	});
 </script>
 
 <div
 	class="flex items-center gap-3 px-4 py-3 rounded-xl border backdrop-blur-md shadow-2xl {getColors(
 		toast.type
 	)}"
-	in:fly={{ y: 20, duration: 400, easing: backOut }}
-	out:fade={{ duration: 200 }}
+	in:fly={{ y: 20, duration: prefersReducedMotion ? 0 : 400, easing: backOut }}
+	out:fade={{ duration: prefersReducedMotion ? 0 : 200 }}
+	role={getAriaRole(toast.type)}
+	aria-live={getAriaRole(toast.type) === 'alert' ? 'assertive' : 'polite'}
 >
 	<span class="text-lg">{getIcon(toast.type)}</span>
 	<p class="text-sm leading-tight flex-1">{toast.message}</p>
 	<button
+		type="button"
 		class="ml-2 p-1 hover:bg-white/10 rounded-full transition-colors"
 		onclick={() => uiState.removeToast(toast.id)}
 		aria-label="Dismiss"

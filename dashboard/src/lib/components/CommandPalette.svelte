@@ -3,11 +3,13 @@
 	import { fade, fly } from 'svelte/transition';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 
 	let { isOpen = $bindable(false) } = $props();
 	let query = $state('');
 	let selectedIndex = $state(0);
 	let searchInput = $state<HTMLInputElement | undefined>(undefined);
+	let prefersReducedMotion = $state(false);
 
 	const actions = [
 		{ id: 'dash', label: 'Go to Dashboard', icon: '📊', path: '/' },
@@ -37,6 +39,31 @@
 		if (isOpen && searchInput) {
 			searchInput.focus();
 		}
+	});
+
+	$effect(() => {
+		if (!isOpen) {
+			selectedIndex = 0;
+			return;
+		}
+		if (selectedIndex >= filteredActions.length) {
+			selectedIndex = 0;
+		}
+	});
+
+	$effect(() => {
+		query;
+		selectedIndex = 0;
+	});
+
+	onMount(() => {
+		const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+		const syncReducedMotion = () => {
+			prefersReducedMotion = mediaQuery.matches;
+		};
+		syncReducedMotion();
+		mediaQuery.addEventListener('change', syncReducedMotion);
+		return () => mediaQuery.removeEventListener('change', syncReducedMotion);
 	});
 
 	function close() {
@@ -72,7 +99,7 @@
 {#if isOpen}
 	<div
 		class="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh] px-4"
-		transition:fade={{ duration: 150 }}
+		transition:fade={{ duration: prefersReducedMotion ? 0 : 150 }}
 	>
 		<!-- Backdrop -->
 		<button
@@ -85,7 +112,7 @@
 		<!-- Palette -->
 		<div
 			class="relative w-full max-w-xl glass-card rounded-xl overflow-hidden shadow-2xl border-white/10"
-			transition:fly={{ y: -10, duration: 300 }}
+			transition:fly={{ y: -10, duration: prefersReducedMotion ? 0 : 300 }}
 			onkeydown={handleKeydown}
 			role="dialog"
 			aria-modal="true"
@@ -110,6 +137,7 @@
 			<div class="max-h-[350px] overflow-y-auto p-2">
 				{#each filteredActions as action, i (action.path)}
 					<button
+						type="button"
 						class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors
                         {i === selectedIndex
 							? 'bg-accent-500/20 text-accent-400'
@@ -145,7 +173,7 @@
 						Select
 					</div>
 				</div>
-				<div class="text-[10px] text-accent-400/60 font-mono">VALDRIX OS v0.1</div>
+				<div class="text-[10px] text-accent-400/60 font-mono">Valdrix Command Palette</div>
 			</div>
 		</div>
 	</div>

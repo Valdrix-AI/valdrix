@@ -229,6 +229,7 @@
 						<td class="py-3 text-right">
 							<div class="flex items-center justify-end gap-2">
 								<button
+									type="button"
 									class="btn btn-ghost btn-xs text-ink-400 hover:text-accent-400"
 									onclick={() =>
 										copyToClipboard(generateSniperCommand(finding), finding.resource_id)}
@@ -241,6 +242,7 @@
 									{/if}
 								</button>
 								<button
+									type="button"
 									class="btn btn-ghost text-xs hover:bg-accent-500/20 hover:text-accent-400"
 									onclick={() => onRemediate(finding)}
 									disabled={remediating === finding.resource_id}
@@ -263,6 +265,7 @@
 	{#if totalPages > 1}
 		<div class="flex items-center justify-between mt-4 pt-4 border-t border-ink-800">
 			<button
+				type="button"
 				class="btn btn-ghost text-xs"
 				disabled={currentPage === 0}
 				onclick={() => (currentPage = Math.max(0, currentPage - 1))}
@@ -282,6 +285,7 @@
 									? totalPages - 5 + p
 									: currentPage - 2 + p}
 					<button
+						type="button"
 						class="w-8 h-8 rounded text-xs {currentPage === pageNum
 							? 'bg-accent-500 text-white'
 							: 'hover:bg-ink-700'}"
@@ -293,6 +297,7 @@
 			</div>
 
 			<button
+				type="button"
 				class="btn btn-ghost text-xs"
 				disabled={currentPage >= totalPages - 1}
 				onclick={() => (currentPage = Math.min(totalPages - 1, currentPage + 1))}

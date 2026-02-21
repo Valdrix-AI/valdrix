@@ -216,7 +216,11 @@
 							</div>
 						</td>
 						<td>
-							<button class="btn btn-ghost text-xs" onclick={() => onRemediate(row.finding)}>
+							<button
+								type="button"
+								class="btn btn-ghost text-xs"
+								onclick={() => onRemediate(row.finding)}
+							>
 								Review
 							</button>
 						</td>

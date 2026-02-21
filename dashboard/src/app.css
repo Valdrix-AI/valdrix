@@ -20,20 +20,20 @@
 	--color-ink-800: #182028;
 	--color-ink-700: #243040;
 	--color-ink-600: #374657;
-	--color-ink-500: #4b5d6f;
-	--color-ink-400: #6b7f93;
+	--color-ink-500: #7089a0;
+	--color-ink-400: #809ab0;
 	--color-ink-300: #94a3b8;
 	--color-ink-200: #bfcad6;
 	--color-ink-100: #e2e8ef;
 	--color-ink-50: #f5f7fa;
 
 	/* Primary Accent - Teal/Cyan for trust */
-	--color-accent-500: #06b6d4;
+	--color-accent-500: #087ea4;
 	--color-accent-400: #22d3ee;
-	--color-accent-600: #0891b2;
-	--color-accent-700: #0e7490;
-	--color-accent-500-rgb: 6 182 212;
-	--color-primary-500: #6366f1;
+	--color-accent-600: #0b7285;
+	--color-accent-700: #0e6679;
+	--color-accent-500-rgb: 8 126 164;
+	--color-primary-500: #4f46e5;
 
 	/* Success - Emerald */
 	--color-success-500: #10b981;
