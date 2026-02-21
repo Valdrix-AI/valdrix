@@ -10,7 +10,7 @@ from app.shared.core.auth import CurrentUser, require_tenant_access
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
 from app.shared.core.provider import normalize_provider, SUPPORTED_PROVIDERS
-from app.shared.db.session import get_db
+from app.shared.db.session import get_db, set_session_tenant_id
 from app.modules.optimization.domain.service import OptimizationService
 from app.models.optimization import (
     StrategyRecommendation,
@@ -78,6 +78,8 @@ async def list_recommendations(
     """
     List FinOps optimization recommendations for the tenant.
     """
+    await set_session_tenant_id(db, tenant_id)
+
     q = (
         select(StrategyRecommendation)
         .where(
@@ -105,6 +107,8 @@ async def trigger_optimization_scan(
     """
     Trigger a fresh analysis of cloud usage to generate RI/SP recommendations.
     """
+    await set_session_tenant_id(db, tenant_id)
+
     service = OptimizationService(db=db)
     recs = await service.generate_recommendations(tenant_id)
 
@@ -139,6 +143,7 @@ async def backtest_strategies(
     - It is safe to run repeatedly (read-only).
     """
     _ = user  # dependency enforces tier gating
+    await set_session_tenant_id(db, tenant_id)
     service = OptimizationService(db=db)
     provider_filter = provider.strip().lower() if provider else None
     if provider_filter:
@@ -265,6 +270,8 @@ async def apply_recommendation(
     Mark a recommendation as applied.
     (Future: Trigger cloud API calls to purchase RI/SP).
     """
+    await set_session_tenant_id(db, tenant_id)
+
     q = select(StrategyRecommendation).where(
         StrategyRecommendation.id == recommendation_id,
         StrategyRecommendation.tenant_id == tenant_id,

@@ -18,7 +18,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.auth import (
+    CurrentUser,
+    get_current_user_with_db_context,
+    requires_role_with_db_context,
+)
 from app.shared.core.logging import audit_log
 from app.shared.db.session import get_db
 from app.models.carbon_settings import CarbonSettings
@@ -88,7 +92,7 @@ class CarbonSettingsUpdate(BaseModel):
 
 @router.get("/carbon", response_model=CarbonSettingsResponse)
 async def get_carbon_settings(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_db_context),
     db: AsyncSession = Depends(get_db),
 ) -> CarbonSettingsResponse:
     """
@@ -132,7 +136,7 @@ async def get_carbon_settings(
 @router.put("/carbon", response_model=CarbonSettingsResponse)
 async def update_carbon_settings(
     data: CarbonSettingsUpdate,
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> CarbonSettingsResponse:
     """

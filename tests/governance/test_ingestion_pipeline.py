@@ -36,6 +36,7 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
         role_arn="arn:aws:iam::123456789012:role/Valdrix",
         external_id="ext-123",
         region="us-east-1",
+        status="active",
         cur_bucket_name="test-cur-bucket",
         cur_status="active",
     )

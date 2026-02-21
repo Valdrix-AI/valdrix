@@ -19,7 +19,6 @@ from app.modules.governance.api.v1.settings.connections_cloud_plus import (
 from app.modules.governance.api.v1.settings.connections_setup_aws_discovery import (
     router as setup_aws_discovery_router,
 )
-
 router = APIRouter(tags=["connections"])
 router.include_router(setup_aws_discovery_router)
 router.include_router(azure_gcp_router)

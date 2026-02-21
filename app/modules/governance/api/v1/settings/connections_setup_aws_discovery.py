@@ -31,7 +31,7 @@ from app.modules.governance.api.v1.settings.connections_helpers import (
     _require_tenant_id,
     check_idp_deep_scan_tier,
 )
-from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.auth import CurrentUser, requires_role_with_db_context
 from app.shared.core.logging import audit_log
 from app.shared.core.pricing import PricingTier, normalize_tier
 from app.shared.core.rate_limit import rate_limit, standard_limit
@@ -51,7 +51,7 @@ async def get_aws_setup_templates(request: Request) -> TemplateResponse:
 
 @router.post("/azure/setup")
 async def get_azure_setup(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
 ) -> dict[str, str]:
     """Get Azure Workload Identity setup instructions."""
     return ConnectionInstructionService.get_azure_setup_snippet(
@@ -61,7 +61,7 @@ async def get_azure_setup(
 
 @router.post("/gcp/setup")
 async def get_gcp_setup(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
 ) -> dict[str, str]:
     """Get GCP Identity Federation setup instructions."""
     return ConnectionInstructionService.get_gcp_setup_snippet(
@@ -71,7 +71,7 @@ async def get_gcp_setup(
 
 @router.post("/saas/setup")
 async def get_saas_setup(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
 ) -> dict[str, Any]:
     """Get SaaS Cloud+ setup instructions."""
     return ConnectionInstructionService.get_saas_setup_snippet(
@@ -81,7 +81,7 @@ async def get_saas_setup(
 
 @router.post("/license/setup")
 async def get_license_setup(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
 ) -> dict[str, Any]:
     """Get License/ITAM Cloud+ setup instructions."""
     return ConnectionInstructionService.get_license_setup_snippet(
@@ -91,7 +91,7 @@ async def get_license_setup(
 
 @router.post("/platform/setup")
 async def get_platform_setup(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
 ) -> dict[str, Any]:
     """Get internal platform Cloud+ setup instructions."""
     return ConnectionInstructionService.get_platform_setup_snippet(
@@ -101,7 +101,7 @@ async def get_platform_setup(
 
 @router.post("/hybrid/setup")
 async def get_hybrid_setup(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
 ) -> dict[str, Any]:
     """Get private/hybrid infra Cloud+ setup instructions."""
     return ConnectionInstructionService.get_hybrid_setup_snippet(
@@ -116,7 +116,7 @@ async def get_hybrid_setup(
 async def create_aws_connection(
     request: Request,
     data: AWSConnectionCreate,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> AWSConnection:
     tenant_id = _require_tenant_id(current_user)
@@ -167,7 +167,7 @@ async def create_aws_connection(
 
 @router.get("/aws", response_model=list[AWSConnectionResponse])
 async def list_aws_connections(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> list[AWSConnection]:
     tenant_id = _require_tenant_id(current_user)
@@ -182,7 +182,7 @@ async def list_aws_connections(
 async def verify_aws_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     return await AWSConnectionService(db).verify_connection(
@@ -193,7 +193,7 @@ async def verify_aws_connection(
 @router.delete("/aws/{connection_id}", status_code=204)
 async def delete_aws_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)
@@ -219,7 +219,7 @@ async def delete_aws_connection(
 @router.post("/aws/{connection_id}/sync-org")
 async def sync_aws_org(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     tenant_id = _require_tenant_id(current_user)
@@ -238,7 +238,7 @@ async def sync_aws_org(
 
 @router.get("/aws/discovered", response_model=list[DiscoveredAccountResponse])
 async def list_discovered_accounts(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> list[DiscoveredAccount]:
     tenant_id = _require_tenant_id(current_user)
@@ -263,7 +263,7 @@ async def list_discovered_accounts(
 @router.post("/aws/discovered/{discovered_id}/link")
 async def link_discovered_account(
     discovered_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     tenant_id = _require_tenant_id(current_user)
@@ -333,7 +333,7 @@ async def link_discovered_account(
 async def discovery_stage_a(
     request: Request,
     data: DiscoveryStageARequest,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryStageResponse:
     tenant_id = _require_tenant_id(current_user)
@@ -371,7 +371,7 @@ async def discovery_stage_a(
 async def discovery_deep_scan(
     request: Request,
     data: DiscoveryDeepScanRequest,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryStageResponse:
     tenant_id = _require_tenant_id(current_user)
@@ -411,7 +411,7 @@ async def discovery_deep_scan(
 
 @router.get("/discovery/candidates", response_model=list[DiscoveryCandidateResponse])
 async def list_discovery_candidates(
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
     status_filter: str | None = Query(
         default=None,
@@ -476,7 +476,7 @@ async def _update_discovery_candidate_status(
 async def accept_discovery_candidate(
     request: Request,
     candidate_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryCandidate:
     return await _update_discovery_candidate_status(
@@ -496,7 +496,7 @@ async def accept_discovery_candidate(
 async def ignore_discovery_candidate(
     request: Request,
     candidate_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryCandidate:
     return await _update_discovery_candidate_status(
@@ -516,7 +516,7 @@ async def ignore_discovery_candidate(
 async def mark_discovery_candidate_connected(
     request: Request,
     candidate_id: UUID,
-    current_user: CurrentUser = Depends(requires_role("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryCandidate:
     return await _update_discovery_candidate_status(
