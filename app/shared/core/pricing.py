@@ -1,5 +1,6 @@
 import uuid
 from enum import Enum
+import inspect
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable, Union, cast
 
@@ -474,6 +475,8 @@ async def get_tenant_tier(
     try:
         result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = result.scalar_one_or_none()
+        if inspect.isawaitable(tenant):
+            tenant = await tenant
 
         if not tenant:
             return PricingTier.FREE
