@@ -54,13 +54,22 @@ from app.shared.core.connection_state import (  # noqa: F401
     resolve_connection_region,
 )
 from app.shared.core.safety_service import SafetyGuardrailService  # noqa: F401
-from app.shared.core.pricing import (
-    PricingTier,
-    get_tenant_tier,  # noqa: F401
-)
+from app.shared.core.pricing import PricingTier
 from app.modules.optimization.domain.actions import RemediationActionFactory  # noqa: F401
 
 logger = structlog.get_logger()
+
+
+async def get_tenant_tier(tenant_id: UUID, db: AsyncSession) -> PricingTier:
+    """
+    Resolve tenant tier via pricing module.
+
+    Keeping this wrapper local ensures a single stable patch point for tests and
+    service-layer callers, while still delegating to canonical pricing logic.
+    """
+    from app.shared.core.pricing import get_tenant_tier as resolve_tenant_tier
+
+    return await resolve_tenant_tier(tenant_id, db)
 
 
 class RemediationService(BaseService):
