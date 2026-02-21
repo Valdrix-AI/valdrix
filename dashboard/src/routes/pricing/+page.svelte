@@ -18,6 +18,7 @@
 
 	import { onMount } from 'svelte';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
+	import { normalizeCheckoutUrl } from '$lib/utils';
 	import { page } from '$app/stores';
 
 	let { data } = $props();
@@ -127,7 +128,7 @@
 			}
 
 			const { checkout_url } = await res.json();
-			window.location.href = checkout_url;
+			window.location.assign(normalizeCheckoutUrl(checkout_url, window.location.origin));
 		} catch (e) {
 			const err = e as Error;
 			error = err.message;

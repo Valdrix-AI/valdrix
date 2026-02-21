@@ -13,6 +13,7 @@
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { fetchWithTimeout } from '$lib/fetchWithTimeout';
+	import { normalizeCheckoutUrl } from '$lib/utils';
 
 	let { data } = $props();
 	const BILLING_REQUEST_TIMEOUT_MS = 8000;
@@ -152,7 +153,7 @@
 			}
 
 			const { checkout_url } = await res.json();
-			window.location.href = checkout_url;
+			window.location.assign(normalizeCheckoutUrl(checkout_url, window.location.origin));
 		} catch (e) {
 			const err = e as Error;
 			error = err.message;

@@ -6,7 +6,6 @@ const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 60000;
 const MAX_RECONNECT_EXPONENT = 6;
 const MAX_RECONNECT_JITTER_MS = 500;
-const SSE_TOKEN_QUERY_PARAM = 'sse_access_token';
 
 export interface JobUpdate {
 	id: string;
@@ -50,7 +49,6 @@ class JobStore {
 		if (!session?.access_token) return;
 
 		const url = new URL(edgeApiPath('/jobs/stream'), window.location.origin);
-		url.searchParams.set(SSE_TOKEN_QUERY_PARAM, session.access_token);
 
 		this.#eventSource = new EventSource(url.toString(), { withCredentials: true });
 

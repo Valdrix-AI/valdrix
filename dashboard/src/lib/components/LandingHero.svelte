@@ -44,21 +44,29 @@
 							Get Started Free →
 						</a>
 						<a href="#features" class="btn btn-secondary text-base px-8 py-3"> Explore Features </a>
-						<a href="#how" class="btn btn-ghost text-base px-6 py-3"> How It Works </a>
+						<a href="#how" class="btn btn-ghost text-ink-200 underline text-base px-6 py-3">
+							How It Works
+						</a>
 					</div>
 
 					<div class="landing-proof fade-in-up" style="animation-delay: 420ms;">
 						<div class="landing-proof-item">
-							<p class="landing-proof-k">Policy-first remediation</p>
-							<p class="landing-proof-v">Deterministic previews before you click approve.</p>
+							<p class="landing-proof-k text-ink-100">Policy-first remediation</p>
+							<p class="landing-proof-v text-ink-200">
+								Deterministic previews before you click approve.
+							</p>
 						</div>
 						<div class="landing-proof-item">
-							<p class="landing-proof-k">Audit-ready evidence</p>
-							<p class="landing-proof-v">Event types, traces, and exports for reviews.</p>
+							<p class="landing-proof-k text-ink-100">Audit-ready evidence</p>
+							<p class="landing-proof-v text-ink-200">
+								Event types, traces, and exports for reviews.
+							</p>
 						</div>
 						<div class="landing-proof-item">
-							<p class="landing-proof-k">Operator UX</p>
-							<p class="landing-proof-v">Queues, jobs, and a command palette for speed.</p>
+							<p class="landing-proof-k text-ink-100">Operator UX</p>
+							<p class="landing-proof-v text-ink-200">
+								Queues, jobs, and a command palette for speed.
+							</p>
 						</div>
 					</div>
 				</div>
@@ -194,7 +202,7 @@
 				<p class="landing-p">
 					Make carbon a first-class constraint alongside cost, and spotlight Graviton optimization.
 				</p>
-				<p class="landing-mini text-ink-400">GreenOps page included.</p>
+				<p class="landing-mini text-ink-300">GreenOps page included.</p>
 			</div>
 
 			<div class="glass-panel row-span-2">
@@ -220,7 +228,7 @@
 				<p class="landing-p">
 					Jobs, queues, and strategy recommendations in a single operator surface.
 				</p>
-				<p class="landing-mini text-ink-400">Designed for "runbook mode".</p>
+				<p class="landing-mini text-ink-300">Designed for "runbook mode".</p>
 			</div>
 
 			<div class="glass-panel">
@@ -228,7 +236,7 @@
 				<p class="landing-p">
 					Event types, detail views, and CSV exports to support reviews and investigations.
 				</p>
-				<p class="landing-mini text-ink-400">Evidence-first workflow.</p>
+				<p class="landing-mini text-ink-300">Evidence-first workflow.</p>
 			</div>
 
 			<div class="glass-panel col-span-2">

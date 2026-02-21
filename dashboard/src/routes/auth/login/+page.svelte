@@ -162,7 +162,7 @@
 				<h1 class="text-xl font-semibold">
 					{mode === 'login' ? 'Welcome back' : 'Create your account'}
 				</h1>
-				<p class="text-ink-400 text-sm mt-1">
+				<p class="text-ink-300 text-sm mt-1">
 					{mode === 'login' ? 'Sign in to continue' : 'Start for free'}
 				</p>
 			</div>
@@ -235,7 +235,7 @@
 				</button>
 			</form>
 
-			<div class="my-4 flex items-center gap-3 text-xs text-ink-500">
+			<div class="my-4 flex items-center gap-3 text-xs text-ink-300">
 				<div class="h-px flex-1 bg-ink-800/70"></div>
 				<span>or</span>
 				<div class="h-px flex-1 bg-ink-800/70"></div>
@@ -257,7 +257,7 @@
 			</button>
 
 			<!-- Toggle Mode -->
-			<p class="mt-6 text-center text-sm text-ink-400">
+			<p class="mt-6 text-center text-sm text-ink-300">
 				{#if mode === 'login'}
 					Don't have an account?
 					<button
@@ -281,22 +281,18 @@
 		</div>
 
 		<!-- Footer -->
-		<p class="text-center text-xs text-ink-500 mt-6 stagger-enter" style="animation-delay: 100ms;">
+		<p class="text-center text-xs text-ink-200 mt-6 stagger-enter" style="animation-delay: 100ms;">
 			By continuing, you agree to our
-			<a href={`${base}/terms`} class="text-accent-400 hover:underline">Terms</a>
+			<a href={`${base}/terms`} class="text-ink-100 underline hover:text-accent-400">Terms</a>
 			and
-			<a href={`${base}/privacy`} class="text-accent-400 hover:underline">Privacy Policy</a>.
+			<a href={`${base}/privacy`} class="text-ink-100 underline hover:text-accent-400">
+				Privacy Policy
+			</a>.
 		</p>
 	</div>
 </div>
 
 <style>
-	.text-ink-400 {
-		color: var(--color-ink-400);
-	}
-	.text-ink-500 {
-		color: var(--color-ink-500);
-	}
 	.text-accent-400 {
 		color: var(--color-accent-400);
 	}
