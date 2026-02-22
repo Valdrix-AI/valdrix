@@ -35,5 +35,15 @@ describe('LandingHero', () => {
 		for (const cta of ctas) {
 			expect(cta.getAttribute('href')).toBe('/auth/login');
 		}
+
+		const summary = screen.getByText(/signal map summary/i);
+		const signalMap = summary.closest('.signal-map');
+		expect(signalMap).toBeTruthy();
+		expect(signalMap?.getAttribute('role')).toBeNull();
+
+		const signalGraphic = signalMap?.querySelector('svg[role="img"]');
+		expect(signalGraphic).toBeTruthy();
+		expect(signalGraphic?.getAttribute('aria-labelledby')).toBe('signal-map-summary');
+		expect(summary.getAttribute('id')).toBe('signal-map-summary');
 	});
 });

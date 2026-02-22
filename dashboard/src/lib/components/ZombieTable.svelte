@@ -1,5 +1,6 @@
 <script lang="ts">
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
+	import { type ZombieCollectionKey, type ZombieCollections } from '$lib/zombieCollections';
 
 	type RemediationFinding = {
 		resource_id: string;
@@ -18,24 +19,10 @@
 		recommended_instance_type?: string;
 	};
 
-	type ZombieCollections = {
-		unattached_volumes?: RemediationFinding[];
-		old_snapshots?: RemediationFinding[];
-		unused_elastic_ips?: RemediationFinding[];
-		idle_instances?: RemediationFinding[];
-		orphan_load_balancers?: RemediationFinding[];
-		idle_rds_databases?: RemediationFinding[];
-		underused_nat_gateways?: RemediationFinding[];
-		idle_s3_buckets?: RemediationFinding[];
-		stale_ecr_images?: RemediationFinding[];
-		idle_sagemaker_endpoints?: RemediationFinding[];
-		cold_redshift_clusters?: RemediationFinding[];
-	};
-
-	type ZombieCategoryKey = keyof ZombieCollections;
+	type RemediationZombieCollections = ZombieCollections<RemediationFinding>;
 
 	type ZombieCategoryConfig = {
-		key: ZombieCategoryKey;
+		key: ZombieCollectionKey;
 		defaultExplainability: string;
 		resourceClassName?: string;
 		typeLabel: string | ((finding: RemediationFinding) => string);
@@ -102,7 +89,7 @@
 	];
 
 	let { zombies, zombieCount, onRemediate } = $props<{
-		zombies: ZombieCollections | null | undefined;
+		zombies: RemediationZombieCollections | null | undefined;
 		zombieCount: number;
 		onRemediate: (finding: RemediationFinding) => void;
 	}>();

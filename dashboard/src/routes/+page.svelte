@@ -30,6 +30,7 @@
 	import LandingHero from '$lib/components/LandingHero.svelte';
 	import ZombieTable from '$lib/components/ZombieTable.svelte';
 	import RemediationModal from '$lib/components/RemediationModal.svelte';
+	import { countZombieFindings, type ZombieCollections } from '$lib/zombieCollections';
 
 	type RemediationFinding = {
 		resource_id: string;
@@ -157,13 +158,7 @@
 		scheduleNavigation(targetPath);
 	}
 
-	let zombieCount = $derived(
-		zombies
-			? Object.values(zombies).reduce((acc: number, val: unknown) => {
-					return Array.isArray(val) ? acc + val.length : acc;
-				}, 0)
-			: 0
-	);
+	let zombieCount = $derived(countZombieFindings(zombies as ZombieCollections | null | undefined));
 
 	let analysisText = $derived(analysis?.analysis ?? '');
 

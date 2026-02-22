@@ -1,9 +1,25 @@
 <script lang="ts">
 	import { assets, base } from '$app/paths';
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 
 	const landingGridX = [...Array(13).keys()];
 	const landingGridY = [...Array(9).keys()];
+	let signalMapElement: HTMLDivElement | null = null;
+	let signalMapInView = $state(true);
+
+	onMount(() => {
+		if (!signalMapElement || typeof IntersectionObserver === 'undefined') return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				const entry = entries[0];
+				signalMapInView = Boolean(entry?.isIntersecting && entry.intersectionRatio > 0.15);
+			},
+			{ threshold: [0, 0.15, 0.5] }
+		);
+		observer.observe(signalMapElement);
+		return () => observer.disconnect();
+	});
 </script>
 
 <div class="landing" itemscope itemtype="https://schema.org/SoftwareApplication">
@@ -78,12 +94,13 @@
 							<span class="landing-preview-pill">Live</span>
 						</div>
 
-						<div
-							class="signal-map"
-							role="img"
-							aria-label="Signal map preview: cost, carbon, and remediation"
-						>
-							<svg class="signal-svg" viewBox="0 0 640 420" aria-hidden="true">
+						<div class="signal-map" class:is-paused={!signalMapInView} bind:this={signalMapElement}>
+							<svg
+								class="signal-svg"
+								viewBox="0 0 640 420"
+								role="img"
+								aria-labelledby="signal-map-summary"
+							>
 								<defs>
 									<linearGradient id="sigLine" x1="0" y1="0" x2="1" y2="1">
 										<stop offset="0" stop-color="var(--color-accent-400)" stop-opacity="0.9" />
@@ -123,24 +140,24 @@
 								<circle class="sig-node sig-node--c" cx="520" cy="300" r="8" />
 							</svg>
 
-							<div class="signal-label signal-label--center">
+							<div class="signal-label signal-label--center" aria-hidden="true">
 								<p class="signal-label-k">Valdrix</p>
 								<p class="signal-label-v">Signals</p>
 							</div>
-							<div class="signal-label signal-label--a">
+							<div class="signal-label signal-label--a" aria-hidden="true">
 								<p class="signal-label-k">FinOps</p>
 								<p class="signal-label-v">Spend + anomalies</p>
 							</div>
-							<div class="signal-label signal-label--b">
+							<div class="signal-label signal-label--b" aria-hidden="true">
 								<p class="signal-label-k">GreenOps</p>
 								<p class="signal-label-v">Carbon + Graviton</p>
 							</div>
-							<div class="signal-label signal-label--c">
+							<div class="signal-label signal-label--c" aria-hidden="true">
 								<p class="signal-label-k">ActiveOps</p>
 								<p class="signal-label-v">Policy remediation</p>
 							</div>
 
-							<div class="sr-only">
+							<div id="signal-map-summary" class="sr-only">
 								Signal map summary: Valdrix signals connect FinOps spend and anomaly detection,
 								GreenOps carbon and Graviton opportunities, and ActiveOps policy-driven remediation.
 								Current highlights show budget drift at minus twelve percent, carbon improvement at
@@ -796,6 +813,11 @@
 		animation: lineDash 7s linear infinite;
 	}
 
+	.signal-map.is-paused .sig-line,
+	.signal-map.is-paused .sig-node {
+		animation-play-state: paused;
+	}
+
 	@keyframes lineDash {
 		to {
 			stroke-dashoffset: -220;
@@ -839,6 +861,14 @@
 		}
 		50% {
 			transform: scale(1.18);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.landing-live-dot,
+		.sig-line,
+		.sig-node {
+			animation: none !important;
 		}
 	}
 

@@ -13,7 +13,9 @@ async function assertPublicRoute(
 }
 
 test.describe('Public marketing smoke (desktop)', () => {
-	test('covers landing, pricing, docs, api docs, and status navigation', async ({ page }) => {
+	test('covers landing, pricing, docs, api docs, and status navigation', async ({
+		page
+	}, testInfo) => {
 		await page.goto(BASE_URL);
 
 		await expect(
@@ -45,13 +47,17 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await expect(switchButton).toHaveAttribute('aria-checked', 'false');
 		await switchButton.click();
 		await expect(switchButton).toHaveAttribute('aria-checked', 'true');
+		await page.screenshot({
+			path: testInfo.outputPath('desktop-public-smoke.png'),
+			fullPage: true
+		});
 	});
 });
 
 test.describe('Public marketing smoke (mobile)', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
-	test('key landing sections and docs pages remain usable', async ({ page }) => {
+	test('key landing sections and docs pages remain usable', async ({ page }, testInfo) => {
 		await page.goto(BASE_URL);
 		await expect(
 			page.getByRole('heading', { level: 1, name: /cloud cost intelligence/i })
@@ -64,5 +70,9 @@ test.describe('Public marketing smoke (mobile)', () => {
 		await assertPublicRoute(page, '/docs', /documentation/i);
 		await assertPublicRoute(page, '/docs/api', /api reference/i);
 		await assertPublicRoute(page, '/status', /system status/i);
+		await page.screenshot({
+			path: testInfo.outputPath('mobile-public-smoke.png'),
+			fullPage: true
+		});
 	});
 });
