@@ -97,6 +97,26 @@ def test_settings_admin_key_env_validation():
         assert "ADMIN_API_KEY must be >= 32 chars" in str(exc.value)
 
 
+def test_settings_rejects_testing_true_in_production() -> None:
+    with pytest.raises(ValueError) as exc:
+        Settings(
+            ENVIRONMENT="production",
+            TESTING=True,
+            _env_file=None,
+        )
+    assert "TESTING must be false in staging/production" in str(exc.value)
+
+
+def test_settings_rejects_testing_true_in_staging() -> None:
+    with pytest.raises(ValueError) as exc:
+        Settings(
+            ENVIRONMENT="staging",
+            TESTING=True,
+            _env_file=None,
+        )
+    assert "TESTING must be false in staging/production" in str(exc.value)
+
+
 def test_settings_llm_provider_key_validation():
     # Set provider but no key
     with pytest.raises(ValueError) as exc:
@@ -117,29 +137,35 @@ def test_settings_llm_provider_key_validation():
 
 
 def test_settings_is_production_property():
-    s_prod = Settings(
-        ENVIRONMENT="production",
-        DEBUG=False,
-        SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
-        DATABASE_URL="postgresql://host/db",
-        CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
-        ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
-        KDF_SALT=FAKE_KDF_SALT,
-        ADMIN_API_KEY="a" * 32,
-        GROQ_API_KEY="g" * 32,
-        PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
-        PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
-        DB_SSL_MODE="require",
-    )
-    assert s_prod.is_production is True
+    with patch.dict("os.environ", {}, clear=True):
+        s_prod = Settings(
+            ENVIRONMENT="production",
+            DEBUG=False,
+            TESTING=False,
+            SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+            DATABASE_URL="postgresql://host/db",
+            CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+            ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+            KDF_SALT=FAKE_KDF_SALT,
+            ADMIN_API_KEY="a" * 32,
+            GROQ_API_KEY="g" * 32,
+            PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+            PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+            REDIS_URL="redis://localhost:6379",
+            DB_SSL_MODE="require",
+            _env_file=None,
+        )
+        assert s_prod.is_production is True
 
-    s_dev = Settings(
-        DEBUG=True,
-        SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
-        DATABASE_URL="sqlite+aiosqlite:///:memory:",
-        CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
-        ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
-        KDF_SALT=FAKE_KDF_SALT,
-        DB_SSL_MODE="disable",
-    )
-    assert s_dev.is_production is False
+        s_dev = Settings(
+            DEBUG=True,
+            TESTING=False,
+            SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+            DATABASE_URL="sqlite+aiosqlite:///:memory:",
+            CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+            ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+            KDF_SALT=FAKE_KDF_SALT,
+            DB_SSL_MODE="disable",
+            _env_file=None,
+        )
+        assert s_dev.is_production is False

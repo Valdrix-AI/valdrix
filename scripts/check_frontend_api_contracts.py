@@ -147,7 +147,10 @@ def path_matches(front_path: str, backend_path: str) -> bool:
     if len(front_parts) != len(back_parts):
         return False
     for front_part, back_part in zip(front_parts, back_parts, strict=True):
-        if back_part.startswith("{") and back_part.endswith("}"):
+        if (
+            (back_part.startswith("{") and back_part.endswith("}"))
+            or (front_part.startswith("{") and front_part.endswith("}"))
+        ):
             continue
         if front_part != back_part:
             return False
