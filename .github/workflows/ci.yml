@@ -63,6 +63,7 @@ jobs:
           JIRA_BASE_URL: ""
           GITHUB_ACTIONS_TOKEN: ""
           CORS_ORIGINS: "[\"https://dashboard.example.com\"]"
+          SENTRY_DSN: "https://example@sentry.io/1"
           FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK: "true"
           FORECASTER_BREAK_GLASS_REASON: "CI preflight while prophet is not bundled."
           FORECASTER_BREAK_GLASS_EXPIRES_AT: "2099-01-01T00:00:00Z"

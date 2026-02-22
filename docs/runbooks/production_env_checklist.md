@@ -25,6 +25,7 @@ Set these in production runtime (Koyeb/Kubernetes/etc):
 - `PAYSTACK_PUBLIC_KEY=pk_live_...`
 - `CORS_ORIGINS=[\"https://<your-frontend-domain>\"]`
 - `SAAS_STRICT_INTEGRATIONS=true`
+- Optional but recommended: `SENTRY_DSN=https://...` (requires `sentry-sdk` in runtime image)
 - If `prophet` is not bundled, set all break-glass vars:
   - `FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=true`
   - `FORECASTER_BREAK_GLASS_REASON=<incident/ticket reference>`

@@ -66,6 +66,7 @@ Also create:
 | `LLM_PROVIDER` | `groq` | Default managed provider |
 | `GROQ_API_KEY` | `gsk_...` | If not BYOK-only |
 | `CORS_ORIGINS` | `["https://dashboard.valdrix.ai"]` | Must match dashboard origin |
+| `SENTRY_DSN` | `https://...` | Optional error tracking DSN (`sentry-sdk` required when set) |
 | `SAAS_STRICT_INTEGRATIONS` | `true` | Recommended |
 | `UPSTASH_REDIS_URL` | `https://...` | Optional |
 | `UPSTASH_REDIS_TOKEN` | `...` | Optional |

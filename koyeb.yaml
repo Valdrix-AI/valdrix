@@ -39,16 +39,43 @@ definition:
   env:
     - name: ENVIRONMENT
       value: production
+    - name: WEB_CONCURRENCY
+      value: "1"
     - name: LOG_LEVEL
       value: INFO
-    - name: WORKERS
-      value: "2"
+    - name: LLM_PROVIDER
+      value: groq
+    - name: SAAS_STRICT_INTEGRATIONS
+      value: "true"
+    - name: CORS_ORIGINS
+      value: "[\"https://dashboard.valdrix.ai\"]"
+    # Prophet is not bundled by default; use controlled break-glass fallback metadata.
+    - name: FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK
+      value: "true"
+    - name: FORECASTER_BREAK_GLASS_REASON
+      value: "Koyeb deployment baseline while Prophet is not bundled."
+    - name: FORECASTER_BREAK_GLASS_EXPIRES_AT
+      value: "2099-01-01T00:00:00Z"
     # Secrets - set via Koyeb dashboard
     - name: DATABASE_URL
       secret: valdrix-database-url
+    - name: REDIS_URL
+      secret: valdrix-redis-url
     - name: SUPABASE_JWT_SECRET
       secret: valdrix-jwt-secret
     - name: ENCRYPTION_KEY
       secret: valdrix-encryption-key
+    - name: KDF_SALT
+      secret: valdrix-kdf-salt
+    - name: CSRF_SECRET_KEY
+      secret: valdrix-csrf-secret
+    - name: ADMIN_API_KEY
+      secret: valdrix-admin-api-key
     - name: GROQ_API_KEY
       secret: valdrix-groq-key
+    - name: PAYSTACK_SECRET_KEY
+      secret: valdrix-paystack-secret
+    - name: PAYSTACK_PUBLIC_KEY
+      secret: valdrix-paystack-public
+    - name: SENTRY_DSN
+      secret: valdrix-sentry-dsn

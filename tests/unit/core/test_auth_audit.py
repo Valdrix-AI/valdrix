@@ -253,6 +253,8 @@ async def test_get_current_user_unexpected_error():
     credentials.credentials = token
     mock_db = AsyncMock()
     mock_db.execute.side_effect = Exception("DB Exploded")
+    # AsyncSession.begin_nested() should be a sync method returning an async context manager.
+    mock_db.begin_nested = MagicMock(return_value=_AsyncNullContext())
 
     with pytest.raises(HTTPException) as exc:
         await get_current_user(MagicMock(), credentials, mock_db)

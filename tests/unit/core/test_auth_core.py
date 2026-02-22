@@ -235,6 +235,9 @@ async def test_get_current_user_db_error(mock_settings):
     mock_request = MagicMock(spec=Request)
     mock_db = AsyncMock()
     mock_db.execute.side_effect = Exception("DB Fail")
+    # AsyncSession.begin_nested() is sync and returns an async context manager.
+    # Keep test double shape aligned to avoid un-awaited AsyncMock coroutine warnings.
+    mock_db.begin_nested = MagicMock(return_value=_AsyncNullContext())
 
     with pytest.raises(HTTPException) as exc:
         await get_current_user(mock_request, mock_credentials, mock_db)

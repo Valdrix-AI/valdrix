@@ -58,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE 8000
 
-CMD ["/bin/sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1}"]
+CMD ["/bin/sh", "-c", "python -c \"from app.shared.core.config import get_settings; from app.shared.core.runtime_dependencies import validate_runtime_dependencies; s=get_settings(); validate_runtime_dependencies(s); print('runtime_env_validation_passed', f'environment={s.ENVIRONMENT}')\" && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1}"]
