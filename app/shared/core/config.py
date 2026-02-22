@@ -85,6 +85,10 @@ class Settings(BaseSettings):
         PRODUCTION-GRADE: Centralized validation orchestrator.
         Groups validation by concern for clarity and specificity.
         """
+        if self.TESTING and self.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}:
+            raise ValueError(
+                "TESTING must be false in staging/production runtime environments."
+            )
         if self.TESTING:
             return self
 

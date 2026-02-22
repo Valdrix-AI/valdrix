@@ -6,6 +6,7 @@ const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 60000;
 const MAX_RECONNECT_EXPONENT = 6;
 const MAX_RECONNECT_JITTER_MS = 500;
+const JOB_STREAM_EDGE_PATH = edgeApiPath('/jobs/stream');
 
 export interface JobUpdate {
 	id: string;
@@ -48,7 +49,16 @@ class JobStore {
 
 		if (!session?.access_token) return;
 
-		const url = new URL(edgeApiPath('/jobs/stream'), window.location.origin);
+		// EventSource cannot send custom Authorization headers; always go through edge proxy.
+		if (!JOB_STREAM_EDGE_PATH.startsWith('/api/edge')) {
+			uiState.addToast('Live job updates are unavailable: invalid stream path.', 'error', 7000);
+			return;
+		}
+
+		const url = new URL(JOB_STREAM_EDGE_PATH, window.location.origin);
+		// Defense-in-depth: never allow token fallbacks via query string.
+		url.searchParams.delete('access_token');
+		url.searchParams.delete('sse_access_token');
 
 		this.#eventSource = new EventSource(url.toString(), { withCredentials: true });
 
