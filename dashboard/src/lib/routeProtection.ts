@@ -5,18 +5,20 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
 	'/robots.txt',
 	'/sitemap.xml',
 	'/terms',
-	'/privacy'
+	'/privacy',
+	'/status'
 ]);
 
 // Segment-safe prefixes: only match "/prefix" or "/prefix/...".
 const PUBLIC_SEGMENT_PREFIXES = [
 	'/auth',
 	'/pricing',
+	'/docs',
 	'/_app' // SvelteKit build assets
 ];
 
 // Loose prefixes: allow "/favicon.ico", "/favicon.png", etc.
-const PUBLIC_LOOSE_PREFIXES = ['/favicon'];
+const PUBLIC_LOOSE_PREFIXES = ['/favicon', '/og-image'];
 
 export function isPublicPath(pathname: string): boolean {
 	const normalized = (() => {

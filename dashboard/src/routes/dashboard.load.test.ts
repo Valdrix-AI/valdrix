@@ -140,4 +140,48 @@ describe('dashboard load contract', () => {
 		expect(result.zombies?.total_monthly_waste).toBe(12.5);
 		expect(result.error).toContain('1 dashboard widgets timed out');
 	});
+
+	it('surfaces non-2xx widget failures while still returning successful widget payloads', async () => {
+		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			if (url.includes('/costs?')) {
+				return jsonResponse({ detail: 'upstream unavailable' }, 503);
+			}
+			if (url.includes('/carbon?')) {
+				return jsonResponse({ total_co2_kg: 2.4 });
+			}
+			if (url.includes('/zombies')) {
+				return jsonResponse({ detail: 'forbidden' }, 403);
+			}
+			if (url.includes('/costs/attribution/summary')) {
+				return jsonResponse({ buckets: [], total: 0 });
+			}
+			if (url.includes('/costs/unit-economics?')) {
+				return jsonResponse({ threshold_percent: 20, anomaly_count: 0, metrics: [] });
+			}
+			return jsonResponse({}, 404);
+		});
+
+		const result = (await load({
+			fetch: fetchMock as unknown as typeof fetch,
+			parent: async () => ({
+				session: { access_token: 'token' },
+				user: { id: 'user-id' },
+				subscription: { tier: 'pro', status: 'active' },
+				profile: { persona: 'finance' }
+			}),
+			url: new URL('http://localhost/?start_date=2024-01-01&end_date=2024-01-31')
+		} as Parameters<typeof load>[0])) as {
+			costs: unknown;
+			carbon: { total_co2_kg: number } | null;
+			zombies: unknown;
+			error?: string;
+		};
+
+		expect(result.costs).toBeNull();
+		expect(result.carbon?.total_co2_kg).toBe(2.4);
+		expect(result.zombies).toBeNull();
+		expect(result.error).toContain('costs (503)');
+		expect(result.error).toContain('zombies (403)');
+	});
 });

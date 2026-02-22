@@ -14,6 +14,7 @@
 	import { AlertTriangle, Clock } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { onDestroy } from 'svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 	import ProviderSelector from '$lib/components/ProviderSelector.svelte';
 	import AllocationBreakdown from '$lib/components/AllocationBreakdown.svelte';
@@ -29,6 +30,7 @@
 	import LandingHero from '$lib/components/LandingHero.svelte';
 	import ZombieTable from '$lib/components/ZombieTable.svelte';
 	import RemediationModal from '$lib/components/RemediationModal.svelte';
+	import { countZombieFindings, type ZombieCollections } from '$lib/zombieCollections';
 
 	type RemediationFinding = {
 		resource_id: string;
@@ -48,7 +50,6 @@
 
 	let { data } = $props();
 
-	let loading = $state(false); // Can be used for nav transitions
 	let costs = $derived(data.costs);
 	let carbon = $derived(data.carbon);
 	let zombies = $derived(data.zombies);
@@ -97,6 +98,31 @@
 	// Remediation state
 	let remediationCandidate = $state<RemediationFinding | null>(null);
 	let remediationModalOpen = $state(false);
+	let pendingNavigationTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
+
+	const DASHBOARD_NAV_DEBOUNCE_MS = 300;
+
+	function scheduleNavigation(targetPath: string) {
+		if (pendingNavigationTimeout) {
+			clearTimeout(pendingNavigationTimeout);
+		}
+
+		pendingNavigationTimeout = setTimeout(() => {
+			void goto(targetPath, {
+				keepFocus: true,
+				noScroll: true,
+				replaceState: true
+			});
+			pendingNavigationTimeout = null;
+		}, DASHBOARD_NAV_DEBOUNCE_MS);
+	}
+
+	onDestroy(() => {
+		if (pendingNavigationTimeout) {
+			clearTimeout(pendingNavigationTimeout);
+			pendingNavigationTimeout = null;
+		}
+	});
 
 	function handleRemediate(finding: RemediationFinding) {
 		remediationCandidate = finding;
@@ -112,11 +138,7 @@
 		if (provider) {
 			params.set('provider', provider);
 		}
-		goto(`${base}/?${params.toString()}`, {
-			keepFocus: true,
-			noScroll: true,
-			replaceState: true
-		});
+		scheduleNavigation(`${base}/?${params.toString()}`);
 	}
 
 	function handleProviderChange(selectedProvider: string) {
@@ -133,20 +155,10 @@
 		const query = params.toString();
 		const targetPath = query.length > 0 ? `${base}/?${query}` : `${base}/`;
 
-		goto(targetPath, {
-			keepFocus: true,
-			noScroll: true,
-			replaceState: true
-		});
+		scheduleNavigation(targetPath);
 	}
 
-	let zombieCount = $derived(
-		zombies
-			? Object.values(zombies).reduce((acc: number, val: unknown) => {
-					return Array.isArray(val) ? acc + val.length : acc;
-				}, 0)
-			: 0
-	);
+	let zombieCount = $derived(countZombieFindings(zombies as ZombieCollections | null | undefined));
 
 	let analysisText = $derived(analysis?.analysis ?? '');
 
@@ -183,13 +195,17 @@
 		<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
 		<meta
 			property="og:image"
-			content={new URL(`${assets}/valdrix_icon.png`, $page.url.origin).toString()}
+			content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
 		/>
-		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:title" content="Valdrix | Cloud Cost Intelligence" />
 		<meta
 			name="twitter:description"
 			content="FinOps + GreenOps + ActiveOps with policy-driven remediation and audit-ready exports."
+		/>
+		<meta
+			name="twitter:image"
+			content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
 		/>
 	{/if}
 </svelte:head>
@@ -214,17 +230,7 @@
 			<DateRangePicker onDateChange={handleDateChange} />
 		</div>
 
-		{#if loading}
-			<!-- Loading Skeletons -->
-			<div class="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-				{#each [1, 2, 3, 4] as i (i)}
-					<div class="card" style="animation-delay: {i * 50}ms;">
-						<div class="skeleton h-4 w-20 mb-3"></div>
-						<div class="skeleton h-8 w-32"></div>
-					</div>
-				{/each}
-			</div>
-		{:else if error}
+		{#if error}
 			<div class="card border-danger-500/50 bg-danger-500/10">
 				<p class="text-danger-400">{error}</p>
 			</div>

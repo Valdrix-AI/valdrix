@@ -3,8 +3,8 @@ import { PUBLIC_API_URL } from '$env/static/public';
 import { error, type RequestHandler } from '@sveltejs/kit';
 
 const CACHEABLE_GET_PREFIXES = ['/health/live', '/api/v1/billing/plans'];
-const EDGE_CACHE_S_MAXAGE_SECONDS = 60;
-const EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 120;
+const EDGE_CACHE_S_MAXAGE_SECONDS = 30;
+const EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 30;
 const EDGE_CACHE_NAMESPACE = 'valdrix-edge-proxy';
 const JOB_STREAM_SUFFIX = '/jobs/stream';
 

@@ -24,11 +24,18 @@ describe('isPublicPath', () => {
 		expect(isPublicPath('/robots.txt')).toBe(true);
 		expect(isPublicPath('/sitemap.xml')).toBe(true);
 		expect(isPublicPath('/favicon.ico')).toBe(true);
+		expect(isPublicPath('/og-image.png')).toBe(true);
 	});
 
 	it('treats legal pages as public', () => {
 		expect(isPublicPath('/terms')).toBe(true);
 		expect(isPublicPath('/privacy')).toBe(true);
+	});
+
+	it('treats docs and status routes as public', () => {
+		expect(isPublicPath('/docs')).toBe(true);
+		expect(isPublicPath('/docs/api')).toBe(true);
+		expect(isPublicPath('/status')).toBe(true);
 	});
 
 	it('protects app routes by default', () => {

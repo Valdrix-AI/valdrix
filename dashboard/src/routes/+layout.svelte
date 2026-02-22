@@ -41,6 +41,7 @@
 	});
 
 	const supabase = createSupabaseBrowserClient();
+	const currentYear = new Date().getFullYear();
 
 	type NavItem = { href: string; label: string; icon: string };
 
@@ -358,6 +359,46 @@
 		<main id="main" tabindex="-1" class="page-enter">
 			{@render children()}
 		</main>
+
+		<footer class="border-t border-ink-800 bg-ink-900/40">
+			<div class="container mx-auto px-6 py-10">
+				<div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+					<div class="space-y-2">
+						<p class="text-sm font-semibold text-ink-100">Valdrix</p>
+						<p class="max-w-xl text-sm text-ink-400">
+							FinOps, GreenOps, and ActiveOps in one operational surface with policy-driven
+							remediation and audit-ready evidence.
+						</p>
+					</div>
+
+					<nav class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-4" aria-label="Footer">
+						<a href={toAppPath('/docs')} class="text-ink-300 hover:text-ink-100">Documentation</a>
+						<a href={toAppPath('/docs/api')} class="text-ink-300 hover:text-ink-100">
+							API Reference
+						</a>
+						<a
+							href="https://github.com/Valdrix-AI/valdrix"
+							target="_blank"
+							rel="noreferrer"
+							class="text-ink-300 hover:text-ink-100"
+						>
+							GitHub
+						</a>
+						<a href={toAppPath('/status')} class="text-ink-300 hover:text-ink-100">Status</a>
+					</nav>
+				</div>
+
+				<div class="mt-6 flex flex-wrap items-center gap-2" aria-label="Technology badges">
+					<span class="badge badge-default">Python 3.12</span>
+					<span class="badge badge-default">FastAPI 0.128+</span>
+					<span class="badge badge-default">Svelte 5</span>
+					<span class="badge badge-success">GreenOps Enabled</span>
+					<span class="badge badge-default">License: BSL 1.1</span>
+				</div>
+
+				<p class="mt-6 text-xs text-ink-500">© {currentYear} Valdrix. All rights reserved.</p>
+			</div>
+		</footer>
 	{/if}
 </div>
 

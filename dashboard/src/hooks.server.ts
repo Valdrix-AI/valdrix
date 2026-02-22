@@ -13,6 +13,7 @@ import { env } from '$env/dynamic/private';
 import type { Handle } from '@sveltejs/kit';
 import type { Session, User } from '@supabase/supabase-js';
 import { isPublicPath } from '$lib/routeProtection';
+import { canUseE2EAuthBypass, shouldUseSecureCookies } from '$lib/serverSecurity';
 
 const E2E_AUTH_HEADER = 'x-valdrix-e2e-auth';
 
@@ -46,8 +47,7 @@ function buildE2EBypassAuth(): { session: Session; user: User } {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-	const forwardedProto = event.request.headers.get('x-forwarded-proto');
-	const isHttps = forwardedProto === 'https' || event.url.protocol === 'https:';
+	const isHttps = shouldUseSecureCookies(event.url, env.NODE_ENV || '');
 
 	// Create a Supabase client with cookie handling
 	event.locals.supabase = createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
@@ -77,7 +77,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.safeGetSession = async () => {
 		const testingMode = env.TESTING === 'true';
 		const allowProdPreviewBypass = env.E2E_ALLOW_PROD_PREVIEW === 'true';
-		if (testingMode && (env.NODE_ENV !== 'production' || allowProdPreviewBypass)) {
+		const canUseBypass = canUseE2EAuthBypass({
+			testingMode,
+			allowProdPreviewBypass,
+			isDevBuild: import.meta.env.DEV,
+			hostname: event.url.hostname
+		});
+		if (canUseBypass) {
 			const provided = event.request.headers.get(E2E_AUTH_HEADER);
 			const expected = String(env.E2E_AUTH_SECRET || '').trim();
 			if (provided && expected && provided === expected) {

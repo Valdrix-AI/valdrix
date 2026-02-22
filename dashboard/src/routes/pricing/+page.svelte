@@ -15,84 +15,20 @@
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
-
-	import { onMount } from 'svelte';
-	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
 	import { normalizeCheckoutUrl } from '$lib/utils';
 	import { page } from '$app/stores';
+	import type { PageData } from './$types';
+	import type { PricingPlan } from './plans';
+	import { DEFAULT_PRICING_PLANS } from './plans';
 
-	let { data } = $props();
+	let { data }: { data: PageData } = $props();
 
 	let billingCycle = $state('monthly'); // 'monthly' or 'annual'
 	let upgrading = $state(''); // plan ID being upgraded to
 	let error = $state(''); // error message for display
-
-	// Dynamic plans from API, with defaults for SSR/Fallback
-	let plans = $state([
-		{
-			id: 'starter',
-			name: 'Starter',
-			price_monthly: 29,
-			price_annual: 290,
-			period: '/mo',
-			description: 'For small teams getting started with cloud cost visibility.',
-			features: [
-				'Single cloud provider (AWS)',
-				'Cost dashboards + budget alerts',
-				'BYOK supported (no additional platform surcharge)'
-			],
-			cta: 'Start with Starter',
-			popular: false
-		},
-		{
-			id: 'growth',
-			name: 'Growth',
-			price_monthly: 79,
-			price_annual: 790,
-			period: '/mo',
-			description: 'For growing teams who need AI-powered cost intelligence.',
-			features: [
-				'Multi-cloud support',
-				'AI analyses + GreenOps',
-				'BYOK supported (no additional platform surcharge)'
-			],
-			cta: 'Start with Growth',
-			popular: true
-		},
-		{
-			id: 'pro',
-			name: 'Pro',
-			price_monthly: 199,
-			price_annual: 1990,
-			period: '/mo',
-			description: 'For teams who want automated optimization and full API access.',
-			features: [
-				'Automated remediation',
-				'Priority support + full API access',
-				'BYOK supported (no additional platform surcharge)'
-			],
-			cta: 'Start with Pro',
-			popular: false
-		}
-	]);
-
-	onMount(async () => {
-		try {
-			const res = await fetchWithTimeout(fetch, edgeApiPath('/billing/plans'), {}, 5000);
-			if (res.ok) {
-				const data = await res.json();
-				if (data && data.length > 0) {
-					plans = data;
-				}
-			}
-		} catch (e) {
-			const message =
-				e instanceof TimeoutError
-					? 'Dynamic pricing request timed out; using defaults.'
-					: 'Failed to fetch dynamic pricing; using defaults.';
-			console.warn(message, e);
-		}
-	});
+	let plans = $derived<PricingPlan[]>(
+		Array.isArray(data.plans) && data.plans.length > 0 ? data.plans : DEFAULT_PRICING_PLANS
+	);
 
 	async function selectPlan(planId: string) {
 		if (upgrading) return;
@@ -152,13 +88,17 @@
 	<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
 	<meta
 		property="og:image"
-		content={new URL(`${assets}/valdrix_icon.png`, $page.url.origin).toString()}
+		content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
 	/>
-	<meta name="twitter:card" content="summary" />
+	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content="Pricing | Valdrix" />
 	<meta
 		name="twitter:description"
 		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."
+	/>
+	<meta
+		name="twitter:image"
+		content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
 	/>
 </svelte:head>
 
@@ -178,6 +118,8 @@
 				class="cycle-toggle-switch {billingCycle === 'annual' ? 'annual' : ''}"
 				onclick={() => (billingCycle = billingCycle === 'monthly' ? 'annual' : 'monthly')}
 				aria-label="Toggle billing cycle"
+				role="switch"
+				aria-checked={billingCycle === 'annual'}
 			>
 				<span class="toggle-knob"></span>
 			</button>
