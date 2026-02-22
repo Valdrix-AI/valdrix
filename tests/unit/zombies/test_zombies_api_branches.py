@@ -2,8 +2,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 
 from app.modules.optimization.api.v1 import zombies
+from app.models.remediation import RemediationAction
 from app.shared.core.auth import CurrentUser, UserRole
 from app.shared.core.exceptions import ResourceNotFoundError, ValdrixException
 from app.shared.core.pricing import PricingTier
@@ -128,6 +130,91 @@ async def test_preview_remediation_policy_payload_success() -> None:
             service.preview_policy_input.await_args.kwargs["connection_id"]
             == connection_id
         )
+
+
+@pytest.mark.asyncio
+async def test_approve_remediation_requires_explicit_permission() -> None:
+    tenant_id = uuid4()
+    request_id = uuid4()
+    db = AsyncMock()
+    request_row = MagicMock()
+    request_row.action = RemediationAction.STOP_INSTANCE
+    request_row.resource_id = "dev-instance-1"
+    request_row.resource_type = "EC2 Instance"
+    request_row.action_parameters = {"_system_policy_context": {"is_production": False}}
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
+    user = CurrentUser(
+        id=uuid4(),
+        email="member@example.com",
+        tenant_id=tenant_id,
+        role=UserRole.MEMBER,
+        tier=PricingTier.PRO,
+    )
+
+    with (
+        patch(
+            "app.modules.optimization.api.v1.zombies.user_has_approval_permission",
+            new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "app.modules.optimization.api.v1.zombies.RemediationService"
+        ) as service_cls,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await zombies.approve_remediation(
+                request_id=request_id,
+                review=zombies.ReviewRequest(notes="approve"),
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+            )
+        assert exc_info.value.status_code == 403
+        service_cls.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_execute_remediation_requires_prod_permission_for_prod_destructive() -> None:
+    tenant_id = uuid4()
+    request_id = uuid4()
+    db = AsyncMock()
+    request_row = MagicMock()
+    request_row.action = RemediationAction.DELETE_S3_BUCKET
+    request_row.resource_id = "prod-payments-archive"
+    request_row.resource_type = "S3 Bucket"
+    request_row.action_parameters = {"_system_policy_context": {"is_production": True}}
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
+    user = CurrentUser(
+        id=uuid4(),
+        email="admin@example.com",
+        tenant_id=tenant_id,
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+
+    with (
+        patch(
+            "app.modules.optimization.api.v1.zombies.user_has_approval_permission",
+            new=AsyncMock(return_value=False),
+        ) as permission_check,
+        patch(
+            "app.modules.optimization.api.v1.zombies.RemediationService"
+        ) as service_cls,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await zombies.execute_remediation(
+                request=MagicMock(),
+                request_id=request_id,
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+            )
+        assert exc_info.value.status_code == 403
+        permission_check.assert_awaited_once()
+        assert (
+            permission_check.await_args.args[2]
+            == "remediation.approve.prod"
+        )
+        service_cls.assert_not_called()
 
 
 @pytest.mark.asyncio
