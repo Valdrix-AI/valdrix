@@ -14,6 +14,7 @@ from app.modules.governance.domain.security.remediation_policy import (
     PolicyConfig,
     PolicyDecision,
     RemediationPolicyEngine,
+    is_production_destructive_remediation,
 )
 from app.modules.optimization.domain.remediation import RemediationService
 from app.modules.optimization.domain.actions.base import ExecutionResult, ExecutionStatus
@@ -72,6 +73,29 @@ def test_policy_engine_blocks_production_destructive_change() -> None:
     )
     assert evaluation.decision == PolicyDecision.BLOCK
     assert evaluation.rule_hits[0].rule_id == "protect-production-destructive"
+
+
+def test_is_production_destructive_remediation_helper() -> None:
+    assert is_production_destructive_remediation(
+        _request(
+            action=RemediationAction.DELETE_S3_BUCKET,
+            resource_id="prod-audit-logs",
+            resource_type="S3 Bucket",
+        )
+    )
+    assert not is_production_destructive_remediation(
+        _request(
+            action=RemediationAction.DELETE_S3_BUCKET,
+            resource_id="bucket-dev-1",
+            resource_type="S3 Bucket",
+            action_parameters={
+                "_system_policy_context": {
+                    "source": "cloud_account",
+                    "is_production": False,
+                }
+            },
+        )
+    )
 
 
 def test_policy_engine_blocks_destructive_change_with_explicit_policy_context() -> None:

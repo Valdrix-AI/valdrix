@@ -36,6 +36,10 @@ from app.shared.core.pricing import (
 from app.shared.core.config import get_settings
 from app.shared.core.security import generate_secret_blind_index
 from app.shared.db.session import get_db
+from app.shared.core.approval_permissions import (
+    SUPPORTED_APPROVAL_PERMISSIONS,
+    normalize_approval_permissions,
+)
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Identity"])
@@ -44,6 +48,7 @@ SCIM_TOKEN_ROTATION_RECOMMENDED_DAYS = 90
 SUPPORTED_SCIM_MAPPING_ROLES = {"admin", "member"}
 SUPPORTED_PERSONAS = {"engineering", "finance", "platform", "leadership"}
 SUPPORTED_SSO_FEDERATION_MODES = {"domain", "provider_id"}
+SUPPORTED_SCIM_APPROVAL_PERMISSIONS = tuple(sorted(SUPPORTED_APPROVAL_PERMISSIONS))
 
 
 def _is_http_url(value: str) -> bool:
@@ -109,6 +114,13 @@ class ScimGroupMapping(BaseModel):
         default=None,
         description="Optional persona default for users in this group (engineering|finance|platform|leadership).",
     )
+    permissions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional scoped approval permissions granted to users in this group. "
+            f"Supported values: {', '.join(SUPPORTED_SCIM_APPROVAL_PERMISSIONS)}."
+        ),
+    )
 
     @field_validator("group")
     @classmethod
@@ -138,6 +150,22 @@ class ScimGroupMapping(BaseModel):
             raise ValueError(
                 "persona must be one of: engineering, finance, platform, leadership"
             )
+        return normalized
+
+    @field_validator("permissions", mode="before")
+    @classmethod
+    def _validate_permissions(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise ValueError("permissions must be a list of strings")
+
+        normalized = normalize_approval_permissions(value)
+        if len(normalized) != len(
+            {str(item or "").strip().lower() for item in value if str(item or "").strip()}
+        ):
+            supported = ", ".join(SUPPORTED_SCIM_APPROVAL_PERMISSIONS)
+            raise ValueError(f"permissions must only include: {supported}")
         return normalized
 
 

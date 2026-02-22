@@ -301,7 +301,12 @@ async def test_identity_scim_group_mappings_requires_enterprise(
             "allowed_email_domains": [],
             "scim_enabled": False,
             "scim_group_mappings": [
-                {"group": "finops-admins", "role": "admin", "persona": "finance"}
+                {
+                    "group": "finops-admins",
+                    "role": "admin",
+                    "persona": "finance",
+                    "permissions": ["remediation.approve.nonprod"],
+                }
             ],
         },
     )
@@ -335,15 +340,69 @@ async def test_identity_scim_group_mappings_update_success_enterprise(
             "allowed_email_domains": [],
             "scim_enabled": False,
             "scim_group_mappings": [
-                {"group": "FinOps-Admins", "role": "admin", "persona": "finance"}
+                {
+                    "group": "FinOps-Admins",
+                    "role": "admin",
+                    "persona": "finance",
+                    "permissions": [
+                        "remediation.approve.nonprod",
+                        "remediation.approve.prod",
+                    ],
+                }
             ],
         },
     )
     assert res.status_code == 200
     payload = res.json()
     assert payload["scim_group_mappings"] == [
-        {"group": "finops-admins", "role": "admin", "persona": "finance"}
+        {
+            "group": "finops-admins",
+            "role": "admin",
+            "persona": "finance",
+            "permissions": [
+                "remediation.approve.nonprod",
+                "remediation.approve.prod",
+            ],
+        }
     ]
+
+
+@pytest.mark.asyncio
+async def test_identity_scim_group_mappings_reject_invalid_permissions(
+    ac: AsyncClient, db: AsyncSession
+):
+    tenant_id = uuid.uuid4()
+    tenant = Tenant(id=tenant_id, name="Tenant Identity SCIM Groups", plan="enterprise")
+    db.add(tenant)
+    user = User(
+        id=uuid.uuid4(),
+        email="admin@example.com",
+        tenant_id=tenant_id,
+        role=UserRole.ADMIN.value,
+    )
+    db.add(user)
+    await db.commit()
+
+    token = create_access_token({"sub": str(user.id), "email": "admin@example.com"})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    res = await ac.put(
+        "/api/v1/settings/identity",
+        headers=headers,
+        json={
+            "sso_enabled": False,
+            "allowed_email_domains": [],
+            "scim_enabled": False,
+            "scim_group_mappings": [
+                {
+                    "group": "FinOps-Admins",
+                    "role": "admin",
+                    "permissions": ["not-a-real-permission"],
+                }
+            ],
+        },
+    )
+    assert res.status_code == 422
 
 
 @pytest.mark.asyncio

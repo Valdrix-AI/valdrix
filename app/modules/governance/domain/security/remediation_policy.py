@@ -330,3 +330,12 @@ class RemediationPolicyEngine:
                 "environment": context.get("environment"),
             }
         return evidence
+
+
+def is_production_destructive_remediation(request: RemediationRequest) -> bool:
+    """
+    Classify whether a remediation targets a production-like resource with a
+    destructive action. Used by human-approval authorization controls.
+    """
+    engine = RemediationPolicyEngine()
+    return engine._is_destructive(request) and engine._looks_like_production(request)

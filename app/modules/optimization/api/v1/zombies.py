@@ -1,7 +1,8 @@
 from typing import Annotated, Optional, Dict, Any
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.params import Param
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 import structlog
@@ -25,6 +26,14 @@ from app.shared.core.remediation_results import (
 )
 from app.models.background_job import JobType
 from app.modules.governance.domain.jobs.processor import enqueue_job
+from app.modules.governance.domain.security.remediation_policy import (
+    is_production_destructive_remediation,
+)
+from app.shared.core.approval_permissions import (
+    APPROVAL_PERMISSION_REMEDIATION_APPROVE_NONPROD,
+    APPROVAL_PERMISSION_REMEDIATION_APPROVE_PROD,
+    user_has_approval_permission,
+)
 
 router = APIRouter(tags=["Cloud Hygiene (Zombies)"])
 logger = structlog.get_logger()
@@ -98,6 +107,46 @@ def _raise_if_failed_execution(executed_request: RemediationRequest) -> None:
         message=failure.message,
         code=failure.reason,
         status_code=failure.status_code or 400,
+    )
+
+
+async def _load_remediation_request_for_authorization(
+    db: AsyncSession,
+    *,
+    request_id: UUID,
+    tenant_id: UUID,
+) -> RemediationRequest:
+    result = await db.execute(
+        select(RemediationRequest)
+        .where(RemediationRequest.id == request_id)
+        .where(RemediationRequest.tenant_id == tenant_id)
+    )
+    remediation_request = result.scalar_one_or_none()
+    if remediation_request is None:
+        raise ResourceNotFoundError(f"Remediation request {request_id} not found")
+    return remediation_request
+
+
+def _required_approval_permission(remediation_request: RemediationRequest) -> str:
+    if is_production_destructive_remediation(remediation_request):
+        return APPROVAL_PERMISSION_REMEDIATION_APPROVE_PROD
+    return APPROVAL_PERMISSION_REMEDIATION_APPROVE_NONPROD
+
+
+async def _enforce_approval_permission(
+    db: AsyncSession,
+    *,
+    user: CurrentUser,
+    required_permission: str,
+) -> None:
+    if await user_has_approval_permission(db, user, required_permission):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "Insufficient permissions. "
+            f"Required approval permission: {required_permission}"
+        ),
     )
 
 
@@ -273,12 +322,24 @@ async def approve_remediation(
     request_id: UUID,
     review: ReviewRequest,
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
-    user: Annotated[CurrentUser, Depends(requires_role("admin"))],
+    user: Annotated[CurrentUser, Depends(requires_role("member"))],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default=DEFAULT_REGION_HINT),
 ) -> Dict[str, str]:
-    """Approve a request."""
+    """Approve a request with explicit remediation approval permission."""
     region_hint = _coerce_region_hint(region)
+    remediation_request = await _load_remediation_request_for_authorization(
+        db,
+        request_id=request_id,
+        tenant_id=tenant_id,
+    )
+    required_permission = _required_approval_permission(remediation_request)
+    await _enforce_approval_permission(
+        db,
+        user=user,
+        required_permission=required_permission,
+    )
+
     service = RemediationService(db=db, region=region_hint)
     try:
         result = await service.approve(
@@ -358,7 +419,7 @@ async def execute_remediation(
     tenant_id: Annotated[UUID, Depends(require_tenant_access)],
     user: Annotated[
         CurrentUser,
-        Depends(requires_feature(FeatureFlag.AUTO_REMEDIATION, required_role="admin")),
+        Depends(requires_feature(FeatureFlag.AUTO_REMEDIATION, required_role="member")),
     ],
     db: AsyncSession = Depends(get_db),
     region: str = Query(default=DEFAULT_REGION_HINT),
@@ -366,9 +427,21 @@ async def execute_remediation(
         default=False, description="Bypass 24h grace period (emergency use)"
     ),
 ) -> Dict[str, str]:
-    """Execute a remediation request. Requires Pro tier or higher and Admin role."""
+    """Execute a remediation request with explicit remediation approval permission."""
     region_hint = _coerce_region_hint(region)
     bypass_grace = _coerce_query_bool(bypass_grace_period, default=False)
+    remediation_request = await _load_remediation_request_for_authorization(
+        db,
+        request_id=request_id,
+        tenant_id=tenant_id,
+    )
+    required_permission = _required_approval_permission(remediation_request)
+    await _enforce_approval_permission(
+        db,
+        user=user,
+        required_permission=required_permission,
+    )
+
     service = RemediationService(db=db, region=region_hint)
 
     try:
