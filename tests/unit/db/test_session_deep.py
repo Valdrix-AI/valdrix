@@ -108,20 +108,16 @@ class TestSessionDeep:
             assert exc.value.code == "rls_enforcement_failed"
 
     def test_session_init_failure_no_url(self):
-        with patch("app.shared.core.config.get_settings") as mock_get_settings:
-            mock_settings = MagicMock()
-            mock_settings.DATABASE_URL = None
-            mock_settings.DB_SSL_MODE = "disable"
-            mock_get_settings.return_value = mock_settings
-            
-            with patch("sys.exit") as mock_exit:
-                import importlib
-                import app.shared.db.session
-                try:
-                    importlib.reload(app.shared.db.session)
-                except SystemExit:
-                    pass
-                assert mock_exit.called
+        import app.shared.db.session as session_module
+
+        mock_settings = MagicMock()
+        mock_settings.DATABASE_URL = None
+        mock_settings.TESTING = False
+        mock_settings.DB_SSL_MODE = "disable"
+
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
+            with pytest.raises(ValueError, match="DATABASE_URL is not set"):
+                session_module._build_db_runtime()
 
     def test_ssl_config_disable(self):
         with patch("app.shared.db.session.settings") as mock_settings:
@@ -132,16 +128,20 @@ class TestSessionDeep:
             importlib.reload(app.shared.db.session)
 
     def test_ssl_config_require_prod_fail(self):
-        # We need to patch the settings *before* reloading
-        with patch("app.shared.core.config.get_settings") as mock_get_settings:
-            mock_settings = MagicMock()
-            mock_settings.DATABASE_URL = "postgresql://test"
-            mock_settings.DB_SSL_MODE = "require"
-            mock_settings.is_production = True
-            mock_settings.DB_SSL_CA_CERT_PATH = None
-            mock_get_settings.return_value = mock_settings
-            
-            import importlib
-            import app.shared.db.session
-            with pytest.raises(ValueError, match="DB_SSL_CA_CERT_PATH is mandatory"):
-                importlib.reload(app.shared.db.session)
+        import app.shared.db.session as session_module
+
+        mock_settings = MagicMock()
+        mock_settings.DATABASE_URL = "postgresql://test"
+        mock_settings.TESTING = False
+        mock_settings.DB_SSL_MODE = "require"
+        mock_settings.is_production = True
+        mock_settings.DB_SSL_CA_CERT_PATH = None
+        mock_settings.ALLOW_TEST_DATABASE_URL = False
+        mock_settings.DB_USE_NULL_POOL = False
+        mock_settings.DB_EXTERNAL_POOLER = False
+
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
+            with pytest.raises(
+                ValueError, match="DB_SSL_CA_CERT_PATH is mandatory"
+            ):
+                session_module._build_db_runtime()
