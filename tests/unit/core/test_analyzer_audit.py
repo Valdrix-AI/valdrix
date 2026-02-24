@@ -101,23 +101,23 @@ async def test_analyzer_byok_injection(mock_usage_summary):
                         usage_summary=mock_usage_summary, tenant_id=tenant_id, db=db
                     )
 
-                    # Verify _invoke_llm was called with the BYOK key (positional or keyword matching implementation)
-                    # The implementation passes it as positional: _invoke_llm(usage_summary, provider, model, byok_key)
-                    mock_invoke.assert_called_with(
-                        ANY, "openai", "gpt-4o", "sk-tenant-key"
+                    # Verify BYOK key and provider/model were propagated; current
+                    # implementation may also pass max_output_tokens as a kwarg.
+                    invoke_call = mock_invoke.await_args
+                    assert invoke_call.args[1:4] == (
+                        "openai",
+                        "gpt-4o",
+                        "sk-tenant-key",
                     )
+                    assert invoke_call.kwargs.get("max_output_tokens") == 512
 
-                    # Verify record_usage was called with is_byok=True
-                    mock_record.assert_called_with(
-                        tenant_id=tenant_id,
-                        db=db,
-                        model=ANY,
-                        provider="openai",
-                        prompt_tokens=ANY,
-                        completion_tokens=ANY,
-                        is_byok=True,
-                        operation_id=ANY,
-                    )
+                    # Verify record_usage was called with BYOK metering.
+                    record_kwargs = mock_record.await_args.kwargs
+                    assert record_kwargs["tenant_id"] == tenant_id
+                    assert record_kwargs["db"] == db
+                    assert record_kwargs["provider"] == "openai"
+                    assert record_kwargs["is_byok"] is True
+                    assert "operation_id" in record_kwargs
 
 
 @pytest.mark.asyncio

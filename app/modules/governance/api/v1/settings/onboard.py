@@ -15,6 +15,7 @@ from app.shared.core.pricing import PricingTier
 from app.shared.core.config import get_settings
 from app.shared.core.rate_limit import auth_limit
 from app.shared.core.provider import normalize_provider
+from app.shared.core.turnstile import require_turnstile_for_onboard
 
 logger = structlog.get_logger()
 
@@ -42,6 +43,7 @@ async def onboard(
     onboard_req: OnboardRequest,
     user: CurrentUser = Depends(get_current_user_from_jwt),  # No DB check
     db: AsyncSession = Depends(get_db),
+    _turnstile: None = Depends(require_turnstile_for_onboard),
 ) -> OnboardResponse:
     # 1. Check if user already exists
     existing = await db.execute(select(User).where(User.id == user.id))
@@ -120,9 +122,9 @@ async def onboard(
                         map_aws_connection_to_credentials(temp_connection)
                     )
 
-            temp_tenant_id = UUID("00000000-0000-0000-0000-000000000000")
+            verification_tenant_id = UUID("00000000-0000-0000-0000-000000000000")
 
-            # Create a mock/temporary connection object for verification
+            # Create an in-memory connection object for preflight verification.
             conn: Any = None
             if platform == "aws":
                 conn = AWSConnection(
@@ -135,7 +137,7 @@ async def onboard(
                     aws_account_id=onboard_req.cloud_config.get(
                         "aws_account_id", "000000000000"
                     ),
-                    tenant_id=temp_tenant_id,  # Temp ID
+                    tenant_id=verification_tenant_id,
                 )
             elif platform == "azure":
                 conn = AzureConnection(
@@ -143,7 +145,7 @@ async def onboard(
                     client_secret=onboard_req.cloud_config.get("client_secret"),
                     azure_tenant_id=onboard_req.cloud_config.get("azure_tenant_id"),
                     subscription_id=onboard_req.cloud_config.get("subscription_id"),
-                    tenant_id=temp_tenant_id,
+                    tenant_id=verification_tenant_id,
                 )
             elif platform == "gcp":
                 conn = GCPConnection(
@@ -151,7 +153,7 @@ async def onboard(
                     service_account_json=onboard_req.cloud_config.get(
                         "service_account_json"
                     ),
-                    tenant_id=temp_tenant_id,
+                    tenant_id=verification_tenant_id,
                 )
             elif platform == "saas":
                 conn = SaaSConnection(
@@ -165,7 +167,7 @@ async def onboard(
                         onboard_req.cloud_config.get("connector_config")
                     ),
                     spend_feed=_as_list(onboard_req.cloud_config.get("spend_feed")),
-                    tenant_id=temp_tenant_id,
+                    tenant_id=verification_tenant_id,
                 )
             elif platform == "license":
                 conn = LicenseConnection(
@@ -181,7 +183,7 @@ async def onboard(
                         onboard_req.cloud_config.get("connector_config")
                     ),
                     license_feed=_as_list(onboard_req.cloud_config.get("license_feed")),
-                    tenant_id=temp_tenant_id,
+                    tenant_id=verification_tenant_id,
                 )
             elif platform == "platform":
                 conn = PlatformConnection(
@@ -198,7 +200,7 @@ async def onboard(
                         onboard_req.cloud_config.get("connector_config")
                     ),
                     spend_feed=_as_list(onboard_req.cloud_config.get("spend_feed")),
-                    tenant_id=temp_tenant_id,
+                    tenant_id=verification_tenant_id,
                 )
             elif platform == "hybrid":
                 conn = HybridConnection(
@@ -215,7 +217,7 @@ async def onboard(
                         onboard_req.cloud_config.get("connector_config")
                     ),
                     spend_feed=_as_list(onboard_req.cloud_config.get("spend_feed")),
-                    tenant_id=temp_tenant_id,
+                    tenant_id=verification_tenant_id,
                 )
             else:
                 raw_platform = onboard_req.cloud_config.get("platform")

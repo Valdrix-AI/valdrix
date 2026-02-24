@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableLambda
 from app.shared.llm.analyzer import FinOpsAnalyzer
 from app.shared.core.constants import LLMProvider
 from app.shared.core.exceptions import AIAnalysisError, BudgetExceededError
+from app.shared.core.pricing import PricingTier
 from app.schemas.costs import CloudUsageSummary, CostRecord
 
 
@@ -590,6 +591,74 @@ async def test_analyze_usage_recording_failure(
         await analyzer.analyze(
             usage_summary_with_records, tenant_id=uuid4(), db=mock_db
         )
+
+
+@pytest.mark.asyncio
+async def test_analyze_applies_tier_output_ceiling_and_user_metering(
+    mock_llm, usage_summary_with_records, mock_db
+):
+    analyzer = FinOpsAnalyzer(mock_llm, mock_db)
+    tenant_id = uuid4()
+    user_id = uuid4()
+    with (
+        patch.object(
+            analyzer, "_check_cache_and_delta", return_value=(None, False)
+        ),
+        patch(
+            "app.shared.llm.analyzer.LLMGuardrails.sanitize_input",
+            new_callable=AsyncMock,
+        ) as mock_sanitize,
+        patch(
+            "app.shared.llm.analyzer.SymbolicForecaster.forecast",
+            new_callable=AsyncMock,
+        ) as mock_forecast,
+        patch.object(
+            analyzer,
+            "_setup_client_and_usage",
+            return_value=("groq", "llama-3.3-70b-versatile", None),
+        ),
+        patch.object(
+            analyzer,
+            "_invoke_llm",
+            new_callable=AsyncMock,
+        ) as mock_invoke,
+        patch.object(analyzer, "_process_analysis_results", return_value={"status": "ok"}),
+        patch(
+            "app.shared.llm.analyzer.LLMBudgetManager.check_and_reserve",
+            new_callable=AsyncMock,
+        ) as mock_reserve,
+        patch(
+            "app.shared.llm.analyzer.LLMBudgetManager.record_usage",
+            new_callable=AsyncMock,
+        ) as mock_record,
+        patch(
+            "app.shared.llm.analyzer.get_tenant_tier",
+            new_callable=AsyncMock,
+        ) as mock_tier,
+        patch("app.shared.llm.analyzer.get_tier_limit", return_value=1024),
+    ):
+        mock_sanitize.return_value = {}
+        mock_forecast.return_value = {}
+        mock_invoke.return_value = (
+            "{}",
+            {"token_usage": {"prompt_tokens": 111, "completion_tokens": 222}},
+        )
+        mock_reserve.return_value = Decimal("0.01")
+        mock_tier.return_value = PricingTier.STARTER
+
+        payload = await analyzer.analyze(
+            usage_summary_with_records,
+            tenant_id=tenant_id,
+            db=mock_db,
+            user_id=user_id,
+        )
+
+    assert payload["status"] == "ok"
+    reserve_kwargs = mock_reserve.await_args.kwargs
+    assert reserve_kwargs["completion_tokens"] == 1024
+    assert reserve_kwargs["user_id"] == user_id
+    assert mock_invoke.await_args.kwargs["max_output_tokens"] == 1024
+    assert mock_record.await_args.kwargs["user_id"] == user_id
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -15,6 +15,16 @@ def _scalar_one_or_none_result(value: object) -> MagicMock:
     result = MagicMock()
     result.scalar_one_or_none.return_value = value
     return result
+
+
+def _authorized_nonprod_request_row(request_id: UUID) -> MagicMock:
+    request_row = MagicMock()
+    request_row.id = request_id
+    request_row.action = RemediationAction.STOP_INSTANCE
+    request_row.resource_id = "dev-instance-1"
+    request_row.resource_type = "EC2 Instance"
+    request_row.action_parameters = {"_system_policy_context": {"is_production": False}}
+    return request_row
 
 
 @pytest.mark.asyncio
@@ -246,6 +256,8 @@ async def test_execute_remediation_wraps_service_error() -> None:
     tenant_id = uuid4()
     request_id = uuid4()
     db = AsyncMock()
+    request_row = _authorized_nonprod_request_row(request_id)
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
     user = CurrentUser(
         id=uuid4(),
         email="admin@example.com",
@@ -276,6 +288,8 @@ async def test_execute_remediation_value_error_is_wrapped() -> None:
     tenant_id = uuid4()
     request_id = uuid4()
     db = AsyncMock()
+    request_row = _authorized_nonprod_request_row(request_id)
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
     user = CurrentUser(
         id=uuid4(),
         email="admin@example.com",
@@ -305,6 +319,8 @@ async def test_execute_remediation_unexpected_error_is_sanitized() -> None:
     tenant_id = uuid4()
     request_id = uuid4()
     db = AsyncMock()
+    request_row = _authorized_nonprod_request_row(request_id)
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
     user = CurrentUser(
         id=uuid4(),
         email="admin@example.com",
@@ -338,6 +354,8 @@ async def test_execute_remediation_failed_status_propagates_code_and_status() ->
     tenant_id = uuid4()
     request_id = uuid4()
     db = AsyncMock()
+    request_row = _authorized_nonprod_request_row(request_id)
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
     user = CurrentUser(
         id=uuid4(),
         email="admin@example.com",
@@ -378,6 +396,8 @@ async def test_execute_remediation_failed_status_without_error_uses_default() ->
     tenant_id = uuid4()
     request_id = uuid4()
     db = AsyncMock()
+    request_row = _authorized_nonprod_request_row(request_id)
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
     user = CurrentUser(
         id=uuid4(),
         email="admin@example.com",
@@ -416,6 +436,8 @@ async def test_execute_remediation_deferred_status_returns_as_is() -> None:
     tenant_id = uuid4()
     request_id = uuid4()
     db = AsyncMock()
+    request_row = _authorized_nonprod_request_row(request_id)
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
     user = CurrentUser(
         id=uuid4(),
         email="admin@example.com",

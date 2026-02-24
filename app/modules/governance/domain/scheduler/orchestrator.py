@@ -255,6 +255,27 @@ class SchedulerOrchestrator:
                 job="license_governance",
             )
 
+    async def enforcement_reconciliation_sweep_job(self) -> None:
+        """Dispatches periodic enforcement reservation reconciliation sweep."""
+        if not bool(
+            getattr(settings, "ENFORCEMENT_RECONCILIATION_SWEEP_ENABLED", True)
+        ):
+            logger.info("scheduler_enforcement_reconciliation_sweep_disabled")
+            return
+        logger.info("scheduler_dispatching_enforcement_reconciliation_sweep")
+        if not await self._acquire_dispatch_lock("enforcement_reconciliation_sweep"):
+            return
+        try:
+            from app.shared.core.celery_app import celery_app
+
+            celery_app.send_task("scheduler.enforcement_reconciliation_sweep")
+        except Exception as e:
+            logger.warning(
+                "scheduler_celery_unavailable",
+                error=str(e),
+                job="enforcement_reconciliation",
+            )
+
     async def detect_stuck_jobs(self) -> None:
         """
         Series-A Hardening (Phase 2): Detects jobs stuck in PENDING status for > 1 hour.
@@ -361,6 +382,13 @@ class SchedulerOrchestrator:
             self.license_governance_sweep_job,
             trigger=CronTrigger(hour=6, minute=0, timezone="UTC"),
             id="daily_license_governance_sweep",
+            replace_existing=True,
+        )
+        # Enforcement reconciliation sweep: Hourly at minute 20 UTC
+        self.scheduler.add_job(
+            self.enforcement_reconciliation_sweep_job,
+            trigger=CronTrigger(minute=20, timezone="UTC"),
+            id="hourly_enforcement_reconciliation_sweep",
             replace_existing=True,
         )
         # Stuck Job Detector: Every hour

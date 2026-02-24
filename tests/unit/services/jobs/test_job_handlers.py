@@ -22,6 +22,9 @@ from app.modules.governance.domain.jobs.handlers.analysis import (
 from app.modules.governance.domain.jobs.handlers.license_governance import (
     LicenseGovernanceHandler,
 )
+from app.modules.governance.domain.jobs.handlers.enforcement_reconciliation import (
+    EnforcementReconciliationHandler,
+)
 
 
 @pytest.fixture
@@ -412,6 +415,44 @@ async def test_license_governance_handler_success(mock_db, sample_job):
 @pytest.mark.asyncio
 async def test_license_governance_handler_requires_tenant_id(mock_db):
     handler = LicenseGovernanceHandler()
+    sample_job = MagicMock(spec=BackgroundJob)
+    sample_job.tenant_id = None
+    sample_job.payload = {}
+
+    with pytest.raises(ValueError, match="tenant_id required"):
+        await handler.execute(sample_job, mock_db)
+
+
+@pytest.mark.asyncio
+async def test_enforcement_reconciliation_handler_success(mock_db, sample_job):
+    handler = EnforcementReconciliationHandler()
+    expected_tenant = UUID(str(sample_job.tenant_id))
+
+    with patch(
+        "app.modules.governance.domain.jobs.handlers.enforcement_reconciliation.EnforcementReconciliationWorker"
+    ) as mock_worker_cls:
+        mock_worker = AsyncMock()
+        mock_worker.run_for_tenant.return_value = MagicMock(
+            to_payload=MagicMock(
+                return_value={
+                    "status": "completed",
+                    "tenant_id": str(expected_tenant),
+                    "released_count": 1,
+                }
+            )
+        )
+        mock_worker_cls.return_value = mock_worker
+
+        result = await handler.execute(sample_job, mock_db)
+
+        assert result["status"] == "completed"
+        assert result["tenant_id"] == str(expected_tenant)
+        mock_worker.run_for_tenant.assert_awaited_once_with(expected_tenant)
+
+
+@pytest.mark.asyncio
+async def test_enforcement_reconciliation_handler_requires_tenant_id(mock_db):
+    handler = EnforcementReconciliationHandler()
     sample_job = MagicMock(spec=BackgroundJob)
     sample_job.tenant_id = None
     sample_job.payload = {}

@@ -5,6 +5,7 @@ from app.modules.optimization.domain.actions.factory import RemediationActionFac
 from app.shared.core.pricing import FeatureFlag
 from app.shared.adapters.license import LicenseAdapter
 from app.shared.core.credentials import LicenseCredentials
+from app.shared.core.exceptions import UnsupportedVendorError
 import structlog
 
 logger = structlog.get_logger()
@@ -70,7 +71,7 @@ class LicenseReclaimSeatAction(BaseLicenseAction):
                     action_taken=RemediationAction.RECLAIM_LICENSE_SEAT.value,
                     error_message="License revocation failed or user not found with specified SKUs."
                 )
-        except NotImplementedError as e:
+        except UnsupportedVendorError as e:
             vendor_name = (
                 credentials.vendor
                 if credentials is not None

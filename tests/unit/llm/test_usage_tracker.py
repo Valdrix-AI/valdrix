@@ -126,6 +126,7 @@ class TestUsageTracker:
                 is_byok=False,
                 operation_id=None,
                 request_type="daily_analysis",
+                user_id=None,
             )
 
     @pytest.mark.asyncio
@@ -155,6 +156,7 @@ class TestUsageTracker:
                     model="gpt-4",
                     prompt_tokens=100,
                     completion_tokens=500,
+                    user_id=None,
                 )
 
     @pytest.mark.asyncio

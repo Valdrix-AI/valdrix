@@ -4,6 +4,7 @@ from uuid import UUID
 from httpx import AsyncClient
 from sqlalchemy import select
 from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
 from app.main import app
 from app.models.tenant import Tenant, User
 from app.shared.core.auth import get_current_user_from_jwt
@@ -146,3 +147,55 @@ async def test_onboard_rejects_http_cloud_credentials_in_production(
         )
         assert response.status_code == 400
         assert "HTTPS is required" in response.json()["error"]
+
+
+def _turnstile_strict_settings() -> SimpleNamespace:
+    return SimpleNamespace(
+        TURNSTILE_ENABLED=True,
+        TURNSTILE_ENFORCE_IN_TESTING=True,
+        TURNSTILE_SECRET_KEY="turnstile-secret-key",
+        TURNSTILE_VERIFY_URL="https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        TURNSTILE_TIMEOUT_SECONDS=2.0,
+        TURNSTILE_FAIL_OPEN=False,
+        TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT=True,
+        TURNSTILE_REQUIRE_SSO_DISCOVERY=True,
+        TURNSTILE_REQUIRE_ONBOARD=True,
+        TESTING=True,
+        ENVIRONMENT="test",
+    )
+
+
+@pytest.mark.asyncio
+async def test_onboard_requires_turnstile_token(async_client: AsyncClient):
+    with patch(
+        "app.shared.core.turnstile.get_settings",
+        return_value=_turnstile_strict_settings(),
+    ):
+        response = await async_client.post(
+            "/api/v1/settings/onboard",
+            json={"tenant_name": "Needs Turnstile"},
+        )
+    assert response.status_code == 400
+    assert response.json()["error"] == "turnstile_token_required"
+
+
+@pytest.mark.asyncio
+async def test_onboard_rejects_invalid_turnstile(async_client: AsyncClient):
+    with (
+        patch(
+            "app.shared.core.turnstile.get_settings",
+            return_value=_turnstile_strict_settings(),
+        ),
+        patch(
+            "app.shared.core.turnstile._verify_turnstile_with_cloudflare",
+            new_callable=AsyncMock,
+            return_value={"success": False, "error-codes": ["invalid-input-response"]},
+        ),
+    ):
+        response = await async_client.post(
+            "/api/v1/settings/onboard",
+            json={"tenant_name": "Needs Turnstile"},
+            headers={"X-Turnstile-Token": "invalid-token"},
+        )
+    assert response.status_code == 403
+    assert response.json()["error"] == "turnstile_verification_failed"

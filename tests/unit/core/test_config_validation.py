@@ -529,3 +529,40 @@ class TestSettingsValidation:
                 _env_file=None,
             )
             assert settings.ALLOW_IN_MEMORY_RATE_LIMITS is True
+
+    def test_settings_rejects_short_enforcement_fallback_signing_keys(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    GROQ_API_KEY="g" * 32,
+                    ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=["short-key"],
+                    _env_file=None,
+                )
+            assert "ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS key must be >= 32" in str(
+                exc.value
+            )
+
+    def test_settings_accepts_enforcement_fallback_signing_keys(self):
+        with patch.dict("os.environ", {}, clear=True):
+            settings = Settings(
+                DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
+                GROQ_API_KEY="g" * 32,
+                ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=[
+                    "f" * 32,
+                    "g" * 40,
+                ],
+                _env_file=None,
+            )
+            assert settings.ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS == [
+                "f" * 32,
+                "g" * 40,
+            ]

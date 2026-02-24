@@ -747,7 +747,11 @@ async def create_user(
     )
     db.add(user)
     # Ensure FK-safe inserts for group membership rows.
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise ScimError(409, "User already exists", scim_type="uniqueness") from exc
     # Apply tenant-configured entitlements and membership (if groups provided).
     await _apply_scim_group_mappings(
         db,
@@ -1308,25 +1312,26 @@ async def put_group(
     member_user_ids: set[UUID] = set()
     missing_member_count = 0
     impacted: set[UUID] = set()
-    if body.members is not None:
-        candidate_ids = {
-            _parse_uuid(ref.value)
-            for ref in body.members
-            if _parse_uuid(ref.value) is not None
-        }
-        member_user_ids = await _resolve_member_user_ids(
-            db, tenant_id=ctx.tenant_id, members=body.members
-        )
-        missing_member_count = len(candidate_ids) - len(member_user_ids)
-        impacted = await _set_group_memberships(
-            db,
-            tenant_id=ctx.tenant_id,
-            group_id=group.id,
-            member_user_ids=member_user_ids,
-        )
-        await _recompute_entitlements_for_users(
-            db, tenant_id=ctx.tenant_id, user_ids=impacted
-        )
+    with db.no_autoflush:
+        if body.members is not None:
+            candidate_ids = {
+                _parse_uuid(ref.value)
+                for ref in body.members
+                if _parse_uuid(ref.value) is not None
+            }
+            member_user_ids = await _resolve_member_user_ids(
+                db, tenant_id=ctx.tenant_id, members=body.members
+            )
+            missing_member_count = len(candidate_ids) - len(member_user_ids)
+            impacted = await _set_group_memberships(
+                db,
+                tenant_id=ctx.tenant_id,
+                group_id=group.id,
+                member_user_ids=member_user_ids,
+            )
+            await _recompute_entitlements_for_users(
+                db, tenant_id=ctx.tenant_id, user_ids=impacted
+            )
 
     try:
         await db.commit()
@@ -1395,40 +1400,111 @@ async def patch_group(
     member_action = False
     impacted_user_ids: set[UUID] = set()
 
-    for operation in body.Operations:
-        op = operation.op.lower().strip()
-        path = (operation.path or "").strip()
-        value = operation.value
+    with db.no_autoflush:
+        for operation in body.Operations:
+            op = operation.op.lower().strip()
+            path = (operation.path or "").strip()
+            value = operation.value
 
-        if op not in {"add", "replace", "remove"}:
-            raise ScimError(400, "Unsupported patch op", scim_type="invalidValue")
+            if op not in {"add", "replace", "remove"}:
+                raise ScimError(400, "Unsupported patch op", scim_type="invalidValue")
 
-        if not path:
-            if op in {"add", "replace"} and isinstance(value, dict):
-                if "displayName" in value:
-                    name_val = str(value.get("displayName") or "").strip()
-                    if not name_val:
-                        raise ScimError(
-                            400, "displayName is required", scim_type="invalidValue"
+            if not path:
+                if op in {"add", "replace"} and isinstance(value, dict):
+                    if "displayName" in value:
+                        name_val = str(value.get("displayName") or "").strip()
+                        if not name_val:
+                            raise ScimError(
+                                400, "displayName is required", scim_type="invalidValue"
+                            )
+                        group.display_name = name_val
+                        group.display_name_norm = _normalize_scim_group(name_val)
+                    if "externalId" in value:
+                        ext_val = str(value.get("externalId") or "").strip() or None
+                        group.external_id = ext_val
+                        group.external_id_norm = (
+                            _normalize_scim_group(ext_val or "") or None
                         )
-                    group.display_name = name_val
-                    group.display_name_norm = _normalize_scim_group(name_val)
-                if "externalId" in value:
-                    ext_val = str(value.get("externalId") or "").strip() or None
-                    group.external_id = ext_val
-                    group.external_id_norm = (
-                        _normalize_scim_group(ext_val or "") or None
+                    if "members" in value:
+                        member_action = True
+                        member_refs = value.get("members")
+                        if not isinstance(member_refs, list):
+                            raise ScimError(
+                                400, "members must be a list", scim_type="invalidValue"
+                            )
+                        parsed_refs = [
+                            ScimMemberRef.model_validate(item)
+                            for item in member_refs
+                            if isinstance(item, dict)
+                        ]
+                        member_user_ids = await _resolve_member_user_ids(
+                            db, tenant_id=ctx.tenant_id, members=parsed_refs
+                        )
+                        impacted_user_ids |= await _set_group_memberships(
+                            db,
+                            tenant_id=ctx.tenant_id,
+                            group_id=group.id,
+                            member_user_ids=member_user_ids,
+                        )
+                    continue
+                raise ScimError(400, "Patch path is required", scim_type="invalidPath")
+
+            path_norm = path.lower()
+            if path_norm == "displayname":
+                if op == "remove":
+                    raise ScimError(
+                        400, "displayName cannot be removed", scim_type="invalidValue"
                     )
-                if "members" in value:
-                    member_action = True
-                    member_refs = value.get("members")
-                    if not isinstance(member_refs, list):
+                if not isinstance(value, str):
+                    raise ScimError(
+                        400, "displayName must be string", scim_type="invalidValue"
+                    )
+                name_val = value.strip()
+                if not name_val:
+                    raise ScimError(
+                        400, "displayName is required", scim_type="invalidValue"
+                    )
+                group.display_name = name_val
+                group.display_name_norm = _normalize_scim_group(name_val)
+                continue
+
+            if path_norm == "externalid":
+                if op == "remove":
+                    group.external_id = None
+                    group.external_id_norm = None
+                    continue
+                if not isinstance(value, str):
+                    raise ScimError(
+                        400, "externalId must be string", scim_type="invalidValue"
+                    )
+                ext_val = value.strip() or None
+                group.external_id = ext_val
+                group.external_id_norm = _normalize_scim_group(ext_val or "") or None
+                continue
+
+            if path_norm == "members" or path_norm.startswith("members["):
+                member_action = True
+
+                existing = await _load_group_member_user_ids(
+                    db, tenant_id=ctx.tenant_id, group_id=group.id
+                )
+
+                remove_from_path = (
+                    _parse_member_filter_from_path(path)
+                    if path_norm.startswith("members[")
+                    else None
+                )
+
+                if op == "replace":
+                    if not isinstance(value, list):
                         raise ScimError(
-                            400, "members must be a list", scim_type="invalidValue"
+                            400,
+                            "members patch value must be a list",
+                            scim_type="invalidValue",
                         )
                     parsed_refs = [
                         ScimMemberRef.model_validate(item)
-                        for item in member_refs
+                        for item in value
                         if isinstance(item, dict)
                     ]
                     member_user_ids = await _resolve_member_user_ids(
@@ -1440,141 +1516,71 @@ async def patch_group(
                         group_id=group.id,
                         member_user_ids=member_user_ids,
                     )
-                continue
-            raise ScimError(400, "Patch path is required", scim_type="invalidPath")
+                    continue
 
-        path_norm = path.lower()
-        if path_norm == "displayname":
-            if op == "remove":
-                raise ScimError(
-                    400, "displayName cannot be removed", scim_type="invalidValue"
-                )
-            if not isinstance(value, str):
-                raise ScimError(
-                    400, "displayName must be string", scim_type="invalidValue"
-                )
-            name_val = value.strip()
-            if not name_val:
-                raise ScimError(
-                    400, "displayName is required", scim_type="invalidValue"
-                )
-            group.display_name = name_val
-            group.display_name_norm = _normalize_scim_group(name_val)
-            continue
-
-        if path_norm == "externalid":
-            if op == "remove":
-                group.external_id = None
-                group.external_id_norm = None
-                continue
-            if not isinstance(value, str):
-                raise ScimError(
-                    400, "externalId must be string", scim_type="invalidValue"
-                )
-            ext_val = value.strip() or None
-            group.external_id = ext_val
-            group.external_id_norm = _normalize_scim_group(ext_val or "") or None
-            continue
-
-        if path_norm == "members" or path_norm.startswith("members["):
-            member_action = True
-
-            existing = await _load_group_member_user_ids(
-                db, tenant_id=ctx.tenant_id, group_id=group.id
-            )
-
-            remove_from_path = (
-                _parse_member_filter_from_path(path)
-                if path_norm.startswith("members[")
-                else None
-            )
-
-            if op == "replace":
-                if not isinstance(value, list):
-                    raise ScimError(
-                        400,
-                        "members patch value must be a list",
-                        scim_type="invalidValue",
-                    )
-                parsed_refs = [
-                    ScimMemberRef.model_validate(item)
-                    for item in value
-                    if isinstance(item, dict)
-                ]
-                member_user_ids = await _resolve_member_user_ids(
-                    db, tenant_id=ctx.tenant_id, members=parsed_refs
-                )
-                impacted_user_ids |= await _set_group_memberships(
-                    db,
-                    tenant_id=ctx.tenant_id,
-                    group_id=group.id,
-                    member_user_ids=member_user_ids,
-                )
-                continue
-
-            if op == "add":
-                if isinstance(value, dict):
-                    value_list = [value]
-                elif isinstance(value, list):
-                    value_list = value
-                else:
-                    raise ScimError(
-                        400,
-                        "members add value must be list or object",
-                        scim_type="invalidValue",
-                    )
-                parsed_refs = [
-                    ScimMemberRef.model_validate(item)
-                    for item in value_list
-                    if isinstance(item, dict)
-                ]
-                to_add = await _resolve_member_user_ids(
-                    db, tenant_id=ctx.tenant_id, members=parsed_refs
-                )
-                impacted_user_ids |= await _set_group_memberships(
-                    db,
-                    tenant_id=ctx.tenant_id,
-                    group_id=group.id,
-                    member_user_ids=(existing | to_add),
-                )
-                continue
-
-            if op == "remove":
-                if remove_from_path is not None:
-                    to_remove = {remove_from_path}
-                elif isinstance(value, dict):
-                    to_remove = await _resolve_member_user_ids(
-                        db,
-                        tenant_id=ctx.tenant_id,
-                        members=[ScimMemberRef.model_validate(value)],
-                    )
-                elif isinstance(value, list):
+                if op == "add":
+                    if isinstance(value, dict):
+                        value_list = [value]
+                    elif isinstance(value, list):
+                        value_list = value
+                    else:
+                        raise ScimError(
+                            400,
+                            "members add value must be list or object",
+                            scim_type="invalidValue",
+                        )
                     parsed_refs = [
                         ScimMemberRef.model_validate(item)
-                        for item in value
+                        for item in value_list
                         if isinstance(item, dict)
                     ]
-                    to_remove = await _resolve_member_user_ids(
+                    to_add = await _resolve_member_user_ids(
                         db, tenant_id=ctx.tenant_id, members=parsed_refs
                     )
-                elif value is None:
-                    to_remove = set()
-                else:
-                    raise ScimError(
-                        400,
-                        "members remove value must be list or object",
-                        scim_type="invalidValue",
+                    impacted_user_ids |= await _set_group_memberships(
+                        db,
+                        tenant_id=ctx.tenant_id,
+                        group_id=group.id,
+                        member_user_ids=(existing | to_add),
                     )
+                    continue
 
-                impacted_user_ids |= await _set_group_memberships(
-                    db,
-                    tenant_id=ctx.tenant_id,
-                    group_id=group.id,
-                    member_user_ids=(existing - to_remove),
-                )
-                continue
+                if op == "remove":
+                    if remove_from_path is not None:
+                        to_remove = {remove_from_path}
+                    elif isinstance(value, dict):
+                        to_remove = await _resolve_member_user_ids(
+                            db,
+                            tenant_id=ctx.tenant_id,
+                            members=[ScimMemberRef.model_validate(value)],
+                        )
+                    elif isinstance(value, list):
+                        parsed_refs = [
+                            ScimMemberRef.model_validate(item)
+                            for item in value
+                            if isinstance(item, dict)
+                        ]
+                        to_remove = await _resolve_member_user_ids(
+                            db, tenant_id=ctx.tenant_id, members=parsed_refs
+                        )
+                    elif value is None:
+                        to_remove = set()
+                    else:
+                        raise ScimError(
+                            400,
+                            "members remove value must be list or object",
+                            scim_type="invalidValue",
+                        )
 
-        raise ScimError(400, "Unsupported patch path", scim_type="invalidPath")
+                    impacted_user_ids |= await _set_group_memberships(
+                        db,
+                        tenant_id=ctx.tenant_id,
+                        group_id=group.id,
+                        member_user_ids=(existing - to_remove),
+                    )
+                    continue
+
+            raise ScimError(400, "Unsupported patch path", scim_type="invalidPath")
 
     if member_action:
         await _recompute_entitlements_for_users(

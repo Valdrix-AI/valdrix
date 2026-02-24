@@ -132,10 +132,11 @@ class LLMBudgetManager:
         cls,
         tenant_id: UUID,
         db: AsyncSession,
+        user_id: UUID | None = None,
     ) -> None:
         from app.shared.llm.budget_fair_use import enforce_daily_analysis_limit
 
-        await enforce_daily_analysis_limit(cls, tenant_id, db)
+        await enforce_daily_analysis_limit(cls, tenant_id, db, user_id=user_id)
 
     @staticmethod
     def _fair_use_inflight_key(tenant_id: UUID) -> str:
@@ -216,6 +217,7 @@ class LLMBudgetManager:
         prompt_tokens: int = AVG_PROMPT_TOKENS,
         completion_tokens: int = AVG_RESPONSE_TOKENS,
         operation_id: str | None = None,
+        user_id: UUID | None = None,
     ) -> Decimal:
         from app.shared.llm.budget_execution import check_and_reserve_budget
 
@@ -228,6 +230,7 @@ class LLMBudgetManager:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             operation_id=operation_id,
+            user_id=user_id,
         )
 
     @classmethod
@@ -243,6 +246,7 @@ class LLMBudgetManager:
         is_byok: bool = False,
         operation_id: str | None = None,
         request_type: str = "unknown",
+        user_id: UUID | None = None,
     ) -> None:
         from app.shared.llm.budget_execution import record_usage_entry
 
@@ -258,6 +262,7 @@ class LLMBudgetManager:
             is_byok=is_byok,
             operation_id=operation_id,
             request_type=request_type,
+            user_id=user_id,
         )
 
     @classmethod

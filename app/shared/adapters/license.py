@@ -9,7 +9,7 @@ import structlog
 from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.feed_utils import as_float, is_number, parse_timestamp
 from app.shared.core.credentials import LicenseCredentials
-from app.shared.core.exceptions import ExternalAPIError
+from app.shared.core.exceptions import ExternalAPIError, UnsupportedVendorError
 
 logger = structlog.get_logger()
 
@@ -598,8 +598,12 @@ class LicenseAdapter(BaseAdapter):
         if native_vendor == "salesforce":
             return await self._revoke_salesforce(resource_id)
             
-        raise NotImplementedError(
-            f"License revocation not implemented for vendor '{self._vendor}'"
+        raise UnsupportedVendorError(
+            (
+                f"License revocation is not supported for vendor '{self._vendor}'. "
+                "Use a supported native vendor or manual follow-up workflow."
+            ),
+            details={"vendor": self._vendor, "operation": "revoke_license"},
         )
 
     async def _revoke_google_workspace(self, resource_id: str, sku_id: str | None = None) -> bool:
@@ -739,8 +743,6 @@ class LicenseAdapter(BaseAdapter):
                 current["email"] = email
             if not current.get("full_name") and full_name:
                 current["full_name"] = full_name
-            if not current.get("user_id") and (user_id or email):
-                current["user_id"] = user_id or email
             if last_active_at is not None:
                 existing_last = current.get("last_active_at")
                 if existing_last is None or last_active_at > existing_last:

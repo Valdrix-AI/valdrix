@@ -58,11 +58,22 @@ async def _load_scim_group_mappings(
     tenant_id: UUID,
 ) -> list[dict[str, Any]]:
     result = await db.execute(
-        select(TenantIdentitySettings.scim_group_mappings).where(
+        select(
+            TenantIdentitySettings.scim_enabled,
+            TenantIdentitySettings.scim_group_mappings,
+        ).where(
             TenantIdentitySettings.tenant_id == tenant_id
         )
     )
-    raw = result.scalar_one_or_none()
+    row = result.one_or_none()
+    if row is None:
+        return []
+
+    scim_enabled = bool(row[0])
+    raw = row[1]
+    if not scim_enabled:
+        return []
+
     if not isinstance(raw, list):
         return []
     return [item for item in raw if isinstance(item, dict)]
@@ -138,4 +149,3 @@ async def user_has_approval_permission(
         return False
 
     return normalized_required in scim_permissions
-

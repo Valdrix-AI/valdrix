@@ -53,8 +53,8 @@ class AWSConnection(Base):
     Flow:
     1. User deploys CloudFormation to create IAM role in their account
     2. User registers the role ARN here
-    3. Valdrix uses STS AssumeRole to get temp credentials
-    4. Scheduler uses temp credentials to fetch cost data
+    3. Valdrix uses STS AssumeRole to get short-lived credentials
+    4. Scheduler uses short-lived credentials to fetch cost data
     """
 
     __tablename__ = "aws_connections"

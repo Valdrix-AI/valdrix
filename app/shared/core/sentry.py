@@ -153,7 +153,7 @@ def capture_message(message: str, level: str = "info", **extras: Any) -> None:
     if not SENTRY_AVAILABLE or sentry_sdk is None:
         return
 
-    with sentry_sdk.push_scope() as scope:
+    with sentry_sdk.new_scope() as scope:
         for key, value in extras.items():
             scope.set_extra(key, value)
         sentry_sdk.capture_message(message, level)
@@ -164,7 +164,7 @@ def capture_exception(error: Exception, **extras: Any) -> None:
     if not SENTRY_AVAILABLE or sentry_sdk is None:
         return
 
-    with sentry_sdk.push_scope() as scope:
+    with sentry_sdk.new_scope() as scope:
         for key, value in extras.items():
             scope.set_extra(key, value)
         sentry_sdk.capture_exception(error)

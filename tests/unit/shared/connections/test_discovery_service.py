@@ -345,6 +345,47 @@ async def test_upsert_candidates_creates_new_rows_and_updates_existing_rows() ->
 
 
 @pytest.mark.asyncio
+async def test_upsert_candidates_preserves_existing_confidence_without_idp_upgrade() -> None:
+    tenant_id = uuid4()
+    existing = SimpleNamespace(
+        confidence_score=0.95,
+        source="domain_dns",
+        requires_admin_auth=False,
+        connection_target=None,
+        connection_vendor_hint=None,
+        evidence=["old-signal"],
+        details={"old": True},
+        last_seen_at=None,
+    )
+    final_rows = [existing]
+    db = _FakeDB([_FakeResult(one=existing), _FakeResult(values=final_rows)])
+    service = DiscoveryWizardService(db)
+
+    drafts = [
+        {
+            "category": "cloud_provider",
+            "provider": "azure",
+            "source": "domain_dns",
+            "confidence_score": 0.40,
+            "requires_admin_auth": True,
+            "connection_target": "azure",
+            "connection_vendor_hint": None,
+            "evidence": ["new-signal"],
+            "details": {"new": True},
+        }
+    ]
+
+    returned = await service._upsert_candidates(tenant_id, "example.com", drafts)
+
+    assert returned == final_rows
+    assert db.commits == 1
+    assert existing.confidence_score == pytest.approx(0.95)
+    assert existing.source == "domain_dns"
+    assert existing.evidence == ["new-signal"]
+    assert existing.details == {"new": True}
+
+
+@pytest.mark.asyncio
 async def test_find_idp_license_connection_returns_first_result() -> None:
     connection = SimpleNamespace(vendor="microsoft_365")
     db = _FakeDB([_FakeResult(values=[connection]), _FakeResult(values=[connection])])
@@ -471,6 +512,61 @@ def test_build_stage_a_candidates_detects_multiple_signal_types() -> None:
     assert microsoft_draft["confidence_score"] == pytest.approx(0.93)
 
 
+def test_build_stage_a_candidates_exercises_partial_and_fallback_paths() -> None:
+    service = DiscoveryWizardService(MagicMock())
+
+    google_spf_only = service._build_stage_a_candidates(
+        "example.com",
+        {
+            "mx_hosts": [],
+            "txt_records": ["v=spf1 include:_spf.google.com ~all"],
+            "cname_targets": {},
+        },
+    )
+    providers = {draft["provider"] for draft in google_spf_only}
+    assert providers == {"google_workspace", "gcp"}
+    assert next(item for item in google_spf_only if item["provider"] == "google_workspace")[
+        "confidence_score"
+    ] == pytest.approx(0.82)
+
+    google_mx_only = service._build_stage_a_candidates(
+        "example.com",
+        {
+            "mx_hosts": ["aspmx.l.google.com"],
+            "txt_records": [],
+            "cname_targets": {},
+        },
+    )
+    providers = {draft["provider"] for draft in google_mx_only}
+    assert providers == {"google_workspace", "gcp"}
+
+    microsoft_autodiscover_only = service._build_stage_a_candidates(
+        "example.com",
+        {
+            "mx_hosts": [],
+            "txt_records": [],
+            "cname_targets": {"autodiscover.example.com": "autodiscover.outlook.com"},
+        },
+    )
+    providers = {draft["provider"] for draft in microsoft_autodiscover_only}
+    assert providers == {"microsoft_365", "azure"}
+    ms365 = next(item for item in microsoft_autodiscover_only if item["provider"] == "microsoft_365")
+    assert ms365["evidence"] == ["cname:autodiscover"]
+
+    microsoft_mx_only = service._build_stage_a_candidates(
+        "example.com",
+        {
+            "mx_hosts": ["example.mail.protection.outlook.com"],
+            "txt_records": [],
+            "cname_targets": {},
+        },
+    )
+    providers = {draft["provider"] for draft in microsoft_mx_only}
+    assert providers == {"microsoft_365", "azure"}
+    ms365 = next(item for item in microsoft_mx_only if item["provider"] == "microsoft_365")
+    assert ms365["evidence"] == ["mx:microsoft"]
+
+
 def test_build_app_name_candidates_maps_known_keywords_and_ignores_blank_values() -> None:
     service = DiscoveryWizardService(MagicMock())
     app_names = [
@@ -511,7 +607,9 @@ async def test_scan_microsoft_enterprise_apps_paginates_and_handles_errors() -> 
         "value": [{"displayName": "Slack"}, {"displayName": "AWS"}, "bad-entry"],
         "@odata.nextLink": "https://graph.microsoft.com/next-page",
     }
-    payload_two = {"value": [{"displayName": "Slack"}, {"displayName": "Datadog"}]}
+    payload_two = {
+        "value": [{"displayName": "Slack"}, {"displayName": "Datadog"}, {"displayName": ""}]
+    }
 
     with patch.object(
         service,
@@ -617,6 +715,88 @@ async def test_scan_google_workspace_apps_user_scan_failure_and_repeated_403_abo
 
 
 @pytest.mark.asyncio
+async def test_scan_google_workspace_apps_non_403_token_error_keeps_scanning() -> None:
+    service = DiscoveryWizardService(MagicMock())
+
+    async def fake_request(
+        _method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        allow_404: bool = False,
+    ) -> dict[str, object]:
+        assert headers["Authorization"].startswith("Bearer ")
+        if "users?customer=my_customer" in url:
+            return {
+                "users": [
+                    {"primaryEmail": "u1@example.com"},
+                    {"primaryEmail": "u2@example.com"},
+                ]
+            }
+        if "/u1@example.com/tokens" in url:
+            assert allow_404 is True
+            raise ValueError("status 500 internal")
+        if "/u2@example.com/tokens" in url:
+            assert allow_404 is True
+            return {"items": [{"displayText": "Slack"}]}
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    with patch.object(service, "_request_json", new=AsyncMock(side_effect=fake_request)):
+        names, warnings = await service._scan_google_workspace_apps("token", max_users=5)
+
+    assert names == ["Slack"]
+    assert any("google_workspace_token_scan_failed:u1@example.com:status 500 internal" in w for w in warnings)
+    assert not any("google_workspace_token_scan_aborted" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_scan_microsoft_and_google_workspace_additional_edge_branches() -> None:
+    service = DiscoveryWizardService(MagicMock())
+
+    with patch.object(
+        service,
+        "_request_json",
+        new=AsyncMock(return_value={"value": "bad-shape"}),
+    ):
+        names, warnings = await service._scan_microsoft_enterprise_apps("token")
+    assert names == []
+    assert warnings == []
+
+    async def fake_request(
+        _method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        allow_404: bool = False,
+    ) -> dict[str, object]:
+        assert headers["Authorization"].startswith("Bearer ")
+        if "users?customer=my_customer" in url:
+            return {
+                "users": [
+                    "skip-non-dict",
+                    {"primaryEmail": ""},
+                    {"primaryEmail": "a@example.com"},
+                ]
+            }
+        assert allow_404 is True
+        return {"items": ["skip-non-dict", {"displayText": ""}, {"displayText": "App-X"}]}
+
+    with patch.object(service, "_request_json", new=AsyncMock(side_effect=fake_request)):
+        names, warnings = await service._scan_google_workspace_apps("token", max_users=10)
+    assert names == ["App-X"]
+    assert warnings == []
+
+    with patch.object(
+        service,
+        "_request_json",
+        new=AsyncMock(return_value={"users": "not-a-list"}),
+    ):
+        names, warnings = await service._scan_google_workspace_apps("token", max_users=10)
+    assert names == []
+    assert warnings == []
+
+
+@pytest.mark.asyncio
 async def test_request_json_allows_404_retries_and_normalizes_list_payloads() -> None:
     service = DiscoveryWizardService(MagicMock())
     client = _FakeHttpClient(
@@ -684,6 +864,35 @@ async def test_request_json_raises_after_exhausted_errors() -> None:
             await service._request_json(
                 "GET",
                 "https://example.invalid/network",
+                headers={"Authorization": "Bearer t"},
+            )
+
+
+@pytest.mark.asyncio
+async def test_request_json_returns_dict_payload_directly() -> None:
+    service = DiscoveryWizardService(MagicMock())
+    client = _FakeHttpClient([_json_response(200, {"ok": True})])
+    with patch("app.shared.connections.discovery.get_http_client", return_value=client):
+        payload = await service._request_json(
+            "GET",
+            "https://example.invalid/dict",
+            headers={"Authorization": "Bearer t"},
+        )
+    assert payload == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_request_json_retry_loop_fallthrough_raises_last_error() -> None:
+    service = DiscoveryWizardService(MagicMock())
+    client = _FakeHttpClient([httpx.ConnectError("c1"), httpx.ConnectError("c2")])
+    with (
+        patch("app.shared.connections.discovery.get_http_client", return_value=client),
+        patch("app.shared.connections.discovery.range", return_value=[1, 2]),
+    ):
+        with pytest.raises(ValueError, match="request_failed:https://example.invalid/fallthrough"):
+            await service._request_json(
+                "GET",
+                "https://example.invalid/fallthrough",
                 headers={"Authorization": "Bearer t"},
             )
 

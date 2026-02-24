@@ -31,6 +31,7 @@ from app.shared.core.connection_state import (
 )
 from app.shared.core.connection_queries import list_active_connections_all_tenants
 from app.shared.core.provider import normalize_provider, resolve_provider_from_connection
+from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 
@@ -732,6 +733,98 @@ def run_currency_sync() -> None:
     for curr in ["NGN", "EUR", "GBP"]:
         run_async(get_exchange_rate, curr)
     logger.info("currency_sync_completed")
+
+
+@shared_task(
+    name="scheduler.enforcement_reconciliation_sweep",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 2, "countdown": 900},
+    retry_backoff=True,
+)  # type: ignore[untyped-decorator]
+def run_enforcement_reconciliation_sweep() -> None:
+    run_async(_enforcement_reconciliation_sweep_logic)
+
+
+async def _enforcement_reconciliation_sweep_logic() -> None:
+    settings = get_settings()
+    if not bool(getattr(settings, "ENFORCEMENT_RECONCILIATION_SWEEP_ENABLED", True)):
+        logger.info("enforcement_reconciliation_sweep_disabled")
+        return
+
+    job_name = "hourly_enforcement_reconciliation_sweep"
+    start_time = time.time()
+    max_retries = 3
+    retry_count = 0
+
+    while retry_count < max_retries:
+        try:
+            async with _open_db_session() as db:
+                begin_ctx = db.begin()
+                if (
+                    asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)
+                ) and not hasattr(begin_ctx, "__aenter__"):
+                    begin_ctx = await begin_ctx
+                async with begin_ctx:
+                    result = await db.execute(
+                        sa.select(Tenant.id).with_for_update(skip_locked=True)
+                    )
+                    tenant_ids = result.scalars().all()
+                    now = datetime.now(timezone.utc)
+                    bucket_str = now.replace(minute=0, second=0, microsecond=0).isoformat()
+                    jobs_enqueued = 0
+
+                    for tenant_id in tenant_ids:
+                        dedup_key = (
+                            f"{tenant_id}:{JobType.ENFORCEMENT_RECONCILIATION.value}:{bucket_str}"
+                        )
+                        stmt = (
+                            insert(BackgroundJob)
+                            .values(
+                                job_type=JobType.ENFORCEMENT_RECONCILIATION.value,
+                                tenant_id=tenant_id,
+                                status=JobStatus.PENDING,
+                                scheduled_for=now,
+                                created_at=now,
+                                payload={"trigger": "scheduled"},
+                                deduplication_key=dedup_key,
+                                priority=1,
+                            )
+                            .on_conflict_do_nothing(index_elements=["deduplication_key"])
+                        )
+                        result_proxy = await db.execute(stmt)
+                        if (
+                            hasattr(result_proxy, "rowcount")
+                            and result_proxy.rowcount > 0
+                        ):
+                            jobs_enqueued += 1
+                            BACKGROUND_JOBS_ENQUEUED.labels(
+                                job_type=JobType.ENFORCEMENT_RECONCILIATION.value,
+                                cohort="ENFORCEMENT",
+                            ).inc()
+
+                    logger.info(
+                        "enforcement_reconciliation_sweep_enqueued",
+                        tenants=len(tenant_ids),
+                        jobs_enqueued=jobs_enqueued,
+                        bucket=bucket_str,
+                    )
+
+            SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
+            break
+        except Exception as e:
+            retry_count += 1
+            logger.error(
+                "enforcement_reconciliation_sweep_failed",
+                error=str(e),
+                attempt=retry_count,
+            )
+            if retry_count == max_retries:
+                SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
+            else:
+                await asyncio.sleep(2 ** (retry_count - 1))
+
+    duration = time.time() - start_time
+    SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 
 @shared_task(name="scheduler.daily_scan")  # type: ignore[untyped-decorator]

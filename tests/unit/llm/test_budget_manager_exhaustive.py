@@ -11,6 +11,7 @@ from app.shared.core.pricing import PricingTier
 
 @pytest.fixture
 def mock_db():
+    LLMBudgetManager._local_global_abuse_block_until = None
     db = MagicMock()
     db.execute = AsyncMock()
     db.flush = AsyncMock()
@@ -41,7 +42,10 @@ async def test_check_and_reserve(mock_db, tenant_id):
     res.scalar_one_or_none.return_value = budget
     mock_db.execute.return_value = res
 
-    settings = MagicMock(LLM_FAIR_USE_GUARDS_ENABLED=False)
+    settings = MagicMock(
+        LLM_FAIR_USE_GUARDS_ENABLED=False,
+        LLM_GLOBAL_ABUSE_GUARDS_ENABLED=False,
+    )
     with (
         patch(
             "app.shared.llm.budget_manager.get_settings",

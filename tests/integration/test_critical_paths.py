@@ -316,6 +316,7 @@ class TestRemediationIntegration:
         ) as mock_get_client:
             mock_ec2_client = AsyncMock()
             mock_get_client.return_value.__aenter__.return_value = mock_ec2_client
+            mock_ec2_client.describe_volumes.return_value = {"Volumes": []}
             mock_ec2_client.delete_volume.side_effect = Exception("AWS API Error")
 
             # Execute remediation - should handle failure gracefully

@@ -28,6 +28,13 @@ async def test_license_governance_sweep_job_dispatch(orchestrator) -> None:
 
 
 @pytest.mark.asyncio
+async def test_enforcement_reconciliation_sweep_job_dispatch(orchestrator) -> None:
+    with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
+        await orchestrator.enforcement_reconciliation_sweep_job()
+        mock_send.assert_called_with("scheduler.enforcement_reconciliation_sweep")
+
+
+@pytest.mark.asyncio
 async def test_cohort_analysis_job_dispatch(orchestrator) -> None:
     """Test dispatching cohort analysis to Celery."""
     with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:

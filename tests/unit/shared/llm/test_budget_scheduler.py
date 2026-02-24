@@ -13,6 +13,7 @@ from app.shared.core.pricing import PricingTier
 
 @pytest.fixture
 def mock_db():
+    LLMBudgetManager._local_global_abuse_block_until = None
     db = MagicMock()
     # Explicitly configure execute to be AsyncMock returning a MagicMock result
     mock_result = MagicMock()
@@ -47,8 +48,23 @@ class TestLLMBudgetManager:
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
         
         # Mock get_tenant_tier
-        with patch("app.shared.llm.budget_manager.get_tenant_tier", new=AsyncMock(return_value=PricingTier.PRO)), \
-             patch.object(LLMBudgetManager, "_enforce_daily_analysis_limit", new=AsyncMock()):
+        settings = MagicMock(
+            LLM_FAIR_USE_GUARDS_ENABLED=False,
+            LLM_GLOBAL_ABUSE_GUARDS_ENABLED=False,
+        )
+        with (
+            patch(
+                "app.shared.llm.budget_manager.get_tenant_tier",
+                new=AsyncMock(return_value=PricingTier.PRO),
+            ),
+            patch(
+                "app.shared.llm.budget_manager.get_settings",
+                return_value=settings,
+            ),
+            patch.object(
+                LLMBudgetManager, "_enforce_daily_analysis_limit", new=AsyncMock()
+            ),
+        ):
                 
             print("Calling check_and_reserve...")
             cost = await LLMBudgetManager.check_and_reserve(
@@ -76,8 +92,23 @@ class TestLLMBudgetManager:
         )
         mock_db.execute.return_value.scalar_one_or_none.return_value = budget
 
-        with patch("app.shared.llm.budget_manager.get_tenant_tier", new=AsyncMock(return_value=PricingTier.STARTER)), \
-             patch.object(LLMBudgetManager, "_enforce_daily_analysis_limit", new=AsyncMock()):
+        settings = MagicMock(
+            LLM_FAIR_USE_GUARDS_ENABLED=False,
+            LLM_GLOBAL_ABUSE_GUARDS_ENABLED=False,
+        )
+        with (
+            patch(
+                "app.shared.llm.budget_manager.get_tenant_tier",
+                new=AsyncMock(return_value=PricingTier.STARTER),
+            ),
+            patch(
+                "app.shared.llm.budget_manager.get_settings",
+                return_value=settings,
+            ),
+            patch.object(
+                LLMBudgetManager, "_enforce_daily_analysis_limit", new=AsyncMock()
+            ),
+        ):
                 
             # Act & Assert
             # Increase tokens to ensure cost > 0.01 (remaining budget)

@@ -31,6 +31,9 @@ from app.modules.governance.domain.jobs.handlers.analysis import (
 from app.modules.governance.domain.jobs.handlers.license_governance import (
     LicenseGovernanceHandler,
 )
+from app.modules.governance.domain.jobs.handlers.enforcement_reconciliation import (
+    EnforcementReconciliationHandler,
+)
 
 
 # Global registry of job handlers
@@ -52,6 +55,7 @@ HANDLER_REGISTRY: Dict[str, Type[BaseJobHandler]] = {
     JobType.ZOMBIE_ANALYSIS.value: ZombieAnalysisHandler,
     JobType.REPORT_GENERATION.value: ReportGenerationHandler,
     JobType.LICENSE_GOVERNANCE.value: LicenseGovernanceHandler,
+    JobType.ENFORCEMENT_RECONCILIATION.value: EnforcementReconciliationHandler,
 }
 
 

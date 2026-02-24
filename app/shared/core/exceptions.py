@@ -191,3 +191,15 @@ class ExternalAPIError(ValdrixException):
         details: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, code=code, status_code=502, details=details)
+
+
+class UnsupportedVendorError(ValdrixException):
+    """Raised when a requested vendor/integration is not supported for the operation."""
+
+    def __init__(
+        self,
+        message: str,
+        code: str = "unsupported_vendor",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(message, code=code, status_code=400, details=details)

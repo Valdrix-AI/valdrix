@@ -15,6 +15,10 @@ from app.models.sso_domain_mapping import SsoDomainMapping
 from app.shared.core.pricing import PricingTier, normalize_tier
 from app.shared.lead_gen.assessment import FreeAssessmentService
 from app.shared.core.rate_limit import auth_limit, rate_limit
+from app.shared.core.turnstile import (
+    require_turnstile_for_public_assessment,
+    require_turnstile_for_sso_discovery,
+)
 from app.shared.db.session import get_system_db
 
 router = APIRouter()
@@ -66,7 +70,9 @@ async def get_csrf_token(request: Request) -> JSONResponse:
 @router.post("/assessment", response_model=None)
 @rate_limit("5/day")
 async def run_public_assessment(
-    request: Request, body: Dict[str, Any]
+    request: Request,
+    body: Dict[str, Any],
+    _turnstile: None = Depends(require_turnstile_for_public_assessment),
 ) -> Dict[str, Any] | JSONResponse:
     """
     Public endpoint for lead-gen cost assessment.
@@ -96,6 +102,7 @@ async def run_public_assessment(
 async def discover_sso_federation(
     request: Request,
     payload: SsoDiscoveryRequest,
+    _turnstile: None = Depends(require_turnstile_for_sso_discovery),
     db: AsyncSession = Depends(get_system_db),
 ) -> SsoDiscoveryResponse:
     """

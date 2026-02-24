@@ -98,6 +98,7 @@ async def test_analyze_with_byok_config(mock_llm, mock_db):
                 "openai",
                 model="gpt-4o",
                 api_key="sk-valid-key-long-enough-12345",
+                max_output_tokens=512,
             )
 
 

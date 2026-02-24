@@ -1,11 +1,14 @@
 import asyncio
 import os
+from datetime import datetime, timezone
+
 import aiohttp
 import structlog
-from datetime import datetime, timezone
-from app.shared.db.session import async_session_maker
-from app.models.pricing import ExchangeRate
 from sqlalchemy import select
+
+from app.models.pricing import ExchangeRate
+from app.shared.core.config import get_settings
+from app.shared.db.session import async_session_maker
 
 logger = structlog.get_logger()
 
@@ -19,7 +22,6 @@ EXCHANGE_RATE_API_URL = (
 PROVIDER = "exchangerate-api" if EXCHANGE_RATE_API_KEY else "open.er-api"
 
 # Standardized BE-FIN-01: Automated Exchange Rate Management.
-from app.shared.core.config import get_settings
 settings = get_settings()
 
 DEFAULT_CURRENCIES = set(settings.SUPPORTED_CURRENCIES)

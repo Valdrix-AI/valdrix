@@ -16,6 +16,8 @@
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import AuthGate from '$lib/components/AuthGate.svelte';
+	import EnforcementOpsCard from '$lib/components/EnforcementOpsCard.svelte';
+	import EnforcementSettingsCard from '$lib/components/EnforcementSettingsCard.svelte';
 	import IdentitySettingsCard from '$lib/components/IdentitySettingsCard.svelte';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
 	import { z } from 'zod';
@@ -1001,6 +1003,16 @@
 			</div>
 
 			<IdentitySettingsCard
+				accessToken={data.session?.access_token}
+				tier={data.subscription?.tier}
+			/>
+
+			<EnforcementSettingsCard
+				accessToken={data.session?.access_token}
+				tier={data.subscription?.tier}
+			/>
+
+			<EnforcementOpsCard
 				accessToken={data.session?.access_token}
 				tier={data.subscription?.tier}
 			/>

@@ -86,7 +86,7 @@ async def test_with_backoff_generic_throttle_exception():
 async def test_with_backoff_no_exception_state():
     """Test with_backoff handles unexpected loop state (coverage)."""
     AsyncMock(return_value="success")
-    # This is a bit of a hack to reach the last line of with_backoff
+    # This is a targeted workaround to reach the last line of with_backoff.
     # But with_backoff is structured as a loop that either returns or raises.
     # The last line is only reachable if the loop finishes without returning, which shouldn't happen.
     pass

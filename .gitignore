@@ -3,6 +3,10 @@ __pycache__/
 *.py[codz]
 *$py.class
 /useLanding.md
+/feedback.md
+/docs/ops/enterprise_hardening_and_llm_tier_strategy_2026-02-22.md
+/docs/ops/enforcement_control_plane_gap_register_2026-02-23.md
+
 # C extensions
 *.so
 ref.md

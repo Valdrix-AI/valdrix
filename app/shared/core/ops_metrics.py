@@ -120,6 +120,73 @@ API_ERRORS_TOTAL = Counter(
     ["path", "method", "status_code"],
 )
 
+ENFORCEMENT_RESERVATION_RECONCILIATIONS_TOTAL = Counter(
+    "valdrix_ops_enforcement_reservation_reconciliations_total",
+    "Total reservation reconciliation actions in the enforcement control plane",
+    ["trigger", "status"],  # trigger: manual|auto, status: matched|overage|savings|auto_release
+)
+
+ENFORCEMENT_RESERVATION_DRIFT_USD_TOTAL = Counter(
+    "valdrix_ops_enforcement_reservation_drift_usd_total",
+    "Absolute reservation reconciliation drift observed in USD",
+    ["direction"],  # direction: overage|savings
+)
+
+ENFORCEMENT_APPROVAL_TOKEN_EVENTS_TOTAL = Counter(
+    "valdrix_ops_enforcement_approval_token_events_total",
+    "Approval token security events in enforcement workflow",
+    ["event"],  # consumed, replay_detected, expired, and mismatch classifications
+)
+
+ENFORCEMENT_RECONCILIATION_SWEEP_RUNS_TOTAL = Counter(
+    "valdrix_ops_enforcement_reconciliation_sweep_runs_total",
+    "Scheduled enforcement reconciliation sweep runs by outcome",
+    ["status"],  # success | failure | skipped_disabled
+)
+
+ENFORCEMENT_RECONCILIATION_ALERTS_TOTAL = Counter(
+    "valdrix_ops_enforcement_reconciliation_alerts_total",
+    "Enforcement reconciliation alerts emitted by alert type and severity",
+    ["alert_type", "severity"],  # sla_release|drift_exception, warning|error
+)
+
+ENFORCEMENT_GATE_DECISIONS_TOTAL = Counter(
+    "valdrix_ops_enforcement_gate_decisions_total",
+    "Enforcement gate decisions by source, decision type, and evaluation path",
+    ["source", "decision", "path"],  # path: normal|failsafe
+)
+
+ENFORCEMENT_GATE_DECISION_REASONS_TOTAL = Counter(
+    "valdrix_ops_enforcement_gate_decision_reasons_total",
+    "Enforcement gate decision reason-code distribution",
+    ["source", "reason"],
+)
+
+ENFORCEMENT_GATE_LATENCY_SECONDS = Histogram(
+    "valdrix_ops_enforcement_gate_latency_seconds",
+    "End-to-end latency of enforcement gate evaluation",
+    ["source", "path"],  # path: normal|failsafe
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30),
+)
+
+ENFORCEMENT_GATE_FAILURES_TOTAL = Counter(
+    "valdrix_ops_enforcement_gate_failures_total",
+    "Enforcement gate failures before deterministic fail-safe fallback",
+    ["source", "failure_type"],  # timeout|evaluation_error
+)
+
+ENFORCEMENT_EXPORT_EVENTS_TOTAL = Counter(
+    "valdrix_ops_enforcement_export_events_total",
+    "Enforcement export events by artifact and outcome",
+    ["artifact", "outcome"],  # parity|archive|bundle, success|mismatch|rejected_limit
+)
+
+TURNSTILE_VERIFICATION_EVENTS_TOTAL = Counter(
+    "valdrix_ops_turnstile_verification_events_total",
+    "Turnstile verification events by surface and outcome",
+    ["surface", "outcome"],
+)
+
 REMEDIATION_DURATION_SECONDS = Histogram(
     "valdrix_ops_remediation_duration_seconds",
     "Duration of remediation execution in seconds",

@@ -10,6 +10,7 @@ from app.shared.core.pricing import PricingTier
 
 @pytest.fixture
 def mock_db():
+    LLMBudgetManager._local_global_abuse_block_until = None
     session = MagicMock()
     session.execute = AsyncMock()
     session.flush = AsyncMock()
@@ -36,7 +37,10 @@ async def test_check_and_reserve_hard_limit(mock_db):
     res1.scalar_one_or_none.return_value = budget_mock
     mock_db.execute.return_value = res1
 
-    settings = MagicMock(LLM_FAIR_USE_GUARDS_ENABLED=False)
+    settings = MagicMock(
+        LLM_FAIR_USE_GUARDS_ENABLED=False,
+        LLM_GLOBAL_ABUSE_GUARDS_ENABLED=False,
+    )
     with (
         patch(
             "app.shared.llm.budget_manager.get_settings",
@@ -73,7 +77,10 @@ async def test_check_and_reserve_success(mock_db):
     res1.scalar_one_or_none.return_value = budget_mock
     mock_db.execute.return_value = res1
 
-    settings = MagicMock(LLM_FAIR_USE_GUARDS_ENABLED=False)
+    settings = MagicMock(
+        LLM_FAIR_USE_GUARDS_ENABLED=False,
+        LLM_GLOBAL_ABUSE_GUARDS_ENABLED=False,
+    )
     with (
         patch(
             "app.shared.llm.budget_manager.get_settings",

@@ -201,6 +201,7 @@ async def test_sweep_jobs_skip_when_lock_not_acquired(
         await orchestrator.auto_remediation_job()
         await orchestrator.billing_sweep_job()
         await orchestrator.license_governance_sweep_job()
+        await orchestrator.enforcement_reconciliation_sweep_job()
         await orchestrator.maintenance_sweep_job()
     mock_send.assert_not_called()
 
@@ -235,7 +236,7 @@ def test_start_stop_and_status(orchestrator: SchedulerOrchestrator) -> None:
     orchestrator.scheduler = scheduler
 
     orchestrator.start()
-    assert scheduler.add_job.call_count == 9
+    assert scheduler.add_job.call_count == 10
     scheduler.start.assert_called_once()
 
     status = orchestrator.get_status()
