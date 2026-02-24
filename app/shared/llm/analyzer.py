@@ -34,6 +34,7 @@ from app.shared.llm.factory import LLMFactory
 from app.shared.core.exceptions import AIAnalysisError, BudgetExceededError
 from app.shared.llm.budget_manager import LLMBudgetManager, BudgetStatus
 from app.shared.core.constants import LLMProvider
+from app.shared.core.pricing import get_tenant_tier, get_tier_limit
 from opentelemetry import trace
 
 if TYPE_CHECKING:
@@ -116,6 +117,38 @@ class FinOpsAnalyzer:
             return match.group(1).strip()
         return text.strip()
 
+    @staticmethod
+    def _resolve_output_token_ceiling(raw_limit: Any) -> int | None:
+        if raw_limit is None:
+            return None
+        try:
+            parsed = int(raw_limit)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0:
+            return None
+        return max(128, min(parsed, 32768))
+
+    @staticmethod
+    def _bind_output_token_ceiling(
+        llm: BaseChatModel, max_output_tokens: int
+    ) -> Any:
+        bind_fn = getattr(llm, "bind", None)
+        if not callable(bind_fn):
+            return None
+        for kwargs in (
+            {"max_tokens": max_output_tokens},
+            {"max_output_tokens": max_output_tokens},
+        ):
+            try:
+                bound = bind_fn(**kwargs)
+                return bound
+            except TypeError:
+                continue
+            except Exception:
+                return None
+        return None
+
     async def analyze(
         self,
         usage_summary: "CloudUsageSummary",
@@ -124,6 +157,7 @@ class FinOpsAnalyzer:
         provider: Optional[str] = None,
         model: Optional[str] = None,
         force_refresh: bool = False,
+        user_id: Optional[UUID] = None,
     ) -> dict[str, Any]:
         """
         PRODUCTION: Analyzes cloud costs with mandatory budget pre-authorization.
@@ -177,6 +211,7 @@ class FinOpsAnalyzer:
 
             # 2. PRODUCTION: PRE-AUTHORIZE LLM BUDGET (HARD BLOCK)
             reserved_amount = None
+            max_output_tokens: int | None = None
 
             # Safely get model name from LLM object, handling mocks in tests
             llm_model = getattr(
@@ -188,9 +223,13 @@ class FinOpsAnalyzer:
 
             try:
                 if tenant_id and effective_db:
+                    tenant_tier = await get_tenant_tier(tenant_id, effective_db)
+                    max_output_tokens = self._resolve_output_token_ceiling(
+                        get_tier_limit(tenant_tier, "llm_output_max_tokens")
+                    )
                     # Estimate tokens: 1 record ≈ 20 tokens, min 500
                     prompt_tokens = max(500, len(usage_summary_to_analyze.records) * 20)
-                    completion_tokens = 500
+                    completion_tokens = max_output_tokens or 500
 
                     reserved_amount = await LLMBudgetManager.check_and_reserve(
                         tenant_id=tenant_id,
@@ -199,6 +238,7 @@ class FinOpsAnalyzer:
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         operation_id=operation_id,
+                        user_id=user_id,
                     )
 
                     logger.info(
@@ -254,7 +294,11 @@ class FinOpsAnalyzer:
                 )
 
                 response_content, response_metadata = await self._invoke_llm(
-                    formatted_data, effective_provider, final_model, byok_key
+                    formatted_data,
+                    effective_provider,
+                    final_model,
+                    byok_key,
+                    max_output_tokens=max_output_tokens,
                 )
             except Exception as e:
                 logger.error(
@@ -280,6 +324,7 @@ class FinOpsAnalyzer:
                         completion_tokens=token_usage.get("completion_tokens", 500),
                         is_byok=bool(byok_key),
                         operation_id=operation_id,
+                        user_id=user_id,
                     )
                 except Exception as e:
                     logger.warning(
@@ -483,11 +528,37 @@ class FinOpsAnalyzer:
         return effective_provider, effective_model, byok_key
 
     async def _invoke_llm(
-        self, formatted_data: str, provider: str, model: str, byok_key: Optional[str]
+        self,
+        formatted_data: str,
+        provider: str,
+        model: str,
+        byok_key: Optional[str],
+        max_output_tokens: Optional[int] = None,
     ) -> tuple[str, dict[str, Any]]:
         """Orchestrates the LangChain invocation."""
         current_llm = self.llm
-        if provider != get_settings().LLM_PROVIDER or byok_key:
+        if max_output_tokens is not None and max_output_tokens > 0:
+            if provider == get_settings().LLM_PROVIDER and not byok_key:
+                bound = self._bind_output_token_ceiling(
+                    current_llm, max_output_tokens
+                )
+                if bound is not None:
+                    current_llm = bound
+                else:
+                    current_llm = LLMFactory.create(
+                        provider,
+                        model=model,
+                        api_key=byok_key,
+                        max_output_tokens=max_output_tokens,
+                    )
+            else:
+                current_llm = LLMFactory.create(
+                    provider,
+                    model=model,
+                    api_key=byok_key,
+                    max_output_tokens=max_output_tokens,
+                )
+        elif provider != get_settings().LLM_PROVIDER or byok_key:
             current_llm = LLMFactory.create(provider, model=model, api_key=byok_key)
 
         prompt_template = await self._get_prompt()
@@ -537,7 +608,9 @@ class FinOpsAnalyzer:
                         continue  # Skip the one that just failed
                     try:
                         fallback_llm = LLMFactory.create(
-                            fallback_provider, model=fallback_model
+                            fallback_provider,
+                            model=fallback_model,
+                            max_output_tokens=max_output_tokens,
                         )
                         fallback_chain = prompt_template | fallback_llm
                         logger.info(

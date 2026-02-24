@@ -120,7 +120,10 @@ async def test_zombie_analyzer_claude_byok(zombie_analyzer):
 
         # Verify factory called with claude, preferred model, and correct key
         mock_factory.create.assert_called_with(
-            "claude", model="claude-3-opus", api_key="sk-ant-test"
+            "claude",
+            model="claude-3-opus",
+            api_key="sk-ant-test",
+            max_output_tokens=512,
         )
 
 
@@ -177,7 +180,10 @@ async def test_zombie_analyzer_gemini_byok(zombie_analyzer):
 
         # Verify factory called with google, preferred model, and correct key
         mock_factory.create.assert_called_with(
-            "google", model="gemini-pro", api_key="sk-goog-test"
+            "google",
+            model="gemini-pro",
+            api_key="sk-goog-test",
+            max_output_tokens=512,
         )
 
 
@@ -256,7 +262,10 @@ async def test_zombie_analyzer_groq_byok(zombie_analyzer):
 
         # Verify factory called with groq, preferred model, and correct key
         mock_factory.create.assert_called_with(
-            "groq", model="llama-3", api_key="sk-groq-test"
+            "groq",
+            model="llama-3",
+            api_key="sk-groq-test",
+            max_output_tokens=512,
         )
 
 

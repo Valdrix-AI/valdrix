@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime, timezone
 from app.shared.adapters.license import LicenseAdapter
 from app.shared.core.credentials import LicenseCredentials
+from app.shared.core.exceptions import UnsupportedVendorError
 from pydantic import SecretStr
 
 @pytest.fixture
@@ -71,7 +72,7 @@ async def test_revoke_license_not_implemented(google_credentials):
     google_credentials.vendor = "unknown"
     adapter = LicenseAdapter(google_credentials)
     
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(UnsupportedVendorError):
         await adapter.revoke_license("user-1")
 
 

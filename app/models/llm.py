@@ -35,6 +35,7 @@ from app.shared.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.tenant import Tenant
+    from app.models.tenant import User
 
 
 class LLMUsage(Base):
@@ -69,6 +70,14 @@ class LLMUsage(Base):
         index=True,  # Fast filtering by tenant
     )
 
+    # Optional actor identity for per-user quota/fairness enforcement.
+    user_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Provider: Which company's API (openai, anthropic, groq)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
 
@@ -101,6 +110,11 @@ class LLMUsage(Base):
 
     # Relationship: Access the tenant object
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="llm_usage")
+    user: Mapped["User | None"] = relationship(
+        "User",
+        foreign_keys=[user_id],
+        passive_deletes=True,
+    )
 
     def __repr__(self) -> str:
         """String representation for debugging."""

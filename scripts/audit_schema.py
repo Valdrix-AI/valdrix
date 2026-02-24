@@ -48,7 +48,7 @@ async def audit_schema():
             if t.index_count == 0:
                 issues.append("NO INDEXES")
                 
-            if "_old" in t.table_name or "temp" in t.table_name:
+            if "_old" in t.table_name or "_tmp" in t.table_name:
                 status = "⚠️ WARNING"
                 issues.append("POTENTIAL ORPHAN/DEVELOPMENT TABLE")
 

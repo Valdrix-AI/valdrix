@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.shared.core.config import get_settings
+from app.shared.core.pricing import get_tenant_tier, get_tier_limit
 from app.shared.llm.budget_manager import LLMBudgetManager
 from app.shared.llm.guardrails import LLMGuardrails, ZombieAnalysisResult
 
@@ -132,6 +133,18 @@ class ZombieAnalyzer:
 
         return flattened
 
+    @staticmethod
+    def _resolve_output_token_ceiling(raw_limit: Any) -> int | None:
+        if raw_limit is None:
+            return None
+        try:
+            parsed = int(raw_limit)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0:
+            return None
+        return max(128, min(parsed, 32768))
+
     async def analyze(
         self,
         detection_results: Dict[str, Any],
@@ -153,6 +166,13 @@ class ZombieAnalyzer:
         logger.info("zombie_analysis_starting", zombie_count=len(zombies))
 
         # 1. Resolve LLM Configuration
+        max_output_tokens: Optional[int] = None
+        if tenant_id and db:
+            tier = await get_tenant_tier(tenant_id, db)
+            max_output_tokens = self._resolve_output_token_ceiling(
+                get_tier_limit(tier, "llm_output_max_tokens")
+            )
+
         (
             effective_provider,
             effective_model,
@@ -168,6 +188,7 @@ class ZombieAnalyzer:
                 effective_provider,
                 model=effective_model,
                 api_key=byok_key,
+                max_output_tokens=max_output_tokens,
             )
 
         # 3. Sanitize and Format
@@ -183,7 +204,7 @@ class ZombieAnalyzer:
                 provider=effective_provider,
                 model=effective_model,
                 prompt_tokens=prompt_tokens,
-                completion_tokens=1200,
+                completion_tokens=max_output_tokens or 1200,
             )
 
         # 4. Invoke LLM

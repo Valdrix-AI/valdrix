@@ -50,7 +50,7 @@ class TestSentryDeep:
     def test_capture_message(self):
         with patch("app.shared.core.sentry.sentry_sdk", create=True) as mock_sentry:
             mock_scope = MagicMock()
-            mock_sentry.push_scope.return_value.__enter__.return_value = mock_scope
+            mock_sentry.new_scope.return_value.__enter__.return_value = mock_scope
 
             capture_message("test message", level="error", extra_key="extra_val")
 

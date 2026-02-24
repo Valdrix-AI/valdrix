@@ -795,8 +795,6 @@ class PlatformAdapter(BaseAdapter):
                 or payload.get("items")
                 or []
             )
-            if records is None:
-                records = []
             if not isinstance(records, list):
                 raise ExternalAPIError(
                     "Platform ledger HTTP payload is missing a list of records"

@@ -14,8 +14,41 @@ def fair_use_inflight_key(tenant_id: UUID) -> str:
     return f"llm:fair_use:inflight:{tenant_id}"
 
 
+def fair_use_global_abuse_block_key() -> str:
+    return "llm:fair_use:global_abuse_block"
+
+
 def fair_use_tier_allowed(tier: PricingTier) -> bool:
     return tier in {PricingTier.PRO, PricingTier.ENTERPRISE}
+
+
+def _as_bool(value: Any, *, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def _as_int(value: Any, *, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except (TypeError, ValueError):
+            return default
+    return default
 
 
 def fair_use_daily_soft_cap(tier: PricingTier) -> int | None:
@@ -41,6 +74,7 @@ async def count_requests_in_window(
     db: AsyncSession,
     start: datetime,
     end: datetime | None = None,
+    user_id: UUID | None = None,
 ) -> int:
     import app.shared.llm.budget_manager as manager_module
 
@@ -48,6 +82,8 @@ async def count_requests_in_window(
         manager_module.LLMUsage.tenant_id == tenant_id,
         manager_module.LLMUsage.created_at >= start,
     )
+    if user_id is not None:
+        query = query.where(manager_module.LLMUsage.user_id == user_id)
     if end is not None:
         query = query.where(manager_module.LLMUsage.created_at < end)
     result = await db.execute(query)
@@ -58,6 +94,7 @@ async def enforce_daily_analysis_limit(
     manager_cls: Any,
     tenant_id: UUID,
     db: AsyncSession,
+    user_id: UUID | None = None,
 ) -> None:
     """
     Enforce tier-based per-day LLM analysis quota.
@@ -100,13 +137,301 @@ async def enforce_daily_analysis_limit(
         end=day_end,
     )
     if requests_today >= daily_limit:
+        manager_module.LLM_PRE_AUTH_DENIALS.labels(
+            reason="daily_tenant_limit_exceeded",
+            tenant_tier=tier.value,
+        ).inc()
+        manager_module.audit_log(
+            event="llm_quota_denied",
+            user_id=str(user_id or "system"),
+            tenant_id=str(tenant_id),
+            details={
+                "gate": "daily_tenant",
+                "tier": tier.value,
+                "limit": daily_limit,
+                "observed": requests_today,
+            },
+        )
         raise manager_module.BudgetExceededError(
             "Daily LLM analysis limit reached for your current plan.",
             details={
+                "gate": "daily_tenant",
                 "daily_limit": daily_limit,
                 "requests_today": requests_today,
             },
         )
+
+    if user_id is None:
+        return
+
+    raw_user_limit = get_tier_limit(tier, "llm_analyses_per_user_per_day")
+    if raw_user_limit is None:
+        return
+
+    try:
+        user_daily_limit = int(raw_user_limit)
+    except (TypeError, ValueError):
+        manager_module.logger.warning(
+            "invalid_llm_daily_user_limit",
+            tenant_id=str(tenant_id),
+            user_id=str(user_id),
+            tier=tier.value,
+            raw_limit=raw_user_limit,
+        )
+        return
+
+    if user_daily_limit <= 0:
+        manager_module.LLM_PRE_AUTH_DENIALS.labels(
+            reason="daily_user_limit_exceeded",
+            tenant_tier=tier.value,
+        ).inc()
+        manager_module.audit_log(
+            event="llm_quota_denied",
+            user_id=str(user_id),
+            tenant_id=str(tenant_id),
+            details={
+                "gate": "daily_user",
+                "tier": tier.value,
+                "limit": user_daily_limit,
+                "observed": 0,
+            },
+        )
+        raise manager_module.BudgetExceededError(
+            "Daily per-user LLM analysis limit reached for your current plan.",
+            details={
+                "gate": "daily_user",
+                "daily_user_limit": user_daily_limit,
+                "user_requests_today": 0,
+            },
+        )
+
+    user_requests_today = await count_requests_in_window(
+        tenant_id=tenant_id,
+        db=db,
+        start=day_start,
+        end=day_end,
+        user_id=user_id,
+    )
+    if user_requests_today >= user_daily_limit:
+        manager_module.LLM_PRE_AUTH_DENIALS.labels(
+            reason="daily_user_limit_exceeded",
+            tenant_tier=tier.value,
+        ).inc()
+        manager_module.audit_log(
+            event="llm_quota_denied",
+            user_id=str(user_id),
+            tenant_id=str(tenant_id),
+            details={
+                "gate": "daily_user",
+                "tier": tier.value,
+                "limit": user_daily_limit,
+                "observed": user_requests_today,
+            },
+        )
+        raise manager_module.BudgetExceededError(
+            "Daily per-user LLM analysis limit reached for your current plan.",
+            details={
+                "gate": "daily_user",
+                "daily_user_limit": user_daily_limit,
+                "user_requests_today": user_requests_today,
+            },
+        )
+
+
+async def enforce_global_abuse_guard(
+    manager_cls: Any,
+    tenant_id: UUID,
+    db: AsyncSession,
+    tier: PricingTier,
+) -> None:
+    import app.shared.llm.budget_manager as manager_module
+
+    settings = manager_module.get_settings()
+    if not _as_bool(
+        getattr(settings, "LLM_GLOBAL_ABUSE_GUARDS_ENABLED", True),
+        default=True,
+    ):
+        return
+
+    tier_label = tier.value
+    kill_switch_enabled = _as_bool(
+        getattr(settings, "LLM_GLOBAL_ABUSE_KILL_SWITCH", False),
+        default=False,
+    )
+    if kill_switch_enabled:
+        manager_module.LLM_PRE_AUTH_DENIALS.labels(
+            reason="global_abuse_kill_switch",
+            tenant_tier=tier_label,
+        ).inc()
+        manager_module.LLM_FAIR_USE_DENIALS.labels(
+            gate="global_abuse",
+            tenant_tier=tier_label,
+        ).inc()
+        manager_module.LLM_FAIR_USE_EVALUATIONS.labels(
+            gate="global_abuse", outcome="deny", tenant_tier=tier_label
+        ).inc()
+        raise manager_module.LLMFairUseExceededError(
+            "Global abuse protections are active. LLM analysis is temporarily unavailable.",
+            details={
+                "gate": "global_abuse",
+                "reason": "kill_switch",
+            },
+        )
+
+    block_key = fair_use_global_abuse_block_key()
+    block_seconds_raw = getattr(settings, "LLM_GLOBAL_ABUSE_BLOCK_SECONDS", 120)
+    block_seconds = max(30, _as_int(block_seconds_raw, default=120))
+    cache = manager_module.get_cache_service()
+    local_until = getattr(manager_cls, "_local_global_abuse_block_until", None)
+    now = datetime.now(timezone.utc)
+    if isinstance(local_until, datetime) and local_until > now:
+        manager_module.LLM_PRE_AUTH_DENIALS.labels(
+            reason="global_abuse_temporal_block",
+            tenant_tier=tier_label,
+        ).inc()
+        manager_module.LLM_FAIR_USE_DENIALS.labels(
+            gate="global_abuse",
+            tenant_tier=tier_label,
+        ).inc()
+        manager_module.LLM_FAIR_USE_EVALUATIONS.labels(
+            gate="global_abuse", outcome="deny", tenant_tier=tier_label
+        ).inc()
+        raise manager_module.LLMFairUseExceededError(
+            "Global abuse protections are active. Retry shortly.",
+            details={
+                "gate": "global_abuse",
+                "reason": "temporal_block",
+                "retry_after_seconds": int((local_until - now).total_seconds()),
+            },
+        )
+    if cache.enabled and cache.client is not None:
+        try:
+            get_fn = getattr(cache.client, "get", None)
+            if callable(get_fn) and await get_fn(block_key):
+                manager_module.LLM_PRE_AUTH_DENIALS.labels(
+                    reason="global_abuse_temporal_block",
+                    tenant_tier=tier_label,
+                ).inc()
+                manager_module.LLM_FAIR_USE_DENIALS.labels(
+                    gate="global_abuse",
+                    tenant_tier=tier_label,
+                ).inc()
+                manager_module.LLM_FAIR_USE_EVALUATIONS.labels(
+                    gate="global_abuse", outcome="deny", tenant_tier=tier_label
+                ).inc()
+                raise manager_module.LLMFairUseExceededError(
+                    "Global abuse protections are active. Retry shortly.",
+                    details={
+                        "gate": "global_abuse",
+                        "reason": "temporal_block",
+                        "retry_after_seconds": block_seconds,
+                    },
+                )
+        except manager_module.LLMFairUseExceededError:
+            raise
+        except Exception as exc:
+            manager_module.logger.warning(
+                "llm_global_abuse_cache_get_failed",
+                error=str(exc),
+            )
+
+    minute_start = now - timedelta(minutes=1)
+    stmt = select(
+        func.count(manager_module.LLMUsage.id),
+        func.count(func.distinct(manager_module.LLMUsage.tenant_id)),
+    ).where(manager_module.LLMUsage.created_at >= minute_start)
+    result = await db.execute(stmt)
+    row: Any = None
+    row_getter = getattr(result, "one_or_none", None)
+    if callable(row_getter):
+        row = row_getter()
+    if row is None:
+        first_getter = getattr(result, "first", None)
+        if callable(first_getter):
+            row = first_getter()
+    if row is None:
+        row = (0, 0)
+    try:
+        global_requests_last_minute = int((row[0] if row else 0) or 0)
+    except Exception:
+        global_requests_last_minute = 0
+    try:
+        active_tenants_last_minute = int((row[1] if row else 0) or 0)
+    except Exception:
+        active_tenants_last_minute = 0
+
+    manager_module.LLM_FAIR_USE_OBSERVED.labels(
+        gate="global_rpm", tenant_tier=tier_label
+    ).set(global_requests_last_minute)
+    manager_module.LLM_FAIR_USE_OBSERVED.labels(
+        gate="global_tenant_count", tenant_tier=tier_label
+    ).set(active_tenants_last_minute)
+
+    rpm_threshold_raw = getattr(settings, "LLM_GLOBAL_ABUSE_PER_MINUTE_CAP", 600)
+    tenant_threshold_raw = getattr(
+        settings, "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD", 30
+    )
+    rpm_threshold = max(1, _as_int(rpm_threshold_raw, default=600))
+    tenant_threshold = max(1, _as_int(tenant_threshold_raw, default=30))
+
+    triggered = (
+        global_requests_last_minute >= rpm_threshold
+        and active_tenants_last_minute >= tenant_threshold
+    )
+    if triggered:
+        manager_module.LLM_PRE_AUTH_DENIALS.labels(
+            reason="global_abuse_triggered",
+            tenant_tier=tier_label,
+        ).inc()
+        manager_module.LLM_FAIR_USE_DENIALS.labels(
+            gate="global_abuse",
+            tenant_tier=tier_label,
+        ).inc()
+        manager_module.LLM_FAIR_USE_EVALUATIONS.labels(
+            gate="global_abuse", outcome="deny", tenant_tier=tier_label
+        ).inc()
+        manager_module.audit_log(
+            event="llm_global_abuse_triggered",
+            user_id="system",
+            tenant_id=str(tenant_id),
+            details={
+                "gate": "global_abuse",
+                "global_requests_last_minute": global_requests_last_minute,
+                "active_tenants_last_minute": active_tenants_last_minute,
+                "rpm_threshold": rpm_threshold,
+                "tenant_threshold": tenant_threshold,
+                "block_seconds": block_seconds,
+            },
+        )
+        manager_cls._local_global_abuse_block_until = now + timedelta(
+            seconds=block_seconds
+        )
+        if cache.enabled and cache.client is not None:
+            try:
+                set_fn = getattr(cache.client, "set", None)
+                if callable(set_fn):
+                    await set_fn(block_key, "1", ex=block_seconds)
+            except Exception as exc:
+                manager_module.logger.warning(
+                    "llm_global_abuse_cache_set_failed",
+                    error=str(exc),
+                )
+        raise manager_module.LLMFairUseExceededError(
+            "Global anti-abuse throttle is active. Retry shortly.",
+            details={
+                "gate": "global_abuse",
+                "reason": "burst_detected",
+                "global_requests_last_minute": global_requests_last_minute,
+                "active_tenants_last_minute": active_tenants_last_minute,
+                "rpm_threshold": rpm_threshold,
+                "tenant_threshold": tenant_threshold,
+                "retry_after_seconds": block_seconds,
+            },
+        )
+
+    manager_module.LLM_FAIR_USE_EVALUATIONS.labels(
+        gate="global_abuse", outcome="allow", tenant_tier=tier_label
+    ).inc()
 
 
 async def acquire_fair_use_inflight_slot(

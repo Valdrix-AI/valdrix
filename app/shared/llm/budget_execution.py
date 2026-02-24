@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.llm.budget_fair_use import (
     enforce_fair_use_guards,
+    enforce_global_abuse_guard,
 )
 
 if TYPE_CHECKING:
@@ -66,6 +67,7 @@ async def check_and_reserve_budget(
     prompt_tokens: int,
     completion_tokens: int,
     operation_id: str | None = None,
+    user_id: UUID | None = None,
 ) -> Decimal:
     """
     Check budget and atomically reserve funds.
@@ -82,10 +84,18 @@ async def check_and_reserve_budget(
     tier_for_metrics = "unknown"
 
     try:
-        await manager_cls._enforce_daily_analysis_limit(tenant_id, db)
+        await manager_cls._enforce_daily_analysis_limit(
+            tenant_id, db, user_id=user_id
+        )
+        tier = await manager_module.get_tenant_tier(tenant_id, db)
+        tier_for_metrics = tier.value
+        await enforce_global_abuse_guard(
+            manager_cls=manager_cls,
+            tenant_id=tenant_id,
+            db=db,
+            tier=tier,
+        )
         if manager_module.get_settings().LLM_FAIR_USE_GUARDS_ENABLED:
-            tier = await manager_module.get_tenant_tier(tenant_id, db)
-            tier_for_metrics = tier.value
             concurrency_slot_acquired = await enforce_fair_use_guards(
                 manager_cls=manager_cls,
                 tenant_id=tenant_id,
@@ -221,6 +231,7 @@ async def record_usage_entry(
     is_byok: bool = False,
     operation_id: str | None = None,
     request_type: str = "unknown",
+    user_id: UUID | None = None,
 ) -> None:
     """
     Record actual LLM usage and handle metrics/alerts.
@@ -269,6 +280,7 @@ async def record_usage_entry(
 
         usage = manager_module.LLMUsage(
             tenant_id=tenant_id,
+            user_id=user_id,
             provider=provider,
             model=model,
             input_tokens=prompt_tokens,

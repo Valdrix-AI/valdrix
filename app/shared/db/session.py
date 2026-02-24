@@ -239,7 +239,17 @@ def _get_db_runtime() -> _DBRuntime:
 def reset_db_runtime() -> None:
     """Test helper for forcing runtime re-initialization on next access."""
     global _db_runtime
+    runtime = _db_runtime
     _db_runtime = None
+
+    if runtime is None:
+        return
+
+    try:
+        # Use sync disposal so reset can be called from non-async test fixtures.
+        runtime.engine.sync_engine.dispose()
+    except Exception as exc:
+        logger.debug("db_runtime_dispose_skipped", error=str(exc), exc_info=True)
 
 
 def get_engine() -> AsyncEngine:

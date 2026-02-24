@@ -1,0 +1,15 @@
+# Full-profile allowlist for expected framework/test patterns.
+# Format: <path_regex>::<marker_regex>
+# If marker_regex is omitted, all markers on that path are allowed.
+
+^app/shared/adapters/base\.py$::NotImplementedError
+^app/shared/adapters/cost_cache\.py$::NotImplementedError
+^app/modules/optimization/domain/plugin\.py$::NotImplementedError
+^app/shared/llm/providers/base\.py$::NotImplementedError
+
+# Guard self-text includes marker regex literals by design.
+^scripts/verify_enterprise_placeholder_guards\.py$::NotImplementedError
+^scripts/verify_enterprise_placeholder_guards\.py$::legacy[ _-]?shim
+
+# Synthetic marker fixture file used to verify guard behavior.
+^tests/unit/supply_chain/test_enterprise_placeholder_guards\.py$::TODO|NotImplementedError

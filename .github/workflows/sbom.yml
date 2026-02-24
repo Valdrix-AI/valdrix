@@ -17,9 +17,16 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
   packages: read
   security-events: write
+  attestations: write
+  id-token: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "24"
+  PNPM_VERSION: "9"
 
 jobs:
   generate-sbom:
@@ -29,12 +36,44 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          # Needed for git push on release
-          token: ${{ secrets.GITHUB_TOKEN }}
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Verify Python lock and dependencies
+        run: |
+          uv lock --check
+          uv sync --locked --group dev
+          uv run pip-audit --ignore-vuln CVE-2026-1703
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Verify dashboard lockfile
+        working-directory: ./dashboard
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit dashboard dependencies
+        working-directory: ./dashboard
+        run: pnpm audit --audit-level=high
       
-      - name: Create SBOM output directory
-        run: mkdir -p sbom
+      - name: Create supply-chain output directories
+        run: mkdir -p sbom provenance
 
       # Python Dependencies SBOM
       - name: Generate Python SBOM (CycloneDX)
@@ -72,14 +111,32 @@ jobs:
           sbom: ./sbom/valdrix-container-sbom.json
           fail-build: true
           severity-cutoff: high
+
+      - name: Generate supply-chain provenance manifest
+        run: |
+          uv run python scripts/generate_provenance_manifest.py \
+            --output ./provenance/supply-chain-manifest.json \
+            --sbom-dir sbom
       
       # Upload as Artifacts
-      - name: Upload SBOM Artifacts
+      - name: Upload supply-chain artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-reports
-          path: ./sbom/
+          name: supply-chain-evidence
+          path: |
+            ./sbom/
+            ./provenance/
           retention-days: 90
+
+      - name: Attest SBOM artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "./sbom/*.json"
+
+      - name: Attest provenance manifest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "./provenance/supply-chain-manifest.json"
       
       # Intentionally do not push directly to main from CI.
       # SBOM artifacts are published through workflow artifacts/releases.
@@ -98,8 +155,8 @@ jobs:
       - name: Download SBOM
         uses: actions/download-artifact@v4
         with:
-          name: sbom-reports
-          path: ./sbom
+          name: supply-chain-evidence
+          path: ./evidence
       
       - name: Generate License Report
         run: |
@@ -108,7 +165,7 @@ jobs:
           echo "" >> compliance-report.md
           echo "## Python Dependencies" >> compliance-report.md
           jq -r '.components[] | "- \(.name)@\(.version): \(.licenses[0].license.id // "Unknown")"' \
-            ./sbom/valdrix-python-sbom.json >> compliance-report.md 2>/dev/null || echo "- No components found" >> compliance-report.md
+            ./evidence/sbom/valdrix-python-sbom.json >> compliance-report.md 2>/dev/null || echo "- No components found" >> compliance-report.md
       
       - name: Upload Compliance Report
         uses: actions/upload-artifact@v4

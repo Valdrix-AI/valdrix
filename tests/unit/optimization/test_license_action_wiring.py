@@ -13,6 +13,7 @@ from app.modules.optimization.domain.actions.base import (
 from app.modules.optimization.domain.actions.license.base import LicenseReclaimSeatAction
 from app.modules.optimization.domain.remediation import RemediationService
 from app.shared.core.credentials import LicenseCredentials
+from app.shared.core.exceptions import UnsupportedVendorError
 
 
 @pytest.mark.asyncio
@@ -99,7 +100,7 @@ async def test_license_action_manual_fallback_returns_skipped() -> None:
         "app.modules.optimization.domain.actions.license.base.LicenseAdapter"
     ) as adapter_cls:
         adapter_cls.return_value.revoke_license = AsyncMock(
-            side_effect=NotImplementedError("no native revoke")
+            side_effect=UnsupportedVendorError("no native revoke")
         )
         result = await action._perform_action("user-9", context)
 

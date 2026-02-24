@@ -7,6 +7,9 @@ from app.modules.governance.domain.jobs.handlers.analysis import (
 from app.modules.governance.domain.jobs.handlers.license_governance import (
     LicenseGovernanceHandler,
 )
+from app.modules.governance.domain.jobs.handlers.enforcement_reconciliation import (
+    EnforcementReconciliationHandler,
+)
 
 
 def test_license_governance_handler_registered() -> None:
@@ -22,3 +25,8 @@ def test_zombie_analysis_handler_registered() -> None:
 def test_report_generation_handler_registered() -> None:
     handler_cls = get_handler_factory(JobType.REPORT_GENERATION.value)
     assert handler_cls is ReportGenerationHandler
+
+
+def test_enforcement_reconciliation_handler_registered() -> None:
+    handler_cls = get_handler_factory(JobType.ENFORCEMENT_RECONCILIATION.value)
+    assert handler_cls is EnforcementReconciliationHandler

@@ -85,6 +85,13 @@ def _register_models():
     from app.models.cost_audit import CostAuditLog  # noqa: F401
     from app.models.invoice import ProviderInvoice  # noqa: F401
     from app.models.realized_savings import RealizedSavingsEvent  # noqa: F401
+    from app.models.enforcement import (  # noqa: F401
+        EnforcementApprovalRequest,
+        EnforcementBudgetAllocation,
+        EnforcementCreditGrant,
+        EnforcementDecision,
+        EnforcementPolicy,
+    )
     from app.models.unit_economics_settings import UnitEconomicsSettings  # noqa: F401
     from app.modules.governance.domain.security.audit_log import AuditLog  # noqa: F401
 

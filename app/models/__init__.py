@@ -18,6 +18,7 @@ from app.models import (  # noqa: F401
     cost_audit,
     discovery_candidate,
     discovered_account,
+    enforcement,
     gcp_connection,
     hybrid_connection,
     invoice,

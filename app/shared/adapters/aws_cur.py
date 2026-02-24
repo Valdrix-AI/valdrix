@@ -174,7 +174,7 @@ class AWSCURAdapter(BaseAdapter):
         e_date = end_date.date() if isinstance(end_date, datetime) else end_date
 
         summary = await self.get_daily_costs(s_date, e_date)
-        return [r.dict() for r in summary.records]
+        return [r.model_dump() for r in summary.records]
 
     async def get_daily_costs(
         self,

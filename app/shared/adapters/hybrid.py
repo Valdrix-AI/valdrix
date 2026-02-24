@@ -748,8 +748,6 @@ class HybridAdapter(BaseAdapter):
                 or payload.get("items")
                 or []
             )
-            if records is None:
-                records = []
             if not isinstance(records, list):
                 raise ExternalAPIError(
                     "Hybrid ledger HTTP payload is missing a list of records"

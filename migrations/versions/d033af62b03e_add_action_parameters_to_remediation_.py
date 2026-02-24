@@ -9,22 +9,27 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'd033af62b03e'
-down_revision: Union[str, Sequence[str], None] = 'c9d0e1f2a3b4'
+revision: str = "d033af62b03e"
+down_revision: Union[str, Sequence[str], None] = "c9d0e1f2a3b4"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-from sqlalchemy.dialects import postgresql
-
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column('remediation_requests', sa.Column('action_parameters', postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+    op.add_column(
+        "remediation_requests",
+        sa.Column(
+            "action_parameters",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+        ),
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column('remediation_requests', 'action_parameters')
+    op.drop_column("remediation_requests", "action_parameters")

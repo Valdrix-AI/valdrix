@@ -36,6 +36,10 @@ async def test_orchestrator_dispatches_celery_tasks(mock_session_maker):
         await orchestrator.license_governance_sweep_job()
         mock_send.assert_called_with("license.governance_sweep")
 
+        # Test Enforcement Reconciliation Dispatch
+        await orchestrator.enforcement_reconciliation_sweep_job()
+        mock_send.assert_called_with("scheduler.enforcement_reconciliation_sweep")
+
 
 @pytest.mark.asyncio
 async def test_scheduler_tasks_logic_execution():

@@ -142,6 +142,7 @@ class LLMFactory:
         provider: Optional[str] = None,
         model: Optional[str] = None,
         api_key: Optional[str] = None,
+        max_output_tokens: Optional[int] = None,
     ) -> BaseChatModel:
         """
         Create an LLM client for the specified provider and model.
@@ -175,7 +176,14 @@ class LLMFactory:
             model=model,
             byok=api_key is not None,
         )
-        return providers[effective_provider].create_model(model=model, api_key=api_key)
+        provider_impl = providers[effective_provider]
+        if isinstance(max_output_tokens, int) and max_output_tokens > 0:
+            return provider_impl.create_model(
+                model=model,
+                api_key=api_key,
+                max_output_tokens=max_output_tokens,
+            )
+        return provider_impl.create_model(model=model, api_key=api_key)
 
     @staticmethod
     def create_smart(

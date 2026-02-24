@@ -323,11 +323,11 @@ async def test_scim_group_patch_no_path_replace_updates_membership(
     ).scalar_one()
     assert user.role == "member"
 
-    # Create a group with a temporary name and no members.
+    # Create a group with a staging name and no members.
     res = await ac.post(
         "/scim/v2/Groups",
         headers=headers,
-        json={"displayName": "Temp Group", "members": []},
+        json={"displayName": "Staging Group", "members": []},
     )
     assert res.status_code == 201
     group_id = res.json()["id"]

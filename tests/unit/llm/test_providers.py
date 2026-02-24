@@ -71,11 +71,11 @@ class TestBaseProvider:
         # Should not raise an exception
         provider.validate_api_key("x" * 20, "test")
 
-    def test_create_model_not_implemented(self):
-        """Test that create_model raises NotImplementedError."""
+    def test_create_model_concrete_provider_works(self):
+        """Test that concrete provider model creation path executes without abstract errors."""
         # Can't instantiate abstract class directly, so test that concrete providers work
         provider = OpenAIProvider()
-        # This should work without raising NotImplementedError
+        # This should work without triggering abstract-base enforcement.
         with patch("app.shared.llm.providers.openai.ChatOpenAI") as mock_chat:
             mock_instance = MagicMock()
             mock_chat.return_value = mock_instance
@@ -106,6 +106,26 @@ class TestOpenAIProvider:
                 temperature=0,
             )
             assert result == mock_instance
+
+    def test_create_model_with_explicit_max_output_tokens(self):
+        provider = OpenAIProvider()
+
+        with patch("app.shared.llm.providers.openai.ChatOpenAI") as mock_chat:
+            mock_instance = MagicMock()
+            mock_chat.return_value = mock_instance
+
+            provider.create_model(
+                model="gpt-4o-mini",
+                api_key="sk-valid123456789012345678901234567890",
+                max_output_tokens=2048,
+            )
+
+            mock_chat.assert_called_once_with(
+                api_key="sk-valid123456789012345678901234567890",
+                model="gpt-4o-mini",
+                temperature=0,
+                max_tokens=2048,
+            )
 
     @patch("app.shared.llm.providers.openai.get_settings")
     def test_create_model_from_settings(self, mock_get_settings):

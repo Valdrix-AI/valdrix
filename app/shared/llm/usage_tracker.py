@@ -93,6 +93,7 @@ class UsageTracker:
         is_byok: bool = False,
         request_type: str = "unknown",
         operation_id: str | None = None,
+        user_id: UUID | None = None,
     ) -> None:
         """
         DELEGATED: Use LLMBudgetManager.record_usage
@@ -107,6 +108,7 @@ class UsageTracker:
             is_byok=is_byok,
             operation_id=operation_id,
             request_type=request_type,
+            user_id=user_id,
         )
 
     async def authorize_request(
@@ -116,6 +118,7 @@ class UsageTracker:
         model: str,
         input_text: str,
         max_output_tokens: int = 1000,
+        user_id: UUID | None = None,
     ) -> bool:
         """
         DELEGATED: Use LLMBudgetManager.check_and_reserve
@@ -128,6 +131,7 @@ class UsageTracker:
             model=model,
             prompt_tokens=input_tokens,
             completion_tokens=max_output_tokens,
+            user_id=user_id,
         )
         return True
 

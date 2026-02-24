@@ -126,3 +126,21 @@ class TestFactoryExhaustive:
             mock_anthropic_instance = MockAnthropic.return_value
             LLMFactory.create(provider="anthropic", api_key="sk-test")
             mock_anthropic_instance.create_model.assert_called()
+
+    def test_create_propagates_max_output_tokens(self):
+        with (
+            patch("app.shared.llm.factory.get_settings"),
+            patch("app.shared.llm.providers.GroqProvider") as mock_groq_provider,
+        ):
+            provider_instance = mock_groq_provider.return_value
+            LLMFactory.create(
+                provider="groq",
+                model="llama-3.3-70b-versatile",
+                api_key="gsk-test",
+                max_output_tokens=2048,
+            )
+            provider_instance.create_model.assert_called_once_with(
+                model="llama-3.3-70b-versatile",
+                api_key="gsk-test",
+                max_output_tokens=2048,
+            )

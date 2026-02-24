@@ -69,6 +69,17 @@ class Settings(BaseSettings):
     # This override exists only for controlled break-glass situations.
     ALLOW_IN_MEMORY_RATE_LIMITS: bool = False
     AUTOPILOT_BYPASS_GRACE_PERIOD: bool = False
+    TURNSTILE_ENABLED: bool = False
+    TURNSTILE_ENFORCE_IN_TESTING: bool = False
+    TURNSTILE_SECRET_KEY: Optional[str] = None
+    TURNSTILE_VERIFY_URL: str = (
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    )
+    TURNSTILE_TIMEOUT_SECONDS: float = 3.0
+    TURNSTILE_FAIL_OPEN: bool = False
+    TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT: bool = True
+    TURNSTILE_REQUIRE_SSO_DISCOVERY: bool = True
+    TURNSTILE_REQUIRE_ONBOARD: bool = True
     INTERNAL_JOB_SECRET: Optional[str] = None
     WEBHOOK_ALLOWED_DOMAINS: list[str] = []  # Allowlist for generic webhook retries
     WEBHOOK_REQUIRE_HTTPS: bool = True
@@ -97,7 +108,9 @@ class Settings(BaseSettings):
         self._validate_llm_config()
         self._validate_billing_config()
         self._validate_integration_config()
+        self._validate_turnstile_config()
         self._validate_remediation_guardrails()
+        self._validate_enforcement_guardrails()
         self._validate_environment_safety()
 
         return self
@@ -193,6 +206,23 @@ class Settings(BaseSettings):
                     "llm_provider_key_missing_non_prod", provider=self.LLM_PROVIDER
                 )
 
+        if self.LLM_GLOBAL_ABUSE_PER_MINUTE_CAP < 1:
+            raise ValueError("LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be >= 1.")
+        if self.LLM_GLOBAL_ABUSE_PER_MINUTE_CAP > 100000:
+            raise ValueError("LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be <= 100000.")
+        if self.LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD < 1:
+            raise ValueError(
+                "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD must be >= 1."
+            )
+        if self.LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD > 10000:
+            raise ValueError(
+                "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD must be <= 10000."
+            )
+        if self.LLM_GLOBAL_ABUSE_BLOCK_SECONDS < 30:
+            raise ValueError("LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be >= 30.")
+        if self.LLM_GLOBAL_ABUSE_BLOCK_SECONDS > 86400:
+            raise ValueError("LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be <= 86400.")
+
     def _validate_billing_config(self) -> None:
         """Validates Paystack credentials (SEC-P0)."""
         default_currency = (
@@ -216,6 +246,37 @@ class Settings(BaseSettings):
             if default_currency == "USD" and not self.PAYSTACK_ENABLE_USD_CHECKOUT:
                 raise ValueError(
                     "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY cannot be USD when PAYSTACK_ENABLE_USD_CHECKOUT is false."
+                )
+
+    def _validate_turnstile_config(self) -> None:
+        """Validates Turnstile anti-bot controls for public/auth attack surfaces."""
+        if self.TURNSTILE_TIMEOUT_SECONDS <= 0:
+            raise ValueError("TURNSTILE_TIMEOUT_SECONDS must be > 0.")
+        if self.TURNSTILE_TIMEOUT_SECONDS > 15:
+            raise ValueError("TURNSTILE_TIMEOUT_SECONDS must be <= 15.")
+
+        verify_url = str(self.TURNSTILE_VERIFY_URL or "").strip().lower()
+        if not verify_url.startswith("https://"):
+            raise ValueError("TURNSTILE_VERIFY_URL must use https://.")
+
+        turnstile_required = (
+            self.TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT
+            or self.TURNSTILE_REQUIRE_SSO_DISCOVERY
+            or self.TURNSTILE_REQUIRE_ONBOARD
+        )
+        if (
+            self.TURNSTILE_ENABLED
+            and turnstile_required
+            and self.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}
+        ):
+            secret = str(self.TURNSTILE_SECRET_KEY or "").strip()
+            if len(secret) < 16:
+                raise ValueError(
+                    "TURNSTILE_SECRET_KEY must be configured when Turnstile is enabled in staging/production."
+                )
+            if self.TURNSTILE_FAIL_OPEN:
+                raise ValueError(
+                    "TURNSTILE_FAIL_OPEN must be false in staging/production."
                 )
 
     def _validate_integration_config(self) -> None:
@@ -300,6 +361,63 @@ class Settings(BaseSettings):
                 "REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE=true in staging/production."
             )
 
+    def _validate_enforcement_guardrails(self) -> None:
+        """Validates enforcement gate runtime safety controls."""
+        if self.ENFORCEMENT_GATE_TIMEOUT_SECONDS <= 0:
+            raise ValueError("ENFORCEMENT_GATE_TIMEOUT_SECONDS must be > 0.")
+        if self.ENFORCEMENT_GATE_TIMEOUT_SECONDS > 30:
+            raise ValueError(
+                "ENFORCEMENT_GATE_TIMEOUT_SECONDS must be <= 30."
+            )
+        if self.ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS < 60:
+            raise ValueError(
+                "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS must be >= 60."
+            )
+        if self.ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS > 604800:
+            raise ValueError(
+                "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS must be <= 604800."
+            )
+        if self.ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES < 1:
+            raise ValueError("ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES must be >= 1.")
+        if self.ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES > 1000:
+            raise ValueError(
+                "ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES must be <= 1000."
+            )
+        if self.ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT < 1:
+            raise ValueError(
+                "ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT must be >= 1."
+            )
+        if self.ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT > 1000:
+            raise ValueError(
+                "ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT must be <= 1000."
+            )
+        if self.ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_THRESHOLD_USD < 0:
+            raise ValueError(
+                "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_THRESHOLD_USD must be >= 0."
+            )
+        if self.ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_EXCEPTION_COUNT < 1:
+            raise ValueError(
+                "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_EXCEPTION_COUNT must be >= 1."
+            )
+        if self.ENFORCEMENT_EXPORT_MAX_DAYS < 1:
+            raise ValueError("ENFORCEMENT_EXPORT_MAX_DAYS must be >= 1.")
+        if self.ENFORCEMENT_EXPORT_MAX_DAYS > 3650:
+            raise ValueError("ENFORCEMENT_EXPORT_MAX_DAYS must be <= 3650.")
+        if self.ENFORCEMENT_EXPORT_MAX_ROWS < 1:
+            raise ValueError("ENFORCEMENT_EXPORT_MAX_ROWS must be >= 1.")
+        if self.ENFORCEMENT_EXPORT_MAX_ROWS > 50000:
+            raise ValueError("ENFORCEMENT_EXPORT_MAX_ROWS must be <= 50000.")
+        fallback_signing_keys = list(self.ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS or [])
+        if len(fallback_signing_keys) > 5:
+            raise ValueError(
+                "ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS must contain at most 5 keys."
+            )
+        for fallback_secret in fallback_signing_keys:
+            if len(str(fallback_secret or "").strip()) < 32:
+                raise ValueError(
+                    "Each ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS key must be >= 32 chars."
+                )
+
     # AWS Credentials
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
@@ -351,6 +469,11 @@ class Settings(BaseSettings):
     LLM_FAIR_USE_PER_MINUTE_CAP: int = 30
     LLM_FAIR_USE_PER_TENANT_CONCURRENCY_CAP: int = 4
     LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS: int = 180
+    LLM_GLOBAL_ABUSE_GUARDS_ENABLED: bool = True
+    LLM_GLOBAL_ABUSE_PER_MINUTE_CAP: int = 600
+    LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD: int = 30
+    LLM_GLOBAL_ABUSE_BLOCK_SECONDS: int = 120
+    LLM_GLOBAL_ABUSE_KILL_SWITCH: bool = False
 
     # Scheduler
     SCHEDULER_HOUR: int = 8
@@ -510,6 +633,16 @@ class Settings(BaseSettings):
     )
     REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE: bool = False
     ENFORCE_REMEDIATION_DRY_RUN: bool = False
+    ENFORCEMENT_GATE_TIMEOUT_SECONDS: float = 2.0
+    ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS: int = 86400
+    ENFORCEMENT_RECONCILIATION_SWEEP_ENABLED: bool = True
+    ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES: int = 500
+    ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT: int = 200
+    ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_THRESHOLD_USD: float = 100.0
+    ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_EXCEPTION_COUNT: int = 5
+    ENFORCEMENT_EXPORT_MAX_DAYS: int = 366
+    ENFORCEMENT_EXPORT_MAX_ROWS: int = 10000
+    ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS: list[str] = []
 
     # Multi-Currency & Localization (Phase 12)
     SUPPORTED_CURRENCIES: list[str] = ["USD", "NGN", "EUR", "GBP"]

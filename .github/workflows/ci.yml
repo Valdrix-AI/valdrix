@@ -72,6 +72,9 @@ jobs:
       - name: Run Linting (Ruff)
         run: uv run ruff check .
 
+      - name: Enforce Enterprise Placeholder Guard (Control-Plane Paths)
+        run: uv run python3 scripts/verify_enterprise_placeholder_guards.py --profile strict
+
       - name: Verify Frontend API Contracts
         run: uv run python scripts/check_frontend_api_contracts.py
 
@@ -336,6 +339,40 @@ jobs:
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
+
+  # JOB 4B: ENTERPRISE TDD RELEASE GATE
+  enterprise-tdd-quality-gate:
+    name: Enterprise TDD Quality Gate
+    runs-on: ubuntu-latest
+    needs: [test, type-check, security, build-and-scan]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Install Dependencies
+        run: uv sync --dev
+
+      - name: Run Enterprise TDD Gate
+        run: uv run python3 scripts/run_enterprise_tdd_gate.py
+
+      - name: Upload Enterprise Gate Coverage Artifact
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('coverage-enterprise-gate.xml') != ''
+        with:
+          name: enterprise-tdd-gate-coverage
+          path: coverage-enterprise-gate.xml
+          retention-days: 30
 
   # JOB 5: DASHBOARD BROWSER GATES (split e2e/a11y/perf)
   dashboard-browser-gates:

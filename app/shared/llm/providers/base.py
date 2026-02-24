@@ -11,7 +11,10 @@ class BaseProvider(ABC):
 
     @abstractmethod
     def create_model(
-        self, model: Optional[str] = None, api_key: Optional[str] = None
+        self,
+        model: Optional[str] = None,
+        api_key: Optional[str] = None,
+        max_output_tokens: Optional[int] = None,
     ) -> BaseChatModel:
         """Create a LangChain compatible ChatModel."""
         raise NotImplementedError()

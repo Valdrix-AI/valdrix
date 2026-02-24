@@ -14,10 +14,11 @@ Key Features:
 5. Export capability for auditors
 """
 
+import inspect
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 from sqlalchemy import String, ForeignKey, Text, Index, JSON, Uuid, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -312,7 +313,10 @@ class AuditLogger:
             error_message=error_message,
         )
 
-        self.db.add(entry)
+        add_result = cast(Any, self.db).add(entry)
+        # AsyncSession.add is sync, but AsyncMock-based tests may return awaitables.
+        if inspect.isawaitable(add_result):
+            await add_result
         await self.db.flush()
 
         # Also log to structured logger for real-time monitoring

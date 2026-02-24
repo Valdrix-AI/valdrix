@@ -515,7 +515,11 @@ async def analyze_costs(
 
     # 3. Analyze
     result = await analyzer.analyze(
-        usage_summary=summary, tenant_id=tenant_id, db=db, provider=provider
+        usage_summary=summary,
+        tenant_id=tenant_id,
+        db=db,
+        provider=provider,
+        user_id=current_user.id,
     )
 
     return result

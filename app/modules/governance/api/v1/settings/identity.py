@@ -903,6 +903,11 @@ async def update_identity_settings(
             error=str(exc),
         )
         await db.rollback()
+        # Rollback expires ORM state; refresh so response serialization stays safe.
+        try:
+            await db.refresh(identity)
+        except Exception:
+            pass
 
     logger.info(
         "identity_settings_updated",
@@ -1005,6 +1010,11 @@ async def rotate_scim_token(
             error=str(exc),
         )
         await db.rollback()
+        # Rollback expires ORM state; refresh so response serialization stays safe.
+        try:
+            await db.refresh(identity)
+        except Exception:
+            pass
 
     logger.info("scim_token_rotated", tenant_id=str(current_user.tenant_id))
     return RotateScimTokenResponse(

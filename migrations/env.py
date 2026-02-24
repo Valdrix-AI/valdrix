@@ -33,6 +33,13 @@ from app.modules.governance.domain.security.audit_log import AuditLog  # noqa: F
 from app.models.attribution import AttributionRule, CostAllocation  # noqa: F401 # pylint: disable=unused-import
 from app.models.anomaly_marker import AnomalyMarker  # noqa: F401 # pylint: disable=unused-import
 from app.models.optimization import OptimizationStrategy, StrategyRecommendation  # noqa: F401 # pylint: disable=unused-import
+from app.models.enforcement import (  # noqa: F401 # pylint: disable=unused-import
+    EnforcementApprovalRequest,
+    EnforcementBudgetAllocation,
+    EnforcementCreditGrant,
+    EnforcementDecision,
+    EnforcementPolicy,
+)
 
 from app.shared.core.config import get_settings
 from sqlalchemy.ext.asyncio import create_async_engine

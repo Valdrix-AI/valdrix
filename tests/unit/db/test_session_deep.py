@@ -13,17 +13,21 @@ from app.shared.core.exceptions import ValdrixException
 class TestSessionDeep:
     @pytest.mark.asyncio
     async def test_get_db_no_request(self):
-        async for session in get_db():
-            assert session.info["rls_context_set"] is True
-            break
+        agen = get_db()
+        session = await anext(agen)
+        assert session.info["rls_context_set"] is True
+        with pytest.raises(StopAsyncIteration):
+            await anext(agen)
 
     @pytest.mark.asyncio
     async def test_get_db_with_request_tenant(self):
         mock_request = MagicMock()
         mock_request.state.tenant_id = "tenant-abc"
-        async for session in get_db(mock_request):
-            assert session.info["rls_context_set"] is True
-            break
+        agen = get_db(mock_request)
+        session = await anext(agen)
+        assert session.info["rls_context_set"] is True
+        with pytest.raises(StopAsyncIteration):
+            await anext(agen)
 
     @pytest.mark.asyncio
     async def test_set_session_tenant_id(self):

@@ -956,23 +956,24 @@ class TestAuthorizationAndAuthentication:
         ac.app.dependency_overrides.pop(get_current_user, None)
 
     @pytest.mark.asyncio
-    async def test_role_based_access_admin_required(self, ac: AsyncClient, mock_user):
-        """Test that admin role is required for certain operations."""
-        # Mock regular member user (not admin)
+    async def test_approve_remediation_requires_explicit_permission(
+        self,
+        ac: AsyncClient,
+        test_tenant,
+        test_remediation_request,
+    ):
+        """Test that explicit approval permission is required for approval operations."""
+        # Mock regular member user with no explicit approval permission.
         member_user = CurrentUser(
             id=uuid4(),
             email="member@test.com",
-            tenant_id=uuid4(),
-            role=UserRole.MEMBER,  # Not admin
+            tenant_id=test_tenant.id,
+            role=UserRole.MEMBER,
             tier=PricingTier.PRO,
         )
 
         # Mock authentication by overriding the app's dependency
-        from app.shared.core.auth import (
-            get_current_user,
-            require_tenant_access,
-            requires_role,
-        )
+        from app.shared.core.auth import get_current_user, require_tenant_access
 
         async def mock_get_current_user():
             return member_user
@@ -980,27 +981,24 @@ class TestAuthorizationAndAuthentication:
         async def mock_require_tenant_access():
             return member_user.tenant_id
 
-        async def mock_requires_role(role: str):
-            # This should return None or raise an exception for non-admin users
-            if role == "admin" and member_user.role != "admin":
-                raise Exception("Admin role required")
-            return member_user
-
         ac.app.dependency_overrides[get_current_user] = mock_get_current_user
         ac.app.dependency_overrides[require_tenant_access] = mock_require_tenant_access
-        ac.app.dependency_overrides[requires_role] = mock_requires_role
 
-        response = await ac.post(
-            f"/api/v1/zombies/approve/{uuid4()}", json={"notes": "test"}
-        )
+        with patch(
+            "app.modules.optimization.api.v1.zombies.user_has_approval_permission",
+            new=AsyncMock(return_value=False),
+        ) as mock_permission_check:
+            response = await ac.post(
+                f"/api/v1/zombies/approve/{test_remediation_request.id}",
+                json={"notes": "test"},
+            )
 
-        # Should be forbidden due to insufficient role
-        assert response.status_code == 403
+            assert response.status_code == 403
+            mock_permission_check.assert_awaited_once()
 
         # Clean up overrides
         ac.app.dependency_overrides.pop(get_current_user, None)
         ac.app.dependency_overrides.pop(require_tenant_access, None)
-        ac.app.dependency_overrides.pop(requires_role, None)
 
     @pytest.mark.asyncio
     async def test_feature_flag_gates_endpoints(self, ac: AsyncClient, mock_user):

@@ -3,6 +3,7 @@ from httpx import AsyncClient
 from unittest.mock import patch
 from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import AsyncMock
+from types import SimpleNamespace
 
 from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
@@ -160,3 +161,69 @@ async def test_sso_discovery_backend_error(async_client: AsyncClient):
     payload = res.json()
     assert payload["available"] is False
     assert payload["reason"] == "sso_discovery_backend_error"
+
+
+def _turnstile_strict_settings() -> SimpleNamespace:
+    return SimpleNamespace(
+        TURNSTILE_ENABLED=True,
+        TURNSTILE_ENFORCE_IN_TESTING=True,
+        TURNSTILE_SECRET_KEY="turnstile-secret-key",
+        TURNSTILE_VERIFY_URL="https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        TURNSTILE_TIMEOUT_SECONDS=2.0,
+        TURNSTILE_FAIL_OPEN=False,
+        TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT=True,
+        TURNSTILE_REQUIRE_SSO_DISCOVERY=True,
+        TURNSTILE_REQUIRE_ONBOARD=True,
+        TESTING=True,
+        ENVIRONMENT="test",
+    )
+
+
+@pytest.mark.asyncio
+async def test_public_assessment_requires_turnstile_token(async_client: AsyncClient):
+    with patch(
+        "app.shared.core.turnstile.get_settings",
+        return_value=_turnstile_strict_settings(),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/assessment",
+            json={"aws_account_id": "123456789012"},
+        )
+    assert response.status_code == 400
+    assert response.json()["error"] == "turnstile_token_required"
+
+
+@pytest.mark.asyncio
+async def test_public_assessment_rejects_invalid_turnstile(async_client: AsyncClient):
+    with (
+        patch(
+            "app.shared.core.turnstile.get_settings",
+            return_value=_turnstile_strict_settings(),
+        ),
+        patch(
+            "app.shared.core.turnstile._verify_turnstile_with_cloudflare",
+            new_callable=AsyncMock,
+            return_value={"success": False, "error-codes": ["invalid-input-response"]},
+        ),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/assessment",
+            json={"aws_account_id": "123456789012"},
+            headers={"X-Turnstile-Token": "invalid-token"},
+        )
+    assert response.status_code == 403
+    assert response.json()["error"] == "turnstile_verification_failed"
+
+
+@pytest.mark.asyncio
+async def test_sso_discovery_requires_turnstile_token(async_client: AsyncClient):
+    with patch(
+        "app.shared.core.turnstile.get_settings",
+        return_value=_turnstile_strict_settings(),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/sso/discovery",
+            json={"email": "user@example.com"},
+        )
+    assert response.status_code == 400
+    assert response.json()["error"] == "turnstile_token_required"
