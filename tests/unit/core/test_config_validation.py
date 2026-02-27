@@ -566,3 +566,67 @@ class TestSettingsValidation:
                 "f" * 32,
                 "g" * 40,
             ]
+
+    def test_settings_rejects_invalid_enforcement_global_gate_cap(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    GROQ_API_KEY="g" * 32,
+                    ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP=0,
+                    _env_file=None,
+                )
+            assert "ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP must be >= 1" in str(
+                exc.value
+            )
+
+    def test_settings_accepts_enforcement_global_gate_cap(self):
+        with patch.dict("os.environ", {}, clear=True):
+            settings = Settings(
+                DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
+                GROQ_API_KEY="g" * 32,
+                ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP=2500,
+                _env_file=None,
+            )
+            assert settings.ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP == 2500
+
+    def test_settings_rejects_short_enforcement_export_signing_secret(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    GROQ_API_KEY="g" * 32,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET="short-secret",
+                    _env_file=None,
+                )
+            assert "ENFORCEMENT_EXPORT_SIGNING_SECRET must be >= 32 chars" in str(
+                exc.value
+            )
+
+    def test_settings_accepts_enforcement_export_signing_controls(self):
+        with patch.dict("os.environ", {}, clear=True):
+            settings = Settings(
+                DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
+                GROQ_API_KEY="g" * 32,
+                ENFORCEMENT_EXPORT_SIGNING_SECRET="x" * 48,
+                ENFORCEMENT_EXPORT_SIGNING_KID="enf-export-v2",
+                _env_file=None,
+            )
+            assert settings.ENFORCEMENT_EXPORT_SIGNING_SECRET == "x" * 48
+            assert settings.ENFORCEMENT_EXPORT_SIGNING_KID == "enf-export-v2"

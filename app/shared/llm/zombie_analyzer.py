@@ -13,6 +13,7 @@ from uuid import UUID
 import json
 import re
 import structlog
+from datetime import date, datetime, timedelta
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
@@ -145,6 +146,98 @@ class ZombieAnalyzer:
             return None
         return max(128, min(parsed, 32768))
 
+    @staticmethod
+    def _resolve_positive_limit(
+        raw_limit: Any,
+        *,
+        minimum: int = 1,
+        maximum: int = 1_000_000,
+    ) -> int | None:
+        if raw_limit is None:
+            return None
+        try:
+            parsed = int(raw_limit)
+        except (TypeError, ValueError):
+            return None
+        if parsed < minimum:
+            return None
+        return min(parsed, maximum)
+
+    @staticmethod
+    def _zombie_to_date(value: Dict[str, Any]) -> date | None:
+        for key in ("last_activity_at", "last_seen_at", "date", "detected_at"):
+            raw = value.get(key)
+            if isinstance(raw, datetime):
+                return raw.date()
+            if isinstance(raw, date):
+                return raw
+            if isinstance(raw, str):
+                try:
+                    return date.fromisoformat(raw[:10])
+                except ValueError:
+                    continue
+        return None
+
+    @classmethod
+    def _apply_tier_analysis_shape_limits(
+        cls,
+        zombies: List[Dict[str, Any]],
+        *,
+        tier: Any,
+    ) -> tuple[List[Dict[str, Any]], dict[str, int]]:
+        limits: dict[str, int] = {}
+        original_count = len(zombies)
+        limited = list(zombies)
+
+        max_window_days = cls._resolve_positive_limit(
+            get_tier_limit(tier, "llm_analysis_max_window_days"),
+            maximum=3650,
+        )
+        if max_window_days:
+            dated_rows = [(row, cls._zombie_to_date(row)) for row in limited]
+            valid_dates = [row_date for _, row_date in dated_rows if row_date]
+            if valid_dates:
+                latest_date = max(valid_dates)
+                cutoff = latest_date - timedelta(days=max_window_days - 1)
+                limited = [
+                    row
+                    for row, row_date in dated_rows
+                    if row_date is None or row_date >= cutoff
+                ]
+                limits["max_window_days"] = max_window_days
+
+        prompt_max_tokens = cls._resolve_positive_limit(
+            get_tier_limit(tier, "llm_prompt_max_input_tokens"),
+            minimum=256,
+            maximum=131_072,
+        )
+        if prompt_max_tokens:
+            limits["max_prompt_tokens"] = prompt_max_tokens
+
+        max_records = cls._resolve_positive_limit(
+            get_tier_limit(tier, "llm_analysis_max_records"),
+            maximum=50_000,
+        )
+        if prompt_max_tokens:
+            prompt_record_cap = max(1, prompt_max_tokens // 20)
+            max_records = (
+                prompt_record_cap
+                if max_records is None
+                else min(max_records, prompt_record_cap)
+            )
+        if max_records and len(limited) > max_records:
+            sortable_rows = [
+                (row, cls._zombie_to_date(row) or date.min, idx)
+                for idx, row in enumerate(limited)
+            ]
+            sortable_rows.sort(key=lambda item: (item[1], item[2]))
+            limited = [row for row, _, _ in sortable_rows[-max_records:]]
+            limits["max_records"] = max_records
+
+        limits["records_before"] = original_count
+        limits["records_after"] = len(limited)
+        return limited, limits
+
     async def analyze(
         self,
         detection_results: Dict[str, Any],
@@ -152,6 +245,8 @@ class ZombieAnalyzer:
         db: Optional[AsyncSession] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
+        user_id: Optional[UUID] = None,
+        client_ip: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Analyze detected zombie resources with LLM."""
         zombies = self._flatten_zombies(detection_results)
@@ -167,11 +262,32 @@ class ZombieAnalyzer:
 
         # 1. Resolve LLM Configuration
         max_output_tokens: Optional[int] = None
+        max_prompt_tokens: Optional[int] = None
+        tier: Any = None
+        shape_limits: dict[str, int] = {}
         if tenant_id and db:
             tier = await get_tenant_tier(tenant_id, db)
             max_output_tokens = self._resolve_output_token_ceiling(
                 get_tier_limit(tier, "llm_output_max_tokens")
             )
+            max_prompt_tokens = self._resolve_positive_limit(
+                get_tier_limit(tier, "llm_prompt_max_input_tokens"),
+                minimum=256,
+                maximum=131_072,
+            )
+            zombies, shape_limits = self._apply_tier_analysis_shape_limits(
+                zombies,
+                tier=tier,
+            )
+            if shape_limits.get("records_after", 0) < shape_limits.get(
+                "records_before", 0
+            ):
+                logger.info(
+                    "zombie_analysis_shape_limited",
+                    tenant_id=str(tenant_id),
+                    tier=getattr(tier, "value", str(tier)),
+                    limits=shape_limits,
+                )
 
         (
             effective_provider,
@@ -198,6 +314,9 @@ class ZombieAnalyzer:
         # 3b. Pre-authorize usage against tier/budget guardrails.
         if tenant_id and db:
             prompt_tokens = max(500, len(formatted_data) // 4)
+            if max_prompt_tokens is not None:
+                prompt_tokens = min(prompt_tokens, max_prompt_tokens)
+            actor_type = "user" if user_id else "system"
             await LLMBudgetManager.check_and_reserve(
                 tenant_id=tenant_id,
                 db=db,
@@ -205,6 +324,9 @@ class ZombieAnalyzer:
                 model=effective_model,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=max_output_tokens or 1200,
+                user_id=user_id,
+                actor_type=actor_type,
+                client_ip=client_ip,
             )
 
         # 4. Invoke LLM
@@ -220,6 +342,9 @@ class ZombieAnalyzer:
                 effective_model,
                 response,
                 byok_key is not None,
+                user_id=user_id,
+                actor_type="user" if user_id else "system",
+                client_ip=client_ip,
             )
 
         # 6. Parse and Validate
@@ -297,6 +422,9 @@ class ZombieAnalyzer:
         model: str,
         response: Any,
         is_byok: bool,
+        user_id: UUID | None = None,
+        actor_type: str = "system",
+        client_ip: str | None = None,
     ) -> None:
         """Records LLM usage metrics."""
         try:
@@ -313,6 +441,9 @@ class ZombieAnalyzer:
                 completion_tokens=output_tokens,
                 is_byok=is_byok,
                 request_type="zombie_analysis",
+                user_id=user_id,
+                actor_type=actor_type,
+                client_ip=client_ip,
             )
             logger.info(
                 "zombie_analysis_usage_tracked",

@@ -31,6 +31,8 @@ from app.shared.core.ops_metrics import (  # noqa: F401
     LLM_FAIR_USE_DENIALS,
     LLM_FAIR_USE_EVALUATIONS,
     LLM_FAIR_USE_OBSERVED,
+    LLM_AUTH_ABUSE_SIGNALS,
+    LLM_AUTH_IP_RISK_SCORE,
 )
 from app.shared.core.pricing import get_tenant_tier, PricingTier  # noqa: F401
 from app.shared.core.logging import audit_log  # noqa: F401
@@ -47,6 +49,8 @@ __all__ = [
     "LLM_FAIR_USE_DENIALS",
     "LLM_FAIR_USE_EVALUATIONS",
     "LLM_FAIR_USE_OBSERVED",
+    "LLM_AUTH_ABUSE_SIGNALS",
+    "LLM_AUTH_IP_RISK_SCORE",
     "get_tenant_tier",
     "PricingTier",
     "audit_log",
@@ -133,10 +137,17 @@ class LLMBudgetManager:
         tenant_id: UUID,
         db: AsyncSession,
         user_id: UUID | None = None,
+        actor_type: str = "system",
     ) -> None:
         from app.shared.llm.budget_fair_use import enforce_daily_analysis_limit
 
-        await enforce_daily_analysis_limit(cls, tenant_id, db, user_id=user_id)
+        await enforce_daily_analysis_limit(
+            cls,
+            tenant_id,
+            db,
+            user_id=user_id,
+            actor_type=actor_type,
+        )
 
     @staticmethod
     def _fair_use_inflight_key(tenant_id: UUID) -> str:
@@ -218,6 +229,8 @@ class LLMBudgetManager:
         completion_tokens: int = AVG_RESPONSE_TOKENS,
         operation_id: str | None = None,
         user_id: UUID | None = None,
+        actor_type: str = "system",
+        client_ip: str | None = None,
     ) -> Decimal:
         from app.shared.llm.budget_execution import check_and_reserve_budget
 
@@ -231,6 +244,8 @@ class LLMBudgetManager:
             completion_tokens=completion_tokens,
             operation_id=operation_id,
             user_id=user_id,
+            actor_type=actor_type,
+            client_ip=client_ip,
         )
 
     @classmethod
@@ -247,6 +262,8 @@ class LLMBudgetManager:
         operation_id: str | None = None,
         request_type: str = "unknown",
         user_id: UUID | None = None,
+        actor_type: str = "system",
+        client_ip: str | None = None,
     ) -> None:
         from app.shared.llm.budget_execution import record_usage_entry
 
@@ -263,6 +280,8 @@ class LLMBudgetManager:
             operation_id=operation_id,
             request_type=request_type,
             user_id=user_id,
+            actor_type=actor_type,
+            client_ip=client_ip,
         )
 
     @classmethod

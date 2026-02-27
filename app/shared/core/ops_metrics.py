@@ -172,13 +172,32 @@ ENFORCEMENT_GATE_LATENCY_SECONDS = Histogram(
 ENFORCEMENT_GATE_FAILURES_TOTAL = Counter(
     "valdrix_ops_enforcement_gate_failures_total",
     "Enforcement gate failures before deterministic fail-safe fallback",
-    ["source", "failure_type"],  # timeout|evaluation_error
+    ["source", "failure_type"],  # timeout|evaluation_error|lock_timeout|lock_contended
+)
+
+ENFORCEMENT_GATE_LOCK_EVENTS_TOTAL = Counter(
+    "valdrix_ops_enforcement_gate_lock_events_total",
+    "Enforcement gate serialization lock events by source and event",
+    ["source", "event"],  # acquired|contended|timeout|not_acquired|error
+)
+
+ENFORCEMENT_GATE_LOCK_WAIT_SECONDS = Histogram(
+    "valdrix_ops_enforcement_gate_lock_wait_seconds",
+    "Wait time spent acquiring the enforcement gate serialization lock",
+    ["source", "outcome"],  # acquired|timeout|error
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5),
 )
 
 ENFORCEMENT_EXPORT_EVENTS_TOTAL = Counter(
     "valdrix_ops_enforcement_export_events_total",
     "Enforcement export events by artifact and outcome",
     ["artifact", "outcome"],  # parity|archive|bundle, success|mismatch|rejected_limit
+)
+
+ENFORCEMENT_APPROVAL_QUEUE_BACKLOG = Gauge(
+    "valdrix_ops_enforcement_approval_queue_backlog",
+    "Current number of pending approvals visible to the caller",
+    ["viewer_role"],
 )
 
 TURNSTILE_VERIFICATION_EVENTS_TOTAL = Counter(
@@ -248,6 +267,18 @@ LLM_TOKENS_TOTAL = Counter(
     "valdrix_ops_llm_tokens_total",
     "Total number of LLM tokens processed",
     ["provider", "model", "token_type"],  # input, output
+)
+
+LLM_AUTH_ABUSE_SIGNALS = Counter(
+    "valdrix_ops_llm_auth_abuse_signals_total",
+    "Authenticated LLM abuse signals by actor type and client IP bucket",
+    ["tenant_tier", "actor_type", "ip_bucket"],
+)
+
+LLM_AUTH_IP_RISK_SCORE = Gauge(
+    "valdrix_ops_llm_auth_ip_risk_score",
+    "Latest authenticated LLM client IP risk score by tier and actor",
+    ["tenant_tier", "actor_type"],
 )
 
 # --- Circuit Breaker Metrics ---

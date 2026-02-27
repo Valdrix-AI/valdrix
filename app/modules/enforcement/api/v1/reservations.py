@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.enforcement.api.v1.common import tenant_or_403
@@ -35,6 +35,18 @@ def _reservation_reconcile_sla_seconds() -> int:
     except (TypeError, ValueError):
         sla_seconds = 86400
     return max(60, min(sla_seconds, 604800))
+
+
+def _resolve_idempotency_key(*, header_value: str | None, body_value: str | None) -> str | None:
+    candidate = str(header_value or body_value or "").strip()
+    if not candidate:
+        return None
+    if len(candidate) < 4 or len(candidate) > 128:
+        raise HTTPException(
+            status_code=422,
+            detail="idempotency_key must be between 4 and 128 characters",
+        )
+    return candidate
 
 
 @router.get("/reservations/active", response_model=list[ActiveReservationItem])
@@ -86,17 +98,23 @@ async def list_active_reservations(
 )
 async def reconcile_reservation(
     decision_id: UUID,
+    request: Request,
     payload: ReservationReconcileRequest,
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> ReservationReconcileResponse:
     service = EnforcementService(db)
+    idempotency_key = _resolve_idempotency_key(
+        header_value=request.headers.get("Idempotency-Key"),
+        body_value=payload.idempotency_key,
+    )
     result = await service.reconcile_reservation(
         tenant_id=tenant_or_403(current_user),
         decision_id=decision_id,
         actor_id=current_user.id,
         actual_monthly_delta_usd=payload.actual_monthly_delta_usd,
         notes=payload.notes,
+        idempotency_key=idempotency_key,
     )
     return ReservationReconcileResponse(
         decision_id=result.decision.id,
@@ -165,6 +183,7 @@ async def list_reconciliation_exceptions(
             status=item.status,
             reconciled_at=item.reconciled_at,
             notes=item.notes,
+            credit_settlement=item.credit_settlement,
         )
         for item in rows
     ]

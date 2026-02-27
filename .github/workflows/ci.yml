@@ -287,6 +287,22 @@ jobs:
           head: HEAD
           extra_args: --only-verified
 
+      - name: Terraform Security Scan (tfsec)
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: ./terraform
+          soft_fail: true # Set to true initially to prevent breaking CI on legacy debt, can switch to false later
+
+      - name: Terraform Lint (tflint)
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+      - name: Run TFLint
+        run: |
+          cd terraform
+          tflint --init
+          tflint -f compact
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

@@ -3,6 +3,7 @@ Tests for Job Handlers - Zombie Scan and Notifications
 """
 
 import pytest
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -18,6 +19,7 @@ from app.modules.governance.domain.jobs.handlers.finops import FinOpsAnalysisHan
 from app.modules.governance.domain.jobs.handlers.analysis import (
     ReportGenerationHandler,
     ZombieAnalysisHandler,
+    _parse_iso_date,
 )
 from app.modules.governance.domain.jobs.handlers.license_governance import (
     LicenseGovernanceHandler,
@@ -123,6 +125,41 @@ async def test_zombie_scan_handler_defaults_region_to_global(mock_db, sample_job
         assert result["status"] == "completed"
         assert mock_service.scan_for_tenant.await_count == 1
         assert mock_service.scan_for_tenant.call_args.kwargs["region"] == "global"
+        assert (
+            mock_service.scan_for_tenant.call_args.kwargs["requested_by_user_id"]
+            is None
+        )
+
+
+@pytest.mark.asyncio
+async def test_zombie_scan_handler_propagates_requested_user_id(mock_db, sample_job):
+    handler = ZombieScanHandler()
+    requester_id = uuid4()
+    sample_job.payload = {
+        "region": "us-east-1",
+        "requested_by_user_id": str(requester_id),
+        "requested_client_ip": "198.51.100.20",
+    }
+
+    with patch("app.modules.optimization.domain.service.ZombieService") as mock_service_cls:
+        mock_service = AsyncMock()
+        mock_service.scan_for_tenant.return_value = {
+            "unattached_volumes": [],
+            "total_monthly_waste": 0.0,
+        }
+        mock_service_cls.return_value = mock_service
+
+        result = await handler.execute(sample_job, mock_db)
+
+        assert result["status"] == "completed"
+        assert (
+            mock_service.scan_for_tenant.call_args.kwargs["requested_by_user_id"]
+            == requester_id
+        )
+        assert (
+            mock_service.scan_for_tenant.call_args.kwargs["requested_client_ip"]
+            == "198.51.100.20"
+        )
 
 
 @pytest.mark.asyncio
@@ -387,6 +424,63 @@ async def test_finops_analysis_handler_success(mock_db, sample_job):
                 assert result["analysis_runs"] == 1
                 assert result["analysis_length"] > 0
                 mock_analyzer.analyze.assert_called_once()
+                assert mock_analyzer.analyze.call_args.kwargs["user_id"] is None
+                assert mock_analyzer.analyze.call_args.kwargs["client_ip"] is None
+
+
+@pytest.mark.asyncio
+async def test_finops_analysis_handler_propagates_actor_context(mock_db, sample_job):
+    handler = FinOpsAnalysisHandler()
+    requester_id = uuid4()
+    sample_job.payload = {
+        "requested_by_user_id": str(requester_id),
+        "requested_client_ip": "198.51.100.30",
+    }
+
+    mock_conn = MagicMock(provider="aws")
+    aws_result = MagicMock()
+    aws_result.scalars.return_value.all.return_value = [mock_conn]
+    empty_result = MagicMock()
+    empty_result.scalars.return_value.all.return_value = []
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            aws_result,
+            empty_result,
+            empty_result,
+            empty_result,
+            empty_result,
+            empty_result,
+            empty_result,
+        ]
+    )
+
+    with patch(
+        "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
+    ) as mock_factory:
+        mock_adapter = MagicMock()
+        usage_summary = MagicMock()
+        usage_summary.records = [MagicMock()]
+        mock_adapter.get_daily_costs = AsyncMock(return_value=usage_summary)
+        mock_factory.get_adapter.return_value = mock_adapter
+
+        with patch(
+            "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer"
+        ) as mock_analyzer_cls:
+            mock_analyzer = AsyncMock()
+            mock_analyzer.analyze.return_value = {"insights": ["ok"]}
+            mock_analyzer_cls.return_value = mock_analyzer
+
+            with patch(
+                "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create"
+            ) as mock_create:
+                mock_create.return_value = MagicMock()
+                result = await handler.execute(sample_job, mock_db)
+
+    assert result["status"] == "completed"
+    assert mock_analyzer.analyze.call_args.kwargs["user_id"] == requester_id
+    assert (
+        mock_analyzer.analyze.call_args.kwargs["client_ip"] == "198.51.100.30"
+    )
 
 
 @pytest.mark.asyncio
@@ -464,7 +558,12 @@ async def test_enforcement_reconciliation_handler_requires_tenant_id(mock_db):
 @pytest.mark.asyncio
 async def test_zombie_analysis_handler_success(mock_db, sample_job):
     handler = ZombieAnalysisHandler()
-    sample_job.payload = {"zombies": {"idle_instances": [{"resource_id": "i-1"}]}}
+    requester_id = uuid4()
+    sample_job.payload = {
+        "zombies": {"idle_instances": [{"resource_id": "i-1"}]},
+        "requested_by_user_id": str(requester_id),
+        "requested_client_ip": "198.51.100.21",
+    }
 
     with (
         patch(
@@ -494,6 +593,10 @@ async def test_zombie_analysis_handler_success(mock_db, sample_job):
         assert result["tenant_id"] == str(sample_job.tenant_id)
         assert result["analysis"]["summary"] == "ok"
         mock_analyzer.analyze.assert_awaited_once()
+        assert mock_analyzer.analyze.await_args.kwargs["user_id"] == requester_id
+        assert (
+            mock_analyzer.analyze.await_args.kwargs["client_ip"] == "198.51.100.21"
+        )
 
 
 @pytest.mark.asyncio
@@ -503,6 +606,73 @@ async def test_zombie_analysis_handler_missing_payload(mock_db, sample_job):
 
     with pytest.raises(ValueError, match="zombies payload required"):
         await handler.execute(sample_job, mock_db)
+
+
+@pytest.mark.asyncio
+async def test_zombie_analysis_handler_requires_tenant_id(mock_db):
+    handler = ZombieAnalysisHandler()
+    sample_job = MagicMock(spec=BackgroundJob)
+    sample_job.tenant_id = None
+    sample_job.payload = {"zombies": {}}
+
+    with pytest.raises(ValueError, match="tenant_id required for zombie_analysis"):
+        await handler.execute(sample_job, mock_db)
+
+
+@pytest.mark.asyncio
+async def test_zombie_analysis_handler_feature_disabled_returns_skipped(mock_db, sample_job):
+    handler = ZombieAnalysisHandler()
+    sample_job.payload = {"zombies": {"idle_instances": []}}
+
+    with (
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            new_callable=AsyncMock,
+        ) as mock_tier,
+        patch("app.shared.core.pricing.is_feature_enabled", return_value=False),
+    ):
+        mock_tier.return_value = "free"
+
+        result = await handler.execute(sample_job, mock_db)
+
+    assert result == {
+        "status": "skipped",
+        "tenant_id": str(sample_job.tenant_id),
+        "reason": "llm_analysis_not_enabled",
+        "tier": "free",
+    }
+
+
+@pytest.mark.asyncio
+async def test_zombie_analysis_handler_invalid_requester_context_coerces_to_none(
+    mock_db, sample_job
+):
+    handler = ZombieAnalysisHandler()
+    sample_job.payload = {
+        "zombies": {"idle_instances": [{"resource_id": "i-2"}]},
+        "requested_by_user_id": "not-a-uuid",
+        "requested_client_ip": 1234,
+    }
+
+    with (
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            new_callable=AsyncMock,
+        ) as mock_tier,
+        patch("app.shared.core.pricing.is_feature_enabled", return_value=True),
+        patch("app.shared.llm.factory.LLMFactory.create", return_value=MagicMock()),
+        patch("app.shared.llm.zombie_analyzer.ZombieAnalyzer") as mock_analyzer_cls,
+    ):
+        mock_tier.return_value = "pro"
+        mock_analyzer = AsyncMock()
+        mock_analyzer.analyze.return_value = {"summary": "ok"}
+        mock_analyzer_cls.return_value = mock_analyzer
+
+        result = await handler.execute(sample_job, mock_db)
+
+    assert result["status"] == "completed"
+    assert mock_analyzer.analyze.await_args.kwargs["user_id"] is None
+    assert mock_analyzer.analyze.await_args.kwargs["client_ip"] is None
 
 
 @pytest.mark.asyncio
@@ -529,9 +699,133 @@ async def test_report_generation_handler_close_package(mock_db, sample_job):
 
 
 @pytest.mark.asyncio
+async def test_report_generation_handler_close_package_payload_conversions(
+    mock_db, sample_job
+):
+    handler = ReportGenerationHandler()
+    sample_job.payload = {
+        "report_type": " close_package ",
+        "provider": 123,  # non-string should be dropped
+        "enforce_finalized": False,
+        "max_restatement_entries": "12",
+        "start_date": "2026-01-01",
+        "end_date": "2026-01-31",
+    }
+
+    with patch(
+        "app.modules.reporting.domain.reconciliation.CostReconciliationService"
+    ) as mock_recon_cls:
+        mock_recon = AsyncMock()
+        mock_recon.generate_close_package.return_value = {"close_status": "ready"}
+        mock_recon_cls.return_value = mock_recon
+
+        result = await handler.execute(sample_job, mock_db)
+
+    kwargs = mock_recon.generate_close_package.await_args.kwargs
+    assert result["report_type"] == "close_package"
+    assert kwargs["provider"] is None
+    assert kwargs["enforce_finalized"] is False
+    assert kwargs["max_restatement_entries"] == 12
+    assert kwargs["start_date"] == date(2026, 1, 1)
+    assert kwargs["end_date"] == date(2026, 1, 31)
+
+
+@pytest.mark.asyncio
+async def test_report_generation_handler_leadership_kpis_model_dump_path(
+    mock_db, sample_job
+):
+    handler = ReportGenerationHandler()
+    sample_job.payload = {
+        "report_type": "leadership_kpis",
+        "provider": "aws",
+        "include_preliminary": 1,
+        "top_services_limit": "7",
+        "start_date": "2026-01-01",
+        "end_date": "2026-01-31",
+    }
+
+    with (
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            new_callable=AsyncMock,
+        ) as mock_tier,
+        patch(
+            "app.modules.reporting.domain.leadership_kpis.LeadershipKpiService"
+        ) as mock_kpi_cls,
+    ):
+        mock_tier.return_value = "pro"
+        mock_service = AsyncMock()
+        model_payload = MagicMock()
+        model_payload.model_dump.return_value = {"summary": {"total_spend": 42}}
+        mock_service.compute.return_value = model_payload
+        mock_kpi_cls.return_value = mock_service
+
+        result = await handler.execute(sample_job, mock_db)
+
+    assert result["status"] == "completed"
+    assert result["report_type"] == "leadership_kpis"
+    assert result["report"] == {"summary": {"total_spend": 42}}
+    kwargs = mock_service.compute.await_args.kwargs
+    assert kwargs["tenant_id"] == UUID(str(sample_job.tenant_id))
+    assert kwargs["provider"] == "aws"
+    assert kwargs["include_preliminary"] is True
+    assert kwargs["top_services_limit"] == 7
+    assert kwargs["start_date"] == date(2026, 1, 1)
+    assert kwargs["end_date"] == date(2026, 1, 31)
+
+
+@pytest.mark.asyncio
+async def test_report_generation_handler_leadership_kpis_plain_dict_path(
+    mock_db, sample_job
+):
+    handler = ReportGenerationHandler()
+    sample_job.payload = {"report_type": "leadership_kpis"}
+
+    with (
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            new_callable=AsyncMock,
+        ) as mock_tier,
+        patch(
+            "app.modules.reporting.domain.leadership_kpis.LeadershipKpiService"
+        ) as mock_kpi_cls,
+    ):
+        mock_tier.return_value = "pro"
+        mock_service = AsyncMock()
+        mock_service.compute.return_value = {"summary": {"ok": True}}
+        mock_kpi_cls.return_value = mock_service
+
+        result = await handler.execute(sample_job, mock_db)
+
+    assert result["report_type"] == "leadership_kpis"
+    assert result["report"] == {"summary": {"ok": True}}
+
+
+@pytest.mark.asyncio
+async def test_report_generation_handler_requires_tenant_id(mock_db):
+    handler = ReportGenerationHandler()
+    sample_job = MagicMock(spec=BackgroundJob)
+    sample_job.tenant_id = None
+    sample_job.payload = {}
+
+    with pytest.raises(ValueError, match="tenant_id required for report_generation"):
+        await handler.execute(sample_job, mock_db)
+
+
+@pytest.mark.asyncio
 async def test_report_generation_handler_unsupported_type(mock_db, sample_job):
     handler = ReportGenerationHandler()
     sample_job.payload = {"report_type": "random_thing"}
 
     with pytest.raises(ValueError, match="Unsupported report_type"):
         await handler.execute(sample_job, mock_db)
+
+
+def test_parse_iso_date_accepts_date_and_iso_string():
+    assert _parse_iso_date(date(2026, 2, 1)) == date(2026, 2, 1)
+    assert _parse_iso_date("2026-02-14") == date(2026, 2, 14)
+
+
+def test_parse_iso_date_rejects_non_string_non_date():
+    with pytest.raises(ValueError, match="Expected ISO date string"):
+        _parse_iso_date(1234)

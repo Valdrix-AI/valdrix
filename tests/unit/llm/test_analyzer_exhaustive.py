@@ -307,8 +307,8 @@ async def test_llm_invocation_primary_failure_fallback(
         await analyzer.analyze(usage_summary, tenant_id=uuid4(), db=mock_db)
         assert mock_factory.call_count >= 1
         assert any(
-            call.args[0] == LLMProvider.GROQ
-            and call.kwargs.get("model") == "llama-3.3-70b-versatile"
+            call.args[0] == LLMProvider.GROQ.value
+            and call.kwargs.get("model") == "llama-3.1-8b-instant"
             for call in mock_factory.call_args_list
         )
 
@@ -657,8 +657,10 @@ async def test_analyze_applies_tier_output_ceiling_and_user_metering(
     reserve_kwargs = mock_reserve.await_args.kwargs
     assert reserve_kwargs["completion_tokens"] == 1024
     assert reserve_kwargs["user_id"] == user_id
+    assert reserve_kwargs["actor_type"] == "user"
     assert mock_invoke.await_args.kwargs["max_output_tokens"] == 1024
     assert mock_record.await_args.kwargs["user_id"] == user_id
+    assert mock_record.await_args.kwargs["actor_type"] == "user"
 
 
 @pytest.mark.asyncio
@@ -669,3 +671,117 @@ async def test_process_results_json_failure(mock_llm, mock_db):
             "Invalid JSON", None, MagicMock(records=[], tenant_id=None)
         )
         assert res["llm_raw"]["error"] == "AI analysis format invalid"
+
+
+@pytest.mark.asyncio
+async def test_apply_tier_analysis_shape_limits_enforces_window_and_record_cap(
+    mock_llm,
+):
+    analyzer = FinOpsAnalyzer(mock_llm)
+    now = datetime.now(timezone.utc)
+    usage = CloudUsageSummary(
+        tenant_id=str(uuid4()),
+        provider="aws",
+        start_date=now.date() - timedelta(days=120),
+        end_date=now.date(),
+        total_cost=Decimal("200.0"),
+        records=[
+            CostRecord(
+                date=now - timedelta(days=idx),
+                amount=Decimal("1.0"),
+                service="EC2",
+                region="us-east-1",
+            )
+            for idx in range(120)
+        ],
+    )
+
+    def _limit_side_effect(_tier: PricingTier, key: str):
+        mapping = {
+            "llm_analysis_max_window_days": 14,
+            "llm_analysis_max_records": 20,
+            "llm_prompt_max_input_tokens": 400,
+        }
+        return mapping.get(key)
+
+    with patch("app.shared.llm.analyzer.get_tier_limit", side_effect=_limit_side_effect):
+        limited, limits = analyzer._apply_tier_analysis_shape_limits(
+            usage,
+            tenant_tier=PricingTier.FREE,
+        )
+
+    assert limits["records_before"] == 120
+    assert limits["records_after"] <= 20
+    assert len(limited.records) <= 20
+    oldest = min(record.date for record in limited.records)
+    newest = max(record.date for record in limited.records)
+    assert (newest - oldest).days <= 13
+
+
+@pytest.mark.asyncio
+async def test_invoke_llm_fallback_policy_excludes_openai_for_free_tier(mock_llm):
+    analyzer = FinOpsAnalyzer(mock_llm)
+    prompt = MagicMock()
+    primary_chain = MagicMock()
+    primary_chain.ainvoke = AsyncMock(side_effect=Exception("primary failed"))
+    fallback_chain = MagicMock()
+    fallback_chain.ainvoke = AsyncMock(side_effect=Exception("fallback failed"))
+    prompt.__or__.side_effect = [primary_chain, fallback_chain]
+
+    with (
+        patch.object(analyzer, "_get_prompt", new_callable=AsyncMock, return_value=prompt),
+        patch("app.shared.llm.analyzer.get_settings") as mock_settings,
+        patch("app.shared.llm.analyzer.LLMFactory.create") as mock_factory,
+    ):
+        mock_settings.return_value.LLM_PROVIDER = "groq"
+        mock_factory.return_value = MagicMock()
+        with pytest.raises(AIAnalysisError):
+            await analyzer._invoke_llm(
+                "{}",
+                provider="groq",
+                model="llama-3.3-70b-versatile",
+                byok_key=None,
+                tenant_tier=PricingTier.FREE,
+            )
+
+    created_providers = [call.args[0] for call in mock_factory.call_args_list]
+    assert created_providers == [LLMProvider.GOOGLE.value]
+
+
+@pytest.mark.asyncio
+async def test_invoke_llm_fallback_policy_allows_openai_for_pro_tier(mock_llm):
+    analyzer = FinOpsAnalyzer(mock_llm)
+    prompt = MagicMock()
+    primary_chain = MagicMock()
+    primary_chain.ainvoke = AsyncMock(side_effect=Exception("primary failed"))
+    fallback_google_chain = MagicMock()
+    fallback_google_chain.ainvoke = AsyncMock(side_effect=Exception("google failed"))
+    fallback_openai_chain = MagicMock()
+    fallback_openai_chain.ainvoke = AsyncMock(
+        return_value=MagicMock(content='{"ok": true}', response_metadata={})
+    )
+    prompt.__or__.side_effect = [
+        primary_chain,
+        fallback_google_chain,
+        fallback_openai_chain,
+    ]
+
+    with (
+        patch.object(analyzer, "_get_prompt", new_callable=AsyncMock, return_value=prompt),
+        patch("app.shared.llm.analyzer.get_settings") as mock_settings,
+        patch("app.shared.llm.analyzer.LLMFactory.create") as mock_factory,
+    ):
+        mock_settings.return_value.LLM_PROVIDER = "groq"
+        mock_factory.side_effect = [MagicMock(), MagicMock()]
+
+        content, _ = await analyzer._invoke_llm(
+            "{}",
+            provider="groq",
+            model="llama-3.3-70b-versatile",
+            byok_key=None,
+            tenant_tier=PricingTier.PRO,
+        )
+
+    assert content == '{"ok": true}'
+    created_providers = [call.args[0] for call in mock_factory.call_args_list]
+    assert created_providers == [LLMProvider.GOOGLE.value, LLMProvider.OPENAI.value]

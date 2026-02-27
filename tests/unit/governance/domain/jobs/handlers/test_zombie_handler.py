@@ -43,6 +43,8 @@ async def test_execute_success(db):
             tenant_id=job.tenant_id,
             region="us-east-1",
             analyze=True,
+            requested_by_user_id=None,
+            requested_client_ip=None,
             on_category_complete=ANY,
         )
 
@@ -96,5 +98,64 @@ async def test_execute_prefers_region_payload_key(db):
             tenant_id=job.tenant_id,
             region="eu-west-1",
             analyze=False,
+            requested_by_user_id=None,
+            requested_client_ip=None,
+            on_category_complete=ANY,
+        )
+
+
+@pytest.mark.asyncio
+async def test_execute_forwards_actor_context_from_payload(db):
+    handler = ZombieScanHandler()
+    requester = uuid4()
+    job = BackgroundJob(
+        tenant_id=uuid4(),
+        payload={
+            "region": "us-west-2",
+            "requested_by_user_id": str(requester),
+            "requested_client_ip": "203.0.113.10",
+        },
+    )
+
+    with patch("app.modules.optimization.domain.service.ZombieService") as MockService:
+        service = MockService.return_value
+        service.scan_for_tenant = AsyncMock(return_value={"total_monthly_waste": 0.0})
+
+        await handler.execute(job, db)
+
+        service.scan_for_tenant.assert_awaited_with(
+            tenant_id=job.tenant_id,
+            region="us-west-2",
+            analyze=False,
+            requested_by_user_id=requester,
+            requested_client_ip="203.0.113.10",
+            on_category_complete=ANY,
+        )
+
+
+@pytest.mark.asyncio
+async def test_execute_actor_context_invalid_values_are_safely_dropped(db):
+    handler = ZombieScanHandler()
+    job = BackgroundJob(
+        tenant_id=uuid4(),
+        payload={
+            "regions": [],
+            "requested_by_user_id": "not-a-uuid",
+            "requested_client_ip": 12345,
+        },
+    )
+
+    with patch("app.modules.optimization.domain.service.ZombieService") as MockService:
+        service = MockService.return_value
+        service.scan_for_tenant = AsyncMock(return_value={"total_monthly_waste": 0.0})
+
+        await handler.execute(job, db)
+
+        service.scan_for_tenant.assert_awaited_with(
+            tenant_id=job.tenant_id,
+            region="global",
+            analyze=False,
+            requested_by_user_id=None,
+            requested_client_ip=None,
             on_category_complete=ANY,
         )

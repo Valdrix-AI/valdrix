@@ -4,6 +4,7 @@ Zombie Resource Scan Job Handlers
 
 import structlog
 from typing import Dict, Any
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
@@ -30,6 +31,15 @@ class ZombieScanHandler(BaseJobHandler):
                 return cleaned
         return default_region
 
+    @staticmethod
+    def _parse_optional_uuid(value: Any) -> UUID | None:
+        if value is None:
+            return None
+        try:
+            return UUID(str(value))
+        except (TypeError, ValueError):
+            return None
+
     async def execute(self, job: BackgroundJob, db: AsyncSession) -> Dict[str, Any]:
         from app.modules.optimization.domain.service import ZombieService
 
@@ -39,6 +49,12 @@ class ZombieScanHandler(BaseJobHandler):
 
         payload = job.payload or {}
         region = self._normalize_region(payload)
+        requested_by_user_id = self._parse_optional_uuid(
+            payload.get("requested_by_user_id")
+        )
+        requested_client_ip = payload.get("requested_client_ip")
+        if not isinstance(requested_client_ip, str):
+            requested_client_ip = None
 
         async def checkpoint_result(
             category_key: str, items: list[dict[str, Any]]
@@ -56,6 +72,8 @@ class ZombieScanHandler(BaseJobHandler):
             tenant_id=tenant_id,
             region=region,
             analyze=payload.get("analyze", False),
+            requested_by_user_id=requested_by_user_id,
+            requested_client_ip=requested_client_ip,
             on_category_complete=checkpoint_result,
         )
 

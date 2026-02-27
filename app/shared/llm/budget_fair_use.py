@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -75,6 +76,7 @@ async def count_requests_in_window(
     start: datetime,
     end: datetime | None = None,
     user_id: UUID | None = None,
+    actor_type: str | None = None,
 ) -> int:
     import app.shared.llm.budget_manager as manager_module
 
@@ -82,6 +84,11 @@ async def count_requests_in_window(
         manager_module.LLMUsage.tenant_id == tenant_id,
         manager_module.LLMUsage.created_at >= start,
     )
+    normalized_actor_type = str(actor_type or "").strip().lower()
+    if normalized_actor_type in {"user", "system"}:
+        query = query.where(
+            manager_module.LLMUsage.request_type.like(f"{normalized_actor_type}:%")
+        )
     if user_id is not None:
         query = query.where(manager_module.LLMUsage.user_id == user_id)
     if end is not None:
@@ -95,6 +102,7 @@ async def enforce_daily_analysis_limit(
     tenant_id: UUID,
     db: AsyncSession,
     user_id: UUID | None = None,
+    actor_type: str = "system",
 ) -> None:
     """
     Enforce tier-based per-day LLM analysis quota.
@@ -103,6 +111,24 @@ async def enforce_daily_analysis_limit(
     """
     from app.shared.core.pricing import get_tier_limit
     import app.shared.llm.budget_manager as manager_module
+
+    normalized_actor_type = str(actor_type or "").strip().lower()
+    if normalized_actor_type not in {"user", "system"}:
+        normalized_actor_type = "user" if user_id is not None else "system"
+    if user_id is not None and normalized_actor_type == "system":
+        normalized_actor_type = "user"
+    if normalized_actor_type == "user" and user_id is None:
+        manager_module.LLM_PRE_AUTH_DENIALS.labels(
+            reason="missing_user_actor_context",
+            tenant_tier="unknown",
+        ).inc()
+        raise manager_module.BudgetExceededError(
+            "User-scoped LLM request missing actor identity.",
+            details={
+                "gate": "actor_context",
+                "actor_type": normalized_actor_type,
+            },
+        )
 
     tier = await manager_module.get_tenant_tier(tenant_id, db)
     raw_limit = get_tier_limit(tier, "llm_analyses_per_day")
@@ -150,6 +176,7 @@ async def enforce_daily_analysis_limit(
                 "tier": tier.value,
                 "limit": daily_limit,
                 "observed": requests_today,
+                "actor_type": normalized_actor_type,
             },
         )
         raise manager_module.BudgetExceededError(
@@ -158,8 +185,70 @@ async def enforce_daily_analysis_limit(
                 "gate": "daily_tenant",
                 "daily_limit": daily_limit,
                 "requests_today": requests_today,
+                "actor_type": normalized_actor_type,
             },
         )
+
+    if normalized_actor_type == "system":
+        raw_system_limit = get_tier_limit(tier, "llm_system_analyses_per_day")
+        if raw_system_limit is None:
+            return
+        try:
+            system_daily_limit = int(raw_system_limit)
+        except (TypeError, ValueError):
+            manager_module.logger.warning(
+                "invalid_llm_daily_system_limit",
+                tenant_id=str(tenant_id),
+                tier=tier.value,
+                raw_limit=raw_system_limit,
+            )
+            return
+        if system_daily_limit <= 0:
+            manager_module.LLM_PRE_AUTH_DENIALS.labels(
+                reason="daily_system_limit_exceeded",
+                tenant_tier=tier.value,
+            ).inc()
+            raise manager_module.BudgetExceededError(
+                "System LLM analysis is not available on your current plan.",
+                details={
+                    "gate": "daily_system",
+                    "daily_system_limit": system_daily_limit,
+                    "system_requests_today": 0,
+                },
+            )
+
+        system_requests_today = await count_requests_in_window(
+            tenant_id=tenant_id,
+            db=db,
+            start=day_start,
+            end=day_end,
+            actor_type="system",
+        )
+        if system_requests_today >= system_daily_limit:
+            manager_module.LLM_PRE_AUTH_DENIALS.labels(
+                reason="daily_system_limit_exceeded",
+                tenant_tier=tier.value,
+            ).inc()
+            manager_module.audit_log(
+                event="llm_quota_denied",
+                user_id="system",
+                tenant_id=str(tenant_id),
+                details={
+                    "gate": "daily_system",
+                    "tier": tier.value,
+                    "limit": system_daily_limit,
+                    "observed": system_requests_today,
+                },
+            )
+            raise manager_module.BudgetExceededError(
+                "Daily system LLM analysis limit reached for your current plan.",
+                details={
+                    "gate": "daily_system",
+                    "daily_system_limit": system_daily_limit,
+                    "system_requests_today": system_requests_today,
+                },
+            )
+        return
 
     if user_id is None:
         return
@@ -202,6 +291,7 @@ async def enforce_daily_analysis_limit(
                 "gate": "daily_user",
                 "daily_user_limit": user_daily_limit,
                 "user_requests_today": 0,
+                "actor_type": normalized_actor_type,
             },
         )
 
@@ -211,6 +301,7 @@ async def enforce_daily_analysis_limit(
         start=day_start,
         end=day_end,
         user_id=user_id,
+        actor_type="user",
     )
     if user_requests_today >= user_daily_limit:
         manager_module.LLM_PRE_AUTH_DENIALS.labels(
@@ -234,8 +325,74 @@ async def enforce_daily_analysis_limit(
                 "gate": "daily_user",
                 "daily_user_limit": user_daily_limit,
                 "user_requests_today": user_requests_today,
+                "actor_type": normalized_actor_type,
             },
         )
+
+
+def _classify_client_ip(client_ip: str | None) -> tuple[str, int]:
+    raw = str(client_ip or "").strip()
+    if not raw:
+        return "unknown", 50
+    try:
+        parsed = ipaddress.ip_address(raw)
+    except ValueError:
+        return "invalid", 80
+    if parsed.is_loopback:
+        return "loopback", 75
+    if parsed.is_link_local:
+        return "link_local", 65
+    if parsed.is_private:
+        return "private", 40
+    if parsed.is_reserved or parsed.is_multicast:
+        return "reserved", 70
+    if parsed.version == 4:
+        return "public_v4", 20
+    return "public_v6", 20
+
+
+async def record_authenticated_abuse_signal(
+    manager_cls: Any,
+    tenant_id: UUID,
+    db: AsyncSession,
+    tier: PricingTier,
+    actor_type: str,
+    user_id: UUID | None,
+    client_ip: str | None,
+) -> None:
+    import app.shared.llm.budget_manager as manager_module
+
+    del manager_cls
+    del db
+    normalized_actor_type = str(actor_type or "").strip().lower()
+    if normalized_actor_type not in {"user", "system"}:
+        normalized_actor_type = "user" if user_id is not None else "system"
+    if user_id is not None and normalized_actor_type == "system":
+        normalized_actor_type = "user"
+    ip_bucket, risk_score = _classify_client_ip(client_ip)
+    manager_module.LLM_AUTH_ABUSE_SIGNALS.labels(
+        tenant_tier=tier.value,
+        actor_type=normalized_actor_type,
+        ip_bucket=ip_bucket,
+    ).inc()
+    manager_module.LLM_AUTH_IP_RISK_SCORE.labels(
+        tenant_tier=tier.value,
+        actor_type=normalized_actor_type,
+    ).set(risk_score)
+
+    if risk_score < 70:
+        return
+
+    manager_module.audit_log(
+        event="llm_authenticated_abuse_signal",
+        user_id=str(user_id or "system"),
+        tenant_id=str(tenant_id),
+        details={
+            "actor_type": normalized_actor_type,
+            "ip_bucket": ip_bucket,
+            "risk_score": risk_score,
+        },
+    )
 
 
 async def enforce_global_abuse_guard(

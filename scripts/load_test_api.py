@@ -49,7 +49,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         dest="profile",
-        choices=["health", "health_deep", "dashboard", "ops", "scale", "soak"],
+        choices=[
+            "health",
+            "health_deep",
+            "dashboard",
+            "ops",
+            "scale",
+            "soak",
+            "enforcement",
+        ],
         default="health",
         help="Use a pre-defined endpoint profile when --endpoint is not supplied.",
     )
@@ -198,6 +206,8 @@ def _build_profile_endpoints(args: argparse.Namespace) -> list[str]:
         endpoints = [LIVENESS_ENDPOINT]
     elif args.profile == "health_deep":
         endpoints = [DEEP_HEALTH_ENDPOINT]
+    elif args.profile == "enforcement":
+        endpoints = _build_enforcement_profile_endpoints(args)
     elif args.profile == "dashboard":
         start_date, end_date = _resolve_date_window(args)
         endpoints = [
@@ -252,6 +262,19 @@ def _build_scale_profile_endpoints(args: argparse.Namespace) -> list[str]:
         f"/api/v1/leadership/kpis?start_date={start_date}&end_date={end_date}&response_format=json{provider_query}",
         f"/api/v1/savings/proof?start_date={start_date}&end_date={end_date}&response_format=json{provider_query}",
         "/api/v1/leaderboards?period=30d",
+    ]
+
+
+def _build_enforcement_profile_endpoints(args: argparse.Namespace) -> list[str]:
+    del args  # profile does not currently depend on date/provider filters.
+    return [
+        LIVENESS_ENDPOINT,
+        "/api/v1/enforcement/policies",
+        "/api/v1/enforcement/budgets",
+        "/api/v1/enforcement/credits",
+        "/api/v1/enforcement/approvals/queue?limit=50",
+        "/api/v1/enforcement/ledger?limit=50",
+        "/api/v1/enforcement/exports/parity?limit=50",
     ]
 
 
@@ -557,6 +580,9 @@ async def main() -> None:
         ),
         "soak": LoadTestThresholds(
             max_p95_seconds=4.0, max_error_rate_percent=2.0, min_throughput_rps=0.2
+        ),
+        "enforcement": LoadTestThresholds(
+            max_p95_seconds=2.0, max_error_rate_percent=1.0, min_throughput_rps=0.5
         ),
     }
 

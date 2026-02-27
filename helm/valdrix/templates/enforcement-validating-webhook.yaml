@@ -1,0 +1,110 @@
+{{- $cfg := .Values.enforcementWebhook -}}
+{{- if $cfg.enabled }}
+{{- $timeoutSeconds := int $cfg.timeoutSeconds -}}
+{{- $failurePolicy := printf "%v" $cfg.failurePolicy -}}
+{{- $pdb := default (dict "enabled" false "maxUnavailable" 1) $cfg.podDisruptionBudget -}}
+{{- $strategy := default (dict "type" "RollingUpdate" "rollingUpdate" (dict "maxUnavailable" 0 "maxSurge" 1)) .Values.deploymentStrategy -}}
+{{- $rollingUpdate := default (dict "maxUnavailable" 0 "maxSurge" 1) $strategy.rollingUpdate -}}
+{{- $strategyType := printf "%v" (default "RollingUpdate" $strategy.type) -}}
+{{- $strategyMaxUnavailable := int (default 0 $rollingUpdate.maxUnavailable) -}}
+{{- $strategyMaxSurge := int (default 1 $rollingUpdate.maxSurge) -}}
+{{- $affinity := default (dict) .Values.affinity -}}
+{{- $podAntiAffinity := default (dict) $affinity.podAntiAffinity -}}
+{{- $requiredAntiAffinity := default (list) $podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution -}}
+{{- $hasHostAntiAffinity := false -}}
+{{- range $entry := $requiredAntiAffinity -}}
+{{- if eq (printf "%v" (get $entry "topologyKey")) "kubernetes.io/hostname" -}}
+{{- $hasHostAntiAffinity = true -}}
+{{- end -}}
+{{- end -}}
+{{- if and $cfg.certManager.enabled (not $cfg.certManager.injectorSecretName) -}}
+{{- fail "enforcementWebhook.certManager.injectorSecretName is required when enforcementWebhook.certManager.enabled=true" -}}
+{{- end -}}
+{{- if and $cfg.certManager.enabled $cfg.caBundle -}}
+{{- fail "enforcementWebhook.caBundle cannot be set when enforcementWebhook.certManager.enabled=true (choose one CA source)" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") (gt $timeoutSeconds 5) -}}
+{{- fail "enforcementWebhook.timeoutSeconds must be <= 5 when failurePolicy=Fail to reduce admission blast radius" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") .Values.autoscaling.enabled (lt (int .Values.autoscaling.minReplicas) 2) -}}
+{{- fail "enforcementWebhook.failurePolicy=Fail requires autoscaling.minReplicas >= 2 for API availability" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") (not .Values.autoscaling.enabled) (lt (int .Values.replicaCount) 2) -}}
+{{- fail "enforcementWebhook.failurePolicy=Fail requires replicaCount >= 2 when autoscaling is disabled" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") (not $pdb.enabled) -}}
+{{- fail "enforcementWebhook.failurePolicy=Fail requires podDisruptionBudget.enabled=true for safe node drain behavior" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") (gt (int $pdb.maxUnavailable) 1) -}}
+{{- fail "enforcementWebhook.failurePolicy=Fail requires podDisruptionBudget.maxUnavailable <= 1" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") (ne $strategyType "RollingUpdate") -}}
+{{- fail "enforcementWebhook.failurePolicy=Fail requires deploymentStrategy.type=RollingUpdate for safe admission rollout" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") (ne $strategyMaxUnavailable 0) -}}
+{{- fail "enforcementWebhook.failurePolicy=Fail requires deploymentStrategy.rollingUpdate.maxUnavailable=0" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") (lt $strategyMaxSurge 1) -}}
+{{- fail "enforcementWebhook.failurePolicy=Fail requires deploymentStrategy.rollingUpdate.maxSurge>=1" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") (lt (len $requiredAntiAffinity) 1) -}}
+{{- fail "enforcementWebhook.failurePolicy=Fail requires affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution with node-level separation" -}}
+{{- end -}}
+{{- if and (eq $failurePolicy "Fail") (not $hasHostAntiAffinity) -}}
+{{- fail "enforcementWebhook.failurePolicy=Fail requires hard pod anti-affinity on topologyKey=kubernetes.io/hostname" -}}
+{{- end -}}
+{{- $webhookName := printf "%s-enforcement-gate" (include "valdrix.fullname" .) -}}
+{{- $serviceName := default (include "valdrix.fullname" .) $cfg.service.name -}}
+{{- $serviceNamespace := default .Release.Namespace $cfg.service.namespace -}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ $webhookName }}
+  labels:
+    {{- include "valdrix.labels" . | nindent 4 }}
+  {{- if and $cfg.certManager.enabled $cfg.certManager.injectorSecretName }}
+  annotations:
+    cert-manager.io/inject-ca-from: "{{ $serviceNamespace }}/{{ $cfg.certManager.injectorSecretName }}"
+  {{- end }}
+webhooks:
+  - name: gate.enforcement.{{ include "valdrix.fullname" . }}.svc
+    admissionReviewVersions:
+      {{- toYaml $cfg.admissionReviewVersions | nindent 6 }}
+    sideEffects: {{ $cfg.sideEffects | quote }}
+    failurePolicy: {{ $cfg.failurePolicy | quote }}
+    matchPolicy: {{ $cfg.matchPolicy | quote }}
+    timeoutSeconds: {{ $timeoutSeconds }}
+    clientConfig:
+      service:
+        namespace: {{ $serviceNamespace }}
+        name: {{ $serviceName }}
+        path: {{ $cfg.path | quote }}
+        port: {{ int $cfg.service.port }}
+      {{- if $cfg.caBundle }}
+      caBundle: {{ $cfg.caBundle | quote }}
+      {{- end }}
+    rules:
+      - operations:
+          {{- toYaml $cfg.operations | nindent 10 }}
+        apiGroups:
+          {{- toYaml $cfg.apiGroups | nindent 10 }}
+        apiVersions:
+          {{- toYaml $cfg.apiVersions | nindent 10 }}
+        resources:
+          {{- toYaml $cfg.resources | nindent 10 }}
+    {{- if $cfg.namespaceSelector }}
+    namespaceSelector:
+      {{- toYaml $cfg.namespaceSelector | nindent 6 }}
+    {{- end }}
+    {{- if $cfg.objectSelector }}
+    objectSelector:
+      {{- toYaml $cfg.objectSelector | nindent 6 }}
+    {{- end }}
+    {{- if $cfg.matchConditions }}
+    matchConditions:
+      {{- range $condition := $cfg.matchConditions }}
+      - name: {{ $condition.name | quote }}
+        expression: {{ $condition.expression | quote }}
+      {{- end }}
+    {{- end }}
+{{- end }}

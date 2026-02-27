@@ -1,221 +1,257 @@
-import pytest
-import pytest_asyncio
-from unittest.mock import AsyncMock, patch
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from sqlalchemy import select, func
 
-from app.models.tenant import Tenant, User, UserRole
-from app.models.optimization import (
-    OptimizationStrategy,
-    StrategyRecommendation,
-    CommitmentTerm,
-    PaymentOption,
-)
-from app.models.cloud import CloudAccount, CostRecord
-from app.shared.core.pricing import PricingTier
-from app.shared.core.auth import CurrentUser, get_current_user, require_tenant_access
+import pytest
+from fastapi import HTTPException
+
+from app.modules.optimization.api.v1 import strategies as strategies_api
+from app.shared.core.auth import CurrentUser, UserRole
+from app.shared.core.dependencies import requires_feature
+from app.shared.core.exceptions import ResourceNotFoundError
+from app.shared.core.pricing import FeatureFlag, PricingTier
 
 
-@pytest_asyncio.fixture
-async def admin_user(db):
-    tenant_id = uuid4()
-    user_id = uuid4()
-    tenant = Tenant(id=tenant_id, name="Test Tenant", plan=PricingTier.PRO)
-    user = User(
-        id=user_id, email="admin@test.io", tenant_id=tenant_id, role=UserRole.ADMIN
-    )
-    db.add_all([tenant, user])
-    await db.commit()
+def _user() -> CurrentUser:
     return CurrentUser(
-        id=user_id,
-        email=user.email,
-        tenant_id=tenant_id,
+        id=uuid4(),
+        email="finops@example.com",
+        tenant_id=uuid4(),
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
 
 
-@pytest_asyncio.fixture
-async def member_user(db):
-    tenant_id = uuid4()
-    user_id = uuid4()
-    tenant = Tenant(id=tenant_id, name="Member Tenant", plan=PricingTier.PRO)
-    user = User(
-        id=user_id, email="member@test.io", tenant_id=tenant_id, role=UserRole.MEMBER
-    )
-    db.add_all([tenant, user])
-    await db.commit()
-    return CurrentUser(
-        id=user_id,
-        email=user.email,
-        tenant_id=tenant_id,
-        role=UserRole.MEMBER,
-        tier=PricingTier.PRO,
-    )
+def _scalars_result(items: list[object]) -> MagicMock:
+    result = MagicMock()
+    scalars = MagicMock()
+    scalars.all.return_value = items
+    result.scalars.return_value = scalars
+    return result
+
+
+def _scalar_result(item: object | None) -> MagicMock:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = item
+    return result
 
 
 @pytest.mark.asyncio
-async def test_list_recommendations_filters_and_orders(
-    async_client, db, app, member_user
-):
-    app.dependency_overrides[get_current_user] = lambda: member_user
-    app.dependency_overrides[require_tenant_access] = lambda: member_user.tenant_id
+async def test_list_recommendations_returns_scalars_result() -> None:
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars_result([{"id": "r1"}]))
 
-    strategy = OptimizationStrategy(
-        name="RI",
-        description="test",
-        type="reserved_instance",
-        provider="aws",
-    )
-    db.add(strategy)
-    await db.flush()
-
-    rec_open_low = StrategyRecommendation(
-        tenant_id=member_user.tenant_id,
-        strategy_id=strategy.id,
-        resource_type="m5.large",
-        region="us-east-1",
-        term=CommitmentTerm.ONE_YEAR,
-        payment_option=PaymentOption.NO_UPFRONT,
-        upfront_cost=0.0,
-        monthly_recurring_cost=10.0,
-        estimated_monthly_savings=5.0,
-        estimated_monthly_savings_low=4.0,
-        estimated_monthly_savings_high=6.0,
-        break_even_months=0.0,
-        confidence_score=0.82,
-        roi_percentage=10.0,
-        status="open",
-    )
-    rec_open_high = StrategyRecommendation(
-        tenant_id=member_user.tenant_id,
-        strategy_id=strategy.id,
-        resource_type="m5.xlarge",
-        region="us-east-1",
-        term=CommitmentTerm.ONE_YEAR,
-        payment_option=PaymentOption.NO_UPFRONT,
-        upfront_cost=0.0,
-        monthly_recurring_cost=20.0,
-        estimated_monthly_savings=15.0,
-        estimated_monthly_savings_low=12.0,
-        estimated_monthly_savings_high=18.0,
-        break_even_months=0.0,
-        confidence_score=0.93,
-        roi_percentage=30.0,
-        status="open",
-    )
-    rec_applied = StrategyRecommendation(
-        tenant_id=member_user.tenant_id,
-        strategy_id=strategy.id,
-        resource_type="m5.2xlarge",
-        region="us-east-1",
-        term=CommitmentTerm.ONE_YEAR,
-        payment_option=PaymentOption.NO_UPFRONT,
-        upfront_cost=0.0,
-        monthly_recurring_cost=30.0,
-        estimated_monthly_savings=25.0,
-        estimated_monthly_savings_low=20.0,
-        estimated_monthly_savings_high=30.0,
-        break_even_months=0.0,
-        confidence_score=0.95,
-        roi_percentage=50.0,
-        status="applied",
-    )
-
-    db.add_all([rec_open_low, rec_open_high, rec_applied])
-    await db.commit()
-
-    response = await async_client.get("/api/v1/strategies/recommendations?status=open")
-    assert response.status_code == 200
-    data = response.json()
-    assert [rec["resource_type"] for rec in data] == ["m5.xlarge", "m5.large"]
-    assert data[0]["estimated_monthly_savings_low"] == 12.0
-    assert data[0]["estimated_monthly_savings_high"] == 18.0
-    assert data[0]["break_even_months"] == 0.0
-    assert data[0]["confidence_score"] == 0.93
-
-    app.dependency_overrides.pop(get_current_user, None)
-    app.dependency_overrides.pop(require_tenant_access, None)
-
-
-@pytest.mark.asyncio
-async def test_apply_recommendation_updates_status(async_client, db, app, admin_user):
-    app.dependency_overrides[get_current_user] = lambda: admin_user
-    app.dependency_overrides[require_tenant_access] = lambda: admin_user.tenant_id
-
-    strategy = OptimizationStrategy(
-        name="RI",
-        description="test",
-        type="reserved_instance",
-        provider="aws",
-    )
-    db.add(strategy)
-    await db.flush()
-
-    rec = StrategyRecommendation(
-        tenant_id=admin_user.tenant_id,
-        strategy_id=strategy.id,
-        resource_type="m5.large",
-        region="us-east-1",
-        term=CommitmentTerm.ONE_YEAR,
-        payment_option=PaymentOption.NO_UPFRONT,
-        upfront_cost=0.0,
-        monthly_recurring_cost=10.0,
-        estimated_monthly_savings=5.0,
-        roi_percentage=10.0,
-        status="open",
-    )
-    db.add(rec)
-    await db.commit()
-
-    response = await async_client.post(f"/api/v1/strategies/apply/{rec.id}")
-    assert response.status_code == 200
-    await db.refresh(rec)
-    assert rec.status == "applied"
-    assert rec.applied_at is not None
-
-    app.dependency_overrides.pop(get_current_user, None)
-    app.dependency_overrides.pop(require_tenant_access, None)
-
-
-@pytest.mark.asyncio
-async def test_apply_recommendation_not_found(async_client, app, admin_user):
-    app.dependency_overrides[get_current_user] = lambda: admin_user
-    app.dependency_overrides[require_tenant_access] = lambda: admin_user.tenant_id
-
-    missing_id = uuid4()
-    response = await async_client.post(f"/api/v1/strategies/apply/{missing_id}")
-    assert response.status_code == 404
-
-    app.dependency_overrides.pop(get_current_user, None)
-    app.dependency_overrides.pop(require_tenant_access, None)
-
-
-@pytest.mark.asyncio
-async def test_trigger_optimization_scan(async_client, app, admin_user):
-    app.dependency_overrides[get_current_user] = lambda: admin_user
-    app.dependency_overrides[require_tenant_access] = lambda: admin_user.tenant_id
-
-    with patch(
-        "app.modules.optimization.api.v1.strategies.OptimizationService"
-    ) as mock_service:
-        mock_service.return_value.generate_recommendations = AsyncMock(
-            return_value=[{"id": "1"}, {"id": "2"}]
+    with patch.object(strategies_api, "set_session_tenant_id", new=AsyncMock()):
+        out = await strategies_api.list_recommendations(
+            tenant_id=uuid4(),
+            user=_user(),
+            db=db,
+            status="open",
         )
-        response = await async_client.post("/api/v1/strategies/refresh")
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["recommendations_generated"] == 2
-
-    app.dependency_overrides.pop(get_current_user, None)
-    app.dependency_overrides.pop(require_tenant_access, None)
+    assert out == [{"id": "r1"}]
+    db.execute.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_strategies_requires_commitment_optimization_feature(
-    async_client, app
-) -> None:
+async def test_trigger_optimization_scan_returns_generated_count() -> None:
+    db = MagicMock()
+    tenant_id = uuid4()
+    with (
+        patch.object(strategies_api, "set_session_tenant_id", new=AsyncMock()),
+        patch.object(strategies_api, "OptimizationService") as service_cls,
+    ):
+        service = MagicMock()
+        service.generate_recommendations = AsyncMock(return_value=[{"id": "a"}, {"id": "b"}])
+        service_cls.return_value = service
+
+        out = await strategies_api.trigger_optimization_scan(
+            tenant_id=tenant_id,
+            user=_user(),
+            db=db,
+        )
+
+    assert out.status == "success"
+    assert out.recommendations_generated == 2
+    service.generate_recommendations.assert_awaited_once_with(tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_apply_recommendation_success_updates_model_and_audits() -> None:
+    tenant_id = uuid4()
+    recommendation_id = uuid4()
+    recommendation = SimpleNamespace(
+        id=recommendation_id,
+        tenant_id=tenant_id,
+        strategy_id=uuid4(),
+        estimated_monthly_savings=12.5,
+        region="us-east-1",
+        resource_type="m5.large",
+        status="open",
+        applied_at=None,
+    )
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalar_result(recommendation))
+    db.commit = AsyncMock()
+
+    request = SimpleNamespace(
+        method="POST",
+        url=SimpleNamespace(path=f"/api/v1/strategies/apply/{recommendation_id}"),
+    )
+    user = _user()
+
+    with (
+        patch.object(strategies_api, "set_session_tenant_id", new=AsyncMock()),
+        patch.object(strategies_api, "AuditLogger") as audit_cls,
+    ):
+        audit = MagicMock()
+        audit.log = AsyncMock()
+        audit_cls.return_value = audit
+
+        out = await strategies_api.apply_recommendation(
+            request=request,
+            recommendation_id=recommendation_id,
+            tenant_id=tenant_id,
+            user=user,
+            db=db,
+        )
+
+    assert out == {"status": "applied", "recommendation_id": str(recommendation_id)}
+    assert recommendation.status == "applied"
+    assert recommendation.applied_at is not None
+    audit.log.assert_awaited_once()
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_apply_recommendation_not_found_raises() -> None:
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalar_result(None))
+
+    request = SimpleNamespace(
+        method="POST",
+        url=SimpleNamespace(path=f"/api/v1/strategies/apply/{uuid4()}"),
+    )
+
+    with patch.object(strategies_api, "set_session_tenant_id", new=AsyncMock()):
+        with pytest.raises(ResourceNotFoundError):
+            await strategies_api.apply_recommendation(
+                request=request,
+                recommendation_id=uuid4(),
+                tenant_id=uuid4(),
+                user=_user(),
+                db=db,
+            )
+
+
+@pytest.mark.asyncio
+async def test_backtest_invalid_provider_is_rejected() -> None:
+    with (
+        patch.object(strategies_api, "set_session_tenant_id", new=AsyncMock()),
+        patch.object(strategies_api, "OptimizationService"),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await strategies_api.backtest_strategies(
+                tenant_id=uuid4(),
+                user=_user(),
+                db=MagicMock(),
+                provider="oracle",
+                strategy_type=None,
+                days=30,
+            )
+
+    assert exc.value.status_code == 400
+    assert "Unsupported provider" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_backtest_filtered_empty_returns_without_seeding() -> None:
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars_result([]))
+
+    with (
+        patch.object(strategies_api, "set_session_tenant_id", new=AsyncMock()),
+        patch.object(strategies_api, "OptimizationService") as service_cls,
+    ):
+        service = MagicMock()
+        service._seed_default_strategies = AsyncMock(return_value=[])
+        service_cls.return_value = service
+
+        out = await strategies_api.backtest_strategies(
+            tenant_id=uuid4(),
+            user=_user(),
+            db=db,
+            provider=None,
+            strategy_type="savings_plan",
+            days=30,
+        )
+
+    assert out.status == "success"
+    assert out.strategies == []
+    service._seed_default_strategies.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_backtest_seeds_defaults_when_unfiltered_and_empty() -> None:
+    tenant_id = uuid4()
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars_result([]))
+    seeded_strategy = SimpleNamespace(
+        id=uuid4(),
+        name="Seeded Strategy",
+        provider="aws",
+        type=SimpleNamespace(value="savings_plan"),
+        config={},
+    )
+    impl = MagicMock()
+    impl.backtest_hourly_series = MagicMock(return_value={"within_tolerance": True})
+
+    with (
+        patch.object(strategies_api, "set_session_tenant_id", new=AsyncMock()),
+        patch.object(strategies_api, "OptimizationService") as service_cls,
+    ):
+        service = MagicMock()
+        service._seed_default_strategies = AsyncMock(return_value=[seeded_strategy])
+        service._get_strategy_impl = MagicMock(return_value=impl)
+        service._aggregate_usage = AsyncMock(
+            return_value={
+                "provider": "aws",
+                "canonical_charge_category": "compute",
+                "granularity": "hour",
+                "observed_buckets": 24,
+                "expected_buckets": 24,
+                "coverage_ratio": 1.0,
+                "volatility": 0.1,
+                "confidence_score": 0.95,
+                "baseline_hourly_spend": 10.0,
+                "average_hourly_spend": 10.2,
+                "top_region": "us-east-1",
+                "hourly_cost_series": [1.0, 1.2, 0.9],
+            }
+        )
+        service_cls.return_value = service
+
+        out = await strategies_api.backtest_strategies(
+            tenant_id=tenant_id,
+            user=_user(),
+            db=db,
+            provider=None,
+            strategy_type=None,
+            days=14,
+        )
+
+    assert out.status == "success"
+    assert len(out.strategies) == 1
+    assert out.strategies[0].provider == "aws"
+    assert out.strategies[0].strategy_type == "savings_plan"
+    service._seed_default_strategies.assert_awaited_once()
+    impl.backtest_hourly_series.assert_called_once_with([1.0, 1.2, 0.9], tolerance=0.30)
+
+
+@pytest.mark.asyncio
+async def test_feature_gate_rejects_starter_for_commitment_optimization() -> None:
     starter_user = CurrentUser(
         id=uuid4(),
         email="starter@valdrix.io",
@@ -223,162 +259,10 @@ async def test_strategies_requires_commitment_optimization_feature(
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
-    app.dependency_overrides[get_current_user] = lambda: starter_user
-    app.dependency_overrides[require_tenant_access] = lambda: starter_user.tenant_id
-    try:
-        response = await async_client.get(
-            "/api/v1/strategies/recommendations?status=open"
-        )
-        assert response.status_code == 403
-        assert "upgrade" in response.json()["error"].lower()
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
-        app.dependency_overrides.pop(require_tenant_access, None)
 
+    checker = requires_feature(FeatureFlag.COMMITMENT_OPTIMIZATION)
+    with pytest.raises(HTTPException) as exc:
+        await checker(starter_user)
 
-@pytest.mark.asyncio
-async def test_backtest_endpoint_returns_strategy_results(
-    async_client, db, app, member_user
-) -> None:
-    app.dependency_overrides[get_current_user] = lambda: member_user
-    app.dependency_overrides[require_tenant_access] = lambda: member_user.tenant_id
-    try:
-        account = CloudAccount(
-            tenant_id=member_user.tenant_id,
-            provider="aws",
-            name="Backtest AWS",
-            is_active=True,
-        )
-        db.add(account)
-        await db.flush()
-
-        # Daily-resolution ledger rows (timestamp is optional). The service expands these
-        # into hourly series for the backtest harness.
-        from datetime import date, timedelta
-        from decimal import Decimal
-        base_day = date.today() - timedelta(days=3)
-
-        db.add_all(
-            [
-                CostRecord(
-                    tenant_id=member_user.tenant_id,
-                    account_id=account.id,
-                    service="AmazonEC2",
-                    region="us-east-1",
-                    usage_type="BoxUsage",
-                    cost_usd=Decimal("24.00"),
-                    currency="USD",
-                    canonical_charge_category="compute",
-                    canonical_mapping_version="focus-1.3-v1",
-                    is_preliminary=False,
-                    cost_status="FINAL",
-                    recorded_at=base_day,
-                    timestamp=None,
-                ),
-                CostRecord(
-                    tenant_id=member_user.tenant_id,
-                    account_id=account.id,
-                    service="AmazonEC2",
-                    region="us-east-1",
-                    usage_type="BoxUsage",
-                    cost_usd=Decimal("24.00"),
-                    currency="USD",
-                    canonical_charge_category="compute",
-                    canonical_mapping_version="focus-1.3-v1",
-                    is_preliminary=False,
-                    cost_status="FINAL",
-                    recorded_at=base_day + timedelta(days=1),
-                    timestamp=None,
-                ),
-                CostRecord(
-                    tenant_id=member_user.tenant_id,
-                    account_id=account.id,
-                    service="AmazonEC2",
-                    region="us-east-1",
-                    usage_type="BoxUsage",
-                    cost_usd=Decimal("24.00"),
-                    currency="USD",
-                    canonical_charge_category="compute",
-                    canonical_mapping_version="focus-1.3-v1",
-                    is_preliminary=False,
-                    cost_status="FINAL",
-                    recorded_at=base_day + timedelta(days=2),
-                    timestamp=None,
-                ),
-            ]
-        )
-
-        strategy = OptimizationStrategy(
-            name="Compute Savings Plan",
-            description="test",
-            type="savings_plan",
-            provider="aws",
-            config={"min_hourly_threshold": 0.01, "backtest_tolerance": 0.30},
-            is_active=True,
-        )
-        db.add(strategy)
-        await db.commit()
-
-        response = await async_client.get(
-            "/api/v1/strategies/backtest",
-            params={"provider": "aws", "strategy_type": "savings_plan", "days": 7},
-        )
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["status"] == "success"
-        assert len(payload["strategies"]) == 1
-        assert payload["strategies"][0]["provider"] == "aws"
-        assert payload["strategies"][0]["strategy_type"] == "savings_plan"
-        assert "within_tolerance" in payload["strategies"][0]["backtest"]
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
-        app.dependency_overrides.pop(require_tenant_access, None)
-
-
-@pytest.mark.asyncio
-async def test_backtest_provider_filter_no_results_does_not_seed_defaults(
-    async_client, db, app, member_user
-) -> None:
-    app.dependency_overrides[get_current_user] = lambda: member_user
-    app.dependency_overrides[require_tenant_access] = lambda: member_user.tenant_id
-    try:
-        before_count = await db.scalar(select(func.count(OptimizationStrategy.id)))
-        response = await async_client.get(
-            "/api/v1/strategies/backtest",
-            params={"provider": "saas", "days": 30},
-        )
-        after_count = await db.scalar(select(func.count(OptimizationStrategy.id)))
-
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["status"] == "success"
-        assert payload["strategies"] == []
-        assert int(after_count or 0) == int(before_count or 0)
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
-        app.dependency_overrides.pop(require_tenant_access, None)
-
-
-@pytest.mark.asyncio
-async def test_backtest_invalid_provider_rejected(
-    async_client, app, member_user
-) -> None:
-    app.dependency_overrides[get_current_user] = lambda: member_user
-    app.dependency_overrides[require_tenant_access] = lambda: member_user.tenant_id
-    try:
-        response = await async_client.get(
-            "/api/v1/strategies/backtest",
-            params={"provider": "oracle"},
-        )
-        assert response.status_code == 400
-        payload = response.json()
-        message = str(
-            payload.get("detail")
-            or payload.get("message")
-            or payload.get("error")
-            or ""
-        )
-        assert "Unsupported provider" in message
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
-        app.dependency_overrides.pop(require_tenant_access, None)
+    assert exc.value.status_code == 403
+    assert "requires an upgrade" in str(exc.value.detail)

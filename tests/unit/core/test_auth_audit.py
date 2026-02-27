@@ -17,6 +17,9 @@ from app.shared.core.auth import (
 from app.models.tenant import UserRole
 from app.shared.core.pricing import PricingTier
 
+TEST_JWT_SECRET = "audit_test_secret_minimum_32_bytes_hs256"
+WRONG_TEST_JWT_SECRET = "wrong_audit_secret_minimum_32_bytes"
+
 
 class _AsyncNullContext:
     async def __aenter__(self):
@@ -30,7 +33,7 @@ class _AsyncNullContext:
 @pytest.fixture(autouse=True)
 def mock_settings():
     with patch("app.shared.core.auth.get_settings") as mock:
-        mock.return_value.SUPABASE_JWT_SECRET = "supersecretkey"
+        mock.return_value.SUPABASE_JWT_SECRET = TEST_JWT_SECRET
         mock.return_value.JWT_SIGNING_KID = None
         yield mock
 
@@ -39,7 +42,7 @@ def test_create_access_token():
     data = {"sub": "123", "email": "test@example.com"}
     token = create_access_token(data)
     decoded = jwt.decode(
-        token, "supersecretkey", algorithms=["HS256"], audience="authenticated"
+        token, TEST_JWT_SECRET, algorithms=["HS256"], audience="authenticated"
     )
     assert decoded["sub"] == "123"
     assert decoded["email"] == "test@example.com"
@@ -52,7 +55,7 @@ def test_create_access_token_with_delta():
     delta = timedelta(minutes=5)
     token = create_access_token(data, expires_delta=delta)
     decoded = jwt.decode(
-        token, "supersecretkey", algorithms=["HS256"], audience="authenticated"
+        token, TEST_JWT_SECRET, algorithms=["HS256"], audience="authenticated"
     )
     assert decoded["sub"] == "456"
     # Basic check that it's within 5 min
@@ -75,7 +78,7 @@ def test_decode_jwt_valid():
             "aud": "authenticated",
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
         },
-        "supersecretkey",
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
     payload = decode_jwt(token)
@@ -89,7 +92,7 @@ def test_decode_jwt_expired():
             "aud": "authenticated",
             "exp": datetime.now(timezone.utc) - timedelta(hours=1),
         },
-        "supersecretkey",
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
     with pytest.raises(HTTPException) as exc:
@@ -100,7 +103,9 @@ def test_decode_jwt_expired():
 
 def test_decode_jwt_invalid_signature():
     token = jwt.encode(
-        {"sub": "123", "aud": "authenticated"}, "wrongkey", algorithm="HS256"
+        {"sub": "123", "aud": "authenticated"},
+        WRONG_TEST_JWT_SECRET,
+        algorithm="HS256",
     )
     with pytest.raises(HTTPException) as exc:
         decode_jwt(token)
@@ -113,7 +118,7 @@ async def test_get_current_user_from_jwt_success():
     user_id = str(uuid4())
     token = jwt.encode(
         {"sub": user_id, "email": "test@example.com", "aud": "authenticated"},
-        "supersecretkey",
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
     credentials = MagicMock()
@@ -135,7 +140,7 @@ async def test_get_current_user_from_jwt_no_creds():
 async def test_get_current_user_from_jwt_invalid_payload():
     token = jwt.encode(
         {"email": "test@example.com", "aud": "authenticated"},  # Missing sub
-        "supersecretkey",
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
     credentials = MagicMock()
@@ -153,7 +158,7 @@ async def test_get_current_user_success():
 
     token = jwt.encode(
         {"sub": str(user_id), "email": "test@example.com", "aud": "authenticated"},
-        "supersecretkey",
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
     credentials = MagicMock()
@@ -197,7 +202,7 @@ async def test_get_current_user_success():
 async def test_get_current_user_not_found():
     token = jwt.encode(
         {"sub": str(uuid4()), "email": "test@example.com", "aud": "authenticated"},
-        "supersecretkey",
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
     credentials = MagicMock()
@@ -232,7 +237,7 @@ async def test_get_current_user_no_creds():
 async def test_get_current_user_invalid_payload():
     token = jwt.encode(
         {"email": "test@example.com", "aud": "authenticated"},  # Missing sub
-        "supersecretkey",
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
     credentials = MagicMock()
@@ -246,7 +251,7 @@ async def test_get_current_user_invalid_payload():
 async def test_get_current_user_unexpected_error():
     token = jwt.encode(
         {"sub": str(uuid4()), "email": "test@example.com", "aud": "authenticated"},
-        "supersecretkey",
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
     credentials = MagicMock()

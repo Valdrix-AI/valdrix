@@ -1,0 +1,226 @@
+{
+  "metadata": {
+    "matrix_version": "2026-02-25",
+    "baseline_standard": "NIST SP 800-218 v1.1 (Final, February 2022)",
+    "source_urls": [
+      "https://csrc.nist.gov/pubs/sp/800/218/final",
+      "https://doi.org/10.6028/NIST.SP.800-218",
+      "https://csrc.nist.gov/pubs/sp/800/218/r1/ipd"
+    ],
+    "notes": [
+      "This matrix is a traceability artifact, not an assertion of full NIST SSDF certification.",
+      "The v1.1 baseline is used for release gating; Rev.1 v1.2 IPD is tracked as forward-looking input."
+    ]
+  },
+  "practices": [
+    {
+      "practice_id": "PO.1",
+      "title": "Define Security Requirements for Software Development",
+      "status": "implemented_baseline",
+      "summary": "Release-critical enforcement and supply-chain controls are tracked as explicit engineering requirements with binary closure criteria.",
+      "evidence": [
+        "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md",
+        "scripts/run_enterprise_tdd_gate.py",
+        "tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py"
+      ]
+    },
+    {
+      "practice_id": "PO.2",
+      "title": "Implement Roles and Responsibilities",
+      "status": "implemented_baseline",
+      "summary": "Runtime authorization boundaries for enforcement and approvals are role-based with SCIM-aware permission overlays.",
+      "evidence": [
+        "app/shared/core/auth.py",
+        "app/shared/core/approval_permissions.py",
+        "tests/unit/enforcement/test_enforcement_api.py"
+      ]
+    },
+    {
+      "practice_id": "PO.3",
+      "title": "Implement Supporting Toolchains",
+      "status": "implemented_baseline",
+      "summary": "CI and supply-chain toolchains are codified for lint, type-check, test, placeholder guard, SBOM/provenance, and attestation verification.",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/sbom.yml",
+        "scripts/verify_supply_chain_attestations.py"
+      ]
+    },
+    {
+      "practice_id": "PO.4",
+      "title": "Define and Use Criteria for Software Security Checks",
+      "status": "implemented_baseline",
+      "summary": "Security and quality checks are enforced through deterministic CI gates and coverage thresholds.",
+      "evidence": [
+        "scripts/run_enterprise_tdd_gate.py",
+        "scripts/verify_enterprise_placeholder_guards.py",
+        "tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py"
+      ]
+    },
+    {
+      "practice_id": "PO.5",
+      "title": "Implement and Maintain Secure Environments for Software Development",
+      "status": "partial",
+      "summary": "Runtime environment contract checks and deployment guardrails are enforced, with ongoing hardening tracked in the gap register.",
+      "evidence": [
+        "scripts/validate_runtime_env.py",
+        "helm/valdrix/values.schema.json",
+        "tests/unit/ops/test_enforcement_webhook_helm_contract.py"
+      ]
+    },
+    {
+      "practice_id": "PS.1",
+      "title": "Protect All Forms of Code from Unauthorized Access and Tampering",
+      "status": "partial",
+      "summary": "Repository and build-path safeguards are enforced in CI, with organizational source-control controls tracked outside this repository.",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        "scripts/verify_enterprise_placeholder_guards.py",
+        "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md"
+      ]
+    },
+    {
+      "practice_id": "PS.2",
+      "title": "Provide a Mechanism for Verifying Software Release Integrity",
+      "status": "implemented_baseline",
+      "summary": "SBOM/provenance artifacts are generated and verified with attestation identity constraints before promotion.",
+      "evidence": [
+        ".github/workflows/sbom.yml",
+        "scripts/verify_supply_chain_attestations.py",
+        "tests/unit/supply_chain/test_verify_supply_chain_attestations.py"
+      ]
+    },
+    {
+      "practice_id": "PS.3",
+      "title": "Archive and Protect Each Software Release",
+      "status": "partial",
+      "summary": "Build artifacts and evidence outputs are retained in CI; retention and archival policy maturity remains a tracked operations concern.",
+      "evidence": [
+        ".github/workflows/sbom.yml",
+        "docs/ops/alert-evidence-2026-02-25.md",
+        "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md"
+      ]
+    },
+    {
+      "practice_id": "PW.1",
+      "title": "Design Software to Meet Security Requirements and Mitigate Security Risks",
+      "status": "implemented_baseline",
+      "summary": "Enforcement decisioning, immutability, replay controls, and fail-safe behavior are designed as first-class control-plane requirements.",
+      "evidence": [
+        "app/modules/enforcement/domain/service.py",
+        "app/modules/enforcement/api/v1/enforcement.py",
+        "tests/unit/enforcement/test_enforcement_service.py"
+      ]
+    },
+    {
+      "practice_id": "PW.2",
+      "title": "Review the Software Design to Verify Compliance with Requirements and Risk Information",
+      "status": "implemented_baseline",
+      "summary": "Design changes are validated through policy and API contract tests plus release-gate register checkpoints.",
+      "evidence": [
+        "tests/contract/test_openapi_contract.py",
+        "tests/unit/enforcement/test_enforcement_api.py",
+        "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md"
+      ]
+    },
+    {
+      "practice_id": "PW.4",
+      "title": "Reuse Existing, Well-Secured Software When Feasible Instead of Duplicating Functionality",
+      "status": "partial",
+      "summary": "Core security controls are centralized in shared modules and CI scripts; broader third-party component assurance is managed by dependency/security checks.",
+      "evidence": [
+        "app/shared/core/auth.py",
+        "app/shared/core/rate_limit.py",
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "practice_id": "PW.5",
+      "title": "Create Source Code by Adhering to Secure Coding Practices",
+      "status": "implemented_baseline",
+      "summary": "Strict coding hygiene is enforced via lint/type/test and explicit placeholder/legacy guardrails.",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        "scripts/verify_enterprise_placeholder_guards.py",
+        "scripts/run_enterprise_tdd_gate.py"
+      ]
+    },
+    {
+      "practice_id": "PW.6",
+      "title": "Configure the Compilation, Interpreter, and Build Processes to Improve Executable Security",
+      "status": "implemented_baseline",
+      "summary": "Build and release workflows enforce deterministic checks, environment contracts, and attestable artifact outputs.",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/sbom.yml",
+        "scripts/validate_runtime_env.py"
+      ]
+    },
+    {
+      "practice_id": "PW.7",
+      "title": "Review and/or Analyze Human-Readable Code to Identify Vulnerabilities and Verify Compliance with Security Requirements",
+      "status": "implemented_baseline",
+      "summary": "Static analysis and policy guard checks are mandatory in CI.",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        "scripts/verify_enterprise_placeholder_guards.py",
+        "scripts/run_enterprise_tdd_gate.py"
+      ]
+    },
+    {
+      "practice_id": "PW.8",
+      "title": "Test Executable Code to Identify Vulnerabilities and Verify Compliance with Security Requirements",
+      "status": "implemented_baseline",
+      "summary": "Enforcement and supply-chain paths are covered by unit/integration and contract tests with explicit coverage thresholds.",
+      "evidence": [
+        "tests/unit/enforcement/test_enforcement_service.py",
+        "tests/unit/enforcement/test_enforcement_api.py",
+        "tests/contract/test_openapi_contract.py"
+      ]
+    },
+    {
+      "practice_id": "PW.9",
+      "title": "Configure Software to Have Secure Settings by Default",
+      "status": "implemented_baseline",
+      "summary": "Secure deployment defaults and fail-closed guardrails are codified in chart schema and template-level enforcement.",
+      "evidence": [
+        "helm/valdrix/values.yaml",
+        "helm/valdrix/values.schema.json",
+        "tests/unit/ops/test_enforcement_webhook_helm_contract.py"
+      ]
+    },
+    {
+      "practice_id": "RV.1",
+      "title": "Identify and Confirm Vulnerabilities on an Ongoing Basis",
+      "status": "implemented_baseline",
+      "summary": "CI performs recurring static and dependency vulnerability checks.",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        "scripts/security_audit.sh",
+        "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md"
+      ]
+    },
+    {
+      "practice_id": "RV.2",
+      "title": "Assess, Prioritize, and Remediate Vulnerabilities",
+      "status": "implemented_baseline",
+      "summary": "Risk and remediation priorities are tracked in the hardening gap register with closure evidence.",
+      "evidence": [
+        "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md",
+        "docs/runbooks/enforcement_incident_response.md",
+        "tests/unit/ops/test_enforcement_slo_runbook.py"
+      ]
+    },
+    {
+      "practice_id": "RV.3",
+      "title": "Analyze Vulnerabilities to Identify Their Root Causes",
+      "status": "partial",
+      "summary": "Incident response requires root-cause and mitigation recording; additional formal RCA templates remain an operational follow-on.",
+      "evidence": [
+        "docs/runbooks/enforcement_incident_response.md",
+        "docs/ops/alert-evidence-2026-02-25.md",
+        "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md"
+      ]
+    }
+  ]
+}

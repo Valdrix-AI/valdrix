@@ -68,6 +68,7 @@ class UnattachedVolumesPlugin(ZombiePlugin):
                         for vol in page.get("Volumes", []):
                             vol_id = vol["VolumeId"]
                             size_gb = vol.get("Size", 0)
+                            total_ops = 0
 
                             try:
                                 end_time = datetime.now(timezone.utc)
@@ -115,7 +116,6 @@ class UnattachedVolumesPlugin(ZombiePlugin):
                                     EndTime=end_time,
                                 )
 
-                                total_ops = 0
                                 for m_res in ops_metrics.get("MetricDataResults", []):
                                     total_ops += sum(m_res.get("Values", [0]))
 

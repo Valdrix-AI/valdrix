@@ -91,13 +91,18 @@ async def get_export_parity(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> EnforcementExportParityResponse:
+    tenant_id = tenant_or_403(current_user)
     window_start, window_end = _resolve_window(start_date=start_date, end_date=end_date)
     service = EnforcementService(db)
     bundle = await service.build_export_bundle(
-        tenant_id=tenant_or_403(current_user),
+        tenant_id=tenant_id,
         window_start=window_start,
         window_end=window_end,
         max_rows=_resolve_max_rows(max_rows),
+    )
+    signed_manifest = service.build_signed_export_manifest(
+        tenant_id=tenant_id,
+        bundle=bundle,
     )
     ENFORCEMENT_EXPORT_EVENTS_TOTAL.labels(
         artifact="parity",
@@ -113,7 +118,15 @@ async def get_export_parity(
         approval_count_exported=bundle.approval_count_exported,
         decisions_sha256=bundle.decisions_sha256,
         approvals_sha256=bundle.approvals_sha256,
+        policy_lineage_sha256=bundle.policy_lineage_sha256,
+        policy_lineage_entries=len(bundle.policy_lineage),
+        computed_context_lineage_sha256=bundle.computed_context_lineage_sha256,
+        computed_context_lineage_entries=len(bundle.computed_context_lineage),
         parity_ok=bundle.parity_ok,
+        manifest_content_sha256=signed_manifest.content_sha256,
+        manifest_signature=signed_manifest.signature,
+        manifest_signature_algorithm=signed_manifest.signature_algorithm,
+        manifest_signature_key_id=signed_manifest.signature_key_id,
     )
 
 
@@ -134,23 +147,15 @@ async def download_export_archive(
         window_end=window_end,
         max_rows=_resolve_max_rows(max_rows),
     )
+    signed_manifest = service.build_signed_export_manifest(
+        tenant_id=tenant_id,
+        bundle=bundle,
+    )
     ENFORCEMENT_EXPORT_EVENTS_TOTAL.labels(
         artifact="archive",
         outcome=("success" if bundle.parity_ok else "mismatch"),
     ).inc()
-
-    manifest = {
-        "generated_at": bundle.generated_at.isoformat(),
-        "window_start": bundle.window_start.isoformat(),
-        "window_end": bundle.window_end.isoformat(),
-        "decision_count_db": bundle.decision_count_db,
-        "decision_count_exported": bundle.decision_count_exported,
-        "approval_count_db": bundle.approval_count_db,
-        "approval_count_exported": bundle.approval_count_exported,
-        "decisions_sha256": bundle.decisions_sha256,
-        "approvals_sha256": bundle.approvals_sha256,
-        "parity_ok": bundle.parity_ok,
-    }
+    manifest = signed_manifest.to_payload()
 
     archive_buffer = io.BytesIO()
     with zipfile.ZipFile(
@@ -159,6 +164,9 @@ async def download_export_archive(
         compression=zipfile.ZIP_DEFLATED,
     ) as bundle_zip:
         bundle_zip.writestr("manifest.json", json.dumps(manifest, indent=2))
+        bundle_zip.writestr("manifest.canonical.json", signed_manifest.canonical_content_json)
+        bundle_zip.writestr("manifest.sha256", f"{signed_manifest.content_sha256}\n")
+        bundle_zip.writestr("manifest.sig", f"{signed_manifest.signature}\n")
         bundle_zip.writestr("decisions.csv", bundle.decisions_csv)
         bundle_zip.writestr("approvals.csv", bundle.approvals_csv)
 

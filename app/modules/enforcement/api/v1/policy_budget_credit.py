@@ -23,14 +23,37 @@ router = APIRouter(tags=["Enforcement"])
 def _policy_to_response(policy: object) -> PolicyResponse:
     return PolicyResponse(
         terraform_mode=getattr(policy, "terraform_mode"),
+        terraform_mode_prod=getattr(policy, "terraform_mode_prod"),
+        terraform_mode_nonprod=getattr(policy, "terraform_mode_nonprod"),
         k8s_admission_mode=getattr(policy, "k8s_admission_mode"),
+        k8s_admission_mode_prod=getattr(policy, "k8s_admission_mode_prod"),
+        k8s_admission_mode_nonprod=getattr(policy, "k8s_admission_mode_nonprod"),
         require_approval_for_prod=bool(getattr(policy, "require_approval_for_prod")),
         require_approval_for_nonprod=bool(
             getattr(policy, "require_approval_for_nonprod")
         ),
+        enforce_prod_requester_reviewer_separation=bool(
+            getattr(policy, "enforce_prod_requester_reviewer_separation", True)
+        ),
+        enforce_nonprod_requester_reviewer_separation=bool(
+            getattr(policy, "enforce_nonprod_requester_reviewer_separation", False)
+        ),
+        plan_monthly_ceiling_usd=getattr(policy, "plan_monthly_ceiling_usd", None),
+        enterprise_monthly_ceiling_usd=getattr(
+            policy,
+            "enterprise_monthly_ceiling_usd",
+            None,
+        ),
         auto_approve_below_monthly_usd=getattr(policy, "auto_approve_below_monthly_usd"),
         hard_deny_above_monthly_usd=getattr(policy, "hard_deny_above_monthly_usd"),
         default_ttl_seconds=int(getattr(policy, "default_ttl_seconds")),
+        approval_routing_rules=list(getattr(policy, "approval_routing_rules", []) or []),
+        policy_document_schema_version=getattr(
+            policy,
+            "policy_document_schema_version",
+        ),
+        policy_document_sha256=getattr(policy, "policy_document_sha256"),
+        policy_document=getattr(policy, "policy_document"),
         policy_version=int(getattr(policy, "policy_version")),
         updated_at=getattr(policy, "updated_at"),
     )
@@ -58,12 +81,26 @@ async def upsert_policy(
     policy = await service.update_policy(
         tenant_id=tenant_or_403(current_user),
         terraform_mode=payload.terraform_mode,
+        terraform_mode_prod=payload.terraform_mode_prod,
+        terraform_mode_nonprod=payload.terraform_mode_nonprod,
         k8s_admission_mode=payload.k8s_admission_mode,
+        k8s_admission_mode_prod=payload.k8s_admission_mode_prod,
+        k8s_admission_mode_nonprod=payload.k8s_admission_mode_nonprod,
         require_approval_for_prod=payload.require_approval_for_prod,
         require_approval_for_nonprod=payload.require_approval_for_nonprod,
+        enforce_prod_requester_reviewer_separation=payload.enforce_prod_requester_reviewer_separation,
+        enforce_nonprod_requester_reviewer_separation=payload.enforce_nonprod_requester_reviewer_separation,
+        plan_monthly_ceiling_usd=payload.plan_monthly_ceiling_usd,
+        enterprise_monthly_ceiling_usd=payload.enterprise_monthly_ceiling_usd,
         auto_approve_below_monthly_usd=payload.auto_approve_below_monthly_usd,
         hard_deny_above_monthly_usd=payload.hard_deny_above_monthly_usd,
         default_ttl_seconds=payload.default_ttl_seconds,
+        approval_routing_rules=[item.model_dump() for item in payload.approval_routing_rules],
+        policy_document=(
+            payload.policy_document.model_dump(mode="json")
+            if payload.policy_document is not None
+            else None
+        ),
     )
     return _policy_to_response(policy)
 
@@ -122,6 +159,7 @@ async def list_credits(
     return [
         CreditResponse(
             id=item.id,
+            pool_type=item.pool_type,
             scope_key=item.scope_key,
             total_amount_usd=item.total_amount_usd,
             remaining_amount_usd=item.remaining_amount_usd,
@@ -144,6 +182,7 @@ async def create_credit(
     credit = await service.create_credit_grant(
         tenant_id=tenant_or_403(current_user),
         actor_id=current_user.id,
+        pool_type=payload.pool_type,
         scope_key=payload.scope_key,
         total_amount_usd=payload.total_amount_usd,
         expires_at=payload.expires_at,
@@ -151,6 +190,7 @@ async def create_credit(
     )
     return CreditResponse(
         id=credit.id,
+        pool_type=credit.pool_type,
         scope_key=credit.scope_key,
         total_amount_usd=credit.total_amount_usd,
         remaining_amount_usd=credit.remaining_amount_usd,

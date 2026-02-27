@@ -9,7 +9,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.modules.governance.api.v1 import audit as audit_api
+from app.modules.governance.api.v1 import audit_partitioning as audit_partitioning_api
 from app.modules.governance.api.v1.audit import (
     _compute_partitioning_evidence,
     _rowcount,
@@ -180,7 +180,7 @@ async def test_compute_partitioning_evidence_postgres_path(monkeypatch) -> None:
         def today(cls) -> "_FixedDate":
             return cls(2026, 1, 15)
 
-    monkeypatch.setattr(audit_api, "date", _FixedDate)
+    monkeypatch.setattr(audit_partitioning_api, "date", _FixedDate)
 
     mock_db = AsyncMock()
     mock_db.bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))

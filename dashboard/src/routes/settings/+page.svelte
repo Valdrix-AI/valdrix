@@ -1012,10 +1012,7 @@
 				tier={data.subscription?.tier}
 			/>
 
-			<EnforcementOpsCard
-				accessToken={data.session?.access_token}
-				tier={data.subscription?.tier}
-			/>
+			<EnforcementOpsCard accessToken={data.session?.access_token} tier={data.subscription?.tier} />
 
 			<!-- AI Strategy Settings -->
 			<div class="card stagger-enter">

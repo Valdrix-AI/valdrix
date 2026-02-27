@@ -399,6 +399,7 @@ async def test_analyze_costs_paths(async_client: AsyncClient, app):
             assert mock_create.called
             assert mock_analyzer.analyze.await_count == 1
             assert mock_analyzer.analyze.await_args.kwargs["user_id"] == user_id
+            assert "client_ip" in mock_analyzer.analyze.await_args.kwargs
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

@@ -1,7 +1,9 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
+from datetime import datetime, timezone, timedelta
 from app.shared.llm.zombie_analyzer import ZombieAnalyzer
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.fixture
@@ -340,3 +342,134 @@ def test_strip_markdown(zombie_analyzer):
     text_no_md = "just text"
     cleaned = zombie_analyzer._strip_markdown(text_no_md)
     assert cleaned == "just text"
+
+
+@pytest.mark.asyncio
+async def test_zombie_analyzer_propagates_user_id_to_budget_and_usage(zombie_analyzer):
+    tenant_id = uuid4()
+    user_id = uuid4()
+    mock_db = AsyncMock()
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value=MagicMock(
+            content='{"summary":"ok","resources":[]}',
+            response_metadata={
+                "token_usage": {"prompt_tokens": 123, "completion_tokens": 77}
+            },
+        )
+    )
+    zombie_analyzer.prompt = MagicMock()
+    zombie_analyzer.prompt.__or__.return_value = mock_chain
+
+    with (
+        patch(
+            "app.shared.llm.zombie_analyzer.get_tenant_tier",
+            new_callable=AsyncMock,
+            return_value=PricingTier.STARTER,
+        ),
+        patch.object(
+            zombie_analyzer,
+            "_get_effective_llm_config",
+            new_callable=AsyncMock,
+            return_value=("groq", "llama-3.3-70b-versatile", None),
+        ),
+        patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+            new_callable=AsyncMock,
+        ) as mock_reserve,
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+            new_callable=AsyncMock,
+        ) as mock_record_usage,
+        patch("app.shared.llm.zombie_analyzer.get_settings") as mock_settings,
+    ):
+        mock_settings.return_value.LLM_PROVIDER = "groq"
+        mock_guardrails.sanitize_input = AsyncMock(return_value=[{"resource_id": "i-1"}])
+        mock_guardrails.validate_output.return_value = MagicMock(
+            model_dump=lambda: {"summary": "ok", "resources": []}
+        )
+
+        await zombie_analyzer.analyze(
+            detection_results={"idle_instances": [{"resource_id": "i-1"}]},
+            tenant_id=tenant_id,
+            db=mock_db,
+            user_id=user_id,
+        )
+
+        assert mock_reserve.await_args.kwargs["user_id"] == user_id
+        assert mock_reserve.await_args.kwargs["actor_type"] == "user"
+        assert mock_record_usage.await_args.kwargs["user_id"] == user_id
+        assert mock_record_usage.await_args.kwargs["actor_type"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_zombie_analyzer_applies_tier_shape_limits(zombie_analyzer):
+    tenant_id = uuid4()
+    mock_db = AsyncMock()
+    now = datetime.now(timezone.utc)
+    rows = [
+        {
+            "resource_id": f"r-{idx}",
+            "last_activity_at": (now - timedelta(days=idx)).isoformat(),
+        }
+        for idx in range(120)
+    ]
+    mock_chain = MagicMock()
+    mock_chain.ainvoke = AsyncMock(
+        return_value=MagicMock(content='{"summary":"ok","resources":[]}')
+    )
+    zombie_analyzer.prompt = MagicMock()
+    zombie_analyzer.prompt.__or__.return_value = mock_chain
+
+    def _limit_side_effect(tier: PricingTier, key: str):
+        mapping = {
+            "llm_output_max_tokens": 512,
+            "llm_analysis_max_records": 12,
+            "llm_analysis_max_window_days": 7,
+            "llm_prompt_max_input_tokens": 512,
+        }
+        return mapping.get(key)
+
+    with (
+        patch(
+            "app.shared.llm.zombie_analyzer.get_tenant_tier",
+            new_callable=AsyncMock,
+            return_value=PricingTier.FREE,
+        ),
+        patch(
+            "app.shared.llm.zombie_analyzer.get_tier_limit",
+            side_effect=_limit_side_effect,
+        ),
+        patch.object(
+            zombie_analyzer,
+            "_get_effective_llm_config",
+            new_callable=AsyncMock,
+            return_value=("groq", "llama-3.3-70b-versatile", None),
+        ),
+        patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.check_and_reserve",
+            new_callable=AsyncMock,
+        ) as mock_reserve,
+        patch(
+            "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+            new_callable=AsyncMock,
+        ),
+        patch("app.shared.llm.zombie_analyzer.get_settings") as mock_settings,
+    ):
+        mock_settings.return_value.LLM_PROVIDER = "groq"
+        mock_guardrails.sanitize_input = AsyncMock(side_effect=lambda payload: payload)
+        mock_guardrails.validate_output.return_value = MagicMock(
+            model_dump=lambda: {"summary": "ok", "resources": []}
+        )
+
+        await zombie_analyzer.analyze(
+            detection_results={"idle_instances": rows},
+            tenant_id=tenant_id,
+            db=mock_db,
+        )
+
+        sanitized_payload = mock_guardrails.sanitize_input.await_args.args[0]
+        assert len(sanitized_payload) <= 12
+        assert mock_reserve.await_args.kwargs["prompt_tokens"] <= 512

@@ -20,6 +20,8 @@ __all__ = [
     "get_limiter",
     "setup_rate_limiting",
     "rate_limit",
+    "global_rate_limit",
+    "global_limit_key",
     "standard_limit",
     "auth_limit",
     "analysis_limit",
@@ -154,6 +156,41 @@ def rate_limit(
     # during each request.
     return cast(
         Callable[[Callable[..., Any]], Callable[..., Any]], get_limiter().limit(limit)
+    )
+
+
+def global_limit_key(namespace: str) -> Callable[[Request], str]:
+    """
+    Build a stable cross-tenant limiter key for shared fairness controls.
+    """
+
+    safe_namespace = "".join(
+        ch if (ch.isalnum() or ch in {"_", "-", ".", ":"}) else "_"
+        for ch in str(namespace or "").strip().lower()
+    )
+    if not safe_namespace:
+        safe_namespace = "global"
+    key = f"global:{safe_namespace}"
+
+    def _key(request: Request | None = None) -> str:
+        del request
+        return key
+
+    return _key
+
+
+def global_rate_limit(
+    limit: str | Callable[[Request], str] = "1000/minute",
+    *,
+    namespace: str = "default",
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """
+    Apply a route-level global throttle shared across tenants.
+    """
+
+    return cast(
+        Callable[[Callable[..., Any]], Callable[..., Any]],
+        get_limiter().limit(limit, key_func=global_limit_key(namespace)),
     )
 
 

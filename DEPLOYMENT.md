@@ -55,23 +55,22 @@ docker run -d \
 ### Quick Start
 
 ```bash
-# Apply all manifests
-kubectl apply -f k8s/
+# Add the helm chart (if using a repo) or use the local one
+helm upgrade --install valdrix ./helm/valdrix --namespace valdrix --create-namespace
 
 # Verify deployment
-kubectl get pods -l app=valdrix
-kubectl get hpa
+kubectl get pods -n valdrix -l app.kubernetes.io/name=valdrix
 ```
 
-### Manifests
+### Helm Chart Structure
 
-| File | Description |
+| Component | Description |
 |---|---|
-| `k8s/deployment.yaml` | API + Worker pods |
-| `k8s/service.yaml` | Internal services |
-| `k8s/configmap.yaml` | Configuration |
-| `k8s/hpa.yaml` | Autoscaling (3→20 replicas) |
-| `k8s/ingress.yaml` | External access with TLS |
+| `templates/deployment.yaml` | API + Worker pods |
+| `templates/service.yaml` | Internal services |
+| `templates/configmap.yaml` | Configuration |
+| `templates/hpa.yaml` | Autoscaling (3→20 replicas) |
+| `templates/ingress.yaml` | External access with TLS |
 
 ### Required Secrets
 

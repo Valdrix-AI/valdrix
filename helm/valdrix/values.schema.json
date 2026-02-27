@@ -1,0 +1,597 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "deploymentStrategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["RollingUpdate", "Recreate"]
+        },
+        "rollingUpdate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "maxUnavailable": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxSurge": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": ["maxUnavailable", "maxSurge"]
+        }
+      },
+      "required": ["type", "rollingUpdate"]
+    },
+    "affinity": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "podAntiAffinity": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "requiredDuringSchedulingIgnoredDuringExecution": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "topologyKey": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["topologyKey"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "enforcementWebhook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "failurePolicy": {
+          "type": "string",
+          "enum": ["Ignore", "Fail"]
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "matchPolicy": {
+          "type": "string",
+          "enum": ["Equivalent", "Exact"]
+        },
+        "sideEffects": {
+          "type": "string",
+          "enum": ["None", "NoneOnDryRun"]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/"
+        },
+        "admissionReviewVersions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "contains": {
+            "const": "v1"
+          }
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["CREATE", "UPDATE", "DELETE", "CONNECT", "*"]
+          }
+        },
+        "apiGroups": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "apiVersions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "resources": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "namespaceSelector": {
+          "$ref": "#/definitions/labelSelector"
+        },
+        "objectSelector": {
+          "$ref": "#/definitions/labelSelector"
+        },
+        "matchConditions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 63
+              },
+              "expression": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": ["name", "expression"]
+          }
+        },
+        "podDisruptionBudget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "maxUnavailable": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": ["enabled", "maxUnavailable"]
+        },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          },
+          "required": ["port"]
+        },
+        "certManager": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "injectorSecretName": {
+              "type": "string"
+            }
+          },
+          "required": ["enabled", "injectorSecretName"]
+        },
+        "caBundle": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "failurePolicy",
+        "timeoutSeconds",
+        "matchPolicy",
+        "sideEffects",
+        "path",
+        "admissionReviewVersions",
+        "operations",
+        "apiGroups",
+        "apiVersions",
+        "resources",
+        "namespaceSelector",
+        "objectSelector",
+        "matchConditions",
+        "podDisruptionBudget",
+        "service",
+        "certManager",
+        "caBundle"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "failurePolicy": {
+                "const": "Fail"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "timeoutSeconds": {
+                "maximum": 5
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "failurePolicy": {
+                "const": "Fail"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "podDisruptionBudget": {
+                "properties": {
+                  "enabled": {
+                    "const": true
+                  }
+                },
+                "required": ["enabled"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "failurePolicy": {
+                "const": "Fail"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "podDisruptionBudget": {
+                "properties": {
+                  "maxUnavailable": {
+                    "maximum": 1
+                  }
+                },
+                "required": ["maxUnavailable"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "certManager": {
+                "properties": {
+                  "enabled": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "certManager": {
+                "properties": {
+                  "injectorSecretName": {
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "not": {
+            "allOf": [
+              {
+                "properties": {
+                  "certManager": {
+                    "properties": {
+                      "enabled": {
+                        "const": true
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "caBundle": {
+                    "pattern": ".+"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "enforcementWebhook": {
+            "properties": {
+              "enabled": {
+                "const": true
+              },
+              "failurePolicy": {
+                "const": "Fail"
+              }
+            },
+            "required": ["enabled", "failurePolicy"]
+          },
+          "autoscaling": {
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            },
+            "required": ["enabled"]
+          }
+        },
+        "required": ["enforcementWebhook", "autoscaling"]
+      },
+      "then": {
+        "properties": {
+          "autoscaling": {
+            "properties": {
+              "minReplicas": {
+                "minimum": 2
+              }
+            },
+            "required": ["minReplicas"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enforcementWebhook": {
+            "properties": {
+              "enabled": {
+                "const": true
+              },
+              "failurePolicy": {
+                "const": "Fail"
+              }
+            },
+            "required": ["enabled", "failurePolicy"]
+          },
+          "autoscaling": {
+            "properties": {
+              "enabled": {
+                "const": false
+              }
+            },
+            "required": ["enabled"]
+          }
+        },
+        "required": ["enforcementWebhook", "autoscaling"]
+      },
+      "then": {
+        "properties": {
+          "replicaCount": {
+            "minimum": 2
+          }
+        },
+        "required": ["replicaCount"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enforcementWebhook": {
+            "properties": {
+              "enabled": {
+                "const": true
+              },
+              "failurePolicy": {
+                "const": "Fail"
+              }
+            },
+            "required": ["enabled", "failurePolicy"]
+          }
+        },
+        "required": ["enforcementWebhook"]
+      },
+      "then": {
+        "properties": {
+          "deploymentStrategy": {
+            "properties": {
+              "type": {
+                "const": "RollingUpdate"
+              },
+              "rollingUpdate": {
+                "properties": {
+                  "maxUnavailable": {
+                    "const": 0
+                  },
+                  "maxSurge": {
+                    "minimum": 1
+                  }
+                },
+                "required": ["maxUnavailable", "maxSurge"]
+              }
+            },
+            "required": ["type", "rollingUpdate"]
+          }
+        },
+        "required": ["deploymentStrategy"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enforcementWebhook": {
+            "properties": {
+              "enabled": {
+                "const": true
+              },
+              "failurePolicy": {
+                "const": "Fail"
+              }
+            },
+            "required": ["enabled", "failurePolicy"]
+          }
+        },
+        "required": ["enforcementWebhook"]
+      },
+      "then": {
+        "properties": {
+          "affinity": {
+            "properties": {
+              "podAntiAffinity": {
+                "properties": {
+                  "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "type": "array",
+                    "minItems": 1,
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "topologyKey": {
+                          "const": "kubernetes.io/hostname"
+                        }
+                      },
+                      "required": ["topologyKey"]
+                    }
+                  }
+                },
+                "required": ["requiredDuringSchedulingIgnoredDuringExecution"]
+              }
+            },
+            "required": ["podAntiAffinity"]
+          }
+        },
+        "required": ["affinity"]
+      }
+    }
+  ],
+  "definitions": {
+    "labelSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "matchLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "matchExpressions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1
+              },
+              "operator": {
+                "type": "string",
+                "enum": ["In", "NotIn", "Exists", "DoesNotExist"]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": ["key", "operator"],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "operator": {
+                      "enum": ["In", "NotIn"]
+                    }
+                  }
+                },
+                "then": {
+                  "required": ["values"],
+                  "properties": {
+                    "values": {
+                      "minItems": 1
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "operator": {
+                      "enum": ["Exists", "DoesNotExist"]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "values": {
+                      "maxItems": 0
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

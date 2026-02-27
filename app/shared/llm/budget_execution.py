@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.llm.budget_fair_use import (
     enforce_fair_use_guards,
     enforce_global_abuse_guard,
+    record_authenticated_abuse_signal,
 )
 
 if TYPE_CHECKING:
@@ -57,6 +58,24 @@ def _coerce_threshold_percent(value: Any) -> Decimal:
     return threshold
 
 
+def _normalize_actor_type(value: Any) -> str:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"user", "system"}:
+            return normalized
+    return "system"
+
+
+def _compose_request_type(actor_type: str, request_type: str) -> str:
+    normalized_actor = _normalize_actor_type(actor_type)
+    raw = str(request_type or "unknown").strip()
+    if not raw:
+        raw = "unknown"
+    if raw.startswith("user:") or raw.startswith("system:"):
+        return raw
+    return f"{normalized_actor}:{raw}"
+
+
 async def check_and_reserve_budget(
     manager_cls: Any,
     tenant_id: UUID,
@@ -68,6 +87,8 @@ async def check_and_reserve_budget(
     completion_tokens: int,
     operation_id: str | None = None,
     user_id: UUID | None = None,
+    actor_type: str = "system",
+    client_ip: str | None = None,
 ) -> Decimal:
     """
     Check budget and atomically reserve funds.
@@ -82,13 +103,28 @@ async def check_and_reserve_budget(
     )
     concurrency_slot_acquired = False
     tier_for_metrics = "unknown"
+    normalized_actor_type = _normalize_actor_type(actor_type)
+    if user_id is not None and normalized_actor_type == "system":
+        normalized_actor_type = "user"
 
     try:
         await manager_cls._enforce_daily_analysis_limit(
-            tenant_id, db, user_id=user_id
+            tenant_id,
+            db,
+            user_id=user_id,
+            actor_type=normalized_actor_type,
         )
         tier = await manager_module.get_tenant_tier(tenant_id, db)
         tier_for_metrics = tier.value
+        await record_authenticated_abuse_signal(
+            manager_cls=manager_cls,
+            tenant_id=tenant_id,
+            db=db,
+            tier=tier,
+            actor_type=normalized_actor_type,
+            user_id=user_id,
+            client_ip=client_ip,
+        )
         await enforce_global_abuse_guard(
             manager_cls=manager_cls,
             tenant_id=tenant_id,
@@ -232,6 +268,8 @@ async def record_usage_entry(
     operation_id: str | None = None,
     request_type: str = "unknown",
     user_id: UUID | None = None,
+    actor_type: str = "system",
+    client_ip: str | None = None,
 ) -> None:
     """
     Record actual LLM usage and handle metrics/alerts.
@@ -239,6 +277,9 @@ async def record_usage_entry(
     import app.shared.llm.budget_manager as manager_module
 
     try:
+        normalized_actor_type = _normalize_actor_type(actor_type)
+        if user_id is not None and normalized_actor_type == "system":
+            normalized_actor_type = "user"
         result = await db.execute(
             select(manager_module.LLMBudget)
             .where(manager_module.LLMBudget.tenant_id == tenant_id)
@@ -289,7 +330,7 @@ async def record_usage_entry(
             cost_usd=actual_cost_decimal,
             is_byok=is_byok,
             operation_id=operation_id,
-            request_type=request_type,
+            request_type=_compose_request_type(normalized_actor_type, request_type),
         )
         db.add(usage)
 

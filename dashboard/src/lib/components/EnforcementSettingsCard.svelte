@@ -282,7 +282,8 @@
 	{/if}
 
 	<p class="text-xs text-ink-400 mb-5">
-		Configure pre-provision gate policy, monthly budget envelopes, and temporary enforcement credits.
+		Configure pre-provision gate policy, monthly budget envelopes, and temporary enforcement
+		credits.
 	</p>
 
 	{#if error}

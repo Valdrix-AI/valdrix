@@ -27,6 +27,28 @@ Applies to:
 - `SEV-2`: degraded enforcement behavior, isolated or time-bounded impact.
 - `SEV-3`: low-risk anomaly requiring follow-up but no immediate outage.
 
+## SLO Burn-Rate Policy (BSAFE-016)
+
+Target SLO for enforcement gate reliability: `99.9%` (error budget `0.1%`).
+
+Burn-rate alerts and thresholds:
+
+1. `ValdrixEnforcementErrorBudgetBurnFast` (`critical`)
+   - windows: `1h` + `5m`
+   - threshold: `14.4x` burn (`error_ratio > 14.4 * 0.001`)
+2. `ValdrixEnforcementErrorBudgetBurnSlow` (`warning`)
+   - windows: `6h` + `30m`
+   - threshold: `6x` burn (`error_ratio > 6 * 0.001`)
+
+Low-traffic guardrails are required in rule expressions to avoid false positives:
+
+1. minimum decision volume in window for alert eligibility.
+
+Release-gate rule:
+
+1. Any firing burn-rate alert blocks release promotion.
+2. Promotion resumes only after alerts are clear for two consecutive windows and incident owner signs off mitigation.
+
 ## Scenario 1: Abuse Spike (Cross-Tenant Burst)
 
 ### Detection Signals
