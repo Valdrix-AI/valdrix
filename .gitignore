@@ -237,3 +237,6 @@ reports/performance/*.log
 # Acceptance evidence artifacts (generated locally/CI)
 reports/acceptance/**
 !reports/acceptance/.gitkeep
+
+# Local scratch/image dump folders
+khafdee/
