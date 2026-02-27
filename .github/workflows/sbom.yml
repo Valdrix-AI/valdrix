@@ -137,6 +137,17 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: "./provenance/supply-chain-manifest.json"
+
+      - name: Verify provenance attestations (release gate)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          uv run python scripts/verify_supply_chain_attestations.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --signer-workflow .github/workflows/sbom.yml \
+            --artifact ./sbom/valdrix-python-sbom.json \
+            --artifact ./sbom/valdrix-container-sbom.json \
+            --artifact ./provenance/supply-chain-manifest.json
       
       # Intentionally do not push directly to main from CI.
       # SBOM artifacts are published through workflow artifacts/releases.

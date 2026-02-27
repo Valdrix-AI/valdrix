@@ -42,12 +42,25 @@ async def list_decision_ledger(
             decision=item.entry.decision.value,
             reason_codes=list(item.entry.reason_codes or []),
             policy_version=int(item.entry.policy_version),
+            policy_document_schema_version=item.entry.policy_document_schema_version,
+            policy_document_sha256=item.entry.policy_document_sha256,
             request_fingerprint=item.entry.request_fingerprint,
             idempotency_key=item.entry.idempotency_key,
             estimated_monthly_delta_usd=item.entry.estimated_monthly_delta_usd,
             estimated_hourly_delta_usd=item.entry.estimated_hourly_delta_usd,
+            burn_rate_daily_usd=item.entry.burn_rate_daily_usd,
+            forecast_eom_usd=item.entry.forecast_eom_usd,
+            risk_class=item.entry.risk_class,
+            risk_score=item.entry.risk_score,
+            anomaly_signal=item.entry.anomaly_signal,
             reserved_total_usd=item.entry.reserved_total_usd,
             approval_required=bool(item.entry.approval_required),
+            approval_request_id=item.entry.approval_request_id,
+            approval_status=(
+                item.entry.approval_status.value
+                if item.entry.approval_status is not None
+                else None
+            ),
             request_payload_sha256=item.entry.request_payload_sha256,
             response_payload_sha256=item.entry.response_payload_sha256,
             decision_created_at=item.entry.decision_created_at,

@@ -369,6 +369,26 @@ class Settings(BaseSettings):
             raise ValueError(
                 "ENFORCEMENT_GATE_TIMEOUT_SECONDS must be <= 30."
             )
+        if self.ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP < 1:
+            raise ValueError("ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP must be >= 1.")
+        if self.ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP > 100000:
+            raise ValueError(
+                "ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP must be <= 100000."
+            )
+        export_signing_secret = str(
+            getattr(self, "ENFORCEMENT_EXPORT_SIGNING_SECRET", "") or ""
+        ).strip()
+        if export_signing_secret and len(export_signing_secret) < 32:
+            raise ValueError(
+                "ENFORCEMENT_EXPORT_SIGNING_SECRET must be >= 32 chars when provided."
+            )
+        export_signing_kid = str(
+            getattr(self, "ENFORCEMENT_EXPORT_SIGNING_KID", "") or ""
+        ).strip()
+        if export_signing_kid and len(export_signing_kid) > 64:
+            raise ValueError(
+                "ENFORCEMENT_EXPORT_SIGNING_KID must be <= 64 chars."
+            )
         if self.ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS < 60:
             raise ValueError(
                 "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS must be >= 60."
@@ -634,6 +654,10 @@ class Settings(BaseSettings):
     REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE: bool = False
     ENFORCE_REMEDIATION_DRY_RUN: bool = False
     ENFORCEMENT_GATE_TIMEOUT_SECONDS: float = 2.0
+    ENFORCEMENT_GLOBAL_ABUSE_GUARD_ENABLED: bool = True
+    ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP: int = 1200
+    ENFORCEMENT_EXPORT_SIGNING_SECRET: Optional[str] = None
+    ENFORCEMENT_EXPORT_SIGNING_KID: str = "enforcement-export-hmac-v1"
     ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS: int = 86400
     ENFORCEMENT_RECONCILIATION_SWEEP_ENABLED: bool = True
     ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES: int = 500

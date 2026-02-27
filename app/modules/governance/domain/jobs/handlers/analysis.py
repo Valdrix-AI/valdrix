@@ -36,6 +36,16 @@ class ZombieAnalysisHandler(BaseJobHandler):
         zombies_payload = payload.get("zombies")
         if not isinstance(zombies_payload, dict):
             raise ValueError("zombies payload required for zombie_analysis")
+        requested_by_user_id_raw = payload.get("requested_by_user_id")
+        requested_by_user_id: UUID | None = None
+        if requested_by_user_id_raw is not None:
+            try:
+                requested_by_user_id = UUID(str(requested_by_user_id_raw))
+            except (TypeError, ValueError):
+                requested_by_user_id = None
+        requested_client_ip = payload.get("requested_client_ip")
+        if not isinstance(requested_client_ip, str):
+            requested_client_ip = None
 
         tenant_uuid = UUID(str(tenant_id))
         from app.shared.core.pricing import (
@@ -62,6 +72,8 @@ class ZombieAnalysisHandler(BaseJobHandler):
             detection_results=zombies_payload,
             tenant_id=tenant_uuid,
             db=db,
+            user_id=requested_by_user_id,
+            client_ip=requested_client_ip,
         )
 
         return {

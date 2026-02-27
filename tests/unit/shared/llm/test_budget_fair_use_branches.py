@@ -14,13 +14,19 @@ from app.shared.llm import budget_fair_use
 
 
 class _MetricStub:
+    def __init__(self) -> None:
+        self.inc_calls = 0
+        self.set_calls = 0
+
     def labels(self, **_kwargs: object) -> "_MetricStub":
         return self
 
     def set(self, _value: object) -> None:
+        self.set_calls += 1
         return None
 
     def inc(self) -> None:
+        self.inc_calls += 1
         return None
 
 
@@ -188,6 +194,58 @@ async def test_enforce_daily_analysis_limit_invalid_or_exhausted_limits() -> Non
         with pytest.raises(BudgetExceededError):
             await budget_fair_use.enforce_daily_analysis_limit(_DummyManager, tenant_id, db)
 
+
+@pytest.mark.asyncio
+async def test_enforce_daily_analysis_limit_requires_user_context_for_user_actor() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+
+    with pytest.raises(BudgetExceededError) as exc:
+        await budget_fair_use.enforce_daily_analysis_limit(
+            _DummyManager,
+            tenant_id,
+            db,
+            user_id=None,
+            actor_type="user",
+        )
+    assert exc.value.details.get("gate") == "actor_context"
+
+
+@pytest.mark.asyncio
+async def test_enforce_daily_analysis_limit_enforces_system_cap() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+
+    def _tier_limit_side_effect(_tier: PricingTier, key: str):
+        mapping = {
+            "llm_analyses_per_day": 100,
+            "llm_system_analyses_per_day": 1,
+        }
+        return mapping.get(key)
+
+    with (
+        patch(
+            "app.shared.llm.budget_manager.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.STARTER),
+        ),
+        patch(
+            "app.shared.core.pricing.get_tier_limit",
+            side_effect=_tier_limit_side_effect,
+        ),
+        patch(
+            "app.shared.llm.budget_fair_use.count_requests_in_window",
+            new=AsyncMock(side_effect=[0, 1]),
+        ),
+    ):
+        with pytest.raises(BudgetExceededError) as exc:
+            await budget_fair_use.enforce_daily_analysis_limit(
+                _DummyManager,
+                tenant_id,
+                db,
+                actor_type="system",
+            )
+    assert exc.value.details.get("gate") == "daily_system"
+
     with (
         patch("app.shared.llm.budget_manager.get_tenant_tier", new=AsyncMock(return_value=PricingTier.PRO)),
         patch("app.shared.core.pricing.get_tier_limit", return_value=2),
@@ -219,6 +277,37 @@ async def test_enforce_fair_use_guards_disabled_or_unsupported_tier() -> None:
             )
             is False
         )
+
+
+def test_classify_client_ip_risk_buckets() -> None:
+    assert budget_fair_use._classify_client_ip(None) == ("unknown", 50)
+    assert budget_fair_use._classify_client_ip("not-an-ip") == ("invalid", 80)
+    assert budget_fair_use._classify_client_ip("127.0.0.1")[0] == "loopback"
+    assert budget_fair_use._classify_client_ip("10.0.0.5")[0] == "private"
+    assert budget_fair_use._classify_client_ip("8.8.8.8")[0] == "public_v4"
+
+
+@pytest.mark.asyncio
+async def test_record_authenticated_abuse_signal_metrics_and_high_risk_audit() -> None:
+    tenant_id = uuid4()
+    metric = _MetricStub()
+    with (
+        patch("app.shared.llm.budget_manager.LLM_AUTH_ABUSE_SIGNALS", metric),
+        patch("app.shared.llm.budget_manager.LLM_AUTH_IP_RISK_SCORE", metric),
+        patch("app.shared.llm.budget_manager.audit_log") as mock_audit,
+    ):
+        await budget_fair_use.record_authenticated_abuse_signal(
+            manager_cls=_DummyManager,
+            tenant_id=tenant_id,
+            db=AsyncMock(),
+            tier=PricingTier.PRO,
+            actor_type="user",
+            user_id=uuid4(),
+            client_ip="127.0.0.1",
+        )
+    assert metric.inc_calls == 1
+    assert metric.set_calls == 1
+    mock_audit.assert_called_once()
 
 
 @pytest.mark.asyncio

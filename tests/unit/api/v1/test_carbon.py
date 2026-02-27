@@ -1,5 +1,6 @@
 import pytest
-from datetime import date, timedelta
+import uuid
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from app.modules.reporting.api.v1.carbon import (
@@ -8,6 +9,7 @@ from app.modules.reporting.api.v1.carbon import (
     analyze_graviton_opportunities,
     get_carbon_intensity_forecast,
 )
+from app.modules.reporting.api.v1 import carbon as carbon_api
 
 
 @pytest.mark.asyncio
@@ -287,3 +289,252 @@ async def test_get_carbon_budget_uses_tenant_default_region_for_global_aws(
     mock_calculator.calculate_from_costs.assert_called_once()
     _, kwargs = mock_calculator.calculate_from_costs.call_args
     assert kwargs["region"] == "eu-west-1"
+
+
+def test_carbon_helper_branches() -> None:
+    assert carbon_api._resolve_region_hint("aws", "") == "us-east-1"
+    assert carbon_api._resolve_region_hint("saas", "") == "global"
+    assert carbon_api._resolve_region_hint("saas", "us-east-1") == "global"
+    assert carbon_api._resolve_region_hint("aws", "us-east-1") == "us-east-1"
+
+    conn = MagicMock()
+    conn.region = "eu-west-1"
+    assert carbon_api._resolve_calc_region(conn, "aws", "ap-south-1") == "ap-south-1"
+    assert carbon_api._resolve_calc_region(conn, "saas", "us-east-1") == "eu-west-1"
+
+    assert carbon_api._coerce_query_int("bad", default=24, minimum=1, maximum=72) == 24
+    assert carbon_api._coerce_query_int(0, default=24, minimum=1, maximum=72) == 1
+    assert carbon_api._coerce_query_int(100, default=24, minimum=1, maximum=72) == 72
+
+    user = MagicMock()
+    user.tenant_id = None
+    with pytest.raises(HTTPException):
+        carbon_api._require_tenant_id(user)
+
+
+@pytest.mark.asyncio
+async def test_carbon_cache_helpers_branches() -> None:
+    cache = MagicMock()
+    cache.enabled = True
+    cache.get = AsyncMock(return_value="not-dict")
+    cache.set = AsyncMock()
+
+    with patch("app.modules.reporting.api.v1.carbon.get_cache_service", return_value=cache):
+        assert await carbon_api._read_cached_payload("k") is None
+        await carbon_api._store_cached_payload("k", {"ok": True}, ttl=timedelta(minutes=5))
+    cache.set.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_fetch_provider_cost_data_non_aws_branch() -> None:
+    adapter = MagicMock()
+    adapter.get_cost_and_usage = AsyncMock(return_value=[{"service": "S3"}])
+    connection = MagicMock()
+
+    with patch("app.modules.reporting.api.v1.carbon.AdapterFactory.get_adapter", return_value=adapter):
+        payload = await carbon_api._fetch_provider_cost_data(
+            connection=connection,
+            provider="saas",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 2),
+        )
+    assert payload[0]["provider"] == "saas"
+
+
+@pytest.mark.asyncio
+async def test_get_carbon_footprint_provider_required() -> None:
+    user = MagicMock()
+    user.tenant_id = "tenant-123"
+    with pytest.raises(HTTPException) as exc:
+        await get_carbon_footprint(date.today(), date.today(), user, AsyncMock(), provider=None)
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_get_carbon_budget_provider_required_and_cache_hit() -> None:
+    user = MagicMock()
+    user.tenant_id = "tenant-123"
+    with pytest.raises(HTTPException) as exc:
+        await get_carbon_budget(user, AsyncMock(), provider=None)
+    assert exc.value.status_code == 400
+
+    cache = MagicMock()
+    cache.enabled = True
+    cache.get = AsyncMock(return_value={"alert_status": "cached"})
+    cache.set = AsyncMock()
+    with patch("app.modules.reporting.api.v1.carbon.get_cache_service", return_value=cache):
+        response = await get_carbon_budget(user, AsyncMock(), provider="aws")
+    assert response["alert_status"] == "cached"
+
+
+@pytest.mark.asyncio
+@patch(
+    "app.modules.reporting.api.v1.carbon._fetch_provider_cost_data",
+    new_callable=AsyncMock,
+)
+@patch(
+    "app.modules.reporting.api.v1.carbon._get_provider_connection",
+    new_callable=AsyncMock,
+)
+@patch("app.modules.reporting.api.v1.carbon.CarbonCalculator")
+@patch("app.modules.reporting.api.v1.carbon.CarbonBudgetService")
+async def test_get_carbon_budget_sends_alert_when_warning(
+    mock_budget_service_class,
+    mock_calculator_class,
+    mock_get_connection,
+    mock_fetch_cost_data,
+):
+    user = MagicMock()
+    user.tenant_id = "tenant-123"
+    db = AsyncMock()
+    mock_get_connection.return_value = MagicMock()
+    mock_fetch_cost_data.return_value = [{"service": "Amazon EC2", "cost_usd": 10.0}]
+    settings_result = MagicMock()
+    settings_result.scalar_one_or_none.return_value = None
+    db.execute.return_value = settings_result
+    mock_calculator_class.return_value.calculate_from_costs.return_value = {"total_co2_kg": 1.0}
+
+    mock_budget_service = mock_budget_service_class.return_value
+    mock_budget_service.get_budget_status = AsyncMock(return_value={"alert_status": "warning"})
+    mock_budget_service.send_carbon_alert = AsyncMock()
+
+    response = await get_carbon_budget(user, db, provider="aws")
+    assert response["alert_status"] == "warning"
+    mock_budget_service.send_carbon_alert.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_analyze_graviton_cache_and_no_connection_branches() -> None:
+    user = MagicMock()
+    user.tenant_id = "tenant-123"
+
+    cache = MagicMock()
+    cache.enabled = True
+    cache.get = AsyncMock(return_value={"cached": True})
+    cache.set = AsyncMock()
+    with patch("app.modules.reporting.api.v1.carbon.get_cache_service", return_value=cache):
+        cached = await analyze_graviton_opportunities(user, AsyncMock())
+    assert cached["cached"] is True
+
+    cache.get = AsyncMock(return_value=None)
+    db = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    db.execute.return_value = result
+    with patch("app.modules.reporting.api.v1.carbon.get_cache_service", return_value=cache):
+        payload = await analyze_graviton_opportunities(user, db)
+    assert payload["migration_candidates"] == 0
+
+
+@pytest.mark.asyncio
+@patch("app.modules.reporting.api.v1.carbon.CarbonAwareScheduler")
+async def test_intensity_and_schedule_cached_and_runtime_paths(mock_scheduler_class):
+    cache = MagicMock()
+    cache.enabled = True
+    cache.get = AsyncMock(side_effect=[{"cached": "intensity"}, None, None])
+    cache.set = AsyncMock()
+
+    with patch("app.modules.reporting.api.v1.carbon.get_cache_service", return_value=cache):
+        cached = await get_carbon_intensity_forecast(MagicMock(), MagicMock(), "global", 24)
+        assert cached["cached"] == "intensity"
+
+        scheduler = mock_scheduler_class.return_value
+        scheduler.get_optimal_execution_time = AsyncMock(
+            return_value=datetime(2026, 2, 25, 13, 0, tzinfo=timezone.utc)
+        )
+        schedule = await carbon_api.get_green_schedule(
+            user=MagicMock(),
+            region="global",
+            duration_hours=1,
+        )
+        assert "Defer to 13:00 UTC" in schedule["recommendation"]
+
+        scheduler.get_optimal_execution_time = AsyncMock(return_value=None)
+        schedule_now = await carbon_api.get_green_schedule(
+            user=MagicMock(),
+            region="global",
+            duration_hours=1,
+        )
+        assert schedule_now["recommendation"] == "Execute now"
+
+
+@pytest.mark.asyncio
+async def test_carbon_factor_endpoints_branches() -> None:
+    db = AsyncMock()
+    user = MagicMock()
+
+    class _ScalarResult:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self._rows
+
+    factor_item = carbon_api.CarbonFactorSetItem(
+        id=str(uuid.uuid4()),
+        status="active",
+        is_active=True,
+        factor_source="unit_test",
+        factor_version="v1",
+        factor_timestamp=datetime(2026, 2, 1, tzinfo=timezone.utc).isoformat(),
+        methodology_version="focus-1.3",
+        factors_checksum_sha256="abc",
+        created_at=datetime(2026, 2, 1, tzinfo=timezone.utc).isoformat(),
+        activated_at=None,
+    )
+    log_item = carbon_api.CarbonFactorUpdateLogItem(
+        id=str(uuid.uuid4()),
+        recorded_at=datetime(2026, 2, 1, tzinfo=timezone.utc).isoformat(),
+        action="staged",
+        message=None,
+        old_factor_set_id=None,
+        new_factor_set_id=None,
+        old_checksum_sha256=None,
+        new_checksum_sha256=None,
+        details={},
+    )
+
+    with (
+        patch("app.modules.reporting.api.v1.carbon._factor_set_to_item", return_value=factor_item),
+        patch("app.modules.reporting.api.v1.carbon._update_log_to_item", return_value=log_item),
+    ):
+        service = MagicMock()
+        service.ensure_active = AsyncMock(return_value=MagicMock())
+        service.stage = AsyncMock(return_value=MagicMock())
+        service.activate = AsyncMock(return_value=MagicMock())
+        service.auto_activate_latest = AsyncMock(return_value={"status": "ok"})
+        with patch("app.modules.reporting.api.v1.carbon.CarbonFactorService", return_value=service):
+            db.execute.return_value = _ScalarResult([MagicMock(), MagicMock()])
+            active = await carbon_api.get_active_carbon_factor_set(user=user, db=db)
+            listed = await carbon_api.list_carbon_factor_sets(user=user, db=db, limit=2)
+            logs = await carbon_api.list_carbon_factor_update_logs(user=user, db=db, limit=2)
+            staged = await carbon_api.stage_carbon_factor_set(
+                request=carbon_api.CarbonFactorStageRequest(payload={"foo": "bar"}, message="stage"),
+                user=user,
+                db=db,
+            )
+            assert active.id == factor_item.id
+            assert listed.total == 2
+            assert logs.total == 2
+            assert staged.id == factor_item.id
+
+            db.scalar.return_value = None
+            with pytest.raises(HTTPException):
+                await carbon_api.activate_carbon_factor_set(
+                    factor_set_id=uuid.uuid4(),
+                    user=user,
+                    db=db,
+                )
+
+            db.scalar.return_value = MagicMock()
+            activated = await carbon_api.activate_carbon_factor_set(
+                factor_set_id=uuid.uuid4(),
+                user=user,
+                db=db,
+            )
+            auto_result = await carbon_api.auto_activate_latest_carbon_factors(user=user, db=db)
+            assert activated.id == factor_item.id
+            assert auto_result["status"] == "ok"

@@ -72,6 +72,17 @@ async def test_get_audit_logs_error(mock_db, admin_user):
 
 
 @pytest.mark.asyncio
+async def test_get_audit_logs_rejects_actor_email_sort(mock_db, admin_user):
+    with pytest.raises(HTTPException) as exc:
+        await get_audit_logs(
+            admin_user,
+            mock_db,
+            sort_by="actor_email",
+        )
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_get_audit_log_detail_success(mock_db, admin_user):
     mock_log = MagicMock(spec=AuditLog)
     mock_log.id = uuid4()
@@ -193,3 +204,16 @@ async def test_request_data_erasure_error(mock_db, owner_user):
         )
     assert exc.value.status_code == 500
     assert mock_db.rollback.called
+
+
+@pytest.mark.asyncio
+async def test_request_data_erasure_tenant_not_found(mock_db, owner_user):
+    tenant_lookup = MagicMock()
+    tenant_lookup.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = tenant_lookup
+
+    with pytest.raises(HTTPException) as exc:
+        await request_data_erasure(
+            owner_user, mock_db, confirmation="DELETE ALL MY DATA"
+        )
+    assert exc.value.status_code == 404

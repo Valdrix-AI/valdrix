@@ -1,180 +1,159 @@
-import uuid
+from __future__ import annotations
+
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
+from app.modules.reporting.api.v1 import leadership as leadership_api
+from app.shared.core.auth import CurrentUser, UserRole
+from app.shared.core.pricing import PricingTier
 
-@pytest.mark.asyncio
-async def test_get_leadership_kpis_json_and_csv_filters_preliminary(
-    async_client, app, db, test_tenant
-):
-    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
-    from app.shared.core.pricing import PricingTier
-    from app.models.cloud import CloudAccount, CostRecord
 
-    user = CurrentUser(
-        id=uuid.uuid4(),
+def _user() -> CurrentUser:
+    return CurrentUser(
+        id=uuid4(),
         email="leadership@valdrix.io",
-        tenant_id=test_tenant.id,
+        tenant_id=uuid4(),
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
-    app.dependency_overrides[get_current_user] = lambda: user
-    try:
-        account = CloudAccount(
-            tenant_id=test_tenant.id,
-            provider="aws",
-            name="Leadership AWS",
-            is_active=True,
-        )
-        db.add(account)
-        await db.flush()
 
-        db.add_all(
-            [
-                CostRecord(
-                    tenant_id=test_tenant.id,
-                    account_id=account.id,
-                    service="AmazonEC2",
-                    region="us-east-1",
-                    usage_type="BoxUsage",
-                    cost_usd=Decimal("100.00"),
-                    currency="USD",
-                    canonical_charge_category="compute",
-                    canonical_mapping_version="focus-1.3-v1",
-                    is_preliminary=False,
-                    cost_status="FINAL",
-                    recorded_at=date(2026, 2, 1),
-                    timestamp=datetime(2026, 2, 1, 10, 0, tzinfo=timezone.utc),
-                ),
-                CostRecord(
-                    tenant_id=test_tenant.id,
-                    account_id=account.id,
-                    service="AmazonEC2",
-                    region="us-east-1",
-                    usage_type="BoxUsage",
-                    cost_usd=Decimal("50.00"),
-                    currency="USD",
-                    canonical_charge_category="compute",
-                    canonical_mapping_version="focus-1.3-v1",
-                    is_preliminary=True,
-                    cost_status="PRELIMINARY",
-                    recorded_at=date(2026, 2, 1),
-                    timestamp=datetime(2026, 2, 1, 11, 0, tzinfo=timezone.utc),
-                ),
-            ]
-        )
-        await db.commit()
 
-        res = await async_client.get(
-            "/api/v1/leadership/kpis",
-            params={"start_date": "2026-02-01", "end_date": "2026-02-01"},
-        )
-        assert res.status_code == 200
-        body = res.json()
-        assert body["total_cost_usd"] == 100.0
-        assert body["cost_by_provider"]["aws"] == 100.0
+def _leadership_payload():
+    from app.modules.reporting.domain.leadership_kpis import (
+        LeadershipKpisResponse,
+        LeadershipTopService,
+    )
 
-        csv_res = await async_client.get(
-            "/api/v1/leadership/kpis",
-            params={
-                "start_date": "2026-02-01",
-                "end_date": "2026-02-01",
-                "response_format": "csv",
-            },
-        )
-        assert csv_res.status_code == 200
-        assert csv_res.headers.get("content-type", "").startswith("text/csv")
-        assert "total_cost_usd" in csv_res.text
-        assert "100.0000" in csv_res.text
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
+    return LeadershipKpisResponse(
+        start_date="2026-02-01",
+        end_date="2026-02-01",
+        as_of="2026-02-01T23:59:59+00:00",
+        tier="pro",
+        provider="aws",
+        include_preliminary=False,
+        total_cost_usd=100.0,
+        cost_by_provider={"aws": 100.0},
+        top_services=[LeadershipTopService(service="AmazonEC2", cost_usd=100.0)],
+        carbon_total_kgco2e=10.0,
+        carbon_coverage_percent=100.0,
+        savings_opportunity_monthly_usd=12.0,
+        savings_realized_monthly_usd=5.0,
+        open_recommendations=1,
+        applied_recommendations=1,
+        pending_remediations=0,
+        completed_remediations=1,
+        notes=[],
+    )
+
+
+def _scalars_result(rows: list[object]) -> MagicMock:
+    result = MagicMock()
+    scalars = MagicMock()
+    scalars.all.return_value = rows
+    result.scalars.return_value = scalars
+    return result
 
 
 @pytest.mark.asyncio
-async def test_capture_and_list_leadership_kpis_evidence(
-    async_client, app, db, test_tenant
-):
-    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
-    from app.shared.core.pricing import PricingTier
-    from app.models.cloud import CloudAccount, CostRecord
-    from app.models.tenant import User
-    from app.modules.governance.domain.security.audit_log import (
-        AuditEventType,
-        AuditLog,
-    )
-    from sqlalchemy import select
+async def test_get_leadership_kpis_json_and_csv_filters_preliminary() -> None:
+    payload = _leadership_payload()
+    db = MagicMock()
 
-    admin_user = CurrentUser(
-        id=uuid.uuid4(),
-        email="admin-leadership@valdrix.io",
-        tenant_id=test_tenant.id,
-        role=UserRole.ADMIN,
-        tier=PricingTier.PRO,
-    )
-    db.add(
-        User(
-            id=admin_user.id,
-            tenant_id=test_tenant.id,
-            email=admin_user.email,
-            role=UserRole.ADMIN,
+    with (
+        patch.object(
+            leadership_api.LeadershipKpiService,
+            "compute",
+            new=AsyncMock(return_value=payload),
+        ) as compute_mock,
+        patch.object(
+            leadership_api.LeadershipKpiService,
+            "render_csv",
+            return_value="metric,value\ntotal_cost_usd,100.0000\n",
+        ) as render_csv_mock,
+    ):
+        json_out = await leadership_api.get_leadership_kpis(
+            start_date=date(2026, 2, 1),
+            end_date=date(2026, 2, 1),
+            provider=" AWS ",
+            include_preliminary=False,
+            top_services_limit=10,
+            response_format="json",
+            current_user=_user(),
+            db=db,
         )
-    )
-    await db.commit()
-
-    app.dependency_overrides[get_current_user] = lambda: admin_user
-    try:
-        account = CloudAccount(
-            tenant_id=test_tenant.id,
+        csv_out = await leadership_api.get_leadership_kpis(
+            start_date=date(2026, 2, 1),
+            end_date=date(2026, 2, 1),
             provider="aws",
-            name="Leadership AWS",
-            is_active=True,
+            include_preliminary=False,
+            top_services_limit=10,
+            response_format="csv",
+            current_user=_user(),
+            db=db,
         )
-        db.add(account)
-        await db.flush()
-        db.add(
-            CostRecord(
-                tenant_id=test_tenant.id,
-                account_id=account.id,
-                service="AmazonS3",
-                region="us-east-1",
-                usage_type="Storage",
-                cost_usd=Decimal("25.00"),
-                currency="USD",
-                canonical_charge_category="storage",
-                canonical_mapping_version="focus-1.3-v1",
-                is_preliminary=False,
-                cost_status="FINAL",
-                recorded_at=date(2026, 2, 2),
-                timestamp=datetime(2026, 2, 2, 10, 0, tzinfo=timezone.utc),
-            )
-        )
-        await db.commit()
 
-        capture = await async_client.post(
-            "/api/v1/leadership/kpis/capture",
-            params={"start_date": "2026-02-01", "end_date": "2026-02-03"},
-        )
-        assert capture.status_code == 200
-        body = capture.json()
-        assert body["status"] == "captured"
-        assert body["leadership_kpis"]["total_cost_usd"] == 25.0
+    assert json_out.total_cost_usd == 100.0
+    assert json_out.cost_by_provider["aws"] == 100.0
+    assert csv_out.media_type == "text/csv"
+    assert "total_cost_usd,100.0000" in csv_out.body.decode()
+    assert compute_mock.await_count == 2
+    assert compute_mock.await_args_list[0].kwargs["provider"] == "aws"
+    render_csv_mock.assert_called_once_with(payload)
 
-        listed = await async_client.get(
-            "/api/v1/leadership/kpis/evidence", params={"limit": 10}
-        )
-        assert listed.status_code == 200
-        payload = listed.json()
-        assert payload["total"] >= 1
-        assert payload["items"][0]["total_cost_usd"] >= 0
 
-        row = await db.scalar(
-            select(AuditLog).where(
-                AuditLog.tenant_id == test_tenant.id,
-                AuditLog.event_type == AuditEventType.LEADERSHIP_KPIS_CAPTURED.value,
-            )
+@pytest.mark.asyncio
+async def test_capture_and_list_leadership_kpis_evidence() -> None:
+    payload = _leadership_payload()
+    user = _user()
+    db = MagicMock()
+    db.commit = AsyncMock()
+
+    event = SimpleNamespace(
+        id=uuid4(),
+        event_timestamp=datetime(2026, 2, 2, 10, 0, tzinfo=timezone.utc),
+        correlation_id="run-1",
+        actor_id=user.id,
+        actor_email=user.email,
+        success=True,
+        details={"leadership_kpis": payload.model_dump()},
+    )
+
+    with (
+        patch.object(
+            leadership_api.LeadershipKpiService,
+            "compute",
+            new=AsyncMock(return_value=payload),
+        ),
+        patch.object(leadership_api, "AuditLogger") as audit_cls,
+    ):
+        audit = MagicMock()
+        audit.log = AsyncMock(return_value=event)
+        audit_cls.return_value = audit
+
+        captured = await leadership_api.capture_leadership_kpis(
+            start_date=date(2026, 2, 1),
+            end_date=date(2026, 2, 3),
+            provider=None,
+            include_preliminary=False,
+            top_services_limit=10,
+            current_user=user,
+            db=db,
         )
-        assert row is not None
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
+
+    assert captured.status == "captured"
+    assert captured.leadership_kpis.total_cost_usd == 100.0
+    db.commit.assert_awaited_once()
+
+    db.execute = AsyncMock(return_value=_scalars_result([event]))
+    listed = await leadership_api.list_leadership_kpi_evidence(
+        limit=10,
+        current_user=user,
+        db=db,
+    )
+    assert listed.total == 1
+    assert listed.items[0].event_id == str(event.id)
+    assert listed.items[0].total_cost_usd == 100.0

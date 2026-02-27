@@ -315,12 +315,14 @@ class AzureAdapter(BaseAdapter):
 
                 client = await self._get_resource_client()
                 async for resource in client.resources.list():
+                    resource_type_name = resource.type or ""
                     if (
                         resource_type
-                        and resource_type.lower() not in resource.type.lower()
+                        and resource_type.lower() not in resource_type_name.lower()
                     ):
                         continue
-                    if region and region.lower() != resource.location.lower():
+                    resource_location = resource.location or ""
+                    if region and region.lower() != resource_location.lower():
                         continue
 
                     resources.append(

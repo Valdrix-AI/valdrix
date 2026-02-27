@@ -7,7 +7,7 @@ FROM python:3.12-slim@sha256:7f08d0e501538350cc6f4cf9b07decfa810ee9a4e0be8451104
 # Labels for OCI compliance
 LABEL org.opencontainers.image.source="https://github.com/valdrix/valdrix"
 LABEL org.opencontainers.image.description="Valdrix AI - Autonomous FinOps & GreenOps Guardian"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="BUSL-1.1"
 
 WORKDIR /app
 

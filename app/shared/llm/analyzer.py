@@ -34,7 +34,7 @@ from app.shared.llm.factory import LLMFactory
 from app.shared.core.exceptions import AIAnalysisError, BudgetExceededError
 from app.shared.llm.budget_manager import LLMBudgetManager, BudgetStatus
 from app.shared.core.constants import LLMProvider
-from app.shared.core.pricing import get_tenant_tier, get_tier_limit
+from app.shared.core.pricing import PricingTier, get_tenant_tier, get_tier_limit
 from opentelemetry import trace
 
 if TYPE_CHECKING:
@@ -130,6 +130,121 @@ class FinOpsAnalyzer:
         return max(128, min(parsed, 32768))
 
     @staticmethod
+    def _resolve_positive_limit(
+        raw_limit: Any,
+        *,
+        minimum: int = 1,
+        maximum: int = 1_000_000,
+    ) -> int | None:
+        if raw_limit is None:
+            return None
+        try:
+            parsed = int(raw_limit)
+        except (TypeError, ValueError):
+            return None
+        if parsed < minimum:
+            return None
+        return min(parsed, maximum)
+
+    @staticmethod
+    def _record_to_date(value: Any) -> date | None:
+        raw = value
+        if isinstance(value, dict):
+            raw = value.get("date")
+        else:
+            raw = getattr(value, "date", None)
+        if isinstance(raw, datetime):
+            return raw.date()
+        if isinstance(raw, date):
+            return raw
+        if isinstance(raw, str):
+            try:
+                return date.fromisoformat(raw[:10])
+            except ValueError:
+                return None
+        return None
+
+    @classmethod
+    def _apply_tier_analysis_shape_limits(
+        cls,
+        usage_summary: "CloudUsageSummary",
+        *,
+        tenant_tier: PricingTier,
+    ) -> tuple["CloudUsageSummary", dict[str, int]]:
+        """
+        Enforce tier-based analysis shape limits before prompt construction.
+
+        Guardrails are deterministic and apply in this order:
+        1) Date window bound.
+        2) Prompt-token-derived record bound.
+        3) Explicit max-records bound.
+        """
+        limits: dict[str, int] = {}
+        records = list(usage_summary.records)
+        original_count = len(records)
+
+        max_window_days = cls._resolve_positive_limit(
+            get_tier_limit(tenant_tier, "llm_analysis_max_window_days"),
+            maximum=3650,
+        )
+        if max_window_days:
+            dated_records = [
+                (record, cls._record_to_date(record))
+                for record in records
+            ]
+            valid_dates = [record_date for _, record_date in dated_records if record_date]
+            if valid_dates:
+                latest_date = max(valid_dates)
+                cutoff = latest_date - timedelta(days=max_window_days - 1)
+                records = [
+                    record
+                    for record, record_date in dated_records
+                    if record_date is None or record_date >= cutoff
+                ]
+                limits["max_window_days"] = max_window_days
+
+        prompt_max_tokens = cls._resolve_positive_limit(
+            get_tier_limit(tenant_tier, "llm_prompt_max_input_tokens"),
+            minimum=256,
+            maximum=131_072,
+        )
+        if prompt_max_tokens:
+            limits["max_prompt_tokens"] = prompt_max_tokens
+
+        max_records = cls._resolve_positive_limit(
+            get_tier_limit(tenant_tier, "llm_analysis_max_records"),
+            maximum=50_000,
+        )
+        if prompt_max_tokens:
+            prompt_record_cap = max(1, prompt_max_tokens // 20)
+            max_records = (
+                prompt_record_cap
+                if max_records is None
+                else min(max_records, prompt_record_cap)
+            )
+        if max_records and len(records) > max_records:
+            sortable_records = [
+                (record, cls._record_to_date(record) or date.min, idx)
+                for idx, record in enumerate(records)
+            ]
+            sortable_records.sort(key=lambda item: (item[1], item[2]))
+            records = [
+                record for record, _, _ in sortable_records[-max_records:]
+            ]
+            limits["max_records"] = max_records
+
+        if len(records) == original_count:
+            limits["records_before"] = original_count
+            limits["records_after"] = original_count
+            return usage_summary, limits
+
+        updated_summary = copy.copy(usage_summary)
+        updated_summary.records = records
+        limits["records_before"] = original_count
+        limits["records_after"] = len(records)
+        return updated_summary, limits
+
+    @staticmethod
     def _bind_output_token_ceiling(
         llm: BaseChatModel, max_output_tokens: int
     ) -> Any:
@@ -158,6 +273,7 @@ class FinOpsAnalyzer:
         model: Optional[str] = None,
         force_refresh: bool = False,
         user_id: Optional[UUID] = None,
+        client_ip: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         PRODUCTION: Analyzes cloud costs with mandatory budget pre-authorization.
@@ -209,9 +325,32 @@ class FinOpsAnalyzer:
                 operation_id=operation_id,
             )
 
+            tenant_tier: PricingTier | None = None
+            shape_limits: dict[str, int] = {}
+            if tenant_id and effective_db:
+                tenant_tier = await get_tenant_tier(tenant_id, effective_db)
+                (
+                    usage_summary_to_analyze,
+                    shape_limits,
+                ) = self._apply_tier_analysis_shape_limits(
+                    usage_summary_to_analyze,
+                    tenant_tier=tenant_tier,
+                )
+                if shape_limits.get("records_after", 0) < shape_limits.get(
+                    "records_before", 0
+                ):
+                    logger.info(
+                        "llm_analysis_shape_limited",
+                        tenant_id=str(tenant_id),
+                        tier=tenant_tier.value,
+                        limits=shape_limits,
+                    )
+
             # 2. PRODUCTION: PRE-AUTHORIZE LLM BUDGET (HARD BLOCK)
             reserved_amount = None
             max_output_tokens: int | None = None
+            max_prompt_tokens: int | None = None
+            actor_type = "user" if user_id else "system"
 
             # Safely get model name from LLM object, handling mocks in tests
             llm_model = getattr(
@@ -223,12 +362,20 @@ class FinOpsAnalyzer:
 
             try:
                 if tenant_id and effective_db:
-                    tenant_tier = await get_tenant_tier(tenant_id, effective_db)
+                    if tenant_tier is None:
+                        tenant_tier = await get_tenant_tier(tenant_id, effective_db)
                     max_output_tokens = self._resolve_output_token_ceiling(
                         get_tier_limit(tenant_tier, "llm_output_max_tokens")
                     )
+                    max_prompt_tokens = self._resolve_positive_limit(
+                        get_tier_limit(tenant_tier, "llm_prompt_max_input_tokens"),
+                        minimum=256,
+                        maximum=131_072,
+                    )
                     # Estimate tokens: 1 record ≈ 20 tokens, min 500
                     prompt_tokens = max(500, len(usage_summary_to_analyze.records) * 20)
+                    if max_prompt_tokens is not None:
+                        prompt_tokens = min(prompt_tokens, max_prompt_tokens)
                     completion_tokens = max_output_tokens or 500
 
                     reserved_amount = await LLMBudgetManager.check_and_reserve(
@@ -239,6 +386,8 @@ class FinOpsAnalyzer:
                         completion_tokens=completion_tokens,
                         operation_id=operation_id,
                         user_id=user_id,
+                        actor_type=actor_type,
+                        client_ip=client_ip,
                     )
 
                     logger.info(
@@ -256,6 +405,10 @@ class FinOpsAnalyzer:
                     operation_id=operation_id,
                 )
                 # Fail open or closed? PRODUCTION: Fail closed if it's a known tenant
+                # Defensive invariant: this except block only has executable statements
+                # when tenant_id/effective_db entered the reservation branch above. The
+                # anonymous path skips that branch entirely, so it cannot land here under
+                # current control flow unless this method is refactored.
                 if tenant_id:
                     raise AIAnalysisError(
                         f"Budget verification failed: {str(e)}"
@@ -299,6 +452,7 @@ class FinOpsAnalyzer:
                     final_model,
                     byok_key,
                     max_output_tokens=max_output_tokens,
+                    tenant_tier=tenant_tier,
                 )
             except Exception as e:
                 logger.error(
@@ -311,6 +465,9 @@ class FinOpsAnalyzer:
                 try:
                     # In production, we'd parse actual tokens from response_metadata
                     token_usage = response_metadata.get("token_usage", {})
+                    # Defensive invariant: reserved_amount is only assigned inside the
+                    # tenant-scoped reservation branch, so tenant_id should always be set.
+                    # Keep the guard to fail safely if future refactors break that invariant.
                     if tenant_id is None:
                         raise AIAnalysisError(
                             "Tenant ID required to record metered LLM usage"
@@ -325,6 +482,8 @@ class FinOpsAnalyzer:
                         is_byok=bool(byok_key),
                         operation_id=operation_id,
                         user_id=user_id,
+                        actor_type=actor_type,
+                        client_ip=client_ip,
                     )
                 except Exception as e:
                     logger.warning(
@@ -534,6 +693,7 @@ class FinOpsAnalyzer:
         model: str,
         byok_key: Optional[str],
         max_output_tokens: Optional[int] = None,
+        tenant_tier: PricingTier | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """Orchestrates the LangChain invocation."""
         current_llm = self.llm
@@ -582,13 +742,27 @@ class FinOpsAnalyzer:
             metadata = getattr(response, "response_metadata", {})
             return safe_content, metadata if isinstance(metadata, dict) else {}
 
-        # BE-LLM-7: Fallback model selection on primary failure
-        # Aligned with DR_RUNBOOK.md: Groq -> Gemini -> OpenAI
-        FALLBACK_PROVIDERS = [
-            (LLMProvider.GROQ, "llama-3.3-70b-versatile"),
-            (LLMProvider.GOOGLE, "gemini-1.5-flash"),
-            (LLMProvider.OPENAI, "gpt-4o-mini"),
+        # BE-LLM-7: Fallback model selection on primary failure.
+        # Tier policy keeps lower tiers on low-cost providers by default.
+        low_cost_chain: list[tuple[str, str]] = [
+            (LLMProvider.GROQ.value, "llama-3.1-8b-instant"),
+            (LLMProvider.GOOGLE.value, "gemini-1.5-flash"),
         ]
+        extended_chain: list[tuple[str, str]] = low_cost_chain + [
+            (LLMProvider.OPENAI.value, "gpt-4o-mini"),
+        ]
+        enterprise_chain: list[tuple[str, str]] = extended_chain + [
+            (LLMProvider.ANTHROPIC.value, "claude-3-5-haiku"),
+        ]
+        fallback_candidates: list[tuple[str, str]]
+        if byok_key:
+            fallback_candidates = []
+        elif tenant_tier in {PricingTier.PRO}:
+            fallback_candidates = extended_chain
+        elif tenant_tier == PricingTier.ENTERPRISE:
+            fallback_candidates = enterprise_chain
+        else:
+            fallback_candidates = low_cost_chain
 
         with tracer.start_as_current_span("llm_invocation") as span:
             span.set_attribute("llm.provider", provider)
@@ -602,8 +776,8 @@ class FinOpsAnalyzer:
                     error=str(primary_error),
                 )
 
-                # Try fallback providers
-                for fallback_provider, fallback_model in FALLBACK_PROVIDERS:
+                # Try fallback providers allowed for this tenant tier.
+                for fallback_provider, fallback_model in fallback_candidates:
                     if fallback_provider == provider:
                         continue  # Skip the one that just failed
                     try:

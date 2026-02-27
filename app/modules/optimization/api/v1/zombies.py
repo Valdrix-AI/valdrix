@@ -221,7 +221,12 @@ async def scan_zombies(
             db=db,
             job_type=JobType.ZOMBIE_SCAN,
             tenant_id=tenant_id,
-            payload={"region": region_hint, "analyze": analyze_enabled},
+            payload={
+                "region": region_hint,
+                "analyze": analyze_enabled,
+                "requested_by_user_id": str(user.id),
+                "requested_client_ip": request.client.host if request.client else None,
+            },
         )
         return {"status": "pending", "job_id": str(job.id)}
 
@@ -230,6 +235,8 @@ async def scan_zombies(
         tenant_id=tenant_id,
         region=region_hint,
         analyze=analyze_enabled,
+        requested_by_user_id=user.id,
+        requested_client_ip=request.client.host if request.client else None,
     )
 
 

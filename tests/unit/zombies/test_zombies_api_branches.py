@@ -514,7 +514,7 @@ async def test_scan_zombies_default_region_hint_is_global() -> None:
         service.scan_for_tenant = AsyncMock(return_value={"status": "ok", "results": []})
 
         await zombies.scan_zombies(
-            request=MagicMock(),
+            request=MagicMock(client=MagicMock(host="203.0.113.10")),
             tenant_id=tenant_id,
             user=user,
             db=db,
@@ -523,6 +523,8 @@ async def test_scan_zombies_default_region_hint_is_global() -> None:
         service.scan_for_tenant.assert_awaited_once()
         kwargs = service.scan_for_tenant.await_args.kwargs
         assert kwargs["region"] == "global"
+        assert kwargs["requested_by_user_id"] == user.id
+        assert kwargs["requested_client_ip"] == "203.0.113.10"
 
 
 @pytest.mark.asyncio
@@ -544,7 +546,7 @@ async def test_scan_zombies_background_default_region_hint_is_global() -> None:
         new=AsyncMock(return_value=job),
     ) as mock_enqueue:
         response = await zombies.scan_zombies(
-            request=MagicMock(),
+            request=MagicMock(client=MagicMock(host="203.0.113.11")),
             tenant_id=tenant_id,
             user=user,
             db=db,
@@ -555,6 +557,8 @@ async def test_scan_zombies_background_default_region_hint_is_global() -> None:
         payload = mock_enqueue.await_args.kwargs["payload"]
         assert payload["region"] == "global"
         assert payload["analyze"] is False
+        assert payload["requested_by_user_id"] == str(user.id)
+        assert payload["requested_client_ip"] == "203.0.113.11"
 
 
 @pytest.mark.asyncio

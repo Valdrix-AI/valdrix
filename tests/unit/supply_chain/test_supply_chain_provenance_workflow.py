@@ -28,6 +28,16 @@ def test_sbom_workflow_attests_provenance_subjects() -> None:
     assert "actions/attest-build-provenance@" in text
 
 
+def test_sbom_workflow_verifies_attestations_before_promotion() -> None:
+    text = (REPO_ROOT / ".github/workflows/sbom.yml").read_text(encoding="utf-8")
+
+    assert "scripts/verify_supply_chain_attestations.py" in text
+    assert "--signer-workflow .github/workflows/sbom.yml" in text
+    assert "--artifact ./sbom/valdrix-python-sbom.json" in text
+    assert "--artifact ./sbom/valdrix-container-sbom.json" in text
+    assert "--artifact ./provenance/supply-chain-manifest.json" in text
+
+
 def test_ci_workflow_enforces_enterprise_placeholder_guard() -> None:
     text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 

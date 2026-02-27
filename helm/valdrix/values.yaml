@@ -11,6 +11,7 @@ global:
 
 # -- Number of API replicas
 # Keep single-replica by default while core circuit-breaker state is process-local.
+# For `enforcementWebhook.failurePolicy=Fail`, increase to >=2 (or use HPA minReplicas >=2).
 replicaCount: 1
 
 image:
@@ -90,6 +91,15 @@ resources:
     cpu: 250m
     memory: 512Mi
 
+# -- API deployment strategy (explicit defaults to avoid Kubernetes implicit rollout variance).
+deploymentStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    # Keep zero disruption for fail-closed admission profile.
+    maxUnavailable: 0
+    # Keep positive surge capacity for safe replacement rollout.
+    maxSurge: 1
+
 autoscaling:
   # -- Enable HPA
   enabled: false
@@ -108,12 +118,20 @@ tolerations: []
 
 affinity:
   podAntiAffinity:
+    # Hard anti-affinity for fail-closed readiness across nodes.
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: valdrix
+            app.kubernetes.io/component: api
+        topologyKey: kubernetes.io/hostname
     preferredDuringSchedulingIgnoredDuringExecution:
       - weight: 100
         podAffinityTerm:
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: valdrix
+              app.kubernetes.io/component: api
           topologyKey: kubernetes.io/hostname
 
 # -- Environment variables
@@ -161,3 +179,55 @@ monitoring:
   alertmanager:
     # -- Alertmanager URL for Grafana
     url: "http://alertmanager.monitoring.svc.cluster.local:9093"
+
+# -- Enforcement admission webhook configuration
+enforcementWebhook:
+  # -- Create ValidatingWebhookConfiguration for pre-provision gate
+  enabled: false
+  # -- Webhook failure policy: Ignore (fail-open) or Fail (fail-closed).
+  # When set to Fail, chart guardrails require API HA (replicaCount>=2 or autoscaling.minReplicas>=2).
+  failurePolicy: Ignore
+  # -- Admission webhook timeout in seconds (recommended <= 2)
+  timeoutSeconds: 2
+  # -- Match policy for equivalent resources
+  matchPolicy: Equivalent
+  sideEffects: None
+  path: /api/v1/enforcement/gate/k8s/admission/review
+  admissionReviewVersions:
+    - v1
+  operations:
+    - CREATE
+    - UPDATE
+  apiGroups:
+    - "*"
+  apiVersions:
+    - "*"
+  resources:
+    - "*/*"
+  # -- Default excludes control-plane namespaces to reduce admission blast radius.
+  namespaceSelector:
+    matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values:
+          - kube-system
+          - kube-public
+          - kube-node-lease
+  objectSelector: {}
+  # -- Optional webhook match conditions (CEL expressions) for fine-grained request filtering.
+  matchConditions: []
+  # -- Disruption budget for API pods serving admission gate traffic.
+  # For failurePolicy=Fail this must remain enabled with maxUnavailable=1.
+  podDisruptionBudget:
+    enabled: false
+    maxUnavailable: 1
+  service:
+    namespace: ""
+    name: ""
+    port: 80
+  certManager:
+    enabled: false
+    # -- Secret name used by cert-manager injector annotation (optional)
+    injectorSecretName: ""
+  # -- Optional CA bundle (base64 PEM)
+  caBundle: ""

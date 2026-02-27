@@ -50,7 +50,9 @@ describe('EnforcementOpsCard', () => {
 
 		expect(screen.getByText('Enforcement Ops Reconciliation')).toBeTruthy();
 		expect(screen.getByText('Pro Plan Required')).toBeTruthy();
-		expect(screen.getByRole('link', { name: /Upgrade to Unlock Enforcement Ops Views/i })).toBeTruthy();
+		expect(
+			screen.getByRole('link', { name: /Upgrade to Unlock Enforcement Ops Views/i })
+		).toBeTruthy();
 
 		await waitFor(() => {
 			expect(getMock).not.toHaveBeenCalled();
@@ -78,8 +80,7 @@ describe('EnforcementOpsCard', () => {
 				]);
 			}
 			if (
-				String(url) ===
-				endpoint('/enforcement/reservations/reconciliation-exceptions?limit=200')
+				String(url) === endpoint('/enforcement/reservations/reconciliation-exceptions?limit=200')
 			) {
 				return jsonResponse([
 					{
@@ -144,8 +145,7 @@ describe('EnforcementOpsCard', () => {
 				]);
 			}
 			if (
-				String(url) ===
-				endpoint('/enforcement/reservations/reconciliation-exceptions?limit=200')
+				String(url) === endpoint('/enforcement/reservations/reconciliation-exceptions?limit=200')
 			) {
 				return jsonResponse([]);
 			}

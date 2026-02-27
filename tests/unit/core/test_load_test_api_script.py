@@ -33,6 +33,17 @@ def test_build_profile_endpoints_dashboard_defaults_to_liveness():
     assert load_test_api.DEEP_HEALTH_ENDPOINT not in endpoints
 
 
+def test_build_profile_endpoints_enforcement_includes_control_plane_read_paths():
+    endpoints = load_test_api._build_profile_endpoints(_args(profile="enforcement"))
+    assert endpoints[0] == load_test_api.LIVENESS_ENDPOINT
+    assert "/api/v1/enforcement/policies" in endpoints
+    assert "/api/v1/enforcement/budgets" in endpoints
+    assert "/api/v1/enforcement/credits" in endpoints
+    assert "/api/v1/enforcement/approvals/queue?limit=50" in endpoints
+    assert "/api/v1/enforcement/ledger?limit=50" in endpoints
+    assert "/api/v1/enforcement/exports/parity?limit=50" in endpoints
+
+
 def test_build_profile_endpoints_include_deep_health_flag():
     endpoints = load_test_api._build_profile_endpoints(
         _args(profile="dashboard", include_deep_health=True)
@@ -112,4 +123,3 @@ async def test_run_preflight_checks_failure_with_retry(monkeypatch):
     assert len(result["failures"]) == 1
     assert "HTTP 500" in result["failures"][0]["error"]
     assert call_count == 2
-

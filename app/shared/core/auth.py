@@ -1,7 +1,7 @@
 import jwt
 import hashlib
 from functools import lru_cache
-from typing import Any, Awaitable, Callable, Optional, cast
+from typing import Any, Awaitable, Callable, Optional
 from uuid import UUID
 from fastapi import HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -124,7 +124,7 @@ def decode_jwt(token: str) -> dict[str, Any]:
             algorithms=["HS256"],
             audience="authenticated",  # Supabase uses this audience
         )
-        return cast(dict[str, Any], payload)
+        return payload
 
     except jwt.ExpiredSignatureError:
         logger.warning("jwt_expired")

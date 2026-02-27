@@ -1,0 +1,118 @@
+{
+  "title": "Valdrix Enforcement Control Plane",
+  "uid": "valdrix-enforcement-control-plane",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "title": "Gate Decisions by Type (5m rate)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (source, decision, path) (rate(valdrix_ops_enforcement_gate_decisions_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Gate Error-Budget Burn Ratio",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "valdrix:enforcement_gate_error_ratio_5m",
+          "refId": "A1"
+        },
+        {
+          "expr": "valdrix:enforcement_gate_error_ratio_1h",
+          "refId": "A2"
+        },
+        {
+          "expr": "valdrix:enforcement_gate_error_ratio_30m",
+          "refId": "A3"
+        },
+        {
+          "expr": "valdrix:enforcement_gate_error_ratio_6h",
+          "refId": "A4"
+        }
+      ]
+    },
+    {
+      "title": "Gate Timeout / Evaluation Failures (5m increase)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (source, failure_type) (increase(valdrix_ops_enforcement_gate_failures_total[5m]))",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Gate Lock Contention Events (10m increase)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (source, event) (increase(valdrix_ops_enforcement_gate_lock_events_total{event=~\"contended|timeout|not_acquired\"}[10m]))",
+          "refId": "H"
+        }
+      ]
+    },
+    {
+      "title": "Gate Latency p95",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, source, path) (rate(valdrix_ops_enforcement_gate_latency_seconds_bucket[5m])))",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Approval Queue Backlog",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "max by (viewer_role) (valdrix_ops_enforcement_approval_queue_backlog)",
+          "refId": "D"
+        }
+      ]
+    },
+    {
+      "title": "Export Parity Mismatch Events (15m)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(increase(valdrix_ops_enforcement_export_events_total{artifact=~\"bundle|parity|archive\", outcome=\"mismatch\"}[15m]))",
+          "refId": "E"
+        }
+      ]
+    },
+    {
+      "title": "Rate-Limit Exceeded on Enforcement Gate (10m)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(increase(valdrix_security_rate_limit_exceeded_total{path=~\"/api/v1/enforcement/gate.*\"}[10m]))",
+          "refId": "F"
+        }
+      ]
+    },
+    {
+      "title": "LLM Fair-Use Denials (15m)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (gate, tenant_tier) (increase(valdrix_ops_llm_fair_use_denials_total[15m]))",
+          "refId": "G"
+        }
+      ]
+    }
+  ]
+}

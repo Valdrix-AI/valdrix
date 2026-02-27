@@ -1,8 +1,14 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 from app.shared.core.rate_limit import (
     context_aware_key,
+    global_limit_key,
+    global_rate_limit,
     get_analysis_limit,
+    setup_rate_limiting,
     get_redis_client,
 )
 
@@ -79,3 +85,40 @@ def test_redis_client_lazy_init():
             client = get_redis_client()
             assert client is not None
             mock_from_url.assert_called_once()
+
+
+def test_global_limit_key_is_stable_across_requests() -> None:
+    key_func = global_limit_key("enforcement_gate")
+    req_a = mock_request(state_attrs={"tenant_id": "tenant-a"})
+    req_b = mock_request(state_attrs={"tenant_id": "tenant-b"})
+    assert key_func(req_a) == "global:enforcement_gate"
+    assert key_func(req_b) == "global:enforcement_gate"
+
+
+def test_global_rate_limit_throttles_cross_tenant_requests() -> None:
+    settings = SimpleNamespace(
+        REDIS_URL=None,
+        ENVIRONMENT="development",
+        ALLOW_IN_MEMORY_RATE_LIMITS=False,
+        RATELIMIT_ENABLED=True,
+        TESTING=False,
+    )
+    with patch("app.shared.core.rate_limit.get_settings", return_value=settings):
+        with patch("app.shared.core.rate_limit._limiter", None):
+            app = FastAPI()
+            setup_rate_limiting(app)
+
+            @app.get("/global-limit")
+            @global_rate_limit("2/minute", namespace="enforcement_gate")
+            async def global_limit_route(request: Request) -> dict[str, bool]:
+                request.state.tenant_id = request.headers.get("x-tenant-id")
+                return {"ok": True}
+
+            client = TestClient(app)
+            first = client.get("/global-limit", headers={"x-tenant-id": "tenant-a"})
+            second = client.get("/global-limit", headers={"x-tenant-id": "tenant-b"})
+            third = client.get("/global-limit", headers={"x-tenant-id": "tenant-c"})
+
+            assert first.status_code == 200
+            assert second.status_code == 200
+            assert third.status_code == 429

@@ -16,6 +16,7 @@ from app.modules.enforcement.api.v1.schemas import (
 )
 from app.modules.enforcement.domain.service import EnforcementService
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
+from app.shared.core.ops_metrics import ENFORCEMENT_APPROVAL_QUEUE_BACKLOG
 from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
 
@@ -40,6 +41,7 @@ async def create_approval_request(
         status=approval.status.value,
         approval_id=approval.id,
         decision_id=approval.decision_id,
+        routing_rule_id=approval.routing_rule_id,
         approval_token=None,
         token_expires_at=approval.approval_token_expires_at,
     )
@@ -54,8 +56,13 @@ async def get_approval_queue(
     service = EnforcementService(db)
     rows = await service.list_pending_approvals(
         tenant_id=tenant_or_403(current_user),
+        reviewer=current_user,
         limit=limit,
     )
+    viewer_role = str(getattr(current_user.role, "value", current_user.role)).strip().lower()
+    if not viewer_role:
+        viewer_role = "unknown"
+    ENFORCEMENT_APPROVAL_QUEUE_BACKLOG.labels(viewer_role=viewer_role[:32]).set(len(rows))
     return [
         ApprovalQueueItem(
             approval_id=approval.id,
@@ -68,6 +75,7 @@ async def get_approval_queue(
             resource_reference=decision.resource_reference,
             estimated_monthly_delta_usd=decision.estimated_monthly_delta_usd,
             reason_codes=list(decision.reason_codes or []),
+            routing_rule_id=approval.routing_rule_id,
             expires_at=approval.expires_at,
             created_at=approval.created_at,
         )
@@ -93,6 +101,7 @@ async def approve_approval_request(
         status=approval.status.value,
         approval_id=approval.id,
         decision_id=decision.id,
+        routing_rule_id=approval.routing_rule_id,
         approval_token=token,
         token_expires_at=expires_at,
     )
@@ -113,6 +122,7 @@ async def consume_approval_token(
         approval_token=payload.approval_token,
         actor_id=current_user.id,
         expected_source=payload.expected_source,
+        expected_project_id=payload.expected_project_id,
         expected_environment=payload.expected_environment,
         expected_request_fingerprint=payload.expected_request_fingerprint,
         expected_resource_reference=payload.expected_resource_reference,
@@ -136,6 +146,7 @@ async def consume_approval_token(
         resource_reference=decision.resource_reference,
         request_fingerprint=decision.request_fingerprint,
         max_monthly_delta_usd=decision.estimated_monthly_delta_usd,
+        max_hourly_delta_usd=decision.estimated_hourly_delta_usd,
         token_expires_at=token_expires_at,
         consumed_at=consumed_at,
     )
@@ -159,6 +170,7 @@ async def deny_approval_request(
         status=approval.status.value,
         approval_id=approval.id,
         decision_id=decision.id,
+        routing_rule_id=approval.routing_rule_id,
         approval_token=None,
         token_expires_at=None,
     )

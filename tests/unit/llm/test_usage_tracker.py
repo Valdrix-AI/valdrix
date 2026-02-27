@@ -127,6 +127,8 @@ class TestUsageTracker:
                 operation_id=None,
                 request_type="daily_analysis",
                 user_id=None,
+                actor_type="system",
+                client_ip=None,
             )
 
     @pytest.mark.asyncio
@@ -157,6 +159,8 @@ class TestUsageTracker:
                     prompt_tokens=100,
                     completion_tokens=500,
                     user_id=None,
+                    actor_type="system",
+                    client_ip=None,
                 )
 
     @pytest.mark.asyncio

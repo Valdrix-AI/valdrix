@@ -520,6 +520,7 @@ async def analyze_costs(
         db=db,
         provider=provider,
         user_id=current_user.id,
+        client_ip=request.client.host if request.client else None,
     )
 
     return result

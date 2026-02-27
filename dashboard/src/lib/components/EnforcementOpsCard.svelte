@@ -233,7 +233,8 @@
 	{/if}
 
 	<p class="text-xs text-ink-400 mb-5">
-		Monitor active reservations and reconciliation drift exceptions, then trigger overdue auto-reconciliation.
+		Monitor active reservations and reconciliation drift exceptions, then trigger overdue
+		auto-reconciliation.
 	</p>
 
 	{#if error}

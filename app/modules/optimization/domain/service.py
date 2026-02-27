@@ -80,6 +80,8 @@ class ZombieService(BaseService):
         tenant_id: UUID,
         region: str = "global",
         analyze: bool = False,
+        requested_by_user_id: UUID | None = None,
+        requested_client_ip: str | None = None,
         on_category_complete: Optional[
             Callable[[str, List[Dict[str, Any]]], Awaitable[None]]
         ] = None,
@@ -392,7 +394,15 @@ class ZombieService(BaseService):
                         scheduled_for=now,
                         created_at=now,
                         deduplication_key=dedup_key,
-                        payload={"zombies": all_zombies},  # Pass the results to analyze
+                        payload={
+                            "zombies": all_zombies,
+                            "requested_by_user_id": (
+                                str(requested_by_user_id)
+                                if requested_by_user_id
+                                else None
+                            ),
+                            "requested_client_ip": requested_client_ip,
+                        },
                     )
                     .on_conflict_do_nothing(index_elements=["deduplication_key"])
                     .returning(BackgroundJob.id)

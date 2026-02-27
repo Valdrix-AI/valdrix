@@ -173,19 +173,7 @@ async def timeout_context(
     if custom_timeout:
         timeout_manager.config["total"] = custom_timeout
 
-    # Create a task with timeout
-    task = None
-
-    try:
-        yield timeout_manager
-    except Exception:
-        if task and not task.done():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-        raise
+    yield timeout_manager
 
 
 def get_timeout_config(operation_type: str) -> dict[str, float]:

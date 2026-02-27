@@ -1,0 +1,16 @@
+{{- $cfg := .Values.enforcementWebhook -}}
+{{- if and $cfg.enabled $cfg.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "valdrix.fullname" . }}-api-pdb
+  labels:
+    {{- include "valdrix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  maxUnavailable: {{ int $cfg.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "valdrix.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+{{- end }}

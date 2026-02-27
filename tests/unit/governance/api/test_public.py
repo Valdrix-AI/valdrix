@@ -56,6 +56,19 @@ async def test_run_public_assessment_validation_error(async_client: AsyncClient)
 
 
 @pytest.mark.asyncio
+async def test_run_public_assessment_unexpected_error(async_client: AsyncClient):
+    with patch(
+        "app.modules.governance.api.v1.public.assessment_service.run_assessment",
+        side_effect=RuntimeError("unexpected"),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/assessment", json={"aws_account_id": "123456789012"}
+        )
+    assert response.status_code == 500
+    assert "unexpected error occurred during assessment" in str(response.json()).lower()
+
+
+@pytest.mark.asyncio
 async def test_sso_discovery_domain_mode_success(
     async_client: AsyncClient, db: AsyncSession
 ):
@@ -161,6 +174,122 @@ async def test_sso_discovery_backend_error(async_client: AsyncClient):
     payload = res.json()
     assert payload["available"] is False
     assert payload["reason"] == "sso_discovery_backend_error"
+
+
+@pytest.mark.asyncio
+async def test_sso_discovery_tier_not_eligible(async_client: AsyncClient, db: AsyncSession):
+    import uuid
+
+    tenant_id = uuid.uuid4()
+    db.add(Tenant(id=tenant_id, name="Tenant Free", plan="starter"))
+    db.add(
+        SsoDomainMapping(
+            tenant_id=tenant_id,
+            domain="tier-ineligible.example",
+            federation_mode="domain",
+            provider_id=None,
+            is_active=True,
+        )
+    )
+    await db.commit()
+
+    res = await async_client.post(
+        "/api/v1/public/sso/discovery",
+        json={"email": "user@tier-ineligible.example"},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["available"] is False
+    assert payload["reason"] == "tier_not_eligible_for_sso_federation"
+
+
+@pytest.mark.asyncio
+async def test_sso_discovery_provider_id_missing(async_client: AsyncClient, db: AsyncSession):
+    import uuid
+
+    tenant_id = uuid.uuid4()
+    db.add(Tenant(id=tenant_id, name="Tenant Missing Provider", plan="enterprise"))
+    db.add(
+        SsoDomainMapping(
+            tenant_id=tenant_id,
+            domain="provider-missing.example",
+            federation_mode="provider_id",
+            provider_id=None,
+            is_active=True,
+        )
+    )
+    await db.commit()
+
+    res = await async_client.post(
+        "/api/v1/public/sso/discovery",
+        json={"email": "user@provider-missing.example"},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["available"] is False
+    assert payload["reason"] == "sso_provider_id_not_configured"
+
+
+@pytest.mark.asyncio
+async def test_sso_discovery_unknown_mode_falls_back_to_domain(
+    async_client: AsyncClient, db: AsyncSession
+):
+    import uuid
+
+    tenant_id = uuid.uuid4()
+    db.add(Tenant(id=tenant_id, name="Tenant Unknown Mode", plan="pro"))
+    db.add(
+        SsoDomainMapping(
+            tenant_id=tenant_id,
+            domain="unknown-mode.example",
+            federation_mode="invalid-mode",
+            provider_id=None,
+            is_active=True,
+        )
+    )
+    await db.commit()
+
+    res = await async_client.post(
+        "/api/v1/public/sso/discovery",
+        json={"email": "user@unknown-mode.example"},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["available"] is True
+    assert payload["mode"] == "domain"
+    assert payload["domain"] == "unknown-mode.example"
+
+
+@pytest.mark.asyncio
+async def test_sso_discovery_ambiguous_mapping_returns_unavailable(async_client: AsyncClient):
+    class _Rows:
+        def __init__(self, values):
+            self._values = values
+
+        def all(self):
+            return self._values
+
+    rows = _Rows(
+        [
+            (SimpleNamespace(federation_mode="domain", provider_id=None), "pro"),
+            (SimpleNamespace(federation_mode="domain", provider_id=None), "enterprise"),
+        ]
+    )
+
+    with patch(
+        "sqlalchemy.ext.asyncio.session.AsyncSession.execute",
+        new_callable=AsyncMock,
+        return_value=rows,
+    ):
+        res = await async_client.post(
+            "/api/v1/public/sso/discovery",
+            json={"email": "user@example.com"},
+        )
+
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["available"] is False
+    assert payload["reason"] == "ambiguous_tenant_domain_mapping"
 
 
 def _turnstile_strict_settings() -> SimpleNamespace:

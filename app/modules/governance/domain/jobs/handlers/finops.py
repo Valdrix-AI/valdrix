@@ -69,6 +69,17 @@ class FinOpsAnalysisHandler(BaseJobHandler):
             raise ValueError("tenant_id required for finops_analysis")
 
         tenant_uuid = UUID(str(tenant_id))
+        payload = job.payload or {}
+        requested_by_user_id_raw = payload.get("requested_by_user_id")
+        requested_by_user_id: UUID | None = None
+        if requested_by_user_id_raw is not None:
+            try:
+                requested_by_user_id = UUID(str(requested_by_user_id_raw))
+            except (TypeError, ValueError):
+                requested_by_user_id = None
+        requested_client_ip = payload.get("requested_client_ip")
+        if not isinstance(requested_client_ip, str):
+            requested_client_ip = None
         connections: list[Any] = await list_tenant_connections(
             db,
             tenant_id=tenant_uuid,
@@ -127,6 +138,8 @@ class FinOpsAnalysisHandler(BaseJobHandler):
                     tenant_id=tenant_uuid,
                     db=db,
                     provider=provider,
+                    user_id=requested_by_user_id,
+                    client_ip=requested_client_ip,
                 )
                 if isinstance(llm_result, dict):
                     analyses.append(llm_result)

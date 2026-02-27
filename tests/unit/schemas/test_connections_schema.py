@@ -1,7 +1,11 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.connections import AzureConnectionCreate, GCPConnectionCreate
+from app.schemas.connections import (
+    AzureConnectionCreate,
+    DiscoveryDeepScanRequest,
+    GCPConnectionCreate,
+)
 
 
 def test_azure_auth_method_normalizes():
@@ -53,3 +57,32 @@ def test_gcp_workload_identity_allows_missing_json():
     )
     assert data.service_account_json is None
     assert data.auth_method == "workload_identity"
+
+
+def test_deep_scan_request_normalizes_domain_and_provider() -> None:
+    request = DiscoveryDeepScanRequest(
+        domain=" Example.COM. ",
+        idp_provider=" GOOGLE_WORKSPACE ",
+    )
+    assert request.domain == "example.com"
+    assert request.idp_provider == "google_workspace"
+
+
+def test_deep_scan_request_requires_fqdn_domain() -> None:
+    with pytest.raises(
+        ValidationError, match="domain must be a fully qualified domain"
+    ):
+        DiscoveryDeepScanRequest(
+            domain="localhost",
+            idp_provider="microsoft_365",
+        )
+
+
+def test_deep_scan_request_rejects_unsupported_provider() -> None:
+    with pytest.raises(
+        ValidationError, match="idp_provider must be microsoft_365 or google_workspace"
+    ):
+        DiscoveryDeepScanRequest(
+            domain="example.com",
+            idp_provider="okta",
+        )

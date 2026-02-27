@@ -10,6 +10,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.modules.governance.api.v1 import audit as audit_api
+from app.modules.governance.api.v1 import audit_partitioning as audit_partitioning_api
 from app.shared.core.auth import CurrentUser, UserRole
 from app.shared.core.pricing import PricingTier
 
@@ -435,7 +436,7 @@ async def test_capture_partitioning_uses_computed_payload(monkeypatch) -> None:
     _RecordingAuditLogger.calls.clear()
     monkeypatch.setattr(audit_log_module, "AuditLogger", _RecordingAuditLogger)
     monkeypatch.setattr(
-        audit_api,
+        audit_partitioning_api,
         "_compute_partitioning_evidence",
         AsyncMock(
             return_value=audit_api.PartitioningEvidencePayload(
