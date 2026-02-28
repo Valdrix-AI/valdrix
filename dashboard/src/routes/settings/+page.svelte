@@ -866,6 +866,7 @@
 					</div>
 					<div class="flex items-end">
 						<button
+							type="button"
 							class="btn btn-primary w-full"
 							onclick={savePersona}
 							disabled={savingPersona}
@@ -990,6 +991,7 @@
 						{/if}
 
 						<button
+							type="button"
 							class="btn btn-primary"
 							onclick={saveCarbonSettings}
 							disabled={savingCarbon ||
@@ -1184,6 +1186,7 @@
 						</div>
 
 						<button
+							type="button"
 							class="btn btn-primary"
 							onclick={saveLLMSettings}
 							disabled={savingLLM}
@@ -1429,6 +1432,7 @@
 						</div>
 
 						<button
+							type="button"
 							class="btn btn-primary"
 							onclick={saveActiveOpsSettings}
 							disabled={savingActiveOps || !['pro', 'enterprise'].includes(data.subscription?.tier)}
@@ -1448,6 +1452,7 @@
 					</h2>
 					<div class="flex items-center gap-2">
 						<button
+							type="button"
 							class="btn btn-ghost"
 							onclick={loadSafetyStatus}
 							disabled={loadingSafety || resettingSafety}
@@ -1456,6 +1461,7 @@
 							{loadingSafety ? 'Refreshing...' : 'Refresh'}
 						</button>
 						<button
+							type="button"
 							class="btn btn-secondary"
 							onclick={resetSafetyCircuitBreaker}
 							disabled={loadingSafety || resettingSafety}
@@ -1578,6 +1584,7 @@
 					</div>
 
 					<button
+						type="button"
 						class="btn btn-secondary"
 						onclick={testSlack}
 						disabled={!settings.slack_enabled || testing}
@@ -1677,6 +1684,7 @@
 							<span>Clear stored Jira token</span>
 						</label>
 						<button
+							type="button"
 							class="btn btn-secondary"
 							onclick={testJira}
 							disabled={!settings.jira_enabled ||
@@ -1729,6 +1737,7 @@
 								<span>Clear stored Teams webhook URL</span>
 							</label>
 							<button
+								type="button"
 								class="btn btn-secondary"
 								onclick={testTeams}
 								disabled={!settings.teams_enabled ||
@@ -1956,6 +1965,7 @@
 							</label>
 
 							<button
+								type="button"
 								class="btn btn-secondary"
 								onclick={testWorkflowDispatch}
 								disabled={testingWorkflow ||
@@ -1970,6 +1980,7 @@
 							<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
 								<h4 class="text-sm font-semibold">Policy Notification Diagnostics</h4>
 								<button
+									type="button"
 									class="btn btn-ghost"
 									onclick={runPolicyDiagnostics}
 									disabled={diagnosticsLoading}
@@ -2118,7 +2129,7 @@
 
 			<!-- Save Button -->
 			<div class="flex justify-end">
-				<button class="btn btn-primary" onclick={saveSettings} disabled={saving}>
+				<button type="button" class="btn btn-primary" onclick={saveSettings} disabled={saving}>
 					{saving ? '⏳ Saving...' : '💾 Save Settings'}
 				</button>
 			</div>

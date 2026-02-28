@@ -48,10 +48,7 @@ export interface LandingTelemetryContext {
 export interface LandingTelemetryTarget {
 	dispatchEvent?: (event: Event) => boolean;
 	dataLayer?: unknown[];
-	createCustomEvent?: (
-		type: string,
-		init: CustomEventInit<LandingTelemetryEvent>
-	) => Event;
+	createCustomEvent?: (type: string, init: CustomEventInit<LandingTelemetryEvent>) => Event;
 	sendToBackend?: (payload: LandingTelemetryEvent) => void | Promise<void>;
 }
 
@@ -186,9 +183,9 @@ export function emitLandingTelemetry(
 ): LandingTelemetryEvent {
 	const hasTargetAsFourthArg = isTelemetryTarget(contextOrTarget);
 	const context = hasTargetAsFourthArg ? {} : (contextOrTarget as LandingTelemetryContext);
-	const target = (hasTargetAsFourthArg
-		? (contextOrTarget as LandingTelemetryTarget)
-		: targetOverride) || resolveDefaultTarget();
+	const target =
+		(hasTargetAsFourthArg ? (contextOrTarget as LandingTelemetryTarget) : targetOverride) ||
+		resolveDefaultTarget();
 
 	const payload = buildLandingTelemetryEvent(name, section, value, context);
 

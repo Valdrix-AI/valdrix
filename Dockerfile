@@ -1,8 +1,8 @@
 # ============================================================
 # STAGE 1: Build dependencies
 # ============================================================
-# python:3.12-slim as of 2026-02-17
-FROM python:3.12-slim@sha256:7f08d0e501538350cc6f4cf9b07decfa810ee9a4e0be8451104975f284c71887 AS builder
+# python:3.12-slim as of 2026-02-28
+FROM python:3.12-slim@sha256:f3fa41d74a768c2fce8016b98c191ae8c1bacd8f1152870a3f9f87d350920b7c AS builder
 
 # Labels for OCI compliance
 LABEL org.opencontainers.image.source="https://github.com/valdrix/valdrix"
@@ -30,7 +30,7 @@ RUN uv pip install --no-cache -r pyproject.toml
 # ============================================================
 # STAGE 2: Runtime (minimal image)
 # ============================================================
-FROM python:3.12-slim@sha256:7f08d0e501538350cc6f4cf9b07decfa810ee9a4e0be8451104975f284c71887 AS runtime
+FROM python:3.12-slim@sha256:f3fa41d74a768c2fce8016b98c191ae8c1bacd8f1152870a3f9f87d350920b7c AS runtime
 
 WORKDIR /app
 

@@ -102,7 +102,9 @@ describe('auth login page conversion flow', () => {
 
 	it('logs in with password and redirects to onboarding context when intent is present', async () => {
 		mocks.pageStore.set({
-			url: new URL('https://example.com/auth/login?mode=login&intent=engineering_control&persona=cto')
+			url: new URL(
+				'https://example.com/auth/login?mode=login&intent=engineering_control&persona=cto'
+			)
 		});
 		render(LoginPage);
 
@@ -145,7 +147,9 @@ describe('auth login page conversion flow', () => {
 		};
 		expect(payload.email).toBe('founder@example.com');
 		expect(payload.options.shouldCreateUser).toBe(true);
-		expect(payload.options.emailRedirectTo).toContain('/auth/callback?next=%2Fonboarding%3Fintent%3Droi_assessment');
+		expect(payload.options.emailRedirectTo).toContain(
+			'/auth/callback?next=%2Fonboarding%3Fintent%3Droi_assessment'
+		);
 		expect(screen.getByRole('status').textContent).toMatch(/Secure sign-in link sent/i);
 	});
 });

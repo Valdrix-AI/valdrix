@@ -51,9 +51,15 @@ jobs:
         uses: trufflesecurity/trufflehog@main
 
       - name: Gitleaks Secret Scan
+        if: ${{ secrets.GITLEAKS_LICENSE != '' }}
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Gitleaks License Fallback
+        if: ${{ secrets.GITLEAKS_LICENSE == '' }}
+        run: echo "GITLEAKS_LICENSE not configured; TruffleHog scan already enforced for this job."
 
   container-scan:
     runs-on: ubuntu-latest

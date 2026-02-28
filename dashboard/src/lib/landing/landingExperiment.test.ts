@@ -62,9 +62,9 @@ describe('landingExperiment', () => {
 
 	it('exposes experiment params only in dev or explicit QA mode', () => {
 		expect(shouldIncludeExperimentQueryParams(new URL('https://example.com/'), false)).toBe(false);
-		expect(shouldIncludeExperimentQueryParams(new URL('https://example.com/?qa_exp=1'), false)).toBe(
-			true
-		);
+		expect(
+			shouldIncludeExperimentQueryParams(new URL('https://example.com/?qa_exp=1'), false)
+		).toBe(true);
 		expect(
 			shouldIncludeExperimentQueryParams(new URL('https://example.com/?qa_exp=true'), false)
 		).toBe(true);

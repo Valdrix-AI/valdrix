@@ -13,7 +13,9 @@
 <section class="container mx-auto px-6 py-12 space-y-8">
 	<header class="space-y-3">
 		<p class="text-xs uppercase tracking-[0.18em] text-accent-300 font-bold">Proof Pack</p>
-		<h1 class="text-3xl font-bold text-ink-100">Executive and technical proof for buyer diligence</h1>
+		<h1 class="text-3xl font-bold text-ink-100">
+			Executive and technical proof for buyer diligence
+		</h1>
 		<p class="text-ink-300 max-w-3xl">
 			This page consolidates high-signal proof categories used during evaluation cycles across
 			leadership, security, finance, and platform teams.
@@ -63,8 +65,8 @@
 		<article class="glass-panel space-y-3">
 			<h2 class="text-xl font-semibold">Operational Resilience and Accessibility</h2>
 			<p class="text-ink-300">
-				Landing UX hardening includes cleanup-safe intervals, tab semantics, reduced-motion behavior,
-				and mobile-first tap target sizing.
+				Landing UX hardening includes cleanup-safe intervals, tab semantics, reduced-motion
+				behavior, and mobile-first tap target sizing.
 			</p>
 			<ul class="text-sm text-ink-300 space-y-1 list-disc pl-5">
 				<li>No unbounded timers; lifecycle cleanup is tested.</li>

@@ -42,7 +42,9 @@ test.describe('Public Accessibility Gate', () => {
 			await page.waitForLoadState('networkidle');
 			await expect(page.locator('main')).toHaveCount(1);
 			if (routeCase.mainHeading) {
-				await expect(page.getByRole('heading', { level: 1, name: routeCase.mainHeading })).toBeVisible();
+				await expect(
+					page.getByRole('heading', { level: 1, name: routeCase.mainHeading })
+				).toBeVisible();
 			}
 			await page.keyboard.press('Tab');
 			const focusedTag = await page.evaluate(() => document.activeElement?.tagName || 'UNKNOWN');

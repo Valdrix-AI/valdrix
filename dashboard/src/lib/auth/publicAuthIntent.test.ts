@@ -42,7 +42,9 @@ describe('publicAuthIntent', () => {
 			new URL('https://example.com/auth/login?mode=login&intent=engineering_control&persona=cto')
 		);
 		expect(context.mode).toBe('login');
-		expect(buildPostAuthRedirectPath(context)).toBe('/onboarding?intent=engineering_control&persona=cto');
+		expect(buildPostAuthRedirectPath(context)).toBe(
+			'/onboarding?intent=engineering_control&persona=cto'
+		);
 	});
 
 	it('keeps only safe next paths and rejects open redirects', () => {

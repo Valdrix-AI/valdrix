@@ -75,7 +75,7 @@
 		<a
 			href="https://github.com/Valdrix-AI/valdrix/tree/main/docs"
 			target="_blank"
-			rel="noreferrer"
+			rel="noopener noreferrer"
 			class="btn btn-secondary w-fit"
 		>
 			Browse GitHub Docs

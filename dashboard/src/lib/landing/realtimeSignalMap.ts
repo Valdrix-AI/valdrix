@@ -114,7 +114,8 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 			financial_governance: {
 				status: 'Stable',
 				metric: 'Budget thresholds aligned',
-				detail: 'Budget boundaries and escalation paths stay aligned across finance and engineering.',
+				detail:
+					'Budget boundaries and escalation paths stay aligned across finance and engineering.',
 				severity: 'healthy'
 			},
 			operational_resilience: {
@@ -140,7 +141,8 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 			economic_visibility: {
 				status: 'Stable',
 				metric: 'Unit economics baseline validated',
-				detail: 'Pricing assumptions stay aligned across starter, growth, pro, and enterprise plans.',
+				detail:
+					'Pricing assumptions stay aligned across starter, growth, pro, and enterprise plans.',
 				severity: 'healthy'
 			},
 			deterministic_enforcement: {
@@ -192,8 +194,7 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 			operational_resilience: {
 				status: 'Watch',
 				metric: 'Operational follow-through required',
-				detail:
-					'Remaining items are operational cadence tasks, not core product capability gaps.',
+				detail: 'Remaining items are operational cadence tasks, not core product capability gaps.',
 				severity: 'watch'
 			}
 		},

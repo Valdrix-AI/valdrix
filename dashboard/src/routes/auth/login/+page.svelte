@@ -168,17 +168,17 @@
 				throw new Error('Unable to discover SSO configuration. Try again.');
 			}
 			const discovery = (await res.json()) as SsoDiscoveryResponse;
-				if (!discovery.available || !discovery.mode) {
-					throw new Error(
-						discovery.reason === 'sso_not_configured_for_domain'
-							? 'No SSO configuration was found for your domain.'
-							: 'SSO is not ready for this domain. Contact your admin.'
-					);
-				}
+			if (!discovery.available || !discovery.mode) {
+				throw new Error(
+					discovery.reason === 'sso_not_configured_for_domain'
+						? 'No SSO configuration was found for your domain.'
+						: 'SSO is not ready for this domain. Contact your admin.'
+				);
+			}
 
-				const redirectTo = callbackRedirectTo();
-				emitAuthEvent('auth_sso_submit', discovery.mode);
-				if (discovery.mode === 'provider_id') {
+			const redirectTo = callbackRedirectTo();
+			emitAuthEvent('auth_sso_submit', discovery.mode);
+			if (discovery.mode === 'provider_id') {
 				if (!discovery.provider_id) {
 					throw new Error('SSO provider configuration is incomplete.');
 				}
@@ -219,31 +219,31 @@
 		<!-- Card -->
 		<div class="card stagger-enter">
 			<!-- Header -->
-				<div class="text-center mb-6">
-					<span class="text-4xl mb-3 block">☁️</span>
-					<h1 class="text-xl font-semibold">
-						{mode === 'login' ? 'Welcome back' : 'Create your account'}
-					</h1>
-					<p class="text-ink-300 text-sm mt-1">
-						{mode === 'login'
-							? 'Sign in to continue with controlled execution'
-							: 'Start free and activate governed economic workflows'}
+			<div class="text-center mb-6">
+				<span class="text-4xl mb-3 block">☁️</span>
+				<h1 class="text-xl font-semibold">
+					{mode === 'login' ? 'Welcome back' : 'Create your account'}
+				</h1>
+				<p class="text-ink-300 text-sm mt-1">
+					{mode === 'login'
+						? 'Sign in to continue with controlled execution'
+						: 'Start free and activate governed economic workflows'}
+				</p>
+				{#if intentLabel || personaLabel}
+					<p class="text-ink-200 text-xs mt-2">
+						Starting with
+						{#if intentLabel}
+							<strong>{intentLabel}</strong>
+						{/if}
+						{#if intentLabel && personaLabel}
+							for
+						{/if}
+						{#if personaLabel}
+							<strong>{personaLabel}</strong>
+						{/if}
 					</p>
-					{#if intentLabel || personaLabel}
-						<p class="text-ink-200 text-xs mt-2">
-							Starting with
-							{#if intentLabel}
-								<strong>{intentLabel}</strong>
-							{/if}
-							{#if intentLabel && personaLabel}
-								for
-							{/if}
-							{#if personaLabel}
-								<strong>{personaLabel}</strong>
-							{/if}
-						</p>
-					{/if}
-				</div>
+				{/if}
+			</div>
 
 			{#if error}
 				<div
@@ -319,28 +319,28 @@
 				<div class="h-px flex-1 bg-ink-800/70"></div>
 			</div>
 
-				<button
-					type="button"
-					class="btn btn-secondary w-full py-2.5"
-					disabled={magicLinkLoading}
-					onclick={() => void handleMagicLinkSubmit()}
-					aria-label={mode === 'login' ? 'Send secure sign-in link' : 'Send secure signup link'}
-				>
-					{#if magicLinkLoading}
-						<span class="spinner" aria-hidden="true"></span>
-						<span>Sending secure link...</span>
-					{:else}
-						{mode === 'login' ? 'Email me a secure sign-in link' : 'Email me a secure signup link'}
-					{/if}
-				</button>
+			<button
+				type="button"
+				class="btn btn-secondary w-full py-2.5"
+				disabled={magicLinkLoading}
+				onclick={() => void handleMagicLinkSubmit()}
+				aria-label={mode === 'login' ? 'Send secure sign-in link' : 'Send secure signup link'}
+			>
+				{#if magicLinkLoading}
+					<span class="spinner" aria-hidden="true"></span>
+					<span>Sending secure link...</span>
+				{:else}
+					{mode === 'login' ? 'Email me a secure sign-in link' : 'Email me a secure signup link'}
+				{/if}
+			</button>
 
-				<button
-					type="button"
-					class="btn btn-secondary w-full py-2.5"
-					disabled={ssoLoading}
-					onclick={() => void handleSsoSubmit()}
-					aria-label="Continue with SSO"
-				>
+			<button
+				type="button"
+				class="btn btn-secondary w-full py-2.5"
+				disabled={ssoLoading}
+				onclick={() => void handleSsoSubmit()}
+				aria-label="Continue with SSO"
+			>
 				{#if ssoLoading}
 					<span class="spinner" aria-hidden="true"></span>
 					<span>Redirecting to IdP...</span>

@@ -678,9 +678,7 @@
 								<div class="flex justify-between items-start mb-2">
 									<div>
 										<div class="flex items-center gap-2 mb-1">
-											<span class="text-xs text-ink-500 font-mono"
-												>ID: {conn.aws_account_id}</span
-											>
+											<span class="text-xs text-ink-500 font-mono">ID: {conn.aws_account_id}</span>
 											<span
 												class="badge {conn.is_management_account
 													? 'badge-accent'
@@ -692,6 +690,7 @@
 									</div>
 
 									<button
+										type="button"
 										class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
 										onclick={() => deleteConnection('aws', conn.id)}
 										title="Delete Connection"
@@ -760,6 +759,7 @@
 									</div>
 
 									<button
+										type="button"
 										class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
 										onclick={() => deleteConnection('azure', conn.id)}
 										title="Delete Connection"
@@ -828,13 +828,12 @@
 								<div class="flex justify-between items-start mb-2">
 									<div>
 										<div class="flex items-center gap-2 mb-1">
-											<span class="text-xs text-ink-500 font-mono"
-												>Project: {conn.project_id}</span
-											>
+											<span class="text-xs text-ink-500 font-mono">Project: {conn.project_id}</span>
 										</div>
 									</div>
 
 									<button
+										type="button"
 										class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
 										onclick={() => deleteConnection('gcp', conn.id)}
 										title="Delete Connection"
@@ -911,6 +910,7 @@
 									</div>
 									<div class="flex items-center gap-2">
 										<button
+											type="button"
 											class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
 											onclick={() => verifyCloudPlusConnection('saas', conn.id)}
 											disabled={!!verifyingCloudPlus[conn.id]}
@@ -918,6 +918,7 @@
 											{verifyingCloudPlus[conn.id] ? 'Verifying...' : 'Verify'}
 										</button>
 										<button
+											type="button"
 											class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
 											onclick={() => deleteConnection('saas', conn.id)}
 											title="Delete Connection"
@@ -983,6 +984,7 @@
 								bind:value={saasFeedInput}
 							></textarea>
 							<button
+								type="button"
 								class="btn btn-secondary text-xs w-full"
 								onclick={() => createCloudPlusConnection('saas')}
 								disabled={creatingSaaS}
@@ -999,9 +1001,7 @@
 						<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
 							>Upgrade for SaaS Connectors</a
 						>
-						<span class="badge badge-warning text-xs w-full justify-center"
-							>Pro Tier Required</span
-						>
+						<span class="badge badge-warning text-xs w-full justify-center">Pro Tier Required</span>
 					</div>
 				{/if}
 			</div>
@@ -1040,6 +1040,7 @@
 									</div>
 									<div class="flex items-center gap-2">
 										<button
+											type="button"
 											class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
 											onclick={() => verifyCloudPlusConnection('license', conn.id)}
 											disabled={!!verifyingCloudPlus[conn.id]}
@@ -1047,6 +1048,7 @@
 											{verifyingCloudPlus[conn.id] ? 'Verifying...' : 'Verify'}
 										</button>
 										<button
+											type="button"
 											class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
 											onclick={() => deleteConnection('license', conn.id)}
 											title="Delete Connection"
@@ -1114,6 +1116,7 @@
 								bind:value={licenseFeedInput}
 							></textarea>
 							<button
+								type="button"
 								class="btn btn-secondary text-xs w-full"
 								onclick={() => createCloudPlusConnection('license')}
 								disabled={creatingLicense}
@@ -1130,9 +1133,7 @@
 						<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
 							>Upgrade for License Connectors</a
 						>
-						<span class="badge badge-warning text-xs w-full justify-center"
-							>Pro Tier Required</span
-						>
+						<span class="badge badge-warning text-xs w-full justify-center">Pro Tier Required</span>
 					</div>
 				{/if}
 			</div>
@@ -1171,6 +1172,7 @@
 									</div>
 									<div class="flex items-center gap-2">
 										<button
+											type="button"
 											class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
 											onclick={() => verifyCloudPlusConnection('platform', conn.id)}
 											disabled={!!verifyingCloudPlus[conn.id]}
@@ -1178,6 +1180,7 @@
 											{verifyingCloudPlus[conn.id] ? 'Verifying...' : 'Verify'}
 										</button>
 										<button
+											type="button"
 											class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
 											onclick={() => deleteConnection('platform', conn.id)}
 											title="Delete Connection"
@@ -1256,6 +1259,7 @@
 								></textarea>
 							{/if}
 							<button
+								type="button"
 								class="btn btn-secondary text-xs w-full"
 								onclick={() => createCloudPlusConnection('platform')}
 								disabled={creatingPlatform}
@@ -1273,9 +1277,7 @@
 						<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
 							>Upgrade for Platform Connectors</a
 						>
-						<span class="badge badge-warning text-xs w-full justify-center"
-							>Pro Tier Required</span
-						>
+						<span class="badge badge-warning text-xs w-full justify-center">Pro Tier Required</span>
 					</div>
 				{/if}
 			</div>
@@ -1314,6 +1316,7 @@
 									</div>
 									<div class="flex items-center gap-2">
 										<button
+											type="button"
 											class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
 											onclick={() => verifyCloudPlusConnection('hybrid', conn.id)}
 											disabled={!!verifyingCloudPlus[conn.id]}
@@ -1321,6 +1324,7 @@
 											{verifyingCloudPlus[conn.id] ? 'Verifying...' : 'Verify'}
 										</button>
 										<button
+											type="button"
 											class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
 											onclick={() => deleteConnection('hybrid', conn.id)}
 											title="Delete Connection"
@@ -1399,6 +1403,7 @@
 								></textarea>
 							{/if}
 							<button
+								type="button"
 								class="btn btn-secondary text-xs w-full"
 								onclick={() => createCloudPlusConnection('hybrid')}
 								disabled={creatingHybrid}
@@ -1416,9 +1421,7 @@
 						<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
 							>Upgrade for Hybrid Connectors</a
 						>
-						<span class="badge badge-warning text-xs w-full justify-center"
-							>Pro Tier Required</span
-						>
+						<span class="badge badge-warning text-xs w-full justify-center">Pro Tier Required</span>
 					</div>
 				{/if}
 			</div>
@@ -1453,6 +1456,7 @@
 								<span class="badge badge-warning">Growth Tier Required</span>
 							{:else}
 								<button
+									type="button"
 									class="btn btn-primary !w-auto flex items-center gap-2"
 									onclick={syncAWSOrg}
 									disabled={syncingOrg}
@@ -1550,6 +1554,7 @@
 												<td class="px-6 py-4 text-right">
 													{#if acc.status === 'discovered'}
 														<button
+															type="button"
 															class="btn btn-ghost btn-sm text-accent-400 hover:text-accent-300 hover:bg-accent-400/10"
 															onclick={() => linkDiscoveredAccount(acc.id)}
 															disabled={linkingAccount === acc.id}
@@ -1574,7 +1579,7 @@
 								<p class="text-ink-500 max-w-sm mx-auto mb-6">
 									We couldn't find any member accounts. Run a sync to scan your Organization.
 								</p>
-								<button class="btn btn-primary !w-auto px-8" onclick={syncAWSOrg}>
+								<button type="button" class="btn btn-primary !w-auto px-8" onclick={syncAWSOrg}>
 									Start Organizational Scan
 								</button>
 							</div>

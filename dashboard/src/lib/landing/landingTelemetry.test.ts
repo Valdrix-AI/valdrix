@@ -3,7 +3,13 @@ import { buildLandingTelemetryEvent, emitLandingTelemetry } from './landingTelem
 
 describe('landingTelemetry', () => {
 	it('builds normalized deterministic payloads', () => {
-		const payload = buildLandingTelemetryEvent('  cta_click  ', ' hero ', ' start_free ', {}, new Date(0));
+		const payload = buildLandingTelemetryEvent(
+			'  cta_click  ',
+			' hero ',
+			' start_free ',
+			{},
+			new Date(0)
+		);
 		expect(payload).toMatchObject({
 			name: 'cta_click',
 			section: 'hero',
@@ -85,7 +91,7 @@ describe('landingTelemetry', () => {
 			dispatchEvent: () => {
 				throw new Error('synthetic failure');
 			},
-			createCustomEvent: () => ({} as Event)
+			createCustomEvent: () => ({}) as Event
 		});
 
 		expect(payload.name).toBe('cta_click');
@@ -120,7 +126,7 @@ describe('landingTelemetry', () => {
 				visitorId: 'visitor-2',
 				funnelStage: 'cta'
 			},
-			{ dispatchEvent, dataLayer, createCustomEvent: () => ({} as Event) }
+			{ dispatchEvent, dataLayer, createCustomEvent: () => ({}) as Event }
 		);
 
 		expect(payload.visitorId).toBe('visitor-2');

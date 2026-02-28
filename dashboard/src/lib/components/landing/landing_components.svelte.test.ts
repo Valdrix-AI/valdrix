@@ -4,7 +4,11 @@ import {
 	lanePositionPercent,
 	laneSeverityClass
 } from '$lib/landing/realtimeSignalMap';
-import { PUBLIC_MOBILE_LINKS, PUBLIC_PRIMARY_LINKS, PUBLIC_SIGNAL_STRIP } from '$lib/landing/publicNav';
+import {
+	PUBLIC_MOBILE_LINKS,
+	PUBLIC_PRIMARY_LINKS,
+	PUBLIC_SIGNAL_STRIP
+} from '$lib/landing/publicNav';
 
 describe('Landing Component Data Hardening', () => {
 	it('provides stable realtime snapshots with unique lane ids', () => {
@@ -21,7 +25,9 @@ describe('Landing Component Data Hardening', () => {
 		const firstLane = REALTIME_SIGNAL_SNAPSHOTS[0]?.lanes[0];
 		expect(firstLane).toBeTruthy();
 		if (!firstLane) return;
-		expect(['is-healthy', 'is-watch', 'is-critical']).toContain(laneSeverityClass(firstLane.severity));
+		expect(['is-healthy', 'is-watch', 'is-critical']).toContain(
+			laneSeverityClass(firstLane.severity)
+		);
 		const pos = lanePositionPercent(firstLane);
 		expect(pos.leftPct).toBeGreaterThanOrEqual(0);
 		expect(pos.leftPct).toBeLessThanOrEqual(100);

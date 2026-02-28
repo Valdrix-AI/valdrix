@@ -391,6 +391,7 @@
 
 			<div class="flex flex-wrap gap-3 items-center">
 				<button
+					type="button"
 					class="btn btn-primary"
 					onclick={savePolicy}
 					disabled={savingPolicy}
@@ -440,6 +441,7 @@
 					</label>
 				</div>
 				<button
+					type="button"
 					class="btn btn-secondary mb-3"
 					onclick={upsertBudget}
 					disabled={savingBudget}
@@ -515,6 +517,7 @@
 					</div>
 				</div>
 				<button
+					type="button"
 					class="btn btn-secondary mb-3"
 					onclick={createCredit}
 					disabled={savingCredit}

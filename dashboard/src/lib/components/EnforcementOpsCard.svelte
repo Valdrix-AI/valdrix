@@ -251,6 +251,7 @@
 
 	<div class="flex flex-wrap gap-3 items-center mb-4">
 		<button
+			type="button"
 			class="btn btn-secondary"
 			onclick={refreshData}
 			disabled={refreshing || loading}
@@ -259,6 +260,7 @@
 			{refreshing ? '⏳ Refreshing...' : 'Refresh'}
 		</button>
 		<button
+			type="button"
 			class="btn btn-primary"
 			onclick={runOverdueAutoReconciliation}
 			disabled={runningSweep || loading}
@@ -300,6 +302,7 @@
 										<td class="py-2">{formatUsd(row.reserved_total_usd)}</td>
 										<td class="py-2">
 											<button
+												type="button"
 												class="btn btn-xs btn-outline"
 												onclick={() => reconcileAsMatched(row)}
 												disabled={reconcilingDecisionId === row.decision_id}

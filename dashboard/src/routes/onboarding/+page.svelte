@@ -1127,6 +1127,7 @@
 
 				<div class="provider-grid">
 					<button
+						type="button"
 						class="provider-card"
 						class:selected={selectedProvider === 'aws'}
 						onclick={() => (selectedProvider = 'aws')}
@@ -1139,6 +1140,7 @@
 					</button>
 
 					<button
+						type="button"
 						class="provider-card"
 						class:selected={selectedProvider === 'azure'}
 						onclick={() => (selectedProvider = 'azure')}
@@ -1151,6 +1153,7 @@
 					</button>
 
 					<button
+						type="button"
 						class="provider-card"
 						class:selected={selectedProvider === 'gcp'}
 						onclick={() => (selectedProvider = 'gcp')}
@@ -1163,6 +1166,7 @@
 					</button>
 
 					<button
+						type="button"
 						class="provider-card"
 						class:selected={selectedProvider === 'saas'}
 						onclick={() => (selectedProvider = 'saas')}
@@ -1175,6 +1179,7 @@
 					</button>
 
 					<button
+						type="button"
 						class="provider-card"
 						class:selected={selectedProvider === 'license'}
 						onclick={() => (selectedProvider = 'license')}
@@ -1320,7 +1325,7 @@
 				{:else if (selectedProvider === 'saas' || selectedProvider === 'license') && !canUseCloudPlusFeatures()}
 					<a href={`${base}/billing`} class="primary-btn mt-8">Upgrade to Pro →</a>
 				{:else}
-					<button class="primary-btn mt-8" onclick={handleContinueToSetup}
+					<button type="button" class="primary-btn mt-8" onclick={handleContinueToSetup}
 						>Continue to Setup →</button
 					>
 				{/if}
@@ -1366,6 +1371,7 @@
 					<!-- Manual Templates (Old Flow) -->
 					<div class="tab-selector">
 						<button
+							type="button"
 							class="tab"
 							class:active={selectedTab === 'cloudformation'}
 							onclick={() => (selectedTab = 'cloudformation')}
@@ -1373,6 +1379,7 @@
 							☁️ CloudFormation
 						</button>
 						<button
+							type="button"
 							class="tab"
 							class:active={selectedTab === 'terraform'}
 							onclick={() => (selectedTab = 'terraform')}
@@ -1475,8 +1482,10 @@
 								>{selectedTab === 'cloudformation' ? 'valdrix-role.yaml' : 'valdrix-role.tf'}</span
 							>
 							<div class="code-actions">
-								<button class="icon-btn" onclick={copyTemplate}>{copied ? '✅' : '📋 Copy'}</button>
-								<button class="icon-btn" onclick={downloadTemplate}>📥</button>
+								<button type="button" class="icon-btn" onclick={copyTemplate}
+									>{copied ? '✅' : '📋 Copy'}</button
+								>
+								<button type="button" class="icon-btn" onclick={downloadTemplate}>📥</button>
 							</div>
 						</div>
 						<pre class="code-block">{selectedTab === 'cloudformation'
@@ -1813,15 +1822,25 @@
 				{/if}
 
 				<div class="flex gap-4 mt-8">
-					<button class="secondary-btn !w-auto px-6" onclick={() => (currentStep = 0)}
+					<button type="button" class="secondary-btn !w-auto px-6" onclick={() => (currentStep = 0)}
 						>← Back</button
 					>
 					{#if selectedProvider === 'aws'}
-						<button class="primary-btn !flex-1" onclick={verifyConnection} disabled={isVerifying}>
+						<button
+							type="button"
+							class="primary-btn !flex-1"
+							onclick={verifyConnection}
+							disabled={isVerifying}
+						>
 							{isVerifying ? '⏳ Verifying...' : '✅ Verify Connection'}
 						</button>
 					{:else}
-						<button class="primary-btn !flex-1" onclick={proceedToVerify} disabled={isVerifying}>
+						<button
+							type="button"
+							class="primary-btn !flex-1"
+							onclick={proceedToVerify}
+							disabled={isVerifying}
+						>
 							{#if isVerifying}
 								⏳ Verifying...
 							{:else if selectedProvider === 'saas' || selectedProvider === 'license'}
@@ -1905,11 +1924,11 @@
 					</div>
 				{/if}
 
-				<button class="primary-btn" onclick={verifyConnection} disabled={isVerifying}>
+				<button type="button" class="primary-btn" onclick={verifyConnection} disabled={isVerifying}>
 					{isVerifying ? '⏳ Verifying...' : '✅ Verify Connection'}
 				</button>
 
-				<button class="secondary-btn" onclick={() => (currentStep = 1)}>
+				<button type="button" class="secondary-btn" onclick={() => (currentStep = 1)}>
 					← Back to Template
 				</button>
 			</div>

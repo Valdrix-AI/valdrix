@@ -435,116 +435,118 @@
 		<CommandPalette bind:isOpen={uiState.isCommandPaletteOpen} />
 	{:else}
 		<!-- Public Layout (Login/Landing) -->
-				<header class="border-b border-ink-800 bg-ink-900/50 backdrop-blur sticky top-0 z-50">
-					<nav class="container public-top-nav mx-auto flex items-center justify-between gap-4 px-6 py-4">
-						<a href={toAppPath('/')} class="flex items-center gap-2">
-							<CloudLogo provider="valdrix" size={32} />
-							<span class="text-xl font-bold text-gradient hidden sm:inline">Valdrics</span>
-						</a>
+		<header class="border-b border-ink-800 bg-ink-900/50 backdrop-blur sticky top-0 z-50">
+			<nav
+				class="container public-top-nav mx-auto flex items-center justify-between gap-4 px-6 py-4"
+			>
+				<a href={toAppPath('/')} class="flex items-center gap-2">
+					<CloudLogo provider="valdrix" size={32} />
+					<span class="text-xl font-bold text-gradient hidden sm:inline">Valdrics</span>
+				</a>
 
-						<div class="public-nav-primary items-center gap-5 text-sm text-ink-300">
-							{#each PUBLIC_PRIMARY_LINKS as link (link.href)}
-								<a href={toAppPath(link.href)} class="hover:text-ink-100">{link.label}</a>
-							{/each}
-						</div>
+				<div class="public-nav-primary items-center gap-5 text-sm text-ink-300">
+					{#each PUBLIC_PRIMARY_LINKS as link (link.href)}
+						<a href={toAppPath(link.href)} class="hover:text-ink-100">{link.label}</a>
+					{/each}
+				</div>
 
-						<div class="public-nav-secondary items-center gap-2">
-							{#each PUBLIC_SECONDARY_LINKS as link (link.href)}
-								<a href={toAppPath(link.href)} class="btn btn-ghost">{link.label}</a>
-							{/each}
-							<a href={toAppPath('/auth/login')} class="btn btn-primary">Start Free</a>
-						</div>
+				<div class="public-nav-secondary items-center gap-2">
+					{#each PUBLIC_SECONDARY_LINKS as link (link.href)}
+						<a href={toAppPath(link.href)} class="btn btn-ghost">{link.label}</a>
+					{/each}
+					<a href={toAppPath('/auth/login')} class="btn btn-primary">Start Free</a>
+				</div>
 
-						<div class="public-nav-mobile flex items-center gap-2">
-							<a href={toAppPath('/auth/login')} class="btn btn-primary public-nav-mobile-cta">
-								Start Free
-							</a>
-							<button
-								type="button"
-								class="btn btn-ghost p-2 public-nav-menu-toggle"
-								bind:this={publicMenuButton}
-								aria-label="Toggle menu"
-								aria-expanded={publicMenuOpen}
-							aria-controls="public-mobile-menu"
-							aria-haspopup="dialog"
-							onclick={togglePublicMenu}
-						>
-							{#if publicMenuOpen}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="20"
-									height="20"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<line x1="18" y1="6" x2="6" y2="18"></line>
-									<line x1="6" y1="6" x2="18" y2="18"></line>
-								</svg>
-							{:else}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="20"
-									height="20"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<line x1="3" y1="12" x2="21" y2="12"></line>
-									<line x1="3" y1="6" x2="21" y2="6"></line>
-									<line x1="3" y1="18" x2="21" y2="18"></line>
-								</svg>
-							{/if}
-						</button>
-					</div>
-				</nav>
-				{#if publicMenuOpen}
+				<div class="public-nav-mobile flex items-center gap-2">
+					<a href={toAppPath('/auth/login')} class="btn btn-primary public-nav-mobile-cta">
+						Start Free
+					</a>
 					<button
 						type="button"
-						class="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-[2px] lg:hidden"
-						aria-label="Close navigation menu"
-						onclick={closePublicMenu}
-					></button>
-						<div
-							id="public-mobile-menu"
-							bind:this={publicMenuPanel}
-							class="relative z-50 lg:hidden border-t border-ink-800/70 bg-ink-900/95"
-							role="dialog"
-							aria-modal="true"
-							aria-labelledby="public-mobile-menu-title"
-						>
-							<div class="container mx-auto px-6 py-4">
-							<h2 id="public-mobile-menu-title" class="sr-only">Public navigation menu</h2>
-							<div class="grid gap-2 text-sm text-ink-200">
-									<a
-										href={toAppPath('/auth/login')}
-										class="btn btn-primary justify-center mb-2 w-full"
-										onclick={closePublicMenu}
-									>
-										Start Free
+						class="btn btn-ghost p-2 public-nav-menu-toggle"
+						bind:this={publicMenuButton}
+						aria-label="Toggle menu"
+						aria-expanded={publicMenuOpen}
+						aria-controls="public-mobile-menu"
+						aria-haspopup="dialog"
+						onclick={togglePublicMenu}
+					>
+						{#if publicMenuOpen}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="20"
+								height="20"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<line x1="18" y1="6" x2="6" y2="18"></line>
+								<line x1="6" y1="6" x2="18" y2="18"></line>
+							</svg>
+						{:else}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="20"
+								height="20"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<line x1="3" y1="12" x2="21" y2="12"></line>
+								<line x1="3" y1="6" x2="21" y2="6"></line>
+								<line x1="3" y1="18" x2="21" y2="18"></line>
+							</svg>
+						{/if}
+					</button>
+				</div>
+			</nav>
+			{#if publicMenuOpen}
+				<button
+					type="button"
+					class="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-[2px] lg:hidden"
+					aria-label="Close navigation menu"
+					onclick={closePublicMenu}
+				></button>
+				<div
+					id="public-mobile-menu"
+					bind:this={publicMenuPanel}
+					class="relative z-50 lg:hidden border-t border-ink-800/70 bg-ink-900/95"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="public-mobile-menu-title"
+				>
+					<div class="container mx-auto px-6 py-4">
+						<h2 id="public-mobile-menu-title" class="sr-only">Public navigation menu</h2>
+						<div class="grid gap-2 text-sm text-ink-200">
+							<a
+								href={toAppPath('/auth/login')}
+								class="btn btn-primary justify-center mb-2 w-full"
+								onclick={closePublicMenu}
+							>
+								Start Free
+							</a>
+							{#each PUBLIC_MOBILE_LINKS as link (link.href)}
+								<a
+									href={toAppPath(link.href)}
+									class="py-3 min-h-11 flex items-center hover:text-ink-100"
+									onclick={closePublicMenu}
+								>
+									{link.label}
 								</a>
-								{#each PUBLIC_MOBILE_LINKS as link (link.href)}
-									<a
-										href={toAppPath(link.href)}
-										class="py-3 min-h-11 flex items-center hover:text-ink-100"
-										onclick={closePublicMenu}
-									>
-										{link.label}
-									</a>
-								{/each}
-							</div>
+							{/each}
 						</div>
 					</div>
-				{/if}
-				<div class="border-t border-ink-800/60 bg-ink-900/65">
-					<div
-						class="container mx-auto flex flex-wrap items-center gap-x-3 gap-y-1 px-6 py-2 text-xs text-ink-400"
+				</div>
+			{/if}
+			<div class="border-t border-ink-800/60 bg-ink-900/65">
+				<div
+					class="container mx-auto flex flex-wrap items-center gap-x-3 gap-y-1 px-6 py-2 text-xs text-ink-400"
 				>
 					{#each PUBLIC_SIGNAL_STRIP as message, index (message)}
 						<span>{message}</span>
@@ -571,11 +573,18 @@
 					<nav class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-4" aria-label="Footer">
 						{#each PUBLIC_FOOTER_LINKS as link (link.href)}
 							{#if link.external}
-								<a href={link.href} target="_blank" rel="noreferrer" class="text-ink-300 hover:text-ink-100">
+								<a
+									href={link.href}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-ink-300 hover:text-ink-100"
+								>
 									{link.label}
 								</a>
 							{:else}
-								<a href={toAppPath(link.href)} class="text-ink-300 hover:text-ink-100">{link.label}</a>
+								<a href={toAppPath(link.href)} class="text-ink-300 hover:text-ink-100"
+									>{link.label}</a
+								>
 							{/if}
 						{/each}
 					</nav>
@@ -583,7 +592,9 @@
 
 				<div class="mt-6 flex flex-wrap items-center gap-2" aria-label="Technology badges">
 					{#each PUBLIC_FOOTER_BADGES as badge (badge)}
-						<span class={`badge ${badge === 'Policy-Governed Actions' ? 'badge-success' : 'badge-default'}`}>
+						<span
+							class={`badge ${badge === 'Policy-Governed Actions' ? 'badge-success' : 'badge-default'}`}
+						>
 							{badge}
 						</span>
 					{/each}
@@ -599,7 +610,9 @@
 
 <!-- Global Toasts -->
 {#if uiState.toasts.length > 0}
-	<div class="fixed inset-x-0 bottom-4 z-[100] px-4 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:px-0 sm:max-w-md">
+	<div
+		class="fixed inset-x-0 bottom-4 z-[100] px-4 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:px-0 sm:max-w-md"
+	>
 		<div class="flex flex-col gap-3 sm:min-w-[320px]">
 			{#each uiState.toasts as toast (toast.id)}
 				<ToastComponent {toast} />

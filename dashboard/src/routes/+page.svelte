@@ -190,7 +190,10 @@
 			name="keywords"
 			content="cloud cost optimization, SaaS spend management, GreenOps platform, carbon cost optimization, FinOps platform, ITAM license optimization, cloud cost control"
 		/>
-		<meta property="og:title" content="Valdrics | Economic Control Plane for Cloud and Software Spend" />
+		<meta
+			property="og:title"
+			content="Valdrics | Economic Control Plane for Cloud and Software Spend"
+		/>
 		<meta
 			property="og:description"
 			content="Control cloud and software spend with owner-assigned actions, safe approvals, and measurable savings."

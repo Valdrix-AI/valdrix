@@ -243,7 +243,12 @@
 					<AlertTriangle class="h-5 w-5 text-warning-400" />
 					Remediate Resource
 				</h3>
-				<button class="btn btn-sm btn-ghost" onclick={handleClose} disabled={submitting}>✕</button>
+				<button
+					type="button"
+					class="btn btn-sm btn-ghost"
+					onclick={handleClose}
+					disabled={submitting}>✕</button
+				>
 			</div>
 
 			<div class="space-y-6">
@@ -303,7 +308,8 @@
 					{:else if previewError}
 						<div class="p-4 bg-danger-500/10 border border-danger-500/30 rounded-lg">
 							<p class="text-sm text-danger-400">{previewError}</p>
-							<button class="btn btn-xs btn-outline mt-2" onclick={runPreview}>Retry Preview</button
+							<button type="button" class="btn btn-xs btn-outline mt-2" onclick={runPreview}
+								>Retry Preview</button
 							>
 						</div>
 					{:else if preview}
@@ -354,10 +360,13 @@
 
 			<div class="modal-action">
 				{#if actionSuccess}
-					<button class="btn btn-primary" onclick={handleClose}>Close Queue</button>
+					<button type="button" class="btn btn-primary" onclick={handleClose}>Close Queue</button>
 				{:else}
-					<button class="btn btn-ghost" onclick={handleClose} disabled={submitting}>Cancel</button>
+					<button type="button" class="btn btn-ghost" onclick={handleClose} disabled={submitting}
+						>Cancel</button
+					>
 					<button
+						type="button"
 						class="btn btn-primary min-w-[140px]"
 						disabled={submitting ||
 							previewLoading ||
