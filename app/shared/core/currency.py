@@ -59,10 +59,10 @@ class ExchangeRateService:
         from app.shared.db.session import async_session_maker
 
         async with async_session_maker() as session:
-            # Global FX table is RLS-exempt, but mark as system context explicitly.
-            session.info["rls_context_set"] = None
-            conn = await session.connection()
-            conn.info["rls_context_set"] = None
+            # Global FX table is RLS-exempt, but mark as explicit system context.
+            from app.shared.db.session import mark_session_system_context
+
+            await mark_session_system_context(session)
             yield session
 
     @staticmethod

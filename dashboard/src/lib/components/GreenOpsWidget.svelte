@@ -120,13 +120,13 @@
 	}
 
 	.subtitle {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		color: #94a3b8;
 		margin: 0;
 	}
 
 	.badge-esg {
-		font-size: 0.65rem;
+		font-size: var(--text-xs);
 		font-weight: 700;
 		text-transform: uppercase;
 		background: rgba(34, 197, 94, 0.2);
@@ -142,7 +142,7 @@
 	}
 
 	.metric-label {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
 		color: #64748b;
@@ -161,7 +161,7 @@
 		align-items: center;
 		justify-content: center;
 		gap: 0.25rem;
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		color: #4ade80;
 		font-weight: 600;
 	}
@@ -188,7 +188,7 @@
 	}
 
 	.stat-label {
-		font-size: 0.65rem;
+		font-size: var(--text-xs);
 		color: #94a3b8;
 	}
 

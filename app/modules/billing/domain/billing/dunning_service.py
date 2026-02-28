@@ -12,7 +12,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Callable
 from app.shared.core.config import get_settings
 
 from app.modules.billing.domain.billing.paystack_billing import (
@@ -20,6 +20,7 @@ from app.modules.billing.domain.billing.paystack_billing import (
     SubscriptionStatus,
     BillingService,
 )
+from app.modules.billing.domain.billing.entitlement_policy import sync_tenant_plan
 from app.shared.core.pricing import PricingTier
 from app.models.background_job import JobType
 from app.modules.governance.domain.jobs.processor import enqueue_job
@@ -47,8 +48,18 @@ class DunningService:
     5. On final failure: downgrade → FREE, send notice
     """
 
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        email_service_factory: Callable[[], "EmailService"] | None = None,
+        billing_service_factory: Callable[[AsyncSession], BillingService] | None = None,
+    ):
         self.db = db
+        self._email_service_factory = (
+            email_service_factory or self._build_email_service_from_settings
+        )
+        self._billing_service_factory = billing_service_factory or BillingService
 
     async def _get_primary_tenant_email(self, tenant_id: UUID) -> Optional[str]:
         from app.models.tenant import User
@@ -62,7 +73,7 @@ class DunningService:
             return None
         return decrypt_string(user.email, context="pii")
 
-    def _build_email_service(self) -> "EmailService":
+    def _build_email_service_from_settings(self) -> "EmailService":
         from app.modules.notifications.domain.email_service import EmailService
 
         settings = get_settings()
@@ -73,6 +84,9 @@ class DunningService:
             smtp_password=str(settings.SMTP_PASSWORD),
             from_email=str(getattr(settings, "SMTP_FROM", "billing@valdrix.io")),
         )
+
+    def _build_email_service(self) -> "EmailService":
+        return self._email_service_factory()
 
     async def process_failed_payment(
         self, subscription_id: UUID, is_webhook: bool = True
@@ -99,6 +113,10 @@ class DunningService:
             return {"status": "error", "reason": "subscription_not_found"}
 
         now = datetime.now(timezone.utc)
+        previous_status = subscription.status
+        previous_dunning_attempts = subscription.dunning_attempts
+        previous_last_dunning_at = subscription.last_dunning_at
+        previous_next_retry_at = subscription.dunning_next_retry_at
 
         # Increment attempt counter
         subscription.dunning_attempts += 1
@@ -140,12 +158,24 @@ class DunningService:
                 subscription_id=str(subscription.id),
                 error=str(e),
             )
-            await self.db.commit()
+            subscription.status = previous_status
+            subscription.dunning_attempts = previous_dunning_attempts
+            subscription.last_dunning_at = previous_last_dunning_at
+            subscription.dunning_next_retry_at = previous_next_retry_at
+            try:
+                await self.db.rollback()
+            except Exception as rollback_exc:
+                logger.error(
+                    "dunning_enqueue_failed_rollback_failed",
+                    subscription_id=str(subscription.id),
+                    error=str(rollback_exc),
+                )
             await self._send_payment_failed_email(subscription, attempt, next_retry)
             return {
                 "status": "enqueue_failed",
                 "attempt": attempt,
                 "next_retry_at": next_retry.isoformat(),
+                "state_reverted": True,
             }
 
         await self.db.commit()
@@ -175,7 +205,7 @@ class DunningService:
         if not subscription:
             return {"status": "error", "reason": "subscription_not_found"}
 
-        billing = BillingService(self.db)
+        billing = self._billing_service_factory(self.db)
 
         try:
             success = await billing.charge_renewal(subscription)
@@ -204,14 +234,11 @@ class DunningService:
         subscription.last_dunning_at = None
         subscription.dunning_next_retry_at = None
 
-        # SEC-10: Ensure Tenant.plan is synced back (entitlement recovery)
-        from sqlalchemy import update
-        from app.models.tenant import Tenant
-
-        await self.db.execute(
-            update(Tenant)
-            .where(Tenant.id == subscription.tenant_id)
-            .values(plan=subscription.tier)
+        await sync_tenant_plan(
+            db=self.db,
+            tenant_id=subscription.tenant_id,
+            tier=subscription.tier,
+            source="dunning_retry_success",
         )
 
         await self.db.commit()
@@ -236,14 +263,11 @@ class DunningService:
         subscription.canceled_at = datetime.now(timezone.utc)
         subscription.dunning_next_retry_at = None
 
-        # SEC-10: Ensure Tenant.plan is synced to FREE (entitlement lockdown)
-        from sqlalchemy import update
-        from app.models.tenant import Tenant
-
-        await self.db.execute(
-            update(Tenant)
-            .where(Tenant.id == subscription.tenant_id)
-            .values(plan=PricingTier.FREE.value)
+        await sync_tenant_plan(
+            db=self.db,
+            tenant_id=subscription.tenant_id,
+            tier=PricingTier.FREE,
+            source="dunning_final_failure",
         )
 
         await self.db.commit()

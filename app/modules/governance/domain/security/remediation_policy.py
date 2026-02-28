@@ -339,3 +339,12 @@ def is_production_destructive_remediation(request: RemediationRequest) -> bool:
     """
     engine = RemediationPolicyEngine()
     return engine._is_destructive(request) and engine._looks_like_production(request)
+
+
+def is_production_remediation_target(request: RemediationRequest) -> bool:
+    """
+    Classify whether a remediation targets a production-like environment.
+    Used for tier boundaries that only allow non-production auto-remediation.
+    """
+    engine = RemediationPolicyEngine()
+    return engine._looks_like_production(request)

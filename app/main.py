@@ -66,8 +66,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 _csrf_load_config = cast(Callable[[F], F], CsrfProtect.load_config)
 
 
-@_csrf_load_config
-def get_csrf_config() -> CsrfSettings:
+def _resolve_csrf_settings() -> CsrfSettings:
     """
     Lazy initialization of CSRF settings to avoid module-load race conditions
     with environment configuration (Finding #5).
@@ -75,9 +74,20 @@ def get_csrf_config() -> CsrfSettings:
     if settings.CSRF_SECRET_KEY:
         return CsrfSettings(secret_key=settings.CSRF_SECRET_KEY)
     if settings.TESTING:
-        # Deterministic non-empty key for tests only.
-        return CsrfSettings(secret_key="test_csrf_secret_key_for_local_tests_only_123")
+        # Tests may provide an explicit key; otherwise derive an ephemeral key so
+        # no hardcoded fallback secret can leak across environments.
+        explicit_test_key = (os.getenv("CSRF_TEST_SECRET_KEY") or "").strip()
+        if explicit_test_key:
+            return CsrfSettings(secret_key=explicit_test_key)
+        test_seed = f"{os.getenv('PYTEST_CURRENT_TEST', 'pytest')}:{os.getpid()}"
+        derived_key = hashlib.sha256(test_seed.encode("utf-8")).hexdigest()
+        return CsrfSettings(secret_key=f"test_csrf_{derived_key}")
     raise ValueError("CSRF_SECRET_KEY must be configured")
+
+
+@_csrf_load_config
+def get_csrf_config() -> CsrfSettings:
+    return _resolve_csrf_settings()
 
 
 logger = structlog.get_logger()

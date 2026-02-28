@@ -15,6 +15,7 @@ from app.shared.adapters.aws_utils import (
     map_aws_credentials,
     resolve_aws_region_hint,
 )
+from app.shared.adapters.aws_pagination import iter_aws_paginator_pages
 
 logger = structlog.get_logger()
 
@@ -65,10 +66,17 @@ class AWSResourceExplorerAdapter:
 
                 resources = []
                 paginator = client.get_paginator("search")
+                page_size = min(max_results, 100)
+                max_pages = max(1, (max_results + page_size - 1) // page_size)
 
-                async for page in paginator.paginate(
-                    QueryString=query,
-                    MaxResults=min(max_results, 100),  # Max 100 per page for search
+                async for page in iter_aws_paginator_pages(
+                    paginator,
+                    operation_name="resource-explorer-2.search",
+                    paginate_kwargs={
+                        "QueryString": query,
+                        "MaxResults": page_size,  # Max 100 per page for search
+                    },
+                    max_pages=max_pages,
                 ):
                     for resource in page.get("Resources", []):
                         resources.append(

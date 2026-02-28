@@ -1,0 +1,85 @@
+{
+  "captured_at": "2026-02-28T15:00:00Z",
+  "thresholds": {
+    "min_blended_gross_margin_percent": 80.0,
+    "max_p95_tenant_llm_cogs_pct_mrr": 8.0,
+    "max_annual_discount_impact_percent": 18.0,
+    "min_growth_to_pro_conversion_mom_delta_percent": 0.0,
+    "min_pro_to_enterprise_conversion_mom_delta_percent": 0.0,
+    "min_stress_margin_percent": 75.0,
+    "required_consecutive_margin_closes": 2
+  },
+  "annual_mix_by_tier": {
+    "starter": 0.7,
+    "growth": 0.7,
+    "pro": 0.7,
+    "enterprise": 0.5
+  },
+  "infra_cogs_percent_of_effective_mrr_by_tier": {
+    "starter": 8.0,
+    "growth": 7.5,
+    "pro": 6.8,
+    "enterprise": 6.0
+  },
+  "support_cogs_per_active_subscription_usd_by_tier": {
+    "starter": 6.0,
+    "growth": 9.0,
+    "pro": 16.0,
+    "enterprise": 30.0
+  },
+  "support_cogs_per_dunning_event_usd": 18.0,
+  "conversion_signals": {
+    "growth_to_pro_conversion_mom_delta_percent": 0.4,
+    "pro_to_enterprise_conversion_mom_delta_percent": 0.2
+  },
+  "stress_scenario": {
+    "infra_cost_multiplier": 2.0
+  },
+  "close_history": [
+    {
+      "month": "2026-01",
+      "blended_gross_margin_percent": 83.7
+    }
+  ],
+  "scenario_models": {
+    "price_sensitivity": [
+      {
+        "name": "baseline",
+        "subscription_multipliers_by_tier": {
+          "starter": 1.0,
+          "growth": 1.0,
+          "pro": 1.0,
+          "enterprise": 1.0
+        },
+        "monthly_price_multipliers_by_tier": {
+          "starter": 1.0,
+          "growth": 1.0,
+          "pro": 1.0,
+          "enterprise": 1.0
+        }
+      },
+      {
+        "name": "higher_pro_price",
+        "subscription_multipliers_by_tier": {
+          "starter": 1.0,
+          "growth": 0.98,
+          "pro": 0.96,
+          "enterprise": 1.02
+        },
+        "monthly_price_multipliers_by_tier": {
+          "starter": 1.0,
+          "growth": 1.0,
+          "pro": 1.2,
+          "enterprise": 1.0
+        }
+      }
+    ]
+  },
+  "self_hosted_tco_inputs": {
+    "annual_staffing_usd": 420000.0,
+    "annual_oncall_usd": 96000.0,
+    "annual_security_compliance_usd": 64000.0,
+    "annual_infra_ops_usd": 72000.0,
+    "annual_tooling_usd": 30000.0
+  }
+}

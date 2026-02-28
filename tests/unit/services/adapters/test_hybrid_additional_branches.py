@@ -756,7 +756,7 @@ async def test_hybrid_get_json_fallthrough_raises_last_error_branch() -> None:
     transport_fail = _FakeAsyncClient([httpx.ConnectError("c1"), httpx.ConnectError("c2")])
     with (
         patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=transport_fail),
-        patch("app.shared.adapters.hybrid.range", return_value=[1, 2]),
+        patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):
         with pytest.raises(ExternalAPIError, match="Hybrid request failed:"):
             await adapter._get_json("https://example.invalid", headers={})

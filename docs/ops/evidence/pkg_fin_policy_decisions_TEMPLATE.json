@@ -1,0 +1,415 @@
+{
+  "captured_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "window": {
+    "start": "YYYY-MM-01T00:00:00Z",
+    "end": "YYYY-MM-DDT23:59:59Z",
+    "label": "YYYY-MM"
+  },
+  "telemetry": {
+    "months_observed": 2,
+    "source_type": "synthetic_prelaunch",
+    "tier_unit_economics": [
+      {
+        "tier": "starter",
+        "mrr_usd": 0.0,
+        "effective_mrr_usd": 0.0,
+        "llm_cogs_usd": 0.0,
+        "infra_cogs_usd": 0.0,
+        "support_cogs_usd": 0.0
+      },
+      {
+        "tier": "growth",
+        "mrr_usd": 0.0,
+        "effective_mrr_usd": 0.0,
+        "llm_cogs_usd": 0.0,
+        "infra_cogs_usd": 0.0,
+        "support_cogs_usd": 0.0
+      },
+      {
+        "tier": "pro",
+        "mrr_usd": 0.0,
+        "effective_mrr_usd": 0.0,
+        "llm_cogs_usd": 0.0,
+        "infra_cogs_usd": 0.0,
+        "support_cogs_usd": 0.0
+      },
+      {
+        "tier": "enterprise",
+        "mrr_usd": 0.0,
+        "effective_mrr_usd": 0.0,
+        "llm_cogs_usd": 0.0,
+        "infra_cogs_usd": 0.0,
+        "support_cogs_usd": 0.0
+      }
+    ]
+  },
+  "policy_decisions": {
+    "enterprise_pricing_model": "hybrid",
+    "enterprise_floor_usd_monthly": 0.0,
+    "max_annual_discount_percent": 20.0,
+    "pricing_motion_allowed": false,
+    "growth_auto_remediation_scope": "nonprod_only",
+    "pro_enforcement_boundary": "required_for_prod_enforcement",
+    "migration_strategy": "grandfather_timeboxed",
+    "migration_window_days": 90
+  },
+  "approvals": {
+    "finance_owner": "finance.owner@example.com",
+    "product_owner": "product.owner@example.com",
+    "go_to_market_owner": "gtm.owner@example.com",
+    "governance_mode": "founder_acting_roles_prelaunch",
+    "approval_record_ref": "PKG-FIN-APPROVAL-YYYY-MM-DD",
+    "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+  },
+  "decision_backlog": {
+    "required_decision_ids": [
+      "PKG-004",
+      "PKG-005",
+      "PKG-009",
+      "PKG-011",
+      "PKG-012",
+      "PKG-013",
+      "PKG-016",
+      "PKG-017",
+      "PKG-018",
+      "PKG-019",
+      "PKG-021",
+      "PKG-022",
+      "PKG-023",
+      "PKG-024",
+      "PKG-025",
+      "PKG-026",
+      "PKG-027",
+      "PKG-028",
+      "PKG-029",
+      "PKG-030",
+      "PKG-031",
+      "PKG-032",
+      "FIN-001",
+      "FIN-002",
+      "FIN-003",
+      "FIN-004",
+      "FIN-005",
+      "FIN-006",
+      "FIN-007",
+      "FIN-008"
+    ],
+    "decision_items": [
+      {
+        "id": "PKG-004",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-004 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-004-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-005",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-005 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-005-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-009",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-009 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-009-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-011",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-011 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-011-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-012",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-012 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-012-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-013",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-013 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-013-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-016",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-016 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-016-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-017",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-017 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-017-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-018",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-018 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-018-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-019",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-019 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-019-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-021",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-021 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-021-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-022",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-022 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-022-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-023",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-023 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-023-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-024",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-024 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-024-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-025",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-025 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-025-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-026",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-026 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-026-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-027",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-027 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-027-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-028",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-028 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-028-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "PKG-029",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-029 policy resolution placeholder.",
+        "resolution": "scheduled_postlaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-029-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ",
+        "target_date": "YYYY-MM-DD",
+        "success_criteria": "Define measurable completion criteria for committee sign-off."
+      },
+      {
+        "id": "PKG-030",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-030 policy resolution placeholder.",
+        "resolution": "scheduled_postlaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-030-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ",
+        "target_date": "YYYY-MM-DD",
+        "success_criteria": "Define measurable completion criteria for committee sign-off."
+      },
+      {
+        "id": "PKG-031",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-031 policy resolution placeholder.",
+        "resolution": "scheduled_postlaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-031-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ",
+        "target_date": "YYYY-MM-DD",
+        "success_criteria": "Define measurable completion criteria for committee sign-off."
+      },
+      {
+        "id": "PKG-032",
+        "owner_function": "product",
+        "owner": "product.owner@example.com",
+        "decision_summary": "PKG-032 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-032-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "FIN-001",
+        "owner_function": "finance",
+        "owner": "finance.owner@example.com",
+        "decision_summary": "FIN-001 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "FIN-001-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "FIN-002",
+        "owner_function": "finance",
+        "owner": "finance.owner@example.com",
+        "decision_summary": "FIN-002 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "FIN-002-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "FIN-003",
+        "owner_function": "finance",
+        "owner": "finance.owner@example.com",
+        "decision_summary": "FIN-003 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "FIN-003-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "FIN-004",
+        "owner_function": "finance",
+        "owner": "finance.owner@example.com",
+        "decision_summary": "FIN-004 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-004-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "FIN-005",
+        "owner_function": "finance",
+        "owner": "finance.owner@example.com",
+        "decision_summary": "FIN-005 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-005-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "FIN-006",
+        "owner_function": "finance",
+        "owner": "finance.owner@example.com",
+        "decision_summary": "FIN-006 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-006-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "FIN-007",
+        "owner_function": "finance",
+        "owner": "finance.owner@example.com",
+        "decision_summary": "FIN-007 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-007-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      },
+      {
+        "id": "FIN-008",
+        "owner_function": "finance",
+        "owner": "finance.owner@example.com",
+        "decision_summary": "FIN-008 policy resolution placeholder.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-008-APPROVAL-YYYY-MM-DD",
+        "approved_at": "YYYY-MM-DDTHH:MM:SSZ"
+      }
+    ]
+  },
+  "gate_results": {
+    "pkg_fin_gate_policy_decisions_complete": false,
+    "pkg_fin_gate_telemetry_window_sufficient": false,
+    "pkg_fin_gate_approvals_complete": false,
+    "pkg_fin_gate_pricing_motion_guarded": false,
+    "pkg_fin_gate_backlog_coverage_complete": false,
+    "pkg_fin_gate_launch_blockers_resolved": false,
+    "pkg_fin_gate_postlaunch_commitments_scheduled": false
+  }
+}

@@ -443,9 +443,11 @@ async def _get_db_impl(
         # PROPAGATION: Ensure the listener can see the RLS status on the connection
         # and satisfy session-level checks in existing tests.
         session.info["rls_context_set"] = rls_context_set
+        session.info["rls_system_context"] = False
 
         conn = await session.connection()
         conn.info["rls_context_set"] = rls_context_set
+        conn.info["rls_system_context"] = False
 
         try:
             yield session
@@ -463,6 +465,28 @@ if "get_db" not in globals():
             yield session
 
 
+async def mark_session_system_context(session: AsyncSession) -> None:
+    """
+    Mark a session as an explicit system/public context.
+
+    This is required for code paths that intentionally bypass tenant-bound RLS
+    checks (for example OIDC discovery, SCIM token lookup, and global reference
+    tables).
+    """
+    session_info = getattr(session, "info", None)
+    if not isinstance(session_info, dict):
+        logger.debug("mark_session_system_context_missing_session_info_dict")
+        return
+    session_info["rls_context_set"] = None
+    session_info["rls_system_context"] = True
+    try:
+        conn = await session.connection()
+        conn.info["rls_context_set"] = None
+        conn.info["rls_system_context"] = True
+    except Exception as exc:
+        logger.debug("mark_session_system_context_connection_unavailable", error=str(exc))
+
+
 async def _get_system_db_impl() -> AsyncGenerator[AsyncSession, None]:
     """
     Provide a DB session for system/public operations that must not require a tenant context.
@@ -476,9 +500,7 @@ async def _get_system_db_impl() -> AsyncGenerator[AsyncSession, None]:
     - Do not use this for tenant-scoped business data.
     """
     async with async_session_maker() as session:
-        session.info["rls_context_set"] = None
-        conn = await session.connection()
-        conn.info["rls_context_set"] = None
+        await mark_session_system_context(session)
         try:
             yield session
         finally:
@@ -513,7 +535,9 @@ async def set_session_tenant_id(session: AsyncSession, tenant_id: Optional[UUID]
 
     # Mark context as set for known backends.
     session.info["rls_context_set"] = True
+    session.info["rls_system_context"] = False
     conn.info["rls_context_set"] = True
+    conn.info["rls_system_context"] = False
 
     # For Postgres, execute the actual set_config for RLS.
     if backend == "postgresql":
@@ -572,10 +596,51 @@ def check_rls_policy(
 
     # Identify the state from the connection info
     rls_status = conn.info.get("rls_context_set")
+    rls_status_explicit = "rls_context_set" in conn.info
+    rls_system_context = bool(conn.info.get("rls_system_context", False))
 
-    # PRODUCTION: Raise exception on RLS context missing (False)
-    # Note: None is allowed for system/internal connections that don't go through get_db
-    # but for all request-bound sessions, it will be True or False.
+    if rls_status is None:
+        if rls_system_context:
+            return statement, parameters
+
+        # Fail closed for non-testing execution paths when data-access sessions
+        # are missing an explicit RLS posture marker.
+        if not settings.TESTING:
+            try:
+                if statement.split():
+                    RLS_CONTEXT_MISSING.labels(
+                        statement_type=statement.split()[0].upper()
+                    ).inc()
+            except Exception as e:
+                logger.debug("rls_metric_increment_failed", error=str(e))
+
+            logger.critical(
+                "rls_enforcement_ambiguous_context_detected",
+                statement=statement[:500],
+                rls_status=rls_status,
+                rls_status_explicit=rls_status_explicit,
+                rls_system_context=rls_system_context,
+                error="Query executed with no explicit RLS/session context marker",
+            )
+            raise ValdrixException(
+                message="RLS context unresolved - query execution aborted",
+                code="rls_context_unresolved",
+                status_code=500,
+                details={
+                    "reason": "No explicit tenant/system context marker for DB query",
+                    "action": "Use get_db()/set_session_tenant_id for tenant flows, or mark_session_system_context for system flows.",
+                },
+            )
+
+        logger.warning(
+            "rls_context_unset_in_testing",
+            statement=statement[:120],
+            rls_status_explicit=rls_status_explicit,
+        )
+        return statement, parameters
+
+    # PRODUCTION: Raise exception on RLS context missing (False).
+    # System/public contexts must now be marked explicitly via `rls_system_context=True`.
     if rls_status is False:
         try:
             if statement.split():
@@ -612,6 +677,7 @@ async def health_check() -> Dict[str, Any]:
     try:
         db_engine = get_engine()
         async with async_session_maker() as session:
+            await mark_session_system_context(session)
             # Item 4: Fast Health Check (No heavy joins/locks)
             await session.execute(text("SELECT 1"))
 

@@ -390,7 +390,10 @@ async def test_activity_list_methods_handle_parse_exceptions_for_vendor_records(
     )
     google = LicenseAdapter(_conn(vendor="google_workspace", auth_method="oauth"))
 
-    with patch("app.shared.adapters.license.parse_timestamp", side_effect=ValueError("bad")):
+    with patch(
+        "app.shared.adapters.license_vendor_ops.parse_timestamp",
+        side_effect=ValueError("bad"),
+    ):
         with patch.object(
             m365,
             "_get_json",
@@ -467,10 +470,10 @@ async def test_list_github_activity_ignores_malformed_events_and_members() -> No
         _conn(vendor="github", auth_method="oauth", connector_config={"github_org": "acme"})
     )
     with (
-        patch(
-            "app.shared.adapters.license.parse_timestamp",
-            side_effect=_parse_or_raise,
-        ),
+            patch(
+                "app.shared.adapters.license_vendor_ops.parse_timestamp",
+                side_effect=_parse_or_raise,
+            ),
         patch.object(
             adapter,
             "_get_json",
@@ -808,7 +811,7 @@ async def test_license_get_json_fallthrough_raises_last_error_and_unexpected() -
     fallthrough_client = _FakeAsyncClient([httpx.ConnectError("c1"), httpx.ConnectError("c2")])
     with (
         patch("app.shared.adapters.license.httpx.AsyncClient", return_value=fallthrough_client),
-        patch("app.shared.adapters.license.range", return_value=[1, 2]),
+        patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):
         with pytest.raises(ExternalAPIError, match="License connector API request failed:"):
             await adapter._get_json("https://example.invalid", headers={})

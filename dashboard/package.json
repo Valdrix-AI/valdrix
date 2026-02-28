@@ -16,7 +16,10 @@
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright test",
-		"test:perf": "playwright test e2e/performance.spec.ts"
+		"test:perf": "playwright test e2e/performance.spec.ts",
+		"test:perf:ci": "PLAYWRIGHT_PUBLIC_ONLY=1 playwright test e2e/performance.spec.ts",
+		"test:visual": "PLAYWRIGHT_PUBLIC_ONLY=1 playwright test e2e/landing-visual.spec.ts",
+		"test:visual:update": "PLAYWRIGHT_PUBLIC_ONLY=1 playwright test e2e/landing-visual.spec.ts --update-snapshots"
 	},
 	"devDependencies": {
 		"@lucide/svelte": "^0.562.0",
@@ -27,6 +30,7 @@
 		"@tailwindcss/vite": "^4.1.18",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.3.1",
+		"@testing-library/user-event": "^14.6.1",
 		"@types/node": "^24",
 		"@vitest/browser-playwright": "^4.0.15",
 		"axe-playwright": "^2.2.2",

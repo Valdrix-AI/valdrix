@@ -12,6 +12,60 @@ SYSTEM_HEALTH = Gauge(
     "System health status (1=healthy, 0.5=degraded, 0=unhealthy)",
 )
 
+_REQUIRED_API_PREFIXES = {
+    "/api/v1/admin",
+    "/api/v1/admin/health-dashboard",
+    "/api/v1/audit",
+    "/api/v1/attribution",
+    "/api/v1/billing",
+    "/api/v1/carbon",
+    "/api/v1/costs",
+    "/api/v1/currency",
+    "/api/v1/enforcement",
+    "/api/v1/jobs",
+    "/api/v1/leaderboards",
+    "/api/v1/leadership",
+    "/api/v1/public",
+    "/api/v1/savings",
+    "/api/v1/settings",
+    "/api/v1/settings/connections",
+    "/api/v1/settings/onboard",
+    "/api/v1/strategies",
+    "/api/v1/usage",
+    "/api/v1/zombies",
+    "/scim/v2",
+}
+
+
+def _validate_router_registry(routes: list[tuple[Any, str | None]]) -> None:
+    seen_prefixes: set[str] = set()
+    for router, prefix in routes:
+        route_list = getattr(router, "routes", None)
+        if not isinstance(route_list, list) or not route_list:
+            raise RuntimeError("Router registry includes an empty router definition")
+        if prefix is None:
+            continue
+        normalized_prefix = prefix.strip()
+        if not normalized_prefix.startswith("/"):
+            raise RuntimeError(f"Router prefix must start with '/': {prefix!r}")
+        if normalized_prefix in seen_prefixes:
+            raise RuntimeError(f"Duplicate router prefix registered: {normalized_prefix}")
+        seen_prefixes.add(normalized_prefix)
+
+    missing_prefixes = sorted(_REQUIRED_API_PREFIXES - seen_prefixes)
+    if missing_prefixes:
+        raise RuntimeError(
+            "Router registry is missing required API prefixes: "
+            + ", ".join(missing_prefixes)
+        )
+
+    unexpected_prefixes = sorted(seen_prefixes - _REQUIRED_API_PREFIXES)
+    if unexpected_prefixes:
+        raise RuntimeError(
+            "Router registry includes unexpected API prefixes: "
+            + ", ".join(unexpected_prefixes)
+        )
+
 
 def register_lifecycle_routes(
     app: FastAPI,
@@ -106,6 +160,8 @@ def register_api_routers(app: FastAPI) -> None:
         (public_router, "/api/v1/public"),
         (scim_router, "/scim/v2"),
     ]
+
+    _validate_router_registry(routes)
 
     for router, prefix in routes:
         if prefix is None:

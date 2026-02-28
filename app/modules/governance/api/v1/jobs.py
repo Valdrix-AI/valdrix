@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, R
 from sqlalchemy import select, func, desc, asc
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
-from app.shared.db.session import get_db, async_session_maker
+from app.shared.db.session import get_db, async_session_maker, mark_session_system_context
 from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
@@ -33,6 +33,28 @@ router = APIRouter(tags=["Background Jobs"])
 logger = structlog.get_logger()
 _active_sse_connections: Dict[str, int] = {}
 _active_sse_lock = asyncio.Lock()
+
+
+async def require_internal_job_secret(
+    secret: str = Query(..., description="Internal secret for pg_cron"),
+) -> None:
+    """
+    Enforce internal scheduler authentication for /jobs/internal/process.
+
+    Defined as a dependency so auth-coverage audits can assert this endpoint is
+    intentionally protected without user-token RBAC.
+    """
+    from app.shared.core.config import get_settings
+
+    settings = get_settings()
+    expected_secret = settings.INTERNAL_JOB_SECRET
+    if not expected_secret or len(expected_secret) < 32:
+        raise HTTPException(
+            status_code=503,
+            detail="INTERNAL_JOB_SECRET is not configured securely. Set a 32+ character secret.",
+        )
+    if not secrets.compare_digest(secret, expected_secret):
+        raise HTTPException(status_code=403, detail="Invalid secret")
 
 
 class JobStatusResponse(BaseModel):
@@ -307,6 +329,7 @@ async def stream_job_updates(
                 try:
                     # We use a fresh session to avoid stale data
                     async with async_session_maker() as session:
+                        await mark_session_system_context(session)
                         # Fetch active jobs (pending, running) and recently finished ones
                         query = (
                             select(BackgroundJob)
@@ -385,28 +408,14 @@ async def stream_job_updates(
 async def internal_process_jobs(
     background_tasks: BackgroundTasks,
     _db: AsyncSession = Depends(get_db),
-    secret: str = Query(description="Internal secret for pg_cron"),
+    _auth: None = Depends(require_internal_job_secret),
 ) -> Dict[str, str]:
     """
     Internal endpoint called by pg_cron (Asynchronous).
     """
-    from app.shared.core.config import get_settings
-
-    settings = get_settings()
-
-    # Validate internal secret using constant-time comparison (SEC: Issue D3)
-    expected_secret = settings.INTERNAL_JOB_SECRET
-    if not expected_secret or len(expected_secret) < 32:
-        raise HTTPException(
-            status_code=503,
-            detail="INTERNAL_JOB_SECRET is not configured securely. Set a 32+ character secret.",
-        )
-
-    if not secrets.compare_digest(secret, expected_secret):
-        raise HTTPException(status_code=403, detail="Invalid secret")
-
     async def run_processor() -> None:
         async with async_session_maker() as session:
+            await mark_session_system_context(session)
             processor = JobProcessor(session)
             await processor.process_pending_jobs()
 

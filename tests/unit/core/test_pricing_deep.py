@@ -131,6 +131,23 @@ class TestPricingDeep:
         assert tier == PricingTier.FREE
 
     @pytest.mark.asyncio
+    async def test_get_tenant_tier_uses_session_cache(self, mock_db):
+        tenant_id = uuid.uuid4()
+        mock_db.info = {}
+        mock_tenant = MagicMock()
+        mock_tenant.plan = PricingTier.PRO.value
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_tenant
+        mock_db.execute.return_value = mock_result
+
+        first = await get_tenant_tier(tenant_id, mock_db)
+        second = await get_tenant_tier(tenant_id, mock_db)
+
+        assert first == PricingTier.PRO
+        assert second == PricingTier.PRO
+        assert mock_db.execute.await_count == 1
+
+    @pytest.mark.asyncio
     async def test_get_tenant_tier_invalid_plan_returns_free(self, mock_db):
         """Invalid plan strings should fallback to FREE."""
         mock_tenant = MagicMock()

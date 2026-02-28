@@ -3,7 +3,11 @@ import uuid
 from httpx import AsyncClient
 from app.models.llm import LLMBudget
 from app.models.tenant import UserRole
-from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.auth import (
+    CurrentUser,
+    get_current_user,
+    get_current_user_with_db_context,
+)
 from unittest.mock import patch
 
 
@@ -59,11 +63,26 @@ async def test_update_llm_settings(
 
 
 @pytest.mark.asyncio
-async def test_get_llm_models(async_client: AsyncClient):
-    """GET /llm/models should return available models."""
-    response = await async_client.get("/api/v1/settings/llm/models")
-    assert response.status_code == 200
-    assert "groq" in response.json()
+async def test_get_llm_models(
+    async_client: AsyncClient, app, mock_user_id, mock_tenant_id
+):
+    """GET /llm/models requires auth and returns available models for authenticated users."""
+    unauthorized = await async_client.get("/api/v1/settings/llm/models")
+    assert unauthorized.status_code == 401
+
+    mock_user = CurrentUser(
+        id=uuid.UUID(str(mock_user_id)),
+        tenant_id=uuid.UUID(str(mock_tenant_id)),
+        email="test@valdrix.io",
+        role=UserRole.ADMIN,
+    )
+    app.dependency_overrides[get_current_user_with_db_context] = lambda: mock_user
+    try:
+        response = await async_client.get("/api/v1/settings/llm/models")
+        assert response.status_code == 200
+        assert "groq" in response.json()
+    finally:
+        app.dependency_overrides.pop(get_current_user_with_db_context, None)
 
     # Verify pricing data import works (runtime check)
     from app.shared.llm.pricing_data import LLM_PRICING

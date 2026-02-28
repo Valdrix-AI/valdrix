@@ -31,8 +31,8 @@
 		{
 			id: 'starter',
 			name: 'Starter',
-			price_monthly: 29,
-			price_annual: 290,
+			price_monthly: 49,
+			price_annual: 490,
 			features: [
 				'Single cloud provider (AWS)',
 				'Cost dashboards + budget alerts',
@@ -42,20 +42,21 @@
 		{
 			id: 'growth',
 			name: 'Growth',
-			price_monthly: 79,
-			price_annual: 790,
+			price_monthly: 149,
+			price_annual: 1490,
 			popular: true,
 			features: [
 				'Multi-cloud support',
 				'AI analyses + GreenOps',
+				'Non-production auto-remediation workflows',
 				'BYOK supported (no platform surcharge)'
 			]
 		},
 		{
 			id: 'pro',
 			name: 'Pro',
-			price_monthly: 199,
-			price_annual: 1990,
+			price_monthly: 299,
+			price_annual: 2990,
 			features: [
 				'Automated remediation',
 				'Priority support + full API access',
@@ -252,7 +253,7 @@
 							Yearly
 							{#if billingCycle !== 'annual'}
 								<span
-									class="bg-success-500/20 text-success-400 px-1.5 py-0.5 rounded text-[10px] font-bold"
+									class="bg-success-500/20 text-success-400 px-1.5 py-0.5 rounded text-xs font-bold"
 									>Save 17%</span
 								>
 							{/if}
@@ -274,7 +275,7 @@
 									<h3 class="text-lg font-semibold capitalize">{plan.name}</h3>
 									{#if plan.popular}
 										<span
-											class="text-[10px] bg-accent-500/20 text-accent-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider"
+											class="text-xs bg-accent-500/20 text-accent-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider"
 											>Popular</span
 										>
 									{/if}
@@ -286,7 +287,7 @@
 									<span class="text-sm text-ink-400 font-normal">/mo</span>
 								</p>
 								{#if billingCycle === 'annual'}
-									<p class="text-[10px] text-success-400 mt-1">
+									<p class="text-xs text-success-400 mt-1">
 										Billed annually (${plan.price_annual}/yr)
 									</p>
 								{/if}

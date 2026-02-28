@@ -129,7 +129,7 @@
 					class="w-full bg-transparent border-none outline-none text-ink-50 text-lg placeholder-ink-500"
 				/>
 				<kbd
-					class="ml-3 px-1.5 py-0.5 rounded border border-ink-700 bg-ink-800 text-[10px] text-ink-400"
+					class="ml-3 px-1.5 py-0.5 rounded border border-ink-700 bg-ink-800 text-xs text-ink-400"
 					>ESC</kbd
 				>
 			</div>
@@ -162,7 +162,7 @@
 				class="px-4 py-2 bg-ink-950/50 border-t border-white/5 flex items-center justify-between"
 			>
 				<div
-					class="flex items-center gap-4 text-[10px] text-ink-500 uppercase tracking-widest font-bold"
+					class="flex items-center gap-4 text-xs text-ink-500 uppercase tracking-widest font-bold"
 				>
 					<div class="flex items-center gap-1.5">
 						<kbd class="px-1 rounded bg-ink-800 border border-ink-700">↑↓</kbd>
@@ -173,7 +173,7 @@
 						Select
 					</div>
 				</div>
-				<div class="text-[10px] text-accent-400/60 font-mono">Valdrics Command Palette</div>
+				<div class="text-xs text-accent-400/60 font-mono">Valdrics Command Palette</div>
 			</div>
 		</div>
 	</div>

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncGenerator
 from datetime import date, datetime, time, timezone
 from typing import Any
@@ -11,6 +10,7 @@ import structlog
 
 from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.feed_utils import as_float, is_number, parse_timestamp
+from app.shared.adapters.http_retry import execute_with_http_retry
 from app.shared.core.credentials import PlatformCredentials
 from app.shared.core.currency import convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
@@ -28,6 +28,35 @@ _LEDGER_HTTP_VENDOR_ALIASES = {
 }
 _DATADOG_VENDOR = "datadog"
 _NEWRELIC_VENDOR_ALIASES = {"newrelic", "new_relic", "new-relic"}
+
+
+async def _platform_get_request(
+    *,
+    url: str,
+    headers: dict[str, str],
+    params: dict[str, Any] | None,
+    verify_ssl: bool,
+) -> httpx.Response:
+    async with httpx.AsyncClient(
+        timeout=_NATIVE_TIMEOUT_SECONDS,
+        verify=verify_ssl,
+    ) as client:
+        return await client.get(url, headers=headers, params=params)
+
+
+async def _platform_post_request(
+    *,
+    url: str,
+    headers: dict[str, str],
+    params: dict[str, Any] | None,
+    json: dict[str, Any],
+    verify_ssl: bool,
+) -> httpx.Response:
+    async with httpx.AsyncClient(
+        timeout=_NATIVE_TIMEOUT_SECONDS,
+        verify=verify_ssl,
+    ) as client:
+        return await client.post(url, headers=headers, params=params, json=json)
 
 
 class PlatformAdapter(BaseAdapter):
@@ -811,55 +840,27 @@ class PlatformAdapter(BaseAdapter):
         headers: dict[str, str],
         params: dict[str, Any] | None = None,
     ) -> object:
-        last_error: Exception | None = None
-        for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
-            try:
-                async with httpx.AsyncClient(
-                    timeout=_NATIVE_TIMEOUT_SECONDS, verify=self._resolve_verify_ssl()
-                ) as client:
-                    response = await client.get(url, headers=headers, params=params)
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPStatusError as exc:
-                last_error = exc
-                status_code = exc.response.status_code
-                retryable = status_code in _RETRYABLE_STATUS_CODES
-                if retryable and attempt < _NATIVE_MAX_RETRIES:
-                    logger.warning(
-                        "platform_native_retry_http_status",
-                        attempt=attempt,
-                        max_attempts=_NATIVE_MAX_RETRIES,
-                        status_code=status_code,
-                        url=url,
-                    )
-                    await asyncio.sleep(0.05 * attempt)
-                    continue
-                raise ExternalAPIError(
-                    f"Platform request failed with status {status_code}: {exc}"
-                ) from exc
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
-                last_error = exc
-                if attempt < _NATIVE_MAX_RETRIES:
-                    logger.warning(
-                        "platform_native_retry_transport_error",
-                        attempt=attempt,
-                        max_attempts=_NATIVE_MAX_RETRIES,
-                        url=url,
-                        error=str(exc),
-                    )
-                    await asyncio.sleep(0.05 * attempt)
-                    continue
-                raise ExternalAPIError(f"Platform request failed: {exc}") from exc
-            except ValueError as exc:
-                raise ExternalAPIError(
-                    "Platform request returned invalid JSON payload"
-                ) from exc
-
-        if last_error is not None:
+        response = await execute_with_http_retry(
+            request=lambda: _platform_get_request(
+                url=url,
+                headers=headers,
+                params=params,
+                verify_ssl=self._resolve_verify_ssl(),
+            ),
+            url=url,
+            max_retries=_NATIVE_MAX_RETRIES,
+            retryable_status_codes=_RETRYABLE_STATUS_CODES,
+            retry_http_status_log_event="platform_native_retry_http_status",
+            retry_transport_log_event="platform_native_retry_transport_error",
+            status_error_prefix="Platform request failed",
+            transport_error_prefix="Platform request failed",
+        )
+        try:
+            return response.json()
+        except ValueError as exc:
             raise ExternalAPIError(
-                f"Platform request failed: {last_error}"
-            ) from last_error
-        raise ExternalAPIError("Platform request failed unexpectedly")
+                "Platform request returned invalid JSON payload"
+            ) from exc
 
     async def _post_json(
         self,
@@ -869,59 +870,28 @@ class PlatformAdapter(BaseAdapter):
         json: dict[str, Any],
         params: dict[str, Any] | None = None,
     ) -> object:
-        last_error: Exception | None = None
-        for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
-            try:
-                async with httpx.AsyncClient(
-                    timeout=_NATIVE_TIMEOUT_SECONDS, verify=self._resolve_verify_ssl()
-                ) as client:
-                    response = await client.post(
-                        url, headers=headers, params=params, json=json
-                    )
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPStatusError as exc:
-                last_error = exc
-                status_code = exc.response.status_code
-                retryable = status_code in _RETRYABLE_STATUS_CODES
-                if retryable and attempt < _NATIVE_MAX_RETRIES:
-                    logger.warning(
-                        "platform_native_retry_http_status",
-                        attempt=attempt,
-                        max_attempts=_NATIVE_MAX_RETRIES,
-                        status_code=status_code,
-                        url=url,
-                    )
-                    await asyncio.sleep(0.05 * attempt)
-                    continue
-                raise ExternalAPIError(
-                    f"Platform native request failed with status {status_code}: {exc}"
-                ) from exc
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
-                last_error = exc
-                if attempt < _NATIVE_MAX_RETRIES:
-                    logger.warning(
-                        "platform_native_retry_transport_error",
-                        attempt=attempt,
-                        max_attempts=_NATIVE_MAX_RETRIES,
-                        url=url,
-                        error=str(exc),
-                    )
-                    await asyncio.sleep(0.05 * attempt)
-                    continue
-                raise ExternalAPIError(
-                    f"Platform native request failed: {exc}"
-                ) from exc
-            except ValueError as exc:
-                raise ExternalAPIError(
-                    "Platform native request returned invalid JSON payload"
-                ) from exc
-
-        if last_error is not None:
+        response = await execute_with_http_retry(
+            request=lambda: _platform_post_request(
+                url=url,
+                headers=headers,
+                params=params,
+                json=json,
+                verify_ssl=self._resolve_verify_ssl(),
+            ),
+            url=url,
+            max_retries=_NATIVE_MAX_RETRIES,
+            retryable_status_codes=_RETRYABLE_STATUS_CODES,
+            retry_http_status_log_event="platform_native_retry_http_status",
+            retry_transport_log_event="platform_native_retry_transport_error",
+            status_error_prefix="Platform native request failed",
+            transport_error_prefix="Platform native request failed",
+        )
+        try:
+            return response.json()
+        except ValueError as exc:
             raise ExternalAPIError(
-                f"Platform native request failed: {last_error}"
-            ) from last_error
-        raise ExternalAPIError("Platform native request failed unexpectedly")
+                "Platform native request returned invalid JSON payload"
+            ) from exc
 
     async def discover_resources(
         self, resource_type: str, region: str | None = None

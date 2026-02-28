@@ -84,6 +84,8 @@ class Settings(BaseSettings):
     WEBHOOK_ALLOWED_DOMAINS: list[str] = []  # Allowlist for generic webhook retries
     WEBHOOK_REQUIRE_HTTPS: bool = True
     WEBHOOK_BLOCK_PRIVATE_IPS: bool = True
+    # Only trust X-Forwarded-For when the deployment path is explicitly trusted.
+    TRUST_PROXY_HEADERS: bool = False
     # Number of trusted reverse-proxy hops when resolving client IP from XFF.
     # 1 = trust the nearest proxy and use the right-most forwarded address.
     TRUSTED_PROXY_HOPS: int = 1

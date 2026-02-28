@@ -345,7 +345,7 @@ We welcome contributions! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) bef
 If Valdrix saved your team $1,000 this month, consider sponsoring the project:
 
 <p align="center">
-  <a href="https://github.com/sponsors/daretechie">
+  <a href="https://github.com/sponsors/AbdulGoniyyDare">
     <img src="https://img.shields.io/badge/💜-Sponsor%20on%20GitHub-pink?style=for-the-badge" alt="Sponsor" />
   </a>
 </p>
@@ -353,6 +353,6 @@ If Valdrix saved your team $1,000 this month, consider sponsoring the project:
 ---
 
 <p align="center">
-  Built with obsessive attention to detail by <a href="https://github.com/daretechie"><strong>Dare AbdulGoniyy</strong></a>.<br/>
+  Built with obsessive attention to detail by <a href="https://github.com/AbdulGoniyyDare"><strong>AbdulGoniyy Dare</strong></a>.<br/>
   <em>Because your cloud bill shouldn't keep you up at night.</em>
 </p>

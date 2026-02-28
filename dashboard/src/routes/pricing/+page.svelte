@@ -333,7 +333,7 @@
 	.savings-badge {
 		background: rgba(var(--color-success-500-rgb), 0.15);
 		color: var(--color-success-400);
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		padding: 0.125rem 0.5rem;
 		border-radius: 999px;
 		border: 1px solid rgba(var(--color-success-500-rgb), 0.3);
@@ -401,7 +401,7 @@
 		color: white;
 		padding: 0.375rem 1rem;
 		border-radius: 999px;
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;

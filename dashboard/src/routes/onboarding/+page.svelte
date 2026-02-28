@@ -1529,7 +1529,7 @@
 									<span class="font-bold">Register as Management Account</span>
 								</div>
 								{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
-									<span class="badge badge-warning text-[10px]">Growth Tier +</span>
+									<span class="badge badge-warning text-xs">Growth Tier +</span>
 								{/if}
 							</label>
 							<p class="text-xs text-ink-500 mt-2">
@@ -1626,7 +1626,7 @@
 									bind:value={gcpBillingProjectId}
 									placeholder={gcpProjectId || 'GCP Project ID'}
 								/>
-								<p class="text-[10px] text-ink-500">
+								<p class="text-xs text-ink-500">
 									Project where the BigQuery dataset resides (defaults to the project ID above).
 								</p>
 							</div>
@@ -1779,7 +1779,7 @@
 							merged automatically).
 						</p>
 						{#if getSelectedNativeConnector()?.optional_connector_config_fields?.length}
-							<p class="text-[11px] text-ink-500 mb-3">
+							<p class="text-xs text-ink-500 mb-3">
 								Optional keys: {getSelectedNativeConnector()?.optional_connector_config_fields.join(
 									', '
 								)}
@@ -1799,7 +1799,7 @@
 							Provide an initial feed payload to validate ingestion immediately.
 						</p>
 						{#if cloudPlusManualFeedSchema.required_fields.length > 0}
-							<p class="text-[11px] text-ink-500 mb-3">
+							<p class="text-xs text-ink-500 mb-3">
 								Required feed keys: {cloudPlusManualFeedSchema.required_fields.join(', ')}
 							</p>
 						{/if}
@@ -1877,7 +1877,7 @@
 							<span class="font-bold">Register as Management Account</span>
 						</div>
 						{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
-							<span class="badge badge-warning text-[10px]">Growth Tier +</span>
+							<span class="badge badge-warning text-xs">Growth Tier +</span>
 						{/if}
 					</label>
 					<p class="text-xs text-ink-500 mt-2">
@@ -1886,7 +1886,7 @@
 						organization permissions allow.
 					</p>
 					{#if !['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier)}
-						<p class="text-[10px] text-accent-400 mt-1">
+						<p class="text-xs text-accent-400 mt-1">
 							⚡ Multi-account discovery requires Growth tier or higher.
 						</p>
 					{/if}
@@ -1986,7 +1986,7 @@
 		border: 1px solid #f43f5e66;
 		background: #f43f5e14;
 		color: #fda4af;
-		font-size: 0.82rem;
+		font-size: var(--text-xs);
 	}
 
 	.discovery-info {
@@ -1996,7 +1996,7 @@
 		border: 1px solid #22c55e66;
 		background: #22c55e14;
 		color: #86efac;
-		font-size: 0.82rem;
+		font-size: var(--text-xs);
 	}
 
 	.discovery-warnings {
@@ -2013,7 +2013,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.2rem;
-		font-size: 0.78rem;
+		font-size: var(--text-xs);
 		color: #fcd34d;
 	}
 
@@ -2054,7 +2054,7 @@
 		border: 1px solid var(--border, #333);
 		background: var(--card-bg, #1a1a2e);
 		color: var(--text-muted, #888);
-		font-size: 0.67rem;
+		font-size: var(--text-xs);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
 	}
@@ -2065,7 +2065,7 @@
 
 	.candidate-meta {
 		margin: 0.2rem 0 0;
-		font-size: 0.76rem;
+		font-size: var(--text-xs);
 		color: var(--text-muted, #888);
 	}
 
@@ -2186,7 +2186,7 @@
 		right: 1rem;
 		background: rgba(99, 102, 241, 0.1);
 		color: var(--primary, #6366f1);
-		font-size: 0.7rem;
+		font-size: var(--text-xs);
 		font-weight: 700;
 		padding: 0.25rem 0.6rem;
 		border-radius: 20px;
@@ -2290,7 +2290,7 @@
 		border-radius: 4px;
 		color: var(--text-muted, #888);
 		cursor: pointer;
-		font-size: 0.8rem;
+		font-size: var(--text-xs);
 	}
 
 	.icon-btn:hover {
@@ -2303,7 +2303,7 @@
 		margin: 0;
 		background: #000;
 		color: #0f0;
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		line-height: 1.4;
 		overflow-x: auto;
 		max-height: 300px;

@@ -166,7 +166,7 @@
 						<td class="flex items-center gap-1.5">
 							<CloudLogo provider={row.finding.provider} size={12} />
 							<span
-								class="text-[10px] font-bold uppercase {providerColorClass(row.finding.provider)}"
+								class="text-xs font-bold uppercase {providerColorClass(row.finding.provider)}"
 							>
 								{providerLabel(row.finding.provider)}
 							</span>
@@ -178,7 +178,7 @@
 							<div class="flex items-center gap-1.5">
 								<span class="badge badge-default">{typeLabel(row.config, row.finding)}</span>
 								{#if row.config.key === 'idle_instances' && row.finding.is_gpu}
-									<span class="badge badge-error py-0 text-[9px] uppercase font-bold">GPU</span>
+									<span class="badge badge-error py-0 text-xs uppercase font-bold">GPU</span>
 								{/if}
 							</div>
 						</td>
@@ -186,7 +186,7 @@
 						<td class="text-xs text-ink-400">{row.finding.owner || 'unknown'}</td>
 						<td>
 							<div class="flex flex-col gap-1 max-w-xs">
-								<p class="text-[10px] leading-tight text-ink-300">
+								<p class="text-xs leading-tight text-ink-300">
 									{row.finding.explainability_notes || row.config.defaultExplainability}
 								</p>
 								<div class="flex items-center gap-2">
@@ -196,7 +196,7 @@
 											style="width: {confidenceBarWidth(row.finding.confidence_score)}"
 										></div>
 									</div>
-									<span class="text-[10px] font-bold text-accent-400">
+									<span class="text-xs font-bold text-accent-400">
 										{confidenceLabel(row.finding.confidence_score)}
 									</span>
 								</div>

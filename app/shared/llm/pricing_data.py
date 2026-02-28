@@ -86,9 +86,13 @@ async def refresh_llm_pricing(db_session: Any = None) -> None:
     try:
         if db_session is None:
             # Avoid top-level import to prevent circularity
-            from app.shared.db.session import async_session_maker
+            from app.shared.db.session import (
+                async_session_maker,
+                mark_session_system_context,
+            )
 
             async with async_session_maker() as session:
+                await mark_session_system_context(session)
                 stmt = select(LLMProviderPricing).where(LLMProviderPricing.is_active)
                 result = await session.execute(stmt)
                 pricing_records = result.scalars().all()

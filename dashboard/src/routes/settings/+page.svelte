@@ -1101,7 +1101,7 @@
 										<span>OpenAI API Key</span>
 										{#if llmSettings.has_openai_key}
 											<span
-												class="text-[10px] px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50"
+												class="text-xs px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50"
 												>Configured</span
 											>
 										{/if}
@@ -1119,7 +1119,7 @@
 										<span>Claude API Key</span>
 										{#if llmSettings.has_claude_key}
 											<span
-												class="text-[10px] px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50"
+												class="text-xs px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50"
 												>Configured</span
 											>
 										{/if}
@@ -1137,7 +1137,7 @@
 										<span>Google AI (Gemini) Key</span>
 										{#if llmSettings.has_google_key}
 											<span
-												class="text-[10px] px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50"
+												class="text-xs px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50"
 												>Configured</span
 											>
 										{/if}
@@ -1155,7 +1155,7 @@
 										<span>Groq API Key</span>
 										{#if llmSettings.has_groq_key}
 											<span
-												class="text-[10px] px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50"
+												class="text-xs px-1.5 py-0.5 rounded bg-success-500/10 text-success-400 border border-success-500/50"
 												>Configured</span
 											>
 										{/if}
@@ -1272,7 +1272,7 @@
 									!['pro', 'enterprise'].includes(data.subscription?.tier)}
 								aria-label="Minimum AI confidence threshold for autonomous actions"
 							/>
-							<div class="flex justify-between text-[10px] text-ink-500 mt-1">
+							<div class="flex justify-between text-xs text-ink-500 mt-1">
 								<span>Riskier (50%)</span>
 								<span>Ultra-Safe (100%)</span>
 							</div>
@@ -1491,7 +1491,7 @@
 					<div class="space-y-4">
 						<div class="grid grid-cols-1 md:grid-cols-4 gap-3">
 							<div class="rounded-lg border border-ink-700 p-3">
-								<p class="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Circuit State</p>
+								<p class="text-xs uppercase tracking-wide text-ink-500 mb-1">Circuit State</p>
 								<span
 									class="badge"
 									class:badge-success={safetyStatus.circuit_state === 'closed'}
@@ -1503,19 +1503,19 @@
 							</div>
 
 							<div class="rounded-lg border border-ink-700 p-3">
-								<p class="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Execution</p>
+								<p class="text-xs uppercase tracking-wide text-ink-500 mb-1">Execution</p>
 								<p class={safetyStatus.can_execute ? 'text-success-400' : 'text-danger-400'}>
 									{safetyStatus.can_execute ? 'Allowed' : 'Blocked'}
 								</p>
 							</div>
 
 							<div class="rounded-lg border border-ink-700 p-3">
-								<p class="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Failure Count</p>
+								<p class="text-xs uppercase tracking-wide text-ink-500 mb-1">Failure Count</p>
 								<p class="text-white">{safetyStatus.failure_count}</p>
 							</div>
 
 							<div class="rounded-lg border border-ink-700 p-3">
-								<p class="text-[11px] uppercase tracking-wide text-ink-500 mb-1">Last Failure</p>
+								<p class="text-xs uppercase tracking-wide text-ink-500 mb-1">Last Failure</p>
 								<p class="text-white text-xs">{formatSafetyDate(safetyStatus.last_failure_at)}</p>
 							</div>
 						</div>
@@ -1539,7 +1539,7 @@
 									style="width: {safetyUsagePercent(safetyStatus)}%"
 								></div>
 							</div>
-							<p class="mt-1 text-right text-[11px] text-ink-500">
+							<p class="mt-1 text-right text-xs text-ink-500">
 								{safetyUsagePercent(safetyStatus).toFixed(1)}% used
 							</p>
 						</div>

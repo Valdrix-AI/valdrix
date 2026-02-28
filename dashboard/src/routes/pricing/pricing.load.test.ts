@@ -19,8 +19,8 @@ describe('pricing load contract', () => {
 			{
 				id: 'growth',
 				name: 'Growth',
-				price_monthly: 79,
-				price_annual: 790,
+				price_monthly: 149,
+				price_annual: 1490,
 				period: '/mo',
 				description: 'Growth plan',
 				features: ['Feature A'],

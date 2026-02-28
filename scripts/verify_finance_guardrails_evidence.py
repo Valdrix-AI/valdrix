@@ -83,6 +83,7 @@ def verify_evidence(
     *,
     evidence_path: Path,
     max_artifact_age_hours: float | None = None,
+    allow_failed_gates: bool = False,
 ) -> int:
     payload = _load_payload(evidence_path)
 
@@ -333,7 +334,7 @@ def verify_evidence(
             raise ValueError(
                 f"gate_results.{gate} mismatch: payload={raw} computed={expected}"
             )
-    if not all(computed_gates.values()):
+    if not all(computed_gates.values()) and not allow_failed_gates:
         failed = [name for name, ok in computed_gates.items() if not ok]
         raise ValueError(
             f"Finance guardrail verification failed for gates: {', '.join(failed)}"
@@ -359,6 +360,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Optional max age of artifact in hours.",
     )
+    parser.add_argument(
+        "--allow-failed-gates",
+        action="store_true",
+        help=(
+            "Validate artifact integrity while allowing computed FIN gates "
+            "to fail."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -372,6 +381,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.max_artifact_age_hours is not None
             else None
         ),
+        allow_failed_gates=bool(args.allow_failed_gates),
     )
     print(f"Finance guardrail evidence verified: {evidence_path}")
     return 0

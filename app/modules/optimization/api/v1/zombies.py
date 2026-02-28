@@ -16,7 +16,7 @@ from app.models.remediation import (
 )
 from app.modules.optimization.domain import ZombieService, RemediationService
 from app.shared.core.dependencies import requires_feature
-from app.shared.core.pricing import FeatureFlag
+from app.shared.core.pricing import FeatureFlag, PricingTier, normalize_tier
 from app.shared.core.rate_limit import rate_limit
 from app.shared.core.exceptions import ResourceNotFoundError, ValdrixException
 from app.shared.core.provider import normalize_provider
@@ -28,6 +28,7 @@ from app.models.background_job import JobType
 from app.modules.governance.domain.jobs.processor import enqueue_job
 from app.modules.governance.domain.security.remediation_policy import (
     is_production_destructive_remediation,
+    is_production_remediation_target,
 )
 from app.shared.core.approval_permissions import (
     APPROVAL_PERMISSION_REMEDIATION_APPROVE_NONPROD,
@@ -146,6 +147,24 @@ async def _enforce_approval_permission(
         detail=(
             "Insufficient permissions. "
             f"Required approval permission: {required_permission}"
+        ),
+    )
+
+
+def _enforce_growth_nonprod_auto_remediation(
+    *,
+    user: CurrentUser,
+    remediation_request: RemediationRequest,
+) -> None:
+    if normalize_tier(user.tier) != PricingTier.GROWTH:
+        return
+    if not is_production_remediation_target(remediation_request):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "Growth tier allows auto-remediation for non-production resources only. "
+            "Upgrade to Pro for production remediation."
         ),
     )
 
@@ -340,6 +359,10 @@ async def approve_remediation(
         request_id=request_id,
         tenant_id=tenant_id,
     )
+    _enforce_growth_nonprod_auto_remediation(
+        user=user,
+        remediation_request=remediation_request,
+    )
     required_permission = _required_approval_permission(remediation_request)
     await _enforce_approval_permission(
         db,
@@ -441,6 +464,10 @@ async def execute_remediation(
         db,
         request_id=request_id,
         tenant_id=tenant_id,
+    )
+    _enforce_growth_nonprod_auto_remediation(
+        user=user,
+        remediation_request=remediation_request,
     )
     required_permission = _required_approval_permission(remediation_request)
     await _enforce_approval_permission(

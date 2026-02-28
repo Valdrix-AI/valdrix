@@ -110,7 +110,7 @@
 	}
 
 	.subtitle {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		color: #94a3b8;
 		margin: 0;
 	}
@@ -129,7 +129,7 @@
 	}
 
 	.center-label {
-		font-size: 0.65rem;
+		font-size: var(--text-xs);
 		text-transform: uppercase;
 		color: #64748b;
 		letter-spacing: 0.05em;
@@ -168,7 +168,7 @@
 	}
 
 	.label {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		font-weight: 600;
 		color: #f1f5f9;
 	}
@@ -180,7 +180,7 @@
 	}
 
 	.item-percent {
-		font-size: 0.625rem;
+		font-size: var(--text-xs);
 		color: #64748b;
 		background: rgba(30, 41, 59, 0.5);
 		padding: 0.125rem 0.375rem;

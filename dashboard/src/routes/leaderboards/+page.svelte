@@ -327,7 +327,7 @@
 	}
 
 	.remediation-count {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		color: var(--color-ink-400);
 	}
 
@@ -344,7 +344,7 @@
 	}
 
 	.savings-label {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		color: var(--color-ink-400);
 	}
 

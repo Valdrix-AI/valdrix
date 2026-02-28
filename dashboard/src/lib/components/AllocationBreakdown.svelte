@@ -209,7 +209,7 @@
 		color: #92400e;
 		padding: 0.375rem 0.75rem;
 		border-radius: 999px;
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		font-weight: 500;
 	}
 
@@ -248,7 +248,7 @@
 	}
 
 	.summary-label {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		text-transform: uppercase;
 		color: #94a3b8;
 		letter-spacing: 0.05em;
@@ -285,7 +285,7 @@
 	}
 
 	th {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		text-transform: uppercase;
 		color: #64748b;
 		font-weight: 500;

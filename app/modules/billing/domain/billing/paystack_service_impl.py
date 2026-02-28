@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Protocol, Callable
 from uuid import UUID
 
 from sqlalchemy import select
@@ -19,20 +19,48 @@ from .paystack_client_impl import PaystackClient
 class BillingService:
     """Paystack billing operations."""
 
-    def __init__(self, db: AsyncSession):
+    class _ExchangeRateRuntime(Protocol):
+        async def get_ngn_rate(self) -> float: ...
+
+        def convert_usd_to_ngn(self, amount_usd: float, ngn_rate: float) -> int: ...
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        exchange_rate_service_factory: (
+            Callable[[AsyncSession], _ExchangeRateRuntime] | None
+        ) = None,
+    ):
         self.db = db
         self.client = PaystackClient()
+        self._exchange_rate_service_factory = (
+            exchange_rate_service_factory or self._default_exchange_rate_service_factory
+        )
 
-        # Monthly plan codes
-        self.plan_codes = {
+    @staticmethod
+    def _default_exchange_rate_service_factory(db: AsyncSession) -> _ExchangeRateRuntime:
+        from app.shared.core.currency import ExchangeRateService
+
+        return ExchangeRateService(db)
+
+    def _build_exchange_rate_service(self) -> _ExchangeRateRuntime:
+        return self._exchange_rate_service_factory(self.db)
+
+    @property
+    def plan_codes(self) -> dict[PricingTier, str | None]:
+        """Resolve monthly plan codes lazily from live settings."""
+        return {
             PricingTier.STARTER: shared.settings.PAYSTACK_PLAN_STARTER,
             PricingTier.GROWTH: shared.settings.PAYSTACK_PLAN_GROWTH,
             PricingTier.PRO: shared.settings.PAYSTACK_PLAN_PRO,
             PricingTier.ENTERPRISE: shared.settings.PAYSTACK_PLAN_ENTERPRISE,
         }
 
-        # Annual plan codes (17% discount - 2 months free)
-        self.annual_plan_codes = {
+    @property
+    def annual_plan_codes(self) -> dict[PricingTier, str | None]:
+        """Resolve annual plan codes lazily from live settings."""
+        return {
             PricingTier.STARTER: getattr(
                 shared.settings, "PAYSTACK_PLAN_STARTER_ANNUAL", None
             ),
@@ -45,44 +73,14 @@ class BillingService:
             ),
         }
 
-        # Monthly amounts in Kobo (NGN x 100)
-        from app.shared.core.pricing import TIER_CONFIG
-
-        self.plan_amounts: dict[PricingTier, int] = {}
-        self.annual_plan_amounts: dict[PricingTier, int] = {}
-
-        for tier, config in TIER_CONFIG.items():
-            kobo_config = config.get("paystack_amount_kobo")
-            if tier == PricingTier.FREE and kobo_config is None:
-                continue
-            # Enterprise/custom tiers may not have fixed Paystack amounts.
-            if kobo_config is None:
-                shared.logger.warning(
-                    "paystack_amount_kobo_missing_for_tier",
-                    tier=tier.value,
-                )
-                continue
-            if not isinstance(kobo_config, dict):
-                shared.logger.warning(
-                    "paystack_amount_kobo_invalid_for_tier",
-                    tier=tier.value,
-                    value_type=type(kobo_config).__name__,
-                )
-                continue
-            monthly = kobo_config.get("monthly")
-            annual = kobo_config.get("annual")
-            if not isinstance(monthly, (int, float)) or not isinstance(
-                annual, (int, float)
-            ):
-                shared.logger.warning(
-                    "paystack_amount_kobo_values_invalid_for_tier",
-                    tier=tier.value,
-                    monthly=monthly,
-                    annual=annual,
-                )
-                continue
-            self.plan_amounts[tier] = int(monthly)
-            self.annual_plan_amounts[tier] = int(annual)
+    def _resolve_plan_code(self, *, tier: PricingTier, billing_cycle: str) -> str | None:
+        is_annual = billing_cycle.lower() == "annual"
+        mapping = self.annual_plan_codes if is_annual else self.plan_codes
+        value = mapping.get(tier)
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        return normalized or None
 
     def _resolve_checkout_currency(self, requested_currency: str | None) -> str:
         default_currency = str(
@@ -241,9 +239,7 @@ class BillingService:
 
         if checkout_currency == shared.PAYSTACK_CHECKOUT_CURRENCY:
             # Convert to NGN using Exchange Rate Service.
-            from app.shared.core.currency import ExchangeRateService
-
-            currency_service = ExchangeRateService(self.db)
+            currency_service = self._build_exchange_rate_service()
             ngn_rate = await currency_service.get_ngn_rate()
             amount_subunits = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
             fx_rate = float(ngn_rate)
@@ -254,6 +250,13 @@ class BillingService:
             fx_rate = 1.0
             fx_provider = shared.PAYSTACK_USD_FX_PROVIDER
 
+        plan_code = (
+            self._resolve_plan_code(tier=tier, billing_cycle=billing_cycle)
+            if checkout_currency == shared.PAYSTACK_CHECKOUT_CURRENCY
+            else None
+        )
+        pricing_mode = "fixed_plan_code" if plan_code else "dynamic_amount"
+
         try:
             # Check existing subscription
             result = await self.db.execute(
@@ -263,11 +266,11 @@ class BillingService:
             )
             sub = result.scalar_one_or_none()
 
-            # Start transaction (WITHOUT plan_code to allow dynamic amount)
+            # Start transaction with plan-code when available, else dynamic amount.
             response = await self.client.initialize_transaction(
                 email=email,
                 amount_kobo=amount_subunits,
-                plan_code=None,
+                plan_code=plan_code,
                 callback_url=callback_url,
                 metadata={
                     "tenant_id": str(tenant_id),
@@ -278,6 +281,8 @@ class BillingService:
                     "amount_subunits": amount_subunits,
                     "exchange_rate": fx_rate,
                     "fx_provider": fx_provider,
+                    "plan_code": plan_code,
+                    "pricing_mode": pricing_mode,
                 },
             )
 
@@ -293,6 +298,8 @@ class BillingService:
                 reference=reference,
                 fx_rate=fx_rate,
                 usd_price=usd_price,
+                plan_code=plan_code,
+                pricing_mode=pricing_mode,
             )
 
             try:
@@ -313,6 +320,8 @@ class BillingService:
                         "exchange_rate": fx_rate,
                         "amount_subunits": amount_subunits,
                         "settlement_currency": checkout_currency,
+                        "plan_code": plan_code,
+                        "pricing_mode": pricing_mode,
                         "billing_cycle": billing_cycle,
                     },
                 )
@@ -401,9 +410,7 @@ class BillingService:
         amount_subunits: int
 
         if renewal_currency == shared.PAYSTACK_CHECKOUT_CURRENCY:
-            from app.shared.core.currency import ExchangeRateService
-
-            currency_service = ExchangeRateService(self.db)
+            currency_service = self._build_exchange_rate_service()
             ngn_rate = await currency_service.get_ngn_rate()
             amount_subunits = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
             fx_rate = float(ngn_rate)
@@ -418,9 +425,7 @@ class BillingService:
                 tenant_id=str(subscription.tenant_id),
                 billing_currency=raw_currency,
             )
-            from app.shared.core.currency import ExchangeRateService
-
-            currency_service = ExchangeRateService(self.db)
+            currency_service = self._build_exchange_rate_service()
             ngn_rate = await currency_service.get_ngn_rate()
             amount_subunits = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
             fx_rate = float(ngn_rate)
