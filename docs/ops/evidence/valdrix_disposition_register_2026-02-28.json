@@ -1,0 +1,72 @@
+{
+  "captured_at": "2026-02-28T15:20:00Z",
+  "source_audit_path": "/home/daretechie/.gemini/antigravity/brain/dc5ab0ea-74a8-4714-a511-0dade0451f8a/VALDRX_CODEBASE_AUDIT_2026-02-28.md.resolved",
+  "dispositions": [
+    {
+      "finding_id": "VAL-ADAPT-001",
+      "status": "planned_refactor",
+      "owner": "platform-architecture@valdrics.io",
+      "review_by": "2026-03-31",
+      "rationale": "Adapter error-state semantics were standardized for runtime behavior, but remaining normalization is coupled to license adapter decomposition scope.",
+      "exit_criteria": "Unify adapter error contracts under one typed interface and remove residual mixed boolean/exception return behavior across Cloud+ adapters.",
+      "backlog_ref": "VAL-ADAPT-002+"
+    },
+    {
+      "finding_id": "VAL-DB-002",
+      "status": "accepted_risk",
+      "owner": "platform-database@valdrics.io",
+      "review_by": "2026-03-31",
+      "rationale": "Backend resolution paths are intentionally defensive and fail closed, with exhaustive branch tests guarding misconfiguration outcomes.",
+      "exit_criteria": "Converge backend resolution to a single deterministic runtime source with equivalent fail-closed guarantees and regression parity."
+    },
+    {
+      "finding_id": "VAL-DB-003",
+      "status": "documented_exception",
+      "owner": "platform-database@valdrics.io",
+      "review_by": "2026-03-31",
+      "rationale": "Explicit close/rollback semantics are retained as deliberate safety controls across mixed transactional paths.",
+      "exit_criteria": "Formal proof and test pack demonstrate context-manager-only lifecycle with no rollback/close regression under all exception branches."
+    },
+    {
+      "finding_id": "VAL-DB-004",
+      "status": "documented_exception",
+      "owner": "platform-database@valdrics.io",
+      "review_by": "2026-03-31",
+      "rationale": "ORM bootstrap import is retained intentionally to guarantee mapper registration at runtime startup.",
+      "exit_criteria": "Replace bootstrap import with explicit mapper registration hook and preserve startup determinism in CI bootstrap tests."
+    },
+    {
+      "finding_id": "VAL-API-001",
+      "status": "documented_exception",
+      "owner": "platform-api@valdrics.io",
+      "review_by": "2026-03-31",
+      "rationale": "Middleware ordering is correct for FastAPI reverse wrapping and currently validated by integration behavior.",
+      "exit_criteria": "Introduce startup assertions for middleware chain order and attach explicit documentation checks to API integration tests."
+    },
+    {
+      "finding_id": "VAL-API-002",
+      "status": "accepted_risk",
+      "owner": "platform-security@valdrics.io",
+      "review_by": "2026-03-31",
+      "rationale": "Bearer-token CSRF bypass remains an explicit API contract with auth-coverage enforcement in release gates.",
+      "exit_criteria": "Add endpoint-classification policy tests proving browser-session routes cannot be served under bearer-auth bypass semantics."
+    },
+    {
+      "finding_id": "VAL-API-004",
+      "status": "documented_exception",
+      "owner": "platform-security@valdrics.io",
+      "review_by": "2026-03-31",
+      "rationale": "Swagger static assets are served from packaged read-only paths and have no app runtime write path.",
+      "exit_criteria": "Add immutable static asset integrity check in CI plus startup assertion for read-only static mount source."
+    },
+    {
+      "finding_id": "VAL-ADAPT-002+",
+      "status": "planned_refactor",
+      "owner": "platform-architecture@valdrics.io",
+      "review_by": "2026-03-31",
+      "rationale": "Vendor-module extraction is complete for correctness paths; remaining scope is class-size and orchestration decomposition.",
+      "exit_criteria": "Complete orchestration split so license adapter core is reduced to interface orchestration while vendor/runtime operations live in dedicated modules.",
+      "backlog_ref": "VAL-ADAPT-002+"
+    }
+  ]
+}

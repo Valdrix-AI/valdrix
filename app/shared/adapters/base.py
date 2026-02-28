@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Dict, Any, Optional, AsyncGenerator
 
+from app.shared.core.exceptions import AdapterError
+
 
 class BaseAdapter(ABC):
     """
@@ -13,6 +15,27 @@ class BaseAdapter(ABC):
     - Connection Verification
     """
     last_error: Optional[str] = None
+
+    def _clear_last_error(self) -> None:
+        """Reset adapter error state before a new operation."""
+        self.last_error = None
+
+    def _set_last_error(self, message: str) -> None:
+        """Store a sanitized adapter error message suitable for operator-facing responses."""
+        self.last_error = AdapterError(message).message
+
+    def _set_last_error_from_exception(
+        self, exc: Exception, *, prefix: str | None = None
+    ) -> None:
+        """
+        Store a sanitized message from an exception.
+
+        Prefixes allow adapters to preserve operation context (for example, provider/auth path)
+        while still passing through AdapterError sanitization.
+        """
+        error_text = str(exc)
+        message = f"{prefix}: {error_text}" if prefix else error_text
+        self._set_last_error(message)
 
     @abstractmethod
     async def verify_connection(self) -> bool:

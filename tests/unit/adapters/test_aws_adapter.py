@@ -73,5 +73,13 @@ async def test_aws_adapter_discover_resources_returns_empty_without_plugin(
 
 @pytest.mark.asyncio
 async def test_aws_adapter_get_resource_usage(aws_adapter: AWSAdapter) -> None:
-    usage = await aws_adapter.get_resource_usage("ec2", "i-123")
-    assert usage == []
+    with patch.object(
+        aws_adapter,
+        "discover_resources",
+        AsyncMock(return_value=[{"resource_id": "i-123", "region": "us-east-1"}]),
+    ):
+        usage = await aws_adapter.get_resource_usage("ec2", "i-123")
+
+    assert len(usage) == 1
+    assert usage[0]["resource_id"] == "i-123"
+    assert usage[0]["usage_unit"] == "resource"

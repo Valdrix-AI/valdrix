@@ -44,16 +44,16 @@ export const PUBLIC_SIGNAL_STRIP: readonly string[] = Object.freeze([
 ]);
 
 export const PUBLIC_FOOTER_BADGES: readonly string[] = Object.freeze([
-	'Svelte 5',
-	'FastAPI 0.128+',
-	'Policy-Governed Actions',
+	'Start Free at $0',
+	'Owner-assigned actions',
+	'Safe approvals',
 	'Cloud + SaaS + ITAM',
-	'Executive Decision Ready',
-	'License: BSL 1.1'
+	'Enterprise-ready security',
+	'Usage-based scaling'
 ]);
 
 export const PUBLIC_FOOTER_SUBTITLE =
-	'The economic control plane for cloud and software spend with deterministic governance and policy-driven execution.';
+	'The spend control platform for cloud and software teams that need clear ownership, faster action, and measurable savings.';
 
 export const PUBLIC_FOOTER_CAPTION =
-	'Designed for teams that need fast cost control, clear ownership, and reliable outcomes.';
+	'Built for finance, engineering, and operations teams that want less waste and faster decisions.';

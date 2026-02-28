@@ -13,6 +13,9 @@ from botocore.config import Config as BotoConfig
 
 import structlog
 from app.shared.adapters.base import BaseAdapter
+from app.shared.adapters.resource_usage_projection import (
+    project_cost_rows_to_resource_usage,
+)
 from app.shared.core.config import get_settings
 from app.shared.core.credentials import AWSCredentials
 import tenacity
@@ -28,6 +31,24 @@ if TYPE_CHECKING:
     pass
 
 logger = structlog.get_logger()
+
+_RESOURCE_USAGE_SERVICE_ALIASES: Dict[str, str] = {
+    "ec2": "instance",
+    "instance": "instance",
+    "instances": "instance",
+    "ebs": "volume",
+    "volume": "volume",
+    "volumes": "volume",
+    "eip": "eip",
+    "elasticip": "eip",
+    "nat": "nat_gateway",
+    "nat_gateway": "nat_gateway",
+    "rds": "rds",
+    "redshift": "redshift",
+    "s3": "s3",
+    "ecr": "ecr",
+    "sagemaker": "sagemaker",
+}
 
 # Standardized boto config with timeouts to prevent indefinite hangs
 # SEC-03: Socket timeouts for all AWS API calls
@@ -117,10 +138,14 @@ class MultiTenantAWSAdapter(BaseAdapter):
     @with_aws_retry
     async def verify_connection(self) -> bool:
         """Verify that the stored credentials are valid by assuming the role."""
+        self._clear_last_error()
         try:
             # BE-ADAPT-1: Regional white-listing
             settings = get_settings()
             if self.credentials.region not in settings.AWS_SUPPORTED_REGIONS:
+                self._set_last_error(
+                    f"Unsupported AWS region '{self.credentials.region}' for role verification"
+                )
                 logger.error(
                     "invalid_aws_region_rejected",
                     region=self.credentials.region,
@@ -131,6 +156,9 @@ class MultiTenantAWSAdapter(BaseAdapter):
             await self.get_credentials()
             return True
         except Exception as e:
+            self._set_last_error_from_exception(
+                e, prefix="AWS STS role verification failed"
+            )
             logger.error("verify_connection_failed", provider="aws", error=str(e))
             return False
 
@@ -279,7 +307,46 @@ class MultiTenantAWSAdapter(BaseAdapter):
                 return []
 
     async def get_resource_usage(
-        self, _service_name: str, _resource_id: Optional[str] = None
+        self, service_name: str, resource_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        # Multi-tenant AWS adapter currently focuses on discovery, not usage metering.
-        return []
+        target_service = service_name.strip()
+        if not target_service:
+            return []
+
+        resource_type = _RESOURCE_USAGE_SERVICE_ALIASES.get(
+            target_service.lower(), target_service
+        )
+        resources = await self.discover_resources(resource_type)
+        if not resources:
+            return []
+
+        now = datetime.now(timezone.utc)
+        seed_rows: List[Dict[str, Any]] = []
+        for item in resources:
+            if not isinstance(item, dict):
+                continue
+            seed_rows.append(
+                {
+                    "provider": "aws",
+                    "service": target_service,
+                    "resource_id": item.get("resource_id") or item.get("id"),
+                    "usage_type": "inventory",
+                    "usage_amount": 1.0,
+                    "usage_unit": "resource",
+                    "cost_usd": 0.0,
+                    "amount_raw": 0.0,
+                    "currency": "USD",
+                    "region": item.get("region") or item.get("location") or "global",
+                    "timestamp": now,
+                    "source_adapter": "aws_resource_discovery",
+                    "tags": item.get("tags") if isinstance(item.get("tags"), dict) else {},
+                }
+            )
+
+        return project_cost_rows_to_resource_usage(
+            cost_rows=seed_rows,
+            service_name=target_service,
+            resource_id=resource_id,
+            default_provider="aws",
+            default_source_adapter="aws_resource_discovery",
+        )

@@ -515,17 +515,56 @@ if "get_system_db" not in globals():
             yield session
 
 
+async def clear_session_tenant_context(session: AsyncSession) -> None:
+    """
+    Clear tenant/session RLS context and mark the session fail-closed.
+
+    This function is used after tenant-scoped work completes so the same
+    pooled session cannot accidentally retain tenant context.
+    """
+    session.info["tenant_id"] = None
+    session.info["rls_context_set"] = False
+    session.info["rls_system_context"] = False
+
+    # We must ensure the connection itself has the info, as listeners look there
+    conn = await session.connection()
+    conn.info["tenant_id"] = None
+    conn.info["rls_context_set"] = False
+    conn.info["rls_system_context"] = False
+
+    backend, source = _resolve_session_backend(session)
+    if backend == "postgresql":
+        try:
+            await session.execute(
+                text("SELECT set_config('app.current_tenant_id', '', true)")
+            )
+        except Exception as e:
+            logger.warning("failed_to_clear_rls_config_in_session", error=str(e))
+    elif backend == "unknown":
+        logger.error(
+            "clear_session_tenant_context_backend_unknown_fail_closed",
+            source=source,
+        )
+
+
 async def set_session_tenant_id(session: AsyncSession, tenant_id: Optional[UUID]) -> None:
-    """Sets the tenant_id in the database session's info dictionary."""
+    """Set tenant context for a session. `tenant_id=None` clears context fail-closed."""
+    if tenant_id is None:
+        await clear_session_tenant_context(session)
+        return
+
     session.info["tenant_id"] = tenant_id
 
     # We must ensure the connection itself has the info, as listeners look there
     conn = await session.connection()
+    conn.info["tenant_id"] = tenant_id
     backend, source = _resolve_session_backend(session)
     if backend == "unknown":
         # Fail closed on unresolved backend detection.
         session.info["rls_context_set"] = False
+        session.info["rls_system_context"] = False
         conn.info["rls_context_set"] = False
+        conn.info["rls_system_context"] = False
         logger.error(
             "set_session_tenant_id_backend_unknown_fail_closed",
             source=source,
@@ -550,7 +589,9 @@ async def set_session_tenant_id(session: AsyncSession, tenant_id: Optional[UUID]
             RLS_ENFORCEMENT_LATENCY.observe(time.perf_counter() - rls_start)
         except Exception as e:
             session.info["rls_context_set"] = False
+            session.info["rls_system_context"] = False
             conn.info["rls_context_set"] = False
+            conn.info["rls_system_context"] = False
             logger.warning("failed_to_set_rls_config_in_session", error=str(e))
 
 

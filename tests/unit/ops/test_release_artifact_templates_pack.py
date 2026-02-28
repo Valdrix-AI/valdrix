@@ -15,6 +15,7 @@ def test_release_artifact_template_pack_exists_with_required_files() -> None:
         OPS_EVIDENCE_DIR / "finance_guardrails_TEMPLATE.json",
         OPS_EVIDENCE_DIR / "finance_telemetry_snapshot_TEMPLATE.json",
         OPS_EVIDENCE_DIR / "finance_committee_packet_assumptions_TEMPLATE.json",
+        OPS_EVIDENCE_DIR / "valdrix_disposition_register_TEMPLATE.json",
         OPS_EVIDENCE_DIR / "pricing_benchmark_register_TEMPLATE.json",
         OPS_EVIDENCE_DIR / "pkg_fin_policy_decisions_TEMPLATE.json",
         REPO_ROOT / "docs" / "evidence" / "ci-green-template.md",
@@ -40,6 +41,9 @@ def test_release_artifact_template_pack_contains_required_contract_tokens() -> N
     finance_assumptions_raw = (
         OPS_EVIDENCE_DIR / "finance_committee_packet_assumptions_TEMPLATE.json"
     ).read_text(encoding="utf-8")
+    valdrix_disposition_raw = (
+        OPS_EVIDENCE_DIR / "valdrix_disposition_register_TEMPLATE.json"
+    ).read_text(encoding="utf-8")
     pricing_raw = (
         OPS_EVIDENCE_DIR / "pricing_benchmark_register_TEMPLATE.json"
     ).read_text(encoding="utf-8")
@@ -55,6 +59,7 @@ def test_release_artifact_template_pack_contains_required_contract_tokens() -> N
     assert "finance_guardrails_YYYY-MM-DD.json" in readme_raw
     assert "finance_telemetry_snapshot_YYYY-MM-DD.json" in readme_raw
     assert "finance_committee_packet_assumptions_YYYY-MM-DD.json" in readme_raw
+    assert "valdrix_disposition_register_YYYY-MM-DD.json" in readme_raw
     assert "pricing_benchmark_register_YYYY-MM-DD.json" in readme_raw
     assert "pkg_fin_policy_decisions_YYYY-MM-DD.json" in readme_raw
 
@@ -71,6 +76,9 @@ def test_release_artifact_template_pack_contains_required_contract_tokens() -> N
     assert '"telemetry_gate_free_tier_margin_guarded"' in finance_telemetry_raw
     assert '"annual_mix_by_tier"' in finance_assumptions_raw
     assert '"scenario_models"' in finance_assumptions_raw
+    assert '"finding_id"' in valdrix_disposition_raw
+    assert '"review_by"' in valdrix_disposition_raw
+    assert '"exit_criteria"' in valdrix_disposition_raw
     assert '"required_source_classes"' in pricing_raw
     assert '"pkg_gate_020_register_fresh"' in pricing_raw
     assert '"enterprise_pricing_model"' in pkg_fin_raw

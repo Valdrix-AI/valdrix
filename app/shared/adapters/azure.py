@@ -17,6 +17,10 @@ from azure.core.exceptions import ServiceRequestError, ServiceResponseError
 import tenacity
 
 from app.shared.adapters.base import BaseAdapter
+from app.shared.adapters.resource_usage_projection import (
+    project_cost_rows_to_resource_usage,
+    resource_usage_lookback_window,
+)
 from app.shared.core.credentials import AzureCredentials
 from app.shared.core.exceptions import ConfigurationError
 from app.schemas.costs import CloudUsageSummary
@@ -83,12 +87,16 @@ class AzureAdapter(BaseAdapter):
         """
         Verify Azure Service Principal credentials by attempting to list resource groups.
         """
+        self._clear_last_error()
         try:
             client = await self._get_resource_client()
             async for _ in client.resource_groups.list():
                 break
             return True
         except Exception as e:
+            self._set_last_error_from_exception(
+                e, prefix="Azure credential verification failed"
+            )
             logger.error(
                 "azure_verify_failed",
                 error=str(e),
@@ -340,7 +348,35 @@ class AzureAdapter(BaseAdapter):
                 return []
 
     async def get_resource_usage(
-        self, _service_name: str, _resource_id: str | None = None
+        self, service_name: str, resource_id: str | None = None
     ) -> list[dict[str, Any]]:
-        # Azure resource-level usage is not exposed by this adapter yet.
-        return []
+        target_service = service_name.strip()
+        if not target_service:
+            return []
+
+        start_date, end_date = resource_usage_lookback_window()
+        try:
+            cost_rows = await self.get_cost_and_usage(
+                start_date=start_date,
+                end_date=end_date,
+                granularity="DAILY",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._set_last_error_from_exception(
+                exc, prefix="Azure resource usage lookup failed"
+            )
+            logger.warning(
+                "azure_resource_usage_failed",
+                service_name=target_service,
+                resource_id=resource_id,
+                error=str(exc),
+            )
+            return []
+
+        return project_cost_rows_to_resource_usage(
+            cost_rows=cost_rows,
+            service_name=target_service,
+            resource_id=resource_id,
+            default_provider="azure",
+            default_source_adapter="azure_cost_query",
+        )

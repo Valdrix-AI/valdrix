@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 from uuid import uuid4
 from types import SimpleNamespace
@@ -47,10 +47,12 @@ def test_credentials_invalid_json_returns_none():
 @pytest.mark.asyncio
 async def test_verify_connection_success():
     adapter = GCPAdapter(_connection())
+    adapter.last_error = "stale"
     client = MagicMock()
     client.list_datasets.return_value = []
     with patch.object(adapter, "_get_bq_client", return_value=client):
         assert await adapter.verify_connection() is True
+    assert adapter.last_error is None
 
 
 @pytest.mark.asyncio
@@ -60,6 +62,8 @@ async def test_verify_connection_failure():
     client.list_datasets.side_effect = RuntimeError("boom")
     with patch.object(adapter, "_get_bq_client", return_value=client):
         assert await adapter.verify_connection() is False
+    assert adapter.last_error is not None
+    assert "GCP credential verification failed" in adapter.last_error
 
 
 @pytest.mark.asyncio
@@ -134,3 +138,58 @@ async def test_discover_resources_failure_returns_empty():
     with patch.object(adapter, "_get_asset_client", return_value=asset_client):
         results = await adapter.discover_resources(resource_type="compute")
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_get_resource_usage_projects_and_filters_rows():
+    adapter = GCPAdapter(_connection())
+    rows = [
+        {
+            "timestamp": datetime(2026, 1, 10, tzinfo=timezone.utc),
+            "service": "Compute Engine",
+            "resource_id": "projects/p1/zones/us-central1-a/instances/vm-1",
+            "usage_type": "instance_hour",
+            "usage_amount": "12",
+            "cost_usd": 6.5,
+            "currency": "USD",
+            "region": "us-central1",
+            "source_adapter": "cur_billing_export",
+        },
+        {
+            "timestamp": datetime(2026, 1, 10, tzinfo=timezone.utc),
+            "service": "Cloud Storage",
+            "resource_id": "projects/_/buckets/b-1",
+            "cost_usd": 1.2,
+            "currency": "USD",
+        },
+    ]
+
+    with patch.object(
+        adapter, "get_cost_and_usage", AsyncMock(return_value=rows)
+    ) as mock_fetch:
+        usage_rows = await adapter.get_resource_usage(
+            "compute", "projects/p1/zones/us-central1-a/instances/vm-1"
+        )
+
+    assert len(usage_rows) == 1
+    assert usage_rows[0]["provider"] == "gcp"
+    assert usage_rows[0]["service"] == "Compute Engine"
+    assert usage_rows[0]["resource_id"].endswith("vm-1")
+    # usage_amount is present; unit defaults to "unit" when not provided.
+    assert usage_rows[0]["usage_unit"] == "unit"
+    assert mock_fetch.await_count == 1
+    assert mock_fetch.await_args.kwargs["granularity"] == "DAILY"
+
+
+@pytest.mark.asyncio
+async def test_get_resource_usage_failure_returns_empty_and_sets_error():
+    adapter = GCPAdapter(_connection())
+    with patch.object(
+        adapter,
+        "get_cost_and_usage",
+        AsyncMock(side_effect=RuntimeError("gcp usage failure")),
+    ):
+        assert await adapter.get_resource_usage("compute") == []
+
+    assert adapter.last_error is not None
+    assert "GCP resource usage lookup failed" in adapter.last_error

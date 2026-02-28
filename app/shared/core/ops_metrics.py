@@ -120,6 +120,18 @@ API_ERRORS_TOTAL = Counter(
     ["path", "method", "status_code"],
 )
 
+LANDING_TELEMETRY_EVENTS_TOTAL = Counter(
+    "valdrix_ops_landing_telemetry_events_total",
+    "Landing telemetry events received by event, section, and funnel stage",
+    ["event_name", "section", "funnel_stage"],
+)
+
+LANDING_TELEMETRY_INGEST_OUTCOMES_TOTAL = Counter(
+    "valdrix_ops_landing_telemetry_ingest_outcomes_total",
+    "Landing telemetry ingestion outcomes",
+    ["outcome"],  # accepted|rejected_timestamp
+)
+
 ENFORCEMENT_RESERVATION_RECONCILIATIONS_TOTAL = Counter(
     "valdrix_ops_enforcement_reservation_reconciliations_total",
     "Total reservation reconciliation actions in the enforcement control plane",

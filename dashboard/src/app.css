@@ -112,6 +112,12 @@ html {
 	-moz-osx-font-smoothing: grayscale;
 }
 
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
 body {
 	background: linear-gradient(180deg, var(--color-ink-950) 0%, var(--color-ink-900) 100%);
 	color: var(--color-ink-100);
@@ -569,6 +575,31 @@ a:focus-visible {
 }
 
 /* ===== UTILITIES ===== */
+.sr-only {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	padding: 0 !important;
+	margin: -1px !important;
+	overflow: hidden !important;
+	clip: rect(0, 0, 0, 0) !important;
+	clip-path: inset(50%) !important;
+	white-space: nowrap !important;
+	border: 0 !important;
+}
+
+.not-sr-only {
+	position: static !important;
+	width: auto !important;
+	height: auto !important;
+	padding: 0 !important;
+	margin: 0 !important;
+	overflow: visible !important;
+	clip: auto !important;
+	clip-path: none !important;
+	white-space: normal !important;
+}
+
 .text-gradient {
 	background: linear-gradient(135deg, var(--color-accent-400), var(--color-accent-500));
 	-webkit-background-clip: text;

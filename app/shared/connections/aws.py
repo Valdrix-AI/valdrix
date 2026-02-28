@@ -67,9 +67,12 @@ class AWSConnectionService:
             else:
                 connection.status = "error"
                 await self.db.commit()
+                failure_message = getattr(adapter, "last_error", None) or (
+                    "Failed to assume role. Check IAM policy and Trust Relationship."
+                )
                 return {
                     "status": "failed",
-                    "message": "Failed to assume role. Check IAM policy and Trust Relationship.",
+                    "message": failure_message,
                 }
         except AdapterError as e:
             connection.status = "error"

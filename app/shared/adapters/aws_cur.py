@@ -18,6 +18,10 @@ import structlog
 from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.aws_pagination import iter_aws_paginator_pages
 from app.shared.adapters.aws_utils import resolve_aws_region_hint
+from app.shared.adapters.resource_usage_projection import (
+    project_cost_rows_to_resource_usage,
+    resource_usage_lookback_window,
+)
 from app.shared.core.exceptions import ConfigurationError
 from app.shared.core.credentials import AWSCredentials
 from app.schemas.costs import CloudUsageSummary, CostRecord
@@ -35,6 +39,7 @@ class AWSCURAdapter(BaseAdapter):
 
     def __init__(self, credentials: AWSCredentials):
         self.credentials = credentials
+        self.last_error = None
         self._resolved_region = resolve_aws_region_hint(credentials.region)
         self.session = aioboto3.Session()
         # Use dynamic bucket name from automated setup, fallback to connection-derived if needed
@@ -45,6 +50,7 @@ class AWSCURAdapter(BaseAdapter):
 
     async def verify_connection(self) -> bool:
         """Verify S3 access."""
+        self._clear_last_error()
         try:
             creds = await self._get_credentials()
             async with self.session.client(
@@ -57,6 +63,9 @@ class AWSCURAdapter(BaseAdapter):
                 await s3.head_bucket(Bucket=self.bucket_name)
             return True
         except Exception as e:
+            self._set_last_error_from_exception(
+                e, prefix="AWS CUR bucket verification failed"
+            )
             logger.error(
                 "cur_bucket_verify_failed", bucket=self.bucket_name, error=str(e)
             )
@@ -626,6 +635,64 @@ class AWSCURAdapter(BaseAdapter):
         self, service_name: str, resource_id: str | None = None
     ) -> List[Dict[str, Any]]:
         """
-        Detailed usage metrics are parsed from the CUR records during ingestion.
+        Project CUR cost rows into normalized resource-usage rows.
+
+        CUR may not always include explicit resource identifiers in every record; in such
+        cases this returns service-level usage rows with `resource_id=None`.
         """
-        return []
+        target_service = service_name.strip()
+        if not target_service:
+            return []
+
+        start_date, end_date = resource_usage_lookback_window()
+        try:
+            raw_rows = await self.get_cost_and_usage(
+                start_date=start_date,
+                end_date=end_date,
+                granularity="DAILY",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._set_last_error_from_exception(
+                exc, prefix="AWS CUR resource usage lookup failed"
+            )
+            logger.warning(
+                "aws_cur_resource_usage_failed",
+                service_name=target_service,
+                resource_id=resource_id,
+                error=str(exc),
+            )
+            return []
+
+        normalized_rows: list[dict[str, Any]] = []
+        for row in raw_rows:
+            if not isinstance(row, dict):
+                continue
+            normalized_rows.append(
+                {
+                    "provider": "aws",
+                    "service": row.get("service"),
+                    "region": row.get("region"),
+                    "usage_type": row.get("usage_type"),
+                    "resource_id": row.get("resource_id")
+                    or row.get("line_item_resource_id")
+                    or row.get("lineItem/ResourceId"),
+                    "usage_amount": row.get("usage_amount")
+                    or row.get("line_item_usage_amount")
+                    or row.get("lineItem/UsageAmount"),
+                    "usage_unit": row.get("usage_unit"),
+                    "cost_usd": row.get("cost_usd", row.get("amount")),
+                    "amount_raw": row.get("amount_raw"),
+                    "currency": row.get("currency"),
+                    "timestamp": row.get("timestamp", row.get("date")),
+                    "source_adapter": row.get("source_adapter", "cur_data_export"),
+                    "tags": row.get("tags") if isinstance(row.get("tags"), dict) else {},
+                }
+            )
+
+        return project_cost_rows_to_resource_usage(
+            cost_rows=normalized_rows,
+            service_name=target_service,
+            resource_id=resource_id,
+            default_provider="aws",
+            default_source_adapter="cur_data_export",
+        )

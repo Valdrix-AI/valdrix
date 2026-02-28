@@ -73,6 +73,8 @@ ENTERPRISE_GATE_TEST_TARGETS: tuple[str, ...] = (
     "tests/unit/ops/test_pricing_benchmark_register_pack.py",
     "tests/unit/ops/test_verify_pkg_fin_policy_decisions.py",
     "tests/unit/ops/test_pkg_fin_policy_decisions_pack.py",
+    "tests/unit/ops/test_verify_valdrix_disposition_freshness.py",
+    "tests/unit/ops/test_valdrix_disposition_register_pack.py",
     "tests/unit/ops/test_release_artifact_templates_pack.py",
     "tests/unit/supply_chain/test_verify_jwt_bcp_checklist.py",
     "tests/unit/supply_chain/test_feature_enforceability_matrix.py",
@@ -190,6 +192,20 @@ ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS_ENV = (
 )
 DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS = "35"
 DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS = "14"
+ENFORCEMENT_VALDRIX_DISPOSITION_REGISTER_PATH_ENV = (
+    "ENFORCEMENT_VALDRIX_DISPOSITION_REGISTER_PATH"
+)
+ENFORCEMENT_VALDRIX_DISPOSITION_MAX_AGE_DAYS_ENV = (
+    "ENFORCEMENT_VALDRIX_DISPOSITION_MAX_AGE_DAYS"
+)
+ENFORCEMENT_VALDRIX_DISPOSITION_MAX_REVIEW_WINDOW_DAYS_ENV = (
+    "ENFORCEMENT_VALDRIX_DISPOSITION_MAX_REVIEW_WINDOW_DAYS"
+)
+DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_REGISTER_PATH = (
+    "docs/ops/evidence/valdrix_disposition_register_2026-02-28.json"
+)
+DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_MAX_AGE_DAYS = "45"
+DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_MAX_REVIEW_WINDOW_DAYS = "120"
 ENFORCEMENT_KEY_ROTATION_DRILL_PATH_ENV = "ENFORCEMENT_KEY_ROTATION_DRILL_PATH"
 ENFORCEMENT_KEY_ROTATION_DRILL_MAX_AGE_DAYS_ENV = (
     "ENFORCEMENT_KEY_ROTATION_DRILL_MAX_AGE_DAYS"
@@ -469,6 +485,34 @@ def build_gate_commands() -> list[list[str]]:
             refresh_max_age_days,
             "--max-capture-spread-days",
             refresh_max_capture_spread_days,
+        ]
+    )
+    valdrix_disposition_register_path = (
+        os.getenv(ENFORCEMENT_VALDRIX_DISPOSITION_REGISTER_PATH_ENV, "").strip()
+        or DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_REGISTER_PATH
+    )
+    valdrix_disposition_max_age_days = (
+        os.getenv(ENFORCEMENT_VALDRIX_DISPOSITION_MAX_AGE_DAYS_ENV, "").strip()
+        or DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_MAX_AGE_DAYS
+    )
+    valdrix_disposition_max_review_window_days = (
+        os.getenv(
+            ENFORCEMENT_VALDRIX_DISPOSITION_MAX_REVIEW_WINDOW_DAYS_ENV, ""
+        ).strip()
+        or DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_MAX_REVIEW_WINDOW_DAYS
+    )
+    commands.append(
+        [
+            "uv",
+            "run",
+            "python3",
+            "scripts/verify_valdrix_disposition_freshness.py",
+            "--register-path",
+            valdrix_disposition_register_path,
+            "--max-artifact-age-days",
+            valdrix_disposition_max_age_days,
+            "--max-review-window-days",
+            valdrix_disposition_max_review_window_days,
         ]
     )
 

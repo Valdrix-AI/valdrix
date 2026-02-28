@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 from datetime import datetime
-from typing import Any, Awaitable, Callable, cast
+from typing import Any
 
 import httpx
 import structlog
@@ -16,6 +16,13 @@ from app.shared.adapters.license_feed_ops import (
     normalize_text as feed_normalize_text,
     validate_manual_feed,
 )
+from app.shared.adapters.license_native_compat import LicenseNativeCompatMixin
+from app.shared.adapters.license_native_dispatch import (
+    list_native_activity,
+    resolve_native_stream_method,
+    revoke_native_license,
+    supported_native_vendors,
+)
 from app.shared.adapters.license_resource_ops import (
     build_discovered_license_resources,
     build_license_usage_rows,
@@ -23,68 +30,14 @@ from app.shared.adapters.license_resource_ops import (
     supports_license_usage_service,
 )
 from app.shared.adapters.license_vendor_registry import resolve_native_vendor
-from app.shared.adapters.license_vendor_ops import (
-    list_github_activity as vendor_list_github_activity,
-    list_google_workspace_activity as vendor_list_google_workspace_activity,
-    list_microsoft_365_activity as vendor_list_microsoft_365_activity,
-    list_salesforce_activity as vendor_list_salesforce_activity,
-    list_slack_activity as vendor_list_slack_activity,
-    list_zoom_activity as vendor_list_zoom_activity,
-    revoke_github as vendor_revoke_github,
-    revoke_google_workspace as vendor_revoke_google_workspace,
-    revoke_microsoft_365 as vendor_revoke_microsoft_365,
-    revoke_salesforce as vendor_revoke_salesforce,
-    revoke_slack as vendor_revoke_slack,
-    revoke_zoom as vendor_revoke_zoom,
-    stream_google_workspace_license_costs as vendor_stream_google_workspace_license_costs,
-    stream_microsoft_365_license_costs as vendor_stream_microsoft_365_license_costs,
-    verify_github as vendor_verify_github,
-    verify_google_workspace as vendor_verify_google_workspace,
-    verify_microsoft_365 as vendor_verify_microsoft_365,
-    verify_salesforce as vendor_verify_salesforce,
-    verify_slack as vendor_verify_slack,
-    verify_zoom as vendor_verify_zoom,
-)
 from app.shared.core.credentials import LicenseCredentials
-from app.shared.core.exceptions import ExternalAPIError, UnsupportedVendorError
+from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
 
 _NATIVE_TIMEOUT_SECONDS = 20.0
 _NATIVE_MAX_RETRIES = 3
 _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
-
-_VERIFY_METHOD_BY_VENDOR: dict[str, str] = {
-    "microsoft_365": "_verify_microsoft_365",
-    "google_workspace": "_verify_google_workspace",
-    "github": "_verify_github",
-    "slack": "_verify_slack",
-    "zoom": "_verify_zoom",
-    "salesforce": "_verify_salesforce",
-}
-
-_REVOKE_METHOD_BY_VENDOR: dict[str, tuple[str, bool]] = {
-    "google_workspace": ("_revoke_google_workspace", True),
-    "microsoft_365": ("_revoke_microsoft_365", True),
-    "github": ("_revoke_github", False),
-    "slack": ("_revoke_slack", False),
-    "zoom": ("_revoke_zoom", False),
-    "salesforce": ("_revoke_salesforce", False),
-}
-
-_ACTIVITY_METHOD_BY_VENDOR: dict[str, str] = {
-    "google_workspace": "_list_google_workspace_activity",
-    "microsoft_365": "_list_microsoft_365_activity",
-    "github": "_list_github_activity",
-    "slack": "_list_slack_activity",
-    "zoom": "_list_zoom_activity",
-    "salesforce": "_list_salesforce_activity",
-}
-
-_NATIVE_STREAM_METHOD_BY_VENDOR: dict[str, str] = {
-    "microsoft_365": "_stream_microsoft_365_license_costs",
-    "google_workspace": "_stream_google_workspace_license_costs",
-}
 
 
 async def _license_get_request(
@@ -97,7 +50,7 @@ async def _license_get_request(
         return await client.get(url, headers=headers, params=params)
 
 
-class LicenseAdapter(BaseAdapter):
+class LicenseAdapter(LicenseNativeCompatMixin, BaseAdapter):
     """
     Cloud+ adapter for license/ITAM spend.
 
@@ -154,10 +107,10 @@ class LicenseAdapter(BaseAdapter):
         self.last_error = None
         native_vendor = self._native_vendor
         if self._auth_method in {"api_key", "oauth"} and native_vendor is None:
+            supported_vendors = ", ".join(supported_native_vendors())
             self.last_error = (
                 f"Native license auth is not supported for vendor '{self._vendor}'. "
-                "Supported vendor aliases: microsoft_365, google_workspace, github, "
-                "slack, zoom, salesforce (and common aliases). "
+                f"Supported vendor aliases: {supported_vendors} (and common aliases). "
                 "Use auth_method manual/csv for custom vendors."
             )
             return False
@@ -213,13 +166,12 @@ class LicenseAdapter(BaseAdapter):
         granularity: str = "DAILY",
     ) -> AsyncGenerator[dict[str, Any], None]:
         native_vendor = self._native_vendor
-        stream_method_name = (
-            _NATIVE_STREAM_METHOD_BY_VENDOR.get(native_vendor)
+        stream_method = (
+            resolve_native_stream_method(self, native_vendor)
             if native_vendor is not None
             else None
         )
-        if stream_method_name is not None:
-            stream_method = getattr(self, stream_method_name)
+        if stream_method is not None:
             try:
                 async for row in stream_method(start_date, end_date):
                     yield row
@@ -243,32 +195,6 @@ class LicenseAdapter(BaseAdapter):
         ):
             yield row
 
-    async def _verify_native_vendor(self, native_vendor: str) -> None:
-        method_name = _VERIFY_METHOD_BY_VENDOR.get(native_vendor)
-        if method_name is None:
-            raise ExternalAPIError(
-                f"Unsupported native license vendor '{native_vendor}'"
-            )
-        await getattr(self, method_name)()
-
-    async def _verify_microsoft_365(self) -> None:
-        await vendor_verify_microsoft_365(self)
-
-    async def _verify_google_workspace(self) -> None:
-        await vendor_verify_google_workspace(self)
-
-    async def _verify_github(self) -> None:
-        await vendor_verify_github(self)
-
-    async def _verify_slack(self) -> None:
-        await vendor_verify_slack(self)
-
-    async def _verify_zoom(self) -> None:
-        await vendor_verify_zoom(self)
-
-    async def _verify_salesforce(self) -> None:
-        await vendor_verify_salesforce(self)
-
     def _salesforce_instance_url(self) -> str:
         raw = self._connector_config.get("salesforce_instance_url") or self._connector_config.get("instance_url")
         if not isinstance(raw, str) or not raw.strip():
@@ -281,26 +207,6 @@ class LicenseAdapter(BaseAdapter):
                 "connector_config.salesforce_instance_url must be an http(s) URL"
             )
         return normalized
-
-    async def _stream_google_workspace_license_costs(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-    ) -> AsyncGenerator[dict[str, Any], None]:
-        async for row in vendor_stream_google_workspace_license_costs(
-            self, start_date, end_date
-        ):
-            yield row
-
-    async def _stream_microsoft_365_license_costs(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-    ) -> AsyncGenerator[dict[str, Any], None]:
-        async for row in vendor_stream_microsoft_365_license_costs(
-            self, start_date, end_date
-        ):
-            yield row
 
     async def _get_json(
         self,
@@ -348,31 +254,11 @@ class LicenseAdapter(BaseAdapter):
         Supported for: google_workspace, microsoft_365, github, slack, zoom, salesforce
         """
         native_vendor = self._native_vendor
-        revoke_method = (
-            _REVOKE_METHOD_BY_VENDOR.get(native_vendor)
-            if native_vendor is not None
-            else None
-        )
-        if revoke_method is not None:
-            method_name, supports_sku = revoke_method
-            if supports_sku:
-                revoke_with_sku = cast(
-                    Callable[[str, str | None], Awaitable[bool]],
-                    getattr(self, method_name),
-                )
-                return await revoke_with_sku(resource_id, sku_id)
-            revoke_without_sku = cast(
-                Callable[[str], Awaitable[bool]],
-                getattr(self, method_name),
-            )
-            return await revoke_without_sku(resource_id)
-
-        raise UnsupportedVendorError(
-            (
-                f"License revocation is not supported for vendor '{self._vendor}'. "
-                "Use a supported native vendor or manual follow-up workflow."
-            ),
-            details={"vendor": self._vendor, "operation": "revoke_license"},
+        return await revoke_native_license(
+            self,
+            native_vendor=native_vendor,
+            resource_id=resource_id,
+            sku_id=sku_id,
         )
 
     async def list_users_activity(self) -> list[dict[str, Any]]:
@@ -383,14 +269,7 @@ class LicenseAdapter(BaseAdapter):
         native_vendor = self._native_vendor
         if native_vendor is None:
             return self._list_manual_feed_activity()
-        method_name = _ACTIVITY_METHOD_BY_VENDOR.get(native_vendor)
-        if method_name is None:
-            return []
-        activity_method = cast(
-            Callable[[], Awaitable[list[dict[str, Any]]]],
-            getattr(self, method_name),
-        )
-        return await activity_method()
+        return await list_native_activity(self, native_vendor)
 
     def _list_manual_feed_activity(self) -> list[dict[str, Any]]:
         """
@@ -404,46 +283,6 @@ class LicenseAdapter(BaseAdapter):
             feed=self.credentials.license_feed,
             parse_timestamp_fn=parse_timestamp,
         )
-
-    async def _revoke_google_workspace(
-        self, resource_id: str, sku_id: str | None = None
-    ) -> bool:
-        return await vendor_revoke_google_workspace(self, resource_id, sku_id)
-
-    async def _revoke_microsoft_365(
-        self, resource_id: str, sku_id: str | None = None
-    ) -> bool:
-        return await vendor_revoke_microsoft_365(self, resource_id, sku_id)
-
-    async def _revoke_github(self, resource_id: str) -> bool:
-        return await vendor_revoke_github(self, resource_id)
-
-    async def _revoke_zoom(self, resource_id: str) -> bool:
-        return await vendor_revoke_zoom(self, resource_id)
-
-    async def _revoke_slack(self, resource_id: str) -> bool:
-        return await vendor_revoke_slack(self, resource_id)
-
-    async def _revoke_salesforce(self, resource_id: str) -> bool:
-        return await vendor_revoke_salesforce(self, resource_id)
-
-    async def _list_google_workspace_activity(self) -> list[dict[str, Any]]:
-        return await vendor_list_google_workspace_activity(self)
-
-    async def _list_microsoft_365_activity(self) -> list[dict[str, Any]]:
-        return await vendor_list_microsoft_365_activity(self)
-
-    async def _list_github_activity(self) -> list[dict[str, Any]]:
-        return await vendor_list_github_activity(self)
-
-    async def _list_zoom_activity(self) -> list[dict[str, Any]]:
-        return await vendor_list_zoom_activity(self)
-
-    async def _list_slack_activity(self) -> list[dict[str, Any]]:
-        return await vendor_list_slack_activity(self)
-
-    async def _list_salesforce_activity(self) -> list[dict[str, Any]]:
-        return await vendor_list_salesforce_activity(self)
 
     async def discover_resources(
         self, resource_type: str, region: str | None = None

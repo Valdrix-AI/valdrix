@@ -1,4 +1,7 @@
+import { edgeApiPath } from '$lib/edgeProxy';
+
 export interface LandingTelemetryEvent {
+	eventId: string;
 	name: string;
 	section: string;
 	value?: string;
@@ -49,11 +52,13 @@ export interface LandingTelemetryTarget {
 		type: string,
 		init: CustomEventInit<LandingTelemetryEvent>
 	) => Event;
+	sendToBackend?: (payload: LandingTelemetryEvent) => void | Promise<void>;
 }
 
 const MAX_TOKEN_LENGTH = 96;
 const LANDING_EVENT_TYPE = 'valdrix:landing_event';
 const DATA_LAYER_EVENT_NAME = 'valdrix_landing_event';
+const LANDING_BACKEND_PATH = '/public/landing/events';
 
 function normalizeToken(input: string | null | undefined, fallback: string): string {
 	const trimmed = (input || '').trim();
@@ -82,6 +87,45 @@ function resolveDefaultTarget(): LandingTelemetryTarget {
 	};
 }
 
+function createEventId(now: Date): string {
+	const timestamp = now.getTime().toString(36);
+	const random =
+		typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+			? crypto.randomUUID().slice(0, 8)
+			: Math.random().toString(36).slice(2, 10);
+	return `evt-${timestamp}-${random}`;
+}
+
+function defaultSendToBackend(payload: LandingTelemetryEvent): void {
+	if (typeof window === 'undefined' || typeof fetch !== 'function') {
+		return;
+	}
+
+	const endpoint = edgeApiPath(LANDING_BACKEND_PATH);
+	const body = JSON.stringify(payload);
+	const contentType = 'application/json';
+	try {
+		const nav = window.navigator;
+		if (typeof nav.sendBeacon === 'function') {
+			const blob = new Blob([body], { type: contentType });
+			if (nav.sendBeacon(endpoint, blob)) {
+				return;
+			}
+		}
+	} catch {
+		// Non-fatal fallback to keepalive fetch below.
+	}
+
+	void fetch(endpoint, {
+		method: 'POST',
+		headers: { 'Content-Type': contentType },
+		body,
+		keepalive: true
+	}).catch(() => {
+		// Non-fatal: telemetry should never block user flow.
+	});
+}
+
 export function buildLandingTelemetryEvent(
 	name: string,
 	section: string,
@@ -94,6 +138,7 @@ export function buildLandingTelemetryEvent(
 	const normalizedValue = normalizeToken(value, '');
 
 	return {
+		eventId: createEventId(now),
 		name: normalizedName,
 		section: normalizedSection,
 		value: normalizedValue || undefined,
@@ -163,6 +208,13 @@ export function emitLandingTelemetry(
 			event: DATA_LAYER_EVENT_NAME,
 			...payload
 		});
+	}
+
+	const sendToBackend = target.sendToBackend || defaultSendToBackend;
+	try {
+		void Promise.resolve(sendToBackend(payload));
+	} catch {
+		// Non-fatal: telemetry backend ingestion must not impact UX.
 	}
 
 	return payload;

@@ -12,6 +12,10 @@ from google.api_core.exceptions import ServiceUnavailable, DeadlineExceeded
 import tenacity
 
 from app.shared.adapters.base import BaseAdapter
+from app.shared.adapters.resource_usage_projection import (
+    project_cost_rows_to_resource_usage,
+    resource_usage_lookback_window,
+)
 from app.shared.core.credentials import GCPCredentials
 from app.shared.core.exceptions import ConfigurationError
 from app.schemas.costs import CloudUsageSummary
@@ -78,6 +82,7 @@ class GCPAdapter(BaseAdapter):
 
     async def verify_connection(self) -> bool:
         """Verify GCP credentials by attempting to list projects or a lightweight check."""
+        self._clear_last_error()
         try:
             client = self._get_bq_client()
             # Just a simple check - list datasets in the billing project
@@ -87,6 +92,9 @@ class GCPAdapter(BaseAdapter):
             list(client.list_datasets(project=billing_project, max_results=1))
             return True
         except Exception as e:
+            self._set_last_error_from_exception(
+                e, prefix="GCP credential verification failed"
+            )
             logger.error("gcp_connection_verify_failed", error=str(e))
             return False
 
@@ -341,7 +349,35 @@ class GCPAdapter(BaseAdapter):
                 return []
 
     async def get_resource_usage(
-        self, _service_name: str, _resource_id: str | None = None
+        self, service_name: str, resource_id: str | None = None
     ) -> list[dict[str, Any]]:
-        # GCP resource-level usage is not exposed by this adapter yet.
-        return []
+        target_service = service_name.strip()
+        if not target_service:
+            return []
+
+        start_date, end_date = resource_usage_lookback_window()
+        try:
+            cost_rows = await self.get_cost_and_usage(
+                start_date=start_date,
+                end_date=end_date,
+                granularity="DAILY",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._set_last_error_from_exception(
+                exc, prefix="GCP resource usage lookup failed"
+            )
+            logger.warning(
+                "gcp_resource_usage_failed",
+                service_name=target_service,
+                resource_id=resource_id,
+                error=str(exc),
+            )
+            return []
+
+        return project_cost_rows_to_resource_usage(
+            cost_rows=cost_rows,
+            service_name=target_service,
+            resource_id=resource_id,
+            default_provider="gcp",
+            default_source_adapter="gcp_billing_export",
+        )

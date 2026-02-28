@@ -124,10 +124,12 @@ class TestAWSCURAdapter:
         ):
             adapter = AWSCURAdapter(mock_creds)
             adapter.session = mock_session
+            adapter.last_error = "stale"
 
             success = await adapter.verify_connection()
             assert success is True
             mock_s3.head_bucket.assert_awaited_with(Bucket=adapter.bucket_name)
+            assert adapter.last_error is None
 
     async def test_verify_connection_failure_returns_false(
         self, mock_creds: AWSCredentials
@@ -153,6 +155,8 @@ class TestAWSCURAdapter:
             success = await adapter.verify_connection()
 
         assert success is False
+        assert adapter.last_error is not None
+        assert "AWS CUR bucket verification failed" in adapter.last_error
         mock_error.assert_called_once()
 
     async def test_setup_cur_automation_creates_bucket_and_report(
@@ -953,4 +957,53 @@ class TestAWSCURAdapter:
         assert summary.provider == "aws"
         assert summary.total_cost == 0
         assert await adapter.discover_resources("ec2") == []
-        assert await adapter.get_resource_usage("ec2") == []
+        with patch.object(adapter, "get_cost_and_usage", AsyncMock(return_value=[])):
+            assert await adapter.get_resource_usage("ec2") == []
+
+    async def test_get_resource_usage_projects_and_filters_cur_rows(
+        self, mock_creds: AWSCredentials
+    ) -> None:
+        adapter = AWSCURAdapter(mock_creds)
+        rows = [
+            {
+                "date": datetime(2026, 2, 1, tzinfo=timezone.utc),
+                "amount": Decimal("12.5"),
+                "amount_raw": Decimal("12.5"),
+                "currency": "USD",
+                "service": "AmazonEC2",
+                "region": "us-east-1",
+                "usage_type": "BoxUsage:m5.large",
+                "resource_id": "i-123",
+                "usage_amount": Decimal("24"),
+            },
+            {
+                "date": datetime(2026, 2, 1, tzinfo=timezone.utc),
+                "amount": Decimal("2.0"),
+                "currency": "USD",
+                "service": "AmazonS3",
+                "region": "us-east-1",
+            },
+        ]
+        with patch.object(adapter, "get_cost_and_usage", AsyncMock(return_value=rows)):
+            out = await adapter.get_resource_usage("ec2", "i-123")
+
+        assert len(out) == 1
+        assert out[0]["provider"] == "aws"
+        assert out[0]["service"] == "AmazonEC2"
+        assert out[0]["resource_id"] == "i-123"
+        assert out[0]["usage_unit"] == "unit"
+
+    async def test_get_resource_usage_returns_empty_and_sets_error_on_failure(
+        self, mock_creds: AWSCredentials
+    ) -> None:
+        adapter = AWSCURAdapter(mock_creds)
+        with patch.object(
+            adapter,
+            "get_cost_and_usage",
+            AsyncMock(side_effect=RuntimeError("cur usage failure")),
+        ):
+            out = await adapter.get_resource_usage("ec2")
+
+        assert out == []
+        assert adapter.last_error is not None
+        assert "AWS CUR resource usage lookup failed" in adapter.last_error

@@ -124,7 +124,7 @@ Execution update (2026-02-28H): immediate PKG/FIN evidence hardening controls co
    - supports bounded timestamp skew to avoid same-day false positives.
    - Evidence: `tests/unit/ops/test_verify_monthly_finance_evidence_refresh.py`, `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`.
 
-Execution update (2026-02-28I): VALDRX codebase audit validation + remediation batch
+Execution update (2026-02-28I): Valdrix codebase audit validation + remediation batch
 1. Validated and remediated confirmed security/runtime defects from `VALDRX_CODEBASE_AUDIT_2026-02-28.md.resolved`:
    - `VAL-DB-001`: hardened RLS session posture by introducing explicit `rls_system_context` marker and fail-closed behavior for ambiguous (unset/non-system) DB query context in non-testing runtime.
      - Code: `app/shared/db/session.py`
@@ -171,7 +171,7 @@ Execution update (2026-02-28J): adapter retry abstraction remediation
 5. Remaining adapter backlog scope:
    - class-size and vendor-strategy decomposition (`VAL-ADAPT-002+`) remains a maintainability refactor backlog item (non-hotfix severity).
 
-Execution update (2026-02-28K): VALDRX audit follow-up (targeted closures + decomposition pass)
+Execution update (2026-02-28K): Valdrix audit follow-up (targeted closures + decomposition pass)
 1. Closed `VAL-CORE-001` (implicit maturity mapping risk):
    - `app/shared/core/pricing.py` now defines explicit preview maturity membership and enforces exact/complete feature-maturity coverage invariants.
    - Startup fails closed if any `FeatureFlag` is missing from maturity classification.
@@ -188,7 +188,7 @@ Execution update (2026-02-28K): VALDRX audit follow-up (targeted closures + deco
    - `VAL-ADAPT-002+` still has additional class-size/vendor-strategy extraction scope; this is maintainability backlog, not a release-blocking runtime defect.
 
 Execution update (2026-02-28L): consolidated remediation state sync
-1. Consolidated remediated VALDRX items now reflected in code + docs:
+1. Consolidated remediated Valdrix items now reflected in code + docs:
    - `VAL-DB-001`, `VAL-BILL-005`, `VAL-SEC-001`, `VAL-SEC-003`, `VAL-CORE-003/004`,
    - `VAL-CORE-001`, `VAL-BILL-001`, `VAL-ADAPT-003`, `VAL-ADAPT-004`.
 2. `VAL-ADAPT-002` status:
@@ -209,7 +209,7 @@ Execution update (2026-02-28M): license stream-cost decomposition follow-up
    - `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_vendor_ops.py --hide-error-context --no-error-summary` -> passed.
    - `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_google_workspace.py` -> `91 passed`.
 
-Execution update (2026-02-28N): VALDRX continuation (auth coverage + paginator + billing entitlement sync)
+Execution update (2026-02-28N): Valdrix continuation (auth coverage + paginator + billing entitlement sync)
 1. Closed `VAL-SEC-002` with machine-checkable route-auth verification:
    - added `scripts/verify_api_auth_coverage.py` (recursive dependency scan + explicit public allowlist),
    - wired as a mandatory enterprise gate command in `scripts/run_enterprise_tdd_gate.py`,

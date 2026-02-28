@@ -11,6 +11,7 @@ This directory stores staged enforcement evidence artifacts used by release gate
 5. PKG/FIN policy decision artifact: `pkg_fin_policy_decisions_YYYY-MM-DD.json`
 6. Finance telemetry snapshot artifact: `finance_telemetry_snapshot_YYYY-MM-DD.json`
 7. Finance committee assumptions artifact: `finance_committee_packet_assumptions_YYYY-MM-DD.json`
+8. Valdrix disposition register artifact: `valdrix_disposition_register_YYYY-MM-DD.json`
 
 ## Template Seeds
 
@@ -21,6 +22,7 @@ This directory stores staged enforcement evidence artifacts used by release gate
 5. `pkg_fin_policy_decisions_TEMPLATE.json`
 6. `finance_telemetry_snapshot_TEMPLATE.json`
 7. `finance_committee_packet_assumptions_TEMPLATE.json`
+8. `valdrix_disposition_register_TEMPLATE.json`
 
 ## Staged Failure-Injection Capture
 
@@ -81,6 +83,12 @@ Finance committee assumptions should be captured to:
 
 ```text
 docs/ops/evidence/finance_committee_packet_assumptions_YYYY-MM-DD.json
+```
+
+Valdrix disposition register should be captured to:
+
+```text
+docs/ops/evidence/valdrix_disposition_register_YYYY-MM-DD.json
 ```
 
 ## Verification Commands
@@ -175,4 +183,13 @@ uv run python3 scripts/verify_monthly_finance_evidence_refresh.py \
   --pkg-fin-policy-decisions-path docs/ops/evidence/pkg_fin_policy_decisions_YYYY-MM-DD.json \
   --max-age-days 35 \
   --max-capture-spread-days 14
+```
+
+Valdrix disposition freshness verifier (risk-review reminder gate):
+
+```bash
+uv run python3 scripts/verify_valdrix_disposition_freshness.py \
+  --register-path docs/ops/evidence/valdrix_disposition_register_YYYY-MM-DD.json \
+  --max-artifact-age-days 45 \
+  --max-review-window-days 120
 ```

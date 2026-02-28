@@ -207,9 +207,9 @@ Source audit: `/home/daretechie/.gemini/antigravity/brain/c6c55133-7d83-4352-ab2
 
 - `VAL-ADAPT-002+` remains open as maintainability refactor scope (full class-size/vendor-strategy split), not an immediate correctness or security hotfix blocker.
 
-## Consolidated remediation status (VALDRX follow-up, 2026-02-28)
+## Consolidated remediation status (Valdrix follow-up, 2026-02-28)
 
-This section consolidates what is now remediated from the VALDRX audit stream so reviewers do not need to reconstruct status across multiple execution updates.
+This section consolidates what is now remediated from the Valdrix audit stream so reviewers do not need to reconstruct status across multiple execution updates.
 
 ### Fully remediated (code + regression evidence captured)
 
@@ -239,7 +239,7 @@ This section consolidates what is now remediated from the VALDRX audit stream so
 - Remaining `VAL-ADAPT-002+` class-size/vendor-strategy decomposition scope.
 - No unresolved release-critical correctness/security defect was confirmed in this subset after remediation and regression reruns.
 
-## Additional remediation batch (VALDRX continuation, 2026-02-28N)
+## Additional remediation batch (Valdrix continuation, 2026-02-28N)
 
 - `VAL-SEC-002` remediated with machine-checkable API auth coverage:
   - Added `scripts/verify_api_auth_coverage.py` to recursively inspect route dependency trees.
@@ -267,7 +267,7 @@ This section consolidates what is now remediated from the VALDRX audit stream so
 - `TESTING=true DEBUG=false uv run python3 scripts/verify_api_auth_coverage.py` -> `Auth coverage check passed.`
 - `DEBUG=false uv run pytest -q --no-cov tests/unit/services/billing/test_entitlement_policy.py tests/unit/services/billing/test_dunning_service.py tests/unit/services/billing/test_paystack_billing_branches.py tests/unit/ops/test_verify_api_auth_coverage.py tests/unit/shared/adapters/test_aws_pagination.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/governance/test_jobs_api.py tests/unit/governance/settings/test_llm_settings.py` -> `98 passed`.
 
-## Additional remediation batch (VALDRX continuation, 2026-02-28O)
+## Additional remediation batch (Valdrix continuation, 2026-02-28O)
 
 - `VAL-ADAPT-002+` decomposition advanced further in `app/shared/adapters/license.py`:
   - moved manual-feed transformation/validation/activity logic to `app/shared/adapters/license_feed_ops.py`,
@@ -283,7 +283,7 @@ This section consolidates what is now remediated from the VALDRX audit stream so
 - `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_feed_ops.py app/shared/adapters/license_vendor_registry.py --hide-error-context --no-error-summary` -> passed.
 - `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_license_feed_ops.py tests/unit/shared/adapters/test_license_vendor_registry.py tests/unit/services/adapters/test_adapter_helper_branches.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_google_workspace.py` -> `123 passed`.
 
-## Additional remediation batch (VALDRX continuation, 2026-02-28P)
+## Additional remediation batch (Valdrix continuation, 2026-02-28P)
 
 - `VAL-ADAPT-002+` decomposition advanced from helper extraction to vendor-module split:
   - `app/shared/adapters/license_vendor_verify.py`
@@ -312,7 +312,7 @@ This section consolidates what is now remediated from the VALDRX audit stream so
 - Snapshot/export stability: stream/revoke/activity wrapper signatures and returned record shapes are unchanged at call sites.
 - Failure modes and misconfiguration: unsupported vendor paths remain fail-closed with explicit error messages.
 
-## Additional remediation batch (VALDRX continuation, 2026-02-28Q)
+## Additional remediation batch (Valdrix continuation, 2026-02-28Q)
 
 - `VAL-ADAPT-002+` advanced by removing stub-grade behavior from the license adapter resource surfaces:
   - added `app/shared/adapters/license_resource_ops.py` for deterministic, typed resource/usage shaping from license activity rows,
@@ -337,7 +337,7 @@ This section consolidates what is now remediated from the VALDRX audit stream so
 - Snapshot stability/export integrity: usage row schema is explicit and stable (`provider/service/usage_type/resource_id/usage_amount/cost/currency/timestamp/tags`).
 - Failure modes/misconfiguration: unsupported resource/service requests return empty results; negative default seat prices are clamped to `0.0`; malformed timestamps fall back safely.
 
-## Additional remediation batch (VALDRX continuation, 2026-02-28R)
+## Additional remediation batch (Valdrix continuation, 2026-02-28R)
 
 - `VAL-CORE-002` remediated in `app/shared/core/pricing.py`:
   - removed legacy hardcoded `paystack_amount_kobo` tier constants from runtime pricing config,
@@ -376,8 +376,12 @@ This section consolidates what is now remediated from the VALDRX audit stream so
 - Snapshot stability/export integrity: billing metadata keys (`plan_code`, `pricing_mode`) are additive and backward-safe.
 - Failure modes/misconfiguration: router registry now fails closed at startup on missing/duplicate/unexpected prefixes.
 
-## VALDRX remaining finding dispositions (post-remediation review)
+## Valdrix remaining finding dispositions (post-remediation review)
 
+- Disposition evidence is now machine-checkable and release-gated via:
+  - register artifact: `docs/ops/evidence/valdrix_disposition_register_2026-02-28.json`
+  - verifier: `scripts/verify_valdrix_disposition_freshness.py`
+  - enterprise gate wiring: `scripts/run_enterprise_tdd_gate.py`
 - `VAL-ADAPT-001`: reduced in practice by standardized adapter retry/error pathways and explicit `last_error` handling in Cloud+ adapters; further normalization is tracked with `VAL-ADAPT-002+` decomposition work.
 - `VAL-DB-002`: backend resolution complexity retained intentionally with fail-closed semantics and exhaustive session-path tests; no release-critical fail-open path confirmed.
 - `VAL-DB-003`: explicit session cleanup kept for deterministic rollback/close behavior across Postgres/SQLite test surfaces; treated as defensive redundancy, not correctness debt.
@@ -386,3 +390,196 @@ This section consolidates what is now remediated from the VALDRX audit stream so
 - `VAL-API-002`: bearer-token CSRF bypass remains an explicit API contract; machine-checkable auth coverage gate is in CI to prevent unprotected private routes.
 - `VAL-API-004`: static Swagger asset serving remains read-only from packaged static directory; no runtime write path is exposed by app routes.
 - `VAL-ADAPT-002+`: still open as class-size/vendor-strategy maintainability decomposition backlog, not a correctness/security release blocker after current remediation packs.
+
+## Additional remediation batch (Valdrix continuation, 2026-02-28S)
+
+- `VAL-ADAPT-002+` decomposition advanced by extracting native vendor dispatch orchestration out of `LicenseAdapter`:
+  - added `app/shared/adapters/license_native_dispatch.py` with typed, table-driven dispatch for verify, stream, revoke, and activity paths,
+  - moved vendor-dispatch map ownership from `app/shared/adapters/license.py` into the new module,
+  - kept existing adapter wrapper methods intact to preserve backward-compatible test seams and runtime behavior.
+- Added focused dispatch coverage:
+  - `tests/unit/shared/adapters/test_license_native_dispatch.py`
+  - covers verify dispatch, stream-method resolution, revoke dispatch (SKU/non-SKU), unknown-vendor fail-closed, and stable supported-vendor contract.
+
+### Validation evidence (this batch)
+
+- `uv run ruff check app/shared/adapters/license.py app/shared/adapters/license_native_dispatch.py tests/unit/shared/adapters/test_license_native_dispatch.py` -> passed.
+- `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_native_dispatch.py --hide-error-context --no-error-summary` -> passed.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_license_native_dispatch.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py` -> `93 passed`.
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: dispatch helpers are immutable module-level maps with no mutable shared runtime state.
+- Observability: existing adapter warning/error logging paths and `last_error` semantics are unchanged.
+- Deterministic replay: vendor operation selection is table-driven and deterministic for a given normalized vendor.
+- Snapshot stability/export integrity: public adapter method signatures and emitted row shapes are unchanged.
+- Failure modes/misconfiguration: unknown native vendors stay fail-closed (`ExternalAPIError`/`UnsupportedVendorError`) with explicit operator-facing messages.
+
+## Additional remediation batch (Valdrix continuation, 2026-02-28T)
+
+- `VAL-ADAPT-001` hardening pass implemented for cloud-core adapters (AWS/Azure/GCP/CUR):
+  - added sanitized adapter error helpers to `app/shared/adapters/base.py`:
+    - `_clear_last_error()`
+    - `_set_last_error()`
+    - `_set_last_error_from_exception()`
+  - updated verify flows to clear stale state and set sanitized failure context:
+    - `app/shared/adapters/azure.py`
+    - `app/shared/adapters/gcp.py`
+    - `app/shared/adapters/aws_cur.py`
+    - `app/shared/adapters/aws_multitenant.py`
+  - adapters now expose deterministic fail-closed operator messages through `last_error` on verification failure.
+- Connection services now consume adapter-provided failure context with safe fallback defaults:
+  - `app/shared/connections/aws.py`
+  - `app/shared/connections/azure.py`
+  - `app/shared/connections/gcp.py`
+
+### Validation evidence (this batch)
+
+- `uv run ruff check app/shared/adapters/base.py app/shared/adapters/azure.py app/shared/adapters/gcp.py app/shared/adapters/aws_cur.py app/shared/adapters/aws_multitenant.py app/shared/connections/aws.py app/shared/connections/azure.py app/shared/connections/gcp.py tests/unit/shared/adapters/test_azure_adapter.py tests/unit/shared/adapters/test_gcp_adapter.py tests/unit/shared/adapters/test_aws_cur.py tests/unit/shared/adapters/test_aws_multitenant_branch_paths.py tests/unit/connections/test_cloud_connections_deep.py` -> passed.
+- `uv run mypy app/shared/adapters/base.py app/shared/adapters/azure.py app/shared/adapters/gcp.py app/shared/adapters/aws_cur.py app/shared/adapters/aws_multitenant.py app/shared/connections/aws.py app/shared/connections/azure.py app/shared/connections/gcp.py --hide-error-context --no-error-summary` -> passed.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_azure_adapter.py tests/unit/shared/adapters/test_gcp_adapter.py tests/unit/shared/adapters/test_aws_cur.py tests/unit/shared/adapters/test_aws_multitenant_branch_paths.py tests/unit/connections/test_cloud_connections_deep.py` -> `71 passed`.
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: no shared mutable singleton state introduced; `last_error` remains instance-local and is reset per verification run.
+- Observability: failure context remains structured in logs while adapter-facing messages are sanitized via `AdapterError`.
+- Deterministic replay: verification outcomes now deterministically include/reset `last_error` for each run, removing stale-message ambiguity.
+- Snapshot stability/export integrity: no request/response schema changes; only failure-message selection semantics improved.
+- Failure modes/misconfiguration: unsupported-region and credential failures remain fail-closed with explicit operator-facing diagnostics.
+
+## Additional remediation batch (Valdrix continuation, 2026-02-28U)
+
+- Remediated all five explicit `get_resource_usage()` stubs that previously returned unconditional empty lists:
+  - `app/shared/adapters/azure.py`
+  - `app/shared/adapters/gcp.py`
+  - `app/shared/adapters/saas.py`
+  - `app/shared/adapters/hybrid.py`
+  - `app/shared/adapters/platform.py`
+- Added reusable projection module for deterministic resource-usage shaping:
+  - `app/shared/adapters/resource_usage_projection.py`
+  - bounded lookback window (`30d`, capped), normalized service/resource filtering, stable ordering, and normalized output schema.
+- Enhanced manual-feed streaming for Cloud+ adapters to preserve resource usage metadata end-to-end:
+  - `app/shared/adapters/hybrid.py`
+  - `app/shared/adapters/platform.py`
+  - both now propagate `resource_id`, `usage_amount`, and `usage_unit` when present.
+- Expanded test coverage to validate projection/filtering/error paths and lookback-safe behavior:
+  - `tests/unit/shared/adapters/test_azure_adapter_branch_paths.py`
+  - `tests/unit/shared/adapters/test_gcp_adapter.py`
+  - `tests/unit/shared/adapters/test_saas_adapter_branch_paths.py`
+  - `tests/unit/services/adapters/test_hybrid_additional_branches.py`
+  - `tests/unit/services/adapters/test_platform_additional_branches.py`
+
+### Validation evidence (this batch)
+
+- `uv run ruff check app/shared/adapters/resource_usage_projection.py app/shared/adapters/azure.py app/shared/adapters/gcp.py app/shared/adapters/saas.py app/shared/adapters/hybrid.py app/shared/adapters/platform.py tests/unit/shared/adapters/test_azure_adapter_branch_paths.py tests/unit/shared/adapters/test_gcp_adapter.py tests/unit/shared/adapters/test_saas_adapter_branch_paths.py tests/unit/services/adapters/test_hybrid_additional_branches.py tests/unit/services/adapters/test_platform_additional_branches.py` -> passed.
+- `uv run mypy app/shared/adapters/resource_usage_projection.py app/shared/adapters/azure.py app/shared/adapters/gcp.py app/shared/adapters/saas.py app/shared/adapters/hybrid.py app/shared/adapters/platform.py --hide-error-context --no-error-summary` -> passed.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_azure_adapter_branch_paths.py tests/unit/shared/adapters/test_gcp_adapter.py tests/unit/shared/adapters/test_saas_adapter_branch_paths.py tests/unit/services/adapters/test_hybrid_additional_branches.py tests/unit/services/adapters/test_platform_additional_branches.py` -> `88 passed`.
+- `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py` -> passed (`883 passed`, enforcement/analytics/LLM coverage gates green; `coverage-enterprise-gate.xml` generated).
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: projection utilities are stateless pure functions; adapter implementations remain instance-local with no shared mutable runtime state.
+- Observability: resource-usage lookup failures now emit explicit warning events and set adapter error context (`last_error`/sanitized error paths).
+- Deterministic replay: row projection enforces deterministic sorting (`timestamp`, `resource_id`, `service`) and stable field normalization.
+- Snapshot stability/export integrity: usage payloads are now consistently shaped with explicit defaults (`currency`, `region`, `source_adapter`) and no placeholder TODO paths.
+- Failure modes/misconfiguration: lookups fail closed (`[]`) on upstream errors; bounded lookback prevents unbounded scans; resource/service filters are explicit and case-normalized.
+
+## Additional remediation batch (Valdrix continuation, 2026-02-28V)
+
+- Remediated remaining AWS adapter `get_resource_usage()` placeholders:
+  - `app/shared/adapters/aws_cur.py`
+  - `app/shared/adapters/aws_multitenant.py`
+- `AWSCURAdapter.get_resource_usage` now:
+  - runs bounded lookback retrieval via existing CUR ingestion path,
+  - normalizes CUR-native fields (`date/amount/line_item_*`) into resource-usage projection inputs,
+  - returns deterministic, filtered usage rows for requested service/resource,
+  - fail-closes with explicit operator-facing error context (`last_error`) on upstream failures.
+- `MultiTenantAWSAdapter.get_resource_usage` now:
+  - maps common AWS service aliases (`ec2`, `ebs`, `eip`, `nat`, `rds`, etc.) to discovery resource types,
+  - derives inventory-backed usage rows from discovered resources (`usage_amount=1`, `usage_unit=resource`, `cost_usd=0`),
+  - supports deterministic service/resource filtering through shared projection utility.
+- Expanded AWS tests to codify new contract behavior:
+  - `tests/unit/shared/adapters/test_aws_cur.py`
+  - `tests/unit/shared/adapters/test_aws_multitenant_branch_paths.py`
+  - `tests/unit/adapters/test_aws_adapter.py`
+
+### Validation evidence (this batch)
+
+- `uv run ruff check app/shared/adapters/aws_cur.py app/shared/adapters/aws_multitenant.py tests/unit/shared/adapters/test_aws_cur.py tests/unit/shared/adapters/test_aws_multitenant_branch_paths.py tests/unit/adapters/test_aws_adapter.py` -> passed.
+- `uv run mypy app/shared/adapters/aws_cur.py app/shared/adapters/aws_multitenant.py --hide-error-context --no-error-summary` -> passed.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_aws_cur.py tests/unit/shared/adapters/test_aws_multitenant_branch_paths.py tests/unit/adapters/test_aws_adapter.py` -> `48 passed`.
+- `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py` -> passed (`883 passed`, enforcement/analytics/LLM coverage gates green; `coverage-enterprise-gate.xml` generated).
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: AWS usage shaping remains stateless per request; no global mutable runtime caches added.
+- Observability: CUR lookup failures now emit explicit warning logs and set deterministic `last_error` context.
+- Deterministic replay: service alias mapping and projected output ordering are stable and deterministic for identical inputs.
+- Snapshot stability/export integrity: emitted usage schema remains consistent with all other adapter resource-usage surfaces.
+- Failure modes/misconfiguration: blank service requests and empty discovery/ingestion paths fail closed (`[]`) without raising unstable runtime errors.
+
+## Additional remediation batch (Valdrix continuation, 2026-02-28W)
+
+- `VAL-DB-001` hardening finalized for explicit tenant-context teardown:
+  - added `clear_session_tenant_context()` in `app/shared/db/session.py` to enforce fail-closed state (`tenant_id=None`, `rls_context_set=False`, `rls_system_context=False`) on both session and connection.
+  - PostgreSQL sessions now explicitly clear `app.current_tenant_id` with `set_config(..., '', true)` during teardown.
+  - `set_session_tenant_id(..., None)` now routes to explicit clear semantics instead of ambiguous "set context" behavior.
+  - backend-unknown and set-config failure branches now also force `rls_system_context=False` to avoid stale system-context leakage.
+- Scheduler isolation hardening in `app/modules/governance/domain/jobs/processor.py`:
+  - tenant context clear moved to `finally` scope inside the per-job savepoint so cleanup executes on success, timeout, cancellation, and handler exceptions.
+- Regression coverage added:
+  - `tests/unit/db/test_session_branch_paths_2.py`:
+    - `set_session_tenant_id(None)` delegation to clear helper,
+    - explicit clear-context fail-closed behavior and PostgreSQL clear query assertion,
+    - clear-query failure logging path.
+  - `tests/unit/governance/jobs/test_job_processor.py`:
+    - tenant-context cleanup on success path,
+    - tenant-context cleanup on handler-failure path.
+
+### Validation evidence (this batch)
+
+- `uv run ruff check app/shared/db/session.py app/modules/governance/domain/jobs/processor.py tests/unit/db/test_session_branch_paths_2.py tests/unit/governance/jobs/test_job_processor.py` -> passed.
+- `uv run mypy app/shared/db/session.py app/modules/governance/domain/jobs/processor.py --hide-error-context --no-error-summary` -> passed.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/db/test_session_branch_paths_2.py` -> `22 passed`.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/governance/jobs/test_job_processor.py` -> `12 passed`.
+- `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py` -> passed (`883 passed`; post-closure sanity dimensions all OK; `coverage-enterprise-gate.xml` regenerated).
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: job processor now enforces deterministic tenant-context teardown in `finally`, eliminating cross-job context retention risk on exception paths.
+- Observability: explicit clear/set failure logs (`failed_to_clear_rls_config_in_session`, `failed_to_set_rls_config_in_session`) provide direct operator signals for DB-context anomalies.
+- Deterministic replay: context transitions are now explicit and state-machine-like (`set -> execute -> clear`) across all outcomes.
+- Snapshot stability/export integrity: no API payload schema changes; remediation is internal session-control behavior only.
+- Failure modes/misconfiguration: unresolved backend detection remains fail-closed and now applies symmetric system-context resets during both set and clear flows.
+
+## Additional remediation batch (Valdrix continuation, 2026-02-28X)
+
+- `VAL-ADAPT-002+` decomposition advanced by extracting native-vendor compatibility wrappers out of `LicenseAdapter`:
+  - added `app/shared/adapters/license_native_compat.py` with a dedicated `LicenseNativeCompatMixin`.
+  - moved native wrapper surfaces into the mixin while preserving existing private method seams:
+    - verify wrappers (`_verify_*`, `_verify_native_vendor`)
+    - stream wrappers (`_stream_google_workspace_license_costs`, `_stream_microsoft_365_license_costs`)
+    - revoke wrappers (`_revoke_*`)
+    - activity wrappers (`_list_*_activity`)
+  - `app/shared/adapters/license.py` now focuses on orchestration/runtime responsibilities and composes native wrappers via inheritance (`LicenseNativeCompatMixin`), reducing core adapter class size/branch density without breaking existing call sites/tests.
+- Type safety hardening:
+  - `license_native_compat.py` uses explicit protocol casts (`LicenseVendorRuntime` / `LicenseNativeDispatchRuntime`) so mypy enforces native runtime contract compatibility.
+
+### Validation evidence (this batch)
+
+- `uv run ruff check app/shared/adapters/license.py app/shared/adapters/license_native_compat.py` -> passed.
+- `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_native_compat.py --hide-error-context --no-error-summary` -> passed.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_license_native_dispatch.py` -> `6 passed`.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_license_verification_stream_branches.py` -> `28 passed`.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_license_activity_and_revoke.py` -> `19 passed`.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_google_workspace.py` -> `6 passed`.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_cloud_plus_adapters.py` -> `40 passed`.
+- `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py` -> passed (`883 passed`; post-closure sanity dimensions all OK; `coverage-enterprise-gate.xml` regenerated).
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: decomposition introduced no shared mutable global runtime state; native dispatch remains per-instance and request-local.
+- Observability: existing native vendor warning/error logs and `last_error` propagation paths are preserved.
+- Deterministic replay: wrapper extraction is behavior-preserving; native vendor flow selection and output ordering are unchanged for identical inputs.
+- Snapshot stability/export integrity: adapter public/native private seams remain stable, protecting existing regression snapshots and downstream exports.
+- Failure modes/misconfiguration: unsupported vendor handling remains fail-closed through dispatch/runtime contracts; native auth guardrails are unchanged.

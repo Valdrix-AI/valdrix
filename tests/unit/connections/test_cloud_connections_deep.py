@@ -62,6 +62,7 @@ class TestCloudConnectionsDeep:
 
         mock_adapter = AsyncMock()
         mock_adapter.verify_connection = AsyncMock(return_value=False)
+        mock_adapter.last_error = "AWS trust policy rejected AssumeRole request"
 
         with patch(
             "app.shared.connections.aws.AWSConnectionService._build_verification_adapter",
@@ -70,6 +71,9 @@ class TestCloudConnectionsDeep:
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "failed"
             assert mock_conn.status == "error"
+            assert (
+                res["message"] == "AWS trust policy rejected AssumeRole request"
+            )
 
     @pytest.mark.asyncio
     async def test_aws_verify_connection_adapter_error(self, mock_db):
@@ -147,9 +151,11 @@ class TestCloudConnectionsDeep:
         with patch("app.shared.connections.azure.AdapterFactory.get_adapter") as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
             mock_adapter.verify_connection = AsyncMock(return_value=False)
+            mock_adapter.last_error = "Azure service principal secret expired"
 
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "failed"
+            assert res["message"] == "Azure service principal secret expired"
 
     @pytest.mark.asyncio
     async def test_gcp_verify_connection_success(self, mock_db):
@@ -187,9 +193,11 @@ class TestCloudConnectionsDeep:
         with patch("app.shared.connections.gcp.AdapterFactory.get_adapter") as mock_adapter_class:
             mock_adapter = mock_adapter_class.return_value
             mock_adapter.verify_connection = AsyncMock(return_value=False)
+            mock_adapter.last_error = "GCP service account key disabled"
 
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "failed"
+            assert res["message"] == "GCP service account key disabled"
 
     def test_aws_setup_templates(self):
         templates = AWSConnectionService.get_setup_templates("ext-123")

@@ -263,21 +263,27 @@ class JobProcessor:
 
             # Use a savepoint to isolate this job's database changes
             async with self.db.begin_nested():
+                tenant_context_set = False
                 # Set tenant context for RLS isolation during job execution
                 if job.tenant_id:
                     from app.shared.db.session import set_session_tenant_id
 
                     await set_session_tenant_id(self.db, job.tenant_id)
+                    tenant_context_set = True
 
-                # Execute handler with timeout protection (BE-SCHED-2)
-                result = await asyncio.wait_for(
-                    handler.execute(job, self.db), timeout=JOB_TIMEOUT_SECONDS
-                )
+                try:
+                    # Execute handler with timeout protection (BE-SCHED-2)
+                    result = await asyncio.wait_for(
+                        handler.execute(job, self.db), timeout=JOB_TIMEOUT_SECONDS
+                    )
+                finally:
+                    # Always reset tenant context after tenant-scoped execution.
+                    if tenant_context_set:
+                        from app.shared.db.session import (
+                            clear_session_tenant_context,
+                        )
 
-                # Reset tenant context after job execution to prevent leakage (Finding #S3)
-                if job.tenant_id:
-                    from app.shared.db.session import set_session_tenant_id
-                    await set_session_tenant_id(self.db, None) 
+                        await clear_session_tenant_context(self.db)
 
             # Mark as completed
             job.status = JobStatus.COMPLETED.value

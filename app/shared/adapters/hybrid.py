@@ -11,6 +11,10 @@ import structlog
 from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.feed_utils import as_float, is_number, parse_timestamp
 from app.shared.adapters.http_retry import execute_with_http_retry
+from app.shared.adapters.resource_usage_projection import (
+    project_cost_rows_to_resource_usage,
+    resource_usage_lookback_window,
+)
 from app.shared.core.credentials import HybridCredentials
 from app.shared.core.currency import convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
@@ -343,12 +347,32 @@ class HybridAdapter(BaseAdapter):
                 cost_usd = float(cost_value or 0.0)
             except (TypeError, ValueError):
                 cost_usd = 0.0
+            resource_id_raw = entry.get("resource_id") or entry.get("id")
+            resource_id = (
+                str(resource_id_raw).strip()
+                if resource_id_raw not in (None, "")
+                else None
+            )
+            usage_amount = (
+                as_float(entry.get("usage_amount"), default=0.0)
+                if is_number(entry.get("usage_amount"))
+                else None
+            )
+            usage_unit_raw = entry.get("usage_unit")
+            usage_unit = (
+                str(usage_unit_raw).strip()
+                if usage_unit_raw not in (None, "")
+                else None
+            )
 
             yield {
                 "provider": "hybrid",
                 "service": service_name,
                 "region": region,
                 "usage_type": usage_type,
+                "resource_id": resource_id,
+                "usage_amount": usage_amount,
+                "usage_unit": usage_unit,
                 "cost_usd": cost_usd,
                 "amount_raw": entry.get("amount_raw"),
                 "currency": str(entry.get("currency") or "USD").upper(),
@@ -806,7 +830,33 @@ class HybridAdapter(BaseAdapter):
         return []
 
     async def get_resource_usage(
-        self, _service_name: str, _resource_id: str | None = None
+        self, service_name: str, resource_id: str | None = None
     ) -> list[dict[str, Any]]:
-        # Hybrid resource-level usage is not exposed by this adapter yet.
-        return []
+        target_service = service_name.strip()
+        if not target_service:
+            return []
+
+        start_date, end_date = resource_usage_lookback_window()
+        try:
+            cost_rows = await self.get_cost_and_usage(
+                start_date=start_date,
+                end_date=end_date,
+                granularity="DAILY",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.last_error = str(exc)
+            logger.warning(
+                "hybrid_resource_usage_failed",
+                service_name=target_service,
+                resource_id=resource_id,
+                error=str(exc),
+            )
+            return []
+
+        return project_cost_rows_to_resource_usage(
+            cost_rows=cost_rows,
+            service_name=target_service,
+            resource_id=resource_id,
+            default_provider="hybrid",
+            default_source_adapter="hybrid_cost_feed",
+        )

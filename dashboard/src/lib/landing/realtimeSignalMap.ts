@@ -68,7 +68,7 @@ export const SIGNAL_LANE_DEFINITIONS: readonly SignalLaneDefinition[] = Object.f
 	{
 		id: 'deterministic_enforcement',
 		title: 'Execution Controls',
-		subtitle: 'Policy checks + approvals',
+		subtitle: 'Risk checks + approvals',
 		x: 488,
 		y: 90,
 		labelClass: 'signal-label--b'
@@ -76,7 +76,7 @@ export const SIGNAL_LANE_DEFINITIONS: readonly SignalLaneDefinition[] = Object.f
 	{
 		id: 'financial_governance',
 		title: 'Financial Governance',
-		subtitle: 'Approvals + ceilings',
+		subtitle: 'Budgets + ownership',
 		x: 540,
 		y: 302,
 		labelClass: 'signal-label--c'
@@ -84,7 +84,7 @@ export const SIGNAL_LANE_DEFINITIONS: readonly SignalLaneDefinition[] = Object.f
 	{
 		id: 'operational_resilience',
 		title: 'Operational Resilience',
-		subtitle: 'Failure drills + replay',
+		subtitle: 'Continuity + response',
 		x: 170,
 		y: 320,
 		labelClass: 'signal-label--d'
@@ -102,32 +102,32 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 			economic_visibility: {
 				status: 'Stable',
 				metric: 'Attribution + anomaly telemetry current',
-				detail: 'Telemetry and pricing references match the release evidence packet.',
+				detail: 'Cost and usage signals are aligned across connected environments.',
 				severity: 'healthy'
 			},
 			deterministic_enforcement: {
 				status: 'Watch',
-				metric: 'Gate expansion in progress',
-				detail: 'Policy controls are enforced at API boundaries with tier-aware guards.',
+				metric: 'Coverage expansion in progress',
+				detail: 'More high-impact actions are being moved into pre-change checks and approvals.',
 				severity: 'watch'
 			},
 			financial_governance: {
 				status: 'Stable',
-				metric: 'Policy decisions codified',
-				detail: 'Commercial boundaries and migration windows are explicitly documented.',
+				metric: 'Budget thresholds aligned',
+				detail: 'Budget boundaries and escalation paths stay aligned across finance and engineering.',
 				severity: 'healthy'
 			},
 			operational_resilience: {
 				status: 'Stable',
-				metric: 'Stress and failure evidence present',
-				detail: 'Stress and failure-injection artifacts are attached and verifiable.',
+				metric: 'Response drills completed',
+				detail: 'Teams have practiced response paths so action stays calm during cost pressure.',
 				severity: 'healthy'
 			}
 		},
 		sources: [
-			'docs/ops/feature_enforceability_matrix_2026-02-27.json',
-			'docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json',
-			'docs/ops/evidence/enforcement_failure_injection_2026-02-27.json'
+			'Cloud cost telemetry',
+			'Stress and failure drill evidence',
+			'Execution coverage report'
 		]
 	},
 	{
@@ -139,34 +139,30 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 		lanes: {
 			economic_visibility: {
 				status: 'Stable',
-				metric: 'Unit economics window validated',
-				detail: 'Tier economics include starter, growth, pro, and enterprise coverage.',
+				metric: 'Unit economics baseline validated',
+				detail: 'Pricing assumptions stay aligned across starter, growth, pro, and enterprise plans.',
 				severity: 'healthy'
 			},
 			deterministic_enforcement: {
 				status: 'Stable',
 				metric: 'Approval routing active',
-				detail: 'Approval sign-offs include finance, product, and go-to-market ownership.',
+				detail: 'Approval sign-offs include finance, product, and engineering owners.',
 				severity: 'healthy'
 			},
 			financial_governance: {
 				status: 'Watch',
-				metric: 'Pricing motion intentionally locked',
-				detail:
-					'Commercial changes remain blocked until post-launch telemetry confirms guardrails.',
+				metric: 'Pricing updates intentionally paused',
+				detail: 'Commercial changes stay paused until more live operating data is collected.',
 				severity: 'watch'
 			},
 			operational_resilience: {
 				status: 'Stable',
-				metric: 'Deterministic replay posture maintained',
-				detail: 'Post-closure sanity policy enforces replay and failure-mode validation.',
+				metric: 'Replay and rollback readiness maintained',
+				detail: 'Critical action paths are tested for predictable rollback and recovery.',
 				severity: 'healthy'
 			}
 		},
-		sources: [
-			'docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json',
-			'docs/ops/enforcement_control_plane_gap_register_2026-02-23.md'
-		]
+		sources: ['Pricing decision records', 'Approval routing checks']
 	},
 	{
 		id: 'snp-2026-02-28-c',
@@ -178,34 +174,30 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 			economic_visibility: {
 				status: 'Stable',
 				metric: '490 active subscriptions in telemetry set',
-				detail: 'Telemetry snapshot includes active tenant and dunning profile by tier.',
+				detail: 'Current subscription mix gives teams a representative operating baseline.',
 				severity: 'healthy'
 			},
 			deterministic_enforcement: {
 				status: 'Stable',
-				metric: 'Evidence gate rerun passed',
-				detail: 'Release evidence gate passed with full evidence-pack integrity checks.',
+				metric: 'Release checks rerun passed',
+				detail: 'Release checks validate that control paths and exports remain intact.',
 				severity: 'healthy'
 			},
 			financial_governance: {
 				status: 'Stable',
 				metric: 'Free-tier margin watch bounded',
-				detail: 'Free-tier LLM cost remains bounded against starter gross MRR guardrails.',
+				detail: 'Free-tier compute usage remains bounded against starter-tier economics.',
 				severity: 'healthy'
 			},
 			operational_resilience: {
 				status: 'Watch',
 				metric: 'Operational follow-through required',
 				detail:
-					'Remaining PKG/FIN items are operating-policy cadence, not core implementation gaps.',
+					'Remaining items are operational cadence tasks, not core product capability gaps.',
 				severity: 'watch'
 			}
 		},
-		sources: [
-			'docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json',
-			'docs/ops/enforcement_control_plane_gap_register_2026-02-23.md',
-			'docs/ops/enforcement_post_closure_sanity_2026-02-26.md'
-		]
+		sources: ['Finance telemetry snapshot', 'Control gap register', 'Post-release sanity checks']
 	}
 ] as const;
 
