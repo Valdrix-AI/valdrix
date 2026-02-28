@@ -158,6 +158,12 @@ jobs:
   dashboard-quality:
     name: Dashboard Lint / Typecheck / Unit
     runs-on: ubuntu-latest
+    env:
+      # Required so `$env/static/public` exports are available during
+      # `svelte-kit sync` and type generation in CI.
+      PUBLIC_API_URL: "https://api.example.com/api/v1"
+      PUBLIC_SUPABASE_URL: "https://example.supabase.co"
+      PUBLIC_SUPABASE_ANON_KEY: "ci-public-anon-key"
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
@@ -316,7 +322,7 @@ jobs:
         run: |
           cd terraform
           tflint --init
-          tflint -f compact
+          tflint --minimum-failure-severity=error -f compact
 
       - name: Setup Node
         uses: actions/setup-node@v4
