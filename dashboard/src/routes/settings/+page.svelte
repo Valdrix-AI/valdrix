@@ -813,7 +813,7 @@
 </script>
 
 <svelte:head>
-	<title>Settings | Valdrix</title>
+	<title>Settings | Valdrics</title>
 </svelte:head>
 
 <div class="space-y-8">
@@ -851,7 +851,7 @@
 					<span>🧭</span> Default Persona
 				</h2>
 				<p class="text-xs text-ink-400 mb-4">
-					Choose which workflows Valdrix prioritizes by default. This does not change access
+					Choose which workflows Valdrics prioritizes by default. This does not change access
 					permissions.
 				</p>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1231,7 +1231,7 @@
 						<div class="p-4 rounded-lg bg-warning-900/10 border border-warning-900/30">
 							<h4 class="text-sm font-bold text-warning-400 mb-1">⚠️ Safety Disclaimer</h4>
 							<p class="text-xs text-warning-500 leading-relaxed">
-								Auto-Pilot mode allows Valdrix to perform destructive actions (deletion) on
+								Auto-Pilot mode allows Valdrics to perform destructive actions (deletion) on
 								identified resources. Always ensure you have regular backups. Actions are only taken
 								if the AI confidence exceeds the specified threshold.
 							</p>

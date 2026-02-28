@@ -275,6 +275,7 @@ async def test_check_budget_and_alert_dispatch_paths() -> None:
 @pytest.mark.parametrize(
     ("tier", "expected_limit", "fair_use_enabled"),
     [
+        (manager_module.PricingTier.FREE, 1.0, False),
         (manager_module.PricingTier.GROWTH, 10.0, False),
         (manager_module.PricingTier.PRO, 50.0, True),
     ],
@@ -511,6 +512,54 @@ async def test_check_and_reserve_budget_logs_and_releases_slot_on_unexpected_err
 
 
 @pytest.mark.asyncio
+async def test_check_and_reserve_budget_unexpected_error_without_concurrency_slot() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=RuntimeError("db-down-no-slot"))
+
+    release_slot = AsyncMock()
+    manager = SimpleNamespace(
+        estimate_cost=_Manager.estimate_cost,
+        _to_decimal=_Manager._to_decimal,
+        _enforce_daily_analysis_limit=AsyncMock(),
+        _release_fair_use_inflight_slot=release_slot,
+    )
+    settings = SimpleNamespace(LLM_FAIR_USE_GUARDS_ENABLED=True)
+
+    with (
+        patch(
+            "app.shared.llm.budget_manager.get_tenant_tier",
+            new=AsyncMock(return_value=manager_module.PricingTier.PRO),
+        ),
+        patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
+        patch(
+            "app.shared.llm.budget_execution.record_authenticated_abuse_signal",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.shared.llm.budget_execution.enforce_global_abuse_guard",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.shared.llm.budget_execution.enforce_fair_use_guards",
+            new=AsyncMock(return_value=False),
+        ),
+        patch("app.shared.llm.budget_manager.logger") as logger,
+        pytest.raises(RuntimeError, match="db-down-no-slot"),
+    ):
+        await budget_execution.check_and_reserve_budget(
+            manager,
+            tenant_id,
+            db,
+            prompt_tokens=1,
+            completion_tokens=1,
+        )
+
+    release_slot.assert_not_awaited()
+    logger.exception.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_record_usage_entry_handles_awaitable_budget_accessor_and_metric_debug_failure() -> None:
     tenant_id = uuid4()
     user_id = uuid4()
@@ -564,6 +613,46 @@ async def test_record_usage_entry_handles_awaitable_budget_accessor_and_metric_d
 
 
 @pytest.mark.asyncio
+async def test_record_usage_entry_non_callable_budget_accessor_path() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=None))
+    db.flush = AsyncMock()
+    db.commit = AsyncMock()
+    db.add = MagicMock()
+
+    manager = SimpleNamespace(
+        BYOK_PLATFORM_FEE_USD=Decimal("0.0100"),
+        estimate_cost=_Manager.estimate_cost,
+        _to_decimal=_Manager._to_decimal,
+        _check_budget_and_alert=AsyncMock(),
+        _release_fair_use_inflight_slot=AsyncMock(),
+    )
+    metric_counter = SimpleNamespace(inc=MagicMock())
+    metric = SimpleNamespace(labels=MagicMock(return_value=metric_counter))
+
+    with (
+        patch("app.shared.llm.budget_manager.LLMUsage", return_value=object()),
+        patch(
+            "app.shared.llm.budget_manager.get_tenant_tier",
+            new=AsyncMock(return_value=manager_module.PricingTier.PRO),
+        ),
+        patch("app.shared.llm.budget_manager.LLM_SPEND_USD", metric),
+    ):
+        await budget_execution.record_usage_entry(
+            manager,
+            tenant_id,
+            db,
+            model="gpt-4o",
+            prompt_tokens=5,
+            completion_tokens=5,
+        )
+
+    manager._check_budget_and_alert.assert_awaited_once()
+    manager._release_fair_use_inflight_slot.assert_awaited_once_with(tenant_id)
+
+
+@pytest.mark.asyncio
 async def test_record_usage_entry_logs_rollback_failure_warning() -> None:
     tenant_id = uuid4()
     db = AsyncMock()
@@ -598,12 +687,61 @@ async def test_record_usage_entry_logs_rollback_failure_warning() -> None:
 
 
 @pytest.mark.asyncio
+async def test_record_usage_entry_error_without_rollback_callable() -> None:
+    tenant_id = uuid4()
+    db = SimpleNamespace(
+        execute=AsyncMock(return_value=MagicMock(scalar_one_or_none=lambda: None)),
+        add=MagicMock(side_effect=RuntimeError("add-failed-no-rollback")),
+        flush=AsyncMock(),
+        commit=AsyncMock(),
+    )
+
+    manager = SimpleNamespace(
+        BYOK_PLATFORM_FEE_USD=Decimal("0.0100"),
+        estimate_cost=_Manager.estimate_cost,
+        _to_decimal=_Manager._to_decimal,
+        _check_budget_and_alert=AsyncMock(),
+        _release_fair_use_inflight_slot=AsyncMock(),
+    )
+
+    with (
+        patch("app.shared.llm.budget_manager.LLMUsage", return_value=object()),
+        patch("app.shared.llm.budget_manager.logger") as logger,
+    ):
+        await budget_execution.record_usage_entry(
+            manager,
+            tenant_id,
+            db,  # type: ignore[arg-type]
+            model="gpt-4o",
+            prompt_tokens=1,
+            completion_tokens=1,
+        )
+
+    logger.error.assert_called_once()
+    logger.warning.assert_not_called()
+    manager._release_fair_use_inflight_slot.assert_awaited_once_with(tenant_id)
+
+
+@pytest.mark.asyncio
 async def test_check_budget_state_handles_awaitable_budget_accessor() -> None:
     tenant_id = uuid4()
     db = AsyncMock()
     db.execute = AsyncMock(
         return_value=SimpleNamespace(scalar_one_or_none=lambda: _async_value(None))
     )
+    cache = SimpleNamespace(enabled=False, client=None)
+
+    with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
+        state = await budget_execution.check_budget_state(_Manager, tenant_id, db)
+
+    assert state == manager_module.BudgetStatus.OK
+
+
+@pytest.mark.asyncio
+async def test_check_budget_state_non_callable_budget_accessor_defaults_ok() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=None))
     cache = SimpleNamespace(enabled=False, client=None)
 
     with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):

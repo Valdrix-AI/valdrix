@@ -1771,6 +1771,7 @@ async def test_approval_token_claims_include_project_and_hourly_cost_binding(db)
 
     service = EnforcementService(db)
     payload = service._decode_approval_token(token)
+    assert str(payload.get("token_type")) == "enforcement_approval"
     assert str(payload.get("project_id")) == project_id
     assert str(payload.get("max_monthly_delta_usd")) == str(
         decision.estimated_monthly_delta_usd

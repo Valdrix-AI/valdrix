@@ -659,6 +659,107 @@ class TestAWSCURAdapter:
             end=None,
         )
 
+    async def test_process_parquet_streamingly_prefers_iter_batches_when_available(
+        self, mock_creds: AWSCredentials
+    ) -> None:
+        adapter = AWSCURAdapter(mock_creds)
+
+        df_first = pd.DataFrame(
+            {
+                "lineItem/UsageStartDate": [
+                    "2026-02-01T00:00:00Z",
+                    "2026-02-01T01:00:00Z",
+                ],
+                "lineItem/UnblendedCost": ["1.0", "2.0"],
+                "lineItem/CurrencyCode": ["USD", "USD"],
+                "lineItem/ProductCode": ["AmazonEC2", "AmazonEC2"],
+                "product/region": ["us-east-1", "us-east-1"],
+                "lineItem/UsageType": ["BoxUsage", "BoxUsage"],
+            }
+        )
+        df_second = pd.DataFrame(
+            {
+                "lineItem/UsageStartDate": ["2026-02-01T02:00:00Z"],
+                "lineItem/UnblendedCost": ["3.0"],
+                "lineItem/CurrencyCode": ["USD"],
+                "lineItem/ProductCode": ["AmazonS3"],
+                "product/region": ["us-east-1"],
+                "lineItem/UsageType": ["Storage"],
+            }
+        )
+
+        class _FakeBatch:
+            def __init__(self, frame: pd.DataFrame) -> None:
+                self._frame = frame
+
+            def to_pandas(self) -> pd.DataFrame:
+                return self._frame
+
+        class _FakeParquetFile:
+            num_row_groups = 0
+
+            def iter_batches(self, batch_size: int):
+                assert batch_size > 0
+                yield _FakeBatch(df_first)
+                yield _FakeBatch(df_second)
+
+            def read_row_group(self, _idx: int):
+                raise AssertionError("read_row_group should not be used when iter_batches works")
+
+        with patch(
+            "app.shared.adapters.aws_cur.pq.ParquetFile",
+            return_value=_FakeParquetFile(),
+        ):
+            summary = adapter._process_parquet_streamingly("/tmp/cur.parquet")
+
+        assert summary.total_cost == Decimal("6")
+        assert len(summary.records) == 3
+        assert summary.by_service["AmazonEC2"] == Decimal("3")
+        assert summary.by_service["AmazonS3"] == Decimal("3")
+
+    async def test_process_parquet_streamingly_falls_back_when_iter_batches_fails(
+        self, mock_creds: AWSCredentials
+    ) -> None:
+        adapter = AWSCURAdapter(mock_creds)
+        df = pd.DataFrame(
+            {
+                "lineItem/UsageStartDate": ["2026-02-01T00:00:00Z"],
+                "lineItem/UnblendedCost": ["4.0"],
+                "lineItem/CurrencyCode": ["USD"],
+                "lineItem/ProductCode": ["AmazonRDS"],
+                "product/region": ["us-east-1"],
+                "lineItem/UsageType": ["InstanceUsage"],
+            }
+        )
+
+        class _FakeTable:
+            def to_pandas(self) -> pd.DataFrame:
+                return df
+
+        class _FakeParquetFile:
+            num_row_groups = 1
+
+            def iter_batches(self, batch_size: int):
+                _ = batch_size
+                raise RuntimeError("iter_batches failed")
+
+            def read_row_group(self, idx: int):
+                assert idx == 0
+                return _FakeTable()
+
+        with patch(
+            "app.shared.adapters.aws_cur.pq.ParquetFile",
+            return_value=_FakeParquetFile(),
+        ), patch("app.shared.adapters.aws_cur.logger.warning") as mock_warning:
+            summary = adapter._process_parquet_streamingly("/tmp/cur.parquet")
+
+        assert summary.total_cost == Decimal("4")
+        assert len(summary.records) == 1
+        mock_warning.assert_any_call(
+            "cur_iter_batches_failed_fallback",
+            error="iter_batches failed",
+        )
+
     async def test_process_parquet_streamingly_handles_read_and_row_parse_errors(
         self, mock_creds: AWSCredentials
     ) -> None:

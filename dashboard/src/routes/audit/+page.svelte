@@ -302,7 +302,7 @@
 </script>
 
 <svelte:head>
-	<title>Audit Logs | Valdrix</title>
+	<title>Audit Logs | Valdrics</title>
 </svelte:head>
 
 <div class="space-y-8">

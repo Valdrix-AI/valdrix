@@ -173,7 +173,7 @@
 						Select
 					</div>
 				</div>
-				<div class="text-[10px] text-accent-400/60 font-mono">Valdrix Command Palette</div>
+				<div class="text-[10px] text-accent-400/60 font-mono">Valdrics Command Palette</div>
 			</div>
 		</div>
 	</div>

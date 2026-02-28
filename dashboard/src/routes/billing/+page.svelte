@@ -167,7 +167,7 @@
 </script>
 
 <svelte:head>
-	<title>Billing | Valdrix</title>
+	<title>Billing | Valdrics</title>
 </svelte:head>
 
 <div class="space-y-8">

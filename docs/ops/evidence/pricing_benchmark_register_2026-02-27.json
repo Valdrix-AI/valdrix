@@ -1,0 +1,104 @@
+{
+  "captured_at": "2026-02-27T22:00:00Z",
+  "refresh_policy": {
+    "max_source_age_days": 120,
+    "required_source_classes": [
+      "vendor_pricing_page",
+      "industry_benchmark_report",
+      "standards_guidance"
+    ],
+    "refresh_cadence": "quarterly"
+  },
+  "thresholds": {
+    "minimum_source_count": 8,
+    "minimum_confidence_score": 0.7
+  },
+  "sources": [
+    {
+      "id": "finops-capabilities",
+      "title": "FinOps Framework Capabilities",
+      "url": "https://www.finops.org/framework/capabilities/",
+      "source_class": "standards_guidance",
+      "crawled_at": "2026-02-27T21:00:00Z",
+      "confidence_score": 0.97,
+      "notes": "Primary standards source for governance and capability framing."
+    },
+    {
+      "id": "finops-maturity",
+      "title": "FinOps Maturity Assessment",
+      "url": "https://www.finops.org/framework/maturity-assessment/",
+      "source_class": "standards_guidance",
+      "crawled_at": "2026-02-27T21:00:00Z",
+      "confidence_score": 0.95,
+      "notes": "Phased maturity anchor for rollout guardrails."
+    },
+    {
+      "id": "focus-changelog",
+      "title": "FOCUS Changelog",
+      "url": "https://focus.finops.org/changelog/",
+      "source_class": "standards_guidance",
+      "crawled_at": "2026-02-27T21:00:00Z",
+      "confidence_score": 0.95,
+      "notes": "Cost data normalization and commitments/virtual currency updates."
+    },
+    {
+      "id": "aws-cost-optimization",
+      "title": "AWS Well-Architected Cost Optimization",
+      "url": "https://docs.aws.amazon.com/wellarchitected/latest/cost-optimization-pillar/welcome.html",
+      "source_class": "standards_guidance",
+      "crawled_at": "2026-02-27T21:00:00Z",
+      "confidence_score": 0.94,
+      "notes": "Cloud provider cost governance guidance."
+    },
+    {
+      "id": "stripe-change-price",
+      "title": "Stripe Billing: Change the price of existing subscriptions",
+      "url": "https://docs.stripe.com/billing/subscriptions/change-price",
+      "source_class": "vendor_pricing_page",
+      "crawled_at": "2026-02-27T21:00:00Z",
+      "confidence_score": 0.93,
+      "notes": "Primary operational guidance for migration mechanics."
+    },
+    {
+      "id": "chargebee-migration",
+      "title": "Chargebee: Migrate subscriptions",
+      "url": "https://www.chargebee.com/docs/billing/2.0/subscriptions/migrate-subscriptions",
+      "source_class": "vendor_pricing_page",
+      "crawled_at": "2026-02-27T21:00:00Z",
+      "confidence_score": 0.9,
+      "notes": "Reference for grandfathering and controlled price transition."
+    },
+    {
+      "id": "chartmogul-growth-report",
+      "title": "ChartMogul SaaS Growth Report",
+      "url": "https://chartmogul.com/saas-growth-report/",
+      "source_class": "industry_benchmark_report",
+      "crawled_at": "2026-02-27T21:00:00Z",
+      "confidence_score": 0.8,
+      "notes": "Industry benchmark signal for retention/expansion context."
+    },
+    {
+      "id": "chartmogul-benchmarks",
+      "title": "ChartMogul SaaS Benchmarks",
+      "url": "https://chartmogul.com/reports/saas-benchmarks/",
+      "source_class": "industry_benchmark_report",
+      "crawled_at": "2026-02-27T21:00:00Z",
+      "confidence_score": 0.79,
+      "notes": "Supplemental benchmark signal for growth and pricing context."
+    }
+  ],
+  "summary": {
+    "total_sources": 8,
+    "class_counts": {
+      "standards_guidance": 4,
+      "vendor_pricing_page": 2,
+      "industry_benchmark_report": 2
+    },
+    "oldest_source_age_days": 0.04
+  },
+  "gate_results": {
+    "pkg_gate_020_register_fresh": true,
+    "pkg_gate_020_required_classes_present": true,
+    "pkg_gate_020_minimum_sources_met": true
+  }
+}

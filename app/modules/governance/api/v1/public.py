@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
-from app.shared.core.pricing import PricingTier, normalize_tier
+from app.shared.core.pricing import FeatureFlag, is_feature_enabled, normalize_tier
 from app.shared.lead_gen.assessment import FreeAssessmentService
 from app.shared.core.rate_limit import auth_limit, rate_limit
 from app.shared.core.turnstile import (
@@ -143,7 +143,7 @@ async def discover_sso_federation(
 
     mapping, raw_plan = rows[0]
     tier = normalize_tier(raw_plan)
-    if tier not in {PricingTier.PRO, PricingTier.ENTERPRISE}:
+    if not is_feature_enabled(tier, FeatureFlag.SSO):
         return SsoDiscoveryResponse(
             available=False, reason="tier_not_eligible_for_sso_federation"
         )

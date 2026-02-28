@@ -14,7 +14,10 @@ import structlog
 from app.models.enforcement import EnforcementSource
 from app.modules.enforcement.api.v1.actions import router as actions_router
 from app.modules.enforcement.api.v1.approvals import router as approvals_router
-from app.modules.enforcement.api.v1.common import tenant_or_403
+from app.modules.enforcement.api.v1.common import (
+    tenant_or_403,
+    require_features_or_403,
+)
 from app.modules.enforcement.api.v1.exports import router as exports_router
 from app.modules.enforcement.api.v1.ledger import router as ledger_router
 from app.modules.enforcement.api.v1.policy_budget_credit import (
@@ -40,6 +43,7 @@ from app.modules.enforcement.domain.service import (
     gate_result_to_response,
 )
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
+from app.shared.core.pricing import FeatureFlag
 from app.shared.core.config import get_settings
 from app.shared.core.ops_metrics import (
     ENFORCEMENT_GATE_DECISIONS_TOTAL,
@@ -379,6 +383,11 @@ async def gate_terraform(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> GateDecisionResponse:
+    await require_features_or_403(
+        user=current_user,
+        db=db,
+        features=(FeatureFlag.API_ACCESS, FeatureFlag.POLICY_CONFIGURATION),
+    )
     return await _run_gate(
         request=request,
         payload=payload,
@@ -397,6 +406,11 @@ async def gate_k8s_admission(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> GateDecisionResponse:
+    await require_features_or_403(
+        user=current_user,
+        db=db,
+        features=(FeatureFlag.API_ACCESS, FeatureFlag.POLICY_CONFIGURATION),
+    )
     return await _run_gate(
         request=request,
         payload=payload,
@@ -415,6 +429,11 @@ async def gate_terraform_preflight(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> TerraformPreflightResponse:
+    await require_features_or_403(
+        user=current_user,
+        db=db,
+        features=(FeatureFlag.API_ACCESS, FeatureFlag.POLICY_CONFIGURATION),
+    )
     idempotency_header = request.headers.get("Idempotency-Key")
     default_idempotency_key = f"terraform:{payload.run_id}:{payload.stage}"[:128]
     gate_metadata = {
@@ -490,6 +509,11 @@ async def gate_k8s_admission_review(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> K8sAdmissionReviewResponse:
+    await require_features_or_403(
+        user=current_user,
+        db=db,
+        features=(FeatureFlag.API_ACCESS, FeatureFlag.POLICY_CONFIGURATION),
+    )
     review_request = payload.request
     labels, annotations, metadata_name, metadata_namespace = _extract_k8s_labels_annotations(
         review_request.obj
@@ -610,6 +634,11 @@ async def gate_cloud_event(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> GateDecisionResponse:
+    await require_features_or_403(
+        user=current_user,
+        db=db,
+        features=(FeatureFlag.API_ACCESS, FeatureFlag.POLICY_CONFIGURATION),
+    )
     idempotency_header = request.headers.get("Idempotency-Key")
     cloud_event_default_idempotency = (
         f"cloudevent:{payload.cloud_event.id}"[:128]

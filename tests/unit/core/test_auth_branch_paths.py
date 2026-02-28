@@ -160,6 +160,83 @@ async def test_get_current_user_schema_mismatch_fallback_without_optional_column
 
 
 @pytest.mark.asyncio
+async def test_get_current_user_sqlite_backend_skips_nested_probe() -> None:
+    user_id = uuid4()
+    tenant_id = uuid4()
+    request = MagicMock(spec=Request)
+    request.state = MagicMock()
+    credentials = SimpleNamespace(credentials="token")
+    db = AsyncMock()
+    db.get_bind = MagicMock(
+        return_value=SimpleNamespace(
+            dialect=SimpleNamespace(name="sqlite"),
+        )
+    )
+    db.begin_nested = MagicMock(side_effect=AssertionError("must not be called"))
+    db.execute.side_effect = [
+        _auth_result_row_with_optional(user_id, tenant_id),
+        _identity_result(None),
+    ]
+
+    with (
+        patch(
+            "app.shared.core.auth.decode_jwt",
+            return_value={"sub": str(user_id), "email": "user@example.com"},
+        ),
+        patch(
+            "app.shared.core.auth.set_session_tenant_id",
+            new_callable=AsyncMock,
+        ) as mock_set_tenant,
+    ):
+        user = await get_current_user(request, credentials, db)
+
+    assert user.id == user_id
+    assert user.tenant_id == tenant_id
+    db.begin_nested.assert_not_called()
+    mock_set_tenant.assert_awaited_once_with(db, tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_sqlite_schema_mismatch_rolls_back_then_retries() -> None:
+    user_id = uuid4()
+    tenant_id = uuid4()
+    request = MagicMock(spec=Request)
+    request.state = MagicMock()
+    credentials = SimpleNamespace(credentials="token")
+    db = AsyncMock()
+    db.get_bind = MagicMock(
+        return_value=SimpleNamespace(
+            dialect=SimpleNamespace(name="sqlite"),
+        )
+    )
+    db.begin_nested = MagicMock(side_effect=AssertionError("must not be called"))
+    db.rollback = AsyncMock()
+    db.execute.side_effect = [
+        Exception('column "persona" does not exist'),
+        _auth_result_row_without_optional(user_id, tenant_id),
+        _identity_result(None),
+    ]
+
+    with (
+        patch(
+            "app.shared.core.auth.decode_jwt",
+            return_value={"sub": str(user_id), "email": "user@example.com"},
+        ),
+        patch(
+            "app.shared.core.auth.set_session_tenant_id",
+            new_callable=AsyncMock,
+        ) as mock_set_tenant,
+    ):
+        user = await get_current_user(request, credentials, db)
+
+    assert user.id == user_id
+    assert user.tenant_id == tenant_id
+    db.begin_nested.assert_not_called()
+    db.rollback.assert_awaited_once()
+    mock_set_tenant.assert_awaited_once_with(db, tenant_id)
+
+
+@pytest.mark.asyncio
 async def test_get_current_user_invalid_persona_then_disabled_user_denied() -> None:
     user_id = uuid4()
     tenant_id = uuid4()

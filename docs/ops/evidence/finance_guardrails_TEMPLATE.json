@@ -1,0 +1,84 @@
+{
+  "captured_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "window": {
+    "start": "YYYY-MM-01T00:00:00Z",
+    "end": "YYYY-MM-DDT23:59:59Z",
+    "label": "YYYY-MM"
+  },
+  "metrics": {
+    "blended_gross_margin_percent": 0.0,
+    "p95_tenant_llm_cogs_pct_mrr": 0.0,
+    "annual_discount_impact_percent": 0.0,
+    "growth_to_pro_conversion_mom_delta_percent": 0.0,
+    "pro_to_enterprise_conversion_mom_delta_percent": 0.0,
+    "stress_margin_percent": 0.0
+  },
+  "thresholds": {
+    "min_blended_gross_margin_percent": 80.0,
+    "max_p95_tenant_llm_cogs_pct_mrr": 8.0,
+    "max_annual_discount_impact_percent": 18.0,
+    "min_growth_to_pro_conversion_mom_delta_percent": 0.0,
+    "min_pro_to_enterprise_conversion_mom_delta_percent": 0.0,
+    "min_stress_margin_percent": 75.0,
+    "required_consecutive_margin_closes": 2
+  },
+  "close_history": [
+    {
+      "month": "YYYY-MM",
+      "blended_gross_margin_percent": 0.0
+    },
+    {
+      "month": "YYYY-MM",
+      "blended_gross_margin_percent": 0.0
+    }
+  ],
+  "tier_unit_economics": [
+    {
+      "tier": "starter",
+      "mrr_usd": 0.0,
+      "effective_mrr_usd": 0.0,
+      "llm_cogs_usd": 0.0,
+      "infra_cogs_usd": 0.0,
+      "support_cogs_usd": 0.0,
+      "gross_margin_percent": 0.0
+    },
+    {
+      "tier": "growth",
+      "mrr_usd": 0.0,
+      "effective_mrr_usd": 0.0,
+      "llm_cogs_usd": 0.0,
+      "infra_cogs_usd": 0.0,
+      "support_cogs_usd": 0.0,
+      "gross_margin_percent": 0.0
+    },
+    {
+      "tier": "pro",
+      "mrr_usd": 0.0,
+      "effective_mrr_usd": 0.0,
+      "llm_cogs_usd": 0.0,
+      "infra_cogs_usd": 0.0,
+      "support_cogs_usd": 0.0,
+      "gross_margin_percent": 0.0
+    },
+    {
+      "tier": "enterprise",
+      "mrr_usd": 0.0,
+      "effective_mrr_usd": 0.0,
+      "llm_cogs_usd": 0.0,
+      "infra_cogs_usd": 0.0,
+      "support_cogs_usd": 0.0,
+      "gross_margin_percent": 0.0
+    }
+  ],
+  "stress_scenario": {
+    "infra_cost_multiplier": 2.0,
+    "projected_margin_percent": 0.0
+  },
+  "gate_results": {
+    "fin_gate_1_gross_margin_floor": false,
+    "fin_gate_2_llm_cogs_containment": false,
+    "fin_gate_3_annual_discount_impact": false,
+    "fin_gate_4_expansion_signal": false,
+    "fin_gate_5_stress_resilience": false
+  }
+}

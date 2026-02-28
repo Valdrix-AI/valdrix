@@ -278,6 +278,65 @@ def _build_enforcement_profile_endpoints(args: argparse.Namespace) -> list[str]:
     ]
 
 
+def _normalize_database_engine_name(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    candidate = raw.split("://", 1)[0].split("+", 1)[0]
+    if candidate.startswith("postgres"):
+        return "postgresql"
+    if candidate.startswith("sqlite"):
+        return "sqlite"
+    return candidate
+
+
+def _extract_health_database_engine(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    database = payload.get("database")
+    if not isinstance(database, dict):
+        return ""
+    return _normalize_database_engine_name(
+        database.get("engine") or database.get("dialect")
+    )
+
+
+async def _collect_runtime_snapshot(
+    *,
+    target_url: str,
+    headers: dict[str, str],
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    request_timeout = max(0.1, float(timeout_seconds))
+    snapshot: dict[str, Any] = {
+        "health_endpoint": DEEP_HEALTH_ENDPOINT,
+        "database_engine": "unknown",
+    }
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(request_timeout, connect=min(request_timeout, 5.0)),
+            headers=headers,
+        ) as client:
+            response = await client.get(f"{target_url}{DEEP_HEALTH_ENDPOINT}")
+        snapshot["health_status_code"] = int(response.status_code)
+        if response.headers.get("content-type", "").lower().startswith(
+            "application/json"
+        ):
+            payload = response.json()
+        else:
+            payload = {}
+        if isinstance(payload, dict):
+            status = payload.get("status")
+            if status is not None:
+                snapshot["status"] = str(status)
+            database_engine = _extract_health_database_engine(payload)
+            if database_engine:
+                snapshot["database_engine"] = database_engine
+    except Exception as exc:
+        snapshot["probe_error"] = format_exception_message(exc)
+    return snapshot
+
+
 async def _run_preflight_checks(
     *,
     target_url: str,
@@ -409,6 +468,11 @@ async def main() -> None:
             timeout_seconds=preflight_timeout,
             attempts=preflight_attempts,
         )
+        runtime_snapshot = await _collect_runtime_snapshot(
+            target_url=config.target_url,
+            headers=headers,
+            timeout_seconds=preflight_timeout,
+        )
         if not preflight.get("passed") and not allow_preflight_failures:
             failure_payload = {
                 "profile": str(args.profile),
@@ -418,6 +482,7 @@ async def main() -> None:
                 "runner": "scripts/load_test_api.py",
                 "status": "preflight_failed",
                 "preflight": preflight,
+                "runtime": runtime_snapshot,
                 "meets_targets": False,
                 "results": {
                     "total_requests": 0,
@@ -443,6 +508,12 @@ async def main() -> None:
             raise SystemExit(
                 "Preflight checks failed. Fix endpoint/auth/runtime health or re-run with --allow-preflight-failures."
             )
+    if skip_preflight:
+        runtime_snapshot = await _collect_runtime_snapshot(
+            target_url=config.target_url,
+            headers=headers,
+            timeout_seconds=preflight_timeout,
+        )
 
     def result_to_payload(result: object) -> dict[str, object]:
         return {
@@ -560,6 +631,7 @@ async def main() -> None:
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "runner": "scripts/load_test_api.py",
         "preflight": preflight,
+        "runtime": runtime_snapshot,
     }
 
     profile_defaults: dict[str, LoadTestThresholds] = {

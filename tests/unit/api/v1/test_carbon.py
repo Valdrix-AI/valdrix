@@ -358,6 +358,97 @@ async def test_get_carbon_budget_provider_required_and_cache_hit() -> None:
         await get_carbon_budget(user, AsyncMock(), provider=None)
     assert exc.value.status_code == 400
 
+
+def test_factor_set_and_update_log_mapping_helpers() -> None:
+    factor_row = MagicMock()
+    factor_row.id = uuid.uuid4()
+    factor_row.status = "active"
+    factor_row.is_active = True
+    factor_row.factor_source = "watttime"
+    factor_row.factor_version = "2026.01"
+    factor_row.factor_timestamp = datetime(2026, 2, 1, 10, 0, tzinfo=timezone.utc)
+    factor_row.methodology_version = "v2"
+    factor_row.factors_checksum_sha256 = "abc123"
+    factor_row.created_at = datetime(2026, 2, 1, 11, 0, tzinfo=timezone.utc)
+    factor_row.activated_at = datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc)
+    factor_item = carbon_api._factor_set_to_item(factor_row)
+    assert factor_item.id == str(factor_row.id)
+    assert factor_item.activated_at == factor_row.activated_at.isoformat()
+
+    log_row = MagicMock()
+    log_row.id = uuid.uuid4()
+    log_row.recorded_at = datetime(2026, 2, 1, 13, 0, tzinfo=timezone.utc)
+    log_row.action = "manual_activated"
+    log_row.message = "ok"
+    log_row.old_factor_set_id = None
+    log_row.new_factor_set_id = uuid.uuid4()
+    log_row.old_checksum_sha256 = None
+    log_row.new_checksum_sha256 = "def456"
+    log_row.details = "bad-shape"
+    log_item = carbon_api._update_log_to_item(log_row)
+    assert log_item.id == str(log_row.id)
+    assert log_item.new_factor_set_id == str(log_row.new_factor_set_id)
+    assert log_item.details == {}
+
+
+@pytest.mark.asyncio
+async def test_get_provider_connection_and_aws_gross_usage_branch() -> None:
+    db = AsyncMock()
+    tenant_id = uuid.uuid4()
+
+    with patch(
+        "app.modules.reporting.api.v1.carbon.list_tenant_connections",
+        new=AsyncMock(return_value=[]),
+    ):
+        assert await carbon_api._get_provider_connection(db, tenant_id, "aws") is None
+
+    connection = MagicMock()
+    with patch(
+        "app.modules.reporting.api.v1.carbon.list_tenant_connections",
+        new=AsyncMock(return_value=[connection]),
+    ):
+        assert (
+            await carbon_api._get_provider_connection(db, tenant_id, "aws")
+            is connection
+        )
+
+    adapter = MagicMock()
+    adapter.get_gross_usage = AsyncMock(return_value=[{"service": "EC2", "cost_usd": 1.0}])
+    with patch(
+        "app.modules.reporting.api.v1.carbon.AdapterFactory.get_adapter",
+        return_value=adapter,
+    ):
+        payload = await carbon_api._fetch_provider_cost_data(
+            connection=connection,
+            provider="aws",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 2),
+        )
+    assert payload[0]["provider"] == "aws"
+    adapter.get_gross_usage.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_green_schedule_cache_hit_branch() -> None:
+    user = MagicMock()
+    user.tenant_id = "tenant-123"
+
+    class CacheHit:
+        enabled = True
+
+        async def get(self, _key: str):
+            return {"region": "global", "optimal_start_time": None, "recommendation": "Execute now"}
+
+        async def set(self, _key: str, _value, ttl=None):
+            return True
+
+    with patch(
+        "app.modules.reporting.api.v1.carbon.get_cache_service",
+        return_value=CacheHit(),
+    ):
+        payload = await carbon_api.get_green_schedule(user=user)
+    assert payload["region"] == "global"
+
     cache = MagicMock()
     cache.enabled = True
     cache.get = AsyncMock(return_value={"alert_status": "cached"})

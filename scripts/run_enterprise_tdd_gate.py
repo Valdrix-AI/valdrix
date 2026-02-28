@@ -15,27 +15,60 @@ from pathlib import Path
 
 ENTERPRISE_GATE_TEST_TARGETS: tuple[str, ...] = (
     "tests/unit/enforcement",
+    "tests/unit/api/v1/test_attribution_branch_paths.py",
+    "tests/unit/api/v1/test_carbon.py",
+    "tests/unit/api/v1/test_costs_metrics_branch_paths.py",
+    "tests/unit/api/v1/test_currency_endpoints.py",
+    "tests/unit/api/v1/test_leaderboards_endpoints.py",
+    "tests/unit/api/v1/test_leadership_kpis_branch_paths.py",
+    "tests/unit/api/v1/test_leadership_kpis_branch_paths_2.py",
+    "tests/unit/api/v1/test_leadership_kpis_endpoints.py",
+    "tests/unit/api/v1/test_savings_branch_paths.py",
+    "tests/unit/api/v1/test_usage_endpoints.py",
+    "tests/unit/api/v1/test_usage_branch_paths.py",
     "tests/unit/shared/llm/test_budget_fair_use_branches.py",
     "tests/unit/shared/llm/test_budget_execution_branches.py",
     "tests/unit/shared/llm/test_budget_scheduler.py",
+    "tests/unit/shared/llm/test_pricing_data.py",
     "tests/unit/core/test_budget_manager_fair_use.py",
     "tests/unit/core/test_budget_manager_audit.py",
+    "tests/unit/llm/test_circuit_breaker.py",
+    "tests/unit/llm/test_delta_analysis.py",
+    "tests/unit/llm/test_delta_analysis_branch_paths_2.py",
+    "tests/unit/llm/test_delta_analysis_exhaustive.py",
     "tests/unit/llm/test_budget_manager.py",
     "tests/unit/llm/test_budget_manager_exhaustive.py",
+    "tests/unit/llm/test_guardrails_audit.py",
+    "tests/unit/llm/test_hybrid_scheduler.py",
+    "tests/unit/llm/test_hybrid_scheduler_exhaustive.py",
     "tests/unit/llm/test_factory_exhaustive.py",
     "tests/unit/llm/test_providers.py",
     "tests/unit/llm/test_usage_tracker.py",
     "tests/unit/llm/test_usage_tracker_audit.py",
+    "tests/unit/llm/test_zombie_analyzer.py",
+    "tests/unit/llm/test_zombie_analyzer_exhaustive.py",
     "tests/unit/llm/test_analyzer_exhaustive.py",
     "tests/unit/llm/test_analyzer_branch_edges.py",
+    "tests/unit/services/llm/test_guardrails_logic.py",
     "tests/unit/api/v1/test_costs_endpoints.py",
     "tests/unit/api/v1/test_costs_acceptance_payload_branches.py",
     "tests/unit/api/v1/test_reconciliation_endpoints.py",
     "tests/unit/services/llm/test_llm_logic.py",
     "tests/unit/ops/test_enforcement_failure_injection_pack.py",
     "tests/unit/ops/test_enforcement_stress_evidence_pack.py",
+    "tests/unit/ops/test_key_rotation_drill_evidence_pack.py",
+    "tests/unit/ops/test_verify_key_rotation_drill_evidence.py",
+    "tests/unit/ops/test_verify_enforcement_failure_injection_evidence.py",
     "tests/unit/ops/test_verify_enforcement_stress_evidence.py",
     "tests/unit/ops/test_verify_enforcement_post_closure_sanity.py",
+    "tests/unit/ops/test_verify_finance_guardrails_evidence.py",
+    "tests/unit/ops/test_finance_guardrails_evidence_pack.py",
+    "tests/unit/ops/test_verify_pricing_benchmark_register.py",
+    "tests/unit/ops/test_pricing_benchmark_register_pack.py",
+    "tests/unit/ops/test_release_artifact_templates_pack.py",
+    "tests/unit/supply_chain/test_verify_jwt_bcp_checklist.py",
+    "tests/unit/supply_chain/test_feature_enforceability_matrix.py",
+    "tests/unit/supply_chain/test_run_enforcement_release_evidence_gate.py",
     "tests/contract/test_openapi_contract.py",
 )
 
@@ -65,6 +98,59 @@ ANALYTICS_VISIBILITY_COVERAGE_INCLUDE: tuple[str, ...] = (
     "app/shared/llm/analyzer.py",
     "app/modules/reporting/api/v1/costs.py",
 )
+
+ENFORCEMENT_STRESS_EVIDENCE_PATH_ENV = "ENFORCEMENT_STRESS_EVIDENCE_PATH"
+ENFORCEMENT_STRESS_EVIDENCE_MAX_AGE_HOURS_ENV = (
+    "ENFORCEMENT_STRESS_EVIDENCE_MAX_AGE_HOURS"
+)
+ENFORCEMENT_STRESS_EVIDENCE_REQUIRED_ENV = "ENFORCEMENT_STRESS_EVIDENCE_REQUIRED"
+ENFORCEMENT_STRESS_EVIDENCE_MIN_DURATION_SECONDS_ENV = (
+    "ENFORCEMENT_STRESS_EVIDENCE_MIN_DURATION_SECONDS"
+)
+ENFORCEMENT_STRESS_EVIDENCE_MIN_CONCURRENT_USERS_ENV = (
+    "ENFORCEMENT_STRESS_EVIDENCE_MIN_CONCURRENT_USERS"
+)
+ENFORCEMENT_STRESS_EVIDENCE_REQUIRED_DATABASE_ENGINE_ENV = (
+    "ENFORCEMENT_STRESS_EVIDENCE_REQUIRED_DATABASE_ENGINE"
+)
+DEFAULT_ENFORCEMENT_STRESS_MIN_DURATION_SECONDS = "30"
+DEFAULT_ENFORCEMENT_STRESS_MIN_CONCURRENT_USERS = "10"
+DEFAULT_ENFORCEMENT_STRESS_REQUIRED_DATABASE_ENGINE = "postgresql"
+ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_PATH_ENV = (
+    "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_PATH"
+)
+ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_MAX_AGE_HOURS_ENV = (
+    "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_MAX_AGE_HOURS"
+)
+ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED_ENV = (
+    "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED"
+)
+ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH_ENV = (
+    "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH"
+)
+ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_MAX_AGE_HOURS_ENV = (
+    "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_MAX_AGE_HOURS"
+)
+ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED_ENV = (
+    "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED"
+)
+DEFAULT_ENFORCEMENT_FINANCE_GUARDRAILS_MAX_AGE_HOURS = "744"
+ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH_ENV = (
+    "ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH"
+)
+ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED_ENV = (
+    "ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED"
+)
+ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS_ENV = (
+    "ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS"
+)
+DEFAULT_ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS = "120"
+ENFORCEMENT_KEY_ROTATION_DRILL_PATH_ENV = "ENFORCEMENT_KEY_ROTATION_DRILL_PATH"
+ENFORCEMENT_KEY_ROTATION_DRILL_MAX_AGE_DAYS_ENV = (
+    "ENFORCEMENT_KEY_ROTATION_DRILL_MAX_AGE_DAYS"
+)
+DEFAULT_KEY_ROTATION_DRILL_PATH = "docs/ops/key-rotation-drill-2026-02-27.md"
+DEFAULT_KEY_ROTATION_DRILL_MAX_AGE_DAYS = "120"
 
 
 @dataclass
@@ -208,6 +294,11 @@ def _parse_coverage_report_args(cmd: Sequence[str]) -> tuple[list[str], int] | N
     return (include_patterns, fail_under)
 
 
+def _is_truthy(value: str | None) -> bool:
+    normalized = str(value or "").strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
+
+
 def build_gate_commands() -> list[list[str]]:
     pytest_cmd: list[str] = ["uv", "run", "pytest", "-q", "-o", "addopts="]
     pytest_cmd.extend(ENTERPRISE_GATE_TEST_TARGETS)
@@ -221,7 +312,15 @@ def build_gate_commands() -> list[list[str]]:
         ]
     )
 
-    return [
+    commands: list[list[str]] = [
+        [
+            "uv",
+            "run",
+            "python3",
+            "scripts/verify_jwt_bcp_checklist.py",
+            "--checklist-path",
+            "docs/security/jwt_bcp_checklist_2026-02-27.json",
+        ],
         [
             "uv",
             "run",
@@ -244,36 +343,213 @@ def build_gate_commands() -> list[list[str]]:
             "uv",
             "run",
             "python3",
-            "scripts/verify_enterprise_placeholder_guards.py",
-            "--profile",
-            "strict",
-        ],
-        pytest_cmd,
-        [
-            "uv",
-            "run",
-            "coverage",
-            "report",
-            '--include=app/modules/enforcement/*',
-            f"--fail-under={ENFORCEMENT_COVERAGE_FAIL_UNDER}",
-        ],
-        [
-            "uv",
-            "run",
-            "coverage",
-            "report",
-            f"--include={','.join(LLM_GUARDRAIL_COVERAGE_INCLUDE)}",
-            f"--fail-under={LLM_COVERAGE_FAIL_UNDER}",
-        ],
-        [
-            "uv",
-            "run",
-            "coverage",
-            "report",
-            f"--include={','.join(ANALYTICS_VISIBILITY_COVERAGE_INCLUDE)}",
-            f"--fail-under={ANALYTICS_VISIBILITY_COVERAGE_FAIL_UNDER}",
+            "scripts/verify_feature_enforceability_matrix.py",
+            "--matrix-path",
+            "docs/ops/feature_enforceability_matrix_2026-02-27.json",
         ],
     ]
+
+    key_rotation_drill_path = (
+        os.getenv(ENFORCEMENT_KEY_ROTATION_DRILL_PATH_ENV, "").strip()
+        or DEFAULT_KEY_ROTATION_DRILL_PATH
+    )
+    key_rotation_max_age_days = (
+        os.getenv(ENFORCEMENT_KEY_ROTATION_DRILL_MAX_AGE_DAYS_ENV, "").strip()
+        or DEFAULT_KEY_ROTATION_DRILL_MAX_AGE_DAYS
+    )
+    commands.append(
+        [
+            "uv",
+            "run",
+            "python3",
+            "scripts/verify_key_rotation_drill_evidence.py",
+            "--drill-path",
+            key_rotation_drill_path,
+            "--max-drill-age-days",
+            key_rotation_max_age_days,
+        ]
+    )
+
+    stress_evidence_path = os.getenv(ENFORCEMENT_STRESS_EVIDENCE_PATH_ENV, "").strip()
+    stress_evidence_required = _is_truthy(
+        os.getenv(ENFORCEMENT_STRESS_EVIDENCE_REQUIRED_ENV)
+    )
+    if stress_evidence_required and not stress_evidence_path:
+        raise ValueError(
+            "ENFORCEMENT_STRESS_EVIDENCE_REQUIRED is true but "
+            "ENFORCEMENT_STRESS_EVIDENCE_PATH is not set"
+        )
+    if stress_evidence_path:
+        stress_min_duration_seconds = (
+            os.getenv(ENFORCEMENT_STRESS_EVIDENCE_MIN_DURATION_SECONDS_ENV, "").strip()
+            or DEFAULT_ENFORCEMENT_STRESS_MIN_DURATION_SECONDS
+        )
+        stress_min_concurrent_users = (
+            os.getenv(ENFORCEMENT_STRESS_EVIDENCE_MIN_CONCURRENT_USERS_ENV, "").strip()
+            or DEFAULT_ENFORCEMENT_STRESS_MIN_CONCURRENT_USERS
+        )
+        stress_required_database_engine = (
+            os.getenv(
+                ENFORCEMENT_STRESS_EVIDENCE_REQUIRED_DATABASE_ENGINE_ENV, ""
+            ).strip()
+            or DEFAULT_ENFORCEMENT_STRESS_REQUIRED_DATABASE_ENGINE
+        )
+        stress_cmd = [
+            "uv",
+            "run",
+            "python3",
+            "scripts/verify_enforcement_stress_evidence.py",
+            "--evidence-path",
+            stress_evidence_path,
+            "--min-duration-seconds",
+            stress_min_duration_seconds,
+            "--min-concurrent-users",
+            stress_min_concurrent_users,
+            "--required-database-engine",
+            stress_required_database_engine,
+        ]
+        stress_artifact_max_age = os.getenv(
+            ENFORCEMENT_STRESS_EVIDENCE_MAX_AGE_HOURS_ENV, ""
+        ).strip()
+        if stress_artifact_max_age:
+            stress_cmd.extend(
+                [
+                    "--max-artifact-age-hours",
+                    stress_artifact_max_age,
+                ]
+            )
+        commands.append(stress_cmd)
+
+    failure_injection_evidence_path = os.getenv(
+        ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_PATH_ENV, ""
+    ).strip()
+    failure_injection_evidence_required = _is_truthy(
+        os.getenv(ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED_ENV)
+    )
+    if failure_injection_evidence_required and not failure_injection_evidence_path:
+        raise ValueError(
+            "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED is true but "
+            "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_PATH is not set"
+        )
+    if failure_injection_evidence_path:
+        failure_injection_cmd = [
+            "uv",
+            "run",
+            "python3",
+            "scripts/verify_enforcement_failure_injection_evidence.py",
+            "--evidence-path",
+            failure_injection_evidence_path,
+        ]
+        failure_injection_max_age = os.getenv(
+            ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_MAX_AGE_HOURS_ENV, ""
+        ).strip()
+        if failure_injection_max_age:
+            failure_injection_cmd.extend(
+                [
+                    "--max-artifact-age-hours",
+                    failure_injection_max_age,
+                ]
+            )
+        commands.append(failure_injection_cmd)
+
+    finance_evidence_path = os.getenv(
+        ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH_ENV, ""
+    ).strip()
+    finance_evidence_required = _is_truthy(
+        os.getenv(ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED_ENV)
+    )
+    if finance_evidence_required and not finance_evidence_path:
+        raise ValueError(
+            "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED is true but "
+            "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH is not set"
+        )
+    if finance_evidence_path:
+        finance_max_age_hours = (
+            os.getenv(ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_MAX_AGE_HOURS_ENV, "").strip()
+            or DEFAULT_ENFORCEMENT_FINANCE_GUARDRAILS_MAX_AGE_HOURS
+        )
+        commands.append(
+            [
+                "uv",
+                "run",
+                "python3",
+                "scripts/verify_finance_guardrails_evidence.py",
+                "--evidence-path",
+                finance_evidence_path,
+                "--max-artifact-age-hours",
+                finance_max_age_hours,
+            ]
+        )
+
+    pricing_benchmark_register_path = os.getenv(
+        ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH_ENV, ""
+    ).strip()
+    pricing_benchmark_register_required = _is_truthy(
+        os.getenv(ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED_ENV)
+    )
+    if pricing_benchmark_register_required and not pricing_benchmark_register_path:
+        raise ValueError(
+            "ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED is true but "
+            "ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH is not set"
+        )
+    if pricing_benchmark_register_path:
+        pricing_max_source_age_days = (
+            os.getenv(
+                ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS_ENV, ""
+            ).strip()
+            or DEFAULT_ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS
+        )
+        commands.append(
+            [
+                "uv",
+                "run",
+                "python3",
+                "scripts/verify_pricing_benchmark_register.py",
+                "--register-path",
+                pricing_benchmark_register_path,
+                "--max-source-age-days",
+                pricing_max_source_age_days,
+            ]
+        )
+
+    commands.extend(
+        [
+            [
+                "uv",
+                "run",
+                "python3",
+                "scripts/verify_enterprise_placeholder_guards.py",
+                "--profile",
+                "strict",
+            ],
+            pytest_cmd,
+            [
+                "uv",
+                "run",
+                "coverage",
+                "report",
+                '--include=app/modules/enforcement/*',
+                f"--fail-under={ENFORCEMENT_COVERAGE_FAIL_UNDER}",
+            ],
+            [
+                "uv",
+                "run",
+                "coverage",
+                "report",
+                f"--include={','.join(LLM_GUARDRAIL_COVERAGE_INCLUDE)}",
+                f"--fail-under={LLM_COVERAGE_FAIL_UNDER}",
+            ],
+            [
+                "uv",
+                "run",
+                "coverage",
+                "report",
+                f"--include={','.join(ANALYTICS_VISIBILITY_COVERAGE_INCLUDE)}",
+                f"--fail-under={ANALYTICS_VISIBILITY_COVERAGE_FAIL_UNDER}",
+            ],
+        ]
+    )
+    return commands
 
 
 def _format_command(cmd: Sequence[str]) -> str:
@@ -289,6 +565,10 @@ def run_gate(*, dry_run: bool) -> int:
         coverage_data_path.unlink(missing_ok=True)
     command_env = os.environ.copy()
     command_env["COVERAGE_FILE"] = str(coverage_data_path)
+    # Enforce deterministic release-gate behavior regardless of ambient shell values.
+    # Some local profiles export non-boolean DEBUG values (for example "release"),
+    # which can break pydantic settings parsing in pytest bootstrap.
+    command_env["DEBUG"] = "false"
     for cmd in commands:
         rendered = _format_command(cmd)
         print(f"[enterprise-gate] {rendered}")

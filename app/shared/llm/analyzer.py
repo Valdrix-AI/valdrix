@@ -3,7 +3,7 @@ import asyncio
 import yaml
 import os
 import uuid
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING, cast
 import json
 import re
 import copy
@@ -404,15 +404,9 @@ class FinOpsAnalyzer:
                     error=str(e),
                     operation_id=operation_id,
                 )
-                # Fail open or closed? PRODUCTION: Fail closed if it's a known tenant
-                # Defensive invariant: this except block only has executable statements
-                # when tenant_id/effective_db entered the reservation branch above. The
-                # anonymous path skips that branch entirely, so it cannot land here under
-                # current control flow unless this method is refactored.
-                if tenant_id:
-                    raise AIAnalysisError(
-                        f"Budget verification failed: {str(e)}"
-                    ) from e
+                # Defensive invariant: this except block only executes inside the
+                # tenant-scoped reservation path above.
+                raise AIAnalysisError(f"Budget verification failed: {str(e)}") from e
 
             # 3. Prepare Data
             try:
@@ -467,13 +461,9 @@ class FinOpsAnalyzer:
                     token_usage = response_metadata.get("token_usage", {})
                     # Defensive invariant: reserved_amount is only assigned inside the
                     # tenant-scoped reservation branch, so tenant_id should always be set.
-                    # Keep the guard to fail safely if future refactors break that invariant.
-                    if tenant_id is None:
-                        raise AIAnalysisError(
-                            "Tenant ID required to record metered LLM usage"
-                        )
+                    tenant_id_for_usage = cast(UUID, tenant_id)
                     await LLMBudgetManager.record_usage(
-                        tenant_id=tenant_id,
+                        tenant_id=tenant_id_for_usage,
                         db=effective_db,
                         model=final_model,
                         provider=effective_provider,

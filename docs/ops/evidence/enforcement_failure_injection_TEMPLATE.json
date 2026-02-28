@@ -1,0 +1,27 @@
+{
+  "profile": "enforcement_failure_injection",
+  "runner": "staged_failure_injection",
+  "execution_class": "staged",
+  "captured_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "executed_by": "incident.commander@example.com",
+  "approved_by": "release.approver@example.com",
+  "scenarios": [
+    {
+      "id": "FI-001",
+      "status": "passed",
+      "duration_seconds": 1.0,
+      "checks": [
+        "timeout fallback routed to configured fail-safe mode"
+      ],
+      "evidence_refs": [
+        "tests/unit/enforcement/test_enforcement_api.py::test_gate_failsafe_timeout_and_error_modes"
+      ]
+    }
+  ],
+  "summary": {
+    "total_scenarios": 5,
+    "passed_scenarios": 5,
+    "failed_scenarios": 0,
+    "overall_passed": true
+  }
+}

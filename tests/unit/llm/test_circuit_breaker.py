@@ -108,6 +108,19 @@ class TestLLMCircuitBreaker:
         # Should be open and unavailable
         assert not breaker.is_available("provider")
 
+    def test_is_available_open_circuit_without_failure_timestamp(self, breaker):
+        """Open state without a timestamp should remain unavailable."""
+        circuit = breaker._get_circuit("provider-no-ts")
+        circuit.state = CircuitState.OPEN
+        circuit.last_failure_time = None
+        assert breaker.is_available("provider-no-ts") is False
+
+    def test_is_available_unknown_state_falls_back_to_false(self, breaker):
+        """Defensive branch: unknown state should fail closed."""
+        circuit = breaker._get_circuit("provider-unknown")
+        circuit.state = "unknown-state"  # type: ignore[assignment]
+        assert breaker.is_available("provider-unknown") is False
+
     def test_is_available_open_circuit_recovery_timeout(self, breaker):
         """Test is_available transitions to half-open after recovery timeout."""
         # Record failures to open circuit
@@ -186,6 +199,15 @@ class TestLLMCircuitBreaker:
         breaker.record_success("provider")
 
         assert circuit.state == CircuitState.HALF_OPEN
+        assert circuit.success_count == 1
+
+    def test_record_success_unknown_state_no_reset(self, breaker):
+        """Unknown state should not trigger CLOSED/HALF_OPEN transitions."""
+        circuit = breaker._get_circuit("provider")
+        circuit.state = "unknown-state"  # type: ignore[assignment]
+        circuit.failure_count = 4
+        breaker.record_success("provider")
+        assert circuit.failure_count == 4
         assert circuit.success_count == 1
 
     def test_record_failure_closed_circuit_opens_on_threshold(self, breaker):

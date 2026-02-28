@@ -50,6 +50,7 @@ from app.modules.enforcement.api.v1.schemas import (
 )
 from app.modules.enforcement.domain.policy_document import PolicyDocument
 from app.shared.core.auth import CurrentUser
+from app.shared.core.pricing import PricingTier
 
 
 def _request(method: str = "POST") -> Request:
@@ -78,6 +79,7 @@ def _actor(role: UserRole = UserRole.ADMIN) -> CurrentUser:
         email="enforcement-wrapper@test.local",
         tenant_id=uuid4(),
         role=role,
+        tier=PricingTier.PRO,
     )
 
 
@@ -369,6 +371,7 @@ async def test_approvals_endpoint_wrappers_cover_queue_and_consume_paths(monkeyp
         email="member@test.local",
         tenant_id=uuid4(),
         role="",
+        tier=PricingTier.PRO,
     )
     db = SimpleNamespace()
 
@@ -641,6 +644,7 @@ async def test_reservations_and_ledger_endpoint_wrappers_and_common_guard(monkey
         email="admin@test.local",
         tenant_id=tenant_id,
         role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
     )
 
     class _FakeService:

@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.shared.llm.pricing_data import ProviderCost, LLM_PRICING, refresh_llm_pricing
+from app.shared.llm.pricing_data import (
+    ProviderCost,
+    LLM_PRICING,
+    _safe_float,
+    refresh_llm_pricing,
+)
 
 
 class TestProviderCost:
@@ -51,6 +56,10 @@ class TestLLMPricing:
                 assert isinstance(model_cost, (ProviderCost, dict))
                 assert "input" in model_cost
                 assert "output" in model_cost
+
+    def test_safe_float_rejects_non_numeric_values(self):
+        assert _safe_float(object()) is None
+        assert _safe_float("not-a-number") is None
 
     @pytest.mark.asyncio
     async def test_refresh_llm_pricing_updates_from_db(self):

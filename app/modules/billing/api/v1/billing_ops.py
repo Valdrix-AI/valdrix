@@ -16,7 +16,12 @@ async def load_public_plans(
     logger: Any,
 ) -> list[dict[str, Any]]:
     from app.models.pricing import PricingPlan
-    from app.shared.core.pricing import PricingTier, TIER_CONFIG
+    from app.shared.core.pricing import (
+        PricingTier,
+        TIER_CONFIG,
+        get_tier_feature_maturity,
+        normalize_tier,
+    )
 
     try:
         result = await db.execute(
@@ -41,6 +46,12 @@ async def load_public_plans(
                     "period": "/mo",
                     "description": p["description"],
                     "features": p["display_features"],
+                    "feature_maturity": (
+                        get_tier_feature_maturity(normalize_tier(str(p["id"])))
+                        if str(p["id"]).strip().lower()
+                        in {tier.value for tier in PricingTier}
+                        else {}
+                    ),
                     "cta": p["cta_text"],
                     "popular": bool(p["is_popular"]),
                 }
@@ -73,6 +84,7 @@ async def load_public_plans(
                 "period": "/mo",
                 "description": config.get("description", ""),
                 "features": config.get("display_features", []),
+                "feature_maturity": get_tier_feature_maturity(tier),
                 "cta": config.get("cta", "Get Started"),
                 "popular": tier == PricingTier.GROWTH,
             }

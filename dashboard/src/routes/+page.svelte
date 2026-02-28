@@ -179,14 +179,14 @@
 
 <svelte:head>
 	{#if data.user}
-		<title>Dashboard | Valdrix</title>
+		<title>Dashboard | Valdrics</title>
 	{:else}
-		<title>Valdrix | Cloud Cost Intelligence</title>
+		<title>Valdrics | Cloud Cost Intelligence</title>
 		<meta
 			name="description"
-			content="Valdrix unifies FinOps, GreenOps, and ActiveOps into a single cloud intelligence surface with policy-driven remediation and audit-ready evidence."
+			content="Valdrics unifies FinOps, GreenOps, and ActiveOps into a single cloud intelligence surface with policy-driven remediation and audit-ready evidence."
 		/>
-		<meta property="og:title" content="Valdrix | Cloud Cost Intelligence" />
+		<meta property="og:title" content="Valdrics | Cloud Cost Intelligence" />
 		<meta
 			property="og:description"
 			content="Unify spend, carbon, and risk into a single signal map with policy-driven remediation and an exportable audit trail."
@@ -198,7 +198,7 @@
 			content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
 		/>
 		<meta name="twitter:card" content="summary_large_image" />
-		<meta name="twitter:title" content="Valdrix | Cloud Cost Intelligence" />
+		<meta name="twitter:title" content="Valdrics | Cloud Cost Intelligence" />
 		<meta
 			name="twitter:description"
 			content="FinOps + GreenOps + ActiveOps with policy-driven remediation and audit-ready exports."

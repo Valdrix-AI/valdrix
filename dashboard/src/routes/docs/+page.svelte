@@ -3,10 +3,10 @@
 </script>
 
 <svelte:head>
-	<title>Documentation | Valdrix</title>
+	<title>Documentation | Valdrics</title>
 	<meta
 		name="description"
-		content="Valdrix documentation for setup, dashboard workflows, API usage, and operational guidance."
+		content="Valdrics documentation for setup, dashboard workflows, API usage, and operational guidance."
 	/>
 </svelte:head>
 
@@ -14,8 +14,8 @@
 	<header class="space-y-3">
 		<h1 class="text-3xl font-bold text-ink-100">Documentation</h1>
 		<p class="text-ink-300 max-w-3xl">
-			Valdrix combines FinOps, GreenOps, and ActiveOps in one operator workflow. Use these guides to
-			connect cloud accounts, analyze findings, and run safe remediations.
+			Valdrics combines FinOps, GreenOps, and ActiveOps in one operator workflow. Use these guides
+			to connect cloud accounts, analyze findings, and run safe remediations.
 		</p>
 	</header>
 

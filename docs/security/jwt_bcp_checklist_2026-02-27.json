@@ -1,0 +1,84 @@
+{
+  "metadata": {
+    "checklist_version": "2026-02-27",
+    "baseline_standard": "RFC 8725 (JSON Web Token Best Current Practices)",
+    "source_urls": [
+      "https://www.rfc-editor.org/rfc/rfc8725"
+    ],
+    "scope": "Enforcement approval token issue/consume path"
+  },
+  "controls": [
+    {
+      "control_id": "JWT-ALG-ALLOWLIST",
+      "title": "Algorithm Allow-list Pinning",
+      "status": "implemented_baseline",
+      "requirement": "Decode path must pin allowed algorithms and reject implicit algorithm negotiation.",
+      "evidence": [
+        "app/modules/enforcement/domain/service.py",
+        "tests/unit/enforcement/test_enforcement_service_helpers.py"
+      ]
+    },
+    {
+      "control_id": "JWT-ISS-AUD-BOUND",
+      "title": "Issuer and Audience Validation",
+      "status": "implemented_baseline",
+      "requirement": "Decode path must validate issuer and audience against explicit contract values.",
+      "evidence": [
+        "app/modules/enforcement/domain/service.py",
+        "tests/unit/enforcement/test_enforcement_service.py"
+      ]
+    },
+    {
+      "control_id": "JWT-TYPE-BINDING",
+      "title": "Explicit Token Type Binding",
+      "status": "implemented_baseline",
+      "requirement": "Approval token payload must include explicit token type and decode path must enforce it.",
+      "evidence": [
+        "app/modules/enforcement/domain/service.py",
+        "tests/unit/enforcement/test_enforcement_service_helpers.py",
+        "tests/unit/enforcement/test_enforcement_service.py"
+      ]
+    },
+    {
+      "control_id": "JWT-TEMPORAL-CLAIMS",
+      "title": "Temporal Claim Enforcement",
+      "status": "implemented_baseline",
+      "requirement": "Decode path must require and validate exp, iat, and nbf claims.",
+      "evidence": [
+        "app/modules/enforcement/domain/service.py",
+        "tests/unit/enforcement/test_enforcement_service_helpers.py"
+      ]
+    },
+    {
+      "control_id": "JWT-BINDING-CLAIMS",
+      "title": "Business Binding Claims",
+      "status": "implemented_baseline",
+      "requirement": "Token must carry tenant/project/decision/resource binding claims and consume path must enforce mismatch rejection.",
+      "evidence": [
+        "app/modules/enforcement/domain/service.py",
+        "tests/unit/enforcement/test_enforcement_service.py"
+      ]
+    },
+    {
+      "control_id": "JWT-REPLAY-PROTECTION",
+      "title": "Replay Safety",
+      "status": "implemented_baseline",
+      "requirement": "Token consume path must enforce one-time use with deterministic replay rejection.",
+      "evidence": [
+        "app/modules/enforcement/domain/service.py",
+        "tests/unit/enforcement/test_enforcement_service.py"
+      ]
+    },
+    {
+      "control_id": "JWT-KEY-ROTATION-FALLBACK",
+      "title": "Rotation-Compatible Verification",
+      "status": "implemented_baseline",
+      "requirement": "Decode path must support secure fallback verification secrets during staged key rotation.",
+      "evidence": [
+        "app/modules/enforcement/domain/service.py",
+        "docs/runbooks/secret_rotation_emergency.md",
+        "tests/unit/enforcement/test_enforcement_service_helpers.py"
+      ]
+    }
+  ]
+}

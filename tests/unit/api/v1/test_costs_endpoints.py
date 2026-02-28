@@ -5,6 +5,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from fastapi import HTTPException
 from httpx import AsyncClient
 from app.models.background_job import BackgroundJob, JobStatus, JobType
 from app.models.cloud import CloudAccount, CostRecord
@@ -812,6 +813,47 @@ def test_build_unit_metrics_handles_zero_denominator_and_zero_baseline():
     assert len(metrics) == 2
     assert all(metric.delta_percent == 0.0 for metric in metrics)
     assert all(metric.is_anomalous is False for metric in metrics)
+
+
+def test_csv_cell_sanitization_and_anomaly_severity_validation() -> None:
+    assert costs_api._sanitize_csv_cell(None) == ""
+    assert costs_api._sanitize_csv_cell("") == ""
+    assert costs_api._sanitize_csv_cell("=2+2") == "'=2+2"
+    assert costs_api._sanitize_csv_cell("+sum(a1:a2)") == "'+sum(a1:a2)"
+    assert costs_api._sanitize_csv_cell("@cmd") == "'@cmd"
+    assert costs_api._sanitize_csv_cell("\tformula") == "'\tformula"
+    assert costs_api._sanitize_csv_cell("-safe-value") == "-safe-value"
+
+    assert costs_api._validate_anomaly_severity(" HIGH ") == "high"
+    with pytest.raises(HTTPException, match="Unsupported severity"):
+        costs_api._validate_anomaly_severity("emergency")
+
+
+def test_anomaly_to_response_item_maps_decimal_fields() -> None:
+    anomaly = costs_api.CostAnomaly(
+        day=date(2026, 2, 27),
+        provider="aws",
+        account_id=uuid.uuid4(),
+        account_name="prod-account",
+        service="AmazonEC2",
+        actual_cost_usd=Decimal("150"),
+        expected_cost_usd=Decimal("100"),
+        delta_cost_usd=Decimal("50"),
+        percent_change=50.0,
+        kind="spike",
+        probable_cause="spend_spike",
+        confidence=0.9,
+        severity="high",
+    )
+
+    item = costs_api._anomaly_to_response_item(anomaly)
+    assert item.day == "2026-02-27"
+    assert item.provider == "aws"
+    assert item.service == "AmazonEC2"
+    assert item.actual_cost_usd == 150.0
+    assert item.expected_cost_usd == 100.0
+    assert item.delta_cost_usd == 50.0
+    assert item.percent_change == 50.0
 
 
 @pytest.mark.asyncio

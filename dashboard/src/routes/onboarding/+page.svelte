@@ -1085,7 +1085,7 @@
 </script>
 
 <svelte:head>
-	<title>Onboarding | Valdrix</title>
+	<title>Onboarding | Valdrics</title>
 </svelte:head>
 
 <AuthGate authenticated={!!data.user} action="connect providers">
@@ -1122,7 +1122,7 @@
 			<div class="step-content">
 				<h2>Choose Your Cloud Provider</h2>
 				<p class="text-muted mb-8">
-					Valdrix uses read-only access to analyze your infrastructure and find waste.
+					Valdrics uses read-only access to analyze your infrastructure and find waste.
 				</p>
 
 				<div class="provider-grid">
@@ -1534,7 +1534,7 @@
 							</label>
 							<p class="text-xs text-ink-500 mt-2">
 								Enable this if this account is the Management Account of an AWS Organization.
-								Valdrix may discover likely member accounts and prefill linking suggestions for
+								Valdrics may discover likely member accounts and prefill linking suggestions for
 								review when organization permissions allow.
 							</p>
 						</div>
@@ -1881,7 +1881,7 @@
 						{/if}
 					</label>
 					<p class="text-xs text-ink-500 mt-2">
-						Enable this if this account is the Management Account of an AWS Organization. Valdrix
+						Enable this if this account is the Management Account of an AWS Organization. Valdrics
 						may discover likely member accounts and prefill linking suggestions for review when
 						organization permissions allow.
 					</p>
@@ -1921,7 +1921,7 @@
 				<div class="success-icon">🎉</div>
 				<h2>Connection Successful!</h2>
 				<p>
-					Valdrix can now analyze your {getProviderLabel(selectedProvider)} spend and include it in Cloud+
+					Valdrics can now analyze your {getProviderLabel(selectedProvider)} spend and include it in Cloud+
 					optimization workflows.
 				</p>
 

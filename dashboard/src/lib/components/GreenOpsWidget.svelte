@@ -74,7 +74,7 @@
 
 	<div class="action-footer">
 		<p class="text-xs text-ink-400">
-			Valdrix is reducing your carbon footprint by automatically culling idle High-TDP nodes.
+			Valdrics is reducing your carbon footprint by automatically culling idle High-TDP nodes.
 		</p>
 	</div>
 </div>

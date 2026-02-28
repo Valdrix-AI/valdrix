@@ -1,13 +1,36 @@
 from __future__ import annotations
 
-from datetime import datetime
-from unittest.mock import AsyncMock, patch
+from datetime import date, datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+
+from app.modules.reporting.api.v1 import leadership as leadership_api
+from app.shared.core.auth import CurrentUser, UserRole
+from app.shared.core.pricing import PricingTier
 
 
-@pytest.fixture
+def _user(*, tenant_id: object | None = None) -> CurrentUser:
+    return CurrentUser(
+        id=uuid4(),
+        email="leadership@example.com",
+        tenant_id=tenant_id if tenant_id is not None else uuid4(),
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+
+
+def _scalars_result(rows: list[object]) -> MagicMock:
+    result = MagicMock()
+    scalars = MagicMock()
+    scalars.all.return_value = rows
+    result.scalars.return_value = scalars
+    return result
+
+
 def _leadership_payload():
     from app.modules.reporting.domain.leadership_kpis import (
         LeadershipKpisResponse,
@@ -36,8 +59,7 @@ def _leadership_payload():
     )
 
 
-@pytest.fixture
-def _quarterly_payload(_leadership_payload):
+def _quarterly_payload():
     from app.modules.reporting.domain.commercial_reports import (
         QuarterlyCommercialProofResponse,
     )
@@ -46,6 +68,7 @@ def _quarterly_payload(_leadership_payload):
         SavingsProofResponse,
     )
 
+    leadership_payload = _leadership_payload()
     savings = SavingsProofResponse(
         start_date="2026-01-01",
         end_date="2026-03-31",
@@ -70,7 +93,6 @@ def _quarterly_payload(_leadership_payload):
         ],
         notes=[],
     )
-
     return QuarterlyCommercialProofResponse(
         period="explicit",
         year=2026,
@@ -80,17 +102,13 @@ def _quarterly_payload(_leadership_payload):
         as_of="2026-03-31T00:00:00+00:00",
         tier="pro",
         provider="aws",
-        leadership_kpis=_leadership_payload,
+        leadership_kpis=leadership_payload,
         savings_proof=savings,
         notes=[],
     )
 
 
-@pytest.mark.asyncio
-async def test_get_leadership_kpis_requires_tenant_context(async_client, app):
-    from app.shared.core.auth import CurrentUser, UserRole, get_current_user
-    from app.shared.core.pricing import PricingTier
-
+def test_get_leadership_kpis_requires_tenant_context() -> None:
     user = CurrentUser(
         id=uuid4(),
         email="tenantless@valdrix.io",
@@ -98,180 +116,140 @@ async def test_get_leadership_kpis_requires_tenant_context(async_client, app):
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
-    app.dependency_overrides[get_current_user] = lambda: user
-    try:
-        response = await async_client.get("/api/v1/leadership/kpis")
-        assert response.status_code == 403
-        assert response.json()["message"] == "Tenant context is required"
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
+    with pytest.raises(HTTPException) as exc:
+        leadership_api._require_tenant_id(user)
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Tenant context is required"
 
 
 @pytest.mark.asyncio
-async def test_get_leadership_kpis_maps_service_value_error(async_client, app, test_tenant):
-    from app.shared.core.auth import CurrentUser, UserRole, get_current_user
-    from app.shared.core.pricing import PricingTier
-
-    user = CurrentUser(
-        id=uuid4(),
-        email="leadership-errors@valdrix.io",
-        tenant_id=test_tenant.id,
-        role=UserRole.ADMIN,
-        tier=PricingTier.PRO,
-    )
-    app.dependency_overrides[get_current_user] = lambda: user
-    try:
-        with patch(
-            "app.modules.reporting.api.v1.leadership.LeadershipKpiService.compute",
-            new=AsyncMock(side_effect=ValueError("invalid leadership window")),
-        ):
-            response = await async_client.get(
-                "/api/v1/leadership/kpis",
-                params={"start_date": "2026-02-10", "end_date": "2026-02-01"},
-        )
-        assert response.status_code == 400
-        assert response.json()["message"] == "invalid leadership window"
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
+async def test_get_leadership_kpis_maps_service_value_error() -> None:
+    with patch.object(
+        leadership_api.LeadershipKpiService,
+        "compute",
+        new=AsyncMock(side_effect=ValueError("invalid leadership window")),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await leadership_api.get_leadership_kpis(
+                start_date=date(2026, 2, 10),
+                end_date=date(2026, 2, 1),
+                provider=None,
+                include_preliminary=False,
+                top_services_limit=10,
+                response_format="json",
+                current_user=_user(),
+                db=MagicMock(),
+            )
+    assert exc.value.status_code == 400
+    assert "invalid leadership window" in str(exc.value.detail)
 
 
 @pytest.mark.asyncio
-async def test_list_leadership_evidence_skips_invalid_payloads(
-    async_client,
-    app,
-    db,
-    test_tenant,
-    _leadership_payload,
-):
-    from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLog
-    from app.shared.core.auth import CurrentUser, UserRole, get_current_user
-    from app.shared.core.pricing import PricingTier
-
-    user = CurrentUser(
+async def test_list_leadership_evidence_skips_invalid_payloads() -> None:
+    payload = _leadership_payload()
+    tenant_id = uuid4()
+    user = _user(tenant_id=tenant_id)
+    valid_row = SimpleNamespace(
         id=uuid4(),
-        email="leadership-admin@valdrix.io",
-        tenant_id=test_tenant.id,
-        role=UserRole.ADMIN,
-        tier=PricingTier.PRO,
-    )
-    app.dependency_overrides[get_current_user] = lambda: user
-
-    valid_row = AuditLog(
-        tenant_id=test_tenant.id,
-        event_type=AuditEventType.LEADERSHIP_KPIS_CAPTURED.value,
-        event_timestamp=datetime(2026, 2, 1, 9, 0, 0),
-        details={"leadership_kpis": _leadership_payload.model_dump()},
+        correlation_id="run-1",
+        event_timestamp=datetime(2026, 2, 1, 9, 0, tzinfo=timezone.utc),
+        actor_id=uuid4(),
+        actor_email="admin@example.com",
         success=True,
+        details={"leadership_kpis": payload.model_dump()},
     )
-    invalid_type_row = AuditLog(
-        tenant_id=test_tenant.id,
-        event_type=AuditEventType.LEADERSHIP_KPIS_CAPTURED.value,
-        event_timestamp=datetime(2026, 2, 1, 8, 0, 0),
+    invalid_type_row = SimpleNamespace(
+        id=uuid4(),
+        correlation_id="run-2",
+        event_timestamp=datetime(2026, 2, 1, 8, 0, tzinfo=timezone.utc),
+        actor_id=None,
+        actor_email=None,
+        success=True,
         details={"leadership_kpis": "not-a-dict"},
-        success=True,
     )
-    invalid_schema_row = AuditLog(
-        tenant_id=test_tenant.id,
-        event_type=AuditEventType.LEADERSHIP_KPIS_CAPTURED.value,
-        event_timestamp=datetime(2026, 2, 1, 7, 0, 0),
+    invalid_schema_row = SimpleNamespace(
+        id=uuid4(),
+        correlation_id="run-3",
+        event_timestamp=datetime(2026, 2, 1, 7, 0, tzinfo=timezone.utc),
+        actor_id=None,
+        actor_email=None,
+        success=True,
         details={"leadership_kpis": {"start_date": "2026-01-01"}},
-        success=True,
     )
-    db.add_all([valid_row, invalid_type_row, invalid_schema_row])
-    await db.commit()
-
-    try:
-        response = await async_client.get("/api/v1/leadership/kpis/evidence", params={"limit": 25})
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["total"] == 1
-        assert len(payload["items"]) == 1
-        assert payload["items"][0]["event_id"] == str(valid_row.id)
-        assert payload["items"][0]["total_cost_usd"] == 100.0
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
-
-
-@pytest.mark.asyncio
-async def test_get_quarterly_report_maps_service_value_error(
-    async_client,
-    app,
-    test_tenant,
-):
-    from app.shared.core.auth import CurrentUser, UserRole, get_current_user
-    from app.shared.core.pricing import PricingTier
-
-    user = CurrentUser(
-        id=uuid4(),
-        email="quarterly-errors@valdrix.io",
-        tenant_id=test_tenant.id,
-        role=UserRole.ADMIN,
-        tier=PricingTier.PRO,
+    db = MagicMock()
+    db.execute = AsyncMock(
+        return_value=_scalars_result([valid_row, invalid_type_row, invalid_schema_row])
     )
-    app.dependency_overrides[get_current_user] = lambda: user
 
-    try:
-        with patch(
-            "app.modules.reporting.api.v1.leadership.CommercialProofReportService.quarterly_report",
-            new=AsyncMock(side_effect=ValueError("invalid report request")),
-        ):
-            response = await async_client.get(
-                "/api/v1/leadership/reports/quarterly",
-                params={"year": 2026, "quarter": 1},
+    with patch.object(leadership_api, "logger") as logger_mock:
+        response = await leadership_api.list_leadership_kpi_evidence(
+            limit=25,
+            current_user=user,
+            db=db,
         )
-        assert response.status_code == 400
-        assert response.json()["message"] == "invalid report request"
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.total == 1
+    assert response.items[0].event_id == str(valid_row.id)
+    assert response.items[0].total_cost_usd == 100.0
+    logger_mock.warning.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_list_quarterly_evidence_skips_invalid_payloads(
-    async_client,
-    app,
-    db,
-    test_tenant,
-    _quarterly_payload,
-):
-    from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLog
-    from app.shared.core.auth import CurrentUser, UserRole, get_current_user
-    from app.shared.core.pricing import PricingTier
+async def test_get_quarterly_report_maps_service_value_error() -> None:
+    with patch.object(
+        leadership_api.CommercialProofReportService,
+        "quarterly_report",
+        new=AsyncMock(side_effect=ValueError("invalid report request")),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await leadership_api.get_quarterly_commercial_report(
+                period="explicit",
+                year=2026,
+                quarter=1,
+                as_of=None,
+                provider=None,
+                response_format="json",
+                current_user=_user(),
+                db=MagicMock(),
+            )
+    assert exc.value.status_code == 400
+    assert "invalid report request" in str(exc.value.detail)
 
-    user = CurrentUser(
+
+@pytest.mark.asyncio
+async def test_list_quarterly_evidence_skips_invalid_payloads() -> None:
+    payload = _quarterly_payload()
+    tenant_id = uuid4()
+    user = _user(tenant_id=tenant_id)
+    valid_row = SimpleNamespace(
         id=uuid4(),
-        email="quarterly-admin@valdrix.io",
-        tenant_id=test_tenant.id,
-        role=UserRole.ADMIN,
-        tier=PricingTier.PRO,
-    )
-    app.dependency_overrides[get_current_user] = lambda: user
-
-    valid_row = AuditLog(
-        tenant_id=test_tenant.id,
-        event_type=AuditEventType.COMMERCIAL_QUARTERLY_REPORT_CAPTURED.value,
-        event_timestamp=datetime(2026, 2, 5, 9, 0, 0),
-        details={"quarterly_report": _quarterly_payload.model_dump()},
+        correlation_id="run-1",
+        event_timestamp=datetime(2026, 2, 5, 9, 0, tzinfo=timezone.utc),
+        actor_id=uuid4(),
+        actor_email="admin@example.com",
         success=True,
+        details={"quarterly_report": payload.model_dump()},
     )
-    invalid_row = AuditLog(
-        tenant_id=test_tenant.id,
-        event_type=AuditEventType.COMMERCIAL_QUARTERLY_REPORT_CAPTURED.value,
-        event_timestamp=datetime(2026, 2, 5, 8, 0, 0),
+    invalid_row = SimpleNamespace(
+        id=uuid4(),
+        correlation_id="run-2",
+        event_timestamp=datetime(2026, 2, 5, 8, 0, tzinfo=timezone.utc),
+        actor_id=None,
+        actor_email=None,
+        success=True,
         details={"quarterly_report": {"year": 2026}},
-        success=True,
     )
-    db.add_all([valid_row, invalid_row])
-    await db.commit()
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars_result([valid_row, invalid_row]))
 
-    try:
-        response = await async_client.get(
-            "/api/v1/leadership/reports/quarterly/evidence", params={"limit": 25}
+    with patch.object(leadership_api, "logger") as logger_mock:
+        response = await leadership_api.list_quarterly_commercial_report_evidence(
+            limit=25,
+            current_user=user,
+            db=db,
         )
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["total"] == 1
-        assert len(payload["items"]) == 1
-        assert payload["items"][0]["event_id"] == str(valid_row.id)
-        assert payload["items"][0]["year"] == 2026
-    finally:
-        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.total == 1
+    assert response.items[0].event_id == str(valid_row.id)
+    assert response.items[0].year == 2026
+    logger_mock.warning.assert_called_once()

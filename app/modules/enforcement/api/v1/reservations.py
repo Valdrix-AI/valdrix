@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.enforcement.api.v1.common import tenant_or_403
+from app.modules.enforcement.api.v1.common import tenant_or_403, require_feature_or_403
 from app.modules.enforcement.api.v1.schemas import (
     ActiveReservationItem,
     ReservationReconcileOverdueRequest,
@@ -18,6 +18,7 @@ from app.modules.enforcement.api.v1.schemas import (
 from app.modules.enforcement.domain.service import EnforcementService
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
 from app.shared.core.config import get_settings
+from app.shared.core.pricing import FeatureFlag
 from app.shared.db.session import get_db
 
 
@@ -55,6 +56,11 @@ async def list_active_reservations(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ActiveReservationItem]:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     now = datetime.now(timezone.utc)
     rows = await service.list_active_reservations(
@@ -103,6 +109,11 @@ async def reconcile_reservation(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> ReservationReconcileResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     idempotency_key = _resolve_idempotency_key(
         header_value=request.headers.get("Idempotency-Key"),
@@ -136,6 +147,11 @@ async def reconcile_overdue_reservations(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> ReservationReconcileOverdueResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     summary = await service.reconcile_overdue_reservations(
         tenant_id=tenant_or_403(current_user),
@@ -164,6 +180,11 @@ async def list_reconciliation_exceptions(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ReservationReconciliationExceptionItem]:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     rows = await service.list_reconciliation_exceptions(
         tenant_id=tenant_or_403(current_user),

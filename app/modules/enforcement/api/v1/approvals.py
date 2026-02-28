@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.enforcement.api.v1.common import tenant_or_403
+from app.modules.enforcement.api.v1.common import tenant_or_403, require_feature_or_403
 from app.modules.enforcement.api.v1.schemas import (
     ApprovalCreateRequest,
     ApprovalQueueItem,
@@ -16,6 +16,7 @@ from app.modules.enforcement.api.v1.schemas import (
 )
 from app.modules.enforcement.domain.service import EnforcementService
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
+from app.shared.core.pricing import FeatureFlag
 from app.shared.core.ops_metrics import ENFORCEMENT_APPROVAL_QUEUE_BACKLOG
 from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
@@ -30,6 +31,11 @@ async def create_approval_request(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> ApprovalReviewResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     approval = await service.create_or_get_approval_request(
         tenant_id=tenant_or_403(current_user),
@@ -53,6 +59,11 @@ async def get_approval_queue(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ApprovalQueueItem]:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     rows = await service.list_pending_approvals(
         tenant_id=tenant_or_403(current_user),
@@ -90,6 +101,11 @@ async def approve_approval_request(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> ApprovalReviewResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     approval, decision, token, expires_at = await service.approve_request(
         tenant_id=tenant_or_403(current_user),
@@ -116,6 +132,11 @@ async def consume_approval_token(
     db: AsyncSession = Depends(get_db),
 ) -> ApprovalTokenConsumeResponse:
     _ = request
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     approval, decision = await service.consume_approval_token(
         tenant_id=tenant_or_403(current_user),
@@ -159,6 +180,11 @@ async def deny_approval_request(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> ApprovalReviewResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     approval, decision = await service.deny_request(
         tenant_id=tenant_or_403(current_user),

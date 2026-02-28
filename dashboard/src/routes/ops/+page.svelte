@@ -1575,7 +1575,7 @@
 </script>
 
 <svelte:head>
-	<title>Ops Center | Valdrix</title>
+	<title>Ops Center | Valdrics</title>
 </svelte:head>
 
 <div class="space-y-8">

@@ -2,6 +2,7 @@ import uuid
 from enum import Enum
 import inspect
 from functools import wraps
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Callable, Union, cast
 
 if TYPE_CHECKING:
@@ -17,11 +18,16 @@ logger = structlog.get_logger()
 __all__ = [
     "PricingTier",
     "FeatureFlag",
+    "FeatureMaturity",
     "TIER_CONFIG",
+    "ENTERPRISE_FEATURES",
+    "FEATURE_MATURITY",
     "normalize_tier",
     "get_tier_config",
     "is_feature_enabled",
     "get_tier_limit",
+    "get_feature_maturity",
+    "get_tier_feature_maturity",
     "requires_tier",
     "requires_feature",
     "get_tenant_tier",
@@ -83,6 +89,103 @@ class FeatureFlag(str, Enum):
     POLICY_CONFIGURATION = "policy_configuration"
     ESCALATION_WORKFLOW = "escalation_workflow"
     INCIDENT_INTEGRATIONS = "incident_integrations"
+
+
+class FeatureMaturity(str, Enum):
+    """Feature maturity metadata for packaging transparency."""
+
+    GA = "GA"
+    BETA = "Beta"
+    PREVIEW = "Preview"
+
+
+# Explicit enterprise entitlement roster (curated, non-dynamic).
+# Keep this list intentionally explicit so new FeatureFlag additions do not
+# auto-promote into Enterprise without an explicit packaging decision.
+ENTERPRISE_FEATURES: set[FeatureFlag] = {
+    FeatureFlag.DASHBOARDS,
+    FeatureFlag.COST_TRACKING,
+    FeatureFlag.ALERTS,
+    FeatureFlag.SLACK_INTEGRATION,
+    FeatureFlag.ZOMBIE_SCAN,
+    FeatureFlag.LLM_ANALYSIS,
+    FeatureFlag.AI_INSIGHTS,
+    FeatureFlag.MULTI_CLOUD,
+    FeatureFlag.MULTI_REGION,
+    FeatureFlag.GREENOPS,
+    FeatureFlag.CARBON_TRACKING,
+    FeatureFlag.AUTO_REMEDIATION,
+    FeatureFlag.API_ACCESS,
+    FeatureFlag.FORECASTING,
+    FeatureFlag.SSO,
+    FeatureFlag.SCIM,
+    FeatureFlag.DEDICATED_SUPPORT,
+    FeatureFlag.AUDIT_LOGS,
+    FeatureFlag.HOURLY_SCANS,
+    FeatureFlag.AI_ANALYSIS_DETAILED,
+    FeatureFlag.DOMAIN_DISCOVERY,
+    FeatureFlag.IDP_DEEP_SCAN,
+    FeatureFlag.PRECISION_DISCOVERY,
+    FeatureFlag.OWNER_ATTRIBUTION,
+    FeatureFlag.GITOPS_REMEDIATION,
+    FeatureFlag.UNIT_ECONOMICS,
+    FeatureFlag.INGESTION_SLA,
+    FeatureFlag.INGESTION_BACKFILL,
+    FeatureFlag.ANOMALY_DETECTION,
+    FeatureFlag.CHARGEBACK,
+    FeatureFlag.RECONCILIATION,
+    FeatureFlag.CLOSE_WORKFLOW,
+    FeatureFlag.CARBON_ASSURANCE,
+    FeatureFlag.CLOUD_PLUS_CONNECTORS,
+    FeatureFlag.COMPLIANCE_EXPORTS,
+    FeatureFlag.SAVINGS_PROOF,
+    FeatureFlag.COMMITMENT_OPTIMIZATION,
+    FeatureFlag.POLICY_PREVIEW,
+    FeatureFlag.POLICY_CONFIGURATION,
+    FeatureFlag.ESCALATION_WORKFLOW,
+    FeatureFlag.INCIDENT_INTEGRATIONS,
+}
+
+# Runtime-gated features are mapped to GA maturity.
+# Catalog-only (not yet hard-gated) features are conservatively mapped to Preview.
+_RUNTIME_GATED_FEATURES: set[FeatureFlag] = {
+    FeatureFlag.COST_TRACKING,
+    FeatureFlag.SLACK_INTEGRATION,
+    FeatureFlag.LLM_ANALYSIS,
+    FeatureFlag.GREENOPS,
+    FeatureFlag.AUTO_REMEDIATION,
+    FeatureFlag.SSO,
+    FeatureFlag.SCIM,
+    FeatureFlag.AUDIT_LOGS,
+    FeatureFlag.IDP_DEEP_SCAN,
+    FeatureFlag.PRECISION_DISCOVERY,
+    FeatureFlag.OWNER_ATTRIBUTION,
+    FeatureFlag.GITOPS_REMEDIATION,
+    FeatureFlag.UNIT_ECONOMICS,
+    FeatureFlag.INGESTION_SLA,
+    FeatureFlag.INGESTION_BACKFILL,
+    FeatureFlag.ANOMALY_DETECTION,
+    FeatureFlag.CHARGEBACK,
+    FeatureFlag.RECONCILIATION,
+    FeatureFlag.CLOSE_WORKFLOW,
+    FeatureFlag.CARBON_ASSURANCE,
+    FeatureFlag.CLOUD_PLUS_CONNECTORS,
+    FeatureFlag.COMPLIANCE_EXPORTS,
+    FeatureFlag.SAVINGS_PROOF,
+    FeatureFlag.COMMITMENT_OPTIMIZATION,
+    FeatureFlag.POLICY_PREVIEW,
+    FeatureFlag.ESCALATION_WORKFLOW,
+    FeatureFlag.INCIDENT_INTEGRATIONS,
+}
+
+FEATURE_MATURITY: dict[FeatureFlag, FeatureMaturity] = {
+    flag: (
+        FeatureMaturity.GA
+        if flag in _RUNTIME_GATED_FEATURES
+        else FeatureMaturity.PREVIEW
+    )
+    for flag in FeatureFlag
+}
 
 
 # Tier configuration - USD pricing
@@ -334,7 +437,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
     PricingTier.ENTERPRISE: {
         "name": "Enterprise",
         "price_usd": None,
-        "features": set(FeatureFlag),
+        "features": ENTERPRISE_FEATURES,
         "limits": {
             "max_aws_accounts": 999,
             "max_azure_tenants": 999,
@@ -368,6 +471,32 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
         ],
     },
 }
+
+
+def get_feature_maturity(feature: FeatureFlag | str) -> FeatureMaturity:
+    if isinstance(feature, str):
+        try:
+            feature = FeatureFlag(feature)
+        except ValueError:
+            return FeatureMaturity.PREVIEW
+    return FEATURE_MATURITY.get(feature, FeatureMaturity.PREVIEW)
+
+
+def get_tier_feature_maturity(tier: PricingTier | str) -> dict[str, str]:
+    config = get_tier_config(tier)
+    features = config.get("features", set())
+    normalized: list[FeatureFlag] = []
+    for feature in features:
+        if isinstance(feature, FeatureFlag):
+            normalized.append(feature)
+            continue
+        if isinstance(feature, str):
+            with suppress(ValueError):
+                normalized.append(FeatureFlag(feature))
+    return {
+        feature.value: get_feature_maturity(feature).value
+        for feature in sorted(normalized, key=lambda item: item.value)
+    }
 
 def normalize_tier(tier: PricingTier | str | None) -> PricingTier:
     """Map arbitrary tier values to a supported PricingTier."""

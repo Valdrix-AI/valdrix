@@ -1,0 +1,291 @@
+{
+  "captured_at": "2026-02-27T20:55:58.017320+00:00",
+  "features": {
+    "ai_analysis_detailed": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "ai_insights": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "alerts": {
+      "evidence": [
+        "app/modules/governance/domain/jobs/handlers/costs.py",
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "anomaly_detection": {
+      "evidence": [
+        "app/modules/governance/domain/jobs/handlers/costs.py",
+        "app/modules/reporting/api/v1/costs.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "api_access": {
+      "evidence": [
+        "app/modules/enforcement/api/v1/enforcement.py",
+        "app/modules/enforcement/api/v1/exports.py",
+        "app/modules/enforcement/api/v1/ledger.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "audit_logs": {
+      "evidence": [
+        "app/modules/governance/api/v1/audit_access.py",
+        "app/modules/governance/api/v1/jobs.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "auto_remediation": {
+      "evidence": [
+        "app/modules/optimization/api/v1/zombies.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "carbon_assurance": {
+      "evidence": [
+        "app/modules/reporting/api/v1/carbon.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "carbon_tracking": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "chargeback": {
+      "evidence": [
+        "app/modules/reporting/api/v1/attribution.py",
+        "app/modules/reporting/api/v1/costs.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "close_workflow": {
+      "evidence": [
+        "app/modules/governance/domain/jobs/handlers/acceptance.py",
+        "app/modules/reporting/api/v1/costs.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "cloud_plus_connectors": {
+      "evidence": [
+        "app/modules/governance/api/v1/settings/connections_helpers.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "commitment_optimization": {
+      "evidence": [
+        "app/modules/optimization/api/v1/strategies.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "compliance_exports": {
+      "evidence": [
+        "app/modules/governance/api/v1/audit_access.py",
+        "app/modules/governance/api/v1/audit_compliance.py",
+        "app/modules/governance/api/v1/audit_evidence.py",
+        "app/modules/governance/api/v1/audit_partitioning.py",
+        "app/modules/governance/domain/jobs/handlers/acceptance.py",
+        "app/modules/reporting/api/v1/costs.py",
+        "app/modules/reporting/api/v1/leadership.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "cost_tracking": {
+      "evidence": [
+        "app/modules/reporting/api/v1/leadership.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "dashboards": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "dedicated_support": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "domain_discovery": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "escalation_workflow": {
+      "evidence": [
+        "app/modules/optimization/domain/remediation_execute.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "forecasting": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "gitops_remediation": {
+      "evidence": [
+        "app/modules/optimization/api/v1/zombies.py",
+        "app/modules/optimization/domain/remediation_execute.py",
+        "app/modules/optimization/domain/remediation_iac.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "greenops": {
+      "evidence": [
+        "app/modules/reporting/api/v1/carbon.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "hourly_scans": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "idp_deep_scan": {
+      "evidence": [
+        "app/modules/governance/api/v1/settings/connections_helpers.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "incident_integrations": {
+      "evidence": [
+        "app/modules/governance/api/v1/settings/notifications.py",
+        "app/modules/optimization/domain/remediation_execute.py",
+        "app/modules/reporting/domain/anomaly_detection.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "ingestion_backfill": {
+      "evidence": [
+        "app/modules/reporting/api/v1/costs.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "ingestion_sla": {
+      "evidence": [
+        "app/modules/reporting/api/v1/costs.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "llm_analysis": {
+      "evidence": [
+        "app/modules/governance/domain/jobs/handlers/analysis.py",
+        "app/modules/optimization/domain/service.py",
+        "app/modules/reporting/api/v1/costs.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "multi_cloud": {
+      "evidence": [
+        "app/modules/optimization/domain/actions/azure/base.py",
+        "app/modules/optimization/domain/actions/gcp/base.py",
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "multi_region": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    },
+    "owner_attribution": {
+      "evidence": [
+        "app/modules/optimization/domain/service.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "policy_configuration": {
+      "evidence": [
+        "app/modules/enforcement/api/v1/actions.py",
+        "app/modules/enforcement/api/v1/approvals.py",
+        "app/modules/enforcement/api/v1/enforcement.py",
+        "app/modules/enforcement/api/v1/policy_budget_credit.py",
+        "app/modules/enforcement/api/v1/reservations.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "policy_preview": {
+      "evidence": [
+        "app/modules/optimization/api/v1/zombies.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "precision_discovery": {
+      "evidence": [
+        "app/modules/optimization/domain/service.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "reconciliation": {
+      "evidence": [
+        "app/modules/reporting/api/v1/costs.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "savings_proof": {
+      "evidence": [
+        "app/modules/reporting/api/v1/savings.py",
+        "app/modules/reporting/domain/leadership_kpis.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "scim": {
+      "evidence": [
+        "app/modules/governance/api/v1/scim.py",
+        "app/modules/governance/api/v1/settings/identity.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "slack_integration": {
+      "evidence": [
+        "app/modules/optimization/domain/remediation_execute.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "sso": {
+      "evidence": [
+        "app/modules/governance/api/v1/settings/identity.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "unit_economics": {
+      "evidence": [
+        "app/modules/reporting/api/v1/costs.py"
+      ],
+      "status": "runtime_gated"
+    },
+    "zombie_scan": {
+      "evidence": [
+        "app/shared/core/pricing.py"
+      ],
+      "status": "catalog_only"
+    }
+  },
+  "scope": {
+    "paid_tiers": [
+      "starter",
+      "growth",
+      "pro",
+      "enterprise"
+    ],
+    "scanner_roots": [
+      "app/modules",
+      "app/shared"
+    ],
+    "source_of_truth": "app/shared/core/pricing.py"
+  }
+}

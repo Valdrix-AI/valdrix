@@ -8,12 +8,13 @@ import zipfile
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.enforcement.api.v1.common import tenant_or_403
+from app.modules.enforcement.api.v1.common import tenant_or_403, require_feature_or_403
 from app.modules.enforcement.api.v1.schemas import EnforcementExportParityResponse
 from app.modules.enforcement.domain.service import EnforcementService
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
 from app.shared.core.config import get_settings
 from app.shared.core.ops_metrics import ENFORCEMENT_EXPORT_EVENTS_TOTAL
+from app.shared.core.pricing import FeatureFlag
 from app.shared.db.session import get_db
 
 
@@ -91,6 +92,11 @@ async def get_export_parity(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> EnforcementExportParityResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.API_ACCESS,
+    )
     tenant_id = tenant_or_403(current_user)
     window_start, window_end = _resolve_window(start_date=start_date, end_date=end_date)
     service = EnforcementService(db)
@@ -138,6 +144,11 @@ async def download_export_archive(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.API_ACCESS,
+    )
     tenant_id = tenant_or_403(current_user)
     window_start, window_end = _resolve_window(start_date=start_date, end_date=end_date)
     service = EnforcementService(db)

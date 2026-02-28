@@ -41,3 +41,23 @@ def test_failure_injection_pack_contains_required_scenarios_and_references() -> 
     ]
     for rel_path in required_files:
         assert (REPO_ROOT / rel_path).exists(), rel_path
+
+
+def test_failure_injection_pack_documents_staged_artifact_contract() -> None:
+    raw = PACK_PATH.read_text(encoding="utf-8")
+    required_tokens = [
+        "profile=enforcement_failure_injection",
+        "runner=staged_failure_injection",
+        "execution_class=staged",
+        "executed_by != approved_by",
+        "docs/ops/evidence/enforcement_failure_injection_TEMPLATE.json",
+        "scripts/verify_enforcement_failure_injection_evidence.py",
+        "scripts/run_enforcement_release_evidence_gate.py",
+        "--stress-evidence-path docs/ops/evidence/enforcement_stress_artifact_2026-02-25.json",
+        "--stress-required-database-engine postgresql",
+        "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_PATH",
+        "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_MAX_AGE_HOURS",
+        "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED",
+    ]
+    for token in required_tokens:
+        assert token in raw
