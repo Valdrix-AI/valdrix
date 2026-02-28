@@ -50,16 +50,22 @@ jobs:
       - name: TruffleHog OSS
         uses: trufflesecurity/trufflehog@main
 
-      - name: Gitleaks Secret Scan
-        if: ${{ secrets.GITLEAKS_LICENSE != '' }}
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+      - name: Gitleaks Secret Scan (OSS, Commit Range Gate)
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Gitleaks License Fallback
-        if: ${{ secrets.GITLEAKS_LICENSE == '' }}
-        run: echo "GITLEAKS_LICENSE not configured; TruffleHog scan already enforced for this job."
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            LOG_OPTS="${{ github.event.pull_request.base.sha }}..${{ github.sha }}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            LOG_OPTS="${{ github.event.before }}..${{ github.sha }}"
+          else
+            LOG_OPTS="HEAD~1..HEAD"
+          fi
+
+          echo "Running OSS gitleaks commit-range scan: ${LOG_OPTS}"
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.24.2 \
+            git --redact --exit-code 1 --no-banner --log-opts="${LOG_OPTS}" /repo
 
   container-scan:
     runs-on: ubuntu-latest
