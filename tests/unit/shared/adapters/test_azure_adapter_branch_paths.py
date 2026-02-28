@@ -194,7 +194,54 @@ async def test_discover_resources_filters_non_compute_type_and_region() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_resource_usage_returns_empty_list() -> None:
+async def test_get_resource_usage_projects_and_filters_rows() -> None:
     adapter = AzureAdapter(_credentials())
-    assert await adapter.get_resource_usage("compute", "vm-1") == []
+    rows = [
+        {
+            "timestamp": datetime(2026, 1, 15, tzinfo=timezone.utc),
+            "service": "Compute",
+            "resource_id": "vm-1",
+            "usage_type": "vm_hours",
+            "usage_amount": 24,
+            "usage_unit": "hour",
+            "cost_usd": 12.5,
+            "currency": "USD",
+            "amount_raw": 12.5,
+            "region": "eastus",
+            "source_adapter": "explorer_api",
+        },
+        {
+            "timestamp": datetime(2026, 1, 15, tzinfo=timezone.utc),
+            "service": "Storage",
+            "resource_id": "disk-1",
+            "cost_usd": 3.0,
+            "currency": "USD",
+        },
+    ]
+    with patch.object(
+        adapter, "get_cost_and_usage", AsyncMock(return_value=rows)
+    ) as mock_fetch:
+        usage_rows = await adapter.get_resource_usage("compute", "vm-1")
 
+    assert len(usage_rows) == 1
+    assert usage_rows[0]["provider"] == "azure"
+    assert usage_rows[0]["service"] == "Compute"
+    assert usage_rows[0]["resource_id"] == "vm-1"
+    assert usage_rows[0]["usage_unit"] == "hour"
+    assert usage_rows[0]["source_adapter"] == "explorer_api"
+    assert mock_fetch.await_count == 1
+    assert mock_fetch.await_args.kwargs["granularity"] == "DAILY"
+
+
+@pytest.mark.asyncio
+async def test_get_resource_usage_failure_returns_empty_and_sets_error() -> None:
+    adapter = AzureAdapter(_credentials())
+    with patch.object(
+        adapter,
+        "get_cost_and_usage",
+        AsyncMock(side_effect=RuntimeError("azure usage failure")),
+    ):
+        assert await adapter.get_resource_usage("compute", "vm-1") == []
+
+    assert adapter.last_error is not None
+    assert "Azure resource usage lookup failed" in adapter.last_error

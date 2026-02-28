@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -417,6 +417,42 @@ async def test_platform_discover_and_resource_usage_defaults() -> None:
     adapter = PlatformAdapter(_conn())
     assert await adapter.discover_resources("any") == []
     assert await adapter.get_resource_usage("service", "id-1") == []
+
+
+@pytest.mark.asyncio
+async def test_platform_get_resource_usage_projects_manual_feed_rows() -> None:
+    now = datetime.now(timezone.utc)
+    adapter = PlatformAdapter(
+        _conn(
+            auth_method="manual",
+            spend_feed=[
+                {
+                    "timestamp": (now - timedelta(days=2)).isoformat(),
+                    "service": "Shared Platform",
+                    "resource_id": "svc-1",
+                    "usage_amount": 2,
+                    "usage_unit": "unit",
+                    "cost_usd": 5.0,
+                },
+                {
+                    "timestamp": (now - timedelta(days=1)).isoformat(),
+                    "service": "Shared Platform",
+                    "resource_id": "svc-2",
+                    "usage_amount": 3,
+                    "cost_usd": 9.0,
+                },
+            ],
+        )
+    )
+    rows = await adapter.get_resource_usage("platform", "svc-1")
+    assert len(rows) == 1
+    assert rows[0]["provider"] == "platform"
+    assert rows[0]["resource_id"] == "svc-1"
+    assert rows[0]["usage_unit"] == "unit"
+
+    defaulted_unit_rows = await adapter.get_resource_usage("platform", "svc-2")
+    assert len(defaulted_unit_rows) == 1
+    assert defaulted_unit_rows[0]["usage_unit"] == "unit"
 
 
 class _Secret:

@@ -16,6 +16,9 @@ describe('docs page', () => {
 		const apiLink = screen.getByRole('link', { name: /open api docs/i });
 		expect(apiLink.getAttribute('href')).toBe('/docs/api');
 
+		const validationLink = screen.getByRole('link', { name: /open technical validation/i });
+		expect(validationLink.getAttribute('href')).toBe('/docs/technical-validation');
+
 		const pricingLink = screen.getByRole('link', { name: /view pricing/i });
 		expect(pricingLink.getAttribute('href')).toBe('/pricing');
 

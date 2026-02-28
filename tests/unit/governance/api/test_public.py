@@ -4,6 +4,7 @@ from unittest.mock import patch
 from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import AsyncMock
 from types import SimpleNamespace
+from datetime import datetime, timezone, timedelta
 
 from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
@@ -356,3 +357,59 @@ async def test_sso_discovery_requires_turnstile_token(async_client: AsyncClient)
         )
     assert response.status_code == 400
     assert response.json()["error"] == "turnstile_token_required"
+
+
+@pytest.mark.asyncio
+async def test_landing_telemetry_ingest_accepts_and_records_metrics(async_client: AsyncClient):
+    payload = {
+        "eventId": "evt-123",
+        "name": "cta_click",
+        "section": "hero",
+        "value": "start_free",
+        "visitorId": "vldx-visitor-01",
+        "persona": "cto",
+        "funnelStage": "cta",
+        "pagePath": "/",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    with (
+        patch("app.modules.governance.api.v1.public.LANDING_TELEMETRY_EVENTS_TOTAL") as mock_events,
+        patch("app.modules.governance.api.v1.public.LANDING_TELEMETRY_INGEST_OUTCOMES_TOTAL") as mock_outcomes,
+    ):
+        response = await async_client.post("/api/v1/public/landing/events", json=payload)
+
+    assert response.status_code == 202
+    data = response.json()
+    assert data["status"] == "accepted"
+    assert data["ingest_id"] == "evt-123"
+    mock_events.labels.assert_called_once_with(
+        event_name="cta_click",
+        section="hero",
+        funnel_stage="cta",
+    )
+    mock_events.labels.return_value.inc.assert_called_once()
+    mock_outcomes.labels.assert_called_once_with(outcome="accepted")
+    mock_outcomes.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_landing_telemetry_ingest_rejects_out_of_window_timestamp(
+    async_client: AsyncClient,
+):
+    payload = {
+        "name": "landing_view",
+        "section": "landing",
+        "funnelStage": "view",
+        "timestamp": (datetime.now(timezone.utc) - timedelta(days=10)).isoformat(),
+    }
+    with patch(
+        "app.modules.governance.api.v1.public.LANDING_TELEMETRY_INGEST_OUTCOMES_TOTAL"
+    ) as mock_outcomes:
+        response = await async_client.post("/api/v1/public/landing/events", json=payload)
+
+    assert response.status_code == 202
+    data = response.json()
+    assert data["status"] == "ignored"
+    assert data["reason"] == "timestamp_out_of_bounds"
+    mock_outcomes.labels.assert_called_once_with(outcome="rejected_timestamp")
+    mock_outcomes.labels.return_value.inc.assert_called_once()

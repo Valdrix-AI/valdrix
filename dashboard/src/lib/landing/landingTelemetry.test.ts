@@ -10,6 +10,7 @@ describe('landingTelemetry', () => {
 			value: 'start_free',
 			timestamp: '1970-01-01T00:00:00.000Z'
 		});
+		expect(payload.eventId).toMatch(/^evt-/);
 	});
 
 	it('falls back when action/section are blank and trims oversized values', () => {
@@ -54,11 +55,13 @@ describe('landingTelemetry', () => {
 		const customEvent = {} as Event;
 		const createCustomEvent = vi.fn(() => customEvent);
 		const dataLayer: unknown[] = [];
+		const sendToBackend = vi.fn();
 
 		const payload = emitLandingTelemetry('hook_toggle', 'cloud_hook', 'with', {
 			dispatchEvent,
 			createCustomEvent,
-			dataLayer
+			dataLayer,
+			sendToBackend
 		});
 
 		expect(createCustomEvent).toHaveBeenCalledTimes(1);
@@ -73,6 +76,8 @@ describe('landingTelemetry', () => {
 			section: 'cloud_hook',
 			value: 'with'
 		});
+		expect(sendToBackend).toHaveBeenCalledOnce();
+		expect(sendToBackend).toHaveBeenCalledWith(payload);
 	});
 
 	it('never throws when dispatch fails and still returns payload', () => {
@@ -92,6 +97,15 @@ describe('landingTelemetry', () => {
 		const payload = emitLandingTelemetry('section_view', 'landing');
 		expect(payload.name).toBe('section_view');
 		expect(payload.section).toBe('landing');
+	});
+
+	it('never throws when backend transport callback errors', () => {
+		const payload = emitLandingTelemetry('cta_click', 'hero', 'start_free', {
+			sendToBackend: () => {
+				throw new Error('backend down');
+			}
+		});
+		expect(payload.name).toBe('cta_click');
 	});
 
 	it('accepts context and target simultaneously with backward-compatible signature', () => {

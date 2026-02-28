@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import re
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Literal
 
 import structlog
@@ -19,11 +23,18 @@ from app.shared.core.turnstile import (
     require_turnstile_for_public_assessment,
     require_turnstile_for_sso_discovery,
 )
+from app.shared.core.ops_metrics import (
+    LANDING_TELEMETRY_EVENTS_TOTAL,
+    LANDING_TELEMETRY_INGEST_OUTCOMES_TOTAL,
+)
 from app.shared.db.session import get_system_db
 
 router = APIRouter()
 assessment_service = FreeAssessmentService()
 logger = structlog.get_logger()
+_LANDING_LABEL_SANITIZER = re.compile(r"[^a-z0-9_]+")
+_LANDING_MAX_AGE = timedelta(days=2)
+_LANDING_MAX_FUTURE_SKEW = timedelta(minutes=5)
 
 
 def _normalize_email_domain(email: str) -> str:
@@ -48,6 +59,65 @@ class SsoDiscoveryResponse(BaseModel):
     reason: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+class LandingTelemetryExperiment(BaseModel):
+    hero: str | None = Field(default=None, max_length=96)
+    cta: str | None = Field(default=None, max_length=96)
+    order: str | None = Field(default=None, max_length=96)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LandingTelemetryUtm(BaseModel):
+    source: str | None = Field(default=None, max_length=96)
+    medium: str | None = Field(default=None, max_length=96)
+    campaign: str | None = Field(default=None, max_length=96)
+    term: str | None = Field(default=None, max_length=96)
+    content: str | None = Field(default=None, max_length=96)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LandingTelemetryRequest(BaseModel):
+    event_id: str | None = Field(default=None, alias="eventId", max_length=64)
+    name: str = Field(..., max_length=96)
+    section: str = Field(..., max_length=96)
+    value: str | None = Field(default=None, max_length=96)
+    visitor_id: str | None = Field(default=None, alias="visitorId", max_length=96)
+    persona: str | None = Field(default=None, max_length=64)
+    funnel_stage: str | None = Field(default=None, alias="funnelStage", max_length=64)
+    page_path: str | None = Field(default=None, alias="pagePath", max_length=256)
+    referrer: str | None = Field(default=None, max_length=256)
+    experiment: LandingTelemetryExperiment | None = None
+    utm: LandingTelemetryUtm | None = None
+    timestamp: datetime
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
+class LandingTelemetryResponse(BaseModel):
+    status: Literal["accepted", "ignored"]
+    ingest_id: str | None = None
+    reason: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def _normalize_landing_label(raw: str | None, fallback: str) -> str:
+    token = (raw or "").strip().lower()
+    if not token:
+        return fallback
+    token = _LANDING_LABEL_SANITIZER.sub("_", token).strip("_")
+    if not token:
+        return fallback
+    return token[:64]
+
+
+def _normalize_event_timestamp(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 @router.get("/csrf")
@@ -171,3 +241,51 @@ async def discover_sso_federation(
         mode="domain",
         domain=domain,
     )
+
+
+@router.post("/landing/events", response_model=LandingTelemetryResponse, status_code=202)
+@rate_limit("240/minute")
+async def ingest_landing_event(
+    request: Request,
+    payload: LandingTelemetryRequest,
+) -> LandingTelemetryResponse:
+    now = datetime.now(timezone.utc)
+    event_timestamp = _normalize_event_timestamp(payload.timestamp)
+    if event_timestamp < now - _LANDING_MAX_AGE or event_timestamp > now + _LANDING_MAX_FUTURE_SKEW:
+        LANDING_TELEMETRY_INGEST_OUTCOMES_TOTAL.labels(outcome="rejected_timestamp").inc()
+        return LandingTelemetryResponse(
+            status="ignored",
+            reason="timestamp_out_of_bounds",
+        )
+
+    event_name = _normalize_landing_label(payload.name, "unknown_action")
+    section = _normalize_landing_label(payload.section, "unknown_section")
+    funnel_stage = _normalize_landing_label(payload.funnel_stage, "unknown_stage")
+    persona = _normalize_landing_label(payload.persona, "unknown_persona")
+    value = _normalize_landing_label(payload.value, "")
+    visitor_prefix = (payload.visitor_id or "").strip()[:24]
+    event_id = (payload.event_id or "").strip() or str(uuid.uuid4())
+    client_ip = getattr(request.client, "host", "") or "unknown"
+    client_hash = hashlib.sha256(client_ip.encode("utf-8")).hexdigest()[:12]
+
+    LANDING_TELEMETRY_EVENTS_TOTAL.labels(
+        event_name=event_name,
+        section=section,
+        funnel_stage=funnel_stage,
+    ).inc()
+    LANDING_TELEMETRY_INGEST_OUTCOMES_TOTAL.labels(outcome="accepted").inc()
+
+    logger.info(
+        "landing_telemetry_ingested",
+        ingest_id=event_id,
+        event_name=event_name,
+        section=section,
+        value=value or None,
+        funnel_stage=funnel_stage,
+        persona=persona,
+        page_path=(payload.page_path or "")[:160] or None,
+        visitor_prefix=visitor_prefix or None,
+        client_hash=client_hash,
+        source="web_landing",
+    )
+    return LandingTelemetryResponse(status="accepted", ingest_id=event_id)

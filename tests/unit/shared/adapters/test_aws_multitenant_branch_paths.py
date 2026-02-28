@@ -95,6 +95,8 @@ async def test_verify_connection_rejects_unsupported_region() -> None:
         ok = await adapter.verify_connection()
 
     assert ok is False
+    assert adapter.last_error is not None
+    assert "Unsupported AWS region" in adapter.last_error
     adapter.get_credentials.assert_not_awaited()
     logger_mock.error.assert_called_once()
 
@@ -102,6 +104,7 @@ async def test_verify_connection_rejects_unsupported_region() -> None:
 @pytest.mark.asyncio
 async def test_verify_connection_returns_true_when_credentials_load() -> None:
     adapter = aws_mt.MultiTenantAWSAdapter(_creds())
+    adapter.last_error = "stale"
     adapter.get_credentials = AsyncMock(return_value={"AccessKeyId": "x"})
 
     with patch.object(
@@ -110,6 +113,7 @@ async def test_verify_connection_returns_true_when_credentials_load() -> None:
         ok = await adapter.verify_connection()
 
     assert ok is True
+    assert adapter.last_error is None
     adapter.get_credentials.assert_awaited_once()
 
 
@@ -129,6 +133,8 @@ async def test_verify_connection_logs_and_returns_false_on_exception() -> None:
         ok = await adapter.verify_connection()
 
     assert ok is False
+    assert adapter.last_error is not None
+    assert "AWS STS role verification failed" in adapter.last_error
     logger_mock.error.assert_called_once_with(
         "verify_connection_failed", provider="aws", error="sts down"
     )
@@ -354,7 +360,32 @@ async def test_discover_resources_logs_and_returns_empty_on_scan_error() -> None
 
 
 @pytest.mark.asyncio
-async def test_get_resource_usage_returns_empty_list() -> None:
+async def test_get_resource_usage_projects_discovered_inventory_rows() -> None:
     adapter = aws_mt.MultiTenantAWSAdapter(_creds())
-    out = await adapter.get_resource_usage("ec2")
-    assert out == []
+    with patch.object(
+        adapter,
+        "discover_resources",
+        AsyncMock(
+            return_value=[
+                {"resource_id": "i-123", "region": "us-east-1", "tags": {"env": "prod"}},
+                {"resource_id": "i-456", "region": "us-east-1", "tags": {"env": "dev"}},
+            ]
+        ),
+    ) as mock_discover:
+        out = await adapter.get_resource_usage("ec2", "i-123")
+
+    assert len(out) == 1
+    assert out[0]["provider"] == "aws"
+    assert out[0]["resource_id"] == "i-123"
+    assert out[0]["usage_amount"] == 1.0
+    assert out[0]["usage_unit"] == "resource"
+    mock_discover.assert_awaited_once_with("instance")
+
+
+@pytest.mark.asyncio
+async def test_get_resource_usage_returns_empty_for_blank_or_empty_discovery() -> None:
+    adapter = aws_mt.MultiTenantAWSAdapter(_creds())
+    assert await adapter.get_resource_usage("   ") == []
+
+    with patch.object(adapter, "discover_resources", AsyncMock(return_value=[])):
+        assert await adapter.get_resource_usage("ec2") == []

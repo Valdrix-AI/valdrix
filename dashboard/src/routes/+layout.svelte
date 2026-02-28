@@ -212,10 +212,18 @@
 			event.preventDefault();
 			nextTarget.focus();
 		};
+		const initialScrollY = window.scrollY;
+		const handleScroll = () => {
+			if (Math.abs(window.scrollY - initialScrollY) > 48) {
+				publicMenuOpen = false;
+			}
+		};
 		window.addEventListener('keydown', handleKeydown);
+		window.addEventListener('scroll', handleScroll, { passive: true });
 
 		return () => {
 			window.removeEventListener('keydown', handleKeydown);
+			window.removeEventListener('scroll', handleScroll);
 			unlockBodyScroll();
 			if (publicMenuRestoreFocus) {
 				publicMenuRestoreFocus.focus();
@@ -427,36 +435,36 @@
 		<CommandPalette bind:isOpen={uiState.isCommandPaletteOpen} />
 	{:else}
 		<!-- Public Layout (Login/Landing) -->
-			<header class="border-b border-ink-800 bg-ink-900/50 backdrop-blur sticky top-0 z-50">
-				<nav class="container mx-auto flex items-center justify-between gap-4 px-6 py-4">
-					<a href={toAppPath('/')} class="flex items-center gap-2">
-						<CloudLogo provider="valdrix" size={32} />
-						<span class="text-xl font-bold text-gradient hidden sm:inline">Valdrics</span>
-					</a>
-
-					<div class="hidden lg:flex items-center gap-5 text-sm text-ink-300">
-						{#each PUBLIC_PRIMARY_LINKS as link (link.href)}
-							<a href={toAppPath(link.href)} class="hover:text-ink-100">{link.label}</a>
-						{/each}
-					</div>
-
-					<div class="hidden lg:flex items-center gap-2">
-						{#each PUBLIC_SECONDARY_LINKS as link (link.href)}
-							<a href={toAppPath(link.href)} class="btn btn-ghost">{link.label}</a>
-						{/each}
-						<a href={toAppPath('/auth/login')} class="btn btn-primary">Start Free</a>
-					</div>
-
-					<div class="flex items-center gap-2 lg:hidden">
-						<a href={toAppPath('/auth/login')} class="btn btn-primary hidden sm:inline-flex">
-							Start Free
+				<header class="border-b border-ink-800 bg-ink-900/50 backdrop-blur sticky top-0 z-50">
+					<nav class="container public-top-nav mx-auto flex items-center justify-between gap-4 px-6 py-4">
+						<a href={toAppPath('/')} class="flex items-center gap-2">
+							<CloudLogo provider="valdrix" size={32} />
+							<span class="text-xl font-bold text-gradient hidden sm:inline">Valdrics</span>
 						</a>
-						<button
-							type="button"
-							class="btn btn-ghost p-2"
-							bind:this={publicMenuButton}
-							aria-label="Toggle menu"
-							aria-expanded={publicMenuOpen}
+
+						<div class="public-nav-primary items-center gap-5 text-sm text-ink-300">
+							{#each PUBLIC_PRIMARY_LINKS as link (link.href)}
+								<a href={toAppPath(link.href)} class="hover:text-ink-100">{link.label}</a>
+							{/each}
+						</div>
+
+						<div class="public-nav-secondary items-center gap-2">
+							{#each PUBLIC_SECONDARY_LINKS as link (link.href)}
+								<a href={toAppPath(link.href)} class="btn btn-ghost">{link.label}</a>
+							{/each}
+							<a href={toAppPath('/auth/login')} class="btn btn-primary">Start Free</a>
+						</div>
+
+						<div class="public-nav-mobile flex items-center gap-2">
+							<a href={toAppPath('/auth/login')} class="btn btn-primary public-nav-mobile-cta">
+								Start Free
+							</a>
+							<button
+								type="button"
+								class="btn btn-ghost p-2 public-nav-menu-toggle"
+								bind:this={publicMenuButton}
+								aria-label="Toggle menu"
+								aria-expanded={publicMenuOpen}
 							aria-controls="public-mobile-menu"
 							aria-haspopup="dialog"
 							onclick={togglePublicMenu}
@@ -503,28 +511,32 @@
 						aria-label="Close navigation menu"
 						onclick={closePublicMenu}
 					></button>
-					<div
-						id="public-mobile-menu"
-						bind:this={publicMenuPanel}
-						class="relative z-50 lg:hidden border-t border-ink-800/70 bg-ink-900/95"
-						role="dialog"
-						aria-modal="true"
-						aria-labelledby="public-mobile-menu-title"
-					>
-						<div class="container mx-auto px-6 py-4">
+						<div
+							id="public-mobile-menu"
+							bind:this={publicMenuPanel}
+							class="relative z-50 lg:hidden border-t border-ink-800/70 bg-ink-900/95"
+							role="dialog"
+							aria-modal="true"
+							aria-labelledby="public-mobile-menu-title"
+						>
+							<div class="container mx-auto px-6 py-4">
 							<h2 id="public-mobile-menu-title" class="sr-only">Public navigation menu</h2>
 							<div class="grid gap-2 text-sm text-ink-200">
-								<a
-									href={toAppPath('/auth/login')}
-									class="btn btn-primary justify-center mb-2"
-									onclick={closePublicMenu}
-								>
-									Start Free
+									<a
+										href={toAppPath('/auth/login')}
+										class="btn btn-primary justify-center mb-2 w-full"
+										onclick={closePublicMenu}
+									>
+										Start Free
 								</a>
 								{#each PUBLIC_MOBILE_LINKS as link (link.href)}
-									<a href={toAppPath(link.href)} class="py-2 hover:text-ink-100" onclick={closePublicMenu}
-										>{link.label}</a
+									<a
+										href={toAppPath(link.href)}
+										class="py-3 min-h-11 flex items-center hover:text-ink-100"
+										onclick={closePublicMenu}
 									>
+										{link.label}
+									</a>
 								{/each}
 							</div>
 						</div>
@@ -586,11 +598,15 @@
 </div>
 
 <!-- Global Toasts -->
-<div class="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 min-w-[320px] max-w-md">
-	{#each uiState.toasts as toast (toast.id)}
-		<ToastComponent {toast} />
-	{/each}
-</div>
+{#if uiState.toasts.length > 0}
+	<div class="fixed inset-x-0 bottom-4 z-[100] px-4 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:px-0 sm:max-w-md">
+		<div class="flex flex-col gap-3 sm:min-w-[320px]">
+			{#each uiState.toasts as toast (toast.id)}
+				<ToastComponent {toast} />
+			{/each}
+		</div>
+	</div>
+{/if}
 
 <style>
 	/* Custom Tailwind classes for this component */
@@ -611,5 +627,43 @@
 	}
 	.bg-accent-500\/20 {
 		background-color: rgb(6 182 212 / 0.2);
+	}
+	.public-top-nav {
+		min-width: 0;
+	}
+	.public-top-nav > a {
+		flex-shrink: 0;
+	}
+	.public-nav-primary,
+	.public-nav-secondary {
+		display: none;
+	}
+	.public-nav-mobile {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-left: auto;
+		min-width: 0;
+	}
+	.public-nav-mobile-cta {
+		display: none;
+		flex-shrink: 0;
+	}
+	.public-nav-menu-toggle {
+		flex-shrink: 0;
+	}
+	@media (min-width: 640px) {
+		.public-nav-mobile-cta {
+			display: inline-flex;
+		}
+	}
+	@media (min-width: 1024px) {
+		.public-nav-primary,
+		.public-nav-secondary {
+			display: flex;
+		}
+		.public-nav-mobile {
+			display: none;
+		}
 	}
 </style>

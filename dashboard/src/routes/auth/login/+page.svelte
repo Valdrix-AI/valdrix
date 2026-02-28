@@ -14,21 +14,32 @@
 	import { page } from '$app/stores';
 	import { base } from '$app/paths';
 	import { edgeApiPath } from '$lib/edgeProxy';
+	import {
+		buildAuthCallbackPath,
+		buildPostAuthRedirectPath,
+		describePublicIntent,
+		describePublicPersona,
+		parsePublicAuthContext,
+		type PublicAuthContext
+	} from '$lib/auth/publicAuthIntent';
+	import { emitLandingTelemetry } from '$lib/landing/landingTelemetry';
 
 	let email = $state('');
 	let password = $state('');
 	let loading = $state(false);
 	let ssoLoading = $state(false);
+	let magicLinkLoading = $state(false);
 	let error = $state('');
 	let success = $state('');
-	let mode: 'login' | 'signup' = $state('login');
+	let authContext = $derived<PublicAuthContext>(parsePublicAuthContext($page.url));
+	let mode: 'login' | 'signup' = $state(parsePublicAuthContext($page.url).mode);
+	let intentLabel = $derived<string | null>(describePublicIntent(authContext.intent));
+	let personaLabel = $derived<string | null>(describePublicPersona(authContext.persona));
 
 	const supabase = createSupabaseBrowserClient();
 
 	$effect(() => {
-		if ($page.url.searchParams.get('mode') === 'signup') {
-			mode = 'signup';
-		}
+		mode = authContext.mode;
 		const oauthError = $page.url.searchParams.get('error');
 		if (oauthError) {
 			error = oauthError;
@@ -55,6 +66,24 @@
 		);
 	}
 
+	function callbackRedirectTo(): string {
+		if (typeof window === 'undefined') {
+			return `${base}/auth/callback`;
+		}
+		const callbackPath = buildAuthCallbackPath(authContext);
+		return `${window.location.origin}${base}${callbackPath}`;
+	}
+
+	function emitAuthEvent(action: string, value?: string): void {
+		emitLandingTelemetry(action, 'auth', value, {
+			persona: authContext.persona,
+			funnelStage: 'signup_intent',
+			pagePath: $page.url.pathname,
+			experiment: undefined,
+			utm: authContext.utm
+		});
+	}
+
 	async function handleSubmit() {
 		loading = true;
 		error = '';
@@ -62,6 +91,7 @@
 
 		try {
 			if (mode === 'login') {
+				emitAuthEvent('auth_password_submit', 'login');
 				const { error: authError } = await supabase.auth.signInWithPassword({
 					email,
 					password
@@ -71,21 +101,52 @@
 
 				// Invalidate all load functions to refresh user data, then navigate
 				await invalidateAll();
-				await goto(`${base}/`);
+				const nextPath = buildPostAuthRedirectPath(authContext);
+				await goto(`${base}${nextPath}`);
 			} else {
+				emitAuthEvent('auth_password_submit', 'signup');
 				const { error: authError } = await supabase.auth.signUp({
 					email,
-					password
+					password,
+					options: { emailRedirectTo: callbackRedirectTo() }
 				});
 
 				if (authError) throw authError;
-				success = 'Check your email for the confirmation link.';
+				success =
+					'Check your email for the confirmation link. Your setup flow will continue after verification.';
 			}
 		} catch (e) {
 			const err = e as Error;
 			error = err.message;
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function handleMagicLinkSubmit() {
+		magicLinkLoading = true;
+		error = '';
+		success = '';
+		try {
+			const normalizedEmail = email.trim().toLowerCase();
+			if (!normalizedEmail) {
+				throw new Error('Enter your work email to continue.');
+			}
+			emitAuthEvent('auth_magic_link_submit', mode);
+			const { error: authError } = await supabase.auth.signInWithOtp({
+				email: normalizedEmail,
+				options: {
+					emailRedirectTo: callbackRedirectTo(),
+					shouldCreateUser: mode === 'signup'
+				}
+			});
+			if (authError) throw authError;
+			success = 'Secure sign-in link sent. Check your inbox to continue.';
+		} catch (e) {
+			const err = e as Error;
+			error = err.message;
+		} finally {
+			magicLinkLoading = false;
 		}
 	}
 
@@ -107,16 +168,17 @@
 				throw new Error('Unable to discover SSO configuration. Try again.');
 			}
 			const discovery = (await res.json()) as SsoDiscoveryResponse;
-			if (!discovery.available || !discovery.mode) {
-				throw new Error(
-					discovery.reason === 'sso_not_configured_for_domain'
-						? 'No SSO configuration was found for your domain.'
-						: 'SSO is not ready for this domain. Contact your admin.'
-				);
-			}
+				if (!discovery.available || !discovery.mode) {
+					throw new Error(
+						discovery.reason === 'sso_not_configured_for_domain'
+							? 'No SSO configuration was found for your domain.'
+							: 'SSO is not ready for this domain. Contact your admin.'
+					);
+				}
 
-			const redirectTo = `${window.location.origin}${base}/auth/callback`;
-			if (discovery.mode === 'provider_id') {
+				const redirectTo = callbackRedirectTo();
+				emitAuthEvent('auth_sso_submit', discovery.mode);
+				if (discovery.mode === 'provider_id') {
 				if (!discovery.provider_id) {
 					throw new Error('SSO provider configuration is incomplete.');
 				}
@@ -157,15 +219,31 @@
 		<!-- Card -->
 		<div class="card stagger-enter">
 			<!-- Header -->
-			<div class="text-center mb-6">
-				<span class="text-4xl mb-3 block">☁️</span>
-				<h1 class="text-xl font-semibold">
-					{mode === 'login' ? 'Welcome back' : 'Create your account'}
-				</h1>
-				<p class="text-ink-300 text-sm mt-1">
-					{mode === 'login' ? 'Sign in to continue' : 'Start for free'}
-				</p>
-			</div>
+				<div class="text-center mb-6">
+					<span class="text-4xl mb-3 block">☁️</span>
+					<h1 class="text-xl font-semibold">
+						{mode === 'login' ? 'Welcome back' : 'Create your account'}
+					</h1>
+					<p class="text-ink-300 text-sm mt-1">
+						{mode === 'login'
+							? 'Sign in to continue with controlled execution'
+							: 'Start free and activate governed economic workflows'}
+					</p>
+					{#if intentLabel || personaLabel}
+						<p class="text-ink-200 text-xs mt-2">
+							Starting with
+							{#if intentLabel}
+								<strong>{intentLabel}</strong>
+							{/if}
+							{#if intentLabel && personaLabel}
+								for
+							{/if}
+							{#if personaLabel}
+								<strong>{personaLabel}</strong>
+							{/if}
+						</p>
+					{/if}
+				</div>
 
 			{#if error}
 				<div
@@ -241,13 +319,28 @@
 				<div class="h-px flex-1 bg-ink-800/70"></div>
 			</div>
 
-			<button
-				type="button"
-				class="btn btn-secondary w-full py-2.5"
-				disabled={ssoLoading}
-				onclick={() => void handleSsoSubmit()}
-				aria-label="Continue with SSO"
-			>
+				<button
+					type="button"
+					class="btn btn-secondary w-full py-2.5"
+					disabled={magicLinkLoading}
+					onclick={() => void handleMagicLinkSubmit()}
+					aria-label={mode === 'login' ? 'Send secure sign-in link' : 'Send secure signup link'}
+				>
+					{#if magicLinkLoading}
+						<span class="spinner" aria-hidden="true"></span>
+						<span>Sending secure link...</span>
+					{:else}
+						{mode === 'login' ? 'Email me a secure sign-in link' : 'Email me a secure signup link'}
+					{/if}
+				</button>
+
+				<button
+					type="button"
+					class="btn btn-secondary w-full py-2.5"
+					disabled={ssoLoading}
+					onclick={() => void handleSsoSubmit()}
+					aria-label="Continue with SSO"
+				>
 				{#if ssoLoading}
 					<span class="spinner" aria-hidden="true"></span>
 					<span>Redirecting to IdP...</span>

@@ -16,6 +16,7 @@
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright test",
+		"test:a11y:public": "PLAYWRIGHT_PUBLIC_ONLY=1 playwright test e2e/public-a11y.spec.ts",
 		"test:perf": "playwright test e2e/performance.spec.ts",
 		"test:perf:ci": "PLAYWRIGHT_PUBLIC_ONLY=1 playwright test e2e/performance.spec.ts",
 		"test:visual": "PLAYWRIGHT_PUBLIC_ONLY=1 playwright test e2e/landing-visual.spec.ts",

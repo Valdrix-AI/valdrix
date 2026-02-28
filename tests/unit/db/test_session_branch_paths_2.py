@@ -405,6 +405,65 @@ async def test_set_session_tenant_id_postgres_execute_failure_marks_fail_closed(
     mock_logger.warning.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_set_session_tenant_id_none_delegates_to_clear_context() -> None:
+    session = MagicMock()
+    session.info = {}
+
+    clear_mock = AsyncMock()
+    with patch.object(session_mod, "clear_session_tenant_context", clear_mock):
+        await session_mod.set_session_tenant_id(session, None)
+
+    clear_mock.assert_awaited_once_with(session)
+
+
+@pytest.mark.asyncio
+async def test_clear_session_tenant_context_postgres_fails_closed() -> None:
+    conn = MagicMock(info={})
+    session = MagicMock()
+    session.info = {"tenant_id": "tenant-1", "rls_context_set": True}
+    session.connection = AsyncMock(return_value=conn)
+    session.execute = AsyncMock(return_value=None)
+
+    with patch(
+        "app.shared.db.session._resolve_session_backend",
+        return_value=("postgresql", "bind"),
+    ):
+        await session_mod.clear_session_tenant_context(session)
+
+    assert session.info["tenant_id"] is None
+    assert session.info["rls_context_set"] is False
+    assert session.info["rls_system_context"] is False
+    assert conn.info["tenant_id"] is None
+    assert conn.info["rls_context_set"] is False
+    assert conn.info["rls_system_context"] is False
+    session.execute.assert_awaited_once()
+    sql_text = str(session.execute.await_args.args[0])
+    assert "set_config('app.current_tenant_id', '', true)" in sql_text
+
+
+@pytest.mark.asyncio
+async def test_clear_session_tenant_context_postgres_clear_failure_logged() -> None:
+    conn = MagicMock(info={})
+    session = MagicMock()
+    session.info = {}
+    session.connection = AsyncMock(return_value=conn)
+    session.execute = AsyncMock(side_effect=RuntimeError("clear failed"))
+
+    with (
+        patch(
+            "app.shared.db.session._resolve_session_backend",
+            return_value=("postgresql", "bind"),
+        ),
+        patch("app.shared.db.session.logger") as mock_logger,
+    ):
+        await session_mod.clear_session_tenant_context(session)
+
+    assert session.info["rls_context_set"] is False
+    assert conn.info["rls_context_set"] is False
+    mock_logger.warning.assert_called_once()
+
+
 def test_check_rls_policy_additional_branch_paths() -> None:
     conn = MagicMock()
     conn.info = {"rls_context_set": True}

@@ -184,15 +184,16 @@
 		<title>Valdrics | Economic Control Plane for Cloud and Software Spend</title>
 		<meta
 			name="description"
-			content="Valdrics helps teams control cloud and software spend with clear ownership, safer actions, and measurable outcomes."
+			content="Valdrics is a cloud cost optimization and software spend management platform that helps finance and engineering reduce waste, assign ownership, and recover margin faster."
 		/>
 		<meta
-			property="og:title"
-			content="Valdrics | Economic Control Plane for Cloud and Software Spend"
+			name="keywords"
+			content="cloud cost optimization, SaaS spend management, GreenOps platform, carbon cost optimization, FinOps platform, ITAM license optimization, cloud cost control"
 		/>
+		<meta property="og:title" content="Valdrics | Economic Control Plane for Cloud and Software Spend" />
 		<meta
 			property="og:description"
-			content="Control every cloud and software dollar with clear ownership, governed actions, and faster decisions."
+			content="Control cloud and software spend with owner-assigned actions, safe approvals, and measurable savings."
 		/>
 		<meta property="og:type" content="website" />
 		<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
@@ -207,7 +208,7 @@
 		/>
 		<meta
 			name="twitter:description"
-			content="Control every cloud and software dollar with clear ownership, governed actions, and faster decisions."
+			content="Control cloud and software spend with owner-assigned actions, safe approvals, and measurable savings."
 		/>
 		<meta
 			name="twitter:image"

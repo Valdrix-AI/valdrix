@@ -19,11 +19,14 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await page.goto(BASE_URL);
 
 		await expect(
-			page.getByRole('heading', { level: 1, name: /cloud cost intelligence/i })
+			page.getByRole('heading', {
+				level: 1,
+				name: /stop cloud and software waste|control every dollar|control cloud margin risk/i
+			})
 		).toBeVisible();
 		await expect(page.getByRole('contentinfo')).toBeVisible();
 
-		const primaryCta = page.getByRole('link', { name: /get started free/i }).first();
+		const primaryCta = page.getByRole('link', { name: /start free|book executive briefing/i }).first();
 		await expect(primaryCta).toHaveAttribute('href', '/auth/login');
 
 		const footer = page.getByRole('contentinfo');
@@ -60,12 +63,15 @@ test.describe('Public marketing smoke (mobile)', () => {
 	test('key landing sections and docs pages remain usable', async ({ page }, testInfo) => {
 		await page.goto(BASE_URL);
 		await expect(
-			page.getByRole('heading', { level: 1, name: /cloud cost intelligence/i })
+			page.getByRole('heading', {
+				level: 1,
+				name: /stop cloud and software waste|control every dollar|control cloud margin risk/i
+			})
 		).toBeVisible();
-		await expect(page.locator('#problem')).toBeVisible();
-		await expect(page.locator('#ai')).toBeVisible();
-		await expect(page.locator('#integrations')).toBeVisible();
-		await expect(page.locator('#faq')).toBeVisible();
+		await expect(page.locator('#cloud-hook')).toBeVisible();
+		await expect(page.locator('#simulator')).toBeVisible();
+		await expect(page.locator('#plans')).toBeVisible();
+		await expect(page.locator('#trust')).toBeVisible();
 
 		await assertPublicRoute(page, '/docs', /documentation/i);
 		await assertPublicRoute(page, '/docs/api', /api reference/i);

@@ -344,6 +344,41 @@ async def test_saas_get_json_dead_fallback_branches_with_patched_range() -> None
 
 
 @pytest.mark.asyncio
-async def test_saas_get_resource_usage_returns_empty_list() -> None:
-    adapter = SaaSAdapter(_saas_credentials())
-    assert await adapter.get_resource_usage("service", "id-1") == []
+async def test_saas_get_resource_usage_projects_feed_rows() -> None:
+    now = datetime.now(timezone.utc)
+    adapter = SaaSAdapter(
+        _saas_credentials(
+            spend_feed=[
+                {
+                    "timestamp": (now - timedelta(days=2)).isoformat(),
+                    "service": "Billing API",
+                    "resource_id": "sub-1",
+                    "usage_amount": 3,
+                    "usage_unit": "seat",
+                    "cost_usd": 9.5,
+                },
+                {
+                    "timestamp": (now - timedelta(days=1)).isoformat(),
+                    "service": "Billing API",
+                    "resource_id": "sub-2",
+                    "usage_amount": 2,
+                    "cost_usd": 6.0,
+                },
+                {
+                    "timestamp": now.isoformat(),
+                    "service": "Support",
+                    "resource_id": "sub-3",
+                    "cost_usd": 1.0,
+                },
+            ]
+        )
+    )
+    rows = await adapter.get_resource_usage("billing", "sub-1")
+    assert len(rows) == 1
+    assert rows[0]["provider"] == "saas"
+    assert rows[0]["resource_id"] == "sub-1"
+    assert rows[0]["usage_unit"] == "seat"
+
+    defaulted_unit_rows = await adapter.get_resource_usage("billing", "sub-2")
+    assert len(defaulted_unit_rows) == 1
+    assert defaulted_unit_rows[0]["usage_unit"] == "unit"

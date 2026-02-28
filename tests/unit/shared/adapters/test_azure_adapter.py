@@ -23,6 +23,7 @@ def _connection():
 @pytest.mark.asyncio
 async def test_verify_connection_success():
     adapter = AzureAdapter(_connection())
+    adapter.last_error = "stale"
     mock_client = MagicMock()
 
     async def list_groups():
@@ -36,6 +37,7 @@ async def test_verify_connection_success():
         adapter, "_get_resource_client", AsyncMock(return_value=mock_client)
     ):
         assert await adapter.verify_connection() is True
+    assert adapter.last_error is None
 
 
 @pytest.mark.asyncio
@@ -45,6 +47,8 @@ async def test_verify_connection_failure():
         adapter, "_get_resource_client", AsyncMock(side_effect=RuntimeError("boom"))
     ):
         assert await adapter.verify_connection() is False
+    assert adapter.last_error is not None
+    assert "Azure credential verification failed" in adapter.last_error
 
 
 def test_parse_row_invalid_date_falls_back():

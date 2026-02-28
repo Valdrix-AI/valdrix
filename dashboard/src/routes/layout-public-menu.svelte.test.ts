@@ -152,4 +152,22 @@ describe('public layout mobile menu', () => {
 			expect(screen.queryByRole('dialog', { name: /public navigation menu/i })).toBeNull();
 		});
 	});
+
+	it('closes when user scrolls after opening the menu', async () => {
+		renderPublicLayout();
+
+		await fireEvent.click(getMenuToggle());
+		await screen.findByRole('dialog', { name: /public navigation menu/i });
+
+		Object.defineProperty(window, 'scrollY', {
+			value: 96,
+			writable: true,
+			configurable: true
+		});
+		await fireEvent.scroll(window);
+
+		await waitFor(() => {
+			expect(screen.queryByRole('dialog', { name: /public navigation menu/i })).toBeNull();
+		});
+	});
 });

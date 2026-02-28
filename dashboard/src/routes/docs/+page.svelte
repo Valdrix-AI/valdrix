@@ -38,6 +38,16 @@
 		</article>
 
 		<article class="glass-panel space-y-3">
+			<h2 class="text-xl font-semibold">Technical Validation</h2>
+			<p class="text-ink-300">
+				Review the buyer-safe capability-to-API validation summary used for technical diligence.
+			</p>
+			<a href={`${base}/docs/technical-validation`} class="btn btn-secondary w-fit">
+				Open Technical Validation
+			</a>
+		</article>
+
+		<article class="glass-panel space-y-3">
 			<h2 class="text-xl font-semibold">Plan & Access</h2>
 			<p class="text-ink-300">
 				See current plan capabilities, billing model, and upgrade paths for advanced workflows.

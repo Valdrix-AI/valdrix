@@ -273,3 +273,76 @@ async def test_process_single_job_cancelled(job_processor, mock_db_session):
         assert job.status == JobStatus.PENDING.value
         assert job.error_message == "Job was cancelled"
         assert job.scheduled_for > datetime.now(timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_process_single_job_tenant_context_cleared_on_success(
+    job_processor, mock_db_session
+):
+    job = BackgroundJob(
+        id=uuid4(),
+        job_type="test_job",
+        attempts=0,
+        max_attempts=3,
+        status=JobStatus.PENDING.value,
+        tenant_id=uuid4(),
+    )
+
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.processor.get_handler_factory"
+        ) as mock_factory,
+        patch(
+            "app.shared.db.session.set_session_tenant_id", new_callable=AsyncMock
+        ) as mock_set_tenant,
+        patch(
+            "app.shared.db.session.clear_session_tenant_context",
+            new_callable=AsyncMock,
+        ) as mock_clear_tenant,
+    ):
+        mock_handler = AsyncMock()
+        mock_handler.execute = AsyncMock(return_value={"ok": True})
+        mock_factory.return_value.return_value = mock_handler
+
+        await job_processor._process_single_job(job)
+
+    mock_set_tenant.assert_awaited_once_with(mock_db_session, job.tenant_id)
+    mock_clear_tenant.assert_awaited_once_with(mock_db_session)
+    assert job.status == JobStatus.COMPLETED.value
+
+
+@pytest.mark.asyncio
+async def test_process_single_job_tenant_context_cleared_on_handler_failure(
+    job_processor, mock_db_session
+):
+    job = BackgroundJob(
+        id=uuid4(),
+        job_type="test_job",
+        attempts=0,
+        max_attempts=2,
+        status=JobStatus.PENDING.value,
+        tenant_id=uuid4(),
+    )
+
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.processor.get_handler_factory"
+        ) as mock_factory,
+        patch(
+            "app.shared.db.session.set_session_tenant_id", new_callable=AsyncMock
+        ) as mock_set_tenant,
+        patch(
+            "app.shared.db.session.clear_session_tenant_context",
+            new_callable=AsyncMock,
+        ) as mock_clear_tenant,
+    ):
+        mock_handler = AsyncMock()
+        mock_handler.execute = AsyncMock(side_effect=RuntimeError("handler boom"))
+        mock_factory.return_value.return_value = mock_handler
+
+        await job_processor._process_single_job(job)
+
+    mock_set_tenant.assert_awaited_once_with(mock_db_session, job.tenant_id)
+    mock_clear_tenant.assert_awaited_once_with(mock_db_session)
+    assert job.status == JobStatus.PENDING.value
+    assert "handler boom" in (job.error_message or "")

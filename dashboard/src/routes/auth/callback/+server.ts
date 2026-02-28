@@ -4,7 +4,9 @@ import type { RequestHandler } from './$types';
 
 function _safeRedirectTarget(value: string | null): string {
 	if (!value) return '/';
-	return value.startsWith('/') ? value : '/';
+	if (!value.startsWith('/')) return '/';
+	if (value.startsWith('//') || value.startsWith('/\\')) return '/';
+	return value;
 }
 
 export const GET: RequestHandler = async ({ url, locals }) => {

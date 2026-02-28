@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -405,6 +405,42 @@ async def test_hybrid_discover_and_resource_usage_defaults() -> None:
     adapter = HybridAdapter(_conn())
     assert await adapter.discover_resources("any") == []
     assert await adapter.get_resource_usage("service", "id-1") == []
+
+
+@pytest.mark.asyncio
+async def test_hybrid_get_resource_usage_projects_manual_feed_rows() -> None:
+    now = datetime.now(timezone.utc)
+    adapter = HybridAdapter(
+        _conn(
+            auth_method="manual",
+            spend_feed=[
+                {
+                    "timestamp": (now - timedelta(days=2)).isoformat(),
+                    "service": "Shared Infra",
+                    "resource_id": "cluster-1",
+                    "usage_amount": 8,
+                    "usage_unit": "node-hour",
+                    "cost_usd": 12.0,
+                },
+                {
+                    "timestamp": (now - timedelta(days=1)).isoformat(),
+                    "service": "Shared Infra",
+                    "resource_id": "cluster-2",
+                    "usage_amount": 4,
+                    "cost_usd": 7.0,
+                },
+            ],
+        )
+    )
+    rows = await adapter.get_resource_usage("shared", "cluster-1")
+    assert len(rows) == 1
+    assert rows[0]["provider"] == "hybrid"
+    assert rows[0]["resource_id"] == "cluster-1"
+    assert rows[0]["usage_unit"] == "node-hour"
+
+    defaulted_unit_rows = await adapter.get_resource_usage("shared", "cluster-2")
+    assert len(defaulted_unit_rows) == 1
+    assert defaulted_unit_rows[0]["usage_unit"] == "unit"
 
 
 class _Secret:
