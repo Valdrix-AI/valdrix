@@ -279,7 +279,7 @@
 </script>
 
 <svelte:head>
-	<title>System Health | Valdrix</title>
+	<title>System Health | Valdrics</title>
 </svelte:head>
 
 <AuthGate authenticated={!!data.user} action="view system health metrics">

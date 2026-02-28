@@ -5,10 +5,11 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.enforcement.api.v1.common import tenant_or_403
+from app.modules.enforcement.api.v1.common import tenant_or_403, require_feature_or_403
 from app.modules.enforcement.api.v1.schemas import DecisionLedgerItem
 from app.modules.enforcement.domain.service import EnforcementService
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
+from app.shared.core.pricing import FeatureFlag
 from app.shared.db.session import get_db
 
 
@@ -23,6 +24,11 @@ async def list_decision_ledger(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> list[DecisionLedgerItem]:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.API_ACCESS,
+    )
     service = EnforcementService(db)
     rows = await service.list_decision_ledger(
         tenant_id=tenant_or_403(current_user),

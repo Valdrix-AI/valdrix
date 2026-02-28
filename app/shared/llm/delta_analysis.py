@@ -244,32 +244,33 @@ class DeltaAnalysisService:
                 )
                 continue
 
-            # Calculate delta
-            if current and previous:
-                prev_cost = previous["daily_cost"]
-                curr_cost = current["daily_cost"]
-                change = curr_cost - prev_cost
+            # At this point we have both current and previous resource entries.
+            assert current is not None
+            assert previous is not None
+            prev_cost = previous["daily_cost"]
+            curr_cost = current["daily_cost"]
+            change = curr_cost - prev_cost
 
-                # Skip insignificant changes
-                if abs(change) < 0.50:  # Less than $0.50/day change
-                    continue
+            # Skip insignificant changes
+            if abs(change) < 0.50:  # Less than $0.50/day change
+                continue
 
-                change_pct = (change / prev_cost * 100) if prev_cost > 0 else 0
+            change_pct = (change / prev_cost * 100) if prev_cost > 0 else 0
 
-                delta = CostDelta(
-                    resource_id=resource_id,
-                    resource_type=current.get("type", "Unknown"),
-                    previous_cost=prev_cost,
-                    current_cost=curr_cost,
-                    change_amount=change,
-                    change_percent=change_pct,
-                    region=current.get("region", ""),
-                )
+            delta = CostDelta(
+                resource_id=resource_id,
+                resource_type=current.get("type", "Unknown"),
+                previous_cost=prev_cost,
+                current_cost=curr_cost,
+                change_amount=change,
+                change_percent=change_pct,
+                region=current.get("region", ""),
+            )
 
-                if delta.is_significant:
-                    result.significant_changes_count += 1
+            if delta.is_significant:
+                result.significant_changes_count += 1
 
-                all_deltas.append(delta)
+            all_deltas.append(delta)
 
         # Sort and select top movers
         increases = [d for d in all_deltas if d.change_amount > 0]

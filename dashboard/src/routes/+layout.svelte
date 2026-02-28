@@ -166,7 +166,7 @@
 			<!-- Logo -->
 			<div class="flex items-center gap-3 px-5 py-5 border-b border-ink-800">
 				<CloudLogo provider="valdrix" size={32} />
-				<span class="text-lg font-semibold text-gradient">Valdrix</span>
+				<span class="text-lg font-semibold text-gradient">Valdrics</span>
 			</div>
 
 			<!-- Navigation -->
@@ -349,7 +349,7 @@
 			<nav class="container mx-auto flex items-center justify-between px-6 py-4">
 				<a href={toAppPath('/')} class="flex items-center gap-2">
 					<CloudLogo provider="valdrix" size={32} />
-					<span class="text-xl font-bold text-gradient">Valdrix</span>
+					<span class="text-xl font-bold text-gradient">Valdrics</span>
 				</a>
 
 				<a href={toAppPath('/auth/login')} class="btn btn-primary"> Sign In </a>
@@ -364,7 +364,7 @@
 			<div class="container mx-auto px-6 py-10">
 				<div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
 					<div class="space-y-2">
-						<p class="text-sm font-semibold text-ink-100">Valdrix</p>
+						<p class="text-sm font-semibold text-ink-100">Valdrics</p>
 						<p class="max-w-xl text-sm text-ink-400">
 							FinOps, GreenOps, and ActiveOps in one operational surface with policy-driven
 							remediation and audit-ready evidence.
@@ -396,7 +396,7 @@
 					<span class="badge badge-default">License: BSL 1.1</span>
 				</div>
 
-				<p class="mt-6 text-xs text-ink-500">© {currentYear} Valdrix. All rights reserved.</p>
+				<p class="mt-6 text-xs text-ink-500">© {currentYear} Valdrics. All rights reserved.</p>
 			</div>
 		</footer>
 	{/if}

@@ -513,6 +513,7 @@ def test_as_bool_and_as_int_edge_cases() -> None:
     assert budget_fair_use._as_bool("yes", default=False) is True
     assert budget_fair_use._as_bool("off", default=True) is False
     assert budget_fair_use._as_bool("not-a-bool", default=True) is True
+    assert budget_fair_use._as_bool(object(), default=False) is False
 
     assert budget_fair_use._as_int(True, default=7) == 7
     assert budget_fair_use._as_int(5, default=0) == 5
@@ -947,4 +948,322 @@ async def test_enforce_fair_use_guards_per_minute_and_concurrency_edges() -> Non
                 _DummyManager, tenant_id, db, PricingTier.PRO
             )
             is True
+        )
+
+
+@pytest.mark.asyncio
+async def test_count_requests_and_daily_limit_normalization_branches() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=SimpleNamespace(scalar=lambda: 0))
+
+    # Covers actor_type normalization branch in count_requests_in_window.
+    await budget_fair_use.count_requests_in_window(
+        tenant_id=tenant_id,
+        db=db,
+        start=datetime.now(timezone.utc) - timedelta(hours=1),
+        actor_type="user",
+    )
+
+    # Covers invalid actor_type fallback in daily limit enforcement.
+    with (
+        patch(
+            "app.shared.llm.budget_manager.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
+        patch("app.shared.core.pricing.get_tier_limit", return_value=None),
+    ):
+        await budget_fair_use.enforce_daily_analysis_limit(
+            _DummyManager,
+            tenant_id,
+            db,
+            actor_type="invalid",
+        )
+
+    # Covers system-actor branch where system limit is absent.
+    def _no_system_limit(_tier: PricingTier, key: str) -> object:
+        if key == "llm_analyses_per_day":
+            return 10
+        if key == "llm_system_analyses_per_day":
+            return None
+        return None
+
+    with (
+        patch(
+            "app.shared.llm.budget_manager.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
+        patch("app.shared.core.pricing.get_tier_limit", side_effect=_no_system_limit),
+        patch(
+            "app.shared.llm.budget_fair_use.count_requests_in_window",
+            new=AsyncMock(return_value=0),
+        ),
+    ):
+        await budget_fair_use.enforce_daily_analysis_limit(
+            _DummyManager,
+            tenant_id,
+            db,
+            actor_type="system",
+        )
+
+
+@pytest.mark.asyncio
+async def test_enforce_daily_limit_system_and_user_short_circuit_branches() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    metric = _MetricStub()
+
+    def _invalid_system_limit(_tier: PricingTier, key: str) -> object:
+        if key == "llm_analyses_per_day":
+            return 5
+        if key == "llm_system_analyses_per_day":
+            return "invalid"
+        return None
+
+    with (
+        patch(
+            "app.shared.llm.budget_manager.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
+        patch("app.shared.core.pricing.get_tier_limit", side_effect=_invalid_system_limit),
+        patch(
+            "app.shared.llm.budget_fair_use.count_requests_in_window",
+            new=AsyncMock(return_value=0),
+        ),
+    ):
+        await budget_fair_use.enforce_daily_analysis_limit(
+            _DummyManager,
+            tenant_id,
+            db,
+            actor_type="system",
+        )
+
+    def _zero_system_limit(_tier: PricingTier, key: str) -> object:
+        if key == "llm_analyses_per_day":
+            return 5
+        if key == "llm_system_analyses_per_day":
+            return 0
+        return None
+
+    with (
+        patch(
+            "app.shared.llm.budget_manager.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
+        patch("app.shared.core.pricing.get_tier_limit", side_effect=_zero_system_limit),
+        patch(
+            "app.shared.llm.budget_fair_use.count_requests_in_window",
+            new=AsyncMock(return_value=0),
+        ),
+        patch("app.shared.llm.budget_manager.LLM_PRE_AUTH_DENIALS", metric),
+    ):
+        with pytest.raises(BudgetExceededError) as exc:
+            await budget_fair_use.enforce_daily_analysis_limit(
+                _DummyManager,
+                tenant_id,
+                db,
+                actor_type="system",
+            )
+    assert exc.value.details["gate"] == "daily_system"
+
+    def _no_user_limit(_tier: PricingTier, key: str) -> object:
+        if key == "llm_analyses_per_day":
+            return 5
+        if key == "llm_analyses_per_user_per_day":
+            return None
+        return None
+
+    with (
+        patch(
+            "app.shared.llm.budget_manager.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
+        patch("app.shared.core.pricing.get_tier_limit", side_effect=_no_user_limit),
+        patch(
+            "app.shared.llm.budget_fair_use.count_requests_in_window",
+            new=AsyncMock(return_value=0),
+        ),
+    ):
+        await budget_fair_use.enforce_daily_analysis_limit(
+            _DummyManager,
+            tenant_id,
+            db,
+            user_id=uuid4(),
+        )
+
+    # user_id absent short-circuit.
+    with (
+        patch(
+            "app.shared.llm.budget_manager.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
+        patch("app.shared.core.pricing.get_tier_limit", return_value=5),
+        patch(
+            "app.shared.llm.budget_fair_use.count_requests_in_window",
+            new=AsyncMock(return_value=0),
+        ),
+    ):
+        await budget_fair_use.enforce_daily_analysis_limit(
+            _DummyManager,
+            tenant_id,
+            db,
+            user_id=None,
+            actor_type="system",
+        )
+
+
+def test_classify_ip_additional_buckets() -> None:
+    assert budget_fair_use._classify_client_ip("169.254.10.10")[0] == "link_local"
+    assert budget_fair_use._classify_client_ip("ff00::1")[0] == "reserved"
+    assert budget_fair_use._classify_client_ip("2001:4860:4860::8888")[0] == "public_v6"
+
+
+@pytest.mark.asyncio
+async def test_record_authenticated_abuse_signal_low_risk_and_actor_normalization() -> None:
+    tenant_id = uuid4()
+    metric = _MetricStub()
+    with (
+        patch("app.shared.llm.budget_manager.LLM_AUTH_ABUSE_SIGNALS", metric),
+        patch("app.shared.llm.budget_manager.LLM_AUTH_IP_RISK_SCORE", metric),
+        patch("app.shared.llm.budget_manager.audit_log") as mock_audit,
+    ):
+        await budget_fair_use.record_authenticated_abuse_signal(
+            manager_cls=_DummyManager,
+            tenant_id=tenant_id,
+            db=AsyncMock(),
+            tier=PricingTier.PRO,
+            actor_type="unknown",
+            user_id=uuid4(),
+            client_ip="10.0.0.8",
+        )
+    # private IP => risk < 70 => no audit
+    mock_audit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_record_authenticated_abuse_signal_system_actor_with_user_id_normalizes() -> None:
+    tenant_id = uuid4()
+    metric = _MetricStub()
+    with (
+        patch("app.shared.llm.budget_manager.LLM_AUTH_ABUSE_SIGNALS", metric),
+        patch("app.shared.llm.budget_manager.LLM_AUTH_IP_RISK_SCORE", metric),
+        patch("app.shared.llm.budget_manager.audit_log") as mock_audit,
+    ):
+        await budget_fair_use.record_authenticated_abuse_signal(
+            manager_cls=_DummyManager,
+            tenant_id=tenant_id,
+            db=AsyncMock(),
+            tier=PricingTier.PRO,
+            actor_type="system",
+            user_id=uuid4(),
+            client_ip="10.1.0.1",
+        )
+    # normalized to user; low risk so no audit.
+    mock_audit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_global_abuse_guard_row_parsing_and_cache_set_non_callable() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    metric = _MetricStub()
+    settings = SimpleNamespace(
+        LLM_GLOBAL_ABUSE_GUARDS_ENABLED=True,
+        LLM_GLOBAL_ABUSE_KILL_SWITCH=False,
+        LLM_GLOBAL_ABUSE_PER_MINUTE_CAP=1,
+        LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD=1,
+        LLM_GLOBAL_ABUSE_BLOCK_SECONDS=45,
+    )
+
+    # Covers first() fallback and int parsing exceptions.
+    result = SimpleNamespace(first=lambda: ("not-int", object()))
+    db.execute = AsyncMock(return_value=result)
+    cache = SimpleNamespace(enabled=False, client=None)
+    with (
+        patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
+        patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache),
+        patch("app.shared.llm.budget_manager.LLM_FAIR_USE_OBSERVED", metric),
+        patch("app.shared.llm.budget_manager.LLM_FAIR_USE_EVALUATIONS", metric),
+    ):
+        await budget_fair_use.enforce_global_abuse_guard(
+            _DummyManager, tenant_id, db, PricingTier.PRO
+        )
+
+    # Covers triggered path with cache.set non-callable branch.
+    result_triggered = MagicMock()
+    result_triggered.one_or_none.return_value = (5, 5)
+    db.execute = AsyncMock(return_value=result_triggered)
+    cache_non_callable_set = SimpleNamespace(
+        enabled=True,
+        client=SimpleNamespace(get=AsyncMock(return_value=None), set=None),
+    )
+    with (
+        patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
+        patch(
+            "app.shared.llm.budget_manager.get_cache_service",
+            return_value=cache_non_callable_set,
+        ),
+        patch("app.shared.llm.budget_manager.LLM_FAIR_USE_OBSERVED", metric),
+        patch("app.shared.llm.budget_manager.LLM_PRE_AUTH_DENIALS", metric),
+        patch("app.shared.llm.budget_manager.LLM_FAIR_USE_DENIALS", metric),
+        patch("app.shared.llm.budget_manager.LLM_FAIR_USE_EVALUATIONS", metric),
+        patch("app.shared.llm.budget_manager.audit_log"),
+    ):
+        with pytest.raises(LLMFairUseExceededError):
+            await budget_fair_use.enforce_global_abuse_guard(
+                _DummyManager, tenant_id, db, PricingTier.PRO
+            )
+
+
+@pytest.mark.asyncio
+async def test_inflight_slot_local_zero_pop_and_release_non_negative_decr() -> None:
+    tenant_id = uuid4()
+    cache_disabled = SimpleNamespace(enabled=False, client=None)
+    with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache_disabled):
+        # max_inflight=0 forces over-limit path with next_value=0 => pop()
+        ok, current = await budget_fair_use.acquire_fair_use_inflight_slot(
+            _DummyManager, tenant_id, max_inflight=0, ttl_seconds=30
+        )
+    assert ok is False
+    assert current == 0
+
+    # Covers release path where decr is callable and current is not negative.
+    settings = SimpleNamespace(LLM_FAIR_USE_GUARDS_ENABLED=True)
+    cache_non_negative = SimpleNamespace(
+        enabled=True,
+        client=SimpleNamespace(decr=AsyncMock(return_value=0)),
+    )
+    with (
+        patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
+        patch(
+            "app.shared.llm.budget_manager.get_cache_service",
+            return_value=cache_non_negative,
+        ),
+    ):
+        await budget_fair_use.release_fair_use_inflight_slot(_DummyManager, tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_global_abuse_guard_result_without_first_and_one_or_none() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    metric = _MetricStub()
+    settings = SimpleNamespace(
+        LLM_GLOBAL_ABUSE_GUARDS_ENABLED=True,
+        LLM_GLOBAL_ABUSE_KILL_SWITCH=False,
+        LLM_GLOBAL_ABUSE_PER_MINUTE_CAP=1000,
+        LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD=1000,
+        LLM_GLOBAL_ABUSE_BLOCK_SECONDS=60,
+    )
+    db.execute = AsyncMock(return_value=SimpleNamespace())
+    cache = SimpleNamespace(enabled=False, client=None)
+
+    with (
+        patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
+        patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache),
+        patch("app.shared.llm.budget_manager.LLM_FAIR_USE_OBSERVED", metric),
+        patch("app.shared.llm.budget_manager.LLM_FAIR_USE_EVALUATIONS", metric),
+    ):
+        await budget_fair_use.enforce_global_abuse_guard(
+            _DummyManager, tenant_id, db, PricingTier.PRO
         )

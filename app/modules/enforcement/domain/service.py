@@ -4722,9 +4722,13 @@ class EnforcementService:
                             "max_monthly_delta_usd",
                             "max_hourly_delta_usd",
                             "resource_reference",
+                            "token_type",
                         ]
                     },
                 )
+                token_type = str(payload.get("token_type", "")).strip()
+                if token_type != "enforcement_approval":
+                    continue
                 return cast(Mapping[str, Any], payload)
             except jwt.ExpiredSignatureError as exc:
                 expired_error = exc
@@ -4853,6 +4857,7 @@ class EnforcementService:
                 _to_decimal(decision.estimated_hourly_delta_usd)
             ),
             "resource_reference": decision.resource_reference,
+            "token_type": "enforcement_approval",
         }
 
         headers: dict[str, str] | None = None

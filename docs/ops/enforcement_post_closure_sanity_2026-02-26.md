@@ -12,7 +12,7 @@ These validations are release-critical and block promotion when evidence is miss
 2. `observability`
    - Validate alert wiring, lock-contention metrics, and actionable operator reason codes.
 3. `deterministic replay`
-   - Validate replay protection for approval tokens and idempotent reconciliation.
+   - Validate replay protection for approval tokens, idempotent reconciliation, and key-rotation fallback/rollback drill evidence.
 4. `snapshot stability`
    - Validate computed-context snapshot boundaries and deterministic replay with stable metadata.
 5. `export integrity`
@@ -27,3 +27,9 @@ These validations are release-critical and block promotion when evidence is miss
 1. `scripts/verify_enforcement_post_closure_sanity.py` must pass.
 2. Evidence tokens for all required dimensions must exist in repo-backed tests/docs.
 3. The gap register must contain the post-closure sanity check gate evidence update.
+4. Release artifact templates must exist and remain machine-verifiable:
+   - `docs/ops/evidence/enforcement_stress_artifact_TEMPLATE.json`
+   - `docs/ops/evidence/enforcement_failure_injection_TEMPLATE.json`
+   - `docs/evidence/ci-green-template.md`
+5. Gap register must include a binary artifact checklist section for release packet closure:
+   - `Binary Artifact Closure Checklist (release packet)`

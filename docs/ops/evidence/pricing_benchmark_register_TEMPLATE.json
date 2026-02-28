@@ -1,0 +1,39 @@
+{
+  "captured_at": "2026-02-27T22:00:00Z",
+  "refresh_policy": {
+    "max_source_age_days": 120,
+    "required_source_classes": [
+      "vendor_pricing_page",
+      "industry_benchmark_report",
+      "standards_guidance"
+    ],
+    "refresh_cadence": "quarterly"
+  },
+  "thresholds": {
+    "minimum_source_count": 5,
+    "minimum_confidence_score": 0.7
+  },
+  "sources": [
+    {
+      "id": "source-id",
+      "title": "Source title",
+      "url": "https://example.com/source",
+      "source_class": "vendor_pricing_page",
+      "crawled_at": "2026-02-27T21:00:00Z",
+      "confidence_score": 0.9,
+      "notes": "Replace with captured evidence metadata."
+    }
+  ],
+  "summary": {
+    "total_sources": 1,
+    "class_counts": {
+      "vendor_pricing_page": 1
+    },
+    "oldest_source_age_days": 0.04
+  },
+  "gate_results": {
+    "pkg_gate_020_register_fresh": true,
+    "pkg_gate_020_required_classes_present": false,
+    "pkg_gate_020_minimum_sources_met": false
+  }
+}

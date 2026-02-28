@@ -2,6 +2,8 @@
 
 This matrix defines required failure-injection scenarios that must be covered by automated tests and release evidence.
 
+Template seed (for schema orientation only): `docs/ops/evidence/enforcement_failure_injection_TEMPLATE.json`
+
 ## Scenario Matrix
 
 | ID | Failure class | Required evidence |
@@ -16,3 +18,50 @@ This matrix defines required failure-injection scenarios that must be covered by
 
 1. All `FI-001` through `FI-005` scenarios must remain present in this matrix.
 2. Any scenario regression in referenced tests blocks release.
+
+## Staged Evidence Contract
+
+1. For release-grade staged operations proof, capture JSON artifact with:
+   - `profile=enforcement_failure_injection`
+   - `runner=staged_failure_injection`
+   - `execution_class=staged`
+   - timezone-aware `captured_at`
+   - separation of duties (`executed_by != approved_by`)
+   - `scenarios[]` entries covering exactly `FI-001..FI-005` with `status`, `duration_seconds`, `checks`, `evidence_refs`
+   - `summary` integrity fields (`total_scenarios`, `passed_scenarios`, `failed_scenarios`, `overall_passed=true`)
+2. Generate artifact from real FI scenario test execution:
+
+```bash
+DEBUG=false uv run python3 scripts/generate_enforcement_failure_injection_evidence.py \
+  --output docs/ops/evidence/enforcement_failure_injection_2026-02-27.json \
+  --executed-by sre.executor@valdrix.local \
+  --approved-by release.approver@valdrix.local
+```
+
+3. Validate artifact with:
+
+```bash
+uv run python3 scripts/verify_enforcement_failure_injection_evidence.py \
+  --evidence-path docs/ops/evidence/enforcement_failure_injection_2026-02-27.json \
+  --max-artifact-age-hours 48
+```
+
+4. Release gate integration:
+   - `ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_PATH` enables validation in enterprise gate.
+   - `ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_MAX_AGE_HOURS` enforces freshness.
+   - `ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED=true` fails fast when path is absent.
+
+## Single-Sprint One-Pass Gate Command
+
+When staged stress + failure-injection artifacts are ready, use:
+
+```bash
+uv run python3 scripts/run_enforcement_release_evidence_gate.py \
+  --stress-evidence-path docs/ops/evidence/enforcement_stress_artifact_2026-02-25.json \
+  --failure-evidence-path docs/ops/evidence/enforcement_failure_injection_2026-02-27.json \
+  --stress-max-age-hours 24 \
+  --failure-max-age-hours 48 \
+  --stress-min-duration-seconds 30 \
+  --stress-min-concurrent-users 10 \
+  --stress-required-database-engine postgresql
+```

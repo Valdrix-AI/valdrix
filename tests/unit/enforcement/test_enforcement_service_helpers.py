@@ -487,6 +487,73 @@ def test_policy_entitlement_matrix_prevalidates_negative_thresholds() -> None:
         )
 
 
+def test_materialize_policy_contract_defensive_threshold_guards_on_quantize_regression(
+    monkeypatch,
+) -> None:
+    service = _service()
+
+    base_kwargs: dict[str, object] = {
+        "terraform_mode": EnforcementMode.SOFT,
+        "terraform_mode_prod": None,
+        "terraform_mode_nonprod": None,
+        "k8s_admission_mode": EnforcementMode.SOFT,
+        "k8s_admission_mode_prod": None,
+        "k8s_admission_mode_nonprod": None,
+        "require_approval_for_prod": False,
+        "require_approval_for_nonprod": False,
+        "plan_monthly_ceiling_usd": None,
+        "enterprise_monthly_ceiling_usd": None,
+        "auto_approve_below_monthly_usd": Decimal("10"),
+        "hard_deny_above_monthly_usd": Decimal("100"),
+        "default_ttl_seconds": 900,
+        "enforce_prod_requester_reviewer_separation": True,
+        "enforce_nonprod_requester_reviewer_separation": False,
+        "approval_routing_rules": [],
+        "policy_document": None,
+    }
+    original_quantize = enforcement_service_module._quantize
+
+    def _run_case(
+        *,
+        trigger_value: Decimal,
+        expected_detail: str,
+        overrides: dict[str, object] | None = None,
+    ) -> None:
+        def _regressive_quantize(value: Decimal, quantum: str) -> Decimal:
+            decimal_value = enforcement_service_module._to_decimal(value)
+            if quantum == "0.0001" and decimal_value == trigger_value:
+                return Decimal("-0.0001")
+            return original_quantize(value, quantum)
+
+        monkeypatch.setattr(
+            enforcement_service_module,
+            "_quantize",
+            _regressive_quantize,
+        )
+        kwargs = dict(base_kwargs)
+        if overrides:
+            kwargs.update(overrides)
+        with pytest.raises(HTTPException, match=expected_detail):
+            service._materialize_policy_contract(**kwargs)
+
+    # Explicitly execute redundant defensive guards that are unreachable in
+    # normal flow because the entitlement model prevalidates these fields.
+    _run_case(
+        trigger_value=Decimal("10"),
+        expected_detail="auto_approve_below_monthly_usd must be >= 0",
+    )
+    _run_case(
+        trigger_value=Decimal("50"),
+        expected_detail="plan_monthly_ceiling_usd must be >= 0 when provided",
+        overrides={"plan_monthly_ceiling_usd": Decimal("50")},
+    )
+    _run_case(
+        trigger_value=Decimal("500"),
+        expected_detail="enterprise_monthly_ceiling_usd must be >= 0 when provided",
+        overrides={"enterprise_monthly_ceiling_usd": Decimal("500")},
+    )
+
+
 def test_reserve_amount_quantization_invariant_proves_defensive_guard() -> None:
     # In _reserve_credit_from_grants(), once both guards pass:
     #  - remaining > 0 (already quantized to 4dp)
@@ -1300,6 +1367,24 @@ def test_decode_and_extract_approval_token_error_branches(monkeypatch) -> None:
         with pytest.raises(HTTPException, match="expired"):
             service._decode_approval_token("token")
 
+    with monkeypatch.context() as context:
+        context.setattr(
+            enforcement_service_module,
+            "get_settings",
+            lambda: SimpleNamespace(
+                SUPABASE_JWT_SECRET="s" * 32,
+                ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=[],
+                API_URL="https://api",
+            ),
+        )
+        context.setattr(
+            enforcement_service_module.jwt,
+            "decode",
+            lambda *_args, **_kwargs: {"token_type": "wrong"},
+        )
+        with pytest.raises(HTTPException, match="Invalid approval token"):
+            service._decode_approval_token("token")
+
     base_payload = {
         "approval_id": str(uuid4()),
         "decision_id": str(uuid4()),
@@ -1385,11 +1470,14 @@ def test_build_approval_token_requires_secret_and_includes_kid(monkeypatch) -> N
         )
 
     captured_headers: dict[str, str] = {}
+    captured_payload: dict[str, object] = {}
 
     def _fake_encode(payload, secret, algorithm, headers=None):
-        del payload, secret, algorithm
+        del secret, algorithm
         nonlocal captured_headers
+        nonlocal captured_payload
         captured_headers = dict(headers or {})
+        captured_payload = dict(payload or {})
         return "signed-token"
 
     monkeypatch.setattr(
@@ -1409,6 +1497,7 @@ def test_build_approval_token_requires_secret_and_includes_kid(monkeypatch) -> N
     )
     assert token == "signed-token"
     assert captured_headers == {"kid": "kid-1"}
+    assert captured_payload.get("token_type") == "enforcement_approval"
 
 
 @pytest.mark.asyncio
@@ -1827,6 +1916,71 @@ async def test_reserve_credit_from_grants_skips_subquantum_reserve_amount() -> N
 
 
 @pytest.mark.asyncio
+async def test_reserve_credit_from_grants_defensive_zero_reserve_amount_guard(
+    monkeypatch,
+) -> None:
+    class _Rows:
+        def __init__(self, rows) -> None:
+            self._rows = list(rows)
+
+        def scalars(self):
+            return SimpleNamespace(all=lambda: list(self._rows))
+
+    class _Db:
+        def __init__(self, row_batches: list[list[SimpleNamespace]]) -> None:
+            self._row_batches = list(row_batches)
+            self.added: list[object] = []
+
+        async def execute(self, _stmt):
+            return _Rows(self._row_batches.pop(0))
+
+        def add(self, obj: object) -> None:
+            self.added.append(obj)
+
+    tenant_id = uuid4()
+    decision_id = uuid4()
+    now = datetime.now(timezone.utc)
+    grant = SimpleNamespace(
+        id=uuid4(),
+        scope_key="default",
+        remaining_amount_usd=Decimal("1.0000"),
+        total_amount_usd=Decimal("1.0000"),
+        active=True,
+        expires_at=None,
+        created_at=now,
+    )
+    db = _Db([[grant]])
+    service = EnforcementService(db=db)
+    original_quantize = enforcement_service_module._quantize
+    quantize_calls = {"count": 0}
+
+    def _quantize_with_regression(value, quantum: str) -> Decimal:
+        quantize_calls["count"] += 1
+        if quantum == "0.0001" and quantize_calls["count"] == 3:
+            return Decimal("0.0000")
+        return original_quantize(value, quantum)
+
+    monkeypatch.setattr(
+        enforcement_service_module,
+        "_quantize",
+        _quantize_with_regression,
+    )
+
+    with pytest.raises(HTTPException, match="Insufficient credit grant headroom"):
+        await service._reserve_credit_from_grants(
+            tenant_id=tenant_id,
+            decision_id=decision_id,
+            scope_key="default",
+            pool_type=EnforcementCreditPoolType.RESERVED,
+            reserve_target_usd=Decimal("1.0000"),
+            now=now,
+        )
+
+    assert grant.remaining_amount_usd == Decimal("1.0000")
+    assert len(db.added) == 0
+
+
+@pytest.mark.asyncio
 async def test_settle_credit_reservations_for_decision_missing_grant_and_drift_errors() -> None:
     class _Rows:
         def __init__(self, rows) -> None:
@@ -2199,7 +2353,7 @@ def test_decode_approval_token_deduplicates_candidate_secrets(monkeypatch) -> No
         decode_attempts.append(secret)
         if secret == "a" * 32:
             raise enforcement_service_module.jwt.InvalidTokenError("bad primary")
-        return {"ok": True}
+        return {"ok": True, "token_type": "enforcement_approval"}
 
     monkeypatch.setattr(
         enforcement_service_module,
@@ -2213,7 +2367,7 @@ def test_decode_approval_token_deduplicates_candidate_secrets(monkeypatch) -> No
     monkeypatch.setattr(enforcement_service_module.jwt, "decode", _fake_decode)
 
     payload = service._decode_approval_token("token")
-    assert payload == {"ok": True}
+    assert payload == {"ok": True, "token_type": "enforcement_approval"}
     assert decode_attempts == ["a" * 32, "b" * 32]
 
 

@@ -1,0 +1,84 @@
+{
+  "captured_at": "2026-02-27T10:00:00Z",
+  "close_history": [
+    {
+      "blended_gross_margin_percent": 84.2,
+      "month": "2026-01"
+    },
+    {
+      "blended_gross_margin_percent": 84.6,
+      "month": "2026-02"
+    }
+  ],
+  "gate_results": {
+    "fin_gate_1_gross_margin_floor": true,
+    "fin_gate_2_llm_cogs_containment": true,
+    "fin_gate_3_annual_discount_impact": true,
+    "fin_gate_4_expansion_signal": true,
+    "fin_gate_5_stress_resilience": true
+  },
+  "metrics": {
+    "annual_discount_impact_percent": 7.38,
+    "blended_gross_margin_percent": 84.6,
+    "growth_to_pro_conversion_mom_delta_percent": 0.8,
+    "p95_tenant_llm_cogs_pct_mrr": 5.2,
+    "pro_to_enterprise_conversion_mom_delta_percent": 0.4,
+    "stress_margin_percent": 76.0
+  },
+  "stress_scenario": {
+    "infra_cost_multiplier": 2.0,
+    "projected_margin_percent": 76.0
+  },
+  "thresholds": {
+    "max_annual_discount_impact_percent": 18.0,
+    "max_p95_tenant_llm_cogs_pct_mrr": 8.0,
+    "min_blended_gross_margin_percent": 80.0,
+    "min_growth_to_pro_conversion_mom_delta_percent": 0.0,
+    "min_pro_to_enterprise_conversion_mom_delta_percent": 0.0,
+    "min_stress_margin_percent": 75.0,
+    "required_consecutive_margin_closes": 2
+  },
+  "tier_unit_economics": [
+    {
+      "effective_mrr_usd": 55000.0,
+      "gross_margin_percent": 84.55,
+      "infra_cogs_usd": 5000.0,
+      "llm_cogs_usd": 2000.0,
+      "mrr_usd": 60000.0,
+      "support_cogs_usd": 1500.0,
+      "tier": "starter"
+    },
+    {
+      "effective_mrr_usd": 110000.0,
+      "gross_margin_percent": 85.91,
+      "infra_cogs_usd": 9000.0,
+      "llm_cogs_usd": 4000.0,
+      "mrr_usd": 120000.0,
+      "support_cogs_usd": 2500.0,
+      "tier": "growth"
+    },
+    {
+      "effective_mrr_usd": 165000.0,
+      "gross_margin_percent": 84.24,
+      "infra_cogs_usd": 15000.0,
+      "llm_cogs_usd": 7000.0,
+      "mrr_usd": 180000.0,
+      "support_cogs_usd": 4000.0,
+      "tier": "pro"
+    },
+    {
+      "effective_mrr_usd": 235000.0,
+      "gross_margin_percent": 84.26,
+      "infra_cogs_usd": 20000.0,
+      "llm_cogs_usd": 10000.0,
+      "mrr_usd": 250000.0,
+      "support_cogs_usd": 7000.0,
+      "tier": "enterprise"
+    }
+  ],
+  "window": {
+    "end": "2026-02-27T23:59:59Z",
+    "label": "2026-02",
+    "start": "2026-02-01T00:00:00Z"
+  }
+}

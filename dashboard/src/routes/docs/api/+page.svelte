@@ -18,10 +18,10 @@
 </script>
 
 <svelte:head>
-	<title>API Reference | Valdrix</title>
+	<title>API Reference | Valdrics</title>
 	<meta
 		name="description"
-		content="Valdrix API usage guide with edge proxy paths, authentication requirements, and endpoint groups."
+		content="Valdrics API usage guide with edge proxy paths, authentication requirements, and endpoint groups."
 	/>
 </svelte:head>
 
@@ -29,7 +29,7 @@
 	<header class="space-y-3">
 		<h1 class="text-3xl font-bold text-ink-100">API Reference</h1>
 		<p class="text-ink-300 max-w-3xl">
-			Frontend requests should go through the Valdrix edge proxy at
+			Frontend requests should go through the Valdrics edge proxy at
 			<code class="badge badge-default">/api/edge</code>. Authenticated calls require a bearer
 			token.
 		</p>

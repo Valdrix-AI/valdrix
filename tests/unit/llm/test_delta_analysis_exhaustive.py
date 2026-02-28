@@ -61,6 +61,12 @@ class TestDeltaAnalysisExhaustive:
         assert len(data["top_cost_decreases"]) == 5
         assert len(data["new_resources"]) == 5
 
+    def test_delta_result_as_json_serialization(self):
+        res = DeltaAnalysisResult(uuid4(), date.today())
+        payload = res.as_json()
+        assert payload.startswith("{")
+        assert '"analysis_type": "delta"' in payload
+
     @pytest.mark.asyncio
     async def test_compute_delta_new_resource_threshold(self, delta_service):
         """Test new resource minimum cost threshold (line 210)."""

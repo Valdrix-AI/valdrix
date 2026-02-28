@@ -197,14 +197,25 @@ async def get_features(
     Get enabled features and limits for the user's current tier.
     Central authority for frontend and backend gating.
     """
-    from app.shared.core.pricing import PricingTier, get_tier_config
+    from app.shared.core.pricing import (
+        PricingTier,
+        get_tier_config,
+        get_tier_feature_maturity,
+    )
 
     user_tier = getattr(user, "tier", PricingTier.FREE)
     config = get_tier_config(user_tier)
+    features = sorted(
+        [
+            feature.value if hasattr(feature, "value") else str(feature)
+            for feature in config.get("features", [])
+        ]
+    )
 
     return {
         "tier": user_tier,
-        "features": list(config.get("features", [])),
+        "features": features,
+        "feature_maturity": get_tier_feature_maturity(user_tier),
         "limits": config.get("limits", {}),
     }
 

@@ -74,12 +74,12 @@
 </script>
 
 <svelte:head>
-	<title>Pricing | Valdrix</title>
+	<title>Pricing | Valdrics</title>
 	<meta
 		name="description"
 		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."
 	/>
-	<meta property="og:title" content="Pricing | Valdrix" />
+	<meta property="og:title" content="Pricing | Valdrics" />
 	<meta
 		property="og:description"
 		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."
@@ -91,7 +91,7 @@
 		content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
 	/>
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content="Pricing | Valdrix" />
+	<meta name="twitter:title" content="Pricing | Valdrics" />
 	<meta
 		name="twitter:description"
 		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."

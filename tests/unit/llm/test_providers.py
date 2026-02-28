@@ -212,6 +212,28 @@ class TestGoogleProvider:
             )
             assert result == mock_instance
 
+    def test_create_model_with_max_output_tokens(self):
+        provider = GoogleProvider()
+
+        with patch(
+            "app.shared.llm.providers.google.ChatGoogleGenerativeAI"
+        ) as mock_chat:
+            mock_instance = MagicMock()
+            mock_chat.return_value = mock_instance
+
+            provider.create_model(
+                model="gemini-2.0-flash",
+                api_key="AIzaSy-valid123456789012345678901234567890",
+                max_output_tokens=1024,
+            )
+
+            mock_chat.assert_called_once_with(
+                google_api_key="AIzaSy-valid123456789012345678901234567890",
+                model="gemini-2.0-flash",
+                temperature=0,
+                max_output_tokens=1024,
+            )
+
 
 class TestAnthropicProvider:
     """Tests for Anthropic provider implementation."""
@@ -284,6 +306,26 @@ class TestAnthropicProvider:
                 temperature=0,
             )
 
+    def test_create_model_with_max_output_tokens(self):
+        provider = AnthropicProvider()
+
+        with patch("app.shared.llm.providers.anthropic.ChatAnthropic") as mock_chat:
+            mock_instance = MagicMock()
+            mock_chat.return_value = mock_instance
+
+            provider.create_model(
+                model="claude-3-7-sonnet",
+                api_key="sk-ant-valid123456789012345678901234567890",
+                max_output_tokens=2048,
+            )
+
+            mock_chat.assert_called_once_with(
+                api_key="sk-ant-valid123456789012345678901234567890",
+                model="claude-3-7-sonnet",
+                temperature=0,
+                max_tokens=2048,
+            )
+
 
 class TestGroqProvider:
     """Tests for Groq provider implementation."""
@@ -330,6 +372,26 @@ class TestGroqProvider:
                 temperature=0,
             )
             assert result == mock_instance
+
+    def test_create_model_with_max_output_tokens(self):
+        provider = GroqProvider()
+
+        with patch("app.shared.llm.providers.groq.ChatGroq") as mock_chat:
+            mock_instance = MagicMock()
+            mock_chat.return_value = mock_instance
+
+            provider.create_model(
+                model="llama-3.3-70b-versatile",
+                api_key="gsk_valid123456789012345678901234567890",
+                max_output_tokens=4096,
+            )
+
+            mock_chat.assert_called_once_with(
+                api_key="gsk_valid123456789012345678901234567890",
+                model="llama-3.3-70b-versatile",
+                temperature=0,
+                max_tokens=4096,
+            )
 
 
 class TestLLMProvidersProductionQuality:

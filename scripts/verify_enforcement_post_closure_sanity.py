@@ -55,6 +55,10 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
             "tests/unit/enforcement/test_enforcement_service.py",
             "test_reconcile_reservation_idempotent_replay_with_same_key",
         ),
+        EvidenceToken(
+            "docs/ops/key-rotation-drill-2026-02-27.md",
+            "rollback_validation_passed: true",
+        ),
     ),
     "snapshot_stability": (
         EvidenceToken(
@@ -131,10 +135,59 @@ DOC_REQUIRED_TOKENS: tuple[str, ...] = (
 )
 
 GAP_REGISTER_REQUIRED_TOKENS: tuple[str, ...] = (
-    "post-closure sanity check gate",
+    "Current Open Items (Canonical, 2026-02-27)",
+    "BSAFE-009",
     "BSAFE-010",
+    "CI-EVID-001",
+    "PKG-001..PKG-032",
+    "FIN-001..FIN-008",
+    "BENCH-DOC-001",
+    "post-closure sanity check gate",
+    "BSAFE-013",
+    "BSAFE-014",
+    "BSAFE-010",
+    "BSAFE-011",
     "BSAFE-015",
     "BSAFE-016",
+    "Binary Artifact Closure Checklist (release packet)",
+    "docs/ops/evidence/enforcement_stress_artifact_YYYY-MM-DD.json",
+    "docs/ops/evidence/enforcement_failure_injection_YYYY-MM-DD.json",
+    "docs/evidence/ci-green-YYYY-MM-DD.md",
+)
+
+ARTIFACT_TEMPLATE_TOKENS: tuple[EvidenceToken, ...] = (
+    EvidenceToken(
+        "docs/ops/evidence/README.md",
+        "enforcement_stress_artifact_YYYY-MM-DD.json",
+    ),
+    EvidenceToken(
+        "docs/ops/evidence/README.md",
+        "enforcement_failure_injection_YYYY-MM-DD.json",
+    ),
+    EvidenceToken(
+        "docs/ops/evidence/enforcement_stress_artifact_TEMPLATE.json",
+        '"profile": "enforcement"',
+    ),
+    EvidenceToken(
+        "docs/ops/evidence/enforcement_stress_artifact_TEMPLATE.json",
+        '"runner": "scripts/load_test_api.py"',
+    ),
+    EvidenceToken(
+        "docs/ops/evidence/enforcement_failure_injection_TEMPLATE.json",
+        '"profile": "enforcement_failure_injection"',
+    ),
+    EvidenceToken(
+        "docs/ops/evidence/enforcement_failure_injection_TEMPLATE.json",
+        '"runner": "staged_failure_injection"',
+    ),
+    EvidenceToken(
+        "docs/evidence/ci-green-template.md",
+        "Enterprise Gate Command",
+    ),
+    EvidenceToken(
+        "docs/evidence/ci-green-template.md",
+        "coverage-enterprise-gate.xml",
+    ),
 )
 
 
@@ -180,6 +233,10 @@ def validate_gap_register_contract(*, gap_register_path: Path) -> None:
             raise ValueError(f"Gap register missing required token: {token!r}")
 
 
+def validate_artifact_template_contract(*, repo_root: Path) -> None:
+    validate_tokens(ARTIFACT_TEMPLATE_TOKENS, repo_root=repo_root)
+
+
 def verify_post_closure_sanity(
     *,
     doc_path: Path,
@@ -187,6 +244,7 @@ def verify_post_closure_sanity(
     repo_root: Path,
 ) -> int:
     validate_dimension_tokens(repo_root=repo_root)
+    validate_artifact_template_contract(repo_root=repo_root)
     validate_doc_contract(doc_path=doc_path)
     validate_gap_register_contract(gap_register_path=gap_register_path)
     print(

@@ -123,3 +123,66 @@ async def test_run_preflight_checks_failure_with_retry(monkeypatch):
     assert len(result["failures"]) == 1
     assert "HTTP 500" in result["failures"][0]["error"]
     assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_collect_runtime_snapshot_extracts_database_engine(monkeypatch):
+    class DummyResponse:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+
+        @staticmethod
+        def json():
+            return {"status": "healthy", "database": {"engine": "postgres"}}
+
+    class SuccessfulClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url):
+            return DummyResponse()
+
+    monkeypatch.setattr(
+        load_test_api.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: SuccessfulClient(),
+    )
+
+    snapshot = await load_test_api._collect_runtime_snapshot(
+        target_url="http://127.0.0.1:8000",
+        headers={},
+        timeout_seconds=2.0,
+    )
+    assert snapshot["database_engine"] == "postgresql"
+    assert snapshot["health_status_code"] == 200
+    assert snapshot["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_collect_runtime_snapshot_records_probe_error(monkeypatch):
+    class FailingClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url):
+            raise RuntimeError("health probe failed")
+
+    monkeypatch.setattr(
+        load_test_api.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: FailingClient(),
+    )
+
+    snapshot = await load_test_api._collect_runtime_snapshot(
+        target_url="http://127.0.0.1:8000",
+        headers={},
+        timeout_seconds=2.0,
+    )
+    assert snapshot["database_engine"] == "unknown"
+    assert "probe_error" in snapshot

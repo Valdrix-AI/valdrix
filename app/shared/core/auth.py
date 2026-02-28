@@ -1,5 +1,7 @@
 import jwt
 import hashlib
+import inspect
+from contextlib import suppress
 from functools import lru_cache
 from typing import Any, Awaitable, Callable, Optional
 from uuid import UUID
@@ -33,6 +35,23 @@ __all__ = [
 ]
 
 security = HTTPBearer(auto_error=False)
+
+
+def _uses_sqlite_session(db: AsyncSession) -> bool:
+    """Best-effort backend detection for auth query savepoint strategy."""
+    try:
+        bind = None
+        bind_getter = getattr(db, "get_bind", None)
+        if callable(bind_getter) and not inspect.iscoroutinefunction(bind_getter):
+            maybe_bind = bind_getter()
+            if not inspect.isawaitable(maybe_bind):
+                bind = maybe_bind
+        if bind is None:
+            bind = getattr(db, "bind", None)
+        backend = getattr(getattr(bind, "dialect", None), "name", "")
+        return str(backend or "").strip().lower() == "sqlite"
+    except Exception:
+        return False
 
 
 def _hash_email(email: str | None) -> str | None:
@@ -218,11 +237,15 @@ async def get_current_user(
             )
             return (await db.execute(stmt)).one_or_none()
 
+        use_nested_probe = not _uses_sqlite_session(db)
         try:
-            # We use a nested transaction (savepoint) for the first probe.
-            # If it fails due to a schema mismatch, SQLAlchemy/asyncpg will abort
-            # only the nested transaction, leaving the main session healthy for the retry.
-            async with db.begin_nested():
+            # Use nested savepoints on non-sqlite backends so schema-mismatch retries
+            # do not poison the main transaction. SQLite + StaticPool under high
+            # concurrency can surface unstable savepoint state; use direct probe there.
+            if use_nested_probe:
+                async with db.begin_nested():
+                    row = await _fetch_auth_row(include_optional=True)
+            else:
                 row = await _fetch_auth_row(include_optional=True)
             has_optional_cols = True
         except (DBAPIError, Exception) as exc:
@@ -230,6 +253,9 @@ async def get_current_user(
                 logger.warning(
                     "auth_schema_mismatch_optional_cols_retrying", error=str(exc)
                 )
+                if not use_nested_probe:
+                    with suppress(Exception):
+                        await db.rollback()
                 row = await _fetch_auth_row(include_optional=False)
                 has_optional_cols = False
             else:

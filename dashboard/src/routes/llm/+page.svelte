@@ -118,7 +118,7 @@
 </script>
 
 <svelte:head>
-	<title>LLM Usage | Valdrix</title>
+	<title>LLM Usage | Valdrics</title>
 </svelte:head>
 
 <div class="space-y-8">

@@ -12,12 +12,13 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.auth import CurrentUser
 from app.shared.core.cache import get_cache_service
+from app.shared.core.dependencies import requires_feature
 from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
 from app.models.remediation import RemediationRequest
-from app.shared.core.pricing import PricingTier, requires_tier
+from app.shared.core.pricing import FeatureFlag
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Leaderboards"])
@@ -59,13 +60,10 @@ class LeaderboardResponse(BaseModel):
 
 @router.get("", response_model=LeaderboardResponse)
 @rate_limit("60/minute")
-@requires_tier(
-    PricingTier.GROWTH, PricingTier.PRO, PricingTier.ENTERPRISE, PricingTier.FREE
-)
 async def get_leaderboard(
     request: Request,
     period: str = Query("30d", pattern="^(7d|30d|90d|all)$"),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(requires_feature(FeatureFlag.COST_TRACKING)),
     db: AsyncSession = Depends(get_db),
 ) -> LeaderboardResponse:
     """

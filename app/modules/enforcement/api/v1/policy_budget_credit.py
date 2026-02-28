@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.enforcement.api.v1.common import tenant_or_403
+from app.modules.enforcement.api.v1.common import tenant_or_403, require_feature_or_403
 from app.modules.enforcement.api.v1.schemas import (
     BudgetResponse,
     BudgetUpsertRequest,
@@ -14,6 +14,7 @@ from app.modules.enforcement.api.v1.schemas import (
 )
 from app.modules.enforcement.domain.service import EnforcementService
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
+from app.shared.core.pricing import FeatureFlag
 from app.shared.db.session import get_db
 
 
@@ -64,10 +65,14 @@ async def get_policy(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> PolicyResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     policy = await service.get_or_create_policy(tenant_or_403(current_user))
     await db.commit()
-    await db.refresh(policy)
     return _policy_to_response(policy)
 
 
@@ -77,6 +82,11 @@ async def upsert_policy(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> PolicyResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     policy = await service.update_policy(
         tenant_id=tenant_or_403(current_user),
@@ -110,6 +120,11 @@ async def list_budgets(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> list[BudgetResponse]:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     budgets = await service.list_budgets(tenant_or_403(current_user))
     return [
@@ -131,6 +146,11 @@ async def upsert_budget(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> BudgetResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     budget = await service.upsert_budget(
         tenant_id=tenant_or_403(current_user),
@@ -154,6 +174,11 @@ async def list_credits(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> list[CreditResponse]:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     credits = await service.list_credits(tenant_or_403(current_user))
     return [
@@ -178,6 +203,11 @@ async def create_credit(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> CreditResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementService(db)
     credit = await service.create_credit_grant(
         tenant_id=tenant_or_403(current_user),

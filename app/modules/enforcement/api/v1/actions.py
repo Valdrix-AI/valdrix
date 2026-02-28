@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enforcement import EnforcementActionExecution, EnforcementActionStatus
-from app.modules.enforcement.api.v1.common import tenant_or_403
+from app.modules.enforcement.api.v1.common import tenant_or_403, require_feature_or_403
 from app.modules.enforcement.api.v1.schemas import (
     ActionCancelRequest,
     ActionCompleteRequest,
@@ -17,6 +17,7 @@ from app.modules.enforcement.api.v1.schemas import (
 )
 from app.modules.enforcement.domain.actions import EnforcementActionOrchestrator
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
+from app.shared.core.pricing import FeatureFlag
 from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
 
@@ -64,6 +65,11 @@ async def create_action_request(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> ActionExecutionResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementActionOrchestrator(db)
     action = await service.create_action_request(
         tenant_id=tenant_or_403(current_user),
@@ -90,6 +96,11 @@ async def list_action_requests(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ActionExecutionResponse]:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementActionOrchestrator(db)
     actions = await service.list_actions(
         tenant_id=tenant_or_403(current_user),
@@ -108,6 +119,11 @@ async def get_action_request(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> ActionExecutionResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementActionOrchestrator(db)
     action = await service.get_action(
         tenant_id=tenant_or_403(current_user),
@@ -124,6 +140,11 @@ async def lease_action_request(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> ActionExecutionResponse | None:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementActionOrchestrator(db)
     action = await service.lease_next_action(
         tenant_id=tenant_or_403(current_user),
@@ -144,6 +165,11 @@ async def complete_action_request(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> ActionExecutionResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementActionOrchestrator(db)
     action = await service.complete_action(
         tenant_id=tenant_or_403(current_user),
@@ -163,6 +189,11 @@ async def fail_action_request(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> ActionExecutionResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementActionOrchestrator(db)
     action = await service.fail_action(
         tenant_id=tenant_or_403(current_user),
@@ -185,6 +216,11 @@ async def cancel_action_request(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> ActionExecutionResponse:
+    await require_feature_or_403(
+        user=current_user,
+        db=db,
+        feature=FeatureFlag.POLICY_CONFIGURATION,
+    )
     service = EnforcementActionOrchestrator(db)
     action = await service.cancel_action(
         tenant_id=tenant_or_403(current_user),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -250,8 +250,8 @@ async def enforce_daily_analysis_limit(
             )
         return
 
-    if user_id is None:
-        return
+    # Actor normalization above guarantees user_id is present for user-scoped flow.
+    user_id = cast(UUID, user_id)
 
     raw_user_limit = get_tier_limit(tier, "llm_analyses_per_user_per_day")
     if raw_user_limit is None:

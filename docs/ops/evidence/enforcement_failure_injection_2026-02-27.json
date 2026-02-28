@@ -1,0 +1,86 @@
+{
+  "approved_by": "release.approver@valdrix.local",
+  "captured_at": "2026-02-27T16:45:32.944207+00:00",
+  "executed_by": "sre.executor@valdrix.local",
+  "execution_class": "staged",
+  "profile": "enforcement_failure_injection",
+  "runner": "staged_failure_injection",
+  "scenarios": [
+    {
+      "checks": [
+        "gate timeout failure routes to configured fail-safe behavior"
+      ],
+      "command": "uv run pytest --no-cov -q tests/unit/enforcement/test_enforcement_api.py::test_gate_failsafe_timeout_and_error_modes tests/unit/enforcement/test_enforcement_service.py::test_resolve_fail_safe_gate_timeout_mode_behavior",
+      "duration_seconds": 23.162,
+      "evidence_refs": [
+        "tests/unit/enforcement/test_enforcement_api.py::test_gate_failsafe_timeout_and_error_modes",
+        "tests/unit/enforcement/test_enforcement_service.py::test_resolve_fail_safe_gate_timeout_mode_behavior"
+      ],
+      "id": "FI-001",
+      "result_tail": ".........                                                                [100%]\n9 passed in 13.31s",
+      "status": "pass"
+    },
+    {
+      "checks": [
+        "gate lock contention and timeout map to explicit fail-safe reason codes"
+      ],
+      "command": "uv run pytest --no-cov -q tests/unit/enforcement/test_enforcement_api.py::test_gate_lock_failures_route_to_failsafe_with_lock_reason_codes tests/unit/enforcement/test_enforcement_service_helpers.py::test_acquire_gate_evaluation_lock_rowcount_zero_raises_contended_reason",
+      "duration_seconds": 13.478,
+      "evidence_refs": [
+        "tests/unit/enforcement/test_enforcement_api.py::test_gate_lock_failures_route_to_failsafe_with_lock_reason_codes",
+        "tests/unit/enforcement/test_enforcement_service_helpers.py::test_acquire_gate_evaluation_lock_rowcount_zero_raises_contended_reason"
+      ],
+      "id": "FI-002",
+      "result_tail": "...                                                                      [100%]\n3 passed in 4.01s",
+      "status": "pass"
+    },
+    {
+      "checks": [
+        "approval token replay/tamper attempts are rejected under fault paths"
+      ],
+      "command": "uv run pytest --no-cov -q tests/unit/enforcement/test_enforcement_api.py::test_consume_approval_token_endpoint_rejects_replay_and_tamper tests/unit/enforcement/test_enforcement_service.py::test_consume_approval_token_rejects_replay",
+      "duration_seconds": 13.129,
+      "evidence_refs": [
+        "tests/unit/enforcement/test_enforcement_api.py::test_consume_approval_token_endpoint_rejects_replay_and_tamper",
+        "tests/unit/enforcement/test_enforcement_service.py::test_consume_approval_token_rejects_replay"
+      ],
+      "id": "FI-003",
+      "result_tail": "..                                                                       [100%]\n2 passed in 3.93s",
+      "status": "pass"
+    },
+    {
+      "checks": [
+        "reservation reconciliation races remain idempotent and bounded"
+      ],
+      "command": "uv run pytest --no-cov -q tests/unit/enforcement/test_enforcement_property_and_concurrency.py::test_concurrency_reconcile_same_idempotency_key_settles_credit_once tests/unit/enforcement/test_enforcement_property_and_concurrency.py::test_concurrency_reconcile_overdue_claims_each_reservation_once",
+      "duration_seconds": 12.861,
+      "evidence_refs": [
+        "tests/unit/enforcement/test_enforcement_property_and_concurrency.py::test_concurrency_reconcile_same_idempotency_key_settles_credit_once",
+        "tests/unit/enforcement/test_enforcement_property_and_concurrency.py::test_concurrency_reconcile_overdue_claims_each_reservation_once"
+      ],
+      "id": "FI-004",
+      "result_tail": "..                                                                       [100%]\n2 passed in 3.85s",
+      "status": "pass"
+    },
+    {
+      "checks": [
+        "cross-tenant limiter saturation preserves global throttle behavior"
+      ],
+      "command": "uv run pytest --no-cov -q tests/unit/core/test_rate_limit.py::test_global_rate_limit_throttles_cross_tenant_requests tests/unit/enforcement/test_enforcement_api.py::test_enforcement_global_gate_limit_uses_configured_cap",
+      "duration_seconds": 10.279,
+      "evidence_refs": [
+        "tests/unit/core/test_rate_limit.py::test_global_rate_limit_throttles_cross_tenant_requests",
+        "tests/unit/enforcement/test_enforcement_api.py::test_enforcement_global_gate_limit_uses_configured_cap"
+      ],
+      "id": "FI-005",
+      "result_tail": "..                                                                       [100%]\n2 passed in 1.34s",
+      "status": "pass"
+    }
+  ],
+  "summary": {
+    "failed_scenarios": 0,
+    "overall_passed": true,
+    "passed_scenarios": 5,
+    "total_scenarios": 5
+  }
+}

@@ -39,3 +39,6 @@ Rotate all high-impact credentials immediately:
 - App health checks green.
 - Auth, billing webhooks, notifications, and DB connectivity verified.
 - Incident timeline documented in `docs/ops/incident_response_runbook.md`.
+- Rotation drill evidence updated in `docs/ops/key-rotation-drill-2026-02-27.md` (or newer dated successor) with:
+  - `rollback_validation_passed: true`
+  - `post_drill_status: PASS`

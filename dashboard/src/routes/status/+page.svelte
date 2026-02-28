@@ -26,10 +26,10 @@
 </script>
 
 <svelte:head>
-	<title>Status | Valdrix</title>
+	<title>Status | Valdrics</title>
 	<meta
 		name="description"
-		content="Current service status for Valdrix dashboard, API proxy, and core platform components."
+		content="Current service status for Valdrics dashboard, API proxy, and core platform components."
 	/>
 </svelte:head>
 

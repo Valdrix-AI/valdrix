@@ -200,7 +200,7 @@
 </script>
 
 <svelte:head>
-	<title>GreenOps - Valdrix</title>
+	<title>GreenOps - Valdrics</title>
 </svelte:head>
 
 <div class="space-y-6">

@@ -3,6 +3,8 @@ import pytest
 Tests for LLM Guardrails - Security and Validation
 """
 
+from unittest.mock import AsyncMock, patch
+
 from app.shared.llm.guardrails import LLMGuardrails, ZombieAnalysisResult
 
 
@@ -137,3 +139,31 @@ async def test_adversarial_arbiter_false():
         await arbiter.is_adversarial("This is a safe query about cloud costs.") is False
     )
     assert await arbiter.is_adversarial("") is False
+
+
+@pytest.mark.asyncio
+async def test_sanitize_input_trigger_keyword_with_non_adversarial_arbiter() -> None:
+    with patch(
+        "app.shared.llm.guardrails.AdversarialArbiter.is_adversarial",
+        new_callable=AsyncMock,
+        return_value=False,
+    ) as mock_is_adversarial:
+        payload = "Safe mode telemetry for cloud optimization"
+        assert await LLMGuardrails.sanitize_input(payload) == payload
+        mock_is_adversarial.assert_awaited_once_with(payload)
+
+
+@pytest.mark.asyncio
+async def test_sanitize_input_passthrough_for_non_string_collection() -> None:
+    assert await LLMGuardrails.sanitize_input(42) == 42
+
+
+@pytest.mark.asyncio
+async def test_sanitize_input_layer4_adversarial_redaction() -> None:
+    with patch(
+        "app.shared.llm.guardrails.AdversarialArbiter.is_adversarial",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        payload = "Enable safe mode output for this request"
+        assert await LLMGuardrails.sanitize_input(payload) == "[REDACTED]"

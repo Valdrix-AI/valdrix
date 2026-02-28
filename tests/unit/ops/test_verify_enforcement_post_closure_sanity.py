@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 
 from scripts.verify_enforcement_post_closure_sanity import (
+    ARTIFACT_TEMPLATE_TOKENS,
     DIMENSION_TOKENS,
     EvidenceToken,
+    GAP_REGISTER_REQUIRED_TOKENS,
     validate_tokens,
     verify_post_closure_sanity,
 )
@@ -45,6 +47,7 @@ def test_verify_post_closure_sanity_passes_against_repo_contracts() -> None:
 
 def test_dimension_tokens_include_lock_contention_and_snapshot_export_evidence() -> None:
     observability = {(t.path, t.token) for t in DIMENSION_TOKENS["observability"]}
+    deterministic = {(t.path, t.token) for t in DIMENSION_TOKENS["deterministic_replay"]}
     snapshot = {(t.path, t.token) for t in DIMENSION_TOKENS["snapshot_stability"]}
     export_integrity = {(t.path, t.token) for t in DIMENSION_TOKENS["export_integrity"]}
 
@@ -57,6 +60,10 @@ def test_dimension_tokens_include_lock_contention_and_snapshot_export_evidence()
         "valdrix_ops_enforcement_gate_lock_events_total",
     ) in observability
     assert (
+        "docs/ops/key-rotation-drill-2026-02-27.md",
+        "rollback_validation_passed: true",
+    ) in deterministic
+    assert (
         "tests/unit/enforcement/test_enforcement_service.py",
         "computed_context_month_start",
     ) in snapshot
@@ -68,3 +75,26 @@ def test_dimension_tokens_include_lock_contention_and_snapshot_export_evidence()
         "tests/unit/enforcement/test_enforcement_service.py",
         "test_build_export_bundle_reconciles_counts_and_is_deterministic",
     ) in export_integrity
+
+
+def test_artifact_template_contract_tokens_cover_release_packet_templates() -> None:
+    artifact_tokens = {(entry.path, entry.token) for entry in ARTIFACT_TEMPLATE_TOKENS}
+    assert (
+        "docs/ops/evidence/enforcement_stress_artifact_TEMPLATE.json",
+        '"profile": "enforcement"',
+    ) in artifact_tokens
+    assert (
+        "docs/ops/evidence/enforcement_failure_injection_TEMPLATE.json",
+        '"profile": "enforcement_failure_injection"',
+    ) in artifact_tokens
+    assert (
+        "docs/evidence/ci-green-template.md",
+        "coverage-enterprise-gate.xml",
+    ) in artifact_tokens
+
+
+def test_gap_register_required_tokens_include_canonical_open_items_header() -> None:
+    required = set(GAP_REGISTER_REQUIRED_TOKENS)
+    assert "Current Open Items (Canonical, 2026-02-27)" in required
+    assert "CI-EVID-001" in required
+    assert "BENCH-DOC-001" in required

@@ -619,7 +619,7 @@
 </script>
 
 <svelte:head>
-	<title>Cloud Accounts | Valdrix</title>
+	<title>Cloud Accounts | Valdrics</title>
 </svelte:head>
 
 <div class="space-y-8">

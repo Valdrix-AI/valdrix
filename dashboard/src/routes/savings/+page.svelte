@@ -226,7 +226,7 @@
 </script>
 
 <svelte:head>
-	<title>Savings Proof | Valdrix</title>
+	<title>Savings Proof | Valdrics</title>
 </svelte:head>
 
 <div class="space-y-8">

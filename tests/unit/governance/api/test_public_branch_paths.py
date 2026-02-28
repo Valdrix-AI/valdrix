@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from inspect import unwrap
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -7,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.modules.governance.api.v1 import public
+from app.shared.core.pricing import FeatureFlag, PricingTier
 
 
 class _RowsResult:
@@ -92,7 +94,7 @@ async def test_discover_sso_federation_single_row_tier_ineligible() -> None:
         )
     )
 
-    with patch.object(public, "normalize_tier", return_value=public.PricingTier.STARTER):
+    with patch.object(public, "normalize_tier", return_value=PricingTier.STARTER):
         response = await endpoint(
             request=SimpleNamespace(),
             payload=SimpleNamespace(email="user@example.com"),
@@ -108,7 +110,7 @@ async def test_discover_sso_federation_single_row_tier_ineligible() -> None:
 async def test_discover_sso_federation_single_row_provider_id_missing_and_success() -> None:
     endpoint = _unwrap_discovery()
 
-    with patch.object(public, "normalize_tier", return_value=public.PricingTier.ENTERPRISE):
+    with patch.object(public, "normalize_tier", return_value=PricingTier.ENTERPRISE):
         missing_db = SimpleNamespace(
             execute=AsyncMock(
                 return_value=_RowsResult(
@@ -176,7 +178,7 @@ async def test_discover_sso_federation_single_row_invalid_mode_falls_back_to_dom
         )
     )
 
-    with patch.object(public, "normalize_tier", return_value=public.PricingTier.PRO):
+    with patch.object(public, "normalize_tier", return_value=PricingTier.PRO):
         response = await endpoint(
             request=SimpleNamespace(),
             payload=SimpleNamespace(email="user@example.com"),
@@ -188,3 +190,83 @@ async def test_discover_sso_federation_single_row_invalid_mode_falls_back_to_dom
     assert response.mode == "domain"
     assert response.domain == "example.com"
 
+
+@pytest.mark.asyncio
+async def test_discover_sso_federation_uses_feature_gate_not_hardcoded_tiers() -> None:
+    endpoint = _unwrap_discovery()
+    db = SimpleNamespace(
+        execute=AsyncMock(
+            return_value=_RowsResult(
+                [(SimpleNamespace(federation_mode="domain", provider_id=None), "pro")]
+            )
+        )
+    )
+
+    with (
+        patch.object(public, "normalize_tier", return_value=PricingTier.PRO),
+        patch.object(public, "is_feature_enabled", return_value=False) as feature_gate,
+    ):
+        response = await endpoint(
+            request=SimpleNamespace(),
+            payload=SimpleNamespace(email="user@example.com"),
+            _turnstile=None,
+            db=db,
+        )
+
+    assert response.available is False
+    assert response.reason == "tier_not_eligible_for_sso_federation"
+    feature_gate.assert_called_once_with(PricingTier.PRO, FeatureFlag.SSO)
+
+
+@pytest.mark.asyncio
+async def test_discover_sso_federation_can_allow_non_pro_when_feature_enabled() -> None:
+    endpoint = _unwrap_discovery()
+    db = SimpleNamespace(
+        execute=AsyncMock(
+            return_value=_RowsResult(
+                [(SimpleNamespace(federation_mode="domain", provider_id=None), "starter")]
+            )
+        )
+    )
+
+    with (
+        patch.object(public, "normalize_tier", return_value=PricingTier.STARTER),
+        patch.object(public, "is_feature_enabled", return_value=True),
+    ):
+        response = await endpoint(
+            request=SimpleNamespace(),
+            payload=SimpleNamespace(email="user@example.com"),
+            _turnstile=None,
+            db=db,
+        )
+
+    assert response.available is True
+    assert response.mode == "domain"
+    assert response.domain == "example.com"
+
+
+@pytest.mark.asyncio
+async def test_discover_sso_federation_concurrent_calls_are_deterministic() -> None:
+    endpoint = _unwrap_discovery()
+    db = SimpleNamespace(
+        execute=AsyncMock(
+            return_value=_RowsResult(
+                [(SimpleNamespace(federation_mode="domain", provider_id=None), "pro")]
+            )
+        )
+    )
+
+    async def _invoke_once() -> public.SsoDiscoveryResponse:
+        return await endpoint(
+            request=SimpleNamespace(),
+            payload=SimpleNamespace(email="user@example.com"),
+            _turnstile=None,
+            db=db,
+        )
+
+    with patch.object(public, "is_feature_enabled", return_value=True):
+        responses = await asyncio.gather(*[_invoke_once() for _ in range(8)])
+
+    assert all(item.available is True for item in responses)
+    assert all(item.mode == "domain" for item in responses)
+    assert all(item.domain == "example.com" for item in responses)

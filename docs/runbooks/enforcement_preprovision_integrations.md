@@ -177,3 +177,9 @@ Guardrails enforced by chart contract:
 5. Monitor gate lock contention events (`valdrix_ops_enforcement_gate_lock_events_total`) and alert on sustained `contended`/`timeout` spikes.
 6. For audit exports, verify `policy_lineage_sha256` and `policy_lineage` are present so each decision can be tied to its decision-time policy hash.
 7. For computed decision determinism audits, verify `computed_context_lineage_sha256` and `computed_context_lineage` are present in export parity/archive artifacts.
+
+## 4) Benchmark profile reference
+
+For standards-aligned deployment profiles tied to benchmark hardening closure (`BENCH-DOC-001`), use:
+
+1. `docs/ops/benchmark_alignment_profiles_2026-02-27.md`

@@ -244,3 +244,120 @@ async def test_wrapper_function(mock_db):
             previous_costs=None,
             force_full=True,
         )
+
+
+@pytest.mark.asyncio
+async def test_full_and_delta_analysis_handle_non_mapping_payloads(scheduler):
+    tenant_id = uuid.uuid4()
+    costs = [{"cost": 100}]
+
+    scheduler._get_analyzer().analyze.return_value = ["non-json-payload"]
+    full_result = await scheduler._run_full_analysis(tenant_id, costs)
+    assert full_result["raw_analysis"] == ["non-json-payload"]
+
+    mock_delta = MagicMock()
+    mock_delta.has_significant_changes = True
+    scheduler.delta_service.compute_delta.return_value = mock_delta
+
+    with patch(
+        "app.shared.llm.hybrid_scheduler.analyze_with_delta",
+        new_callable=AsyncMock,
+        return_value=1234,
+    ):
+        delta_result = await scheduler._run_delta_analysis(tenant_id, costs)
+
+    assert delta_result["raw_analysis"] == 1234
+    assert delta_result["analysis_type"] == "delta_3_day"
+
+
+def test_coerce_usage_summary_handles_invalid_rows_and_empty_fallback() -> None:
+    tenant_id = uuid.uuid4()
+
+    summary_with_invalid_row = HybridAnalysisScheduler._coerce_usage_summary(
+        tenant_id=tenant_id,
+        costs=[
+            {
+                "amount": object(),
+                "date": "invalid-date",
+                "service": "EC2",
+                "region": "us-east-1",
+            }
+        ],
+    )
+    assert summary_with_invalid_row.total_cost == 0
+    assert summary_with_invalid_row.records[0].amount == 0
+
+    summary_empty = HybridAnalysisScheduler._coerce_usage_summary(
+        tenant_id=tenant_id,
+        costs=["not-a-dict"],
+    )
+    assert summary_empty.total_cost == 0
+    assert len(summary_empty.records) == 1
+    assert summary_empty.records[0].service == "Unknown"
+    assert summary_empty.records[0].usage_type == "Unknown"
+
+
+def test_merge_with_full_preserves_existing_delta_context(scheduler) -> None:
+    merged = scheduler._merge_with_full(
+        delta_result={
+            "trends": ["current"],
+            "seasonal_context": "already-present",
+        },
+        full_result={
+            "trends": ["historical"],
+            "seasonal_context": "historical-context",
+            "analysis_date": "2026-02-27",
+        },
+    )
+
+    assert merged["trends"] == ["current"]
+    assert merged["seasonal_context"] == "already-present"
+    assert merged["context_from"]["full_analysis_date"] == "2026-02-27"
+
+
+def test_set_analyzer_allows_manual_injection(scheduler) -> None:
+    injected = MagicMock()
+    scheduler.set_analyzer(injected)
+    assert scheduler._get_analyzer() is injected
+
+
+@pytest.mark.asyncio
+async def test_run_analysis_auto_delta_when_schedule_says_no(scheduler) -> None:
+    tenant_id = uuid.uuid4()
+    costs = [{"cost": 100}]
+
+    with patch.object(scheduler, "should_run_full_analysis", return_value=False):
+        with patch.object(
+            scheduler, "_run_delta_analysis", new_callable=AsyncMock
+        ) as mock_run_delta:
+            mock_run_delta.return_value = {"analysis_type": "delta_3_day"}
+            scheduler.cache.get.return_value = None
+
+            result = await scheduler.run_analysis(tenant_id, costs)
+
+    assert result["analysis_type"] == "delta_3_day"
+    mock_run_delta.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_full_and_delta_analysis_accept_dict_payloads(scheduler) -> None:
+    tenant_id = uuid.uuid4()
+    costs = [{"cost": 1}]
+
+    scheduler._get_analyzer().analyze.return_value = {"summary": "dict-result"}
+    full_result = await scheduler._run_full_analysis(tenant_id, costs)
+    assert full_result["summary"] == "dict-result"
+    assert full_result["analysis_type"] == "full_30_day"
+
+    mock_delta = MagicMock()
+    mock_delta.has_significant_changes = True
+    scheduler.delta_service.compute_delta.return_value = mock_delta
+    with patch(
+        "app.shared.llm.hybrid_scheduler.analyze_with_delta",
+        new_callable=AsyncMock,
+        return_value={"summary": "delta-dict"},
+    ):
+        delta_result = await scheduler._run_delta_analysis(tenant_id, costs)
+
+    assert delta_result["summary"] == "delta-dict"
+    assert delta_result["analysis_type"] == "delta_3_day"

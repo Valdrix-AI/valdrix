@@ -10,7 +10,7 @@ import json
 import tempfile
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, List, AsyncGenerator, cast
+from typing import Any, Dict, List, AsyncGenerator, cast, Iterator
 import aioboto3
 import pandas as pd
 import pyarrow.parquet as pq
@@ -29,6 +29,7 @@ class AWSCURAdapter(BaseAdapter):
     Ingests AWS CUR (Cost and Usage Report) data from S3.
     """
     _SUMMARY_RECORD_CAP = 50000
+    _PARQUET_BATCH_SIZE = 4096
 
     def __init__(self, credentials: AWSCredentials):
         self.credentials = credentials
@@ -416,14 +417,7 @@ class AWSCURAdapter(BaseAdapter):
             "usage_type": ["lineItem/UsageType", "line_item_operation"],
         }
 
-        for i in range(parquet_file.num_row_groups):
-            try:
-                table = parquet_file.read_row_group(i)
-                df_chunk = table.to_pandas()
-            except Exception as e:
-                logger.warning("cur_row_group_read_failed", error=str(e), row_group=i)
-                continue
-
+        for df_chunk in self._iter_parquet_dataframes(parquet_file):
             if df_chunk.empty:
                 continue
 
@@ -492,6 +486,39 @@ class AWSCURAdapter(BaseAdapter):
             by_region=by_region,
             by_tag=by_tag,
         )
+
+    def _iter_parquet_dataframes(self, parquet_file: Any) -> Iterator[pd.DataFrame]:
+        """Yield CUR dataframes with bounded memory when batch iteration is available."""
+        iter_batches = getattr(parquet_file, "iter_batches", None)
+        if callable(iter_batches):
+            processed_batch = False
+            try:
+                try:
+                    batch_iter = iter_batches(batch_size=self._PARQUET_BATCH_SIZE)
+                except TypeError:
+                    # Support older pyarrow variants with positional-only batch size.
+                    batch_iter = iter_batches(self._PARQUET_BATCH_SIZE)
+
+                for batch in batch_iter:
+                    processed_batch = True
+                    try:
+                        yield batch.to_pandas()
+                    except Exception as e:
+                        logger.warning("cur_batch_to_pandas_failed", error=str(e))
+                        continue
+                return
+            except Exception as e:
+                logger.warning("cur_iter_batches_failed_fallback", error=str(e))
+                if processed_batch:
+                    return
+
+        for i in range(parquet_file.num_row_groups):
+            try:
+                table = parquet_file.read_row_group(i)
+                yield table.to_pandas()
+            except Exception as e:
+                logger.warning("cur_row_group_read_failed", error=str(e), row_group=i)
+                continue
 
     def _parse_row(self, row: pd.Series, col_map: Dict[str, str | None]) -> CostRecord:
         """Parses a single CUR row into a CostRecord."""

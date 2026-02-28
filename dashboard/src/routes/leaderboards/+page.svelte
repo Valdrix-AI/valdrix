@@ -133,7 +133,7 @@
 </script>
 
 <svelte:head>
-	<title>Leaderboards | Valdrix</title>
+	<title>Leaderboards | Valdrics</title>
 </svelte:head>
 
 <div class="space-y-8">
