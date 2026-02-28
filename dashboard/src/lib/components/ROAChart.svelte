@@ -173,7 +173,7 @@
 	}
 
 	.subtitle {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		color: #94a3b8;
 		margin: 0;
 	}
@@ -188,7 +188,7 @@
 	}
 
 	.growth-value {
-		font-size: 0.75rem;
+		font-size: var(--text-xs);
 		font-weight: 700;
 		color: #4ade80;
 	}
@@ -214,7 +214,7 @@
 	}
 
 	.label {
-		font-size: 0.625rem;
+		font-size: var(--text-xs);
 		text-transform: uppercase;
 		color: #64748b;
 		letter-spacing: 0.05em;

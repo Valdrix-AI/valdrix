@@ -1,4 +1,3 @@
-import asyncio
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from typing import Any
@@ -9,6 +8,7 @@ import structlog
 
 from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.feed_utils import as_float, is_number, parse_timestamp
+from app.shared.adapters.http_retry import execute_with_http_retry
 from app.shared.core.currency import convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
 from app.shared.core.credentials import SaaSCredentials
@@ -24,6 +24,16 @@ _NATIVE_SUPPORTED_VENDORS = {
     _NATIVE_VENDOR_STRIPE,
     _NATIVE_VENDOR_SALESFORCE,
 }
+
+
+async def _saas_get_request(
+    *,
+    url: str,
+    headers: dict[str, str],
+    params: dict[str, Any] | None = None,
+) -> httpx.Response:
+    async with httpx.AsyncClient(timeout=_NATIVE_TIMEOUT_SECONDS) as client:
+        return await client.get(url, headers=headers, params=params)
 
 
 class SaaSAdapter(BaseAdapter):
@@ -445,60 +455,31 @@ class SaaSAdapter(BaseAdapter):
         headers: dict[str, str],
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        last_error: Exception | None = None
-        for attempt in range(1, _NATIVE_MAX_RETRIES + 1):
-            try:
-                async with httpx.AsyncClient(timeout=_NATIVE_TIMEOUT_SECONDS) as client:
-                    response = await client.get(url, headers=headers, params=params)
-                response.raise_for_status()
-                payload = response.json()
-                if not isinstance(payload, dict):
-                    raise ExternalAPIError(
-                        "SaaS connector API returned invalid payload shape"
-                    )
-                return payload
-            except httpx.HTTPStatusError as exc:
-                last_error = exc
-                status_code = exc.response.status_code
-                retryable = status_code in _RETRYABLE_STATUS_CODES
-                if retryable and attempt < _NATIVE_MAX_RETRIES:
-                    logger.warning(
-                        "saas_native_retry_http_status",
-                        attempt=attempt,
-                        max_attempts=_NATIVE_MAX_RETRIES,
-                        status_code=status_code,
-                        url=url,
-                    )
-                    await asyncio.sleep(0.05 * attempt)
-                    continue
-                raise ExternalAPIError(
-                    f"SaaS connector API request failed with status {status_code}: {exc}"
-                ) from exc
-            except (httpx.TimeoutException, httpx.TransportError) as exc:
-                last_error = exc
-                if attempt < _NATIVE_MAX_RETRIES:
-                    logger.warning(
-                        "saas_native_retry_transport_error",
-                        attempt=attempt,
-                        max_attempts=_NATIVE_MAX_RETRIES,
-                        url=url,
-                        error=str(exc),
-                    )
-                    await asyncio.sleep(0.05 * attempt)
-                    continue
-                raise ExternalAPIError(
-                    f"SaaS connector API request failed: {exc}"
-                ) from exc
-            except ValueError as exc:
-                raise ExternalAPIError(
-                    "SaaS connector API returned invalid JSON payload"
-                ) from exc
-
-        if last_error is not None:
+        response = await execute_with_http_retry(
+            request=lambda: _saas_get_request(
+                url=url,
+                headers=headers,
+                params=params,
+            ),
+            url=url,
+            max_retries=_NATIVE_MAX_RETRIES,
+            retryable_status_codes=_RETRYABLE_STATUS_CODES,
+            retry_http_status_log_event="saas_native_retry_http_status",
+            retry_transport_log_event="saas_native_retry_transport_error",
+            status_error_prefix="SaaS connector API request failed",
+            transport_error_prefix="SaaS connector API request failed",
+        )
+        try:
+            payload = response.json()
+        except ValueError as exc:
             raise ExternalAPIError(
-                f"SaaS connector API request failed: {last_error}"
-            ) from last_error
-        raise ExternalAPIError("SaaS connector API request failed unexpectedly")
+                "SaaS connector API returned invalid JSON payload"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ExternalAPIError(
+                "SaaS connector API returned invalid payload shape"
+            )
+        return payload
 
     async def discover_resources(
         self, resource_type: str, region: str | None = None

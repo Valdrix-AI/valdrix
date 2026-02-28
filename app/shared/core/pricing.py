@@ -1,6 +1,5 @@
 import uuid
 from enum import Enum
-import inspect
 from functools import wraps
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Callable, Union, cast
@@ -147,7 +146,7 @@ ENTERPRISE_FEATURES: set[FeatureFlag] = {
 }
 
 # Runtime-gated features are mapped to GA maturity.
-# Catalog-only (not yet hard-gated) features are conservatively mapped to Preview.
+# Catalog-only (not yet hard-gated) features are explicitly tracked in Preview.
 _RUNTIME_GATED_FEATURES: set[FeatureFlag] = {
     FeatureFlag.COST_TRACKING,
     FeatureFlag.SLACK_INTEGRATION,
@@ -177,6 +176,34 @@ _RUNTIME_GATED_FEATURES: set[FeatureFlag] = {
     FeatureFlag.ESCALATION_WORKFLOW,
     FeatureFlag.INCIDENT_INTEGRATIONS,
 }
+
+_PREVIEW_MATURITY_FEATURES: set[FeatureFlag] = {
+    FeatureFlag.DASHBOARDS,
+    FeatureFlag.ALERTS,
+    FeatureFlag.ZOMBIE_SCAN,
+    FeatureFlag.AI_INSIGHTS,
+    FeatureFlag.DOMAIN_DISCOVERY,
+    FeatureFlag.MULTI_CLOUD,
+    FeatureFlag.MULTI_REGION,
+    FeatureFlag.CARBON_TRACKING,
+    FeatureFlag.API_ACCESS,
+    FeatureFlag.DEDICATED_SUPPORT,
+    FeatureFlag.HOURLY_SCANS,
+    FeatureFlag.AI_ANALYSIS_DETAILED,
+    FeatureFlag.FORECASTING,
+    FeatureFlag.POLICY_CONFIGURATION,
+}
+
+_FEATURE_MATURITY_COVERAGE = _RUNTIME_GATED_FEATURES | _PREVIEW_MATURITY_FEATURES
+_ALL_FEATURE_FLAGS = {flag for flag in FeatureFlag}
+_FEATURE_MATURITY_MISSING = _ALL_FEATURE_FLAGS - _FEATURE_MATURITY_COVERAGE
+_FEATURE_MATURITY_EXTRA = _FEATURE_MATURITY_COVERAGE - _ALL_FEATURE_FLAGS
+if _FEATURE_MATURITY_MISSING or _FEATURE_MATURITY_EXTRA:
+    raise RuntimeError(
+        "Feature maturity classification is incomplete or invalid. "
+        f"missing={[item.value for item in sorted(_FEATURE_MATURITY_MISSING, key=lambda x: x.value)]} "
+        f"extra={[item.value for item in sorted(_FEATURE_MATURITY_EXTRA, key=lambda x: x.value)]}"
+    )
 
 FEATURE_MATURITY: dict[FeatureFlag, FeatureMaturity] = {
     flag: (
@@ -239,8 +266,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
     },
     PricingTier.STARTER: {
         "name": "Starter",
-        "price_usd": {"monthly": 29, "annual": 290},
-        "paystack_amount_kobo": {"monthly": 4125000, "annual": 41250000},
+        "price_usd": {"monthly": 49, "annual": 490},
         "features": {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
@@ -291,11 +317,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
     },
     PricingTier.GROWTH: {
         "name": "Growth",
-        "price_usd": {"monthly": 79, "annual": 790},
-        "paystack_amount_kobo": {
-            "monthly": 11250000,  # ₦112,500
-            "annual": 112500000,  # ₦1,125,000
-        },
+        "price_usd": {"monthly": 149, "annual": 1490},
         "features": {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
@@ -339,14 +361,14 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
             "max_backfill_days": 180,
             "retention_days": 365,
         },
-        "description": "For growing teams who need AI-powered cost intelligence.",
+        "description": "For growing teams who need structured FinOps governance.",
         "cta": "Start with Growth",
         "display_features": [
             "Includes all Starter features",
             "AI-driven savings analyses",
             "Chargeback/showback workflows",
             "Historical ingestion backfill",
-            "Custom remediation guides",
+            "Non-production auto-remediation workflows",
             "BYOK supported (no platform surcharge)",
             "Full multi-cloud support",
             "1-year data retention",
@@ -354,11 +376,7 @@ TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
     },
     PricingTier.PRO: {
         "name": "Pro",
-        "price_usd": {"monthly": 199, "annual": 1990},
-        "paystack_amount_kobo": {
-            "monthly": 28500000,  # ₦285,000
-            "annual": 285000000,  # ₦2,850,000
-        },
+        "price_usd": {"monthly": 299, "annual": 2990},
         "features": {
             FeatureFlag.DASHBOARDS,
             FeatureFlag.COST_TRACKING,
@@ -621,7 +639,12 @@ def requires_feature(
 async def get_tenant_tier(
     tenant_id: Union[str, uuid.UUID], db: "AsyncSession"
 ) -> PricingTier:
-    """Get the pricing tier for a tenant."""
+    """
+    Get the pricing tier for a tenant.
+
+    Uses a per-session cache to avoid repeated tenant lookups within the same
+    request/job execution context.
+    """
     from sqlalchemy import select
     from app.models.tenant import Tenant
 
@@ -632,23 +655,41 @@ async def get_tenant_tier(
             # If not a valid UUID string, we can't look it up.
             return PricingTier.FREE
 
+    cache: dict[str, PricingTier] | None = None
+    db_info = getattr(db, "info", None)
+    if isinstance(db_info, dict):
+        raw_cache = db_info.setdefault("_tenant_tier_cache", {})
+        if isinstance(raw_cache, dict):
+            cache = raw_cache
+
+    tenant_key = str(tenant_id)
+    if cache is not None and tenant_key in cache:
+        return cache[tenant_key]
+
     try:
         result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         tenant = result.scalar_one_or_none()
-        if inspect.isawaitable(tenant):
-            tenant = await tenant
 
         if not tenant:
+            if cache is not None:
+                cache[tenant_key] = PricingTier.FREE
             return PricingTier.FREE
         try:
-            return PricingTier(tenant.plan)
+            resolved = PricingTier(tenant.plan)
+            if cache is not None:
+                cache[tenant_key] = resolved
+            return resolved
         except ValueError:
             logger.error(
                 "invalid_tenant_plan", tenant_id=str(tenant_id), plan=tenant.plan
             )
+            if cache is not None:
+                cache[tenant_key] = PricingTier.FREE
             return PricingTier.FREE
     except Exception as e:
         logger.error("get_tenant_tier_failed", tenant_id=str(tenant_id), error=str(e))
+        if cache is not None:
+            cache[tenant_key] = PricingTier.FREE
         return PricingTier.FREE
 
 

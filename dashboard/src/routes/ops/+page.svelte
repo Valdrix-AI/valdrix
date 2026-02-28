@@ -2505,7 +2505,7 @@
 												{req.status.replaceAll('_', ' ')}
 											</div>
 											{#if req.escalation_required}
-												<div class="badge badge-warning mt-1 text-[10px]">
+												<div class="badge badge-warning mt-1 text-xs">
 													Escalated: {req.escalation_reason || 'Owner approval required'}
 												</div>
 											{/if}

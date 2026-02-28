@@ -347,7 +347,9 @@ async def test_get_db_impl_request_without_tenant_sets_false_and_closes() -> Non
         yielded = await agen.__anext__()
         assert yielded is mock_session
         assert mock_session.info["rls_context_set"] is False
+        assert mock_session.info["rls_system_context"] is False
         assert conn.info["rls_context_set"] is False
+        assert conn.info["rls_system_context"] is False
         with pytest.raises(StopAsyncIteration):
             await agen.__anext__()
 
@@ -365,7 +367,9 @@ async def test_get_system_db_impl_and_wrapper() -> None:
         yielded = await agen.__anext__()
         assert yielded is mock_session
         assert mock_session.info["rls_context_set"] is None
+        assert mock_session.info["rls_system_context"] is True
         assert conn.info["rls_context_set"] is None
+        assert conn.info["rls_system_context"] is True
         with pytest.raises(StopAsyncIteration):
             await agen.__anext__()
 
@@ -395,7 +399,9 @@ async def test_set_session_tenant_id_postgres_execute_failure_marks_fail_closed(
         await session_mod.set_session_tenant_id(session, tenant_id)
 
     assert session.info["rls_context_set"] is False
+    assert session.info["rls_system_context"] is False
     assert conn.info["rls_context_set"] is False
+    assert conn.info["rls_system_context"] is False
     mock_logger.warning.assert_called_once()
 
 
@@ -429,6 +435,30 @@ def test_check_rls_policy_additional_branch_paths() -> None:
         with pytest.raises(ValdrixException):
             session_mod.check_rls_policy(conn_false, None, "SELECT * FROM z", {}, None, False)
     mock_logger.debug.assert_any_call("rls_metric_increment_failed", error="metric failed")
+
+    conn_ambiguous = MagicMock()
+    conn_ambiguous.info = {"rls_context_set": None}
+    with patch.object(
+        session_mod,
+        "settings",
+        SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
+    ):
+        with pytest.raises(ValdrixException):
+            session_mod.check_rls_policy(
+                conn_ambiguous, None, "SELECT * FROM accounts", {}, None, False
+            )
+
+    conn_system = MagicMock()
+    conn_system.info = {"rls_context_set": None, "rls_system_context": True}
+    with patch.object(
+        session_mod,
+        "settings",
+        SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
+    ):
+        stmt_system, _ = session_mod.check_rls_policy(
+            conn_system, None, "SELECT * FROM exchange_rates", {}, None, False
+        )
+        assert stmt_system == "SELECT * FROM exchange_rates"
 
 
 @pytest.mark.asyncio

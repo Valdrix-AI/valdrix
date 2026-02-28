@@ -14,6 +14,7 @@
 	import { createSupabaseBrowserClient } from '$lib/supabase';
 	import { invalidate } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { tick } from 'svelte';
 	import { uiState } from '$lib/stores/ui.svelte';
 	import ToastComponent from '$lib/components/Toast.svelte';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
@@ -24,6 +25,21 @@
 	import { jobStore } from '$lib/stores/jobs.svelte';
 	import { allowedNavHrefs, isAdminRole, normalizePersona } from '$lib/persona';
 	import ErrorBoundary from '$lib/components/ErrorBoundary.svelte';
+	import {
+		PUBLIC_FOOTER_BADGES,
+		PUBLIC_FOOTER_CAPTION,
+		PUBLIC_FOOTER_LINKS,
+		PUBLIC_FOOTER_SUBTITLE,
+		PUBLIC_MOBILE_LINKS,
+		PUBLIC_PRIMARY_LINKS,
+		PUBLIC_SECONDARY_LINKS,
+		PUBLIC_SIGNAL_STRIP
+	} from '$lib/landing/publicNav';
+	import {
+		getFocusableElements,
+		lockBodyScroll,
+		resolveNextFocusTarget
+	} from '$lib/landing/publicMenuA11y';
 
 	let { data, children } = $props();
 
@@ -65,16 +81,28 @@
 	let showAllNav = $state(false);
 	let navPreferenceLoaded = $state(false);
 	let prefersReducedMotion = $state(false);
+	let publicMenuOpen = $state(false);
+	let publicMenuPanel = $state<HTMLDivElement | null>(null);
+	let publicMenuButton = $state<HTMLButtonElement | null>(null);
+	let publicMenuRestoreFocus = $state<HTMLElement | null>(null);
 
 	$effect(() => {
 		if (!browser) return;
+		if (typeof window.matchMedia !== 'function') {
+			prefersReducedMotion = false;
+			return;
+		}
 		const media = window.matchMedia('(prefers-reduced-motion: reduce)');
 		const update = () => {
 			prefersReducedMotion = media.matches;
 		};
 		update();
-		media.addEventListener('change', update);
-		return () => media.removeEventListener('change', update);
+		if (typeof media.addEventListener === 'function') {
+			media.addEventListener('change', update);
+			return () => media.removeEventListener('change', update);
+		}
+		media.addListener(update);
+		return () => media.removeListener(update);
 	});
 
 	let persona = $derived(normalizePersona(data.profile?.persona));
@@ -151,6 +179,60 @@
 			jobStore.disconnect();
 		}
 	});
+
+	$effect(() => {
+		$page.url.pathname;
+		publicMenuOpen = false;
+	});
+
+	$effect(() => {
+		if (!browser || !publicMenuOpen) return;
+
+		publicMenuRestoreFocus =
+			document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		const unlockBodyScroll = lockBodyScroll(document);
+
+		void tick().then(() => {
+			const firstFocusable = getFocusableElements(publicMenuPanel)[0];
+			firstFocusable?.focus();
+		});
+
+		const handleKeydown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				publicMenuOpen = false;
+				return;
+			}
+			if (event.key !== 'Tab') return;
+			const direction = event.shiftKey ? 'backward' : 'forward';
+			const activeElement =
+				document.activeElement instanceof HTMLElement ? document.activeElement : null;
+			const nextTarget = resolveNextFocusTarget(publicMenuPanel, activeElement, direction);
+			if (!nextTarget) return;
+			event.preventDefault();
+			nextTarget.focus();
+		};
+		window.addEventListener('keydown', handleKeydown);
+
+		return () => {
+			window.removeEventListener('keydown', handleKeydown);
+			unlockBodyScroll();
+			if (publicMenuRestoreFocus) {
+				publicMenuRestoreFocus.focus();
+			} else {
+				publicMenuButton?.focus();
+			}
+			publicMenuRestoreFocus = null;
+		};
+	});
+
+	function togglePublicMenu(): void {
+		publicMenuOpen = !publicMenuOpen;
+	}
+
+	function closePublicMenu(): void {
+		publicMenuOpen = false;
+	}
 </script>
 
 <svelte:head>
@@ -204,7 +286,7 @@
 					</div>
 					{#if !showAllNav && activeSecondaryNavItems.length > 0}
 						<div class="px-5 pb-2">
-							<p class="text-[10px] text-ink-500 mb-2">
+							<p class="text-xs text-ink-500 mb-2">
 								You are viewing a page outside your persona navigation.
 							</p>
 							{#each activeSecondaryNavItems as item (item.href)}
@@ -314,7 +396,7 @@
 									></span>
 									<span class="relative inline-flex rounded-full h-2 w-2 bg-accent-500"></span>
 								</span>
-								<span class="text-[10px] font-bold uppercase tracking-wider text-accent-400">
+								<span class="text-xs font-bold uppercase tracking-wider text-accent-400">
 									{jobStore.activeJobsCount} Active {jobStore.activeJobsCount === 1
 										? 'Job'
 										: 'Jobs'}
@@ -345,15 +427,121 @@
 		<CommandPalette bind:isOpen={uiState.isCommandPaletteOpen} />
 	{:else}
 		<!-- Public Layout (Login/Landing) -->
-		<header class="border-b border-ink-800 bg-ink-900/50 backdrop-blur sticky top-0 z-50">
-			<nav class="container mx-auto flex items-center justify-between px-6 py-4">
-				<a href={toAppPath('/')} class="flex items-center gap-2">
-					<CloudLogo provider="valdrix" size={32} />
-					<span class="text-xl font-bold text-gradient">Valdrics</span>
-				</a>
+			<header class="border-b border-ink-800 bg-ink-900/50 backdrop-blur sticky top-0 z-50">
+				<nav class="container mx-auto flex items-center justify-between gap-4 px-6 py-4">
+					<a href={toAppPath('/')} class="flex items-center gap-2">
+						<CloudLogo provider="valdrix" size={32} />
+						<span class="text-xl font-bold text-gradient hidden sm:inline">Valdrics</span>
+					</a>
 
-				<a href={toAppPath('/auth/login')} class="btn btn-primary"> Sign In </a>
-			</nav>
+					<div class="hidden lg:flex items-center gap-5 text-sm text-ink-300">
+						{#each PUBLIC_PRIMARY_LINKS as link (link.href)}
+							<a href={toAppPath(link.href)} class="hover:text-ink-100">{link.label}</a>
+						{/each}
+					</div>
+
+					<div class="hidden lg:flex items-center gap-2">
+						{#each PUBLIC_SECONDARY_LINKS as link (link.href)}
+							<a href={toAppPath(link.href)} class="btn btn-ghost">{link.label}</a>
+						{/each}
+						<a href={toAppPath('/auth/login')} class="btn btn-primary">Start Free</a>
+					</div>
+
+					<div class="flex items-center gap-2 lg:hidden">
+						<a href={toAppPath('/auth/login')} class="btn btn-primary hidden sm:inline-flex">
+							Start Free
+						</a>
+						<button
+							type="button"
+							class="btn btn-ghost p-2"
+							bind:this={publicMenuButton}
+							aria-label="Toggle menu"
+							aria-expanded={publicMenuOpen}
+							aria-controls="public-mobile-menu"
+							aria-haspopup="dialog"
+							onclick={togglePublicMenu}
+						>
+							{#if publicMenuOpen}
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="20"
+									height="20"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<line x1="18" y1="6" x2="6" y2="18"></line>
+									<line x1="6" y1="6" x2="18" y2="18"></line>
+								</svg>
+							{:else}
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="20"
+									height="20"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<line x1="3" y1="12" x2="21" y2="12"></line>
+									<line x1="3" y1="6" x2="21" y2="6"></line>
+									<line x1="3" y1="18" x2="21" y2="18"></line>
+								</svg>
+							{/if}
+						</button>
+					</div>
+				</nav>
+				{#if publicMenuOpen}
+					<button
+						type="button"
+						class="fixed inset-0 z-40 bg-ink-950/50 backdrop-blur-[2px] lg:hidden"
+						aria-label="Close navigation menu"
+						onclick={closePublicMenu}
+					></button>
+					<div
+						id="public-mobile-menu"
+						bind:this={publicMenuPanel}
+						class="relative z-50 lg:hidden border-t border-ink-800/70 bg-ink-900/95"
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="public-mobile-menu-title"
+					>
+						<div class="container mx-auto px-6 py-4">
+							<h2 id="public-mobile-menu-title" class="sr-only">Public navigation menu</h2>
+							<div class="grid gap-2 text-sm text-ink-200">
+								<a
+									href={toAppPath('/auth/login')}
+									class="btn btn-primary justify-center mb-2"
+									onclick={closePublicMenu}
+								>
+									Start Free
+								</a>
+								{#each PUBLIC_MOBILE_LINKS as link (link.href)}
+									<a href={toAppPath(link.href)} class="py-2 hover:text-ink-100" onclick={closePublicMenu}
+										>{link.label}</a
+									>
+								{/each}
+							</div>
+						</div>
+					</div>
+				{/if}
+				<div class="border-t border-ink-800/60 bg-ink-900/65">
+					<div
+						class="container mx-auto flex flex-wrap items-center gap-x-3 gap-y-1 px-6 py-2 text-xs text-ink-400"
+				>
+					{#each PUBLIC_SIGNAL_STRIP as message, index (message)}
+						<span>{message}</span>
+						{#if index < PUBLIC_SIGNAL_STRIP.length - 1}
+							<span aria-hidden="true">•</span>
+						{/if}
+					{/each}
+				</div>
+			</div>
 		</header>
 
 		<main id="main" tabindex="-1" class="page-enter">
@@ -365,38 +553,33 @@
 				<div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
 					<div class="space-y-2">
 						<p class="text-sm font-semibold text-ink-100">Valdrics</p>
-						<p class="max-w-xl text-sm text-ink-400">
-							FinOps, GreenOps, and ActiveOps in one operational surface with policy-driven
-							remediation and audit-ready evidence.
-						</p>
+						<p class="max-w-xl text-sm text-ink-400">{PUBLIC_FOOTER_SUBTITLE}</p>
 					</div>
 
 					<nav class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-4" aria-label="Footer">
-						<a href={toAppPath('/docs')} class="text-ink-300 hover:text-ink-100">Documentation</a>
-						<a href={toAppPath('/docs/api')} class="text-ink-300 hover:text-ink-100">
-							API Reference
-						</a>
-						<a
-							href="https://github.com/Valdrix-AI/valdrix"
-							target="_blank"
-							rel="noreferrer"
-							class="text-ink-300 hover:text-ink-100"
-						>
-							GitHub
-						</a>
-						<a href={toAppPath('/status')} class="text-ink-300 hover:text-ink-100">Status</a>
+						{#each PUBLIC_FOOTER_LINKS as link (link.href)}
+							{#if link.external}
+								<a href={link.href} target="_blank" rel="noreferrer" class="text-ink-300 hover:text-ink-100">
+									{link.label}
+								</a>
+							{:else}
+								<a href={toAppPath(link.href)} class="text-ink-300 hover:text-ink-100">{link.label}</a>
+							{/if}
+						{/each}
 					</nav>
 				</div>
 
 				<div class="mt-6 flex flex-wrap items-center gap-2" aria-label="Technology badges">
-					<span class="badge badge-default">Python 3.12</span>
-					<span class="badge badge-default">FastAPI 0.128+</span>
-					<span class="badge badge-default">Svelte 5</span>
-					<span class="badge badge-success">GreenOps Enabled</span>
-					<span class="badge badge-default">License: BSL 1.1</span>
+					{#each PUBLIC_FOOTER_BADGES as badge (badge)}
+						<span class={`badge ${badge === 'Policy-Governed Actions' ? 'badge-success' : 'badge-default'}`}>
+							{badge}
+						</span>
+					{/each}
 				</div>
 
-				<p class="mt-6 text-xs text-ink-500">© {currentYear} Valdrics. All rights reserved.</p>
+				<p class="mt-4 text-sm text-ink-500">{PUBLIC_FOOTER_CAPTION}</p>
+
+				<p class="mt-6 text-sm text-ink-500">© {currentYear} Valdrics. All rights reserved.</p>
 			</div>
 		</footer>
 	{/if}

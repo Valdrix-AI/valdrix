@@ -14,6 +14,7 @@ from app.modules.governance.domain.security.remediation_policy import (
     PolicyConfig,
     PolicyDecision,
     RemediationPolicyEngine,
+    is_production_remediation_target,
     is_production_destructive_remediation,
 )
 from app.modules.optimization.domain.remediation import RemediationService
@@ -88,6 +89,29 @@ def test_is_production_destructive_remediation_helper() -> None:
             action=RemediationAction.DELETE_S3_BUCKET,
             resource_id="bucket-dev-1",
             resource_type="S3 Bucket",
+            action_parameters={
+                "_system_policy_context": {
+                    "source": "cloud_account",
+                    "is_production": False,
+                }
+            },
+        )
+    )
+
+
+def test_is_production_remediation_target_helper() -> None:
+    assert is_production_remediation_target(
+        _request(
+            action=RemediationAction.STOP_INSTANCE,
+            resource_id="prod-app-worker-1",
+            resource_type="EC2 Instance",
+        )
+    )
+    assert not is_production_remediation_target(
+        _request(
+            action=RemediationAction.STOP_INSTANCE,
+            resource_id="shared-dev-worker-1",
+            resource_type="EC2 Instance",
             action_parameters={
                 "_system_policy_context": {
                     "source": "cloud_account",

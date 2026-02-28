@@ -6,10 +6,37 @@ This document converts the three requirement sets provided in the current review
 
 This is the single source of truth for what is still open. Historical sections below may contain older `Partial`/transition notes and should not override this list.
 
-1. `PKG-*` (`OPEN`): packaging/commercial backlog remains active (`PKG-001..PKG-032`), with `PKG-003`, `PKG-006`, `PKG-007`, `PKG-008`, `PKG-014`, and `PKG-020` now implemented baseline.
+1. `PKG-*` (`OPEN`): packaging/commercial backlog remains active (`PKG-001..PKG-032`), with `PKG-003`, `PKG-006`, `PKG-007`, `PKG-008`, `PKG-010`, `PKG-014`, `PKG-015`, and `PKG-020` now implemented baseline.
 2. `FIN-*` (`OPEN`): financial model/guardrail backlog remains active (`FIN-001..FIN-008` + `FIN-GATE-*`).
 
 Everything else in enforcement runtime hardening is treated as `DONE` baseline with regression-watch posture.
+
+Pre-launch policy lock note (2026-02-28F):
+1. Launch-blocking PKG/FIN decisions are now explicitly codified and verified:
+   - pricing boundary policy,
+   - synthetic pre-launch telemetry handling,
+   - founder-acting approval governance mode.
+2. Remaining `PKG-*` / `FIN-*` work is now primarily post-launch policy operations (production telemetry and pricing-motion governance), not implementation readiness for platform launch.
+
+Execution update (2026-02-28E): closure audit rerun
+1. Re-ran full non-dry-run release-evidence gate with all current evidence contracts:
+   - stress + failure injection + finance guardrails + finance telemetry + pricing benchmark + PKG/FIN decision artifact.
+   - Result: passed (`860 passed`) with all coverage thresholds satisfied.
+2. Re-ran additional backend regression suites for modified non-gate pricing/remediation modules:
+   - `tests/unit/api/v1/test_billing.py`
+   - `tests/unit/services/billing/test_paystack_billing_branches.py`
+   - `tests/unit/optimization/test_remediation_policy.py`
+   - `tests/unit/zombies/test_zombies_api_branches.py`
+   - Result: `72 passed`.
+3. Re-ran modified frontend pricing checks:
+   - `npm run test:unit -- --run src/routes/pricing/pricing.load.test.ts` -> `4 passed`
+   - `npm run check` -> `0 errors`, `0 warnings`.
+4. Re-ran static quality checks on changed/new Python files:
+   - `uv run ruff check ...` -> passed.
+   - `uv run mypy ... --hide-error-context --no-error-summary` -> passed.
+5. Current interpretation:
+   - engineering/test hardening in this scope is green,
+   - remaining open backlog is policy/telemetry-governance (`PKG-*`, `FIN-*`) rather than unresolved implementation defects.
 
 Recent staged closures (2026-02-27, single-sprint hardening pass):
 1. `CI-EVID-001` (`DONE`): CI green-run promotion packet captured.
@@ -48,6 +75,196 @@ Recent staged closures (2026-02-27, single-sprint hardening pass):
      - `docs/ops/evidence/pricing_benchmark_register_2026-02-27.json`
      - `scripts/verify_pricing_benchmark_register.py`
      - `docs/ops/pkg_fin_decision_memo_2026-02-27.md`
+12. `PKG/FIN` policy-decision automation baseline (`DONE`): machine-verifiable decision artifact added to enforce that pricing/packaging motions carry explicit policy choices and approval sign-offs, backed by at least 2 months of telemetry.
+   - Artifacts:
+     - `docs/ops/evidence/pkg_fin_policy_decisions_TEMPLATE.json`
+     - `docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json`
+     - `scripts/verify_pkg_fin_policy_decisions.py`
+     - `docs/ops/pkg_fin_decision_memo_2026-02-27.md`
+13. `FIN` live telemetry automation baseline (`DONE`): machine-verifiable telemetry snapshot + monthly committee packet generator + optional gate wiring added for live FIN packet automation.
+   - Artifacts:
+     - `docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json`
+     - `docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json`
+     - `docs/ops/evidence/finance_committee_packet_assumptions_TEMPLATE.json`
+     - `docs/ops/evidence/finance_committee_packet_assumptions_2026-02-28.json`
+     - `scripts/collect_finance_telemetry_snapshot.py`
+     - `scripts/verify_finance_telemetry_snapshot.py`
+     - `scripts/generate_finance_committee_packet.py`
+14. `PKG-010` (`DONE` baseline): free-tier LLM compute guardrails and telemetry gates are now machine-verifiable in finance telemetry snapshots.
+   - Artifacts:
+     - `scripts/collect_finance_telemetry_snapshot.py`
+     - `scripts/verify_finance_telemetry_snapshot.py`
+     - `docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json`
+     - `docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json`
+     - `tests/unit/ops/test_collect_finance_telemetry_snapshot.py`
+     - `tests/unit/ops/test_verify_finance_telemetry_snapshot.py`
+15. `PKG-015` (`DONE` baseline): B-launch readiness gate is now machine-checkable and enforced in enterprise gate command construction.
+   - Artifacts:
+     - `scripts/verify_pkg015_launch_gate.py`
+     - `scripts/run_enterprise_tdd_gate.py`
+     - `tests/unit/ops/test_verify_pkg015_launch_gate.py`
+     - `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
+
+Execution update (2026-02-28H): immediate PKG/FIN evidence hardening controls completed
+1. CI now enforces evidence artifacts as mandatory inputs for enterprise release gate:
+   - stress artifact required,
+   - failure-injection artifact required,
+   - finance guardrails required,
+   - finance telemetry snapshot required,
+   - pricing benchmark register required,
+   - PKG/FIN policy-decision artifact required.
+   - Evidence: `.github/workflows/ci.yml` (`enterprise-tdd-quality-gate` env contract).
+2. PKG/FIN verifier now rejects placeholder values in approval and decision fields:
+   - blocks tokens such as `example.com`, `.example`, `TBD`, `TODO`, `placeholder`, `replace_me`, `yyyy`.
+   - Evidence: `scripts/verify_pkg_fin_policy_decisions.py`, `tests/unit/ops/test_verify_pkg_fin_policy_decisions.py`.
+3. Added monthly finance evidence refresh gate with CI reminder posture:
+   - `scripts/verify_monthly_finance_evidence_refresh.py`
+   - wired as always-on command in `scripts/run_enterprise_tdd_gate.py`,
+   - validates freshness (`max_age_days`) + capture-cycle coherence (`max_capture_spread_days`),
+   - supports bounded timestamp skew to avoid same-day false positives.
+   - Evidence: `tests/unit/ops/test_verify_monthly_finance_evidence_refresh.py`, `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`.
+
+Execution update (2026-02-28I): VALDRX codebase audit validation + remediation batch
+1. Validated and remediated confirmed security/runtime defects from `VALDRX_CODEBASE_AUDIT_2026-02-28.md.resolved`:
+   - `VAL-DB-001`: hardened RLS session posture by introducing explicit `rls_system_context` marker and fail-closed behavior for ambiguous (unset/non-system) DB query context in non-testing runtime.
+     - Code: `app/shared/db/session.py`
+     - Propagation: explicit system-context markers added in non-request session paths (`oidc`, `scim token lookup`, `scheduler`, `jobs SSE/internal processor`, `CUR ingestion`, `LLM pricing refresh`, `FX service`).
+   - `VAL-BILL-005`: dunning enqueue failure now reverts ATTENTION transition and retry metadata to prevent persisted partial state without an actual scheduled retry job.
+     - Code: `app/modules/billing/domain/billing/dunning_service.py`
+   - `VAL-SEC-001`: removed hardcoded CSRF test fallback; test mode now uses env-provided key or derived ephemeral key.
+     - Code: `app/main.py`
+   - `VAL-SEC-003`: webhook IP extraction now ignores `X-Forwarded-For` unless proxy header trust is explicitly enabled (`TRUST_PROXY_HEADERS`).
+     - Code: `app/modules/billing/api/v1/billing.py`, `app/shared/core/config.py`
+   - `VAL-CORE-003/004`: added per-session tenant-tier cache and removed awaitable scalar branch to reduce repeated tenant lookups and normalize lookup behavior.
+     - Code: `app/shared/core/pricing.py`
+2. Validated as non-defects / architecture backlog (not immediate security correctness bugs):
+   - middleware ordering note (`VAL-API-001`) already documented in-code and intentional,
+   - bearer-token CSRF bypass (`VAL-API-002`) is constrained to non-cookie auth flow,
+   - static docs assets (`VAL-API-004`) already have SRI attachment and static-only mount behavior,
+   - adapter retry-loop duplication is now remediated via shared helper (`app/shared/adapters/http_retry.py`) and rollout across license/saas/platform/hybrid adapters.
+   - residual `VAL-ADAPT-002+` scope is class-size/vendor-strategy decomposition (maintainability architecture backlog), not immediate hotfix blockers.
+3. Regression evidence:
+   - Targeted suites: `212 passed`.
+   - Command:
+     - `DEBUG=false uv run pytest -q --no-cov tests/unit/db/test_session_branch_paths_2.py tests/unit/core/test_main.py tests/unit/services/billing/test_dunning_service.py tests/unit/core/test_pricing_deep.py tests/unit/api/v1/test_billing.py tests/unit/connections/test_oidc_deep.py tests/unit/shared/connections/test_oidc_service.py tests/unit/governance/jobs/test_cur_ingestion.py tests/unit/governance/jobs/test_cur_ingestion_branch_paths.py tests/unit/governance/test_jobs_api.py tests/unit/governance/test_scim_api.py tests/unit/governance/test_scim_api_branches.py tests/unit/governance/test_scim_context_and_race_branches.py tests/unit/governance/test_scim_internal_branches.py tests/unit/governance/test_scim_direct_endpoint_branches.py tests/unit/tasks/test_scheduler_tasks.py tests/unit/tasks/test_scheduler_tasks_branch_paths_2.py`
+   - Static checks:
+     - `uv run ruff check ...` -> passed.
+     - `uv run mypy ... --hide-error-context --no-error-summary` -> passed.
+
+Execution update (2026-02-28J): adapter retry abstraction remediation
+1. Closed retry-loop duplication across Cloud+ adapters by introducing a shared retry primitive:
+   - `app/shared/adapters/http_retry.py::execute_with_http_retry()`
+   - normalized retryable HTTP status handling, transport retry behavior, and `ExternalAPIError` mapping.
+2. Refactored adapters to consume the shared retry primitive:
+   - `app/shared/adapters/license.py`
+   - `app/shared/adapters/saas.py`
+   - `app/shared/adapters/platform.py`
+   - `app/shared/adapters/hybrid.py`
+3. Hardened deterministic connector parsing:
+   - extracted Google Workspace license connector parser to `app/shared/adapters/license_config.py`,
+   - adapter runtime now uses typed parsed config instead of ad-hoc nested dict parsing.
+4. Regression evidence:
+   - `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/services/adapters/test_platform_hybrid_adapters.py tests/unit/services/adapters/test_platform_additional_branches.py tests/unit/services/adapters/test_hybrid_additional_branches.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/shared/adapters/test_saas_adapter_branch_paths.py` -> `155 passed`.
+   - Added direct unit coverage for new abstractions:
+     - `tests/unit/shared/adapters/test_http_retry.py`
+     - `tests/unit/shared/adapters/test_license_config.py`
+5. Remaining adapter backlog scope:
+   - class-size and vendor-strategy decomposition (`VAL-ADAPT-002+`) remains a maintainability refactor backlog item (non-hotfix severity).
+
+Execution update (2026-02-28K): VALDRX audit follow-up (targeted closures + decomposition pass)
+1. Closed `VAL-CORE-001` (implicit maturity mapping risk):
+   - `app/shared/core/pricing.py` now defines explicit preview maturity membership and enforces exact/complete feature-maturity coverage invariants.
+   - Startup fails closed if any `FeatureFlag` is missing from maturity classification.
+2. Closed `VAL-BILL-001` (stale plan code resolution risk):
+   - `app/modules/billing/domain/billing/paystack_service_impl.py` now resolves `plan_codes` and `annual_plan_codes` lazily from live settings instead of capturing once in `__init__`.
+3. Advanced `VAL-ADAPT-002` decomposition:
+   - Extracted vendor verify/revoke/activity operation implementations into `app/shared/adapters/license_vendor_ops.py`.
+   - `app/shared/adapters/license.py` now delegates those vendor operations through wrappers, reducing adapter density and improving test seam isolation.
+4. Regression evidence:
+   - `uv run ruff check app/shared/core/pricing.py app/modules/billing/domain/billing/paystack_service_impl.py app/shared/adapters/license.py app/shared/adapters/license_vendor_ops.py tests/unit/services/adapters/test_license_verification_stream_branches.py` -> passed.
+   - `uv run mypy app/shared/core/pricing.py app/modules/billing/domain/billing/paystack_service_impl.py app/shared/adapters/license.py app/shared/adapters/license_vendor_ops.py --hide-error-context --no-error-summary` -> passed.
+   - `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/billing/test_paystack_billing_branches.py tests/unit/core/test_pricing_packaging_contract.py` -> `76 passed`.
+5. Remaining architecture backlog:
+   - `VAL-ADAPT-002+` still has additional class-size/vendor-strategy extraction scope; this is maintainability backlog, not a release-blocking runtime defect.
+
+Execution update (2026-02-28L): consolidated remediation state sync
+1. Consolidated remediated VALDRX items now reflected in code + docs:
+   - `VAL-DB-001`, `VAL-BILL-005`, `VAL-SEC-001`, `VAL-SEC-003`, `VAL-CORE-003/004`,
+   - `VAL-CORE-001`, `VAL-BILL-001`, `VAL-ADAPT-003`, `VAL-ADAPT-004`.
+2. `VAL-ADAPT-002` status:
+   - decomposition materially advanced via `app/shared/adapters/license_vendor_ops.py` (vendor verify/revoke/activity extraction),
+   - adapter wrapper seam preserved in `app/shared/adapters/license.py` for stable behavior and patch-based tests.
+3. Remaining non-hotfix scope:
+   - `VAL-ADAPT-002+` further class-size/vendor-strategy splitting remains maintainability backlog, not a release-blocking runtime/security issue.
+
+Execution update (2026-02-28M): license stream-cost decomposition follow-up
+1. Advanced `VAL-ADAPT-002` by extracting native stream-cost implementations from `app/shared/adapters/license.py` into `app/shared/adapters/license_vendor_ops.py`:
+   - Google Workspace stream-cost path.
+   - Microsoft 365 stream-cost path.
+2. Preserved adapter behavior and patch seams:
+   - `LicenseAdapter._stream_google_workspace_license_costs()` and `LicenseAdapter._stream_microsoft_365_license_costs()` remain as wrappers that delegate to vendor ops.
+   - Existing stream fallback behavior (`native -> manual feed`) and external error semantics remain unchanged.
+3. Validation evidence:
+   - `uv run ruff check app/shared/adapters/license.py app/shared/adapters/license_vendor_ops.py` -> passed.
+   - `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_vendor_ops.py --hide-error-context --no-error-summary` -> passed.
+   - `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_google_workspace.py` -> `91 passed`.
+
+Execution update (2026-02-28N): VALDRX continuation (auth coverage + paginator + billing entitlement sync)
+1. Closed `VAL-SEC-002` with machine-checkable route-auth verification:
+   - added `scripts/verify_api_auth_coverage.py` (recursive dependency scan + explicit public allowlist),
+   - wired as a mandatory enterprise gate command in `scripts/run_enterprise_tdd_gate.py`,
+   - hardened explicit auth on:
+     - `app/modules/governance/api/v1/jobs.py` (`/internal/process` now depends on `require_internal_job_secret`),
+     - `app/modules/governance/api/v1/settings/llm.py` (`/llm/models` now depends on authenticated user context).
+2. Advanced `VAL-ADAPT-005` with shared AWS paginator abstraction:
+   - added `app/shared/adapters/aws_pagination.py::iter_aws_paginator_pages()`,
+   - applied to:
+     - `app/shared/adapters/aws_resource_explorer.py`,
+     - `app/shared/adapters/aws_cur.py` (`s3.list_objects_v2` bounded traversal cap + warning).
+3. Closed `VAL-BILL-006` by centralizing entitlement plan synchronization:
+   - added `app/modules/billing/domain/billing/entitlement_policy.py`,
+   - replaced scattered direct `Tenant.plan` update statements in:
+     - `app/modules/billing/domain/billing/dunning_service.py`,
+     - `app/modules/billing/domain/billing/paystack_webhook_impl.py`,
+   - added tier normalization + rowcount guardrails for deterministic, fail-closed sync semantics.
+4. Post-closure sanity checks:
+   - concurrency: duplicate webhook/dunning branch behavior preserved by existing queue/idempotency tests,
+   - observability: auth-coverage and entitlement sync add explicit log events for gate visibility,
+   - deterministic replay/snapshot stability/export integrity: no schema or export contract changes introduced in this pass,
+   - failure modes/misconfiguration: anonymous LLM model access now rejects (`401`) and internal job processing requires explicit secret dependency.
+5. Validation evidence:
+   - `uv run ruff check app/modules/governance/api/v1/jobs.py app/modules/governance/api/v1/settings/llm.py scripts/verify_api_auth_coverage.py app/shared/adapters/aws_pagination.py app/shared/adapters/aws_resource_explorer.py app/shared/adapters/aws_cur.py scripts/run_enterprise_tdd_gate.py app/modules/billing/domain/billing/entitlement_policy.py app/modules/billing/domain/billing/dunning_service.py app/modules/billing/domain/billing/paystack_webhook_impl.py tests/unit/ops/test_verify_api_auth_coverage.py tests/unit/shared/adapters/test_aws_pagination.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/services/billing/test_entitlement_policy.py tests/unit/services/billing/test_dunning_service.py tests/unit/services/billing/test_paystack_billing_branches.py tests/unit/governance/settings/test_llm_settings.py` -> passed.
+   - `uv run mypy app/modules/governance/api/v1/jobs.py app/modules/governance/api/v1/settings/llm.py app/shared/adapters/aws_pagination.py app/shared/adapters/aws_resource_explorer.py app/shared/adapters/aws_cur.py scripts/verify_api_auth_coverage.py scripts/run_enterprise_tdd_gate.py app/modules/billing/domain/billing/entitlement_policy.py app/modules/billing/domain/billing/dunning_service.py app/modules/billing/domain/billing/paystack_webhook_impl.py --hide-error-context --no-error-summary` -> passed.
+   - `TESTING=true DEBUG=false uv run python3 scripts/verify_api_auth_coverage.py` -> `Auth coverage check passed.`
+   - `DEBUG=false uv run pytest -q --no-cov tests/unit/services/billing/test_entitlement_policy.py tests/unit/services/billing/test_dunning_service.py tests/unit/services/billing/test_paystack_billing_branches.py tests/unit/ops/test_verify_api_auth_coverage.py tests/unit/shared/adapters/test_aws_pagination.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/governance/test_jobs_api.py tests/unit/governance/settings/test_llm_settings.py` -> `98 passed`.
+
+Execution update (2026-02-28O): VAL-ADAPT-002+ decomposition continuation (license adapter)
+1. Advanced `VAL-ADAPT-002+` by extracting manual-feed and vendor-resolution concerns out of `app/shared/adapters/license.py`:
+   - added `app/shared/adapters/license_feed_ops.py`:
+     - manual feed validation,
+     - manual feed cost-row shaping/window filtering,
+     - manual feed activity consolidation and normalization helpers.
+   - added `app/shared/adapters/license_vendor_registry.py`:
+     - canonical alias-to-native-vendor resolution.
+2. Replaced conditional-heavy vendor dispatch in `LicenseAdapter` with table-driven routing while preserving existing method seams:
+   - verify dispatch map (`_VERIFY_METHOD_BY_VENDOR`),
+   - revoke dispatch map (`_REVOKE_METHOD_BY_VENDOR`),
+   - activity dispatch map (`_ACTIVITY_METHOD_BY_VENDOR`),
+   - native stream dispatch map (`_NATIVE_STREAM_METHOD_BY_VENDOR`).
+   - wrapper methods (`_revoke_*`, `_list_*_activity`, `_verify_*`) retained to avoid behavioral drift and preserve existing test patch points.
+3. Added dedicated helper tests:
+   - `tests/unit/shared/adapters/test_license_feed_ops.py`
+   - `tests/unit/shared/adapters/test_license_vendor_registry.py`
+4. Post-closure sanity checks:
+   - concurrency: no mutable shared global state introduced; helper modules are pure/stateless,
+   - observability: existing adapter warning/error log events preserved in main adapter and vendor ops,
+   - deterministic replay/snapshot stability: no schema/export/serialization contracts changed,
+   - failure modes: native/manual fallback semantics preserved and re-verified in branch coverage packs,
+   - operational misconfiguration: alias resolution remains fail-closed (`None`) for unsupported manual/unknown vendor combinations.
+5. Validation evidence:
+   - `uv run ruff check app/shared/adapters/license.py app/shared/adapters/license_feed_ops.py app/shared/adapters/license_vendor_registry.py tests/unit/shared/adapters/test_license_feed_ops.py tests/unit/shared/adapters/test_license_vendor_registry.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_adapter_helper_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_google_workspace.py` -> passed.
+   - `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_feed_ops.py app/shared/adapters/license_vendor_registry.py --hide-error-context --no-error-summary` -> passed.
+   - `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_license_feed_ops.py tests/unit/shared/adapters/test_license_vendor_registry.py tests/unit/services/adapters/test_adapter_helper_branches.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_google_workspace.py` -> `123 passed`.
 
 Execution update (2026-02-27): FIN evidence contract + release-gate wiring
 1. Added strict finance evidence verifier:
@@ -141,6 +358,105 @@ Execution update (2026-02-27): PKG-003 + PKG-014 runtime gate hardening
 5. Release evidence gate reconfirmed after runtime gate hardening:
    - `uv run python3 scripts/run_enforcement_release_evidence_gate.py --stress-evidence-path docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json --failure-evidence-path docs/ops/evidence/enforcement_failure_injection_2026-02-27.json --stress-required-database-engine postgresql`
    - result: passed (`815 passed`, coverage thresholds satisfied).
+
+Execution update (2026-02-28): PKG/FIN policy-decision evidence gate wiring
+1. Added strict PKG/FIN policy decision verifier:
+   - `scripts/verify_pkg_fin_policy_decisions.py`
+   - Enforces:
+     - explicit pricing-policy choices (`flat_floor|spend_based|hybrid`),
+     - explicit migration strategy + window,
+     - explicit growth/pro commercial boundary choices,
+     - approval sign-offs (`finance`, `product`, `go-to-market`),
+     - telemetry window sufficiency (`>= 2` months) with required tier coverage.
+2. Added policy-decision evidence artifacts:
+   - `docs/ops/evidence/pkg_fin_policy_decisions_TEMPLATE.json`
+   - `docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json`
+   - `docs/ops/evidence/README.md` updated with capture/verify contract.
+3. Release-gate wiring extended:
+   - `scripts/run_enterprise_tdd_gate.py`
+     - env support:
+       - `ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH`
+       - `ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED`
+       - `ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS`
+   - `scripts/run_enforcement_release_evidence_gate.py`
+     - CLI support:
+       - `--pkg-fin-policy-decisions-path`
+       - `--pkg-fin-policy-decisions-required`
+       - `--pkg-fin-policy-decisions-max-age-hours`
+4. Regression coverage added:
+   - `tests/unit/ops/test_verify_pkg_fin_policy_decisions.py`
+   - `tests/unit/ops/test_pkg_fin_policy_decisions_pack.py`
+   - `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
+   - `tests/unit/supply_chain/test_run_enforcement_release_evidence_gate.py`
+   - `tests/unit/ops/test_release_artifact_templates_pack.py`
+5. End-to-end closure validation rerun:
+   - `DEBUG=false uv run python3 scripts/run_enforcement_release_evidence_gate.py --stress-evidence-path docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json --failure-evidence-path docs/ops/evidence/enforcement_failure_injection_2026-02-27.json --finance-evidence-path docs/ops/evidence/finance_guardrails_2026-02-27.json --pricing-benchmark-register-path docs/ops/evidence/pricing_benchmark_register_2026-02-27.json --pkg-fin-policy-decisions-path docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json --finance-evidence-required --pricing-benchmark-register-required --pkg-fin-policy-decisions-required`
+   - result: passed (`845 passed`) with all coverage gates satisfied.
+6. Status note:
+   - automation baseline for policy-decision evidence is closed,
+   - decision execution remains governed by live telemetry refresh cadence (`FIN-*` operational follow-through).
+
+Execution update (2026-02-28G): PKG/FIN decision-backlog sign-off contract hardening
+1. Strengthened `scripts/verify_pkg_fin_policy_decisions.py` with a canonical decision-backlog contract:
+   - requires `decision_backlog.required_decision_ids` to exactly match the tracked PKG/FIN decision set,
+   - requires `decision_backlog.decision_items[*]` coverage for every required ID with explicit owner, owner function, resolution, approval record, and approval timestamp,
+   - requires `target_date` and `success_criteria` for all `scheduled_postlaunch` decisions,
+   - enforces launch-blocking items to be prelaunch-locked for a passing release state.
+2. Added explicit release gates for decision backlog governance:
+   - `pkg_fin_gate_backlog_coverage_complete`
+   - `pkg_fin_gate_launch_blockers_resolved`
+   - `pkg_fin_gate_postlaunch_commitments_scheduled`
+3. Updated evidence artifacts/docs to the hardened contract:
+   - `docs/ops/evidence/pkg_fin_policy_decisions_TEMPLATE.json`
+   - `docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json`
+   - `docs/ops/evidence/README.md`
+4. Added TDD coverage for new failure modes:
+   - `tests/unit/ops/test_verify_pkg_fin_policy_decisions.py`
+   - `tests/unit/ops/test_pkg_fin_policy_decisions_pack.py`
+   - `tests/unit/ops/test_release_artifact_templates_pack.py`
+5. Validation rerun:
+   - `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_pkg_fin_policy_decisions.py tests/unit/ops/test_pkg_fin_policy_decisions_pack.py tests/unit/ops/test_release_artifact_templates_pack.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/supply_chain/test_run_enforcement_release_evidence_gate.py` -> `48 passed`
+   - `uv run python3 scripts/verify_pkg_fin_policy_decisions.py --evidence-path docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json --max-artifact-age-hours 744` -> passed.
+
+Execution update (2026-02-28): FIN live telemetry + committee packet automation
+1. Added finance telemetry snapshot collector and verifier:
+   - `scripts/collect_finance_telemetry_snapshot.py`
+   - `scripts/verify_finance_telemetry_snapshot.py`
+2. Added monthly finance committee packet generator:
+   - `scripts/generate_finance_committee_packet.py`
+   - outputs:
+     - finance guardrail artifact JSON,
+     - committee packet JSON,
+     - tier/scenario CSV exports,
+     - optional alert webhook dispatch on gate failure.
+3. Added telemetry evidence and assumptions templates:
+   - `docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json`
+   - `docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json`
+   - `docs/ops/evidence/finance_committee_packet_assumptions_TEMPLATE.json`
+   - `docs/ops/evidence/finance_committee_packet_assumptions_2026-02-28.json`
+4. Expanded release-gate wiring:
+   - `scripts/run_enterprise_tdd_gate.py`
+     - `ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH`
+     - `ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED`
+     - `ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS`
+   - `scripts/run_enforcement_release_evidence_gate.py`
+     - `--finance-telemetry-snapshot-path`
+     - `--finance-telemetry-snapshot-required`
+     - `--finance-telemetry-max-age-hours`
+5. Regression/tests:
+   - `tests/unit/ops/test_verify_finance_telemetry_snapshot.py`
+   - `tests/unit/ops/test_collect_finance_telemetry_snapshot.py`
+   - `tests/unit/ops/test_generate_finance_committee_packet.py`
+   - `tests/unit/ops/test_finance_telemetry_snapshot_pack.py`
+   - updated:
+     - `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
+     - `tests/unit/supply_chain/test_run_enforcement_release_evidence_gate.py`
+     - `tests/unit/ops/test_release_artifact_templates_pack.py`
+6. Execution evidence:
+   - `DEBUG=false uv run pytest --no-cov -q tests/unit/ops/test_verify_finance_telemetry_snapshot.py tests/unit/ops/test_collect_finance_telemetry_snapshot.py tests/unit/ops/test_generate_finance_committee_packet.py tests/unit/ops/test_finance_telemetry_snapshot_pack.py tests/unit/ops/test_release_artifact_templates_pack.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/supply_chain/test_run_enforcement_release_evidence_gate.py` -> `48 passed`.
+   - `uv run ruff check ...` (new telemetry scripts/tests + gate files) -> passed.
+   - `uv run mypy scripts/verify_finance_guardrails_evidence.py scripts/verify_finance_telemetry_snapshot.py scripts/collect_finance_telemetry_snapshot.py scripts/generate_finance_committee_packet.py scripts/run_enterprise_tdd_gate.py scripts/run_enforcement_release_evidence_gate.py --hide-error-context --no-error-summary` -> passed.
+   - `DEBUG=false uv run python3 scripts/run_enforcement_release_evidence_gate.py --stress-evidence-path docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json --failure-evidence-path docs/ops/evidence/enforcement_failure_injection_2026-02-27.json --finance-evidence-path docs/ops/evidence/finance_guardrails_2026-02-27.json --finance-telemetry-snapshot-path docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json --pricing-benchmark-register-path docs/ops/evidence/pricing_benchmark_register_2026-02-27.json --pkg-fin-policy-decisions-path docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json --finance-evidence-required --finance-telemetry-snapshot-required --pricing-benchmark-register-required --pkg-fin-policy-decisions-required` -> passed (`860 passed`, coverage gates satisfied).
 
 Execution update (2026-02-27): release evidence DB-backend provenance hardening
 1. Stress artifact capture now records runtime DB backend metadata from `/health`:
@@ -2738,6 +3054,82 @@ Validation:
 3. `uv run ruff check tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 4. `uv run pytest --no-cov -q tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 5. `uv run pytest --no-cov -q tests/unit/ops`
+
+## Execution update (2026-02-28): VAL-ADAPT-002+ vendor-module split hardening pass
+
+Objective:
+1. Continue architecture hardening by reducing adapter concentration risk in license vendor operations.
+2. Preserve existing runtime behavior while making vendor logic easier to test, reason about, and secure.
+
+Implemented:
+1. Split vendor operation logic into dedicated modules:
+   - `app/shared/adapters/license_vendor_verify.py`
+   - `app/shared/adapters/license_vendor_google.py`
+   - `app/shared/adapters/license_vendor_microsoft.py`
+   - `app/shared/adapters/license_vendor_github.py`
+   - `app/shared/adapters/license_vendor_zoom.py`
+   - `app/shared/adapters/license_vendor_slack.py`
+   - `app/shared/adapters/license_vendor_salesforce.py`
+2. Added shared runtime typing contract:
+   - `app/shared/adapters/license_vendor_types.py`
+3. Kept `app/shared/adapters/license_vendor_ops.py` as compatibility facade and made its public API explicit with `__all__` so static typing enforces exported symbols.
+4. Kept `license.py` behavior and wrapper seams intact while continuing decomposition.
+
+Validation:
+1. `uv run ruff check app/shared/adapters/license.py app/shared/adapters/license_feed_ops.py app/shared/adapters/license_vendor_registry.py app/shared/adapters/license_vendor_ops.py app/shared/adapters/license_vendor_types.py app/shared/adapters/license_vendor_verify.py app/shared/adapters/license_vendor_google.py app/shared/adapters/license_vendor_microsoft.py app/shared/adapters/license_vendor_github.py app/shared/adapters/license_vendor_zoom.py app/shared/adapters/license_vendor_slack.py app/shared/adapters/license_vendor_salesforce.py tests/unit/shared/adapters/test_license_feed_ops.py tests/unit/shared/adapters/test_license_vendor_registry.py`
+2. `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_feed_ops.py app/shared/adapters/license_vendor_registry.py app/shared/adapters/license_vendor_ops.py app/shared/adapters/license_vendor_types.py app/shared/adapters/license_vendor_verify.py app/shared/adapters/license_vendor_google.py app/shared/adapters/license_vendor_microsoft.py app/shared/adapters/license_vendor_github.py app/shared/adapters/license_vendor_zoom.py app/shared/adapters/license_vendor_slack.py app/shared/adapters/license_vendor_salesforce.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_license_feed_ops.py tests/unit/shared/adapters/test_license_vendor_registry.py tests/unit/services/adapters/test_adapter_helper_branches.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_google_workspace.py`
+4. Result: `123 passed in 8.03s`.
+
+Post-closure sanity (mandatory release checks):
+1. Concurrency: no shared mutable state introduced; dispatch remains module-level immutable mappings.
+2. Observability: error semantics preserved through existing adapter exception paths.
+3. Deterministic replay: extracted helper behavior remains deterministic and test-covered.
+4. Snapshot stability/export integrity: stream/revoke/activity contracts unchanged at consumer boundaries.
+5. Failure modes/misconfiguration: unsupported vendor selection remains explicit fail-closed behavior.
+
+## Execution update (2026-02-28): full enterprise gate rerun after VAL-ADAPT-002+ split
+
+Validation:
+1. `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py`
+2. Result: passed (`876 passed`, no runtime warnings, no gate failure).
+3. Coverage gates remained satisfied:
+   - enforcement subset `99%` (threshold `>=95%`),
+   - LLM budget/provider subset `100%` (threshold `>=90%`),
+   - analytics subset (`analyzer.py` + `costs.py`) `100%` (threshold `>=99%`).
+
+## Execution update (2026-02-28): VAL-ADAPT-002+ license resource-surface hardening
+
+Objective:
+1. Remove remaining stub-grade behavior from license adapter resource surfaces.
+2. Make discovery/usage behavior deterministic, testable, and fail-closed under connector errors/misconfiguration.
+
+Implemented:
+1. Added `app/shared/adapters/license_resource_ops.py`:
+   - resource/service alias contracts,
+   - deterministic identity normalization and ordered output shaping,
+   - explicit usage row construction from activity records.
+2. Upgraded `app/shared/adapters/license.py`:
+   - `discover_resources()` now returns license-seat resources for supported aliases from `list_users_activity()`.
+   - `get_resource_usage()` now returns normalized seat usage rows with safe default-price/currency handling.
+   - connector/activity failures now log context and fail closed with empty results + `last_error`.
+3. Added comprehensive branch coverage:
+   - `tests/unit/shared/adapters/test_license_resource_ops.py`
+   - expanded `tests/unit/services/adapters/test_license_activity_and_revoke.py`.
+
+Validation:
+1. `uv run ruff check app/shared/adapters/license.py app/shared/adapters/license_resource_ops.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/shared/adapters/test_license_resource_ops.py`
+2. `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_resource_ops.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_license_resource_ops.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_license_feed_ops.py tests/unit/shared/adapters/test_license_vendor_registry.py`
+4. Result: `69 passed`.
+5. `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py` -> `876 passed` with all gate thresholds satisfied.
+
+Post-closure sanity (mandatory release checks):
+1. Concurrency: no mutable shared state introduced; shaping logic is stateless/pure.
+2. Observability: failure paths now emit structured warning logs and preserve `last_error`.
+3. Deterministic replay: outputs are canonicalized and sorted by resource identity.
+4. Snapshot stability/export integrity: usage row schema is explicit and stable.
+5. Failure modes/misconfiguration: unsupported services/types fail closed; negative configured seat prices are clamped.
 
 ## Execution update (2026-02-27): binary release-artifact checklist hardening
 

@@ -12,6 +12,9 @@ pnpm run check
 pnpm run test:unit -- --run
 pnpm run test:e2e
 pnpm run test:perf
+pnpm run test:perf:ci
+pnpm run test:visual
+pnpm run test:visual:update
 pnpm run check:bundle
 pnpm audit --audit-level=high
 ```
@@ -28,7 +31,7 @@ This avoids hardcoded test credentials and removes auth-related E2E skips while 
 
 ## Performance Gate
 
-`pnpm run test:perf` runs `e2e/performance.spec.ts` and enforces baseline budgets for:
+`pnpm run test:perf` runs `e2e/performance.spec.ts` and enforces baseline budgets for both desktop and mobile:
 
 - TTFB
 - FCP
@@ -37,3 +40,14 @@ This avoids hardcoded test credentials and removes auth-related E2E skips while 
 - DOM Complete
 
 These checks are intended as a repeatable release gate for frontend performance regressions.
+
+## Visual Regression Gate
+
+`pnpm run test:visual` runs `e2e/landing-visual.spec.ts` and verifies key landing sections via
+Playwright image snapshots (desktop + mobile).
+
+- Hero
+- Cloud hook
+- Trust section
+
+Use `pnpm run test:visual:update` only when intentional visual changes are approved.

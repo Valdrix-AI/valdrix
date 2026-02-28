@@ -1,0 +1,415 @@
+{
+  "captured_at": "2026-02-28T06:30:00Z",
+  "window": {
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2026-02-28T23:59:59Z",
+    "label": "2026-01_to_2026-02"
+  },
+  "telemetry": {
+    "months_observed": 2,
+    "source_type": "synthetic_prelaunch",
+    "tier_unit_economics": [
+      {
+        "tier": "starter",
+        "mrr_usd": 62000.0,
+        "effective_mrr_usd": 56800.0,
+        "llm_cogs_usd": 2100.0,
+        "infra_cogs_usd": 5100.0,
+        "support_cogs_usd": 1600.0
+      },
+      {
+        "tier": "growth",
+        "mrr_usd": 126000.0,
+        "effective_mrr_usd": 115000.0,
+        "llm_cogs_usd": 4200.0,
+        "infra_cogs_usd": 9300.0,
+        "support_cogs_usd": 2700.0
+      },
+      {
+        "tier": "pro",
+        "mrr_usd": 188000.0,
+        "effective_mrr_usd": 171000.0,
+        "llm_cogs_usd": 7300.0,
+        "infra_cogs_usd": 15300.0,
+        "support_cogs_usd": 4200.0
+      },
+      {
+        "tier": "enterprise",
+        "mrr_usd": 255000.0,
+        "effective_mrr_usd": 239000.0,
+        "llm_cogs_usd": 10100.0,
+        "infra_cogs_usd": 20300.0,
+        "support_cogs_usd": 7300.0
+      }
+    ]
+  },
+  "policy_decisions": {
+    "enterprise_pricing_model": "hybrid",
+    "enterprise_floor_usd_monthly": 799.0,
+    "max_annual_discount_percent": 20.0,
+    "pricing_motion_allowed": false,
+    "growth_auto_remediation_scope": "nonprod_only",
+    "pro_enforcement_boundary": "required_for_prod_enforcement",
+    "migration_strategy": "grandfather_timeboxed",
+    "migration_window_days": 90
+  },
+  "approvals": {
+    "finance_owner": "AbdulGoniyy Dare (acting)",
+    "product_owner": "AbdulGoniyy Dare",
+    "go_to_market_owner": "AbdulGoniyy Dare (acting)",
+    "governance_mode": "founder_acting_roles_prelaunch",
+    "approval_record_ref": "PKG-FIN-APPROVAL-2026-02-28",
+    "approved_at": "2026-02-28T05:45:00Z"
+  },
+  "decision_backlog": {
+    "required_decision_ids": [
+      "PKG-004",
+      "PKG-005",
+      "PKG-009",
+      "PKG-011",
+      "PKG-012",
+      "PKG-013",
+      "PKG-016",
+      "PKG-017",
+      "PKG-018",
+      "PKG-019",
+      "PKG-021",
+      "PKG-022",
+      "PKG-023",
+      "PKG-024",
+      "PKG-025",
+      "PKG-026",
+      "PKG-027",
+      "PKG-028",
+      "PKG-029",
+      "PKG-030",
+      "PKG-031",
+      "PKG-032",
+      "FIN-001",
+      "FIN-002",
+      "FIN-003",
+      "FIN-004",
+      "FIN-005",
+      "FIN-006",
+      "FIN-007",
+      "FIN-008"
+    ],
+    "decision_items": [
+      {
+        "id": "PKG-004",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-004 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-004-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-005",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-005 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-005-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-009",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-009 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-009-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-011",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-011 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-011-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-012",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-012 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "PKG-012-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-013",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-013 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-013-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-016",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-016 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-016-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-017",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-017 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-017-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-018",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-018 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-018-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-019",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-019 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-019-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-021",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-021 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-021-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-022",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-022 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-022-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-023",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-023 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-023-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-024",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-024 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-024-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-025",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-025 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-025-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-026",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-026 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-026-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-027",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-027 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-027-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-028",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-028 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-028-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "PKG-029",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-029 policy resolution recorded for release evidence.",
+        "resolution": "scheduled_postlaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-029-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z",
+        "target_date": "2026-03-31",
+        "success_criteria": "Finance and product sign-off captured in the next monthly committee packet."
+      },
+      {
+        "id": "PKG-030",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-030 policy resolution recorded for release evidence.",
+        "resolution": "scheduled_postlaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-030-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z",
+        "target_date": "2026-03-31",
+        "success_criteria": "Finance and product sign-off captured in the next monthly committee packet."
+      },
+      {
+        "id": "PKG-031",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-031 policy resolution recorded for release evidence.",
+        "resolution": "scheduled_postlaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-031-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z",
+        "target_date": "2026-03-31",
+        "success_criteria": "Finance and product sign-off captured in the next monthly committee packet."
+      },
+      {
+        "id": "PKG-032",
+        "owner_function": "product",
+        "owner": "product-owner@valdrix.io",
+        "decision_summary": "PKG-032 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "PKG-032-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "FIN-001",
+        "owner_function": "finance",
+        "owner": "finance-owner@valdrix.io",
+        "decision_summary": "FIN-001 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "FIN-001-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "FIN-002",
+        "owner_function": "finance",
+        "owner": "finance-owner@valdrix.io",
+        "decision_summary": "FIN-002 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "FIN-002-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "FIN-003",
+        "owner_function": "finance",
+        "owner": "finance-owner@valdrix.io",
+        "decision_summary": "FIN-003 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": true,
+        "approval_record_ref": "FIN-003-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "FIN-004",
+        "owner_function": "finance",
+        "owner": "finance-owner@valdrix.io",
+        "decision_summary": "FIN-004 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-004-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "FIN-005",
+        "owner_function": "finance",
+        "owner": "finance-owner@valdrix.io",
+        "decision_summary": "FIN-005 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-005-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "FIN-006",
+        "owner_function": "finance",
+        "owner": "finance-owner@valdrix.io",
+        "decision_summary": "FIN-006 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-006-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "FIN-007",
+        "owner_function": "finance",
+        "owner": "finance-owner@valdrix.io",
+        "decision_summary": "FIN-007 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-007-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      },
+      {
+        "id": "FIN-008",
+        "owner_function": "finance",
+        "owner": "finance-owner@valdrix.io",
+        "decision_summary": "FIN-008 policy resolution recorded for release evidence.",
+        "resolution": "locked_prelaunch",
+        "launch_blocking": false,
+        "approval_record_ref": "FIN-008-APPROVAL-2026-02-28",
+        "approved_at": "2026-02-28T05:45:00Z"
+      }
+    ]
+  },
+  "gate_results": {
+    "pkg_fin_gate_policy_decisions_complete": true,
+    "pkg_fin_gate_telemetry_window_sufficient": true,
+    "pkg_fin_gate_approvals_complete": true,
+    "pkg_fin_gate_pricing_motion_guarded": true,
+    "pkg_fin_gate_backlog_coverage_complete": true,
+    "pkg_fin_gate_launch_blockers_resolved": true,
+    "pkg_fin_gate_postlaunch_commitments_scheduled": true
+  }
+}

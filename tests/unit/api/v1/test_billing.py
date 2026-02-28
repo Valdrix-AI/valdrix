@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
 from fastapi import HTTPException
 from app.modules.billing.api.v1.billing import (
     get_public_plans,
@@ -11,10 +12,13 @@ from app.modules.billing.api.v1.billing import (
     update_exchange_rate,
     get_exchange_rate,
     update_pricing_plan,
+    _extract_client_ip,
 )
 from app.models.pricing import PricingPlan, ExchangeRate
 from app.modules.billing.domain.billing.paystack_billing import TenantSubscription
-from app.shared.core.pricing import PricingTier
+from app.shared.core.pricing import PricingTier, TIER_CONFIG
+
+STARTER_MONTHLY_PRICE = float(TIER_CONFIG[PricingTier.STARTER]["price_usd"]["monthly"])
 
 
 @pytest.fixture
@@ -41,7 +45,7 @@ async def test_get_public_plans_db_success(mock_db: AsyncMock) -> None:
         {
             "id": "starter",
             "name": "Starter",
-            "price_usd": 29.0,
+            "price_usd": STARTER_MONTHLY_PRICE,
             "description": "Test plan",
             "display_features": ["Feature 1"],
             "cta_text": "Start Now",
@@ -243,7 +247,7 @@ async def test_update_pricing_plan_success(
     plan_req.features = {}
     plan_req.limits = {}
 
-    mock_plan = PricingPlan(id="starter", price_usd=29.0)
+    mock_plan = PricingPlan(id="starter", price_usd=STARTER_MONTHLY_PRICE)
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = mock_plan
     mock_db.execute.return_value = mock_result
@@ -253,3 +257,27 @@ async def test_update_pricing_plan_success(
     )
     assert response["status"] == "success"
     assert mock_plan.price_usd == 99.0
+
+
+def test_extract_client_ip_ignores_xff_when_proxy_headers_untrusted() -> None:
+    request = MagicMock()
+    request.client.host = "203.0.113.10"
+    request.headers.get.return_value = "198.51.100.20, 198.51.100.21"
+
+    with patch(
+        "app.modules.billing.api.v1.billing.settings",
+        SimpleNamespace(TRUST_PROXY_HEADERS=False, TRUSTED_PROXY_HOPS=1),
+    ):
+        assert _extract_client_ip(request) == "203.0.113.10"
+
+
+def test_extract_client_ip_uses_xff_when_proxy_headers_trusted() -> None:
+    request = MagicMock()
+    request.client.host = "203.0.113.10"
+    request.headers.get.return_value = "198.51.100.20, 198.51.100.21"
+
+    with patch(
+        "app.modules.billing.api.v1.billing.settings",
+        SimpleNamespace(TRUST_PROXY_HEADERS=True, TRUSTED_PROXY_HOPS=1),
+    ):
+        assert _extract_client_ip(request) == "198.51.100.21"

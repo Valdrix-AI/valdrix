@@ -221,7 +221,9 @@ async def update_llm_settings(
 
 
 @router.get("/llm/models")
-async def get_llm_models() -> dict[str, list[str]]:
+async def get_llm_models(
+    _current_user: CurrentUser = Depends(get_current_user_with_db_context),
+) -> dict[str, list[str]]:
     """Returns available LLM providers and models."""
     from app.shared.llm.pricing_data import LLM_PRICING
 

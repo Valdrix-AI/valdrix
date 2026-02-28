@@ -203,6 +203,18 @@ jobs:
         working-directory: ./dashboard
         run: pnpm run check:bundle
 
+      - name: Install Playwright Chromium
+        working-directory: ./dashboard
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Dashboard Performance Budgets (Desktop + Mobile)
+        working-directory: ./dashboard
+        run: pnpm run test:perf:ci
+
+      - name: Dashboard Landing Visual Regression
+        working-directory: ./dashboard
+        run: pnpm run test:visual
+
   # JOB 2: CARBON EMISSIONS (GreenOps 2.0)
   emissions:
     name: Carbon Footprint Report
@@ -380,6 +392,27 @@ jobs:
         run: uv sync --dev
 
       - name: Run Enterprise TDD Gate
+        env:
+          ENFORCEMENT_STRESS_EVIDENCE_PATH: "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json"
+          ENFORCEMENT_STRESS_EVIDENCE_REQUIRED: "true"
+          ENFORCEMENT_STRESS_EVIDENCE_MAX_AGE_HOURS: "48"
+          ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_PATH: "docs/ops/evidence/enforcement_failure_injection_2026-02-27.json"
+          ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED: "true"
+          ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_MAX_AGE_HOURS: "48"
+          ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH: "docs/ops/evidence/finance_guardrails_2026-02-27.json"
+          ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED: "true"
+          ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_MAX_AGE_HOURS: "744"
+          ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH: "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json"
+          ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED: "true"
+          ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS: "744"
+          ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH: "docs/ops/evidence/pricing_benchmark_register_2026-02-27.json"
+          ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED: "true"
+          ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS: "120"
+          ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH: "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json"
+          ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED: "true"
+          ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS: "744"
+          ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS: "35"
+          ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS: "14"
         run: uv run python3 scripts/run_enterprise_tdd_gate.py
 
       - name: Upload Enterprise Gate Coverage Artifact

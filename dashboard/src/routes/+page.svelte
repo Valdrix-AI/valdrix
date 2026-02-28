@@ -181,15 +181,18 @@
 	{#if data.user}
 		<title>Dashboard | Valdrics</title>
 	{:else}
-		<title>Valdrics | Cloud Cost Intelligence</title>
+		<title>Valdrics | Economic Control Plane for Cloud and Software Spend</title>
 		<meta
 			name="description"
-			content="Valdrics unifies FinOps, GreenOps, and ActiveOps into a single cloud intelligence surface with policy-driven remediation and audit-ready evidence."
+			content="Valdrics helps teams control cloud and software spend with clear ownership, safer actions, and measurable outcomes."
 		/>
-		<meta property="og:title" content="Valdrics | Cloud Cost Intelligence" />
+		<meta
+			property="og:title"
+			content="Valdrics | Economic Control Plane for Cloud and Software Spend"
+		/>
 		<meta
 			property="og:description"
-			content="Unify spend, carbon, and risk into a single signal map with policy-driven remediation and an exportable audit trail."
+			content="Control every cloud and software dollar with clear ownership, governed actions, and faster decisions."
 		/>
 		<meta property="og:type" content="website" />
 		<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
@@ -198,10 +201,13 @@
 			content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
 		/>
 		<meta name="twitter:card" content="summary_large_image" />
-		<meta name="twitter:title" content="Valdrics | Cloud Cost Intelligence" />
+		<meta
+			name="twitter:title"
+			content="Valdrics | Economic Control Plane for Cloud and Software Spend"
+		/>
 		<meta
 			name="twitter:description"
-			content="FinOps + GreenOps + ActiveOps with policy-driven remediation and audit-ready exports."
+			content="Control every cloud and software dollar with clear ownership, governed actions, and faster decisions."
 		/>
 		<meta
 			name="twitter:image"

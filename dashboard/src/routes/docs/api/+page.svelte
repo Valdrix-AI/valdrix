@@ -21,7 +21,7 @@
 	<title>API Reference | Valdrics</title>
 	<meta
 		name="description"
-		content="Valdrics API usage guide with edge proxy paths, authentication requirements, and endpoint groups."
+		content="Valdrics API guide for integration teams: endpoint groups, authentication expectations, and practical request examples."
 	/>
 </svelte:head>
 
@@ -29,9 +29,8 @@
 	<header class="space-y-3">
 		<h1 class="text-3xl font-bold text-ink-100">API Reference</h1>
 		<p class="text-ink-300 max-w-3xl">
-			Frontend requests should go through the Valdrics edge proxy at
-			<code class="badge badge-default">/api/edge</code>. Authenticated calls require a bearer
-			token.
+			Use these endpoint groups to connect dashboards, workflows, and governance automations with
+			Valdrics.
 		</p>
 	</header>
 
@@ -43,7 +42,7 @@
 Authorization: Bearer <access_token>`}</code
 			></pre>
 		<p class="text-ink-400 text-sm">
-			API base prefixes are preserved automatically by the edge proxy builder.
+			Bearer-authenticated requests are required for protected resources.
 		</p>
 	</div>
 

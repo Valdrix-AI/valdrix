@@ -107,6 +107,21 @@ def _extract_client_ip(request: Request) -> str:
     fall back to `request.client.host`.
     """
     fallback = request.client.host if request.client and request.client.host else "unknown"
+    trust_proxy_headers_raw = getattr(settings, "TRUST_PROXY_HEADERS", False)
+    if isinstance(trust_proxy_headers_raw, bool):
+        trust_proxy_headers = trust_proxy_headers_raw
+    elif isinstance(trust_proxy_headers_raw, str):
+        trust_proxy_headers = trust_proxy_headers_raw.strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+    else:
+        trust_proxy_headers = False
+    if not trust_proxy_headers:
+        return fallback
+
     xff = request.headers.get("x-forwarded-for", "")
     if not xff:
         return fallback

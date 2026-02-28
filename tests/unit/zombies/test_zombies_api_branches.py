@@ -27,6 +27,16 @@ def _authorized_nonprod_request_row(request_id: UUID) -> MagicMock:
     return request_row
 
 
+def _authorized_prod_request_row(request_id: UUID) -> MagicMock:
+    request_row = MagicMock()
+    request_row.id = request_id
+    request_row.action = RemediationAction.DELETE_S3_BUCKET
+    request_row.resource_id = "prod-payments-archive"
+    request_row.resource_type = "S3 Bucket"
+    request_row.action_parameters = {"_system_policy_context": {"is_production": True}}
+    return request_row
+
+
 @pytest.mark.asyncio
 async def test_preview_remediation_policy_not_found() -> None:
     tenant_id = uuid4()
@@ -187,11 +197,7 @@ async def test_execute_remediation_requires_prod_permission_for_prod_destructive
     tenant_id = uuid4()
     request_id = uuid4()
     db = AsyncMock()
-    request_row = MagicMock()
-    request_row.action = RemediationAction.DELETE_S3_BUCKET
-    request_row.resource_id = "prod-payments-archive"
-    request_row.resource_type = "S3 Bucket"
-    request_row.action_parameters = {"_system_policy_context": {"is_production": True}}
+    request_row = _authorized_prod_request_row(request_id)
     db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
     user = CurrentUser(
         id=uuid4(),
@@ -224,6 +230,84 @@ async def test_execute_remediation_requires_prod_permission_for_prod_destructive
             permission_check.await_args.args[2]
             == "remediation.approve.prod"
         )
+        service_cls.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_approve_remediation_blocks_growth_tier_for_production() -> None:
+    tenant_id = uuid4()
+    request_id = uuid4()
+    db = AsyncMock()
+    request_row = _authorized_prod_request_row(request_id)
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
+    user = CurrentUser(
+        id=uuid4(),
+        email="growth-admin@example.com",
+        tenant_id=tenant_id,
+        role=UserRole.ADMIN,
+        tier=PricingTier.GROWTH,
+    )
+
+    with (
+        patch(
+            "app.modules.optimization.api.v1.zombies.user_has_approval_permission",
+            new=AsyncMock(),
+        ) as permission_check,
+        patch(
+            "app.modules.optimization.api.v1.zombies.RemediationService"
+        ) as service_cls,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await zombies.approve_remediation(
+                request_id=request_id,
+                review=zombies.ReviewRequest(notes="approve"),
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+            )
+
+        assert exc_info.value.status_code == 403
+        assert "Growth tier allows auto-remediation" in str(exc_info.value.detail)
+        permission_check.assert_not_awaited()
+        service_cls.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_execute_remediation_blocks_growth_tier_for_production() -> None:
+    tenant_id = uuid4()
+    request_id = uuid4()
+    db = AsyncMock()
+    request_row = _authorized_prod_request_row(request_id)
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
+    user = CurrentUser(
+        id=uuid4(),
+        email="growth-admin@example.com",
+        tenant_id=tenant_id,
+        role=UserRole.ADMIN,
+        tier=PricingTier.GROWTH,
+    )
+
+    with (
+        patch(
+            "app.modules.optimization.api.v1.zombies.user_has_approval_permission",
+            new=AsyncMock(),
+        ) as permission_check,
+        patch(
+            "app.modules.optimization.api.v1.zombies.RemediationService"
+        ) as service_cls,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await zombies.execute_remediation(
+                request=MagicMock(),
+                request_id=request_id,
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+            )
+
+        assert exc_info.value.status_code == 403
+        assert "Growth tier allows auto-remediation" in str(exc_info.value.detail)
+        permission_check.assert_not_awaited()
         service_cls.assert_not_called()
 
 

@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from app.shared.adapters.license import LicenseAdapter
-from app.shared.core.exceptions import UnsupportedVendorError
+from app.shared.core.exceptions import ExternalAPIError, UnsupportedVendorError
 
 
 class _FakeResponse:
@@ -491,5 +491,82 @@ async def test_google_workspace_activity_and_misc_methods() -> None:
     with patch.object(adapter, "_get_json", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
         assert await adapter._list_google_workspace_activity() == []
 
-    assert await adapter.discover_resources("license") == []
-    assert await adapter.get_resource_usage("license", "id-1") == []
+    with patch.object(
+        adapter,
+        "list_users_activity",
+        new=AsyncMock(
+            return_value=[
+                {
+                    "user_id": "gw-1",
+                    "email": "gw@example.com",
+                    "full_name": "GW User",
+                    "last_active_at": datetime(2026, 1, 18, tzinfo=timezone.utc),
+                    "is_admin": True,
+                    "suspended": False,
+                }
+            ]
+        ),
+    ):
+        discovered = await adapter.discover_resources("license")
+        usage = await adapter.get_resource_usage("license", "gw-1")
+
+    assert len(discovered) == 1
+    assert discovered[0]["id"] == "gw-1"
+    assert discovered[0]["metadata"]["is_admin"] is True
+    assert len(usage) == 1
+    assert usage[0]["resource_id"] == "gw-1"
+    assert usage[0]["usage_amount"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_discover_resources_and_usage_from_manual_feed_and_filters() -> None:
+    adapter = LicenseAdapter(
+        _conn(
+            vendor="custom",
+            auth_method="manual",
+            connector_config={"default_seat_price_usd": 29.5, "currency": "eur"},
+            license_feed=[
+                {
+                    "user_id": "u-1",
+                    "email": "u1@example.com",
+                    "timestamp": "2026-01-01T00:00:00Z",
+                    "name": "User One",
+                },
+                {
+                    "user_id": "u-2",
+                    "email": "u2@example.com",
+                    "timestamp": "2026-01-02T00:00:00Z",
+                    "status": "suspended",
+                },
+            ],
+        )
+    )
+
+    discovered = await adapter.discover_resources("licenses", region="eu-west-1")
+    assert len(discovered) == 2
+    assert discovered[0]["region"] == "eu-west-1"
+    assert discovered[0]["type"] == "license_seat"
+    assert discovered[1]["status"] == "suspended"
+
+    usage_rows = await adapter.get_resource_usage("license", "u-2")
+    assert len(usage_rows) == 1
+    assert usage_rows[0]["resource_id"] == "u-2"
+    assert usage_rows[0]["cost_usd"] == 29.5
+    assert usage_rows[0]["currency"] == "EUR"
+    assert usage_rows[0]["tags"]["suspended"] is True
+
+    assert await adapter.discover_resources("compute") == []
+    assert await adapter.get_resource_usage("compute") == []
+
+
+@pytest.mark.asyncio
+async def test_discover_resources_and_usage_fail_closed_on_activity_errors() -> None:
+    adapter = LicenseAdapter(_conn(vendor="github", auth_method="oauth"))
+    with patch.object(
+        adapter,
+        "list_users_activity",
+        new=AsyncMock(side_effect=ExternalAPIError("activity down")),
+    ):
+        assert await adapter.discover_resources("license") == []
+        assert await adapter.get_resource_usage("license", "user-1") == []
+    assert "activity down" in str(adapter.last_error)

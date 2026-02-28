@@ -14,8 +14,8 @@ export const DEFAULT_PRICING_PLANS: PricingPlan[] = [
 	{
 		id: 'starter',
 		name: 'Starter',
-		price_monthly: 29,
-		price_annual: 290,
+		price_monthly: 49,
+		price_annual: 490,
 		period: '/mo',
 		description: 'For small teams getting started with cloud cost visibility.',
 		features: [
@@ -29,13 +29,14 @@ export const DEFAULT_PRICING_PLANS: PricingPlan[] = [
 	{
 		id: 'growth',
 		name: 'Growth',
-		price_monthly: 79,
-		price_annual: 790,
+		price_monthly: 149,
+		price_annual: 1490,
 		period: '/mo',
-		description: 'For growing teams who need AI-powered cost intelligence.',
+		description: 'For growing teams who need structured FinOps governance.',
 		features: [
 			'Multi-cloud support',
 			'AI analyses + GreenOps',
+			'Non-production auto-remediation workflows',
 			'BYOK supported (no additional platform surcharge)'
 		],
 		cta: 'Start with Growth',
@@ -44,8 +45,8 @@ export const DEFAULT_PRICING_PLANS: PricingPlan[] = [
 	{
 		id: 'pro',
 		name: 'Pro',
-		price_monthly: 199,
-		price_annual: 1990,
+		price_monthly: 299,
+		price_annual: 2990,
 		period: '/mo',
 		description: 'For teams who want automated optimization and full API access.',
 		features: [

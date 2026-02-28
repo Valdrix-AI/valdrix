@@ -14,6 +14,7 @@ from app.main import (
     generic_exception_handler,
     custom_rate_limit_handler,
     _load_emissions_tracker,
+    _resolve_csrf_settings,
 )
 from app.main import settings
 from app.shared.core.exceptions import ValdrixException
@@ -417,3 +418,22 @@ def test_load_emissions_tracker_imports_codecarbon_when_available():
     ):
         tracker = _load_emissions_tracker()
     assert tracker is DummyTracker
+
+
+def test_get_csrf_config_uses_explicit_test_key_env(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("CSRF_TEST_SECRET_KEY", "x" * 48)
+    with patch("app.main.settings", MagicMock(TESTING=True, CSRF_SECRET_KEY=None)):
+        cfg = _resolve_csrf_settings()
+        assert cfg.secret_key == "x" * 48
+
+
+def test_get_csrf_config_derives_ephemeral_testing_secret(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("CSRF_TEST_SECRET_KEY", raising=False)
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/unit/core/test_main.py::seed")
+    with patch("app.main.settings", MagicMock(TESTING=True, CSRF_SECRET_KEY=None)):
+        cfg = _resolve_csrf_settings()
+        assert cfg.secret_key.startswith("test_csrf_")
+        assert cfg.secret_key != "test_csrf_secret_key_for_local_tests_only_123"
+        assert len(cfg.secret_key) > 20

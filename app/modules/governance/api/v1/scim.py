@@ -116,6 +116,7 @@ async def get_scim_context(request: Request) -> ScimContext:
     # NOTE: We intentionally reference `db_session.async_session_maker` at runtime so
     # tests can patch it to a per-test engine (instead of capturing the symbol at import).
     async with db_session.async_session_maker() as db:
+        await db_session.mark_session_system_context(db)
         result = await db.execute(
             select(
                 TenantIdentitySettings.tenant_id, TenantIdentitySettings.scim_enabled

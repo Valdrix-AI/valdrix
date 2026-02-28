@@ -9,6 +9,11 @@ import pytest
 from scripts.run_enterprise_tdd_gate import (
     ANALYTICS_VISIBILITY_COVERAGE_FAIL_UNDER,
     ANALYTICS_VISIBILITY_COVERAGE_INCLUDE,
+    DEFAULT_ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH,
+    DEFAULT_ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH,
+    DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS,
+    DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS,
+    DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH,
     DEFAULT_ENFORCEMENT_STRESS_MIN_CONCURRENT_USERS,
     DEFAULT_ENFORCEMENT_STRESS_MIN_DURATION_SECONDS,
     DEFAULT_ENFORCEMENT_STRESS_REQUIRED_DATABASE_ENGINE,
@@ -27,12 +32,22 @@ from scripts.run_enterprise_tdd_gate import (
     ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH_ENV,
     ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED_ENV,
     DEFAULT_ENFORCEMENT_FINANCE_GUARDRAILS_MAX_AGE_HOURS,
+    DEFAULT_ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS,
+    ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS_ENV,
+    ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH_ENV,
+    ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED_ENV,
     DEFAULT_ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS,
     ENFORCEMENT_KEY_ROTATION_DRILL_MAX_AGE_DAYS_ENV,
     ENFORCEMENT_KEY_ROTATION_DRILL_PATH_ENV,
+    ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS_ENV,
+    ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS_ENV,
     ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS_ENV,
     ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH_ENV,
     ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED_ENV,
+    DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS,
+    ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS_ENV,
+    ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH_ENV,
+    ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED_ENV,
     ENTERPRISE_GATE_TEST_TARGETS,
     ENFORCEMENT_COVERAGE_FAIL_UNDER,
     LLM_GUARDRAIL_COVERAGE_INCLUDE,
@@ -47,6 +62,9 @@ from scripts.run_enterprise_tdd_gate import (
 
 def test_build_gate_commands_includes_required_test_targets() -> None:
     commands = build_gate_commands()
+    auth_coverage_cmd = next(
+        cmd for cmd in commands if "scripts/verify_api_auth_coverage.py" in cmd
+    )
     jwt_bcp_cmd = next(
         cmd for cmd in commands if "scripts/verify_jwt_bcp_checklist.py" in cmd
     )
@@ -58,10 +76,18 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         for cmd in commands
         if "scripts/verify_enforcement_post_closure_sanity.py" in cmd
     )
+    pkg015_cmd = next(
+        cmd for cmd in commands if "scripts/verify_pkg015_launch_gate.py" in cmd
+    )
     key_rotation_cmd = next(
         cmd
         for cmd in commands
         if "scripts/verify_key_rotation_drill_evidence.py" in cmd
+    )
+    monthly_refresh_cmd = next(
+        cmd
+        for cmd in commands
+        if "scripts/verify_monthly_finance_evidence_refresh.py" in cmd
     )
     guard_cmd = next(
         cmd for cmd in commands if "scripts/verify_enterprise_placeholder_guards.py" in cmd
@@ -71,6 +97,12 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     assert jwt_bcp_cmd[:4] == ["uv", "run", "python3", "scripts/verify_jwt_bcp_checklist.py"]
     assert "--checklist-path" in jwt_bcp_cmd
     assert "docs/security/jwt_bcp_checklist_2026-02-27.json" in jwt_bcp_cmd
+    assert auth_coverage_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_api_auth_coverage.py",
+    ]
 
     assert ssdf_cmd[:4] == ["uv", "run", "python3", "scripts/verify_ssdf_traceability_matrix.py"]
     assert "--matrix-path" in ssdf_cmd
@@ -87,6 +119,12 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     assert "--gap-register" in sanity_cmd
     assert "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md" in sanity_cmd
 
+    assert pkg015_cmd[:4] == ["uv", "run", "python3", "scripts/verify_pkg015_launch_gate.py"]
+    assert "--gap-register" in pkg015_cmd
+    assert "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md" in pkg015_cmd
+    assert "--matrix-path" in pkg015_cmd
+    assert "docs/ops/feature_enforceability_matrix_2026-02-27.json" in pkg015_cmd
+
     assert key_rotation_cmd[:4] == [
         "uv",
         "run",
@@ -97,6 +135,28 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     assert DEFAULT_KEY_ROTATION_DRILL_PATH in key_rotation_cmd
     assert "--max-drill-age-days" in key_rotation_cmd
     assert DEFAULT_KEY_ROTATION_DRILL_MAX_AGE_DAYS in key_rotation_cmd
+
+    assert monthly_refresh_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_monthly_finance_evidence_refresh.py",
+    ]
+    assert "--finance-guardrails-path" in monthly_refresh_cmd
+    assert DEFAULT_ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH in monthly_refresh_cmd
+    assert "--finance-telemetry-snapshot-path" in monthly_refresh_cmd
+    assert (
+        DEFAULT_ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH in monthly_refresh_cmd
+    )
+    assert "--pkg-fin-policy-decisions-path" in monthly_refresh_cmd
+    assert DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH in monthly_refresh_cmd
+    assert "--max-age-days" in monthly_refresh_cmd
+    assert DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS in monthly_refresh_cmd
+    assert "--max-capture-spread-days" in monthly_refresh_cmd
+    assert (
+        DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS
+        in monthly_refresh_cmd
+    )
 
     assert pytest_cmd[:3] == ["uv", "run", "pytest"]
     assert "tests/unit/enforcement" in pytest_cmd
@@ -136,7 +196,13 @@ def test_build_gate_commands_excludes_stress_artifact_verifier_by_default(
         "scripts/verify_finance_guardrails_evidence.py" in cmd for cmd in commands
     )
     assert not any(
+        "scripts/verify_finance_telemetry_snapshot.py" in cmd for cmd in commands
+    )
+    assert not any(
         "scripts/verify_pricing_benchmark_register.py" in cmd for cmd in commands
+    )
+    assert not any(
+        "scripts/verify_pkg_fin_policy_decisions.py" in cmd for cmd in commands
     )
 
 
@@ -182,6 +248,30 @@ def test_build_gate_commands_rejects_required_pricing_benchmark_register_without
 
     with pytest.raises(
         ValueError, match="ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED"
+    ):
+        build_gate_commands()
+
+
+def test_build_gate_commands_rejects_required_finance_telemetry_snapshot_without_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH_ENV, raising=False)
+    monkeypatch.setenv(ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED_ENV, "true")
+
+    with pytest.raises(
+        ValueError, match="ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED"
+    ):
+        build_gate_commands()
+
+
+def test_build_gate_commands_rejects_required_pkg_fin_policy_without_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH_ENV, raising=False)
+    monkeypatch.setenv(ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED_ENV, "true")
+
+    with pytest.raises(
+        ValueError, match="ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED"
     ):
         build_gate_commands()
 
@@ -299,6 +389,55 @@ def test_build_gate_commands_uses_default_finance_max_age_when_not_set(
     assert DEFAULT_ENFORCEMENT_FINANCE_GUARDRAILS_MAX_AGE_HOURS in finance_cmd
 
 
+def test_build_gate_commands_includes_finance_telemetry_verifier_when_env_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH_ENV,
+        "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json",
+    )
+    monkeypatch.setenv(ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED_ENV, "true")
+    monkeypatch.setenv(ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS_ENV, "720")
+
+    commands = build_gate_commands()
+    telemetry_cmd = next(
+        cmd
+        for cmd in commands
+        if "scripts/verify_finance_telemetry_snapshot.py" in cmd
+    )
+    assert telemetry_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_finance_telemetry_snapshot.py",
+    ]
+    assert "--snapshot-path" in telemetry_cmd
+    assert "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json" in telemetry_cmd
+    assert "--max-artifact-age-hours" in telemetry_cmd
+    assert "720" in telemetry_cmd
+
+
+def test_build_gate_commands_uses_default_finance_telemetry_max_age_when_not_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH_ENV,
+        "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json",
+    )
+    monkeypatch.delenv(
+        ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS_ENV,
+        raising=False,
+    )
+    commands = build_gate_commands()
+    telemetry_cmd = next(
+        cmd
+        for cmd in commands
+        if "scripts/verify_finance_telemetry_snapshot.py" in cmd
+    )
+    assert "--max-artifact-age-hours" in telemetry_cmd
+    assert DEFAULT_ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS in telemetry_cmd
+
+
 def test_build_gate_commands_includes_pricing_benchmark_register_verifier_when_env_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -348,6 +487,55 @@ def test_build_gate_commands_uses_default_pricing_benchmark_max_age_when_not_set
     assert DEFAULT_ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS in pricing_cmd
 
 
+def test_build_gate_commands_includes_pkg_fin_policy_verifier_when_env_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH_ENV,
+        "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json",
+    )
+    monkeypatch.setenv(ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED_ENV, "true")
+    monkeypatch.setenv(ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS_ENV, "720")
+
+    commands = build_gate_commands()
+    pkg_fin_cmd = next(
+        cmd
+        for cmd in commands
+        if "scripts/verify_pkg_fin_policy_decisions.py" in cmd
+    )
+    assert pkg_fin_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_pkg_fin_policy_decisions.py",
+    ]
+    assert "--evidence-path" in pkg_fin_cmd
+    assert "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json" in pkg_fin_cmd
+    assert "--max-artifact-age-hours" in pkg_fin_cmd
+    assert "720" in pkg_fin_cmd
+
+
+def test_build_gate_commands_uses_default_pkg_fin_policy_max_age_when_not_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH_ENV,
+        "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json",
+    )
+    monkeypatch.delenv(
+        ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS_ENV,
+        raising=False,
+    )
+    commands = build_gate_commands()
+    pkg_fin_cmd = next(
+        cmd
+        for cmd in commands
+        if "scripts/verify_pkg_fin_policy_decisions.py" in cmd
+    )
+    assert "--max-artifact-age-hours" in pkg_fin_cmd
+    assert DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS in pkg_fin_cmd
+
+
 def test_build_gate_commands_applies_stress_evidence_workload_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -395,6 +583,48 @@ def test_build_gate_commands_applies_key_rotation_env_overrides(
     assert "docs/ops/key-rotation-drill-override.md" in key_rotation_cmd
     assert "--max-drill-age-days" in key_rotation_cmd
     assert "45" in key_rotation_cmd
+
+
+def test_build_gate_commands_applies_monthly_finance_refresh_env_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH_ENV,
+        "docs/ops/evidence/finance_guardrails_current.json",
+    )
+    monkeypatch.setenv(
+        ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH_ENV,
+        "docs/ops/evidence/finance_telemetry_snapshot_current.json",
+    )
+    monkeypatch.setenv(
+        ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH_ENV,
+        "docs/ops/evidence/pkg_fin_policy_decisions_current.json",
+    )
+    monkeypatch.setenv(ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS_ENV, "28")
+    monkeypatch.setenv(
+        ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS_ENV,
+        "7",
+    )
+    commands = build_gate_commands()
+
+    monthly_refresh_cmd = next(
+        cmd
+        for cmd in commands
+        if "scripts/verify_monthly_finance_evidence_refresh.py" in cmd
+    )
+    assert "--finance-guardrails-path" in monthly_refresh_cmd
+    assert "docs/ops/evidence/finance_guardrails_current.json" in monthly_refresh_cmd
+    assert "--finance-telemetry-snapshot-path" in monthly_refresh_cmd
+    assert (
+        "docs/ops/evidence/finance_telemetry_snapshot_current.json"
+        in monthly_refresh_cmd
+    )
+    assert "--pkg-fin-policy-decisions-path" in monthly_refresh_cmd
+    assert "docs/ops/evidence/pkg_fin_policy_decisions_current.json" in monthly_refresh_cmd
+    assert "--max-age-days" in monthly_refresh_cmd
+    assert "28" in monthly_refresh_cmd
+    assert "--max-capture-spread-days" in monthly_refresh_cmd
+    assert "7" in monthly_refresh_cmd
 
 
 def test_build_gate_commands_includes_coverage_thresholds() -> None:

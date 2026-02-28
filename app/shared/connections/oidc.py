@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.shared.db.session import async_session_maker
+from app.shared.db.session import async_session_maker, mark_session_system_context
 from sqlalchemy import select
 from app.shared.core.config import get_settings
 
@@ -51,6 +51,7 @@ class OIDCService:
 
         if db is None:
             async with async_session_maker() as session:
+                await mark_session_system_context(session)
                 return await OIDCService._create_token_with_session(
                     tenant_id, audience, session, settings, now
                 )
@@ -102,6 +103,7 @@ class OIDCService:
     ) -> dict[str, list[dict[str, str]]]:
         if db is None:
             async with async_session_maker() as session:
+                await mark_session_system_context(session)
                 return await OIDCService._get_jwks_with_session(session)
         else:
             return await OIDCService._get_jwks_with_session(db)

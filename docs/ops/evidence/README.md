@@ -8,6 +8,9 @@ This directory stores staged enforcement evidence artifacts used by release gate
 2. Failure-injection artifact: `enforcement_failure_injection_YYYY-MM-DD.json`
 3. Finance guardrail artifact: `finance_guardrails_YYYY-MM-DD.json`
 4. Pricing benchmark register: `pricing_benchmark_register_YYYY-MM-DD.json`
+5. PKG/FIN policy decision artifact: `pkg_fin_policy_decisions_YYYY-MM-DD.json`
+6. Finance telemetry snapshot artifact: `finance_telemetry_snapshot_YYYY-MM-DD.json`
+7. Finance committee assumptions artifact: `finance_committee_packet_assumptions_YYYY-MM-DD.json`
 
 ## Template Seeds
 
@@ -15,6 +18,9 @@ This directory stores staged enforcement evidence artifacts used by release gate
 2. `enforcement_failure_injection_TEMPLATE.json`
 3. `finance_guardrails_TEMPLATE.json`
 4. `pricing_benchmark_register_TEMPLATE.json`
+5. `pkg_fin_policy_decisions_TEMPLATE.json`
+6. `finance_telemetry_snapshot_TEMPLATE.json`
+7. `finance_committee_packet_assumptions_TEMPLATE.json`
 
 ## Staged Failure-Injection Capture
 
@@ -59,6 +65,24 @@ Pricing benchmark register evidence should be captured to:
 docs/ops/evidence/pricing_benchmark_register_YYYY-MM-DD.json
 ```
 
+PKG/FIN policy decision evidence should be captured to:
+
+```text
+docs/ops/evidence/pkg_fin_policy_decisions_YYYY-MM-DD.json
+```
+
+Finance telemetry snapshot evidence should be captured to:
+
+```text
+docs/ops/evidence/finance_telemetry_snapshot_YYYY-MM-DD.json
+```
+
+Finance committee assumptions should be captured to:
+
+```text
+docs/ops/evidence/finance_committee_packet_assumptions_YYYY-MM-DD.json
+```
+
 ## Verification Commands
 
 Stress verifier:
@@ -90,4 +114,65 @@ Pricing benchmark register verifier:
 uv run python3 scripts/verify_pricing_benchmark_register.py \
   --register-path docs/ops/evidence/pricing_benchmark_register_YYYY-MM-DD.json \
   --max-source-age-days 120
+```
+
+PKG/FIN policy decision verifier:
+
+```bash
+uv run python3 scripts/verify_pkg_fin_policy_decisions.py \
+  --evidence-path docs/ops/evidence/pkg_fin_policy_decisions_YYYY-MM-DD.json \
+  --max-artifact-age-hours 744
+```
+
+PKG/FIN policy decision artifact minimum required policy fields:
+1. `telemetry.source_type` (`synthetic_prelaunch` or `production_observed`)
+2. `policy_decisions.pricing_motion_allowed`
+3. `approvals.governance_mode` (`founder_acting_roles_prelaunch` or `segregated_owners`)
+4. `approvals.approval_record_ref`
+5. `decision_backlog.required_decision_ids` (canonical PKG/FIN decision set)
+6. `decision_backlog.decision_items[*].resolution` (`locked_prelaunch` or `scheduled_postlaunch`)
+7. `decision_backlog.decision_items[*].launch_blocking`
+
+PKG/FIN policy decision release gates:
+1. `pkg_fin_gate_policy_decisions_complete`
+2. `pkg_fin_gate_telemetry_window_sufficient`
+3. `pkg_fin_gate_approvals_complete`
+4. `pkg_fin_gate_pricing_motion_guarded`
+5. `pkg_fin_gate_backlog_coverage_complete`
+6. `pkg_fin_gate_launch_blockers_resolved`
+7. `pkg_fin_gate_postlaunch_commitments_scheduled`
+
+Finance telemetry snapshot verifier:
+
+```bash
+uv run python3 scripts/verify_finance_telemetry_snapshot.py \
+  --snapshot-path docs/ops/evidence/finance_telemetry_snapshot_YYYY-MM-DD.json \
+  --max-artifact-age-hours 744
+```
+
+Finance telemetry snapshot minimum guardrail fields for PKG-010:
+1. `free_tier_compute_guardrails` (free-vs-starter bounded LLM limits)
+2. `free_tier_margin_watch` (free-tier LLM cost telemetry against starter MRR reference)
+3. `gate_results.telemetry_gate_free_tier_guardrails_bounded`
+4. `gate_results.telemetry_gate_free_tier_margin_guarded`
+
+Monthly finance committee packet generator:
+
+```bash
+uv run python3 scripts/generate_finance_committee_packet.py \
+  --telemetry-path docs/ops/evidence/finance_telemetry_snapshot_YYYY-MM-DD.json \
+  --assumptions-path docs/ops/evidence/finance_committee_packet_assumptions_YYYY-MM-DD.json \
+  --output-dir docs/ops/evidence \
+  --require-all-gates-pass
+```
+
+Monthly finance refresh verifier (release reminder gate):
+
+```bash
+uv run python3 scripts/verify_monthly_finance_evidence_refresh.py \
+  --finance-guardrails-path docs/ops/evidence/finance_guardrails_YYYY-MM-DD.json \
+  --finance-telemetry-snapshot-path docs/ops/evidence/finance_telemetry_snapshot_YYYY-MM-DD.json \
+  --pkg-fin-policy-decisions-path docs/ops/evidence/pkg_fin_policy_decisions_YYYY-MM-DD.json \
+  --max-age-days 35 \
+  --max-capture-spread-days 14
 ```

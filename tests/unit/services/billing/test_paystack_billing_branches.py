@@ -13,7 +13,10 @@ from app.modules.billing.domain.billing.paystack_billing import (
     PaystackClient,
     WebhookHandler,
 )
-from app.shared.core.pricing import PricingTier
+from app.shared.core.pricing import PricingTier, TIER_CONFIG
+
+STARTER_MONTHLY_USD = float(TIER_CONFIG[PricingTier.STARTER]["price_usd"]["monthly"])
+STARTER_MONTHLY_SUBUNITS = int(round(STARTER_MONTHLY_USD * 100))
 
 
 def _scalar_result(value: object) -> MagicMock:
@@ -114,7 +117,7 @@ async def test_client_wrapper_methods_delegate_request(
 
 
 @pytest.mark.asyncio
-async def test_billing_service_init_handles_invalid_amount_config(
+async def test_billing_service_init_ignores_legacy_amount_config(
     mock_db: MagicMock,
     configured_settings: None,
 ) -> None:
@@ -129,8 +132,90 @@ async def test_billing_service_init_handles_invalid_amount_config(
         patch.object(billing_mod.logger, "warning") as mock_warning,
     ):
         service = BillingService(mock_db)
-    assert service.plan_amounts == {}
-    assert mock_warning.called
+    assert service._resolve_plan_code(
+        tier=PricingTier.STARTER, billing_cycle="monthly"
+    ) == "PLN_STARTER"
+    # Plan-code resolution no longer depends on eager amount map parsing.
+    mock_warning.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_checkout_session_uses_fixed_plan_code_when_available(
+    mock_db: MagicMock,
+    configured_settings: None,
+) -> None:
+    fx_runtime = MagicMock()
+    fx_runtime.get_ngn_rate = AsyncMock(return_value=1500.0)
+    fx_runtime.convert_usd_to_ngn.return_value = 150000
+    service = BillingService(
+        mock_db, exchange_rate_service_factory=lambda _db: fx_runtime
+    )
+    mock_db.execute.return_value = _scalar_result(None)
+    service.client.initialize_transaction = AsyncMock(
+        return_value={
+            "data": {
+                "authorization_url": "https://pay.example/checkout",
+                "reference": "REFNGN1",
+            }
+        }
+    )
+
+    await service.create_checkout_session(
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER,
+        email="user@example.com",
+        callback_url="https://callback.example.com",
+        billing_cycle="monthly",
+        currency="NGN",
+    )
+
+    fx_runtime.get_ngn_rate.assert_awaited_once()
+    assert service.client.initialize_transaction.await_args is not None
+    init_kwargs = service.client.initialize_transaction.await_args.kwargs
+    assert init_kwargs["plan_code"] == "PLN_STARTER"
+    assert init_kwargs["metadata"]["plan_code"] == "PLN_STARTER"
+    assert init_kwargs["metadata"]["pricing_mode"] == "fixed_plan_code"
+
+
+@pytest.mark.asyncio
+async def test_create_checkout_session_falls_back_to_dynamic_mode_without_plan_code(
+    mock_db: MagicMock,
+    configured_settings: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        billing_mod.settings, "PAYSTACK_PLAN_STARTER", None, raising=False
+    )
+    fx_runtime = MagicMock()
+    fx_runtime.get_ngn_rate = AsyncMock(return_value=1500.0)
+    fx_runtime.convert_usd_to_ngn.return_value = 150000
+    service = BillingService(
+        mock_db, exchange_rate_service_factory=lambda _db: fx_runtime
+    )
+    mock_db.execute.return_value = _scalar_result(None)
+    service.client.initialize_transaction = AsyncMock(
+        return_value={
+            "data": {
+                "authorization_url": "https://pay.example/checkout",
+                "reference": "REFNGN2",
+            }
+        }
+    )
+
+    await service.create_checkout_session(
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER,
+        email="user@example.com",
+        callback_url="https://callback.example.com",
+        billing_cycle="monthly",
+        currency="NGN",
+    )
+
+    assert service.client.initialize_transaction.await_args is not None
+    init_kwargs = service.client.initialize_transaction.await_args.kwargs
+    assert init_kwargs["plan_code"] is None
+    assert init_kwargs["metadata"]["plan_code"] is None
+    assert init_kwargs["metadata"]["pricing_mode"] == "dynamic_amount"
 
 
 @pytest.mark.asyncio
@@ -482,15 +567,20 @@ async def test_handle_charge_success_creates_subscription_without_auth(
     handler = WebhookHandler(mock_db)
     tenant_id = uuid4()
     mock_db.execute.return_value = _scalar_result(None)
-    await handler._handle_charge_success(
-        {
-            "metadata": {"tenant_id": str(tenant_id), "tier": PricingTier.GROWTH.value},
-            "customer": {"customer_code": "CUS3", "email": "x@example.com"},
-            "authorization": {},
-        }
-    )
+    with patch(
+        "app.modules.billing.domain.billing.paystack_webhook_impl.sync_tenant_plan",
+        new=AsyncMock(),
+    ) as mock_sync_tenant_plan:
+        await handler._handle_charge_success(
+            {
+                "metadata": {"tenant_id": str(tenant_id), "tier": PricingTier.GROWTH.value},
+                "customer": {"customer_code": "CUS3", "email": "x@example.com"},
+                "authorization": {},
+            }
+        )
     added_objects = [call.args[0] for call in mock_db.add.call_args_list]
     assert any(isinstance(obj, billing_mod.TenantSubscription) for obj in added_objects)
+    mock_sync_tenant_plan.assert_awaited_once()
     # Billing webhooks should also emit an immutable audit log event.
     assert any(obj.__class__.__name__ == "AuditLog" for obj in added_objects)
 
@@ -579,7 +669,7 @@ async def test_create_checkout_session_usd_enabled_uses_cents_without_fx_lookup(
 
     assert service.client.initialize_transaction.await_args is not None
     init_kwargs = service.client.initialize_transaction.await_args.kwargs
-    assert init_kwargs["amount_kobo"] == 2900  # $29.00 -> 2900 cents
+    assert init_kwargs["amount_kobo"] == STARTER_MONTHLY_SUBUNITS
     assert init_kwargs["metadata"]["currency"] == "USD"
     assert init_kwargs["metadata"]["exchange_rate"] == 1.0
 
@@ -598,7 +688,7 @@ async def test_charge_renewal_uses_usd_without_fx_when_subscription_currency_usd
     )
     mock_user = MagicMock(email="enc-email")
     mock_db.execute.side_effect = [
-        _scalar_result(MagicMock(price_usd=29.0)),
+        _scalar_result(MagicMock(price_usd=STARTER_MONTHLY_USD)),
         _scalar_result(mock_user),
     ]
 
@@ -629,8 +719,50 @@ async def test_charge_renewal_uses_usd_without_fx_when_subscription_currency_usd
     mock_convert.assert_not_called()
     assert mock_charge.await_args is not None
     charge_kwargs = mock_charge.await_args.kwargs
-    assert charge_kwargs["amount_kobo"] == 2900
+    assert charge_kwargs["amount_kobo"] == STARTER_MONTHLY_SUBUNITS
     assert charge_kwargs["metadata"]["currency"] == "USD"
+
+
+@pytest.mark.asyncio
+async def test_charge_renewal_uses_injected_exchange_runtime_for_ngn(
+    mock_db: MagicMock,
+    configured_settings: None,
+) -> None:
+    fx_runtime = MagicMock()
+    fx_runtime.get_ngn_rate = AsyncMock(return_value=1550.0)
+    fx_runtime.convert_usd_to_ngn.return_value = 155000
+    service = BillingService(
+        mock_db, exchange_rate_service_factory=lambda _db: fx_runtime
+    )
+    sub = MagicMock(
+        paystack_auth_code="enc-auth",
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER.value,
+        billing_currency="NGN",
+    )
+    mock_user = MagicMock(email="enc-email")
+    mock_db.execute.side_effect = [
+        _scalar_result(MagicMock(price_usd=STARTER_MONTHLY_USD)),
+        _scalar_result(mock_user),
+    ]
+
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
+            return_value="AUTH",
+        ),
+        patch("app.shared.core.security.decrypt_string", return_value="user@example.com"),
+        patch.object(
+            service.client,
+            "charge_authorization",
+            new=AsyncMock(return_value={"status": True, "data": {"status": "success"}}),
+        ),
+    ):
+        ok = await service.charge_renewal(sub)
+
+    assert ok is True
+    fx_runtime.get_ngn_rate.assert_awaited_once()
+    fx_runtime.convert_usd_to_ngn.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -648,7 +780,7 @@ async def test_charge_renewal_uses_provider_next_payment_date_when_available(
     )
     mock_user = MagicMock(email="enc-email")
     mock_db.execute.side_effect = [
-        _scalar_result(MagicMock(price_usd=29.0)),
+        _scalar_result(MagicMock(price_usd=STARTER_MONTHLY_USD)),
         _scalar_result(mock_user),
     ]
     provider_next = "2026-05-01T00:00:00Z"
@@ -694,7 +826,7 @@ async def test_charge_renewal_fallback_uses_annual_cycle_when_metadata_declares_
     )
     mock_user = MagicMock(email="enc-email")
     mock_db.execute.side_effect = [
-        _scalar_result(MagicMock(price_usd=29.0)),
+        _scalar_result(MagicMock(price_usd=STARTER_MONTHLY_USD)),
         _scalar_result(mock_user),
     ]
 

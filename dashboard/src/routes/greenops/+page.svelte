@@ -477,28 +477,28 @@
 								<div class="text-sm font-bold text-white">
 									{carbonData.equivalencies.miles_driven}
 								</div>
-								<div class="text-[10px] text-ink-500">miles</div>
+								<div class="text-xs text-ink-500">miles</div>
 							</div>
 							<div class="text-center p-2 bg-ink-900/30 rounded border border-ink-800/50">
 								<div class="text-xl mb-1">🌳</div>
 								<div class="text-sm font-bold text-white">
 									{carbonData.equivalencies.trees_needed_for_year}
 								</div>
-								<div class="text-[10px] text-ink-500">trees</div>
+								<div class="text-xs text-ink-500">trees</div>
 							</div>
 							<div class="text-center p-2 bg-ink-900/30 rounded border border-ink-800/50">
 								<div class="text-xl mb-1">📱</div>
 								<div class="text-sm font-bold text-white">
 									{carbonData.equivalencies.smartphone_charges}
 								</div>
-								<div class="text-[10px] text-ink-500">charges</div>
+								<div class="text-xs text-ink-500">charges</div>
 							</div>
 							<div class="text-center p-2 bg-ink-900/30 rounded border border-ink-800/50">
 								<div class="text-xl mb-1">🏠</div>
 								<div class="text-sm font-bold text-white">
 									{carbonData.equivalencies.percent_of_home_month}%
 								</div>
-								<div class="text-[10px] text-ink-500">home/mo</div>
+								<div class="text-xs text-ink-500">home/mo</div>
 							</div>
 						</div>
 					{/if}
@@ -588,7 +588,7 @@
 											style="height: {(hour.intensity_gco2_kwh / 800) * 100}%"
 										></div>
 										<div
-											class="absolute bottom-full mb-2 hidden group-hover:block bg-ink-900 border border-ink-700 p-2 rounded text-[10px] z-50 whitespace-nowrap"
+											class="absolute bottom-full mb-2 hidden group-hover:block bg-ink-900 border border-ink-700 p-2 rounded text-xs z-50 whitespace-nowrap"
 										>
 											{hour.hour_utc}:00 UTC <br />
 											<span class="font-bold">{hour.intensity_gco2_kwh} g/kWh</span>
@@ -597,7 +597,7 @@
 								{/each}
 							{/if}
 						</div>
-						<div class="flex justify-between mt-2 text-[10px] text-ink-500 px-1">
+						<div class="flex justify-between mt-2 text-xs text-ink-500 px-1">
 							<span>NOW</span>
 							<span>+12h</span>
 							<span>+24h</span>
@@ -638,7 +638,7 @@
 								<div
 									class="mt-4 p-4 bg-accent-950/30 border border-accent-500/20 rounded-lg animate-in fade-in slide-in-from-bottom-2"
 								>
-									<div class="text-[10px] uppercase font-bold text-accent-400 mb-1">
+									<div class="text-xs uppercase font-bold text-accent-400 mb-1">
 										Recommendation
 									</div>
 									<div class="text-sm text-white font-medium">{scheduleResult.recommendation}</div>

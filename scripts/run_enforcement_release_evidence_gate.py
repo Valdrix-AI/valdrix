@@ -43,13 +43,19 @@ def build_gate_environment(
     finance_evidence_required: bool,
     pricing_benchmark_register_path: Path | None,
     pricing_benchmark_register_required: bool,
+    pkg_fin_policy_decisions_path: Path | None,
+    pkg_fin_policy_decisions_required: bool,
     stress_max_age_hours: float,
     failure_max_age_hours: float,
     finance_max_age_hours: float,
     pricing_benchmark_max_source_age_days: float,
+    pkg_fin_policy_decisions_max_age_hours: float,
     stress_min_duration_seconds: int,
     stress_min_concurrent_users: int,
     stress_required_database_engine: str,
+    finance_telemetry_snapshot_path: Path | None = None,
+    finance_telemetry_snapshot_required: bool = False,
+    finance_telemetry_snapshot_max_age_hours: float = 744.0,
 ) -> dict[str, str]:
     stress_path = _assert_file(stress_evidence_path, field="stress_evidence_path")
     failure_path = _assert_file(failure_evidence_path, field="failure_evidence_path")
@@ -59,6 +65,17 @@ def build_gate_environment(
     if finance_evidence_required and finance_path is None:
         raise ValueError(
             "finance_evidence_required is true but finance_evidence_path is not provided"
+        )
+    finance_telemetry_path: Path | None = None
+    if finance_telemetry_snapshot_path is not None:
+        finance_telemetry_path = _assert_file(
+            finance_telemetry_snapshot_path,
+            field="finance_telemetry_snapshot_path",
+        )
+    if finance_telemetry_snapshot_required and finance_telemetry_path is None:
+        raise ValueError(
+            "finance_telemetry_snapshot_required is true but "
+            "finance_telemetry_snapshot_path is not provided"
         )
     pricing_benchmark_path: Path | None = None
     if pricing_benchmark_register_path is not None:
@@ -70,6 +87,17 @@ def build_gate_environment(
         raise ValueError(
             "pricing_benchmark_register_required is true but "
             "pricing_benchmark_register_path is not provided"
+        )
+    pkg_fin_policy_path: Path | None = None
+    if pkg_fin_policy_decisions_path is not None:
+        pkg_fin_policy_path = _assert_file(
+            pkg_fin_policy_decisions_path,
+            field="pkg_fin_policy_decisions_path",
+        )
+    if pkg_fin_policy_decisions_required and pkg_fin_policy_path is None:
+        raise ValueError(
+            "pkg_fin_policy_decisions_required is true but "
+            "pkg_fin_policy_decisions_path is not provided"
         )
     validated_stress_max_age = _assert_positive_float(
         stress_max_age_hours,
@@ -83,9 +111,17 @@ def build_gate_environment(
         finance_max_age_hours,
         field="finance_max_age_hours",
     )
+    validated_finance_telemetry_max_age = _assert_positive_float(
+        finance_telemetry_snapshot_max_age_hours,
+        field="finance_telemetry_snapshot_max_age_hours",
+    )
     validated_pricing_benchmark_max_age_days = _assert_positive_float(
         pricing_benchmark_max_source_age_days,
         field="pricing_benchmark_max_source_age_days",
+    )
+    validated_pkg_fin_policy_decisions_max_age = _assert_positive_float(
+        pkg_fin_policy_decisions_max_age_hours,
+        field="pkg_fin_policy_decisions_max_age_hours",
     )
     validated_duration = _assert_positive_int(
         stress_min_duration_seconds,
@@ -121,11 +157,23 @@ def build_gate_environment(
     env.pop("ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH", None)
     env.pop("ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED", None)
     env.pop("ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS", None)
+    env.pop("ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH", None)
+    env.pop("ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED", None)
+    env.pop("ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS", None)
+    env.pop("ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH", None)
+    env.pop("ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED", None)
+    env.pop("ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS", None)
     if finance_path is not None:
         env["ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH"] = str(finance_path)
         env["ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED"] = "true"
         env["ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_MAX_AGE_HOURS"] = str(
             validated_finance_max_age
+        )
+    if finance_telemetry_path is not None:
+        env["ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH"] = str(finance_telemetry_path)
+        env["ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED"] = "true"
+        env["ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS"] = str(
+            validated_finance_telemetry_max_age
         )
     if pricing_benchmark_path is not None:
         env["ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH"] = str(
@@ -134,6 +182,12 @@ def build_gate_environment(
         env["ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED"] = "true"
         env["ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS"] = str(
             validated_pricing_benchmark_max_age_days
+        )
+    if pkg_fin_policy_path is not None:
+        env["ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH"] = str(pkg_fin_policy_path)
+        env["ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED"] = "true"
+        env["ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS"] = str(
+            validated_pkg_fin_policy_decisions_max_age
         )
     return env
 
@@ -146,14 +200,20 @@ def run_release_gate(
     finance_evidence_required: bool,
     pricing_benchmark_register_path: Path | None,
     pricing_benchmark_register_required: bool,
+    pkg_fin_policy_decisions_path: Path | None,
+    pkg_fin_policy_decisions_required: bool,
     stress_max_age_hours: float,
     failure_max_age_hours: float,
     finance_max_age_hours: float,
     pricing_benchmark_max_source_age_days: float,
+    pkg_fin_policy_decisions_max_age_hours: float,
     stress_min_duration_seconds: int,
     stress_min_concurrent_users: int,
     stress_required_database_engine: str,
     dry_run: bool,
+    finance_telemetry_snapshot_path: Path | None = None,
+    finance_telemetry_snapshot_required: bool = False,
+    finance_telemetry_snapshot_max_age_hours: float = 744.0,
 ) -> int:
     env = build_gate_environment(
         stress_evidence_path=stress_evidence_path,
@@ -162,13 +222,19 @@ def run_release_gate(
         finance_evidence_required=finance_evidence_required,
         pricing_benchmark_register_path=pricing_benchmark_register_path,
         pricing_benchmark_register_required=pricing_benchmark_register_required,
+        pkg_fin_policy_decisions_path=pkg_fin_policy_decisions_path,
+        pkg_fin_policy_decisions_required=pkg_fin_policy_decisions_required,
         stress_max_age_hours=stress_max_age_hours,
         failure_max_age_hours=failure_max_age_hours,
         finance_max_age_hours=finance_max_age_hours,
         pricing_benchmark_max_source_age_days=pricing_benchmark_max_source_age_days,
+        pkg_fin_policy_decisions_max_age_hours=pkg_fin_policy_decisions_max_age_hours,
         stress_min_duration_seconds=stress_min_duration_seconds,
         stress_min_concurrent_users=stress_min_concurrent_users,
         stress_required_database_engine=stress_required_database_engine,
+        finance_telemetry_snapshot_path=finance_telemetry_snapshot_path,
+        finance_telemetry_snapshot_required=finance_telemetry_snapshot_required,
+        finance_telemetry_snapshot_max_age_hours=finance_telemetry_snapshot_max_age_hours,
     )
 
     cmd = ["uv", "run", "python3", "scripts/run_enterprise_tdd_gate.py"]
@@ -213,6 +279,22 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--finance-telemetry-snapshot-path",
+        default=None,
+        help=(
+            "Optional path to staged finance telemetry snapshot JSON. "
+            "When provided, telemetry snapshot verification is enforced."
+        ),
+    )
+    parser.add_argument(
+        "--finance-telemetry-snapshot-required",
+        action="store_true",
+        help=(
+            "Require finance telemetry snapshot verification. "
+            "When set, --finance-telemetry-snapshot-path must be provided."
+        ),
+    )
+    parser.add_argument(
         "--pricing-benchmark-register-path",
         default=None,
         help=(
@@ -226,6 +308,22 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Require pricing benchmark register verification. "
             "When set, --pricing-benchmark-register-path must be provided."
+        ),
+    )
+    parser.add_argument(
+        "--pkg-fin-policy-decisions-path",
+        default=None,
+        help=(
+            "Optional path to staged PKG/FIN policy decision evidence JSON. "
+            "When provided, policy decision verification is enforced."
+        ),
+    )
+    parser.add_argument(
+        "--pkg-fin-policy-decisions-required",
+        action="store_true",
+        help=(
+            "Require PKG/FIN policy decision verification. "
+            "When set, --pkg-fin-policy-decisions-path must be provided."
         ),
     )
     parser.add_argument(
@@ -247,10 +345,22 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Maximum allowed age for finance guardrails evidence artifact in hours.",
     )
     parser.add_argument(
+        "--finance-telemetry-max-age-hours",
+        type=float,
+        default=744.0,
+        help="Maximum allowed age for finance telemetry snapshot artifact in hours.",
+    )
+    parser.add_argument(
         "--pricing-benchmark-max-source-age-days",
         type=float,
         default=120.0,
         help="Maximum allowed source age for pricing benchmark register entries in days.",
+    )
+    parser.add_argument(
+        "--pkg-fin-policy-decisions-max-age-hours",
+        type=float,
+        default=744.0,
+        help="Maximum allowed age for PKG/FIN policy decision evidence artifact in hours.",
     )
     parser.add_argument(
         "--stress-min-duration-seconds",
@@ -288,6 +398,14 @@ def main(argv: list[str] | None = None) -> int:
             else None
         ),
         finance_evidence_required=bool(args.finance_evidence_required),
+        finance_telemetry_snapshot_path=(
+            Path(str(args.finance_telemetry_snapshot_path))
+            if args.finance_telemetry_snapshot_path
+            else None
+        ),
+        finance_telemetry_snapshot_required=bool(
+            args.finance_telemetry_snapshot_required
+        ),
         pricing_benchmark_register_path=(
             Path(str(args.pricing_benchmark_register_path))
             if args.pricing_benchmark_register_path
@@ -296,11 +414,25 @@ def main(argv: list[str] | None = None) -> int:
         pricing_benchmark_register_required=bool(
             args.pricing_benchmark_register_required
         ),
+        pkg_fin_policy_decisions_path=(
+            Path(str(args.pkg_fin_policy_decisions_path))
+            if args.pkg_fin_policy_decisions_path
+            else None
+        ),
+        pkg_fin_policy_decisions_required=bool(
+            args.pkg_fin_policy_decisions_required
+        ),
         stress_max_age_hours=float(args.stress_max_age_hours),
         failure_max_age_hours=float(args.failure_max_age_hours),
         finance_max_age_hours=float(args.finance_max_age_hours),
+        finance_telemetry_snapshot_max_age_hours=float(
+            args.finance_telemetry_max_age_hours
+        ),
         pricing_benchmark_max_source_age_days=float(
             args.pricing_benchmark_max_source_age_days
+        ),
+        pkg_fin_policy_decisions_max_age_hours=float(
+            args.pkg_fin_policy_decisions_max_age_hours
         ),
         stress_min_duration_seconds=int(args.stress_min_duration_seconds),
         stress_min_concurrent_users=int(args.stress_min_concurrent_users),

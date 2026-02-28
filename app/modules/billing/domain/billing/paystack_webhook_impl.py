@@ -10,10 +10,11 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import Request
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pricing import TenantSubscription
+from app.modules.billing.domain.billing.entitlement_policy import sync_tenant_plan
 from app.shared.core.pricing import PricingTier
 
 from . import paystack_shared as shared
@@ -295,21 +296,12 @@ class WebhookHandler:
             sub.last_charge_at = datetime.now(timezone.utc)
 
             if resolved_tier is not None:
-                try:
-                    from app.models.tenant import Tenant
-
-                    await self.db.execute(
-                        update(Tenant)
-                        .where(Tenant.id == tenant_id)
-                        .values(plan=resolved_tier.value)
-                    )
-                except Exception as exc:
-                    shared.logger.warning(
-                        "billing_plan_sync_failed",
-                        tenant_id=str(tenant_id),
-                        tier=resolved_tier.value,
-                        error=str(exc),
-                    )
+                await sync_tenant_plan(
+                    db=self.db,
+                    tenant_id=tenant_id,
+                    tier=resolved_tier,
+                    source="paystack_charge_success",
+                )
 
             try:
                 from app.modules.governance.domain.security.audit_log import (

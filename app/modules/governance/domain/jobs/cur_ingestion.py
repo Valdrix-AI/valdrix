@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.aws_connection import AWSConnection
 from app.shared.adapters.aws_utils import resolve_aws_region_hint
-from app.shared.db.session import async_session_maker
+from app.shared.db.session import async_session_maker, mark_session_system_context
 
 logger = structlog.get_logger()
 
@@ -26,6 +26,7 @@ class CURIngestionJob:
         # If no session provided, use the global maker (for standalone job runs)
         if not self.db:
             async with async_session_maker() as session:
+                await mark_session_system_context(session)
                 self.db = session
                 await self._execute(connection_id, tenant_id)
         else:

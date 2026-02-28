@@ -839,7 +839,7 @@ async def test_platform_get_json_and_post_json_fallthrough_raise_last_error() ->
     get_transport_fail = _FakeAsyncClient([httpx.ConnectError("c1"), httpx.ConnectError("c2")])
     with (
         patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=get_transport_fail),
-        patch("app.shared.adapters.platform.range", return_value=[1, 2]),
+        patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):
         with pytest.raises(ExternalAPIError, match="Platform request failed:"):
             await adapter._get_json("https://example.invalid", headers={})
@@ -847,7 +847,7 @@ async def test_platform_get_json_and_post_json_fallthrough_raise_last_error() ->
     post_transport_fail = _FakeAsyncClient([httpx.ConnectError("p1"), httpx.ConnectError("p2")])
     with (
         patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=post_transport_fail),
-        patch("app.shared.adapters.platform.range", return_value=[1, 2]),
+        patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):
         with pytest.raises(ExternalAPIError, match="Platform native request failed:"):
             await adapter._post_json(

@@ -678,13 +678,13 @@
 								<div class="flex justify-between items-start mb-2">
 									<div>
 										<div class="flex items-center gap-2 mb-1">
-											<span class="text-[10px] text-ink-500 font-mono"
+											<span class="text-xs text-ink-500 font-mono"
 												>ID: {conn.aws_account_id}</span
 											>
 											<span
 												class="badge {conn.is_management_account
 													? 'badge-accent'
-													: 'badge-default'} text-[10px] px-1.5 py-0.5"
+													: 'badge-default'} text-xs px-1.5 py-0.5"
 											>
 												{conn.is_management_account ? 'Management' : 'Member'}
 											</span>
@@ -701,7 +701,7 @@
 								</div>
 
 								{#if conn.organization_id}
-									<div class="flex justify-between text-[10px]">
+									<div class="flex justify-between text-xs">
 										<span class="text-ink-500">Organization:</span>
 										<span class="text-ink-300 font-mono">{conn.organization_id}</span>
 									</div>
@@ -751,7 +751,7 @@
 								<div class="flex justify-between items-start mb-2">
 									<div>
 										<div class="flex items-center gap-2 mb-1">
-											<span class="text-[10px] text-ink-500 font-mono"
+											<span class="text-xs text-ink-500 font-mono"
 												>Sub ID: {conn.subscription_id
 													? `${conn.subscription_id.slice(0, 8)}...`
 													: 'N/A'}</span
@@ -767,7 +767,7 @@
 										<span class="text-xs">🗑️</span>
 									</button>
 								</div>
-								<div class="flex justify-between text-[10px]">
+								<div class="flex justify-between text-xs">
 									<span class="text-ink-500">Auth Strategy:</span>
 									<span class="text-accent-400">Identity Federation</span>
 								</div>
@@ -793,7 +793,7 @@
 						>
 							Connect Azure
 						</a>
-						<span class="badge badge-warning text-[10px] w-full justify-center"
+						<span class="badge badge-warning text-xs w-full justify-center"
 							>Growth Tier Required</span
 						>
 					</div>
@@ -828,7 +828,7 @@
 								<div class="flex justify-between items-start mb-2">
 									<div>
 										<div class="flex items-center gap-2 mb-1">
-											<span class="text-[10px] text-ink-500 font-mono"
+											<span class="text-xs text-ink-500 font-mono"
 												>Project: {conn.project_id}</span
 											>
 										</div>
@@ -842,7 +842,7 @@
 										<span class="text-xs">🗑️</span>
 									</button>
 								</div>
-								<div class="flex justify-between text-[10px]">
+								<div class="flex justify-between text-xs">
 									<span class="text-ink-500">Auth Method:</span>
 									<span class="text-accent-400 capitalize"
 										>{conn.auth_method ? conn.auth_method.replace('_', ' ') : 'unknown'}</span
@@ -870,7 +870,7 @@
 						>
 							Connect GCP
 						</a>
-						<span class="badge badge-warning text-[10px] w-full justify-center"
+						<span class="badge badge-warning text-xs w-full justify-center"
 							>Growth Tier Required</span
 						>
 					</div>
@@ -902,16 +902,16 @@
 							<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800">
 								<div class="flex justify-between items-start mb-2">
 									<div>
-										<div class="text-[11px] text-ink-300 font-semibold">
+										<div class="text-xs text-ink-300 font-semibold">
 											{conn.name || 'SaaS Feed'}
 										</div>
-										<div class="text-[10px] text-ink-500 font-mono">
+										<div class="text-xs text-ink-500 font-mono">
 											Vendor: {conn.vendor || 'unknown'}
 										</div>
 									</div>
 									<div class="flex items-center gap-2">
 										<button
-											class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
+											class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
 											onclick={() => verifyCloudPlusConnection('saas', conn.id)}
 											disabled={!!verifyingCloudPlus[conn.id]}
 										>
@@ -926,11 +926,11 @@
 										</button>
 									</div>
 								</div>
-								<div class="flex justify-between text-[10px]">
+								<div class="flex justify-between text-xs">
 									<span class="text-ink-500">Auth Method:</span>
 									<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
 								</div>
-								<div class="flex justify-between text-[10px] mt-1">
+								<div class="flex justify-between text-xs mt-1">
 									<span class="text-ink-500">Status:</span>
 									<span class={conn.is_active ? 'text-success-400' : 'text-warning-400'}>
 										{conn.is_active ? 'active' : 'pending verification'}
@@ -999,7 +999,7 @@
 						<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
 							>Upgrade for SaaS Connectors</a
 						>
-						<span class="badge badge-warning text-[10px] w-full justify-center"
+						<span class="badge badge-warning text-xs w-full justify-center"
 							>Pro Tier Required</span
 						>
 					</div>
@@ -1031,16 +1031,16 @@
 							<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800">
 								<div class="flex justify-between items-start mb-2">
 									<div>
-										<div class="text-[11px] text-ink-300 font-semibold">
+										<div class="text-xs text-ink-300 font-semibold">
 											{conn.name || 'License Feed'}
 										</div>
-										<div class="text-[10px] text-ink-500 font-mono">
+										<div class="text-xs text-ink-500 font-mono">
 											Vendor: {conn.vendor || 'unknown'}
 										</div>
 									</div>
 									<div class="flex items-center gap-2">
 										<button
-											class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
+											class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
 											onclick={() => verifyCloudPlusConnection('license', conn.id)}
 											disabled={!!verifyingCloudPlus[conn.id]}
 										>
@@ -1055,11 +1055,11 @@
 										</button>
 									</div>
 								</div>
-								<div class="flex justify-between text-[10px]">
+								<div class="flex justify-between text-xs">
 									<span class="text-ink-500">Auth Method:</span>
 									<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
 								</div>
-								<div class="flex justify-between text-[10px] mt-1">
+								<div class="flex justify-between text-xs mt-1">
 									<span class="text-ink-500">Status:</span>
 									<span class={conn.is_active ? 'text-success-400' : 'text-warning-400'}>
 										{conn.is_active ? 'active' : 'pending verification'}
@@ -1130,7 +1130,7 @@
 						<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
 							>Upgrade for License Connectors</a
 						>
-						<span class="badge badge-warning text-[10px] w-full justify-center"
+						<span class="badge badge-warning text-xs w-full justify-center"
 							>Pro Tier Required</span
 						>
 					</div>
@@ -1162,16 +1162,16 @@
 							<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800">
 								<div class="flex justify-between items-start mb-2">
 									<div>
-										<div class="text-[11px] text-ink-300 font-semibold">
+										<div class="text-xs text-ink-300 font-semibold">
 											{conn.name || 'Platform Feed'}
 										</div>
-										<div class="text-[10px] text-ink-500 font-mono">
+										<div class="text-xs text-ink-500 font-mono">
 											Vendor: {conn.vendor || 'unknown'}
 										</div>
 									</div>
 									<div class="flex items-center gap-2">
 										<button
-											class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
+											class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
 											onclick={() => verifyCloudPlusConnection('platform', conn.id)}
 											disabled={!!verifyingCloudPlus[conn.id]}
 										>
@@ -1186,11 +1186,11 @@
 										</button>
 									</div>
 								</div>
-								<div class="flex justify-between text-[10px]">
+								<div class="flex justify-between text-xs">
 									<span class="text-ink-500">Auth Method:</span>
 									<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
 								</div>
-								<div class="flex justify-between text-[10px] mt-1">
+								<div class="flex justify-between text-xs mt-1">
 									<span class="text-ink-500">Status:</span>
 									<span class={conn.is_active ? 'text-success-400' : 'text-warning-400'}>
 										{conn.is_active ? 'active' : 'pending verification'}
@@ -1273,7 +1273,7 @@
 						<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
 							>Upgrade for Platform Connectors</a
 						>
-						<span class="badge badge-warning text-[10px] w-full justify-center"
+						<span class="badge badge-warning text-xs w-full justify-center"
 							>Pro Tier Required</span
 						>
 					</div>
@@ -1305,16 +1305,16 @@
 							<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800">
 								<div class="flex justify-between items-start mb-2">
 									<div>
-										<div class="text-[11px] text-ink-300 font-semibold">
+										<div class="text-xs text-ink-300 font-semibold">
 											{conn.name || 'Hybrid Feed'}
 										</div>
-										<div class="text-[10px] text-ink-500 font-mono">
+										<div class="text-xs text-ink-500 font-mono">
 											Vendor: {conn.vendor || 'unknown'}
 										</div>
 									</div>
 									<div class="flex items-center gap-2">
 										<button
-											class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
+											class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
 											onclick={() => verifyCloudPlusConnection('hybrid', conn.id)}
 											disabled={!!verifyingCloudPlus[conn.id]}
 										>
@@ -1329,11 +1329,11 @@
 										</button>
 									</div>
 								</div>
-								<div class="flex justify-between text-[10px]">
+								<div class="flex justify-between text-xs">
 									<span class="text-ink-500">Auth Method:</span>
 									<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
 								</div>
-								<div class="flex justify-between text-[10px] mt-1">
+								<div class="flex justify-between text-xs mt-1">
 									<span class="text-ink-500">Status:</span>
 									<span class={conn.is_active ? 'text-success-400' : 'text-warning-400'}>
 										{conn.is_active ? 'active' : 'pending verification'}
@@ -1416,7 +1416,7 @@
 						<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
 							>Upgrade for Hybrid Connectors</a
 						>
-						<span class="badge badge-warning text-[10px] w-full justify-center"
+						<span class="badge badge-warning text-xs w-full justify-center"
 							>Pro Tier Required</span
 						>
 					</div>
@@ -1516,7 +1516,7 @@
 						{:else if discoveredAccounts.length > 0}
 							<div class="overflow-x-auto rounded-xl border border-ink-800">
 								<table class="w-full text-sm text-left">
-									<thead class="bg-ink-900/80 text-ink-400 uppercase text-[10px] tracking-wider">
+									<thead class="bg-ink-900/80 text-ink-400 uppercase text-xs tracking-wider">
 										<tr>
 											<th class="px-6 py-4 font-semibold uppercase">Account Details</th>
 											<th class="px-6 py-4 font-semibold uppercase">Email</th>

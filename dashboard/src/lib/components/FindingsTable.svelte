@@ -113,7 +113,7 @@
 						<!-- Provider -->
 						<td class="py-3 pr-4">
 							<div
-								class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter
+								class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-bold uppercase tracking-tighter
                 {finding.provider === 'aws'
 									? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
 									: finding.provider === 'azure'
@@ -162,7 +162,7 @@
 							</span>
 							{#if finding.is_gpu}
 								<span
-									class="badge badge-error py-0.5 px-1.5 text-[10px] uppercase font-bold animate-pulse"
+									class="badge badge-error py-0.5 px-1.5 text-xs uppercase font-bold animate-pulse"
 									>GPU</span
 								>
 							{/if}
@@ -195,7 +195,7 @@
 							<div class="flex flex-col">
 								{#if finding.owner === 'Upgrade to Growth'}
 									<span
-										class="text-[10px] font-bold text-warning-400 flex items-center gap-1"
+										class="text-xs font-bold text-warning-400 flex items-center gap-1"
 										title="Owner Attribution requires Growth tier"
 									>
 										<span class="w-1 h-1 rounded-full bg-warning-400 animate-ping"></span>

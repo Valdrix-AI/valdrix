@@ -16,6 +16,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 import structlog
 from app.shared.adapters.base import BaseAdapter
+from app.shared.adapters.aws_pagination import iter_aws_paginator_pages
 from app.shared.adapters.aws_utils import resolve_aws_region_hint
 from app.shared.core.exceptions import ConfigurationError
 from app.shared.core.credentials import AWSCredentials
@@ -30,6 +31,7 @@ class AWSCURAdapter(BaseAdapter):
     """
     _SUMMARY_RECORD_CAP = 50000
     _PARQUET_BATCH_SIZE = 4096
+    _LIST_OBJECTS_MAX_PAGES_PER_MONTH = 512
 
     def __init__(self, credentials: AWSCredentials):
         self.credentials = credentials
@@ -271,9 +273,15 @@ class AWSCURAdapter(BaseAdapter):
                 paginator = s3.get_paginator("list_objects_v2")
                 manifest_keys = []
                 parquet_keys = []
-                
-                async for page in paginator.paginate(
-                    Bucket=self.bucket_name, Prefix=month_prefix
+
+                async for page in iter_aws_paginator_pages(
+                    paginator,
+                    operation_name="s3.list_objects_v2",
+                    paginate_kwargs={
+                        "Bucket": self.bucket_name,
+                        "Prefix": month_prefix,
+                    },
+                    max_pages=self._LIST_OBJECTS_MAX_PAGES_PER_MONTH,
                 ):
                     for obj in page.get("Contents", []):
                         key = obj["Key"]

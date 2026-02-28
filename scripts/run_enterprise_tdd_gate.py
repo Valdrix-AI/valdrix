@@ -63,8 +63,16 @@ ENTERPRISE_GATE_TEST_TARGETS: tuple[str, ...] = (
     "tests/unit/ops/test_verify_enforcement_post_closure_sanity.py",
     "tests/unit/ops/test_verify_finance_guardrails_evidence.py",
     "tests/unit/ops/test_finance_guardrails_evidence_pack.py",
+    "tests/unit/ops/test_verify_monthly_finance_evidence_refresh.py",
+    "tests/unit/ops/test_collect_finance_telemetry_snapshot.py",
+    "tests/unit/ops/test_verify_finance_telemetry_snapshot.py",
+    "tests/unit/ops/test_generate_finance_committee_packet.py",
+    "tests/unit/ops/test_finance_telemetry_snapshot_pack.py",
+    "tests/unit/ops/test_verify_pkg015_launch_gate.py",
     "tests/unit/ops/test_verify_pricing_benchmark_register.py",
     "tests/unit/ops/test_pricing_benchmark_register_pack.py",
+    "tests/unit/ops/test_verify_pkg_fin_policy_decisions.py",
+    "tests/unit/ops/test_pkg_fin_policy_decisions_pack.py",
     "tests/unit/ops/test_release_artifact_templates_pack.py",
     "tests/unit/supply_chain/test_verify_jwt_bcp_checklist.py",
     "tests/unit/supply_chain/test_feature_enforceability_matrix.py",
@@ -134,7 +142,23 @@ ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_MAX_AGE_HOURS_ENV = (
 ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED_ENV = (
     "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED"
 )
+DEFAULT_ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH = (
+    "docs/ops/evidence/finance_guardrails_2026-02-27.json"
+)
 DEFAULT_ENFORCEMENT_FINANCE_GUARDRAILS_MAX_AGE_HOURS = "744"
+ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH_ENV = (
+    "ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH"
+)
+ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED_ENV = (
+    "ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED"
+)
+ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS_ENV = (
+    "ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS"
+)
+DEFAULT_ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH = (
+    "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json"
+)
+DEFAULT_ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS = "744"
 ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH_ENV = (
     "ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH"
 )
@@ -145,6 +169,27 @@ ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS_ENV = (
     "ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS"
 )
 DEFAULT_ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS = "120"
+ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH_ENV = (
+    "ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH"
+)
+ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED_ENV = (
+    "ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED"
+)
+ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS_ENV = (
+    "ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS"
+)
+DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH = (
+    "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json"
+)
+DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS = "744"
+ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS_ENV = (
+    "ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS"
+)
+ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS_ENV = (
+    "ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS"
+)
+DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS = "35"
+DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS = "14"
 ENFORCEMENT_KEY_ROTATION_DRILL_PATH_ENV = "ENFORCEMENT_KEY_ROTATION_DRILL_PATH"
 ENFORCEMENT_KEY_ROTATION_DRILL_MAX_AGE_DAYS_ENV = (
     "ENFORCEMENT_KEY_ROTATION_DRILL_MAX_AGE_DAYS"
@@ -317,6 +362,12 @@ def build_gate_commands() -> list[list[str]]:
             "uv",
             "run",
             "python3",
+            "scripts/verify_api_auth_coverage.py",
+        ],
+        [
+            "uv",
+            "run",
+            "python3",
             "scripts/verify_jwt_bcp_checklist.py",
             "--checklist-path",
             "docs/security/jwt_bcp_checklist_2026-02-27.json",
@@ -347,6 +398,16 @@ def build_gate_commands() -> list[list[str]]:
             "--matrix-path",
             "docs/ops/feature_enforceability_matrix_2026-02-27.json",
         ],
+        [
+            "uv",
+            "run",
+            "python3",
+            "scripts/verify_pkg015_launch_gate.py",
+            "--gap-register",
+            "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md",
+            "--matrix-path",
+            "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        ],
     ]
 
     key_rotation_drill_path = (
@@ -367,6 +428,47 @@ def build_gate_commands() -> list[list[str]]:
             key_rotation_drill_path,
             "--max-drill-age-days",
             key_rotation_max_age_days,
+        ]
+    )
+
+    refresh_guardrails_path = (
+        os.getenv(ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH_ENV, "").strip()
+        or DEFAULT_ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH
+    )
+    refresh_telemetry_path = (
+        os.getenv(ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH_ENV, "").strip()
+        or DEFAULT_ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH
+    )
+    refresh_pkg_fin_path = (
+        os.getenv(ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH_ENV, "").strip()
+        or DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH
+    )
+    refresh_max_age_days = (
+        os.getenv(ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS_ENV, "").strip()
+        or DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS
+    )
+    refresh_max_capture_spread_days = (
+        os.getenv(
+            ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS_ENV, ""
+        ).strip()
+        or DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS
+    )
+    commands.append(
+        [
+            "uv",
+            "run",
+            "python3",
+            "scripts/verify_monthly_finance_evidence_refresh.py",
+            "--finance-guardrails-path",
+            refresh_guardrails_path,
+            "--finance-telemetry-snapshot-path",
+            refresh_telemetry_path,
+            "--pkg-fin-policy-decisions-path",
+            refresh_pkg_fin_path,
+            "--max-age-days",
+            refresh_max_age_days,
+            "--max-capture-spread-days",
+            refresh_max_capture_spread_days,
         ]
     )
 
@@ -481,6 +583,35 @@ def build_gate_commands() -> list[list[str]]:
             ]
         )
 
+    finance_telemetry_snapshot_path = os.getenv(
+        ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH_ENV, ""
+    ).strip()
+    finance_telemetry_snapshot_required = _is_truthy(
+        os.getenv(ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED_ENV)
+    )
+    if finance_telemetry_snapshot_required and not finance_telemetry_snapshot_path:
+        raise ValueError(
+            "ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED is true but "
+            "ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH is not set"
+        )
+    if finance_telemetry_snapshot_path:
+        finance_telemetry_max_age_hours = (
+            os.getenv(ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS_ENV, "").strip()
+            or DEFAULT_ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS
+        )
+        commands.append(
+            [
+                "uv",
+                "run",
+                "python3",
+                "scripts/verify_finance_telemetry_snapshot.py",
+                "--snapshot-path",
+                finance_telemetry_snapshot_path,
+                "--max-artifact-age-hours",
+                finance_telemetry_max_age_hours,
+            ]
+        )
+
     pricing_benchmark_register_path = os.getenv(
         ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH_ENV, ""
     ).strip()
@@ -509,6 +640,37 @@ def build_gate_commands() -> list[list[str]]:
                 pricing_benchmark_register_path,
                 "--max-source-age-days",
                 pricing_max_source_age_days,
+            ]
+        )
+
+    pkg_fin_policy_decisions_path = os.getenv(
+        ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH_ENV, ""
+    ).strip()
+    pkg_fin_policy_decisions_required = _is_truthy(
+        os.getenv(ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED_ENV)
+    )
+    if pkg_fin_policy_decisions_required and not pkg_fin_policy_decisions_path:
+        raise ValueError(
+            "ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED is true but "
+            "ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH is not set"
+        )
+    if pkg_fin_policy_decisions_path:
+        pkg_fin_policy_decisions_max_age_hours = (
+            os.getenv(
+                ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS_ENV, ""
+            ).strip()
+            or DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS
+        )
+        commands.append(
+            [
+                "uv",
+                "run",
+                "python3",
+                "scripts/verify_pkg_fin_policy_decisions.py",
+                "--evidence-path",
+                pkg_fin_policy_decisions_path,
+                "--max-artifact-age-hours",
+                pkg_fin_policy_decisions_max_age_hours,
             ]
         )
 

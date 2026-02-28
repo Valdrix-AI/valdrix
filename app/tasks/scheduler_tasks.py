@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, AsyncGenerator, Coroutine, cast
 import structlog
 from celery import shared_task
-from app.shared.db.session import async_session_maker
+from app.shared.db.session import async_session_maker, mark_session_system_context
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.orchestrator import SchedulerOrchestrator
@@ -48,6 +48,7 @@ async def _open_db_session() -> AsyncGenerator[AsyncSession, None]:
     try:
         async with asyncio.timeout(10.0):
             async with session_cm as session:
+                await mark_session_system_context(session)
                 yield session
     except asyncio.TimeoutError as exc:
         logger.error("db_session_acquisition_failed", error=str(exc), type="TimeoutError")

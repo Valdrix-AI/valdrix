@@ -22,6 +22,7 @@ def mock_db():
     db = MagicMock()
     db.execute = AsyncMock()
     db.commit = AsyncMock()
+    db.rollback = AsyncMock()
     return db
 
 
@@ -84,19 +85,6 @@ async def test_process_failed_payment_subscription_missing(mock_db):
 
 
 @pytest.mark.asyncio
-async def test_process_failed_payment_subscription_missing(mock_db):
-    """Missing subscription returns error without raising."""
-    mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = None
-    mock_db.execute.return_value = mock_result
-
-    dunning = DunningService(mock_db)
-    result = await dunning.process_failed_payment(uuid4())
-    assert result["status"] == "error"
-    assert result["reason"] == "subscription_not_found"
-
-
-@pytest.mark.asyncio
 async def test_process_failed_payment_max_attempts_reached(mock_db, mock_subscription):
     """Test max attempts triggers tier downgrade."""
     mock_subscription.dunning_attempts = (
@@ -117,7 +105,7 @@ async def test_process_failed_payment_max_attempts_reached(mock_db, mock_subscri
 
 @pytest.mark.asyncio
 async def test_process_failed_payment_enqueue_failure(mock_db, mock_subscription):
-    """Enqueue failures should not abort state updates."""
+    """Enqueue failures should revert ATTENTION transition to avoid partial state."""
     setup_mock_db_result(mock_db, mock_subscription)
 
     with patch(
@@ -133,7 +121,11 @@ async def test_process_failed_payment_enqueue_failure(mock_db, mock_subscription
             result = await dunning.process_failed_payment(mock_subscription.id)
 
             assert result["status"] == "enqueue_failed"
-            mock_db.commit.assert_awaited()
+            assert result["state_reverted"] is True
+            assert mock_subscription.status == SubscriptionStatus.ACTIVE.value
+            assert mock_subscription.dunning_attempts == 0
+            mock_db.rollback.assert_awaited_once()
+            mock_db.commit.assert_not_awaited()
             mock_email.assert_awaited_once()
 
 
@@ -191,6 +183,27 @@ async def test_retry_payment_failure_continues_dunning(mock_db, mock_subscriptio
 
 
 @pytest.mark.asyncio
+async def test_retry_payment_uses_injected_billing_service_factory(
+    mock_db, mock_subscription
+):
+    setup_mock_db_result(mock_db, mock_subscription)
+    billing_instance = MagicMock()
+    billing_instance.charge_renewal = AsyncMock(return_value=True)
+    factory = MagicMock(return_value=billing_instance)
+
+    dunning = DunningService(mock_db, billing_service_factory=factory)
+    with patch.object(
+        DunningService, "_handle_retry_success", new_callable=AsyncMock
+    ) as mock_success:
+        mock_success.return_value = {"status": "success"}
+        result = await dunning.retry_payment(mock_subscription.id)
+
+    assert result["status"] == "success"
+    factory.assert_called_once_with(mock_db)
+    mock_success.assert_awaited_once_with(mock_subscription)
+
+
+@pytest.mark.asyncio
 async def test_retry_payment_subscription_missing(mock_db):
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
@@ -224,6 +237,15 @@ async def test_retry_payment_exception_path(mock_db, mock_subscription):
             mock_process.assert_awaited_once()
 
 
+def test_build_email_service_uses_injected_factory(mock_db):
+    email_service = object()
+    factory = MagicMock(return_value=email_service)
+    dunning = DunningService(mock_db, email_service_factory=factory)
+
+    assert dunning._build_email_service() is email_service
+    factory.assert_called_once_with()
+
+
 @pytest.mark.asyncio
 async def test_handle_retry_success_clears_state(mock_db, mock_subscription):
     """Test _handle_retry_success resets dunning state."""
@@ -231,25 +253,37 @@ async def test_handle_retry_success_clears_state(mock_db, mock_subscription):
     mock_subscription.status = SubscriptionStatus.ATTENTION.value
 
     dunning = DunningService(mock_db)
-    with patch.object(
-        DunningService, "_send_payment_recovered_email", new_callable=AsyncMock
+    with (
+        patch.object(DunningService, "_send_payment_recovered_email", new_callable=AsyncMock),
+        patch(
+            "app.modules.billing.domain.billing.dunning_service.sync_tenant_plan",
+            new_callable=AsyncMock,
+        ) as mock_sync_tenant_plan,
     ):
         await dunning._handle_retry_success(mock_subscription)
 
         assert mock_subscription.dunning_attempts == 0
         assert mock_subscription.status == SubscriptionStatus.ACTIVE.value
         mock_db.commit.assert_called()
-        
-        # Verify Tenant.plan sync
-        assert any("UPDATE tenant" in str(call.args[0]) and "plan" in str(call.args[0]) for call in mock_db.execute.call_args_list)
+        mock_sync_tenant_plan.assert_awaited_once()
+        assert mock_sync_tenant_plan.await_args is not None
+        assert (
+            mock_sync_tenant_plan.await_args.kwargs["tier"] == mock_subscription.tier
+        )
 
 
 @pytest.mark.asyncio
 async def test_handle_final_failure_downgrades(mock_db, mock_subscription):
     """Test _handle_final_failure downgrades to free."""
     dunning = DunningService(mock_db)
-    with patch.object(
-        DunningService, "_send_account_downgraded_email", new_callable=AsyncMock
+    with (
+        patch.object(
+            DunningService, "_send_account_downgraded_email", new_callable=AsyncMock
+        ),
+        patch(
+            "app.modules.billing.domain.billing.dunning_service.sync_tenant_plan",
+            new_callable=AsyncMock,
+        ) as mock_sync_tenant_plan,
     ):
         await dunning._handle_final_failure(mock_subscription)
 
@@ -257,9 +291,11 @@ async def test_handle_final_failure_downgrades(mock_db, mock_subscription):
         assert mock_subscription.status == SubscriptionStatus.CANCELLED.value
         assert mock_subscription.canceled_at is not None
         mock_db.commit.assert_called()
-
-        # Verify Tenant.plan sync to FREE
-        assert any("UPDATE tenant" in str(call.args[0]) and "plan" in str(call.args[0]) for call in mock_db.execute.call_args_list)
+        mock_sync_tenant_plan.assert_awaited_once()
+        assert mock_sync_tenant_plan.await_args is not None
+        assert (
+            mock_sync_tenant_plan.await_args.kwargs["tier"] == PricingTier.FREE
+        )
 
 
 @pytest.mark.asyncio

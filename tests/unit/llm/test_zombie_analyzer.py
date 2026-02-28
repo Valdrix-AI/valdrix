@@ -105,10 +105,17 @@ async def test_analyze_flow(analyzer, mock_llm):
                         "resources": [],
                     }
 
+                    # Ensure tenant-tier lookup sees a realistic async session/result shape.
+                    mock_db = AsyncMock()
+                    mock_db.info = {}
+                    mock_result = MagicMock()
+                    mock_result.scalar_one_or_none.return_value = None
+                    mock_db.execute = AsyncMock(return_value=mock_result)
+
                     result = await fresh_analyzer.analyze(
                         detection_results={"ec2": [{"id": "i-1"}]},
                         tenant_id=uuid4(),
-                        db=AsyncMock(),
+                        db=mock_db,
                     )
 
                     assert result["summary"] == "Valid summary"

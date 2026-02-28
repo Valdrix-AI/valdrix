@@ -332,13 +332,13 @@ async def test_saas_get_json_dead_fallback_branches_with_patched_range() -> None
     fake_client = _FakeAsyncClient([httpx.ConnectError("c1"), httpx.ConnectError("c2")])
     with (
         patch("app.shared.adapters.saas.httpx.AsyncClient", return_value=fake_client),
-        patch("app.shared.adapters.saas.asyncio.sleep", new=AsyncMock()),
-        patch("app.shared.adapters.saas.range", return_value=[1, 2], create=True),
+        patch("app.shared.adapters.http_retry.asyncio.sleep", new=AsyncMock()),
+        patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):
         with pytest.raises(ExternalAPIError, match="c2"):
             await adapter._get_json("https://example.invalid", headers={})
 
-    with patch("app.shared.adapters.saas.range", return_value=[], create=True):
+    with patch("app.shared.adapters.http_retry.range", return_value=[]):
         with pytest.raises(ExternalAPIError, match="unexpectedly"):
             await adapter._get_json("https://example.invalid", headers={})
 

@@ -14,8 +14,8 @@
 	<header class="space-y-3">
 		<h1 class="text-3xl font-bold text-ink-100">Documentation</h1>
 		<p class="text-ink-300 max-w-3xl">
-			Valdrics combines FinOps, GreenOps, and ActiveOps in one operator workflow. Use these guides
-			to connect cloud accounts, analyze findings, and run safe remediations.
+			Use these guides to set up Valdrics quickly, align teams on spend ownership, and execute
+			reliable cost decisions with confidence.
 		</p>
 	</header>
 
@@ -23,8 +23,8 @@
 		<article class="glass-panel space-y-3">
 			<h2 class="text-xl font-semibold">Quick Start</h2>
 			<p class="text-ink-300">
-				Connect your cloud providers, pick a date range, and start triaging spend, carbon, and
-				zombie signals from the main dashboard.
+				Connect providers, select your operating window, and prioritize the biggest cost and risk
+				signals first.
 			</p>
 			<a href={`${base}/`} class="btn btn-secondary w-fit">Open Dashboard</a>
 		</article>
@@ -32,7 +32,7 @@
 		<article class="glass-panel space-y-3">
 			<h2 class="text-xl font-semibold">API Reference</h2>
 			<p class="text-ink-300">
-				Review endpoint groups, authenticated edge proxy patterns, and common request examples.
+				Review endpoint groups and request examples for product and platform integrations.
 			</p>
 			<a href={`${base}/docs/api`} class="btn btn-secondary w-fit">Open API Docs</a>
 		</article>

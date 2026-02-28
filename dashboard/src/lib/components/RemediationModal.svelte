@@ -281,7 +281,7 @@
 							bind:value={parameters.target_size}
 							onchange={runPreview}
 						/>
-						<p class="text-[10px] text-ink-500">
+						<p class="text-xs text-ink-500">
 							Recommended optimization for {finding.resource_id} ({finding.instance_type ||
 								'current'})
 						</p>
@@ -316,12 +316,12 @@
 								<span class={policyDecisionClass(preview.decision)}>
 									Decision: {preview.decision}
 								</span>
-								<span class="text-[10px] text-ink-500 font-mono">Tier: {preview.tier}</span>
+								<span class="text-xs text-ink-500 font-mono">Tier: {preview.tier}</span>
 							</div>
 							<p class="text-sm text-ink-300 mb-3">{preview.summary}</p>
 
 							{#if preview.rule_hits.length > 0}
-								<div class="bg-black/20 p-2 rounded text-[10px] text-ink-400 space-y-1">
+								<div class="bg-black/20 p-2 rounded text-xs text-ink-400 space-y-1">
 									<p class="font-bold opacity-60">Rule Hits:</p>
 									{#each preview.rule_hits as hit (hit.rule_id)}
 										<div class="flex gap-2">
