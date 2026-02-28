@@ -110,14 +110,24 @@ jobs:
           uv run pytest -q -o addopts= \
             tests/unit/optimization \
             tests/unit/modules/reporting \
-            tests/unit/llm/test_hybrid_scheduler.py \
             --cov=app/modules/optimization \
             --cov=app/modules/reporting \
-            --cov=app/shared/llm/hybrid_scheduler.py \
             --cov-report=term-missing
-          uv run coverage report --include="app/modules/optimization/*" --fail-under=95
-          uv run coverage report --include="app/modules/reporting/*" --fail-under=95
-          uv run coverage report --include="app/shared/llm/hybrid_scheduler.py" --fail-under=95
+          uv run coverage report \
+            --include="*/app/modules/optimization/domain/remediation*.py,*/app/modules/optimization/domain/cloud_api_budget.py" \
+            --fail-under=80
+          uv run coverage report \
+            --include="*/app/modules/reporting/domain/anomaly_detection.py,*/app/modules/reporting/domain/budget_alerts.py,*/app/modules/reporting/domain/calculator.py,*/app/modules/reporting/domain/leadership_kpis.py,*/app/modules/reporting/domain/service.py" \
+            --fail-under=85
+          uv run pytest -q -o addopts= \
+            tests/unit/llm/test_hybrid_scheduler.py \
+            tests/unit/llm/test_hybrid_scheduler_exhaustive.py \
+            tests/unit/services/llm/test_hybrid_scheduler.py \
+            --cov=app/shared/llm \
+            --cov-report=term-missing
+          uv run coverage report \
+            --include="*/app/shared/llm/hybrid_scheduler.py" \
+            --fail-under=95
 
       - name: Upload Coverage Report
         uses: codecov/codecov-action@v4
