@@ -25,6 +25,26 @@ jobs:
   test:
     name: Run Unit Tests
     runs-on: ubuntu-latest
+    env:
+      # Default test-runtime contract (step-level env can override as needed).
+      ENVIRONMENT: "development"
+      TESTING: "true"
+      DEBUG: "false"
+      DB_SSL_MODE: "require"
+      DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+      CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"
+      ENCRYPTION_KEY: "ci-encryption-key-32-chars-min-00000000"
+      KDF_SALT: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+      SUPABASE_JWT_SECRET: "ci-supabase-jwt-secret-32-chars-0000"
+      ENFORCEMENT_EXPORT_SIGNING_SECRET: "ci-enforcement-export-signing-secret-0000"
+      ADMIN_API_KEY: "ci-admin-api-key-32-chars-min-0000000"
+      TRUST_PROXY_HEADERS: "true"
+      TRUSTED_PROXY_HOPS: "1"
+      AWS_ACCESS_KEY_ID: "testing"
+      AWS_SECRET_ACCESS_KEY: "testing"
+      AWS_DEFAULT_REGION: "us-east-1"
+      GROQ_API_KEY: "testing"
+      CODECARBON_LOG_LEVEL: "info"
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
@@ -82,29 +102,10 @@ jobs:
         run: uv run python scripts/check_frontend_hygiene.py
 
       - name: Run Pytest with Coverage
-        env:
-          # Production Readiness: Provide dummy env vars for CI.
-          # We don't need real keys because we use Mocks, but Pydantic
-          # validation happens at import time.
-          AWS_ACCESS_KEY_ID: "testing"
-          AWS_SECRET_ACCESS_KEY: "testing"
-          AWS_DEFAULT_REGION: "us-east-1"
-          GROQ_API_KEY: "testing"
-          DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
-          SUPABASE_JWT_SECRET: "test-jwt-secret-for-ci"
-          CODECARBON_LOG_LEVEL: "info"
         run: |
           uv run pytest -v --cov=app --cov-report=xml --cov-report=term-missing
 
       - name: Run Focused Coverage Gate (Optimization/Reporting/LLM Scheduler)
-        env:
-          AWS_ACCESS_KEY_ID: "testing"
-          AWS_SECRET_ACCESS_KEY: "testing"
-          AWS_DEFAULT_REGION: "us-east-1"
-          GROQ_API_KEY: "testing"
-          DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
-          SUPABASE_JWT_SECRET: "test-jwt-secret-for-ci"
-          CODECARBON_LOG_LEVEL: "info"
         run: |
           uv run pytest -q -o addopts= \
             tests/unit/optimization \
@@ -294,11 +295,8 @@ jobs:
         # B101: Assert used in tests; B104: Bind to all interfaces (Docker)
         run: uv run bandit -r app -ll -ii -s B101,B104
 
-      - name: Run Safety (Dependencies)
-        # PVE-2021-42194 is tied to StringEncryptedType + AesEngine usage patterns.
-        # This repository tracks the finding separately while continuing to block all
-        # other dependency vulnerabilities in CI.
-        run: uv run safety check --ignore 42194
+      - name: Run pip-audit (Dependencies)
+        run: uv run pip-audit
 
       - name: TruffleHog Secret Scan
         uses: trufflesecurity/trufflehog@v3.93.0
@@ -312,7 +310,9 @@ jobs:
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           working_directory: ./terraform
-          soft_fail: true # Set to true initially to prevent breaking CI on legacy debt, can switch to false later
+          soft_fail: false
+          # Enforce hard-fail for critical findings while high/medium backlog is remediated.
+          additional_args: --minimum-severity CRITICAL
 
       - name: Terraform Lint (tflint)
         uses: terraform-linters/setup-tflint@v4

@@ -117,6 +117,7 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
         assert job.error_message is None
 
         # Check Cost Records
+        await set_session_tenant_id(db, tenant.id)
         result = await db.execute(
             select(CostRecordModel).where(CostRecordModel.account_id == connection.id)
         )
@@ -137,6 +138,7 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
         results = await processor.process_pending_jobs(limit=1)
         assert results["processed"] == 1
 
+        await set_session_tenant_id(db, tenant.id)
         result = await db.execute(
             select(CostRecordModel).where(CostRecordModel.account_id == connection.id)
         )

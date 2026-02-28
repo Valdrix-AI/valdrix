@@ -453,6 +453,8 @@ async def test_handle_webhook_unauthorized_ip_staging():
 async def test_handle_webhook_rightmost_forwarded_ip_is_used():
     with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
         mock_settings.ENVIRONMENT = "production"
+        mock_settings.TRUST_PROXY_HEADERS = True
+        mock_settings.TRUSTED_PROXY_HOPS = 1
         async with AsyncClient(transport=transport, base_url="https://test") as ac:
             response = await ac.post(
                 "/api/v1/billing/webhook",
