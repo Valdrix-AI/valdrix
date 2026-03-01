@@ -15,6 +15,12 @@ vi.mock('$env/static/public', () => ({
 	PUBLIC_API_URL: 'https://api.test/api/v1'
 }));
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {
+		PUBLIC_API_URL: 'https://api.test/api/v1'
+	}
+}));
+
 vi.mock('$lib/api', () => ({
 	api: {
 		get: (...args: unknown[]) => getMock(...args),

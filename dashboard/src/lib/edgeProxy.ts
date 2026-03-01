@@ -1,6 +1,7 @@
-import { PUBLIC_API_URL } from '$env/static/public';
+import { env as publicEnv } from '$env/dynamic/public';
 
 const EDGE_PROXY_PREFIX = '/api/edge';
+const DEFAULT_PUBLIC_API_BASE = '/api/v1';
 
 function resolveApiPathPrefix(apiBaseUrl: string): string {
 	try {
@@ -30,5 +31,6 @@ export function buildEdgeApiPath(apiBaseUrl: string, pathAndQuery: string): stri
  * - edgeApiPath('/costs?start=...') => /api/edge/api/v1/costs?start=...
  */
 export function edgeApiPath(pathAndQuery: string): string {
-	return buildEdgeApiPath(PUBLIC_API_URL, pathAndQuery);
+	const publicApiUrl = String(publicEnv.PUBLIC_API_URL || '').trim() || DEFAULT_PUBLIC_API_BASE;
+	return buildEdgeApiPath(publicApiUrl, pathAndQuery);
 }

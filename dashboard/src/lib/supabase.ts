@@ -6,14 +6,28 @@
  */
 
 import { createBrowserClient, createServerClient } from '@supabase/ssr';
-import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+import { env as publicEnv } from '$env/dynamic/public';
+
+function readSupabasePublicConfig(): { url: string; anonKey: string } {
+	const url = String(publicEnv.PUBLIC_SUPABASE_URL || '').trim();
+	const anonKey = String(publicEnv.PUBLIC_SUPABASE_ANON_KEY || '').trim();
+
+	if (!url || !anonKey) {
+		throw new Error(
+			'Supabase public environment is not configured. Set PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY.'
+		);
+	}
+
+	return { url, anonKey };
+}
 
 /**
  * Creates a Supabase client for browser-side usage.
  * Sessions are stored in cookies for SSR compatibility.
  */
 export function createSupabaseBrowserClient() {
-	return createBrowserClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY);
+	const { url, anonKey } = readSupabasePublicConfig();
+	return createBrowserClient(url, anonKey);
 }
 
 /**
@@ -25,7 +39,8 @@ export function createSupabaseServerClient(cookies: {
 	set: (key: string, value: string, options: object) => void;
 	remove: (key: string, options: object) => void;
 }) {
-	return createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
+	const { url, anonKey } = readSupabasePublicConfig();
+	return createServerClient(url, anonKey, {
 		cookies: {
 			get: (key) => cookies.get(key),
 			set: (key, value, options) => {

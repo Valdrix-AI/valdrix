@@ -1,7 +1,7 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { onMount } from 'svelte';
-	import { PUBLIC_API_URL } from '$env/static/public';
+	import { env as publicEnv } from '$env/dynamic/public';
 	import { base } from '$app/paths';
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
@@ -194,7 +194,8 @@
 	}
 
 	function scimBaseUrl(): string {
-		return `${apiRootFromPublicApiUrl(PUBLIC_API_URL)}/scim/v2`;
+		const publicApiUrl = String(publicEnv.PUBLIC_API_URL || '').trim();
+		return `${apiRootFromPublicApiUrl(publicApiUrl)}/scim/v2`;
 	}
 
 	async function getHeaders() {
