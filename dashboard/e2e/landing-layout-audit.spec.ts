@@ -1,6 +1,39 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Landing layout audit regressions', () => {
+	test('does not trigger unresolved Supabase host errors on anonymous landing loads', async ({
+		page
+	}) => {
+		const failedRequests: { url: string; reason: string }[] = [];
+		const consoleErrors: string[] = [];
+
+		page.on('requestfailed', (request) => {
+			const failure = request.failure();
+			failedRequests.push({
+				url: request.url(),
+				reason: failure?.errorText ?? 'unknown'
+			});
+		});
+
+		page.on('console', (message) => {
+			if (message.type() !== 'error') return;
+			consoleErrors.push(message.text());
+		});
+
+		await page.goto('/');
+		await page.waitForLoadState('networkidle');
+
+		const supabaseDnsFailures = failedRequests.filter((entry) =>
+			entry.url.includes('.supabase.co')
+		);
+		const unresolvedErrors = consoleErrors.filter((entry) =>
+			/ERR_NAME_NOT_RESOLVED|dns/i.test(entry)
+		);
+
+		expect(supabaseDnsFailures).toEqual([]);
+		expect(unresolvedErrors).toEqual([]);
+	});
+
 	test.describe('mobile viewport 390', () => {
 		test.use({ viewport: { width: 390, height: 844 } });
 

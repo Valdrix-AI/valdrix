@@ -1923,50 +1923,64 @@ class EnforcementService:
         entitlement_result: EntitlementWaterfallResult | None = None
 
         decision = EnforcementDecisionType.ALLOW
-        hard_deny_threshold = _to_decimal(policy.hard_deny_above_monthly_usd)
-        if monthly_delta > hard_deny_threshold:
-            reasons.append("hard_deny_threshold_exceeded")
-            decision = self._mode_violation_decision(mode)
-            if mode == EnforcementMode.SOFT:
-                reasons.append("soft_mode_escalation")
-            if mode == EnforcementMode.SHADOW:
-                reasons.append("shadow_mode_override")
-        else:
-            entitlement_result = self._evaluate_entitlement_waterfall(
-                mode=mode,
-                monthly_delta=monthly_delta,
-                plan_headroom=plan_headroom,
-                allocation_headroom=allocation_headroom,
-                reserved_credit_headroom=reserved_credit_headroom,
-                emergency_credit_headroom=emergency_credit_headroom,
-                enterprise_headroom=enterprise_headroom,
+        computed_context_unavailable = (
+            computed_context.data_source_mode == "unavailable"
+            and monthly_delta > Decimal("0.0000")
+        )
+        if computed_context_unavailable:
+            reasons.append("computed_context_unavailable")
+            reasons.append(
+                self._mode_violation_reason_suffix(mode, subject="cost_context")
             )
-            decision = entitlement_result.decision
-            reserve_allocation = entitlement_result.reserve_allocation_usd
-            reserve_reserved_credit = entitlement_result.reserve_reserved_credit_usd
-            reserve_emergency_credit = entitlement_result.reserve_emergency_credit_usd
-            reserve_credit = entitlement_result.reserve_credit_usd
+            decision = self._mode_violation_decision(mode)
+        else:
+            hard_deny_threshold = _to_decimal(policy.hard_deny_above_monthly_usd)
+            if monthly_delta > hard_deny_threshold:
+                reasons.append("hard_deny_threshold_exceeded")
+                decision = self._mode_violation_decision(mode)
+                if mode == EnforcementMode.SOFT:
+                    reasons.append("soft_mode_escalation")
+                if mode == EnforcementMode.SHADOW:
+                    reasons.append("shadow_mode_override")
+            else:
+                entitlement_result = self._evaluate_entitlement_waterfall(
+                    mode=mode,
+                    monthly_delta=monthly_delta,
+                    plan_headroom=plan_headroom,
+                    allocation_headroom=allocation_headroom,
+                    reserved_credit_headroom=reserved_credit_headroom,
+                    emergency_credit_headroom=emergency_credit_headroom,
+                    enterprise_headroom=enterprise_headroom,
+                )
+                decision = entitlement_result.decision
+                reserve_allocation = entitlement_result.reserve_allocation_usd
+                reserve_reserved_credit = entitlement_result.reserve_reserved_credit_usd
+                reserve_emergency_credit = entitlement_result.reserve_emergency_credit_usd
+                reserve_credit = entitlement_result.reserve_credit_usd
 
-            if entitlement_result.reason_code is not None:
-                reasons.append(entitlement_result.reason_code)
-                reason_subject = {
-                    "budget_exceeded": "budget",
-                    "plan_limit_exceeded": "plan_limit",
-                    "enterprise_ceiling_exceeded": "enterprise_ceiling",
-                }.get(entitlement_result.reason_code)
-                if reason_subject and mode in {EnforcementMode.SHADOW, EnforcementMode.SOFT}:
-                    reasons.append(
-                        self._mode_violation_reason_suffix(
-                            mode,
-                            subject=reason_subject,
+                if entitlement_result.reason_code is not None:
+                    reasons.append(entitlement_result.reason_code)
+                    reason_subject = {
+                        "budget_exceeded": "budget",
+                        "plan_limit_exceeded": "plan_limit",
+                        "enterprise_ceiling_exceeded": "enterprise_ceiling",
+                    }.get(entitlement_result.reason_code)
+                    if reason_subject and mode in {
+                        EnforcementMode.SHADOW,
+                        EnforcementMode.SOFT,
+                    }:
+                        reasons.append(
+                            self._mode_violation_reason_suffix(
+                                mode,
+                                subject=reason_subject,
+                            )
                         )
-                    )
-            if reserve_credit > Decimal("0.0000"):
-                reasons.append("credit_waterfall_used")
-                if reserve_reserved_credit > Decimal("0.0000"):
-                    reasons.append("reserved_credit_waterfall_used")
-                if reserve_emergency_credit > Decimal("0.0000"):
-                    reasons.append("emergency_credit_waterfall_used")
+                if reserve_credit > Decimal("0.0000"):
+                    reasons.append("credit_waterfall_used")
+                    if reserve_reserved_credit > Decimal("0.0000"):
+                        reasons.append("reserved_credit_waterfall_used")
+                    if reserve_emergency_credit > Decimal("0.0000"):
+                        reasons.append("emergency_credit_waterfall_used")
 
         if decision in {
             EnforcementDecisionType.ALLOW,

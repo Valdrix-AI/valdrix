@@ -1,0 +1,50 @@
+{
+  "artifacts": {
+    "finance_guardrails_path": "docs/ops/evidence/finance_guardrails_2026-02-27.json",
+    "policy_decisions_path": "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json",
+    "telemetry_snapshot_path": "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json"
+  },
+  "derived": {
+    "approval_governance_mode": "founder_acting_roles_prelaunch",
+    "finance_all_gates_pass": true,
+    "months_observed": 2,
+    "policy_all_gates_pass": true,
+    "postlaunch_pricing_motion_ready": false,
+    "prelaunch_operational_ready": true,
+    "production_observed_telemetry_ready": false,
+    "segregated_approval_governance_ready": false,
+    "telemetry_all_gates_pass": true,
+    "telemetry_source_type": "synthetic_prelaunch"
+  },
+  "gates": {
+    "finance": {
+      "fin_gate_1_gross_margin_floor": true,
+      "fin_gate_2_llm_cogs_containment": true,
+      "fin_gate_3_annual_discount_impact": true,
+      "fin_gate_4_expansion_signal": true,
+      "fin_gate_5_stress_resilience": true
+    },
+    "policy": {
+      "pkg_fin_gate_approvals_complete": true,
+      "pkg_fin_gate_backlog_coverage_complete": true,
+      "pkg_fin_gate_launch_blockers_resolved": true,
+      "pkg_fin_gate_policy_decisions_complete": true,
+      "pkg_fin_gate_postlaunch_commitments_scheduled": true,
+      "pkg_fin_gate_pricing_motion_guarded": true,
+      "pkg_fin_gate_telemetry_window_sufficient": true
+    },
+    "telemetry": {
+      "telemetry_gate_artifact_fresh": true,
+      "telemetry_gate_free_tier_guardrails_bounded": true,
+      "telemetry_gate_free_tier_margin_guarded": true,
+      "telemetry_gate_percentiles_valid": true,
+      "telemetry_gate_required_tiers_present": true,
+      "telemetry_gate_window_valid": true
+    }
+  },
+  "generated_at": "2026-03-01T16:11:26+00:00",
+  "remaining_work_items": [
+    "Collect >=2 months production_observed telemetry and refresh PKG/FIN policy evidence.",
+    "Move approvals.governance_mode to segregated_owners with distinct finance/product/go-to-market owners."
+  ]
+}

@@ -20,14 +20,27 @@ def clear_settings_cache():
 
 def test_settings_defaults():
     settings = Settings(
+        APP_NAME="Valdrics",
         SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
         DATABASE_URL="postgresql://user:pass@host/db",
         CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
         ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
         KDF_SALT=FAKE_KDF_SALT,
     )
-    assert settings.APP_NAME == "Valdrix"
+    assert settings.APP_NAME == "Valdrics"
     assert settings.RATELIMIT_ENABLED is True
+
+
+def test_settings_normalizes_legacy_brand_name() -> None:
+    settings = Settings(
+        APP_NAME="Valdrix",
+        SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+        DATABASE_URL="postgresql://user:pass@host/db",
+        CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+        ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+        KDF_SALT=FAKE_KDF_SALT,
+    )
+    assert settings.APP_NAME == "Valdrics"
 
 
 def test_settings_production_validation():

@@ -21,6 +21,10 @@ vi.mock('$lib/api', () => ({
 	}
 }));
 
+vi.mock('$lib/security/turnstile', () => ({
+	getTurnstileToken: vi.fn().mockResolvedValue(null)
+}));
+
 function jsonResponse(payload: unknown, status = 200): Response {
 	return new Response(JSON.stringify(payload), {
 		status,

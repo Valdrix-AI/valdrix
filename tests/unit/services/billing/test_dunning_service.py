@@ -2,7 +2,7 @@
 Tests for DunningService - Payment Retry Workflow
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -127,6 +127,61 @@ async def test_process_failed_payment_enqueue_failure(mock_db, mock_subscription
             mock_db.rollback.assert_awaited_once()
             mock_db.commit.assert_not_awaited()
             mock_email.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_failed_payment_webhook_debounce_ignores_duplicates(
+    mock_db, mock_subscription
+):
+    setup_mock_db_result(mock_db, mock_subscription)
+    mock_subscription.dunning_attempts = 1
+    mock_subscription.last_dunning_at = datetime.now(timezone.utc) - timedelta(
+        seconds=120
+    )
+
+    with patch(
+        "app.modules.billing.domain.billing.dunning_service.enqueue_job",
+        new_callable=AsyncMock,
+    ) as mock_enqueue:
+        dunning = DunningService(mock_db)
+        result = await dunning.process_failed_payment(
+            mock_subscription.id, is_webhook=True
+        )
+
+    assert result["status"] == "duplicate_ignored"
+    assert result["attempt"] == 1
+    assert mock_subscription.dunning_attempts == 1
+    mock_enqueue.assert_not_awaited()
+    mock_db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_failed_payment_non_webhook_bypasses_debounce(
+    mock_db, mock_subscription
+):
+    setup_mock_db_result(mock_db, mock_subscription)
+    mock_subscription.dunning_attempts = 1
+    mock_subscription.last_dunning_at = datetime.now(timezone.utc) - timedelta(
+        seconds=120
+    )
+
+    with patch(
+        "app.modules.billing.domain.billing.dunning_service.enqueue_job",
+        new_callable=AsyncMock,
+    ) as mock_enqueue:
+        mock_enqueue.return_value = MagicMock()
+        with patch.object(
+            DunningService, "_send_payment_failed_email", new_callable=AsyncMock
+        ):
+            dunning = DunningService(mock_db)
+            result = await dunning.process_failed_payment(
+                mock_subscription.id, is_webhook=False
+            )
+
+    assert result["status"] == "scheduled_retry"
+    assert result["attempt"] == 2
+    assert mock_subscription.dunning_attempts == 2
+    mock_enqueue.assert_awaited_once()
 
 
 @pytest.mark.asyncio

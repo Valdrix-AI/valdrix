@@ -517,7 +517,14 @@ async def test_list_github_activity_handles_non_list_payload_shapes() -> None:
     with patch.object(
         adapter,
         "_get_json",
-        new=AsyncMock(side_effect=[{"members": {"bad": True}}, {"events": {"bad": True}}]),
+        new=AsyncMock(
+            side_effect=[
+                {"members": {"bad": True}},
+                {"events": {"bad": True}},
+                {"members": []},
+                {"members": []},
+            ]
+        ),
     ):
         rows = await vendor_github.list_github_activity(
             adapter,
@@ -556,6 +563,9 @@ async def test_list_github_activity_ignores_malformed_events_and_members() -> No
                             {"actor": {"login": "alice"}, "created_at": "2026-01-02T00:00:00Z"},
                         ]
                     },
+                    {"members": []},
+                    {"members": [{"login": "alice"}]},
+                    {"role": "member", "state": "active"},
                 ]
             ),
         ),
@@ -567,6 +577,9 @@ async def test_list_github_activity_ignores_malformed_events_and_members() -> No
 
     assert len(rows) == 1
     assert rows[0]["user_id"] == "alice"
+    assert rows[0]["org_role"] == "member"
+    assert rows[0]["membership_state"] == "active"
+    assert rows[0]["mfa_enabled"] is False
     assert rows[0]["last_active_at"] == datetime(2026, 1, 2, tzinfo=timezone.utc)
 
 

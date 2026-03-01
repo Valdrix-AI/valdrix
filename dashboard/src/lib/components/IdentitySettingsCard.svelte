@@ -768,7 +768,7 @@
 								<div>
 									<p class="text-sm font-medium">SCIM group mappings</p>
 									<p class="text-xs text-ink-500 mt-1">
-										Optional. Map IdP groups to Valdrix role/persona at provisioning time.
+										Optional. Map IdP groups to Valdrics role/persona at provisioning time.
 									</p>
 								</div>
 								<button type="button" class="btn btn-secondary" onclick={addGroupMapping}>

@@ -56,7 +56,6 @@
 		return () => window.removeEventListener('keydown', handleKeydown);
 	});
 
-	const supabase = createSupabaseBrowserClient();
 	const currentYear = new Date().getFullYear();
 
 	type NavItem = { href: string; label: string; icon: string };
@@ -66,6 +65,7 @@
 		{ href: '/', label: 'Dashboard', icon: '📊' },
 		{ href: '/ops', label: 'Ops Center', icon: '🛠️' },
 		{ href: '/onboarding', label: 'Onboarding', icon: '🧭' },
+		{ href: '/roi-planner', label: 'ROI Planner', icon: '📈' },
 		{ href: '/audit', label: 'Audit Logs', icon: '🧾' },
 		{ href: '/connections', label: 'Connections', icon: '☁️' },
 		{ href: '/greenops', label: 'GreenOps', icon: '🌱' },
@@ -161,6 +161,8 @@
 	}
 
 	$effect(() => {
+		if (!browser || !data.user) return;
+		const supabase = createSupabaseBrowserClient();
 		const {
 			data: { subscription }
 		} = supabase.auth.onAuthStateChange((event) => {

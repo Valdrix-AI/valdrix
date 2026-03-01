@@ -149,7 +149,8 @@ export function buildPostAuthRedirectPath(context: PublicAuthContext): string {
 	if (context.utm.content) {
 		params.set('utm_content', context.utm.content);
 	}
-	return `/onboarding?${params.toString()}`;
+	const targetPath = context.intent === 'roi_assessment' ? '/roi-planner' : '/onboarding';
+	return `${targetPath}?${params.toString()}`;
 }
 
 export function buildAuthCallbackPath(context: PublicAuthContext): string {

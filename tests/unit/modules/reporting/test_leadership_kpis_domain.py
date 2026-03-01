@@ -65,6 +65,7 @@ async def test_compute_handles_no_carbon_and_savings_feature_disabled() -> None:
             _Result(first_value=(Decimal("120.50"), 3, 0, None)),
             _Result(all_values=[("aws", Decimal("120.50"))]),
             _Result(all_values=[("AmazonEC2", Decimal("120.50"))]),
+            _Result(first_value=(2, 1, 0)),
         ]
     )
 
@@ -88,6 +89,9 @@ async def test_compute_handles_no_carbon_and_savings_feature_disabled() -> None:
     assert payload.carbon_coverage_percent == 0.0
     assert payload.cost_by_provider == {"aws": 120.5}
     assert payload.top_services[0].service == "AmazonEC2"
+    assert payload.security_high_risk_decisions == 2
+    assert payload.security_approval_required_decisions == 1
+    assert payload.security_anomaly_signal_decisions == 0
     assert any("Carbon coverage is 0%" in note for note in payload.notes)
     assert any("Savings proof is not enabled" in note for note in payload.notes)
 
@@ -101,6 +105,7 @@ async def test_compute_includes_savings_when_feature_enabled() -> None:
             _Result(first_value=(Decimal("200.00"), 2, 2, Decimal("12.34"))),
             _Result(all_values=[("aws", Decimal("150.00")), ("gcp", Decimal("50.00"))]),
             _Result(all_values=[("AmazonEC2", Decimal("120.00")), ("AmazonS3", Decimal("30.00"))]),
+            _Result(first_value=(1, 2, 1)),
         ]
     )
 
@@ -142,6 +147,9 @@ async def test_compute_includes_savings_when_feature_enabled() -> None:
     assert payload.applied_recommendations == 5
     assert payload.pending_remediations == 3
     assert payload.completed_remediations == 7
+    assert payload.security_high_risk_decisions == 1
+    assert payload.security_approval_required_decisions == 2
+    assert payload.security_anomaly_signal_decisions == 1
     assert payload.notes == []
 
 
@@ -154,6 +162,7 @@ async def test_compute_adds_note_when_savings_service_raises() -> None:
             _Result(first_value=(Decimal("10.0"), 1, 1, Decimal("1.2"))),
             _Result(all_values=[("aws", Decimal("10.0"))]),
             _Result(all_values=[("AmazonS3", Decimal("10.0"))]),
+            _Result(first_value=(0, 0, 0)),
         ]
     )
 
@@ -179,6 +188,9 @@ async def test_compute_adds_note_when_savings_service_raises() -> None:
     assert any("Savings proof unavailable: proof unavailable" in note for note in payload.notes)
     assert payload.savings_opportunity_monthly_usd == 0.0
     assert payload.savings_realized_monthly_usd == 0.0
+    assert payload.security_high_risk_decisions == 0
+    assert payload.security_approval_required_decisions == 0
+    assert payload.security_anomaly_signal_decisions == 0
 
 
 def test_render_csv_sorts_provider_rows_by_cost_descending() -> None:
@@ -200,6 +212,9 @@ def test_render_csv_sorts_provider_rows_by_cost_descending() -> None:
         applied_recommendations=2,
         pending_remediations=1,
         completed_remediations=1,
+        security_high_risk_decisions=2,
+        security_approval_required_decisions=3,
+        security_anomaly_signal_decisions=1,
         notes=[],
     )
 

@@ -95,6 +95,7 @@ class AuditEventType(str, Enum):
     SCIM_GROUP_CREATED = "scim.group_created"
     SCIM_GROUP_UPDATED = "scim.group_updated"
     SCIM_GROUP_DELETED = "scim.group_deleted"
+    SECURITY_EMERGENCY_TOKEN_ISSUED = "security.emergency_token_issued"
 
     # Identity (tenant-scoped enforcement primitives)
     IDENTITY_SETTINGS_UPDATED = "identity.settings_updated"
@@ -119,6 +120,7 @@ class AuditEventType(str, Enum):
     INTEGRATION_TEST_JIRA = "integration_test.jira"
     INTEGRATION_TEST_TEAMS = "integration_test.teams"
     INTEGRATION_TEST_WORKFLOW = "integration_test.workflow"
+    INTEGRATION_TEST_TENANCY = "integration_test.tenancy"
     INTEGRATION_TEST_SUITE = "integration_test.suite"
 
     # Acceptance evidence snapshots

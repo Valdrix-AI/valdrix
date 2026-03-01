@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Valdrix-AI/valdrix/actions/workflows/ci.yml"><img src="https://github.com/Valdrix-AI/valdrix/actions/workflows/ci.yml/badge.svg" alt="CI/CD Status" /></a>
+  <a href="https://github.com/Valdrics/valdrics/actions/workflows/ci.yml"><img src="https://github.com/Valdrics/valdrics/actions/workflows/ci.yml/badge.svg" alt="CI/CD Status" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-BSL%201.1-blue.svg" alt="License: BSL 1.1" /></a>
   <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.12-3776AB.svg?logo=python&logoColor=white" alt="Python 3.12" /></a>
   <a href="https://svelte.dev"><img src="https://img.shields.io/badge/Svelte-5-FF3E00.svg?logo=svelte&logoColor=white" alt="Svelte 5" /></a>
@@ -207,7 +207,7 @@ We're paranoid, so you don't have to be:
 ### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/Valdrix-AI/valdrix.git
+git clone https://github.com/Valdrics/valdrics.git
 cd valdrix
 cp .env.example .env
 ```

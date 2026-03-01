@@ -15,6 +15,7 @@ describe('persona helpers', () => {
 		expect(hrefs.has('/llm')).toBe(false);
 		expect(hrefs.has('/settings')).toBe(true);
 		expect(hrefs.has('/onboarding')).toBe(true);
+		expect(hrefs.has('/roi-planner')).toBe(true);
 	});
 
 	it('removes admin-only routes for non-admin roles', () => {

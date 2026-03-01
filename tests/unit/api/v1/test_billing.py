@@ -152,6 +152,7 @@ async def test_handle_webhook_success(
 
     mock_retry = mock_retry_class.return_value
     mock_retry.store_webhook = AsyncMock(return_value=MagicMock())
+    mock_retry.mark_inline_processed = AsyncMock()
 
     try:
         response = await handle_webhook(request, mock_db)
@@ -161,6 +162,7 @@ async def test_handle_webhook_success(
         traceback.print_exc()
         raise
     assert response == {"status": "success"}
+    mock_retry.mark_inline_processed.assert_awaited_once()
 
 
 @pytest.mark.asyncio
