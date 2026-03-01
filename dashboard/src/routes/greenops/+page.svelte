@@ -628,6 +628,7 @@
 							</div>
 
 							<button
+								type="button"
 								onclick={getOptimalSchedule}
 								class="w-full py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg text-sm font-semibold transition-colors shadow-lg shadow-accent-600/20"
 							>
@@ -638,9 +639,7 @@
 								<div
 									class="mt-4 p-4 bg-accent-950/30 border border-accent-500/20 rounded-lg animate-in fade-in slide-in-from-bottom-2"
 								>
-									<div class="text-xs uppercase font-bold text-accent-400 mb-1">
-										Recommendation
-									</div>
+									<div class="text-xs uppercase font-bold text-accent-400 mb-1">Recommendation</div>
 									<div class="text-sm text-white font-medium">{scheduleResult.recommendation}</div>
 								</div>
 							{/if}

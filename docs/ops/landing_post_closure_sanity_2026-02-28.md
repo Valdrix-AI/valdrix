@@ -46,6 +46,7 @@ Scope: public landing + auth conversion hardening release covering messaging cla
 
 7. Operational Misconfiguration Risk
 - Added dedicated public accessibility gate to avoid coupling landing checks with authenticated app routes.
+- Added public-safe technical validation route (`/docs/technical-validation`) to separate buyer diligence from internal evidence artifacts.
 - Public-only Playwright mode remains enforced for perf/visual/a11y gates.
 - Validation:
   - `pnpm --dir dashboard run test:a11y:public`
@@ -57,6 +58,6 @@ Scope: public landing + auth conversion hardening release covering messaging cla
 - Frontend landing/auth targeted unit suites: passing (`30 passed`).
 - Backend public API suite for landing ingest + discovery paths: passing (`18 passed`).
 - Svelte type/accessibility check: passing (`0 errors, 0 warnings`).
-- Public accessibility Playwright gate: passing (`6 passed`).
+- Public accessibility Playwright gate: passing (`7 passed`, including `/docs/technical-validation` route).
 - Public performance budgets: passing (`2 passed`).
 - Public visual regression gate: passing after intentional trust-section baseline refresh (`2 passed`).

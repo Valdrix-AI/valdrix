@@ -1652,6 +1652,7 @@
 							Alert on anomaly
 						</label>
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={refreshingUnitEconomics}
 							onclick={refreshUnitEconomics}
@@ -1810,6 +1811,7 @@
 							</select>
 						</label>
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={refreshingIngestionSla}
 							onclick={refreshIngestionSla}
@@ -1889,6 +1891,7 @@
 							</select>
 						</label>
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={refreshingJobSlo}
 							onclick={refreshJobSlo}
@@ -1969,6 +1972,7 @@
 					</div>
 					<div class="flex items-center gap-2">
 						<button
+							type="button"
 							class="btn btn-primary text-xs"
 							disabled={capturingAcceptanceKpis}
 							onclick={captureAcceptanceKpis}
@@ -1976,6 +1980,7 @@
 							{capturingAcceptanceKpis ? 'Capturing...' : 'Capture KPI Evidence'}
 						</button>
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={downloadingAcceptanceJson}
 							onclick={downloadAcceptanceKpiJson}
@@ -1983,6 +1988,7 @@
 							{downloadingAcceptanceJson ? 'Exporting...' : 'Download JSON'}
 						</button>
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={downloadingAcceptanceCsv}
 							onclick={downloadAcceptanceKpiCsv}
@@ -1990,6 +1996,7 @@
 							{downloadingAcceptanceCsv ? 'Exporting...' : 'Download CSV'}
 						</button>
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={refreshingAcceptanceKpis}
 							onclick={refreshAcceptanceKpis}
@@ -1997,6 +2004,7 @@
 							{refreshingAcceptanceKpis ? 'Refreshing...' : 'Refresh KPI Evidence'}
 						</button>
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={refreshingAcceptanceKpiHistory}
 							onclick={refreshAcceptanceKpiHistory}
@@ -2100,6 +2108,7 @@
 					</div>
 					<div class="flex items-center gap-2">
 						<button
+							type="button"
 							class="btn btn-primary text-xs"
 							disabled={runningAcceptanceSuite ||
 								capturingAcceptanceRuns ||
@@ -2112,6 +2121,7 @@
 							{runningAcceptanceSuite ? 'Running...' : 'Run Full Suite'}
 						</button>
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={capturingAcceptanceRuns ||
 								refreshingAcceptanceRuns ||
@@ -2121,6 +2131,7 @@
 							{capturingAcceptanceRuns ? 'Running...' : 'Run Checks'}
 						</button>
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={refreshingAcceptanceRuns || capturingAcceptanceRuns}
 							onclick={refreshAcceptanceRuns}
@@ -2278,6 +2289,7 @@
 
 				<div class="flex flex-wrap gap-2">
 					<button
+						type="button"
 						class="btn btn-secondary text-xs"
 						disabled={refreshingClosePackage}
 						onclick={() => previewClosePackage()}
@@ -2285,6 +2297,7 @@
 						{refreshingClosePackage ? 'Refreshing...' : 'Preview Close Status'}
 					</button>
 					<button
+						type="button"
 						class="btn btn-secondary text-xs"
 						disabled={downloadingCloseJson}
 						onclick={downloadClosePackageJson}
@@ -2292,6 +2305,7 @@
 						{downloadingCloseJson ? 'Exporting...' : 'Download Close JSON'}
 					</button>
 					<button
+						type="button"
 						class="btn btn-secondary text-xs"
 						disabled={downloadingCloseCsv}
 						onclick={downloadClosePackageCsv}
@@ -2299,6 +2313,7 @@
 						{downloadingCloseCsv ? 'Exporting...' : 'Download Close CSV'}
 					</button>
 					<button
+						type="button"
 						class="btn btn-secondary text-xs"
 						disabled={downloadingRestatementCsv}
 						onclick={downloadRestatementCsv}
@@ -2515,6 +2530,7 @@
 										<td class="text-xs text-ink-500">{formatDate(req.created_at)}</td>
 										<td class="flex gap-2">
 											<button
+												type="button"
 												class="btn btn-primary text-xs"
 												disabled={actingId === req.id}
 												onclick={() => openRemediationModal(req)}
@@ -2535,6 +2551,7 @@
 					<h2 class="text-lg font-semibold">Background Jobs</h2>
 					<div class="flex gap-2">
 						<button
+							type="button"
 							class="btn btn-secondary text-xs"
 							disabled={processingJobs}
 							onclick={loadOpsData}
@@ -2542,6 +2559,7 @@
 							Refresh
 						</button>
 						<button
+							type="button"
 							class="btn btn-primary text-xs"
 							disabled={processingJobs}
 							onclick={processPendingJobs}
@@ -2586,8 +2604,11 @@
 				<div class="flex items-center justify-between mb-4">
 					<h2 class="text-lg font-semibold">RI/SP Strategy Recommendations</h2>
 					<div class="flex gap-2">
-						<button class="btn btn-secondary text-xs" onclick={loadOpsData}>Refresh</button>
+						<button type="button" class="btn btn-secondary text-xs" onclick={loadOpsData}
+							>Refresh</button
+						>
 						<button
+							type="button"
 							class="btn btn-primary text-xs"
 							disabled={refreshingStrategies}
 							onclick={refreshRecommendations}
@@ -2629,6 +2650,7 @@
 										<td>{rec.roi_percentage.toFixed(1)}%</td>
 										<td>
 											<button
+												type="button"
 												class="btn btn-secondary text-xs"
 												disabled={actingId === rec.id}
 												onclick={() => applyRecommendation(rec.id)}
@@ -2666,7 +2688,9 @@
 					<h3 class="text-lg font-semibold">Remediation Request Review</h3>
 					<p class="text-xs text-ink-400 mt-1 font-mono">{selectedRequest.id}</p>
 				</div>
-				<button class="btn btn-secondary text-xs" onclick={closeRemediationModal}>Close</button>
+				<button type="button" class="btn btn-secondary text-xs" onclick={closeRemediationModal}
+					>Close</button
+				>
 			</div>
 
 			<div class="space-y-3 text-sm">
@@ -2761,6 +2785,7 @@
 					</label>
 				{/if}
 				<button
+					type="button"
 					class="btn btn-secondary text-xs"
 					onclick={previewSelectedPolicy}
 					disabled={policyPreviewLoading || remediationSubmitting}
@@ -2768,6 +2793,7 @@
 					{policyPreviewLoading ? 'Refreshing...' : 'Re-run Preview'}
 				</button>
 				<button
+					type="button"
 					class="btn btn-secondary text-xs"
 					onclick={approveSelectedRequest}
 					disabled={remediationSubmitting ||
@@ -2779,6 +2805,7 @@
 					{remediationSubmitting && actingId === selectedRequest.id ? 'Approving...' : 'Approve'}
 				</button>
 				<button
+					type="button"
 					class="btn btn-primary text-xs"
 					onclick={executeSelectedRequest}
 					disabled={remediationSubmitting ||

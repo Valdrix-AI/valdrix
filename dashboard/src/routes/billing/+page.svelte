@@ -235,6 +235,7 @@
 						class="flex items-center gap-3 bg-surface-200/50 p-1 rounded-full border border-surface-300 w-fit"
 					>
 						<button
+							type="button"
 							class="px-4 py-1.5 rounded-full text-xs font-medium transition-all {billingCycle ===
 							'monthly'
 								? 'bg-accent-500 text-white shadow-sm'
@@ -244,6 +245,7 @@
 							Monthly
 						</button>
 						<button
+							type="button"
 							class="px-4 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-2 {billingCycle ===
 							'annual'
 								? 'bg-accent-500 text-white shadow-sm'
@@ -305,11 +307,12 @@
 
 							<!-- Action Button -->
 							{#if tierIsCurrent(plan.id)}
-								<button class="btn btn-secondary w-full cursor-default" disabled>
+								<button type="button" class="btn btn-secondary w-full cursor-default" disabled>
 									Current Plan
 								</button>
 							{:else}
 								<button
+									type="button"
 									class="btn {plan.popular ? 'btn-primary' : 'btn-secondary'} w-full"
 									onclick={() => upgrade(plan.id)}
 									disabled={!!upgrading}

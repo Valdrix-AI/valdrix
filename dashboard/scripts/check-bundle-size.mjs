@@ -2,7 +2,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const projectRoot = process.cwd();
-const immutableDir = path.join(projectRoot, 'build', 'client', '_app', 'immutable');
+const IMMUTABLE_DIR_CANDIDATES = [
+	path.join(projectRoot, 'build', 'client', '_app', 'immutable'),
+	path.join(projectRoot, '.svelte-kit', 'output', 'client', '_app', 'immutable')
+];
 
 const MAX_CHUNK_KB = Number(process.env.BUNDLE_MAX_CHUNK_KB ?? '350');
 const MAX_TOTAL_KB = Number(process.env.BUNDLE_MAX_TOTAL_KB ?? '4000');
@@ -29,12 +32,22 @@ function formatKb(bytes) {
 }
 
 async function main() {
-	try {
-		await fs.access(immutableDir);
-	} catch {
+	let immutableDir = null;
+	for (const candidate of IMMUTABLE_DIR_CANDIDATES) {
+		try {
+			await fs.access(candidate);
+			immutableDir = candidate;
+			break;
+		} catch {
+			// Try next candidate path.
+		}
+	}
+
+	if (!immutableDir) {
 		console.error(
-			`Bundle directory not found: ${immutableDir}\n` +
-				`Run 'pnpm -C dashboard build' before checking bundle budgets.`
+			`Bundle directory not found. Checked:\n` +
+				IMMUTABLE_DIR_CANDIDATES.map((candidate) => `- ${candidate}`).join('\n') +
+				`\nRun 'pnpm -C dashboard build' before checking bundle budgets.`
 		);
 		process.exit(2);
 	}

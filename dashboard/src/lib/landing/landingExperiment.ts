@@ -36,12 +36,16 @@ function normalizeToken(input: string | null | undefined): string {
 
 function parseBuyerPersona(raw: string | null): BuyerPersona | null {
 	const token = normalizeToken(raw);
-	return (BUYER_PERSONAS.find((candidate) => candidate === token) as BuyerPersona | undefined) ?? null;
+	return (
+		(BUYER_PERSONAS.find((candidate) => candidate === token) as BuyerPersona | undefined) ?? null
+	);
 }
 
 function parseHeroVariant(raw: string | null): HeroVariant | null {
 	const token = normalizeToken(raw);
-	return (HERO_VARIANTS.find((candidate) => candidate === token) as HeroVariant | undefined) ?? null;
+	return (
+		(HERO_VARIANTS.find((candidate) => candidate === token) as HeroVariant | undefined) ?? null
+	);
 }
 
 function parseCtaVariant(raw: string | null): CtaVariant | null {
@@ -96,7 +100,8 @@ export function resolveLandingExperiments(
 	const heroVariant =
 		parseHeroVariant(url.searchParams.get('exp_hero')) || DEFAULT_ASSIGNMENTS.heroVariant;
 
-	const ctaVariant = parseCtaVariant(url.searchParams.get('exp_cta')) || DEFAULT_ASSIGNMENTS.ctaVariant;
+	const ctaVariant =
+		parseCtaVariant(url.searchParams.get('exp_cta')) || DEFAULT_ASSIGNMENTS.ctaVariant;
 
 	const sectionOrderVariant =
 		parseSectionOrderVariant(url.searchParams.get('exp_order')) ||

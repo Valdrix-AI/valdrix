@@ -10,7 +10,9 @@ describe('proof page', () => {
 	it('renders structured proof sections and navigation links', () => {
 		render(Page);
 
-		expect(screen.getByRole('heading', { level: 1, name: /executive and technical proof/i })).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { level: 1, name: /executive and technical proof/i })
+		).toBeTruthy();
 		expect(screen.getByText(/Economic Control Integrity/i)).toBeTruthy();
 		expect(screen.getByText(/Deterministic Execution/i)).toBeTruthy();
 		expect(screen.getByText(/Funnel and Attribution Telemetry/i)).toBeTruthy();
@@ -23,4 +25,3 @@ describe('proof page', () => {
 		expect(screen.getByRole('link', { name: /Back to Landing/i }).getAttribute('href')).toBe('/');
 	});
 });
-

@@ -32,7 +32,8 @@
 			capability: 'Financial Guardrails',
 			apiSurface:
 				'/api/v1/enforcement/gate, /api/v1/enforcement/policies, /api/v1/enforcement/budgets, /api/v1/enforcement/credits, /api/v1/enforcement/approvals, /api/v1/enforcement/reservations',
-			validationScope: 'Budget/credit checks, approval routing, reservation integrity, decision ledger'
+			validationScope:
+				'Budget/credit checks, approval routing, reservation integrity, decision ledger'
 		},
 		{
 			capability: 'Savings Proof for Leadership',
@@ -62,7 +63,9 @@
 
 <section class="container mx-auto px-6 py-12 space-y-8">
 	<header class="space-y-3">
-		<p class="text-xs uppercase tracking-[0.18em] text-accent-300 font-bold">Technical Validation</p>
+		<p class="text-xs uppercase tracking-[0.18em] text-accent-300 font-bold">
+			Technical Validation
+		</p>
 		<h1 class="text-3xl font-bold text-ink-100">Public capability validation summary</h1>
 		<p class="text-ink-300 max-w-3xl">
 			This page shows how public product capabilities map to active API surface areas used in
@@ -95,8 +98,12 @@
 		<h2 class="text-xl font-semibold">What this page is and is not</h2>
 		<ul class="text-sm text-ink-300 space-y-1 list-disc pl-5">
 			<li>It is a public, buyer-safe validation map for capability coverage.</li>
-			<li>It does not expose internal incident data, private traces, or tenant-sensitive evidence.</li>
-			<li>For implementation detail, use API docs and private diligence channels as appropriate.</li>
+			<li>
+				It does not expose internal incident data, private traces, or tenant-sensitive evidence.
+			</li>
+			<li>
+				For implementation detail, use API docs and private diligence channels as appropriate.
+			</li>
 		</ul>
 		<div class="flex flex-wrap gap-3 pt-1">
 			<a href={`${base}/docs/api`} class="btn btn-secondary">API Reference</a>

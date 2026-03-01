@@ -115,6 +115,7 @@
 		<div class="cycle-toggle-container">
 			<span class={billingCycle === 'monthly' ? 'active' : ''}>Monthly</span>
 			<button
+				type="button"
 				class="cycle-toggle-switch {billingCycle === 'annual' ? 'annual' : ''}"
 				onclick={() => (billingCycle = billingCycle === 'monthly' ? 'annual' : 'monthly')}
 				aria-label="Toggle billing cycle"
@@ -133,7 +134,7 @@
 	{#if error}
 		<div class="error-banner">
 			<p>{error}</p>
-			<button onclick={() => (error = '')}>Dismiss</button>
+			<button type="button" onclick={() => (error = '')}>Dismiss</button>
 		</div>
 	{/if}
 
@@ -173,6 +174,7 @@
 				</ul>
 
 				<button
+					type="button"
 					class="cta-button {plan.popular ? 'primary' : 'secondary'}"
 					onclick={() => selectPlan(plan.id)}
 					disabled={!!upgrading}

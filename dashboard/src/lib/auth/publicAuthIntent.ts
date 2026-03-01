@@ -76,7 +76,9 @@ function parseIntent(raw: string | null): PublicAuthIntent | null {
 
 function parsePersona(raw: string | null): PublicAuthPersona | null {
 	const token = normalizeToken(raw);
-	return (VALID_PERSONAS.find((persona) => persona === token) as PublicAuthPersona | undefined) ?? null;
+	return (
+		(VALID_PERSONAS.find((persona) => persona === token) as PublicAuthPersona | undefined) ?? null
+	);
 }
 
 function sanitizeNextPath(raw: string | null): string | null {

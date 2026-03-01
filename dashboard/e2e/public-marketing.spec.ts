@@ -26,7 +26,9 @@ test.describe('Public marketing smoke (desktop)', () => {
 		).toBeVisible();
 		await expect(page.getByRole('contentinfo')).toBeVisible();
 
-		const primaryCta = page.getByRole('link', { name: /start free|book executive briefing/i }).first();
+		const primaryCta = page
+			.getByRole('link', { name: /start free|book executive briefing/i })
+			.first();
 		await expect(primaryCta).toHaveAttribute('href', '/auth/login');
 
 		const footer = page.getByRole('contentinfo');

@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -45,15 +47,27 @@ jobs:
         run: uv run bandit -r app/ -ll
         
       - name: Run pip-audit
-        run: uv run pip-audit --ignore-vuln CVE-2026-1703
+        run: uv run pip-audit
         
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.93.0
 
-      - name: Gitleaks Secret Scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Gitleaks Secret Scan (OSS, Commit Range Gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            LOG_OPTS="${{ github.event.pull_request.base.sha }}..${{ github.sha }}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            LOG_OPTS="${{ github.event.before }}..${{ github.sha }}"
+          else
+            LOG_OPTS="HEAD~1..HEAD"
+          fi
+
+          echo "Running OSS gitleaks commit-range scan: ${LOG_OPTS}"
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.24.2 \
+            git --redact --exit-code 1 --no-banner --log-opts="${LOG_OPTS}" /repo
 
   container-scan:
     runs-on: ubuntu-latest

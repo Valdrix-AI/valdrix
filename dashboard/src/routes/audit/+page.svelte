@@ -353,13 +353,23 @@
 					</select>
 				</div>
 				<div class="flex gap-2">
-					<button class="btn btn-secondary text-xs" onclick={applyFilters}>Apply</button>
-					<button class="btn btn-secondary text-xs" onclick={previousPage}> Prev </button>
-					<button class="btn btn-secondary text-xs" onclick={nextPage}>Next</button>
-					<button class="btn btn-primary text-xs" disabled={exporting} onclick={exportCsv}>
+					<button type="button" class="btn btn-secondary text-xs" onclick={applyFilters}
+						>Apply</button
+					>
+					<button type="button" class="btn btn-secondary text-xs" onclick={previousPage}>
+						Prev
+					</button>
+					<button type="button" class="btn btn-secondary text-xs" onclick={nextPage}>Next</button>
+					<button
+						type="button"
+						class="btn btn-primary text-xs"
+						disabled={exporting}
+						onclick={exportCsv}
+					>
 						{exporting ? 'Exporting...' : 'Export CSV'}
 					</button>
 					<button
+						type="button"
 						class="btn btn-primary text-xs"
 						disabled={exportingPack}
 						onclick={exportCompliancePack}
@@ -404,7 +414,12 @@
 					<input type="checkbox" class="accent-accent-500" bind:checked={focusIncludePreliminary} />
 					<span>Include preliminary</span>
 				</label>
-				<button class="btn btn-primary text-xs" disabled={exportingFocus} onclick={exportFocusCsv}>
+				<button
+					type="button"
+					class="btn btn-primary text-xs"
+					disabled={exportingFocus}
+					onclick={exportFocusCsv}
+				>
 					{exportingFocus ? 'Exporting...' : 'FOCUS CSV'}
 				</button>
 			</div>
@@ -499,7 +514,11 @@
 										</td>
 										<td class="text-xs font-mono">{log.correlation_id || '-'}</td>
 										<td>
-											<button class="btn btn-secondary text-xs" onclick={() => viewDetail(log.id)}>
+											<button
+												type="button"
+												class="btn btn-secondary text-xs"
+												onclick={() => viewDetail(log.id)}
+											>
 												View
 											</button>
 										</td>
@@ -530,7 +549,7 @@
 		>
 			<div class="flex items-center justify-between mb-4">
 				<h3 class="text-lg font-semibold">Audit Log Detail</h3>
-				<button class="btn btn-secondary text-xs" onclick={closeDetail}>Close</button>
+				<button type="button" class="btn btn-secondary text-xs" onclick={closeDetail}>Close</button>
 			</div>
 			{#if loadingDetail}
 				<div class="skeleton h-5 w-64 mb-2"></div>

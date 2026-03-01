@@ -204,7 +204,9 @@ export function incrementLandingFunnelStage(
 	storage?: StorageLike,
 	now: Date = new Date()
 ): LandingFunnelSummary {
-	const current = normalizeCounts(readJson<LandingFunnelCounts>(storage, FUNNEL_STORAGE_KEY) || EMPTY_COUNTS);
+	const current = normalizeCounts(
+		readJson<LandingFunnelCounts>(storage, FUNNEL_STORAGE_KEY) || EMPTY_COUNTS
+	);
 	const next: LandingFunnelCounts = { ...current };
 	next[stage] += 1;
 	writeJson(storage, FUNNEL_STORAGE_KEY, next);
@@ -230,7 +232,9 @@ export function incrementLandingWeeklyStage(
 }
 
 export function readLandingFunnelReport(storage?: StorageLike): LandingFunnelSummary {
-	const counts = normalizeCounts(readJson<LandingFunnelCounts>(storage, FUNNEL_STORAGE_KEY) || EMPTY_COUNTS);
+	const counts = normalizeCounts(
+		readJson<LandingFunnelCounts>(storage, FUNNEL_STORAGE_KEY) || EMPTY_COUNTS
+	);
 	return summarizeFunnel(counts);
 }
 

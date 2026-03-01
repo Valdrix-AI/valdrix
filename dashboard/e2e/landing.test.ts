@@ -12,7 +12,9 @@ test.describe('Landing Page Content', () => {
 				name: /stop cloud and software waste|control every dollar|control cloud margin risk/i
 			})
 		).toBeVisible();
-		await expect(page.getByRole('heading', { name: /realtime spend scenario simulator/i })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: /realtime spend scenario simulator/i })
+		).toBeVisible();
 	});
 
 	test('should have a functional CTA button', async ({ page }) => {

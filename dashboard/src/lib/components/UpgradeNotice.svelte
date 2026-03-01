@@ -22,8 +22,7 @@
 </script>
 
 <div class="glass-panel flex flex-col items-center justify-center text-center gap-3 p-6">
-	<span class="badge badge-warning text-xs w-fit justify-center"
-		>{requiredLabel} Tier Required</span
+	<span class="badge badge-warning text-xs w-fit justify-center">{requiredLabel} Tier Required</span
 	>
 	<p class="text-sm text-ink-300">
 		Upgrade to <span class="font-semibold text-ink-100">{requiredLabel}</span> (or higher) to unlock

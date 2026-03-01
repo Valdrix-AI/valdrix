@@ -43,14 +43,20 @@ describe('LandingHero', () => {
 		expect(
 			screen.getByRole('heading', { name: /see your 12-month control roi before you commit/i })
 		).toBeTruthy();
-		expect(screen.getByRole('heading', { name: /proof from teams reducing spend waste/i })).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { name: /proof from teams reducing spend waste/i })
+		).toBeTruthy();
 		expect(screen.getByText(/Valdrics helps teams catch overspend early/i)).toBeTruthy();
 		expect(
 			screen.getByText(/The problem is not visibility\. The problem is delayed action\./i)
 		).toBeTruthy();
 		expect(screen.getByRole('link', { name: /run the spend scenario simulator/i })).toBeTruthy();
-		expect(screen.getByRole('heading', { name: /realtime spend scenario simulator/i })).toBeTruthy();
-		expect(screen.getByRole('heading', { name: /choose a plan and launch in one sprint/i })).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { name: /realtime spend scenario simulator/i })
+		).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { name: /choose a plan and launch in one sprint/i })
+		).toBeTruthy();
 		expect(screen.getAllByText(/permanent free tier/i).length).toBeGreaterThan(0);
 		expect(screen.getByText(/start free\. upgrade only when ready\./i)).toBeTruthy();
 
@@ -70,7 +76,9 @@ describe('LandingHero', () => {
 		expect(withoutToggle.getAttribute('aria-pressed')).toBe('true');
 		expect(withToggle.getAttribute('aria-pressed')).toBe('false');
 		expect(
-			screen.getByText(/Anomalies surface late, ownership is unclear, and teams react under pressure\./i)
+			screen.getByText(
+				/Anomalies surface late, ownership is unclear, and teams react under pressure\./i
+			)
 		).toBeTruthy();
 		expect(screen.getByText(/After invoice close/i)).toBeTruthy();
 
@@ -174,10 +182,14 @@ describe('LandingHero', () => {
 		).toBeTruthy();
 		expect(screen.getByText(/GreenOps Execution/i)).toBeTruthy();
 		expect(screen.getByText(/Operational Integrations/i)).toBeTruthy();
-		const technicalValidationLink = screen.getByRole('link', { name: /open technical validation/i });
+		const technicalValidationLink = screen.getByRole('link', {
+			name: /open technical validation/i
+		});
 		expect(technicalValidationLink.getAttribute('href')).toBe('/docs/technical-validation');
 
-		expect(screen.queryByText(/go deeper without turning the homepage into an audit log/i)).toBeNull();
+		expect(
+			screen.queryByText(/go deeper without turning the homepage into an audit log/i)
+		).toBeNull();
 		expect(screen.queryByRole('link', { name: /explore docs/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /review api surfaces/i })).toBeNull();
 		expect(screen.queryByText(/http_retry\.py/i)).toBeNull();

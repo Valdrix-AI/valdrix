@@ -51,7 +51,8 @@
 		cto: {
 			controlTitle: 'Stop cloud and software waste before it slows your roadmap.',
 			metricsTitle: 'From cost dashboards to fast, owner-led engineering action.',
-			subtitle: 'Give engineering a faster path from spend signal to safe execution with clear ownership.',
+			subtitle:
+				'Give engineering a faster path from spend signal to safe execution with clear ownership.',
 			quantPromise: 'Target 10-18% controllable spend recovery opportunity in the first 90 days.',
 			primaryIntent: 'engineering_control'
 		},
@@ -60,7 +61,8 @@
 			metricsTitle: 'From visibility reporting to faster financial action.',
 			subtitle:
 				'Detect spend movement earlier, route accountable owners immediately, and close actions before month-end pressure.',
-			quantPromise: 'Target 30-50% fewer late-cycle escalations by formalizing ownership and action paths.',
+			quantPromise:
+				'Target 30-50% fewer late-cycle escalations by formalizing ownership and action paths.',
 			primaryIntent: 'finops_governance'
 		},
 		security: {
@@ -68,7 +70,8 @@
 			metricsTitle: 'From anomalies to safe, reviewable remediation.',
 			subtitle:
 				'Keep execution guarded by approvals and pre-change checks while engineering keeps shipping.',
-			quantPromise: 'Target measurable reduction in risky manual changes by enforcing pre-change checks.',
+			quantPromise:
+				'Target measurable reduction in risky manual changes by enforcing pre-change checks.',
 			primaryIntent: 'security_governance'
 		},
 		cfo: {
@@ -159,35 +162,34 @@
 			title: 'Without Valdrics',
 			subtitle: 'Reactive cloud cost operations',
 			ahaMoment: 'Anomalies surface late, ownership is unclear, and teams react under pressure.',
-				points: [
-					'Spend spikes are discovered after the billing cycle.',
-					'Remediation ownership is ambiguous across teams.',
-					'Cost actions execute ad hoc, and outcomes are hard to track.'
-				],
+			points: [
+				'Spend spikes are discovered after the billing cycle.',
+				'Remediation ownership is ambiguous across teams.',
+				'Cost actions execute ad hoc, and outcomes are hard to track.'
+			],
 			metrics: [
 				{ label: 'Signal Lag', value: 'After invoice close' },
 				{ label: 'Decision Owner', value: 'Unclear' },
 				{ label: 'Execution Safety', value: 'Inconsistent' }
 			]
 		},
-			{
-				id: 'with',
-				title: 'With Valdrics',
-				subtitle: 'Controlled cloud economics',
-				ahaMoment:
-					'Anomaly detected, owner assigned, risk checked, and action approved in one flow.',
-				points: [
-					'Realtime anomalies route to a named accountable owner.',
-					'Safety checks run before every change.',
-					'Decision history is easy to share with finance and leadership.'
-				],
-				metrics: [
-					{ label: 'Signal Lag', value: 'Realtime' },
-					{ label: 'Decision Owner', value: 'Explicit' },
-					{ label: 'Execution Safety', value: 'Guardrailed' }
-				]
-			}
-		]);
+		{
+			id: 'with',
+			title: 'With Valdrics',
+			subtitle: 'Controlled cloud economics',
+			ahaMoment: 'Anomaly detected, owner assigned, risk checked, and action approved in one flow.',
+			points: [
+				'Realtime anomalies route to a named accountable owner.',
+				'Safety checks run before every change.',
+				'Decision history is easy to share with finance and leadership.'
+			],
+			metrics: [
+				{ label: 'Signal Lag', value: 'Realtime' },
+				{ label: 'Decision Owner', value: 'Explicit' },
+				{ label: 'Execution Safety', value: 'Guardrailed' }
+			]
+		}
+	]);
 
 	const EXECUTIVE_CONFIDENCE_POINTS = Object.freeze([
 		{
@@ -394,8 +396,7 @@
 		},
 		{
 			title: 'ITAM and License',
-			detail:
-				'Entitlement and license posture are reviewed in the same workflow as cloud spend.'
+			detail: 'Entitlement and license posture are reviewed in the same workflow as cloud spend.'
 		},
 		{
 			title: 'Platform Tooling',
@@ -521,9 +522,7 @@
 	let primaryCtaIntent = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'executive_briefing' : heroContext.primaryIntent
 	);
-	let includeExperimentQueryParams = $derived(
-		shouldIncludeExperimentQueryParams($page.url, false)
-	);
+	let includeExperimentQueryParams = $derived(shouldIncludeExperimentQueryParams($page.url, false));
 	let shouldRotateSnapshots = $derived(
 		signalMapInView && documentVisible && REALTIME_SIGNAL_SNAPSHOTS.length > 1
 	);
@@ -758,7 +757,12 @@
 		if (engagedCaptured) return;
 		engagedCaptured = true;
 		incrementLandingFunnelStage('engaged', getStorage());
-		emitLandingTelemetry('landing_engaged', 'landing', 'interactive', buildTelemetryContext('engaged'));
+		emitLandingTelemetry(
+			'landing_engaged',
+			'landing',
+			'interactive',
+			buildTelemetryContext('engaged')
+		);
 	}
 
 	function buildSignupHref(intent: string, extraParams: Record<string, string> = {}): string {
@@ -888,14 +892,14 @@
 	}
 </script>
 
-	<div class="landing" itemscope itemtype="https://schema.org/SoftwareApplication">
+<div class="landing" itemscope itemtype="https://schema.org/SoftwareApplication">
 	<meta itemprop="name" content="Valdrics" />
 	<meta itemprop="operatingSystem" content="Web" />
 	<meta itemprop="applicationCategory" content="BusinessApplication" />
-		<meta
-			itemprop="description"
-			content="Valdrics helps teams reduce cloud and software spend by turning live spend signals into owner-assigned actions, approvals, and measurable savings."
-		/>
+	<meta
+		itemprop="description"
+		content="Valdrics helps teams reduce cloud and software spend by turning live spend signals into owner-assigned actions, approvals, and measurable savings."
+	/>
 	<meta itemprop="url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
 	<meta itemprop="image" content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()} />
 
@@ -903,16 +907,19 @@
 		<div class="container mx-auto px-6 pt-10 pb-16">
 			<div class="landing-hero-grid">
 				<div class="landing-copy">
-						<div class="landing-kicker fade-in-up" style="animation-delay: 0ms;">
-							<span class="badge badge-accent">Cloud + Software Spend Control</span>
-							<span class="landing-sep" aria-hidden="true">•</span>
-							<span class="landing-kicker-text">See waste early. Act faster. Protect margin.</span>
-						</div>
+					<div class="landing-kicker fade-in-up" style="animation-delay: 0ms;">
+						<span class="badge badge-accent">Cloud + Software Spend Control</span>
+						<span class="landing-sep" aria-hidden="true">•</span>
+						<span class="landing-kicker-text">See waste early. Act faster. Protect margin.</span>
+					</div>
 
 					<div class="landing-problem-hook fade-in-up" style="animation-delay: 70ms;">
-						<p class="landing-problem-k">The problem is not visibility. The problem is delayed action.</p>
+						<p class="landing-problem-k">
+							The problem is not visibility. The problem is delayed action.
+						</p>
 						<p class="landing-problem-v">
-							When ownership is unclear and approvals happen late, controllable waste compounds every week.
+							When ownership is unclear and approvals happen late, controllable waste compounds
+							every week.
 						</p>
 					</div>
 
@@ -955,13 +962,15 @@
 					<p class="landing-cta-free-note fade-in-up" style="animation-delay: 338ms;">
 						Start free. Upgrade only when ready.
 					</p>
-						<div class="landing-free-strip fade-in-up" style="animation-delay: 345ms;">
-							<span class="landing-free-pill">Permanent Free Tier</span>
-							<span>Start at $0, prove value in your own data, then scale when your team is ready.</span>
-						</div>
-						<p class="landing-cta-note fade-in-up" style="animation-delay: 360ms;">
-							One sign-up path. One workspace. Control cloud and software spend from day one.
-						</p>
+					<div class="landing-free-strip fade-in-up" style="animation-delay: 345ms;">
+						<span class="landing-free-pill">Permanent Free Tier</span>
+						<span
+							>Start at $0, prove value in your own data, then scale when your team is ready.</span
+						>
+					</div>
+					<p class="landing-cta-note fade-in-up" style="animation-delay: 360ms;">
+						One sign-up path. One workspace. Control cloud and software spend from day one.
+					</p>
 					<a
 						href="#simulator"
 						class="landing-cta-link fade-in-up"
@@ -1067,14 +1076,18 @@
 								></button>
 							{/each}
 
-								<div id="signal-map-summary" class="sr-only">
-									Signal map summary for {activeSnapshot.label}: {activeSnapshot.headline}
-									{activeSnapshot.decisionSummary} This view highlights clarity, control, and confidence
-									signals for owner-led execution.
-								</div>
+							<div id="signal-map-summary" class="sr-only">
+								Signal map summary for {activeSnapshot.label}: {activeSnapshot.headline}
+								{activeSnapshot.decisionSummary} This view highlights clarity, control, and confidence
+								signals for owner-led execution.
+							</div>
 						</div>
 
-						<div class="signal-lane-controls" role="tablist" aria-label="Realtime signal lane details">
+						<div
+							class="signal-lane-controls"
+							role="tablist"
+							aria-label="Realtime signal lane details"
+						>
 							{#each activeSnapshot.lanes as lane (lane.id)}
 								<button
 									type="button"
@@ -1163,10 +1176,10 @@
 			<div class="landing-hook glass-panel">
 				<p class="landing-proof-k">The Cloud Cost Trap</p>
 				<h2 class="landing-h2">Visibility alone does not control cloud spend.</h2>
-					<p class="landing-section-sub">
-						Most teams see cloud waste after the invoice closes. Valdrics creates the aha moment by
-						linking each cloud signal to risk checks, ownership, and approved execution in one loop.
-					</p>
+				<p class="landing-section-sub">
+					Most teams see cloud waste after the invoice closes. Valdrics creates the aha moment by
+					linking each cloud signal to risk checks, ownership, and approved execution in one loop.
+				</p>
 
 				<div class="landing-hook-highlight">
 					<p class="landing-hook-highlight-k">Aha Moment</p>
@@ -1215,11 +1228,11 @@
 			class="container mx-auto px-6 pb-20 landing-section-lazy"
 			data-landing-section="workflow"
 		>
-				<div class="landing-section-head">
-					<h2 class="landing-h2">From signal to savings in one operating flow</h2>
+			<div class="landing-section-head">
+				<h2 class="landing-h2">From signal to savings in one operating flow</h2>
 				<p class="landing-section-sub">
-					Detect spend risk early, route the right owner, and execute approved actions without slowing
-					delivery.
+					Detect spend risk early, route the right owner, and execute approved actions without
+					slowing delivery.
 				</p>
 			</div>
 
@@ -1231,13 +1244,14 @@
 						Bring AWS, Azure, GCP, SaaS, and license data into one live operating view.
 					</p>
 				</div>
-					<div class="glass-panel landing-step">
-						<p class="landing-step-n">02</p>
-						<h3 class="landing-h3">Decide with guardrails</h3>
-						<p class="landing-p">
-							Apply ownership and risk rules before changes so teams move fast without risky shortcuts.
-						</p>
-					</div>
+				<div class="glass-panel landing-step">
+					<p class="landing-step-n">02</p>
+					<h3 class="landing-h3">Decide with guardrails</h3>
+					<p class="landing-p">
+						Apply ownership and risk rules before changes so teams move fast without risky
+						shortcuts.
+					</p>
+				</div>
 				<div class="glass-panel landing-step">
 					<p class="landing-step-n">03</p>
 					<h3 class="landing-h3">Execute safely, prove impact</h3>
@@ -1260,12 +1274,13 @@
 		class="container mx-auto px-6 pb-20 landing-section-lazy"
 		data-landing-section="simulator"
 	>
-			<div class="landing-section-head">
-				<h2 class="landing-h2">Realtime spend scenario simulator</h2>
-				<p class="landing-section-sub">
-					Compare reactive spend behavior versus owner-led execution and see the economic delta instantly.
-				</p>
-			</div>
+		<div class="landing-section-head">
+			<h2 class="landing-h2">Realtime spend scenario simulator</h2>
+			<p class="landing-section-sub">
+				Compare reactive spend behavior versus owner-led execution and see the economic delta
+				instantly.
+			</p>
+		</div>
 
 		<div class="landing-sim-grid">
 			<div class="glass-panel landing-sim-controls">
@@ -1284,8 +1299,8 @@
 						oninput={() => trackScenarioAdjust('reactive_waste_rate')}
 					/>
 				</div>
-					<div class="landing-roi-control">
-						<label for="sim-waste-with" class="landing-roi-label">Managed waste rate (%)</label>
+				<div class="landing-roi-control">
+					<label for="sim-waste-with" class="landing-roi-label">Managed waste rate (%)</label>
 					<div class="landing-roi-meta">
 						<span>{normalizedScenarioWasteWithPct}%</span>
 					</div>
@@ -1318,18 +1333,24 @@
 
 			<div class="glass-panel landing-sim-results">
 				<p class="landing-proof-k">Scenario Delta</p>
-				<div class="landing-sim-chart" role="img" aria-label="Reactive versus governed waste comparison">
+				<div
+					class="landing-sim-chart"
+					role="img"
+					aria-label="Reactive versus governed waste comparison"
+				>
 					<div class="landing-sim-bar-row">
 						<div class="landing-sim-bar-label">Reactive spend</div>
 						<div class="landing-sim-bar-track">
-							<span class="landing-sim-bar is-reactive" style={`width:${scenarioWithoutBarPct}%;`}></span>
+							<span class="landing-sim-bar is-reactive" style={`width:${scenarioWithoutBarPct}%;`}
+							></span>
 						</div>
 						<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithoutUsd)}</div>
 					</div>
 					<div class="landing-sim-bar-row">
 						<div class="landing-sim-bar-label">Governed spend</div>
 						<div class="landing-sim-bar-track">
-							<span class="landing-sim-bar is-governed" style={`width:${scenarioWithBarPct}%;`}></span>
+							<span class="landing-sim-bar is-governed" style={`width:${scenarioWithBarPct}%;`}
+							></span>
 						</div>
 						<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithUsd)}</div>
 					</div>
@@ -1350,13 +1371,18 @@
 					</div>
 				</div>
 				<p class="landing-roi-note">
-					This simulator is directional and designed to accelerate finance + engineering decision alignment.
+					This simulator is directional and designed to accelerate finance + engineering decision
+					alignment.
 				</p>
 			</div>
 		</div>
 	</section>
 
-	<section id="roi" class="container mx-auto px-6 pb-20 landing-section-lazy" data-landing-section="roi">
+	<section
+		id="roi"
+		class="container mx-auto px-6 pb-20 landing-section-lazy"
+		data-landing-section="roi"
+	>
 		<div class="landing-section-head">
 			<h2 class="landing-h2">See your 12-month control ROI before you commit</h2>
 			<p class="landing-section-sub">
@@ -1494,18 +1520,18 @@
 		</div>
 	</section>
 
-		<section
+	<section
 		id="benefits"
 		class="container mx-auto px-6 pb-20 landing-section-lazy"
 		data-landing-section="benefits"
 	>
-			<div class="landing-section-head">
-				<h2 class="landing-h2">Why teams switch from dashboards to control</h2>
-				<p class="landing-section-sub">
-					Valdrics combines visibility, ownership, and execution so teams can reduce waste with less
-					escalation pressure.
-				</p>
-			</div>
+		<div class="landing-section-head">
+			<h2 class="landing-h2">Why teams switch from dashboards to control</h2>
+			<p class="landing-section-sub">
+				Valdrics combines visibility, ownership, and execution so teams can reduce waste with less
+				escalation pressure.
+			</p>
+		</div>
 
 		<div class="landing-benefits-grid">
 			<article class="glass-panel landing-benefit-card">
@@ -1526,13 +1552,13 @@
 				</p>
 			</article>
 
-				<article class="glass-panel landing-benefit-card">
-					<p class="landing-proof-k">Financial Control</p>
-					<h3 class="landing-h3">Set budget rules once and enforce them everywhere</h3>
-					<p class="landing-p">
-						Keep financial decisions aligned across platform, finance, and leadership with clear
-						ownership and consistent decision paths.
-					</p>
+			<article class="glass-panel landing-benefit-card">
+				<p class="landing-proof-k">Financial Control</p>
+				<h3 class="landing-h3">Set budget rules once and enforce them everywhere</h3>
+				<p class="landing-p">
+					Keep financial decisions aligned across platform, finance, and leadership with clear
+					ownership and consistent decision paths.
+				</p>
 			</article>
 
 			<article class="glass-panel landing-benefit-card">
@@ -1544,36 +1570,37 @@
 				</p>
 			</article>
 
-				<article class="glass-panel landing-benefit-card">
-					<p class="landing-proof-k">Executive Explainability</p>
-					<h3 class="landing-h3">Answer leadership questions in minutes</h3>
-					<p class="landing-p">
-						Share clear decision history and measurable outcomes when leadership or finance needs answers.
-					</p>
-				</article>
-			</div>
-		</section>
+			<article class="glass-panel landing-benefit-card">
+				<p class="landing-proof-k">Executive Explainability</p>
+				<h3 class="landing-h3">Answer leadership questions in minutes</h3>
+				<p class="landing-p">
+					Share clear decision history and measurable outcomes when leadership or finance needs
+					answers.
+				</p>
+			</article>
+		</div>
+	</section>
 
 	<section
 		id="plans"
 		class="container mx-auto px-6 pb-20 landing-section-lazy"
 		data-landing-section="plans"
 	>
-			<div class="landing-section-head">
-				<h2 class="landing-h2">Choose a plan and launch in one sprint</h2>
-				<p class="landing-section-sub">
-					Shorten the path from sign-up to first savings decision with a plan built for your stage.
-				</p>
-			</div>
+		<div class="landing-section-head">
+			<h2 class="landing-h2">Choose a plan and launch in one sprint</h2>
+			<p class="landing-section-sub">
+				Shorten the path from sign-up to first savings decision with a plan built for your stage.
+			</p>
+		</div>
 
 		<div class="landing-free-tier-card glass-panel">
 			<div class="landing-free-tier-head">
-					<div>
-						<p class="landing-proof-k">Start Free</p>
-						<h3 class="landing-h3">Permanent free tier for your first savings workflow</h3>
+				<div>
+					<p class="landing-proof-k">Start Free</p>
+					<h3 class="landing-h3">Permanent free tier for your first savings workflow</h3>
 					<p class="landing-p">
-						You can start at $0 with bounded usage, prove economic impact, and upgrade only when you need
-						expanded scale and automation.
+						You can start at $0 with bounded usage, prove economic impact, and upgrade only when you
+						need expanded scale and automation.
 					</p>
 				</div>
 				<div class="landing-free-tier-price">
@@ -1622,11 +1649,11 @@
 		</div>
 		<div class="landing-onboard-flow glass-panel">
 			<p class="landing-proof-k">Fast onboarding flow</p>
-				<ol class="landing-onboard-steps">
-					<li>Connect cloud and software sources.</li>
-					<li>Assign owners and approval responsibilities.</li>
-					<li>Run your first owner-led remediation cycle.</li>
-				</ol>
+			<ol class="landing-onboard-steps">
+				<li>Connect cloud and software sources.</li>
+				<li>Assign owners and approval responsibilities.</li>
+				<li>Run your first owner-led remediation cycle.</li>
+			</ol>
 			<a
 				href={`${base}/pricing`}
 				class="landing-cta-link"
@@ -1645,7 +1672,8 @@
 		<div class="landing-section-head">
 			<h2 class="landing-h2">What each team gets in the first 30 days</h2>
 			<p class="landing-section-sub">
-				Engineering, FinOps, security, and leadership use one system, but each role sees tailored outcomes.
+				Engineering, FinOps, security, and leadership use one system, but each role sees tailored
+				outcomes.
 			</p>
 		</div>
 
@@ -1690,10 +1718,11 @@
 				</ul>
 			</div>
 		</div>
-			<div class="landing-persona-proof">
-				Outcome: one system that improves weekly operating decisions across technical and financial teams.
-			</div>
-		</section>
+		<div class="landing-persona-proof">
+			Outcome: one system that improves weekly operating decisions across technical and financial
+			teams.
+		</div>
+	</section>
 
 	{#if experiments.sectionOrderVariant === 'workflow_first'}
 		{@render cloudHookSection()}
@@ -1701,18 +1730,18 @@
 		{@render workflowSection()}
 	{/if}
 
-		<section
-			id="coverage"
-			class="container mx-auto px-6 pb-20 landing-section-lazy"
-			data-landing-section="coverage"
+	<section
+		id="coverage"
+		class="container mx-auto px-6 pb-20 landing-section-lazy"
+		data-landing-section="coverage"
 	>
-			<div class="landing-section-head">
-				<h2 class="landing-h2">One platform for cloud, SaaS, and license spend</h2>
-				<p class="landing-section-sub">
-					Valdrics starts with cloud economics and extends spend control into SaaS, ITAM/license, and
-					platform operations.
-				</p>
-			</div>
+		<div class="landing-section-head">
+			<h2 class="landing-h2">One platform for cloud, SaaS, and license spend</h2>
+			<p class="landing-section-sub">
+				Valdrics starts with cloud economics and extends spend control into SaaS, ITAM/license, and
+				platform operations.
+			</p>
+		</div>
 
 		<div class="landing-coverage-grid">
 			{#each CROSS_SURFACE_COVERAGE as area (area.title)}
@@ -1721,57 +1750,58 @@
 					<p class="landing-p">{area.detail}</p>
 				</article>
 			{/each}
-			</div>
-		</section>
+		</div>
+	</section>
 
-		<section
-			id="capabilities"
-			class="container mx-auto px-6 pb-20 landing-section-lazy"
-			data-landing-section="capabilities"
-		>
-			<div class="landing-section-head">
-				<h2 class="landing-h2">What Valdrics already runs across your operations</h2>
-				<p class="landing-section-sub">
-					Valdrics is not just a dashboard. It combines cost control, GreenOps, SaaS/license
-					management, remediation, and executive proof in one platform.
-				</p>
-			</div>
+	<section
+		id="capabilities"
+		class="container mx-auto px-6 pb-20 landing-section-lazy"
+		data-landing-section="capabilities"
+	>
+		<div class="landing-section-head">
+			<h2 class="landing-h2">What Valdrics already runs across your operations</h2>
+			<p class="landing-section-sub">
+				Valdrics is not just a dashboard. It combines cost control, GreenOps, SaaS/license
+				management, remediation, and executive proof in one platform.
+			</p>
+		</div>
 
-			<div class="landing-coverage-grid">
-				{#each BACKEND_CAPABILITY_PILLARS as capability (capability.title)}
-					<article class="glass-panel landing-coverage-card">
-						<p class="landing-proof-k">{capability.title}</p>
-						<p class="landing-p">{capability.detail}</p>
-					</article>
-				{/each}
-			</div>
-			<div class="landing-validation-cta glass-panel">
-				<p class="landing-proof-k">Technical Validation</p>
-				<p class="landing-p">
-					See the public capability-to-API validation summary used for buyer diligence and security reviews.
-				</p>
-				<a
-					href={`${base}/docs/technical-validation`}
-					class="landing-cta-link"
-					onclick={() => trackCta('cta_click', 'capabilities', 'open_technical_validation')}
-				>
-					Open Technical Validation
-				</a>
-			</div>
-		</section>
+		<div class="landing-coverage-grid">
+			{#each BACKEND_CAPABILITY_PILLARS as capability (capability.title)}
+				<article class="glass-panel landing-coverage-card">
+					<p class="landing-proof-k">{capability.title}</p>
+					<p class="landing-p">{capability.detail}</p>
+				</article>
+			{/each}
+		</div>
+		<div class="landing-validation-cta glass-panel">
+			<p class="landing-proof-k">Technical Validation</p>
+			<p class="landing-p">
+				See the public capability-to-API validation summary used for buyer diligence and security
+				reviews.
+			</p>
+			<a
+				href={`${base}/docs/technical-validation`}
+				class="landing-cta-link"
+				onclick={() => trackCta('cta_click', 'capabilities', 'open_technical_validation')}
+			>
+				Open Technical Validation
+			</a>
+		</div>
+	</section>
 
 	<section
 		id="trust"
 		class="container mx-auto px-6 pb-20 landing-section-lazy"
 		data-landing-section="proof"
 	>
-			<div class="landing-section-head">
-				<h2 class="landing-h2">Proof from teams reducing spend waste</h2>
-				<p class="landing-section-sub">
-					Buyers need outcomes, not marketing claims. Valdrics is designed to show clear before-and-after
-					operating results.
-				</p>
-			</div>
+		<div class="landing-section-head">
+			<h2 class="landing-h2">Proof from teams reducing spend waste</h2>
+			<p class="landing-section-sub">
+				Buyers need outcomes, not marketing claims. Valdrics is designed to show clear
+				before-and-after operating results.
+			</p>
+		</div>
 
 		<div class="landing-evidence-grid">
 			{#each EXECUTIVE_CONFIDENCE_POINTS as point (point.title)}
@@ -1825,19 +1855,19 @@
 			{/each}
 		</div>
 
-			<div class="landing-compliance-block">
-				<p class="landing-proof-k">Security and compliance essentials</p>
-				<div class="landing-trust-badges">
-					{#each COMPLIANCE_FOUNDATION_BADGES as badge (badge)}
-						<span class="landing-trust-badge">{badge}</span>
+		<div class="landing-compliance-block">
+			<p class="landing-proof-k">Security and compliance essentials</p>
+			<div class="landing-trust-badges">
+				{#each COMPLIANCE_FOUNDATION_BADGES as badge (badge)}
+					<span class="landing-trust-badge">{badge}</span>
 				{/each}
 			</div>
-			</div>
-			<p class="landing-trust-note">
-				Customer examples are anonymized and benchmark ranges are directional. Validate against your own
-				baseline.
-			</p>
-		</section>
+		</div>
+		<p class="landing-trust-note">
+			Customer examples are anonymized and benchmark ranges are directional. Validate against your
+			own baseline.
+		</p>
+	</section>
 
 	<div class="landing-mobile-sticky-cta" aria-label="Mobile quick actions">
 		<a
@@ -3654,8 +3684,8 @@
 		z-index: 60;
 		display: flex;
 		gap: 0.6rem;
-		padding: 0.75rem max(0.85rem, env(safe-area-inset-left)) calc(0.75rem + env(safe-area-inset-bottom))
-			max(0.85rem, env(safe-area-inset-right));
+		padding: 0.75rem max(0.85rem, env(safe-area-inset-left))
+			calc(0.75rem + env(safe-area-inset-bottom)) max(0.85rem, env(safe-area-inset-right));
 		background: linear-gradient(180deg, rgb(2 6 11 / 0.35), rgb(2 6 11 / 0.94));
 		backdrop-filter: blur(10px);
 		-webkit-backdrop-filter: blur(10px);
@@ -3714,5 +3744,4 @@
 			padding-bottom: 4.8rem;
 		}
 	}
-
 </style>

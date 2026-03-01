@@ -1,4 +1,5 @@
 import uuid
+from inspect import isawaitable
 from enum import Enum
 from functools import wraps
 from contextlib import suppress
@@ -668,7 +669,15 @@ async def get_tenant_tier(
 
     try:
         result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
-        tenant = result.scalar_one_or_none()
+        scalar_one_or_none = getattr(result, "scalar_one_or_none", None)
+        tenant: Any = None
+        if callable(scalar_one_or_none):
+            tenant_candidate = scalar_one_or_none()
+            tenant = (
+                await tenant_candidate
+                if isawaitable(tenant_candidate)
+                else tenant_candidate
+            )
 
         if not tenant:
             if cache is not None:

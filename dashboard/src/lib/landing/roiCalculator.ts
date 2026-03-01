@@ -39,14 +39,26 @@ export function normalizeLandingRoiInputs(
 	inputs: Partial<LandingRoiInputs> | undefined
 ): LandingRoiInputs {
 	return {
-		monthlySpendUsd: clamp(Number(inputs?.monthlySpendUsd ?? DEFAULT_LANDING_ROI_INPUTS.monthlySpendUsd), 5000, 5000000),
+		monthlySpendUsd: clamp(
+			Number(inputs?.monthlySpendUsd ?? DEFAULT_LANDING_ROI_INPUTS.monthlySpendUsd),
+			5000,
+			5000000
+		),
 		expectedReductionPct: clamp(
 			Number(inputs?.expectedReductionPct ?? DEFAULT_LANDING_ROI_INPUTS.expectedReductionPct),
 			1,
 			60
 		),
-		rolloutDays: clamp(Number(inputs?.rolloutDays ?? DEFAULT_LANDING_ROI_INPUTS.rolloutDays), 7, 180),
-		teamMembers: clamp(Number(inputs?.teamMembers ?? DEFAULT_LANDING_ROI_INPUTS.teamMembers), 1, 12),
+		rolloutDays: clamp(
+			Number(inputs?.rolloutDays ?? DEFAULT_LANDING_ROI_INPUTS.rolloutDays),
+			7,
+			180
+		),
+		teamMembers: clamp(
+			Number(inputs?.teamMembers ?? DEFAULT_LANDING_ROI_INPUTS.teamMembers),
+			1,
+			12
+		),
 		blendedHourlyUsd: clamp(
 			Number(inputs?.blendedHourlyUsd ?? DEFAULT_LANDING_ROI_INPUTS.blendedHourlyUsd),
 			50,
@@ -73,9 +85,7 @@ export function calculateLandingRoi(inputs: LandingRoiInputs): LandingRoiResult 
 	const paybackDays =
 		monthlySavingsUsd > 0 ? Math.ceil((implementationCostUsd / monthlySavingsUsd) * 30) : null;
 	const roiMultiple =
-		implementationCostUsd > 0
-			? roundCurrency(annualGrossSavingsUsd / implementationCostUsd)
-			: 0;
+		implementationCostUsd > 0 ? roundCurrency(annualGrossSavingsUsd / implementationCostUsd) : 0;
 
 	return {
 		monthlySavingsUsd,

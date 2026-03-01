@@ -86,7 +86,9 @@
 		</article>
 		<article class="card">
 			<p class="text-xs uppercase tracking-[0.08em] text-ink-500">Engagement rate</p>
-			<p class="text-2xl font-bold mt-1">{formatPercent(allTimeSummary.conversion.engagementRate)}</p>
+			<p class="text-2xl font-bold mt-1">
+				{formatPercent(allTimeSummary.conversion.engagementRate)}
+			</p>
 		</article>
 		<article class="card">
 			<p class="text-xs uppercase tracking-[0.08em] text-ink-500">CTA rate</p>
@@ -94,7 +96,9 @@
 		</article>
 		<article class="card">
 			<p class="text-xs uppercase tracking-[0.08em] text-ink-500">Signup intent rate</p>
-			<p class="text-2xl font-bold mt-1">{formatPercent(allTimeSummary.conversion.signupIntentRate)}</p>
+			<p class="text-2xl font-bold mt-1">
+				{formatPercent(allTimeSummary.conversion.signupIntentRate)}
+			</p>
 		</article>
 	</div>
 

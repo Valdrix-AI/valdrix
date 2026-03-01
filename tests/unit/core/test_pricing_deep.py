@@ -148,6 +148,20 @@ class TestPricingDeep:
         assert mock_db.execute.await_count == 1
 
     @pytest.mark.asyncio
+    async def test_get_tenant_tier_supports_async_scalar_accessor(self, mock_db):
+        """Async scalar accessors should be awaited when present."""
+        mock_tenant = MagicMock()
+        mock_tenant.plan = PricingTier.GROWTH.value
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none = AsyncMock(return_value=mock_tenant)
+        mock_db.execute.return_value = mock_result
+
+        tier = await get_tenant_tier(uuid.uuid4(), mock_db)
+
+        assert tier == PricingTier.GROWTH
+        mock_result.scalar_one_or_none.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_get_tenant_tier_invalid_plan_returns_free(self, mock_db):
         """Invalid plan strings should fallback to FREE."""
         mock_tenant = MagicMock()

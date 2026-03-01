@@ -318,7 +318,12 @@
 					<span class={statusBadgeClass(dashboard.system.status)}>
 						{dashboard.system.status.toUpperCase()}
 					</span>
-					<button class="btn btn-secondary text-xs" onclick={refreshMetrics} disabled={refreshing}>
+					<button
+						type="button"
+						class="btn btn-secondary text-xs"
+						onclick={refreshMetrics}
+						disabled={refreshing}
+					>
 						<RefreshCw class="h-3.5 w-3.5" />
 						{refreshing ? 'Refreshing...' : 'Refresh'}
 					</button>

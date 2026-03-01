@@ -165,9 +165,7 @@
 					<tr>
 						<td class="flex items-center gap-1.5">
 							<CloudLogo provider={row.finding.provider} size={12} />
-							<span
-								class="text-xs font-bold uppercase {providerColorClass(row.finding.provider)}"
-							>
+							<span class="text-xs font-bold uppercase {providerColorClass(row.finding.provider)}">
 								{providerLabel(row.finding.provider)}
 							</span>
 						</td>
