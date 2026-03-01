@@ -5,6 +5,16 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+    paths:
+      - "app/**"
+      - "dashboard/**"
+      - "terraform/**"
+      - "Dockerfile"
+      - "Dockerfile.dashboard"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/security-scan.yml"
+      - ".github/workflows/ci.yml"
   schedule:
     - cron: '0 0 * * *' # Daily at midnight
 
