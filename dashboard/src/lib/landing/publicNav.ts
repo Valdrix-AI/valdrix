@@ -5,23 +5,22 @@ export interface PublicNavLink {
 }
 
 export const PUBLIC_PRIMARY_LINKS: readonly PublicNavLink[] = Object.freeze([
-	{ href: '/#benefits', label: 'Features' },
-	{ href: '/#personas', label: "Who It's For" },
+	{ href: '/#benefits', label: 'Outcomes' },
 	{ href: '/#workflow', label: 'How It Works' },
-	{ href: '/docs', label: 'Docs' },
+	{ href: '/#personas', label: "Who It's For" },
+	{ href: '/#trust', label: 'Proof' },
 	{ href: '/pricing', label: 'Pricing' }
 ]);
 
 export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
-	{ href: '/#trust', label: 'Why Trust It' },
-	{ href: '/pricing', label: 'Pricing' }
+	{ href: '/docs', label: 'Docs' }
 ]);
 
 export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
-	{ href: '/#benefits', label: 'Features' },
-	{ href: '/#personas', label: "Who It's For" },
+	{ href: '/#benefits', label: 'Outcomes' },
 	{ href: '/#workflow', label: 'How It Works' },
-	{ href: '/#trust', label: 'Why Trust It' },
+	{ href: '/#personas', label: "Who It's For" },
+	{ href: '/#trust', label: 'Proof' },
 	{ href: '/docs', label: 'Docs' },
 	{ href: '/pricing', label: 'Pricing' }
 ]);

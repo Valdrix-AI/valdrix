@@ -20,7 +20,9 @@ describe('publicNav', () => {
 		for (const links of LINK_GROUPS) {
 			for (const link of links) {
 				expect(link.href.toLowerCase()).not.toContain('/proof');
-				expect(link.label.toLowerCase()).not.toContain('proof');
+				expect(link.label.toLowerCase()).not.toContain('audit');
+				expect(link.label.toLowerCase()).not.toContain('telemetry');
+				expect(link.label.toLowerCase()).not.toContain('capture');
 			}
 		}
 	});
@@ -46,13 +48,16 @@ describe('publicNav', () => {
 		}
 	});
 
-	it('keeps trust and pricing surfaced consistently', () => {
-		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/#trust')).toBe(true);
+	it('keeps outcome, proof, docs, and pricing routes surfaced consistently', () => {
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#benefits')).toBe(true);
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#trust')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#trust')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/#trust')).toBe(true);
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/pricing')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/pricing')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/pricing')).toBe(true);
+		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/docs')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/docs')).toBe(true);
 	});
 
 	it('keeps only customer-facing strip and badge language', () => {
