@@ -1,8 +1,8 @@
 # FOCUS Export (v1.3 Core CSV)
 
-Valdrix supports a **FOCUS v1.3-aligned core export** for cost records in the tenant ledger.
+Valdrics supports a **FOCUS v1.3-aligned core export** for cost records in the tenant ledger.
 
-This export is intentionally scoped to the FOCUS columns that Valdrix can derive deterministically
+This export is intentionally scoped to the FOCUS columns that Valdrics can derive deterministically
 from the normalized cost ledger today, without claiming SKU or unit-price conformance for fields
 we do not persist yet.
 
@@ -58,7 +58,7 @@ The export includes the following columns:
 
 ## Known Limitations (By Design for v1)
 
-- SKU/unit price columns are not included yet (Valdrix does not persist those fields in the ledger today).
+- SKU/unit price columns are not included yet (Valdrics does not persist those fields in the ledger today).
 - ServiceSubcategory is currently exported as `Other (ServiceCategory)` until per-provider subcategory
   normalization is added.
 

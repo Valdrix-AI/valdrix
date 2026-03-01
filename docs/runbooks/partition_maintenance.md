@@ -1,6 +1,6 @@
 # Partition Maintenance (Postgres)
 
-Valdrix uses monthly range partitioning for high-volume tables to keep query latency stable as data grows.
+Valdrics uses monthly range partitioning for high-volume tables to keep query latency stable as data grows.
 
 Tables:
 - `cost_records` (partitioned by `recorded_at` DATE)

@@ -1,4 +1,4 @@
-# Valdrix Roadmap (Internal)
+# Valdrics Roadmap (Internal)
 
 Last updated: **February 20, 2026**
 

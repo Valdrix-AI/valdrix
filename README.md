@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/valdrix_icon.png" alt="Valdrix" width="200" />
+  <img src="assets/valdrix_icon.png" alt="Valdrics" width="200" />
 </p>
 
-<h1 align="center">Valdrix</h1>
+<h1 align="center">Valdrics</h1>
 <h3 align="center">Optimize Cloud Value, Not Just Cost</h3>
 
 <p align="center">
@@ -52,7 +52,7 @@ Graphs give you... more questions.
 
 ## 🛡️ The Solution
 
-**Valdrix transforms raw cost data into actionable value intelligence.**
+**Valdrics transforms raw cost data into actionable value intelligence.**
 
 It connects to your cloud, uncovers waste, explains spend behavior, and gives you *exactly* what to do—with receipts.
 
@@ -68,7 +68,7 @@ It connects to your cloud, uncovers waste, explains spend behavior, and gives yo
 4. **Act** → Get Slack alerts, approve remediations, and watch your bill shrink.
 
 > [!TIP]
-> **Zero API Costs for Your AWS Account**: Valdrix uses [AWS CUR](https://docs.aws.amazon.com/cur/latest/userguide/what-is-cur.html) and [Resource Explorer 2](https://docs.aws.amazon.com/resource-explorer/latest/userguide/welcome.html) instead of expensive APIs like Cost Explorer ($0.01/request). Your AWS bill from Valdrix scans is **~$0.00/month**.
+> **Zero API Costs for Your AWS Account**: Valdrics uses [AWS CUR](https://docs.aws.amazon.com/cur/latest/userguide/what-is-cur.html) and [Resource Explorer 2](https://docs.aws.amazon.com/resource-explorer/latest/userguide/welcome.html) instead of expensive APIs like Cost Explorer ($0.01/request). Your AWS bill from Valdrics scans is **~$0.00/month**.
 
 
 ```
@@ -77,7 +77,7 @@ It connects to your cloud, uncovers waste, explains spend behavior, and gives yo
               └────────┬─────────┘
                        ▼
               ┌──────────────────┐
-              │  🔌 Valdrix Core │
+              │  🔌 Valdrics Core │
               │    (FastAPI)     │
               └────────┬─────────┘
                        ▼
@@ -121,7 +121,7 @@ Not just "idle EC2." We find *everything*:
 
 Other tools use static rules: *"CPU < 10% for 7 days = zombie."*
 
-Valdrix asks: *"Why did RDS costs spike 47% on Tuesday?"*  
+Valdrics asks: *"Why did RDS costs spike 47% on Tuesday?"*  
 And answers: *"Because Staging-DB-04 was left running after the load test. Estimated waste: $312/month."*
 
 **Powered by your choice of:**
@@ -136,7 +136,7 @@ And answers: *"Because Staging-DB-04 was left running after the load test. Estim
 
 ### 🌿 **GreenOps Native**
 
-Every wasted dollar has a carbon cost. Valdrix calculates it.
+Every wasted dollar has a carbon cost. Valdrics calculates it.
 
 ```
 Total CO₂ this month:      42.7 kg
@@ -151,7 +151,7 @@ Carbon efficiency:         89 gCO₂e per $1 spent
 
 ### 🔔 **Slack-First Alerts**
 
-Your engineering team lives in Slack. So does Valdrix.
+Your engineering team lives in Slack. So does Valdrics.
 
 - **Anomaly alerts** when costs spike unexpectedly
 - **Daily digests** with top savings opportunities
@@ -192,7 +192,7 @@ We're paranoid, so you don't have to be:
 - An AWS account with:
   - AWS CUR configured to deliver Parquet reports to S3
   - Resource Explorer 2 enabled
-- Cost Explorer is optional (Valdrix ingestion path is CUR + Resource Explorer 2)
+- Cost Explorer is optional (Valdrics ingestion path is CUR + Resource Explorer 2)
 - An LLM API key (OpenAI, Anthropic, Google, or Groq)
 
 ### Runtime Dependency Policy (Prod/Staging)
@@ -252,7 +252,7 @@ The dashboard will guide you through deploying our read-only IAM role via CloudF
 
 ## 🏗️ Production Infrastructure
 
-Valdrix includes production-ready infrastructure components:
+Valdrics includes production-ready infrastructure components:
 
 ### Kubernetes Deployment
 ```bash
@@ -313,10 +313,10 @@ We're in **active development**. Here's where we are:
 
 ## 📜 License
 
-Valdrix is **source available** under the **Business Source License (BSL) 1.1**.
+Valdrics is **source available** under the **Business Source License (BSL) 1.1**.
 
 - ✅ **Free for internal use** — Run it on your own infrastructure.
-- ❌ **No resale** — Cannot offer Valdrix as a managed service.
+- ❌ **No resale** — Cannot offer Valdrics as a managed service.
 - 🗓️ **Freedom date:** Converts to **Apache 2.0** on **January 12, 2029**.
 
 See [LICENSE](LICENSE) for full terms.
@@ -342,7 +342,7 @@ We welcome contributions! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) bef
 
 ## 💖 Support
 
-If Valdrix saved your team $1,000 this month, consider sponsoring the project:
+If Valdrics saved your team $1,000 this month, consider sponsoring the project:
 
 <p align="center">
   <a href="https://github.com/sponsors/AbdulGoniyyDare">

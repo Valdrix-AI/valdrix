@@ -6,8 +6,8 @@ This project is released under the Business Source License 1.1 (BSL 1.1). The le
 
 ## Plain-English Summary
 
-- You can run Valdrix internally in your own organization.
-- You cannot offer Valdrix itself as a competing hosted/managed service to third parties.
+- You can run Valdrics internally in your own organization.
+- You cannot offer Valdrics itself as a competing hosted/managed service to third parties.
 - On the change date, the code converts to Apache 2.0.
 
 ## Change Terms
@@ -22,31 +22,31 @@ This project is released under the Business Source License 1.1 (BSL 1.1). The le
 | Internal self-hosting for your own company | Yes | Includes production internal usage. |
 | Internal use by subsidiaries under same corporate control | Yes | Treated as internal use. |
 | Consulting/professional services deploying a customer-owned instance | Yes | Customer controls the instance and data plane. |
-| Reselling Valdrix as your own hosted SaaS | No | Prohibited competitive hosted offering. |
-| Multi-tenant MSP offering Valdrix capabilities as a service | No | Prohibited if customers consume Valdrix as the service. |
+| Reselling Valdrics as your own hosted SaaS | No | Prohibited competitive hosted offering. |
+| Multi-tenant MSP offering Valdrics capabilities as a service | No | Prohibited if customers consume Valdrics as the service. |
 | Research, evaluation, and test environments | Yes | Non-production and production internal use allowed. |
 
 ## Definitions Used in This Project
 
 - Production use: any environment used to serve real internal business workloads.
 - Hosted service: software operated by one party for use by unrelated third parties over a network.
-- Competitive offering: hosted use where Valdrix functionality is sold or bundled as a service.
+- Competitive offering: hosted use where Valdrics functionality is sold or bundled as a service.
 
 ## Licensing FAQ
 
-### Can I self-host Valdrix?
+### Can I self-host Valdrics?
 
 Yes, for your own internal operations.
 
 ### Can Valdrix-AI offer an official hosted SaaS?
 
-Yes. The BSL restriction targets third parties offering competing hosted services. It does not block the project owner from operating the official Valdrix SaaS.
+Yes. The BSL restriction targets third parties offering competing hosted services. It does not block the project owner from operating the official Valdrics SaaS.
 
 ### Can I run it for my clients?
 
-You can deploy/support a client-owned instance. You cannot operate a shared hosted Valdrix service for third-party consumption.
+You can deploy/support a client-owned instance. You cannot operate a shared hosted Valdrics service for third-party consumption.
 
-### Can I buy rights to run Valdrix as a managed service?
+### Can I buy rights to run Valdrics as a managed service?
 
 Yes. We provide commercial exceptions for qualified partners and OEM use cases. See `COMMERCIAL_LICENSE.md`.
 

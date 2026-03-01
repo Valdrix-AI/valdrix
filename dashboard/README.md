@@ -1,6 +1,6 @@
-# Valdrix Dashboard Frontend
+# Valdrics Dashboard Frontend
 
-SvelteKit frontend for Valdrix.
+SvelteKit frontend for Valdrics.
 
 ## Commands
 

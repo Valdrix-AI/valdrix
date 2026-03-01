@@ -2,7 +2,7 @@
 # Multi-Region Failover Architecture
 
 ## 1. Strategy
-Valdrix uses an **Active-Passive** multi-region strategy for high availability.
+Valdrics uses an **Active-Passive** multi-region strategy for high availability.
 
 ## 2. Components
 - **Primary Region**: AWS `us-east-1`.

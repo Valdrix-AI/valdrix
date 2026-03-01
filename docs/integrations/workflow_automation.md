@@ -1,6 +1,6 @@
 # Workflow Automation Integrations
 
-Valdrix can trigger external automation workflows on remediation policy and execution events.
+Valdrics can trigger external automation workflows on remediation policy and execution events.
 
 ## Supported targets
 
@@ -10,7 +10,7 @@ Valdrix can trigger external automation workflows on remediation policy and exec
 
 ## Event model
 
-Valdrix emits deterministic events:
+Valdrics emits deterministic events:
 
 - `policy.block`
 - `policy.escalate`

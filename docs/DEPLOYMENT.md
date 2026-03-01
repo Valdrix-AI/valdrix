@@ -1,8 +1,8 @@
-# Valdrix Deployment Guide (Cloudflare Pages + Koyeb + Supabase)
+# Valdrics Deployment Guide (Cloudflare Pages + Koyeb + Supabase)
 
 Last verified: **2026-02-18**
 
-This guide defines the current production path for Valdrix:
+This guide defines the current production path for Valdrics:
 - Frontend: Cloudflare Pages (SvelteKit + Cloudflare adapter)
 - API: Koyeb (FastAPI)
 - Data/Auth: Supabase (PostgreSQL + Auth)

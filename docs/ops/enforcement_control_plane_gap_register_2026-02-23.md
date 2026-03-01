@@ -124,7 +124,7 @@ Execution update (2026-02-28H): immediate PKG/FIN evidence hardening controls co
    - supports bounded timestamp skew to avoid same-day false positives.
    - Evidence: `tests/unit/ops/test_verify_monthly_finance_evidence_refresh.py`, `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`.
 
-Execution update (2026-02-28I): Valdrix codebase audit validation + remediation batch
+Execution update (2026-02-28I): Valdrics codebase audit validation + remediation batch
 1. Validated and remediated confirmed security/runtime defects from `VALDRX_CODEBASE_AUDIT_2026-02-28.md.resolved`:
    - `VAL-DB-001`: hardened RLS session posture by introducing explicit `rls_system_context` marker and fail-closed behavior for ambiguous (unset/non-system) DB query context in non-testing runtime.
      - Code: `app/shared/db/session.py`
@@ -171,7 +171,7 @@ Execution update (2026-02-28J): adapter retry abstraction remediation
 5. Remaining adapter backlog scope:
    - class-size and vendor-strategy decomposition (`VAL-ADAPT-002+`) remains a maintainability refactor backlog item (non-hotfix severity).
 
-Execution update (2026-02-28K): Valdrix audit follow-up (targeted closures + decomposition pass)
+Execution update (2026-02-28K): Valdrics audit follow-up (targeted closures + decomposition pass)
 1. Closed `VAL-CORE-001` (implicit maturity mapping risk):
    - `app/shared/core/pricing.py` now defines explicit preview maturity membership and enforces exact/complete feature-maturity coverage invariants.
    - Startup fails closed if any `FeatureFlag` is missing from maturity classification.
@@ -188,7 +188,7 @@ Execution update (2026-02-28K): Valdrix audit follow-up (targeted closures + dec
    - `VAL-ADAPT-002+` still has additional class-size/vendor-strategy extraction scope; this is maintainability backlog, not a release-blocking runtime defect.
 
 Execution update (2026-02-28L): consolidated remediation state sync
-1. Consolidated remediated Valdrix items now reflected in code + docs:
+1. Consolidated remediated Valdrics items now reflected in code + docs:
    - `VAL-DB-001`, `VAL-BILL-005`, `VAL-SEC-001`, `VAL-SEC-003`, `VAL-CORE-003/004`,
    - `VAL-CORE-001`, `VAL-BILL-001`, `VAL-ADAPT-003`, `VAL-ADAPT-004`.
 2. `VAL-ADAPT-002` status:
@@ -209,7 +209,7 @@ Execution update (2026-02-28M): license stream-cost decomposition follow-up
    - `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_vendor_ops.py --hide-error-context --no-error-summary` -> passed.
    - `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_google_workspace.py` -> `91 passed`.
 
-Execution update (2026-02-28N): Valdrix continuation (auth coverage + paginator + billing entitlement sync)
+Execution update (2026-02-28N): Valdrics continuation (auth coverage + paginator + billing entitlement sync)
 1. Closed `VAL-SEC-002` with machine-checkable route-auth verification:
    - added `scripts/verify_api_auth_coverage.py` (recursive dependency scan + explicit public allowlist),
    - wired as a mandatory enterprise gate command in `scripts/run_enterprise_tdd_gate.py`,
@@ -1484,7 +1484,7 @@ Later wave (`Optional/Later`):
 ## Operator review of new pricing feedback (2026-02-24)
 
 This section evaluates the newly provided pricing feedback with two evidence types only:
-1. Codebase facts (current Valdrix implementation).
+1. Codebase facts (current Valdrics implementation).
 2. Public pricing evidence from primary vendor pages / AWS Marketplace.
 
 ### Codebase facts verified
@@ -1632,7 +1632,7 @@ This addendum evaluates the latest tier-by-tier pricing feedback against reposit
 
 ## B-first launch recalibration addendum (2026-02-24, latest feedback)
 
-This section evaluates the claim that pricing/positioning must shift immediately if Valdrix launches as an economic control plane.
+This section evaluates the claim that pricing/positioning must shift immediately if Valdrics launches as an economic control plane.
 
 ### Codebase facts that constrain launch positioning
 
@@ -2509,7 +2509,7 @@ This section evaluates the latest BSL feedback against repository license terms 
 
 ### Repository facts (legal/commercial posture)
 
-1. Valdrix is licensed under BSL 1.1 with source availability, not OSI open-source licensing today.
+1. Valdrics is licensed under BSL 1.1 with source availability, not OSI open-source licensing today.
    - Evidence: `LICENSE`, `README.md`, `docs/licensing.md`.
 2. Change terms are explicit:
    - Change Date: `2029-01-12`.
@@ -2540,7 +2540,7 @@ Conclusion:
 1. The strategic comparison is useful directionally.
 2. Licensing analogs must be treated as category-adjacent, not all "BSL peers."
 
-### Commercial implication for Valdrix (strict)
+### Commercial implication for Valdrics (strict)
 
 1. Under BSL + public repo, monetization strength comes from operated service value:
    - reliability/SLOs,

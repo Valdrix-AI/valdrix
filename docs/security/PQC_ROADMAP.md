@@ -1,7 +1,7 @@
 # Post-Quantum Cryptography (PQC) Roadmap
 
 ## Strategic Vision
-Valdrix is committed to future-proofing tenant data against the "Harvest Now, Decrypt Later" threat. This roadmap outlines the transition from classical asymmetric cryptography (RSA, ECC) to NIST-standardized quantum-resistant algorithms.
+Valdrics is committed to future-proofing tenant data against the "Harvest Now, Decrypt Later" threat. This roadmap outlines the transition from classical asymmetric cryptography (RSA, ECC) to NIST-standardized quantum-resistant algorithms.
 
 ## 1. Cryptographic Inventory (Current State)
 - **Symmetric**: AES-256-CBC (Fernet) - *Quantum-Safe (requires 256-bit keys)*.

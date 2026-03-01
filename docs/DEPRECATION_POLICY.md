@@ -1,6 +1,6 @@
-# Valdrix Deprecation & Versioning Policy
+# Valdrics Deprecation & Versioning Policy
 
-To ensure high reliability for enterprise customers, Valdrix follows strict version lifecycles.
+To ensure high reliability for enterprise customers, Valdrics follows strict version lifecycles.
 
 ## 1. API Versioning
 - **Structure**: `/api/v[N]/` (e.g., `/api/v1/`).

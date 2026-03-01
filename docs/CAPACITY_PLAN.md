@@ -1,4 +1,4 @@
-# Valdrix Capacity Plan (2026)
+# Valdrics Capacity Plan (2026)
 
 This plan outlines the infrastructure targets for scaling the platform.
 

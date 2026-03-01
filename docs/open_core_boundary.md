@@ -2,7 +2,7 @@
 
 Last updated: February 12, 2026
 
-This document defines licensing boundaries for Valdrix components.
+This document defines licensing boundaries for Valdrics components.
 
 ## Current State
 

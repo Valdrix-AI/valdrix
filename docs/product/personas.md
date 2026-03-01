@@ -1,6 +1,6 @@
 # Personas (Product Defaults)
 
-Valdrix is used by different roles with different success metrics. Persona is a **UX default** that controls:
+Valdrics is used by different roles with different success metrics. Persona is a **UX default** that controls:
 
 - which navigation items are emphasized
 - which home widgets load first

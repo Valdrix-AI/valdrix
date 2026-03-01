@@ -1,6 +1,6 @@
 # SCIM 2.0 Provisioning (Enterprise)
 
-Valdrix supports **tenant-scoped SCIM 2.0 provisioning** for **Users** and (optionally) **Groups** via a dedicated SCIM bearer token.
+Valdrics supports **tenant-scoped SCIM 2.0 provisioning** for **Users** and (optionally) **Groups** via a dedicated SCIM bearer token.
 
 ## Availability
 - Tier: **Enterprise**
@@ -16,7 +16,7 @@ Examples:
 - `GET /scim/v2/Users`
 
 ## How To Enable
-1. In Valdrix, go to **Settings** -> **Identity**.
+1. In Valdrics, go to **Settings** -> **Identity**.
 2. Toggle **SCIM provisioning** on.
 3. Click **Rotate SCIM token** (this returns a new token once).
 4. Store the token in your IdP as a secret.
@@ -37,7 +37,7 @@ This endpoint never returns the stored token. It only confirms whether the submi
 Set the following:
 - SCIM Base URL: `https://<your-valdrix-host>/scim/v2`
 - Authentication: Bearer Token
-- Token: the SCIM token you generated in Valdrix
+- Token: the SCIM token you generated in Valdrics
 
 ## Supported Operations
 - `GET /ServiceProviderConfig`
@@ -65,7 +65,7 @@ For stable “reference values” (URLs, auth mode, attribute mapping guidance) 
 - `docs/integrations/idp_reference_configs.md`
 
 ## SCIM Group Mappings (Recommended)
-Valdrix supports **tenant-configurable group mappings** that assign:
+Valdrics supports **tenant-configurable group mappings** that assign:
 - `role`: `admin` or `member`
 - `persona` (optional UX default): `engineering | finance | platform | leadership`
 
@@ -74,8 +74,8 @@ Configure:
 2. Add one or more mappings (group name is case-insensitive).
 
 Provisioning behavior:
-- If your IdP includes `groups` on `POST/PUT/PATCH /Users`, Valdrix applies mappings to set `role` and optional `persona`.
-- If your IdP provisions Group objects and manages membership via `POST/PUT/PATCH /Groups`, Valdrix stores group membership and recomputes entitlements for affected users based on your mappings.
+- If your IdP includes `groups` on `POST/PUT/PATCH /Users`, Valdrics applies mappings to set `role` and optional `persona`.
+- If your IdP provisions Group objects and manages membership via `POST/PUT/PATCH /Groups`, Valdrics stores group membership and recomputes entitlements for affected users based on your mappings.
 - If `groups` is **omitted** on `PUT`, entitlements are treated as **no change**.
 - If `groups` is **present** (even an empty list) on `PUT`, it is treated as **authoritative** for `role`:
   - No matching mapping => `member`

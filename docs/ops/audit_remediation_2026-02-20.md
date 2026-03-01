@@ -207,9 +207,9 @@ Source audit: `/home/daretechie/.gemini/antigravity/brain/c6c55133-7d83-4352-ab2
 
 - `VAL-ADAPT-002+` remains open as maintainability refactor scope (full class-size/vendor-strategy split), not an immediate correctness or security hotfix blocker.
 
-## Consolidated remediation status (Valdrix follow-up, 2026-02-28)
+## Consolidated remediation status (Valdrics follow-up, 2026-02-28)
 
-This section consolidates what is now remediated from the Valdrix audit stream so reviewers do not need to reconstruct status across multiple execution updates.
+This section consolidates what is now remediated from the Valdrics audit stream so reviewers do not need to reconstruct status across multiple execution updates.
 
 ### Fully remediated (code + regression evidence captured)
 
@@ -239,7 +239,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Remaining `VAL-ADAPT-002+` class-size/vendor-strategy decomposition scope.
 - No unresolved release-critical correctness/security defect was confirmed in this subset after remediation and regression reruns.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28N)
+## Additional remediation batch (Valdrics continuation, 2026-02-28N)
 
 - `VAL-SEC-002` remediated with machine-checkable API auth coverage:
   - Added `scripts/verify_api_auth_coverage.py` to recursively inspect route dependency trees.
@@ -267,7 +267,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - `TESTING=true DEBUG=false uv run python3 scripts/verify_api_auth_coverage.py` -> `Auth coverage check passed.`
 - `DEBUG=false uv run pytest -q --no-cov tests/unit/services/billing/test_entitlement_policy.py tests/unit/services/billing/test_dunning_service.py tests/unit/services/billing/test_paystack_billing_branches.py tests/unit/ops/test_verify_api_auth_coverage.py tests/unit/shared/adapters/test_aws_pagination.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/governance/test_jobs_api.py tests/unit/governance/settings/test_llm_settings.py` -> `98 passed`.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28O)
+## Additional remediation batch (Valdrics continuation, 2026-02-28O)
 
 - `VAL-ADAPT-002+` decomposition advanced further in `app/shared/adapters/license.py`:
   - moved manual-feed transformation/validation/activity logic to `app/shared/adapters/license_feed_ops.py`,
@@ -283,7 +283,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_feed_ops.py app/shared/adapters/license_vendor_registry.py --hide-error-context --no-error-summary` -> passed.
 - `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_license_feed_ops.py tests/unit/shared/adapters/test_license_vendor_registry.py tests/unit/services/adapters/test_adapter_helper_branches.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_google_workspace.py` -> `123 passed`.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28P)
+## Additional remediation batch (Valdrics continuation, 2026-02-28P)
 
 - `VAL-ADAPT-002+` decomposition advanced from helper extraction to vendor-module split:
   - `app/shared/adapters/license_vendor_verify.py`
@@ -312,7 +312,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot/export stability: stream/revoke/activity wrapper signatures and returned record shapes are unchanged at call sites.
 - Failure modes and misconfiguration: unsupported vendor paths remain fail-closed with explicit error messages.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28Q)
+## Additional remediation batch (Valdrics continuation, 2026-02-28Q)
 
 - `VAL-ADAPT-002+` advanced by removing stub-grade behavior from the license adapter resource surfaces:
   - added `app/shared/adapters/license_resource_ops.py` for deterministic, typed resource/usage shaping from license activity rows,
@@ -337,7 +337,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: usage row schema is explicit and stable (`provider/service/usage_type/resource_id/usage_amount/cost/currency/timestamp/tags`).
 - Failure modes/misconfiguration: unsupported resource/service requests return empty results; negative default seat prices are clamped to `0.0`; malformed timestamps fall back safely.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28R)
+## Additional remediation batch (Valdrics continuation, 2026-02-28R)
 
 - `VAL-CORE-002` remediated in `app/shared/core/pricing.py`:
   - removed legacy hardcoded `paystack_amount_kobo` tier constants from runtime pricing config,
@@ -376,7 +376,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: billing metadata keys (`plan_code`, `pricing_mode`) are additive and backward-safe.
 - Failure modes/misconfiguration: router registry now fails closed at startup on missing/duplicate/unexpected prefixes.
 
-## Valdrix remaining finding dispositions (post-remediation review)
+## Valdrics remaining finding dispositions (post-remediation review)
 
 - Disposition evidence is now machine-checkable and release-gated via:
   - register artifact: `docs/ops/evidence/valdrix_disposition_register_2026-02-28.json`
@@ -391,7 +391,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - `VAL-API-004`: static Swagger asset serving remains read-only from packaged static directory; no runtime write path is exposed by app routes.
 - `VAL-ADAPT-002+`: still open as class-size/vendor-strategy maintainability decomposition backlog, not a correctness/security release blocker after current remediation packs.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28S)
+## Additional remediation batch (Valdrics continuation, 2026-02-28S)
 
 - `VAL-ADAPT-002+` decomposition advanced by extracting native vendor dispatch orchestration out of `LicenseAdapter`:
   - added `app/shared/adapters/license_native_dispatch.py` with typed, table-driven dispatch for verify, stream, revoke, and activity paths,
@@ -415,7 +415,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: public adapter method signatures and emitted row shapes are unchanged.
 - Failure modes/misconfiguration: unknown native vendors stay fail-closed (`ExternalAPIError`/`UnsupportedVendorError`) with explicit operator-facing messages.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28T)
+## Additional remediation batch (Valdrics continuation, 2026-02-28T)
 
 - `VAL-ADAPT-001` hardening pass implemented for cloud-core adapters (AWS/Azure/GCP/CUR):
   - added sanitized adapter error helpers to `app/shared/adapters/base.py`:
@@ -447,7 +447,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: no request/response schema changes; only failure-message selection semantics improved.
 - Failure modes/misconfiguration: unsupported-region and credential failures remain fail-closed with explicit operator-facing diagnostics.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28U)
+## Additional remediation batch (Valdrics continuation, 2026-02-28U)
 
 - Remediated all five explicit `get_resource_usage()` stubs that previously returned unconditional empty lists:
   - `app/shared/adapters/azure.py`
@@ -484,7 +484,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: usage payloads are now consistently shaped with explicit defaults (`currency`, `region`, `source_adapter`) and no placeholder TODO paths.
 - Failure modes/misconfiguration: lookups fail closed (`[]`) on upstream errors; bounded lookback prevents unbounded scans; resource/service filters are explicit and case-normalized.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28V)
+## Additional remediation batch (Valdrics continuation, 2026-02-28V)
 
 - Remediated remaining AWS adapter `get_resource_usage()` placeholders:
   - `app/shared/adapters/aws_cur.py`
@@ -518,7 +518,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: emitted usage schema remains consistent with all other adapter resource-usage surfaces.
 - Failure modes/misconfiguration: blank service requests and empty discovery/ingestion paths fail closed (`[]`) without raising unstable runtime errors.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28W)
+## Additional remediation batch (Valdrics continuation, 2026-02-28W)
 
 - `VAL-DB-001` hardening finalized for explicit tenant-context teardown:
   - added `clear_session_tenant_context()` in `app/shared/db/session.py` to enforce fail-closed state (`tenant_id=None`, `rls_context_set=False`, `rls_system_context=False`) on both session and connection.
@@ -552,7 +552,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: no API payload schema changes; remediation is internal session-control behavior only.
 - Failure modes/misconfiguration: unresolved backend detection remains fail-closed and now applies symmetric system-context resets during both set and clear flows.
 
-## Additional remediation batch (Valdrix continuation, 2026-02-28X)
+## Additional remediation batch (Valdrics continuation, 2026-02-28X)
 
 - `VAL-ADAPT-002+` decomposition advanced by extracting native-vendor compatibility wrappers out of `LicenseAdapter`:
   - added `app/shared/adapters/license_native_compat.py` with a dedicated `LicenseNativeCompatMixin`.
@@ -584,7 +584,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: adapter public/native private seams remain stable, protecting existing regression snapshots and downstream exports.
 - Failure modes/misconfiguration: unsupported vendor handling remains fail-closed through dispatch/runtime contracts; native auth guardrails are unchanged.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01A)
+## Additional remediation batch (Valdrics continuation, 2026-03-01A)
 
 - `VAL-ADAPT-002+` breaking cleanup completed (legacy private wrapper seam removed):
   - removed `app/shared/adapters/license_native_compat.py` and dropped `LicenseNativeCompatMixin` inheritance from `LicenseAdapter`.
@@ -618,7 +618,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: public adapter outputs and exported usage/cost row schemas are unchanged; only internal invocation topology changed.
 - Failure modes/misconfiguration: unsupported vendor and unsupported revoke paths remain fail-closed with explicit `ExternalAPIError` / `UnsupportedVendorError` semantics.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01B)
+## Additional remediation batch (Valdrics continuation, 2026-03-01B)
 
 - Cloud+ adapter architecture hardening completed for remaining native-vendor branch chains:
   - `app/shared/adapters/saas.py`
@@ -655,7 +655,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Snapshot stability/export integrity: discovery payload shape is deterministic and sorted by resource identity/region; no existing cost row schema contracts changed.
 - Failure modes/misconfiguration: unsupported vendor and invalid auth mode checks remain explicit fail-closed guards.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01C)
+## Additional remediation batch (Valdrics continuation, 2026-03-01C)
 
 - Completed no-compat cleanup for `VAL-ADAPT-002+` runtime dispatch:
   - removed `app/shared/adapters/license_vendor_ops.py` compatibility facade from production code,
@@ -689,7 +689,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Failure modes: unsupported vendors still fail closed (`ExternalAPIError` / `UnsupportedVendorError`) and discovery errors return empty lists with explicit warning logs.
 - Operational misconfiguration risk: auth-mode/vendor guards and connector-config validation branches remain enforced with explicit error strings.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01D)
+## Additional remediation batch (Valdrics continuation, 2026-03-01D)
 
 - Adapter consistency hardening completed across cloud and Cloud+ discovery/usage surfaces:
   - `app/shared/adapters/aws_multitenant.py`
@@ -725,7 +725,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Failure modes: fail-closed branches now carry explicit operator context instead of silent empty returns.
 - Operational misconfiguration: unsupported-region/plugin-mapping branches in AWS multitenant now surface explicit actionable error messages.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01E)
+## Additional remediation batch (Valdrics continuation, 2026-03-01E)
 
 - Completed remaining private stream-wrapper seam cleanup on adapters:
   - removed `_stream_cost_and_usage_impl` methods from:
@@ -762,7 +762,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Failure modes: invalid `lastmod` env values are ignored (fail-safe omission instead of malformed XML).
 - Operational misconfiguration: explicit env-driven `lastmod` control makes deployment behavior auditable and intentional.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01F)
+## Additional remediation batch (Valdrics continuation, 2026-03-01F)
 
 - Closed remaining silent fallback path for unsupported native license auth vendors:
   - `app/shared/adapters/license.py`
@@ -791,7 +791,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Failure modes: unsupported vendor + native auth can no longer silently degrade into manual-feed execution.
 - Operational misconfiguration: Playwright backend startup is now resilient to inherited non-boolean `DEBUG` values.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01G)
+## Additional remediation batch (Valdrics continuation, 2026-03-01G)
 
 - `VAL-CORE-003` hardening completed with process-level tenant-tier cache:
   - `app/shared/core/pricing.py`
@@ -831,7 +831,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Failure modes: stale tier reads are bounded by TTL and explicit invalidation on plan sync; DB session dependency paths remain fail-closed where enforced.
 - Operational misconfiguration: cache behavior remains safe under missing `db.info`; direct dependency seams reduce override drift and hidden aliasing risk.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01H)
+## Additional remediation batch (Valdrics continuation, 2026-03-01H)
 
 - `VAL-SEC-003` hardening completed for webhook client IP attribution:
   - `app/modules/billing/api/v1/billing.py`
@@ -873,7 +873,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Failure modes: proxy trust misconfiguration now fails closed for XFF usage; invalid CIDRs fail at config validation.
 - Operational misconfiguration: staging/production now requires explicit trusted proxy CIDR allowlist when proxy headers are enabled.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01I)
+## Additional remediation batch (Valdrics continuation, 2026-03-01I)
 
 - `VAL-CORE-004` compatibility cleanup finalized in tier resolution:
   - `app/shared/core/pricing.py`
@@ -909,7 +909,7 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Failure modes: invalid pricing result shapes and malformed paystack webhook allowlist values fail closed.
 - Operational misconfiguration: webhook source-IP policy is now explicit, validated configuration rather than embedded constants.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01J)
+## Additional remediation batch (Valdrics continuation, 2026-03-01J)
 
 - Canonical disposition sync for adapter decomposition track:
   - `VAL-ADAPT-002`: `CLOSED`.
@@ -938,3 +938,58 @@ This section consolidates what is now remediated from the Valdrix audit stream s
 - Export integrity: documentation-only + frontend regression validation pass; export contracts unchanged.
 - Failure modes: overflow/sr-only/header/toggle regressions are explicit test failures.
 - Operational misconfiguration: no new runtime config surface introduced.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01K)
+
+- Billing webhook idempotency and replay hardening:
+  - `app/modules/billing/domain/billing/webhook_retry.py`
+  - replaced time-based webhook reference fallback with deterministic payload reference resolution (`reference`, `data.reference`, `data.id`, `id`, `event_id`, stable payload hash fallback),
+  - added `mark_inline_processed(...)` to complete queued webhook jobs when inline handling succeeds, preventing duplicate worker re-processing.
+  - `app/modules/billing/api/v1/billing_ops.py`
+  - immediate webhook path now marks queued retry jobs completed after successful inline processing.
+- Dunning duplicate-webhook control:
+  - `app/modules/billing/domain/billing/dunning_service.py`
+  - added `DUNNING_WEBHOOK_DEBOUNCE_SECONDS` (5 minutes),
+  - duplicate rapid `invoice.payment_failed` webhooks now return `duplicate_ignored` without incrementing attempt counters.
+- Billing precision hardening:
+  - `app/modules/billing/domain/billing/paystack_webhook_impl.py`
+  - converted charge subunit and FX parsing to decimal-safe normalization,
+  - invalid/negative payload values now fail closed with structured warnings.
+  - `app/modules/billing/domain/billing/paystack_service_impl.py`
+  - introduced decimal-first USD normalization and cent conversion to remove float-rounding drift in checkout/renewal USD paths.
+- Executive reporting security signal integration:
+  - `app/modules/reporting/domain/leadership_kpis.py`
+  - added deterministic enforcement-derived KPI counters:
+    - `security_high_risk_decisions`
+    - `security_approval_required_decisions`
+    - `security_anomaly_signal_decisions`
+  - extended leadership CSV summary with these security posture metrics.
+- Public edge and mobile layout hardening:
+  - `dashboard/src/routes/+layout.svelte`
+  - Supabase auth listener now initializes only for authenticated sessions, eliminating public landing client resolution noise.
+  - `dashboard/src/app.css`
+  - `.main-content` sidebar offset now applies only from tablet+ breakpoints (`min-width: 768px`), preventing mobile layout breakage.
+- Operational safety hardening for destructive/admin scripts:
+  - `scripts/force_wipe_app.py`
+  - `scripts/database_wipe.py`
+  - `scripts/emergency_token.py`
+  - all now enforce explicit force flags, confirmation phrases, and protected environment controls for break-glass flows.
+- Naming consistency:
+  - `app/shared/core/config.py`
+  - default `APP_NAME` updated to `Valdrics`.
+
+### Validation evidence (this batch)
+
+- `DEBUG=false .venv/bin/pytest -q -o addopts='' tests/unit/modules/reporting/test_webhook_retry.py tests/unit/services/billing/test_dunning_service.py tests/unit/api/v1/test_billing.py tests/unit/modules/reporting/test_leadership_kpis_domain.py tests/unit/services/billing/test_paystack_billing.py tests/unit/services/billing/test_paystack_billing_branches.py tests/unit/core/test_config_audit.py` -> `122 passed`.
+- `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> `2 passed`.
+- `.venv/bin/python -m py_compile app/modules/billing/api/v1/billing_ops.py app/modules/billing/domain/billing/dunning_service.py app/modules/billing/domain/billing/paystack_service_impl.py app/modules/billing/domain/billing/paystack_webhook_impl.py app/modules/billing/domain/billing/webhook_retry.py app/modules/reporting/domain/leadership_kpis.py scripts/force_wipe_app.py scripts/database_wipe.py scripts/emergency_token.py` -> passed.
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: inline webhook completion plus worker retries now share deterministic idempotency references; duplicate webhook storms are debounced before state mutation.
+- Observability: duplicate webhook suppression, inline completion failures, invalid payload values, and script guard denials emit explicit structured logs.
+- Deterministic replay: webhook idempotency keys are now derived from stable payload identity (no time entropy).
+- Snapshot stability: landing layout checks remain deterministic across mobile breakpoints and SR-only clipping assertions.
+- Export integrity: leadership KPI CSV now includes explicit security posture columns without changing provider/service sort determinism.
+- Failure modes: webhook inline-processing success no longer leaves pending jobs that can replay side effects; invalid FX/amount payloads are safely rejected.
+- Operational misconfiguration: destructive scripts and emergency-token generation now fail closed unless explicit break-glass controls are supplied.

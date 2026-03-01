@@ -1,6 +1,6 @@
 # Month-End Close (Operator Runbook)
 
-Valdrix “month-end close” is a deterministic reconciliation package meant for finance/procurement sign-off:
+Valdrics “month-end close” is a deterministic reconciliation package meant for finance/procurement sign-off:
 
 - Close status (ready / not-ready reasons)
 - Lifecycle counts (preliminary vs final)

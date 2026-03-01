@@ -1,7 +1,7 @@
-# SCIM Compatibility Matrix (Valdrix)
+# SCIM Compatibility Matrix (Valdrics)
 
 This document is an internal, source-controlled checklist for SCIM IdP interoperability.
-It describes what Valdrix **supports today** (endpoints + payload variants), so we can
+It describes what Valdrics **supports today** (endpoints + payload variants), so we can
 validate compatibility without relying on tribal knowledge.
 
 It does **not** claim vendor certification unless explicitly stated elsewhere.
