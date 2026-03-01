@@ -34,12 +34,22 @@ function escapeXml(value: string): string {
 		.replaceAll("'", '&apos;');
 }
 
+function normalizeConfiguredLastMod(value: string | undefined): string | null {
+	if (!value) return null;
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) return null;
+	return parsed.toISOString();
+}
+
 export const GET: RequestHandler = ({ url }) => {
 	const basePath = basePathFor(url, '/sitemap.xml');
-	const lastMod = new Date().toISOString();
+	const configuredLastMod = normalizeConfiguredLastMod(
+		process.env.PUBLIC_SITEMAP_LASTMOD ?? process.env.SITEMAP_LASTMOD
+	);
 
 	const urlsXml = PUBLIC_ENTRIES.map((entry) => {
 		const loc = new URL(`${basePath}${entry.path}`, url.origin).toString();
+		const lastmod = configuredLastMod ? `<lastmod>${escapeXml(configuredLastMod)}</lastmod>` : '';
 		const changefreq = entry.changefreq ? `<changefreq>${entry.changefreq}</changefreq>` : '';
 		const priority =
 			typeof entry.priority === 'number' ? `<priority>${entry.priority.toFixed(1)}</priority>` : '';
@@ -47,7 +57,7 @@ export const GET: RequestHandler = ({ url }) => {
 		return [
 			'<url>',
 			`<loc>${escapeXml(loc)}</loc>`,
-			`<lastmod>${escapeXml(lastMod)}</lastmod>`,
+			lastmod,
 			changefreq,
 			priority,
 			'</url>'
