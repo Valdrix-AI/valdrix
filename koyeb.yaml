@@ -1,4 +1,4 @@
-# Valdrix Koyeb Configuration
+# Valdrics Koyeb Configuration
 # https://www.koyeb.com/docs/deploy/koyeb-files
 
 name: valdrix-api
@@ -17,7 +17,7 @@ definition:
       cpu:
         value: 70
 
-  instance_type: nano
+  instance_type: micro
 
   ports:
     - port: 8000

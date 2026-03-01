@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cloud import CloudAccount, CostRecord
+from app.models.enforcement import EnforcementDecision
 from app.modules.reporting.domain.savings_proof import SavingsProofService
 from app.shared.core.pricing import (
     FeatureFlag,
@@ -65,6 +66,9 @@ class LeadershipKpisResponse(BaseModel):
     applied_recommendations: int
     pending_remediations: int
     completed_remediations: int
+    security_high_risk_decisions: int = 0
+    security_approval_required_decisions: int = 0
+    security_anomaly_signal_decisions: int = 0
     notes: list[str]
 
 
@@ -189,6 +193,33 @@ class LeadershipKpiService:
             for service, cost in svc_rows
         ]
 
+        # Security posture indicators from deterministic enforcement decisions.
+        security_stmt = select(
+            func.count()
+            .filter(EnforcementDecision.risk_class.in_(("high", "critical")))
+            .label("high_risk_count"),
+            func.count()
+            .filter(EnforcementDecision.approval_required.is_(True))
+            .label("approval_required_count"),
+            func.count()
+            .filter(EnforcementDecision.anomaly_signal.is_(True))
+            .label("anomaly_signal_count"),
+        ).where(
+            EnforcementDecision.tenant_id == tenant_id,
+            EnforcementDecision.created_at >= window_start,
+            EnforcementDecision.created_at <= window_end,
+        )
+        security_row = (await self.db.execute(security_stmt)).first()
+        security_high_risk_decisions = (
+            int(security_row[0] or 0) if security_row else 0
+        )
+        security_approval_required_decisions = (
+            int(security_row[1] or 0) if security_row else 0
+        )
+        security_anomaly_signal_decisions = (
+            int(security_row[2] or 0) if security_row else 0
+        )
+
         # Savings proof (tier-gated).
         savings_opportunity = 0.0
         savings_realized = 0.0
@@ -232,6 +263,9 @@ class LeadershipKpiService:
             applied_recommendations=applied_recs,
             pending_remediations=pending_rems,
             completed_remediations=completed_rems,
+            security_high_risk_decisions=security_high_risk_decisions,
+            security_approval_required_decisions=security_approval_required_decisions,
+            security_anomaly_signal_decisions=security_anomaly_signal_decisions,
             notes=notes,
         )
 
@@ -243,6 +277,9 @@ class LeadershipKpiService:
             end_date=payload.end_date,
             total_cost_usd=payload.total_cost_usd,
             savings_realized_monthly_usd=payload.savings_realized_monthly_usd,
+            security_high_risk_decisions=payload.security_high_risk_decisions,
+            security_approval_required_decisions=payload.security_approval_required_decisions,
+            security_anomaly_signal_decisions=payload.security_anomaly_signal_decisions,
         )
         return payload
 
@@ -251,12 +288,14 @@ class LeadershipKpiService:
         # Summary section.
         lines: list[str] = []
         lines.append(
-            "start_date,end_date,total_cost_usd,carbon_total_kgco2e,carbon_coverage_percent,savings_opportunity_monthly_usd,savings_realized_monthly_usd"
+            "start_date,end_date,total_cost_usd,carbon_total_kgco2e,carbon_coverage_percent,savings_opportunity_monthly_usd,savings_realized_monthly_usd,security_high_risk_decisions,security_approval_required_decisions,security_anomaly_signal_decisions"
         )
         lines.append(
             f"{payload.start_date},{payload.end_date},{payload.total_cost_usd:.4f},"
             f"{payload.carbon_total_kgco2e:.4f},{payload.carbon_coverage_percent:.4f},"
-            f"{payload.savings_opportunity_monthly_usd:.2f},{payload.savings_realized_monthly_usd:.2f}"
+            f"{payload.savings_opportunity_monthly_usd:.2f},{payload.savings_realized_monthly_usd:.2f},"
+            f"{payload.security_high_risk_decisions},{payload.security_approval_required_decisions},"
+            f"{payload.security_anomaly_signal_decisions}"
         )
         lines.append("")
 

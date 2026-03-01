@@ -8,7 +8,7 @@
  */
 
 import { createServerClient } from '@supabase/ssr';
-import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+import { env as publicEnv } from '$env/dynamic/public';
 import { env } from '$env/dynamic/private';
 import type { Handle } from '@sveltejs/kit';
 import type { Session, User } from '@supabase/supabase-js';
@@ -48,9 +48,17 @@ function buildE2EBypassAuth(): { session: Session; user: User } {
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const isHttps = shouldUseSecureCookies(event.url, env.NODE_ENV || '');
+	const publicSupabaseUrl = String(publicEnv.PUBLIC_SUPABASE_URL || '').trim();
+	const publicSupabaseAnonKey = String(publicEnv.PUBLIC_SUPABASE_ANON_KEY || '').trim();
+
+	if (!publicSupabaseUrl || !publicSupabaseAnonKey) {
+		throw new Error(
+			'Supabase public environment is not configured. Set PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY.'
+		);
+	}
 
 	// Create a Supabase client with cookie handling
-	event.locals.supabase = createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
+	event.locals.supabase = createServerClient(publicSupabaseUrl, publicSupabaseAnonKey, {
 		cookies: {
 			get: (key) => event.cookies.get(key),
 			set: (key, value, options) => {
@@ -91,22 +99,27 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 
-		const {
-			data: { session }
-		} = await event.locals.supabase.auth.getSession();
-		if (!session) return { session: null, user: null };
+		try {
+			const {
+				data: { session }
+			} = await event.locals.supabase.auth.getSession();
+			if (!session) return { session: null, user: null };
 
-		const {
-			data: { user },
-			error
-		} = await event.locals.supabase.auth.getUser();
+			const {
+				data: { user },
+				error
+			} = await event.locals.supabase.auth.getUser();
 
-		if (error || !user) {
-			// validation failed
+			if (error || !user) {
+				// validation failed
+				return { session: null, user: null };
+			}
+
+			return { session, user };
+		} catch {
+			// Public edge hardening: avoid request crashes on auth provider resolution faults.
 			return { session: null, user: null };
 		}
-
-		return { session, user };
 	};
 
 	// Auth Guard: Protect all application routes by default.

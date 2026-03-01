@@ -1,5 +1,5 @@
 /**
- * Valdrix Resilient API Client
+ * Valdrics Resilient API Client
  *
  * Provides a wrapper around the native fetch API to:
  * 1. Automatically handle 429 (Rate Limit) errors via uiState

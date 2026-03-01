@@ -4,6 +4,12 @@ vi.mock('$env/static/public', () => ({
 	PUBLIC_API_URL: 'https://api.test.local/api/v1'
 }));
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {
+		PUBLIC_API_URL: 'https://api.test.local/api/v1'
+	}
+}));
+
 import { buildEdgeApiPath, edgeApiPath } from './edgeProxy';
 
 describe('edgeProxy helpers', () => {

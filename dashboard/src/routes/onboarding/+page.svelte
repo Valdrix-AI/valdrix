@@ -4,6 +4,7 @@
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { edgeApiPath } from '$lib/edgeProxy';
+	import { getTurnstileToken } from '$lib/security/turnstile';
 	import { base } from '$app/paths';
 
 	type CloudPlusAuthMethod = 'manual' | 'api_key' | 'oauth' | 'csv';
@@ -624,29 +625,39 @@
 		}
 
 		try {
+			const turnstileToken = await getTurnstileToken('onboard');
 			const res = await api.post(
 				edgeApiPath('/settings/onboard'),
 				{ tenant_name: 'My Organization' },
 				{
 					headers: {
-						Authorization: `Bearer ${token}`
+						Authorization: `Bearer ${token}`,
+						...(turnstileToken ? { 'X-Turnstile-Token': turnstileToken } : {})
 					}
 				}
 			);
 
 			if (res.ok) {
 				return true;
-			} else if (res.status === 400) {
+			}
+			if (res.status === 400) {
 				// Already onboarded - this is fine
 				const data = await res.json();
 				if (data.detail === 'Already onboarded') {
 					return true;
 				}
 			}
-			return true; // Continue anyway
+			const failurePayload = await res.json().catch(() => ({}));
+			const detail =
+				typeof failurePayload.detail === 'string'
+					? failurePayload.detail
+					: 'Unable to complete onboarding preparation.';
+			error = detail;
+			return false;
 		} catch (e) {
 			console.error('Onboarding check failed:', e);
-			return true; // Continue anyway - the endpoints will catch it
+			error = 'Unable to initialize onboarding right now. Please try again.';
+			return false;
 		}
 	}
 
@@ -1518,7 +1529,7 @@
 								type="text"
 								id="roleArn"
 								bind:value={roleArn}
-								placeholder="arn:aws:iam::123456789012:role/ValdrixReadOnly"
+								placeholder="arn:aws:iam::123456789012:role/ValdricsReadOnly"
 								class="input"
 							/>
 						</div>
@@ -1877,7 +1888,7 @@
 						type="text"
 						id="roleArn"
 						bind:value={roleArn}
-						placeholder="arn:aws:iam::123456789012:role/ValdrixReadOnly"
+						placeholder="arn:aws:iam::123456789012:role/ValdricsReadOnly"
 					/>
 				</div>
 

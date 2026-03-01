@@ -16,7 +16,7 @@ from app.modules.billing.domain.billing.webhook_retry import (
     WEBHOOK_MAX_ATTEMPTS,
     WEBHOOK_IDEMPOTENCY_TTL_HOURS,
 )
-from app.models.background_job import BackgroundJob
+from app.models.background_job import BackgroundJob, JobStatus
 
 
 @pytest.fixture
@@ -218,6 +218,7 @@ class TestWebhookStorage:
             call_args = mock_enqueue.call_args
             assert call_args is not None
             assert "deduplication_key" in call_args.kwargs
+            assert str(call_args.kwargs["payload"]["reference"]) == "txn_test_123"
 
     @pytest.mark.asyncio
     async def test_store_webhook_sets_max_attempts(
@@ -355,6 +356,60 @@ class TestWebhookPayloadValidation:
             )
 
             mock_enqueue.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_store_webhook_prefers_data_id_when_reference_missing(
+        self, mock_db, webhook_service
+    ):
+        payload = {"event": "invoice.payment_failed", "data": {"id": 998877}}
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
+        ) as mock_enqueue:
+            mock_job = MagicMock(spec=BackgroundJob)
+            mock_job._enqueue_created = True
+            mock_enqueue.return_value = mock_job
+
+            await webhook_service.store_webhook(
+                provider="paystack",
+                event_type="invoice.payment_failed",
+                payload=payload,
+            )
+
+            call_args = mock_enqueue.call_args
+            assert call_args is not None
+            assert call_args.kwargs["payload"]["reference"] == "998877"
+
+    @pytest.mark.asyncio
+    async def test_store_webhook_fallback_reference_is_deterministic_payload_hash(
+        self, mock_db, webhook_service
+    ):
+        payload = {"event": "invoice.payment_failed", "data": {"customer": {"customer_code": "CUS-1"}}}
+        dedup_keys: list[str] = []
+
+        async def _capture_enqueue(*args, **kwargs):
+            dedup_keys.append(str(kwargs["deduplication_key"]))
+            mock_job = MagicMock(spec=BackgroundJob)
+            mock_job._enqueue_created = True
+            return mock_job
+
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.enqueue_job",
+            side_effect=_capture_enqueue,
+        ):
+            await webhook_service.store_webhook(
+                provider="paystack",
+                event_type="invoice.payment_failed",
+                payload=payload,
+            )
+            await webhook_service.store_webhook(
+                provider="paystack",
+                event_type="invoice.payment_failed",
+                payload=payload,
+            )
+
+        assert len(dedup_keys) == 2
+        assert dedup_keys[0] == dedup_keys[1]
+        assert dedup_keys[0].startswith("webhook:paystack:")
 
 
 class TestProcessPaystackWebhook:
@@ -625,3 +680,22 @@ class TestWebhookIntegration:
                 result = await process_paystack_webhook(mock_job, mock_db)
 
                 assert result["status"] == "processed"
+
+
+class TestInlineCompletion:
+    @pytest.mark.asyncio
+    async def test_mark_inline_processed_marks_job_completed(self, mock_db, webhook_service):
+        job = MagicMock(spec=BackgroundJob)
+        job.id = uuid.uuid4()
+        job.status = JobStatus.PENDING.value
+        job.attempts = 0
+        job.result = None
+
+        await webhook_service.mark_inline_processed(job, {"status": "success"})
+
+        assert job.status == JobStatus.COMPLETED.value
+        assert job.completed_at is not None
+        assert job.result == {"status": "success"}
+        assert job.error_message is None
+        assert job.attempts == 1
+        mock_db.commit.assert_awaited_once()

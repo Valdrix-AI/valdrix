@@ -14,6 +14,12 @@ from app.shared.core.exceptions import ExternalAPIError
 logger = structlog.get_logger()
 
 
+def _optional_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    return None
+
+
 async def stream_google_workspace_license_costs(
     runtime: LicenseVendorRuntime,
     start_date: datetime,
@@ -155,6 +161,16 @@ async def list_google_workspace_activity(
         for user in users_list:
             primary_email = user.get("primaryEmail")
             last_login_raw = user.get("lastLoginTime")
+            is_super_admin = bool(user.get("isAdmin", False))
+            is_delegated_admin = bool(user.get("isDelegatedAdmin", False))
+            is_admin = is_super_admin or is_delegated_admin
+            mfa_enabled = _optional_bool(user.get("isEnrolledIn2Sv"))
+            mfa_enforced = _optional_bool(user.get("isEnforcedIn2Sv"))
+            admin_role = (
+                "super_admin"
+                if is_super_admin
+                else ("delegated_admin" if is_delegated_admin else "member")
+            )
 
             last_active_at = None
             if last_login_raw:
@@ -169,7 +185,13 @@ async def list_google_workspace_activity(
                     "email": primary_email,
                     "full_name": user.get("name", {}).get("fullName"),
                     "last_active_at": last_active_at,
-                    "is_admin": user.get("isAdmin", False),
+                    "is_admin": is_admin,
+                    "is_super_admin": is_super_admin,
+                    "is_delegated_admin": is_delegated_admin,
+                    "admin_role": admin_role,
+                    "mfa_enabled": mfa_enabled,
+                    "two_factor_authentication": mfa_enabled,
+                    "mfa_enforced": mfa_enforced,
                     "suspended": user.get("suspended", False),
                     "creation_time": user.get("creationTime"),
                 }

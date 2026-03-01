@@ -30,10 +30,10 @@ describe('publicAuthIntent', () => {
 		expect(describePublicIntent(context.intent)).toBe('ROI Assessment');
 		expect(describePublicPersona(context.persona)).toBe('CFO');
 		expect(buildPostAuthRedirectPath(context)).toBe(
-			'/onboarding?intent=roi_assessment&persona=cfo&utm_source=google&utm_medium=cpc'
+			'/roi-planner?intent=roi_assessment&persona=cfo&utm_source=google&utm_medium=cpc'
 		);
 		expect(buildAuthCallbackPath(context)).toBe(
-			'/auth/callback?next=%2Fonboarding%3Fintent%3Droi_assessment%26persona%3Dcfo%26utm_source%3Dgoogle%26utm_medium%3Dcpc'
+			'/auth/callback?next=%2Froi-planner%3Fintent%3Droi_assessment%26persona%3Dcfo%26utm_source%3Dgoogle%26utm_medium%3Dcpc'
 		);
 	});
 

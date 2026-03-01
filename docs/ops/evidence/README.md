@@ -12,6 +12,7 @@ This directory stores staged enforcement evidence artifacts used by release gate
 6. Finance telemetry snapshot artifact: `finance_telemetry_snapshot_YYYY-MM-DD.json`
 7. Finance committee assumptions artifact: `finance_committee_packet_assumptions_YYYY-MM-DD.json`
 8. Valdrics disposition register artifact: `valdrix_disposition_register_YYYY-MM-DD.json`
+9. PKG/FIN operational readiness summary (optional but recommended): `pkg_fin_operational_readiness_YYYY-MM-DD.json`
 
 ## Template Seeds
 
@@ -192,4 +193,14 @@ uv run python3 scripts/verify_valdrix_disposition_freshness.py \
   --register-path docs/ops/evidence/valdrix_disposition_register_YYYY-MM-DD.json \
   --max-artifact-age-days 45 \
   --max-review-window-days 120
+```
+
+PKG/FIN operational readiness summary verifier/generator:
+
+```bash
+uv run python3 scripts/verify_pkg_fin_operational_readiness.py \
+  --policy-decisions-path docs/ops/evidence/pkg_fin_policy_decisions_YYYY-MM-DD.json \
+  --finance-guardrails-path docs/ops/evidence/finance_guardrails_YYYY-MM-DD.json \
+  --telemetry-snapshot-path docs/ops/evidence/finance_telemetry_snapshot_YYYY-MM-DD.json \
+  --output-path docs/ops/evidence/pkg_fin_operational_readiness_YYYY-MM-DD.json
 ```

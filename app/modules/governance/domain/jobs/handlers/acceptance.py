@@ -21,7 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
 from app.models.tenant import Tenant, UserPersona, UserRole
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
-from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLogger
+from app.modules.governance.domain.security.audit_log import (
+    AuditEventType,
+    AuditLog,
+    AuditLogger,
+)
 from app.modules.notifications.domain import (
     get_tenant_jira_service,
     get_tenant_slack_service,
@@ -29,6 +33,7 @@ from app.modules.notifications.domain import (
     get_tenant_workflow_dispatchers,
 )
 from app.shared.core.auth import CurrentUser
+from app.shared.core.config import get_settings
 from app.shared.core.pricing import (
     FeatureFlag,
     PricingTier,
@@ -57,6 +62,88 @@ def _tenant_tier(plan: str | None) -> PricingTier:
     if not plan:
         return PricingTier.FREE
     return normalize_tier(plan)
+
+
+def _coerce_positive_int(value: object, *, default: int) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    return max(1, parsed)
+
+
+async def _evaluate_tenancy_passive_check(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    max_age_hours: int,
+    now_utc: datetime,
+) -> dict[str, Any]:
+    latest = await db.scalar(
+        select(AuditLog)
+        .where(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.event_type
+            == AuditEventType.TENANCY_ISOLATION_VERIFICATION_CAPTURED.value,
+        )
+        .order_by(AuditLog.event_timestamp.desc())
+        .limit(1)
+    )
+
+    if latest is None:
+        return {
+            "success": False,
+            "status_code": 503,
+            "message": "Tenant isolation verification evidence is missing.",
+            "details": {
+                "max_age_hours": max_age_hours,
+                "reason": "evidence_missing",
+            },
+        }
+
+    observed = latest.event_timestamp
+    if observed.tzinfo is None:
+        observed_utc = observed.replace(tzinfo=timezone.utc)
+    else:
+        observed_utc = observed.astimezone(timezone.utc)
+    age_hours = (now_utc - observed_utc).total_seconds() / 3600.0
+
+    if not bool(getattr(latest, "success", False)):
+        return {
+            "success": False,
+            "status_code": 503,
+            "message": "Latest tenant isolation verification did not pass.",
+            "details": {
+                "max_age_hours": max_age_hours,
+                "age_hours": round(age_hours, 4),
+                "reason": "latest_verification_failed",
+                "evidence_correlation_id": getattr(latest, "correlation_id", None),
+            },
+        }
+
+    if age_hours > float(max_age_hours):
+        return {
+            "success": False,
+            "status_code": 504,
+            "message": "Tenant isolation verification evidence is stale.",
+            "details": {
+                "max_age_hours": max_age_hours,
+                "age_hours": round(age_hours, 4),
+                "reason": "evidence_stale",
+                "evidence_correlation_id": getattr(latest, "correlation_id", None),
+            },
+        }
+
+    return {
+        "success": True,
+        "status_code": 200,
+        "message": "Tenant isolation passive check OK.",
+        "details": {
+            "max_age_hours": max_age_hours,
+            "age_hours": round(age_hours, 4),
+            "evidence_correlation_id": getattr(latest, "correlation_id", None),
+        },
+    }
 
 
 class AcceptanceSuiteCaptureHandler(BaseJobHandler):
@@ -567,6 +654,27 @@ class AcceptanceSuiteCaptureHandler(BaseJobHandler):
                 details={"providers": providers, "checked": False},
             )
 
+        runtime_settings = get_settings()
+        environment = str(getattr(runtime_settings, "ENVIRONMENT", "") or "").strip().lower()
+        if environment in {"staging", "production"}:
+            max_age_hours = _coerce_positive_int(
+                getattr(runtime_settings, "TENANT_ISOLATION_EVIDENCE_MAX_AGE_HOURS", 168),
+                default=168,
+            )
+            tenancy_check = await _evaluate_tenancy_passive_check(
+                db,
+                tenant_id=tenant_id,
+                max_age_hours=max_age_hours,
+                now_utc=datetime.now(timezone.utc),
+            )
+            await record_integration(
+                channel="tenancy",
+                success=bool(tenancy_check["success"]),
+                status_code=int(tenancy_check["status_code"]),
+                message=str(tenancy_check["message"]),
+                details=tenancy_check.get("details"),
+            )
+
         passed = sum(1 for item in integration_results if item.get("success"))
         failed = len(integration_results) - passed
         overall_status = (
@@ -628,4 +736,6 @@ def _integration_event_type(channel: str) -> AuditEventType:
         return AuditEventType.INTEGRATION_TEST_TEAMS
     if normalized == "workflow":
         return AuditEventType.INTEGRATION_TEST_WORKFLOW
+    if normalized == "tenancy":
+        return AuditEventType.INTEGRATION_TEST_TENANCY
     return AuditEventType.INTEGRATION_TEST_SUITE

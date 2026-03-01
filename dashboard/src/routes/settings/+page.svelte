@@ -1778,7 +1778,7 @@
 										type="text"
 										id="workflow_github_owner"
 										bind:value={settings.workflow_github_owner}
-										placeholder="Valdrix-AI"
+										placeholder="Valdrics-AI"
 										disabled={!settings.workflow_github_enabled ||
 											!['pro', 'enterprise'].includes(data.subscription?.tier)}
 									/>

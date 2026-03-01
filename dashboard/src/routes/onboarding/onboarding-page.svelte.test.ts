@@ -11,6 +11,12 @@ vi.mock('$env/static/public', () => ({
 	PUBLIC_API_URL: 'https://api.test/api/v1'
 }));
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {
+		PUBLIC_API_URL: 'https://api.test/api/v1'
+	}
+}));
+
 vi.mock('$app/paths', () => ({
 	base: ''
 }));
@@ -19,6 +25,10 @@ vi.mock('$lib/api', () => ({
 	api: {
 		post: (...args: unknown[]) => postMock(...args)
 	}
+}));
+
+vi.mock('$lib/security/turnstile', () => ({
+	getTurnstileToken: vi.fn().mockResolvedValue(null)
 }));
 
 function jsonResponse(payload: unknown, status = 200): Response {

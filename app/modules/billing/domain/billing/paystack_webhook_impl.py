@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -87,6 +88,32 @@ class WebhookHandler:
             )
 
         return is_valid
+
+    @staticmethod
+    def _parse_subunit_amount(value: Any) -> int | None:
+        if value is None:
+            return None
+        try:
+            normalized = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+        if normalized < 0:
+            return None
+        # Paystack amount is already a subunit integer (kobo/cents), but we
+        # normalize with explicit half-up rounding for defensive parsing.
+        return int(normalized.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+    @staticmethod
+    def _parse_fx_rate(value: Any) -> Decimal | None:
+        if value is None:
+            return None
+        try:
+            normalized = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+        if normalized <= 0:
+            return None
+        return normalized.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 
     async def _handle_subscription_create(self, data: dict[str, Any]) -> None:
         """Handle new subscription - update subscription codes and next payment date."""
@@ -267,25 +294,26 @@ class WebhookHandler:
                 sub.tier = resolved_tier.value
             sub.status = shared.SubscriptionStatus.ACTIVE.value
             sub.billing_currency = charge_currency
-            if isinstance(charge_amount_raw, (int, float, str)):
-                try:
-                    sub.last_charge_amount_subunits = int(charge_amount_raw)
-                except (TypeError, ValueError):
-                    shared.logger.warning(
-                        "paystack_charge_amount_invalid",
-                        tenant_id=str(tenant_id),
-                        amount=charge_amount_raw,
-                    )
+            parsed_amount_subunits = self._parse_subunit_amount(charge_amount_raw)
+            if parsed_amount_subunits is None:
+                shared.logger.warning(
+                    "paystack_charge_amount_invalid",
+                    tenant_id=str(tenant_id),
+                    amount=charge_amount_raw,
+                )
+            else:
+                sub.last_charge_amount_subunits = parsed_amount_subunits
+
             fx_rate_raw = metadata.get("exchange_rate")
-            if isinstance(fx_rate_raw, (int, float, str)):
-                try:
-                    sub.last_charge_fx_rate = float(fx_rate_raw)
-                except (TypeError, ValueError):
-                    shared.logger.warning(
-                        "paystack_fx_rate_invalid",
-                        tenant_id=str(tenant_id),
-                        exchange_rate=fx_rate_raw,
-                    )
+            parsed_fx_rate = self._parse_fx_rate(fx_rate_raw)
+            if parsed_fx_rate is None and fx_rate_raw not in (None, ""):
+                shared.logger.warning(
+                    "paystack_fx_rate_invalid",
+                    tenant_id=str(tenant_id),
+                    exchange_rate=fx_rate_raw,
+                )
+            elif parsed_fx_rate is not None:
+                sub.last_charge_fx_rate = parsed_fx_rate
             fx_provider = metadata.get("fx_provider")
             if isinstance(fx_provider, str) and fx_provider.strip():
                 sub.last_charge_fx_provider = fx_provider.strip().lower()
@@ -323,12 +351,8 @@ class WebhookHandler:
                         "tier": (resolved_tier.value if resolved_tier else sub.tier),
                         "customer_code": customer_code,
                         "currency": charge_currency,
-                        "amount_subunits": (
-                            int(charge_amount_raw)
-                            if isinstance(charge_amount_raw, (int, float))
-                            else charge_amount_raw
-                        ),
-                        "fx_rate": metadata.get("exchange_rate"),
+                        "amount_subunits": parsed_amount_subunits,
+                        "fx_rate": str(parsed_fx_rate) if parsed_fx_rate is not None else None,
                         "fx_provider": metadata.get("fx_provider")
                         or sub.last_charge_fx_provider,
                     },

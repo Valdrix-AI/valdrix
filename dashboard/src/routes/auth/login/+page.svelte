@@ -10,6 +10,7 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { createSupabaseBrowserClient } from '$lib/supabase';
+	import { getTurnstileToken } from '$lib/security/turnstile';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { base } from '$app/paths';
@@ -159,9 +160,13 @@
 				throw new Error('Enter your work email to continue with SSO.');
 			}
 
+			const turnstileToken = await getTurnstileToken('sso_discovery');
 			const res = await fetch(edgeApiPath('/public/sso/discovery'), {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: {
+					'Content-Type': 'application/json',
+					...(turnstileToken ? { 'X-Turnstile-Token': turnstileToken } : {})
+				},
 				body: JSON.stringify({ email: email.trim().toLowerCase() })
 			});
 			if (!res.ok) {

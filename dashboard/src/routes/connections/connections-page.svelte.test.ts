@@ -14,6 +14,12 @@ vi.mock('$env/static/public', () => ({
 	PUBLIC_API_URL: 'https://api.test/api/v1'
 }));
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {
+		PUBLIC_API_URL: 'https://api.test/api/v1'
+	}
+}));
+
 vi.mock('$app/paths', () => ({
 	base: ''
 }));

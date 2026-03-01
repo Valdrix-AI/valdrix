@@ -41,7 +41,7 @@ describe('LandingHero', () => {
 			})
 		).toBeTruthy();
 		expect(
-			screen.getByRole('heading', { name: /see your 12-month control roi before you commit/i })
+			screen.getByRole('heading', { name: /need the full 12-month roi planner/i })
 		).toBeTruthy();
 		expect(
 			screen.getByRole('heading', { name: /proof from teams reducing spend waste/i })
@@ -64,8 +64,8 @@ describe('LandingHero', () => {
 		expect(screen.getByLabelText(/reactive waste rate/i)).toBeTruthy();
 		expect(screen.getByLabelText(/managed waste rate/i)).toBeTruthy();
 		expect(screen.getByLabelText(/decision window \(months\)/i)).toBeTruthy();
-		expect(screen.getByText(/Projected 12-Month Impact/i)).toBeTruthy();
-		expect(screen.getByRole('link', { name: /Run This In Your Environment/i })).toBeTruthy();
+		expect(screen.getByText(/Scenario Delta/i)).toBeTruthy();
+		expect(screen.getByRole('link', { name: /Open Full ROI Planner/i })).toBeTruthy();
 		expect(
 			screen.getByText(/Realtime cloud anomaly is detected and scoped to impacted workloads\./i)
 		).toBeTruthy();
@@ -170,18 +170,12 @@ describe('LandingHero', () => {
 		expect(
 			screen.getByText(/owners, approvals, and safety checks are built into every action path/i)
 		).toBeTruthy();
-		expect(screen.getByText(/Cloud Infrastructure/i)).toBeTruthy();
-		expect(screen.getByText(/GreenOps and Carbon/i)).toBeTruthy();
-		expect(screen.getByText(/SaaS Spend/i)).toBeTruthy();
-		expect(screen.getByText(/ITAM and License/i)).toBeTruthy();
-		expect(screen.getByText(/Platform Tooling/i)).toBeTruthy();
-		expect(
-			screen.getByRole('heading', {
-				name: /what valdrics already runs across your operations/i
-			})
-		).toBeTruthy();
+		expect(screen.getByText(/Cost Intelligence and Forecasting/i)).toBeTruthy();
 		expect(screen.getByText(/GreenOps Execution/i)).toBeTruthy();
-		expect(screen.getByText(/Operational Integrations/i)).toBeTruthy();
+		expect(screen.getByText(/Cloud Hygiene and Remediation/i)).toBeTruthy();
+		expect(screen.getByText(/SaaS and ITAM License Control/i)).toBeTruthy();
+		expect(screen.queryByText(/Platform Tooling/i)).toBeNull();
+		expect(screen.queryByText(/Operational Integrations/i)).toBeNull();
 		const technicalValidationLink = screen.getByRole('link', {
 			name: /open technical validation/i
 		});

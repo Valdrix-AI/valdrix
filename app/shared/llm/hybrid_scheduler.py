@@ -10,7 +10,10 @@ This provides 95% quality at 20% of the cost of always doing full analysis.
 
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
+from contextlib import contextmanager
+from collections.abc import Generator
 from typing import Any
+import time
 from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,8 +24,39 @@ from app.shared.llm.analyzer import FinOpsAnalyzer
 from app.shared.llm.factory import LLMFactory
 from app.shared.core.config import get_settings
 from app.shared.core.cache import get_cache_service
+from app.shared.core.tracing import get_tracer
+from opentelemetry.trace import Status, StatusCode
 
 logger = structlog.get_logger()
+tracer = get_tracer(__name__)
+
+
+@contextmanager
+def _hybrid_span(name: str, **attributes: Any) -> Generator[None, None, None]:
+    start_ts = time.perf_counter()
+    with tracer.start_as_current_span(name) as span:
+        for key, value in attributes.items():
+            if value is None:
+                continue
+            if isinstance(value, (str, bool, int, float)):
+                span.set_attribute(f"hybrid.{key}", value)
+            else:
+                span.set_attribute(f"hybrid.{key}", str(value))
+        try:
+            yield
+        except Exception as exc:
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+            raise
+        finally:
+            duration_ms = max(0.0, (time.perf_counter() - start_ts) * 1000.0)
+            span.set_attribute("hybrid.duration_ms", duration_ms)
+            if duration_ms >= 2000.0:
+                logger.warning(
+                    "hybrid_span_latency_spike",
+                    span=name,
+                    duration_ms=round(duration_ms, 2),
+                )
 
 
 class HybridAnalysisScheduler:
@@ -79,38 +113,39 @@ class HybridAnalysisScheduler:
         - No cached full analysis exists (first run)
         - Tenant explicitly requested deep dive
         """
-        today = date.today()
+        with _hybrid_span("hybrid_analysis.should_run_full", tenant_id=str(tenant_id)):
+            today = date.today()
 
-        # Weekly full analysis on Sunday
-        if today.weekday() in self.FULL_ANALYSIS_DAYS:
-            logger.info(
-                "hybrid_full_analysis_scheduled",
-                tenant_id=str(tenant_id),
-                reason="weekly_sunday",
-            )
-            return True
+            # Weekly full analysis on Sunday
+            if today.weekday() in self.FULL_ANALYSIS_DAYS:
+                logger.info(
+                    "hybrid_full_analysis_scheduled",
+                    tenant_id=str(tenant_id),
+                    reason="weekly_sunday",
+                )
+                return True
 
-        # Monthly full analysis on 1st
-        if today.day == 1:
-            logger.info(
-                "hybrid_full_analysis_scheduled",
-                tenant_id=str(tenant_id),
-                reason="monthly_first",
-            )
-            return True
+            # Monthly full analysis on 1st
+            if today.day == 1:
+                logger.info(
+                    "hybrid_full_analysis_scheduled",
+                    tenant_id=str(tenant_id),
+                    reason="monthly_first",
+                )
+                return True
 
-        # Check if we have any cached full analysis
-        cache_key = f"full_analysis:{tenant_id}"
-        cached = await self.cache.get(cache_key)
-        if not cached:
-            logger.info(
-                "hybrid_full_analysis_scheduled",
-                tenant_id=str(tenant_id),
-                reason="no_cached_full_analysis",
-            )
-            return True
+            # Check if we have any cached full analysis
+            cache_key = f"full_analysis:{tenant_id}"
+            cached = await self.cache.get(cache_key)
+            if not cached:
+                logger.info(
+                    "hybrid_full_analysis_scheduled",
+                    tenant_id=str(tenant_id),
+                    reason="no_cached_full_analysis",
+                )
+                return True
 
-        return False
+            return False
 
     async def run_analysis(
         self,
@@ -134,50 +169,58 @@ class HybridAnalysisScheduler:
             Analysis result dict
         """
 
-        # Determine analysis type
-        if force_full:
-            analysis_type = "full"
-        elif force_delta:
-            analysis_type = "delta"
-        elif await self.should_run_full_analysis(tenant_id):
-            analysis_type = "full"
-        else:
-            analysis_type = "delta"
-
-        logger.info(
-            "hybrid_analysis_starting",
+        with _hybrid_span(
+            "hybrid_analysis.run",
             tenant_id=str(tenant_id),
-            analysis_type=analysis_type,
-        )
+            force_full=force_full,
+            force_delta=force_delta,
+            current_rows=len(current_costs),
+            previous_rows=len(previous_costs or []),
+        ):
+            # Determine analysis type
+            if force_full:
+                analysis_type = "full"
+            elif force_delta:
+                analysis_type = "delta"
+            elif await self.should_run_full_analysis(tenant_id):
+                analysis_type = "full"
+            else:
+                analysis_type = "delta"
 
-        if analysis_type == "full":
-            # Full 30-day analysis
-            result = await self._run_full_analysis(tenant_id, current_costs)
-
-            # Cache the full analysis for a week
-            cache_key = f"full_analysis:{tenant_id}"
-            await self.cache.set(cache_key, result, ttl=timedelta(days=7))
-
-        else:
-            # Delta analysis (daily)
-            result = await self._run_delta_analysis(
-                tenant_id, current_costs, previous_costs
+            logger.info(
+                "hybrid_analysis_starting",
+                tenant_id=str(tenant_id),
+                analysis_type=analysis_type,
             )
 
-            # Merge with last full analysis if available
-            full_cache_key = f"full_analysis:{tenant_id}"
-            cached_full = await self.cache.get(full_cache_key)
-            if cached_full:
-                result = self._merge_with_full(result, cached_full)
+            if analysis_type == "full":
+                # Full 30-day analysis
+                result = await self._run_full_analysis(tenant_id, current_costs)
 
-        logger.info(
-            "hybrid_analysis_complete",
-            tenant_id=str(tenant_id),
-            analysis_type=analysis_type,
-            has_changes=result.get("has_significant_changes", True),
-        )
+                # Cache the full analysis for a week
+                cache_key = f"full_analysis:{tenant_id}"
+                await self.cache.set(cache_key, result, ttl=timedelta(days=7))
 
-        return result
+            else:
+                # Delta analysis (daily)
+                result = await self._run_delta_analysis(
+                    tenant_id, current_costs, previous_costs
+                )
+
+                # Merge with last full analysis if available
+                full_cache_key = f"full_analysis:{tenant_id}"
+                cached_full = await self.cache.get(full_cache_key)
+                if cached_full:
+                    result = self._merge_with_full(result, cached_full)
+
+            logger.info(
+                "hybrid_analysis_complete",
+                tenant_id=str(tenant_id),
+                analysis_type=analysis_type,
+                has_changes=result.get("has_significant_changes", True),
+            )
+
+            return result
 
     async def _run_full_analysis(
         self, tenant_id: UUID, costs: list[dict[str, Any]]
@@ -185,31 +228,36 @@ class HybridAnalysisScheduler:
         """Run comprehensive 30-day analysis."""
         import json
 
-        usage_summary = self._coerce_usage_summary(tenant_id=tenant_id, costs=costs)
-        analyzer = self._get_analyzer()
+        with _hybrid_span(
+            "hybrid_analysis.full_run",
+            tenant_id=str(tenant_id),
+            cost_rows=len(costs),
+        ):
+            usage_summary = self._coerce_usage_summary(tenant_id=tenant_id, costs=costs)
+            analyzer = self._get_analyzer()
 
-        result = await analyzer.analyze(
-            usage_summary=usage_summary,
-            tenant_id=tenant_id,
-            db=self.db,
-            force_refresh=True,
-        )
+            result = await analyzer.analyze(
+                usage_summary=usage_summary,
+                tenant_id=tenant_id,
+                db=self.db,
+                force_refresh=True,
+            )
 
-        if isinstance(result, dict):
-            parsed = result
-        elif isinstance(result, str):
-            try:
-                parsed = json.loads(result)
-            except (json.JSONDecodeError, TypeError):
+            if isinstance(result, dict):
+                parsed = result
+            elif isinstance(result, str):
+                try:
+                    parsed = json.loads(result)
+                except (json.JSONDecodeError, TypeError):
+                    parsed = {"raw_analysis": result}
+            else:
                 parsed = {"raw_analysis": result}
-        else:
-            parsed = {"raw_analysis": result}
 
-        parsed["analysis_type"] = "full_30_day"
-        parsed["analysis_date"] = date.today().isoformat()
-        parsed["next_full_analysis"] = "Next Sunday or 1st of month"
+            parsed["analysis_type"] = "full_30_day"
+            parsed["analysis_date"] = date.today().isoformat()
+            parsed["next_full_analysis"] = "Next Sunday or 1st of month"
 
-        return parsed
+            return parsed
 
     async def _run_delta_analysis(
         self,
@@ -219,54 +267,60 @@ class HybridAnalysisScheduler:
     ) -> dict[str, Any]:
         """Run lightweight delta analysis."""
 
-        delta = await self.delta_service.compute_delta(
-            tenant_id=tenant_id,
-            current_costs=current_costs,
-            previous_costs=previous_costs,
-            days_to_compare=3,
-        )
+        with _hybrid_span(
+            "hybrid_analysis.delta_run",
+            tenant_id=str(tenant_id),
+            current_rows=len(current_costs),
+            previous_rows=len(previous_costs or []),
+        ):
+            delta = await self.delta_service.compute_delta(
+                tenant_id=tenant_id,
+                current_costs=current_costs,
+                previous_costs=previous_costs,
+                days_to_compare=3,
+            )
 
-        if not delta.has_significant_changes:
-            return {
-                "analysis_type": "delta",
-                "status": "no_significant_changes",
-                "summary": {
-                    "message": f"No significant changes in last {delta.days_compared} days",
-                    "total_change": f"${delta.total_change:+.2f}",
-                    "percent_change": f"{delta.total_change_percent:+.1f}%",
-                },
-                "anomalies": [],
-                "recommendations": [],
-                "has_significant_changes": False,
-            }
+            if not delta.has_significant_changes:
+                return {
+                    "analysis_type": "delta",
+                    "status": "no_significant_changes",
+                    "summary": {
+                        "message": f"No significant changes in last {delta.days_compared} days",
+                        "total_change": f"${delta.total_change:+.2f}",
+                        "percent_change": f"{delta.total_change_percent:+.1f}%",
+                    },
+                    "anomalies": [],
+                    "recommendations": [],
+                    "has_significant_changes": False,
+                }
 
-        # Run LLM analysis on delta data
-        analyzer = self._get_analyzer()
-        result = await analyze_with_delta(
-            analyzer=analyzer,
-            tenant_id=tenant_id,
-            current_costs=current_costs,
-            previous_costs=previous_costs,
-            db=self.db,
-            force_refresh=True,
-        )
+            # Run LLM analysis on delta data
+            analyzer = self._get_analyzer()
+            result = await analyze_with_delta(
+                analyzer=analyzer,
+                tenant_id=tenant_id,
+                current_costs=current_costs,
+                previous_costs=previous_costs,
+                db=self.db,
+                force_refresh=True,
+            )
 
-        import json
+            import json
 
-        if isinstance(result, dict):
-            parsed = result
-        elif isinstance(result, str):
-            try:
-                parsed = json.loads(result)
-            except (json.JSONDecodeError, TypeError):
+            if isinstance(result, dict):
+                parsed = result
+            elif isinstance(result, str):
+                try:
+                    parsed = json.loads(result)
+                except (json.JSONDecodeError, TypeError):
+                    parsed = {"raw_analysis": result}
+            else:
                 parsed = {"raw_analysis": result}
-        else:
-            parsed = {"raw_analysis": result}
 
-        parsed["analysis_type"] = "delta_3_day"
-        parsed["has_significant_changes"] = True
+            parsed["analysis_type"] = "delta_3_day"
+            parsed["has_significant_changes"] = True
 
-        return parsed
+            return parsed
 
     @staticmethod
     def _coerce_usage_summary(

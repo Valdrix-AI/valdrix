@@ -1,5 +1,5 @@
-import { env } from '$env/dynamic/private';
-import { PUBLIC_API_URL } from '$env/static/public';
+import { env as privateEnv } from '$env/dynamic/private';
+import { env as publicEnv } from '$env/dynamic/public';
 import { error, type RequestHandler } from '@sveltejs/kit';
 
 const CACHEABLE_GET_PREFIXES = ['/health/live', '/api/v1/billing/plans'];
@@ -9,15 +9,19 @@ const EDGE_CACHE_NAMESPACE = 'valdrix-edge-proxy';
 const JOB_STREAM_SUFFIX = '/jobs/stream';
 
 function resolveBackendOrigin(): string {
-	const privateOrigin = String(env.PRIVATE_API_ORIGIN || '').trim();
+	const privateOrigin = String(privateEnv.PRIVATE_API_ORIGIN || '').trim();
 	if (privateOrigin) {
 		return privateOrigin.replace(/\/+$/, '');
 	}
 
+	const publicApiUrl = String(publicEnv.PUBLIC_API_URL || '').trim();
 	try {
-		return new URL(PUBLIC_API_URL).origin;
+		return new URL(publicApiUrl).origin;
 	} catch {
-		throw error(500, 'Edge proxy is misconfigured. Set PRIVATE_API_ORIGIN to your API origin.');
+		throw error(
+			500,
+			'Edge proxy is misconfigured. Set PRIVATE_API_ORIGIN (preferred) or PUBLIC_API_URL.'
+		);
 	}
 }
 

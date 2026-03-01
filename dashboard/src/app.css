@@ -1,5 +1,5 @@
 /**
- * Valdrix Design System - 2026 Premium SaaS
+ * Valdrics Design System - 2026 Premium SaaS
  * 
  * Design Principles:
  * - Utility-first UX
@@ -499,13 +499,19 @@ a:focus-visible {
 }
 
 .main-content {
-	margin-left: 240px;
+	margin-left: 0;
 	min-height: 100vh;
 	transition: margin var(--duration-normal) var(--ease-out);
 }
 
 .sidebar-collapsed + .main-content {
 	margin-left: 0;
+}
+
+@media (min-width: 768px) {
+	.main-content {
+		margin-left: 240px;
+	}
 }
 
 /* ===== LAYOUT: Nav Items ===== */

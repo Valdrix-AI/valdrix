@@ -61,6 +61,47 @@ class WebhookRetryService:
         data = f"{provider}:{event_type}:{reference}"
         return hashlib.sha256(data.encode()).hexdigest()[:32]
 
+    @staticmethod
+    def _resolve_reference(
+        *, payload: Dict[str, Any], reference: Optional[str]
+    ) -> str:
+        """
+        Resolve a stable reference for webhook idempotency.
+
+        Priority:
+        1) Explicit `reference` argument
+        2) Payload-native identifiers (`data.reference`, `data.id`, `id`, `event_id`)
+        3) Deterministic payload hash fallback
+        """
+        explicit_ref = str(reference or "").strip()
+        if explicit_ref:
+            return explicit_ref
+
+        data = payload.get("data", {})
+        if isinstance(data, dict):
+            for key in ("reference", "id"):
+                value = data.get(key)
+                if value is None:
+                    continue
+                normalized = str(value).strip()
+                if normalized:
+                    return normalized
+
+        for key in ("id", "event_id"):
+            value = payload.get(key)
+            if value is None:
+                continue
+            normalized = str(value).strip()
+            if normalized:
+                return normalized
+
+        payload_fingerprint = hashlib.sha256(
+            json.dumps(
+                payload, sort_keys=True, separators=(",", ":"), default=str
+            ).encode("utf-8")
+        ).hexdigest()
+        return f"payload_sha256:{payload_fingerprint[:24]}"
+
     async def is_duplicate(self, idempotency_key: str) -> bool:
         """Check if webhook was already processed successfully."""
         result = await self.db.execute(
@@ -96,9 +137,7 @@ class WebhookRetryService:
             BackgroundJob if new, None if duplicate
         """
         # Generate idempotency key
-        ref = reference or payload.get("data", {}).get(
-            "reference", str(datetime.now(timezone.utc))
-        )
+        ref = self._resolve_reference(payload=payload, reference=reference)
         idempotency_key = self._generate_idempotency_key(provider, event_type, ref)
 
         # Store new webhook job
@@ -149,6 +188,26 @@ class WebhookRetryService:
         )
 
         return job
+
+    async def mark_inline_processed(
+        self,
+        job: BackgroundJob,
+        result: Dict[str, Any] | None = None,
+    ) -> None:
+        """
+        Mark a queued webhook job as completed after successful inline processing.
+
+        This prevents the same webhook from being re-processed by the async worker
+        when the synchronous HTTP path already handled it successfully.
+        """
+        now = datetime.now(timezone.utc)
+        current_attempts = int(getattr(job, "attempts", 0) or 0)
+        job.status = JobStatus.COMPLETED.value
+        job.completed_at = now
+        job.error_message = None
+        job.result = result or {"status": "success", "mode": "inline"}
+        job.attempts = current_attempts + 1
+        await self.db.commit()
 
     async def get_pending_webhooks(
         self, provider: Optional[str] = None

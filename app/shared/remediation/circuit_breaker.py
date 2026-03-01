@@ -90,10 +90,16 @@ class CircuitBreaker:
         tenant_id: str,
         config: Optional[CircuitBreakerConfig] = None,
         redis_client: Any = None,
+        backend_unavailable_reason: str | None = None,
     ) -> None:
         self.tenant_id = tenant_id
         self.config = config or CircuitBreakerConfig.from_settings()
         self.state = CircuitBreakerState(tenant_id, redis_client)
+        self.backend_unavailable_reason = (
+            str(backend_unavailable_reason).strip()
+            if backend_unavailable_reason
+            else None
+        )
 
     async def _reset_daily_budget_if_needed(self) -> None:
         """Reset daily savings counter when UTC date changes."""
@@ -108,6 +114,14 @@ class CircuitBreaker:
         return CircuitState(s)
 
     async def can_execute(self, estimated_savings: float = 0.0) -> bool:
+        if self.backend_unavailable_reason:
+            logger.error(
+                "circuit_breaker_backend_unavailable_fail_closed",
+                tenant_id=self.tenant_id,
+                reason=self.backend_unavailable_reason,
+            )
+            return False
+
         state = await self.get_state()
 
         if state == CircuitState.OPEN.value or state == CircuitState.OPEN:
@@ -137,6 +151,14 @@ class CircuitBreaker:
         return True
 
     async def record_success(self, savings: float = 0.0) -> None:
+        if self.backend_unavailable_reason:
+            logger.warning(
+                "circuit_breaker_record_success_skipped_backend_unavailable",
+                tenant_id=self.tenant_id,
+                reason=self.backend_unavailable_reason,
+            )
+            return
+
         state = await self.get_state()
         if state == CircuitState.HALF_OPEN:
             await self.reset()
@@ -151,6 +173,15 @@ class CircuitBreaker:
         await self.state.set("daily_savings_usd", current_savings + savings)
 
     async def record_failure(self, error: str) -> None:
+        if self.backend_unavailable_reason:
+            logger.warning(
+                "circuit_breaker_record_failure_skipped_backend_unavailable",
+                tenant_id=self.tenant_id,
+                reason=self.backend_unavailable_reason,
+                error=error,
+            )
+            return
+
         count = await self.state.incr("failure_count")
         await self.state.set("last_failure_at", time.time())
         await self.state.set("last_error", error)
@@ -166,6 +197,14 @@ class CircuitBreaker:
 
     async def reset(self) -> None:
         """Manually reset the circuit breaker."""
+        if self.backend_unavailable_reason:
+            logger.warning(
+                "circuit_breaker_reset_skipped_backend_unavailable",
+                tenant_id=self.tenant_id,
+                reason=self.backend_unavailable_reason,
+            )
+            return
+
         await self.state.set("state", CircuitState.CLOSED.value)
         await self.state.set("failure_count", 0)
         await self.state.delete("last_failure_at")
@@ -179,12 +218,45 @@ class CircuitBreaker:
             "daily_savings_usd": await self.state.get("daily_savings_usd", 0.0),
             "can_execute": await self.can_execute(),
             "last_error": await self.state.get("last_error"),
+            "distributed_backend_available": self.backend_unavailable_reason is None,
+            "backend_unavailable_reason": self.backend_unavailable_reason,
         }
 
 
 # Multi-tenant cache
 _tenant_breakers: "OrderedDict[str, CircuitBreaker]" = OrderedDict()
 _tenant_breakers_lock = asyncio.Lock()
+
+
+def _resolve_distributed_redis_client() -> Any | None:
+    """
+    Resolve a shared Redis client for circuit-breaker state when configured.
+
+    Falls back to process-local memory state if distributed mode is disabled or Redis
+    is unavailable, preserving runtime availability.
+    """
+    runtime_settings = get_settings()
+    distributed_enabled = bool(
+        getattr(runtime_settings, "CIRCUIT_BREAKER_DISTRIBUTED_STATE", False)
+    )
+    if not distributed_enabled:
+        return None
+
+    redis_url = str(getattr(runtime_settings, "REDIS_URL", "") or "").strip()
+    if not redis_url:
+        logger.warning("remediation_circuit_breaker_distributed_missing_redis_url")
+        return None
+
+    try:
+        from app.shared.core.rate_limit import get_redis_client
+
+        return get_redis_client()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "remediation_circuit_breaker_distributed_client_unavailable",
+            error=str(exc),
+        )
+        return None
 
 
 async def get_circuit_breaker(tenant_id: str) -> CircuitBreaker:
@@ -194,8 +266,29 @@ async def get_circuit_breaker(tenant_id: str) -> CircuitBreaker:
             _tenant_breakers.move_to_end(tenant_id)
             return _tenant_breakers[tenant_id]
 
-        # In a real production environment, we would also inject the Redis client here.
-        _tenant_breakers[tenant_id] = CircuitBreaker(tenant_id)
+        redis_client = _resolve_distributed_redis_client()
+        runtime_settings = get_settings()
+        environment = str(getattr(runtime_settings, "ENVIRONMENT", "") or "").strip().lower()
+        distributed_enabled = bool(
+            getattr(runtime_settings, "CIRCUIT_BREAKER_DISTRIBUTED_STATE", False)
+        )
+        backend_unavailable_reason: str | None = None
+        if distributed_enabled and redis_client is None and environment in {
+            "production",
+            "staging",
+        }:
+            backend_unavailable_reason = "distributed_state_backend_unavailable"
+            logger.error(
+                "remediation_circuit_breaker_distributed_unavailable_fail_closed",
+                tenant_id=tenant_id,
+                environment=environment,
+            )
+
+        _tenant_breakers[tenant_id] = CircuitBreaker(
+            tenant_id,
+            redis_client=redis_client,
+            backend_unavailable_reason=backend_unavailable_reason,
+        )
 
         max_cache_size = max(1, int(settings.CIRCUIT_BREAKER_CACHE_SIZE))
         while len(_tenant_breakers) > max_cache_size:

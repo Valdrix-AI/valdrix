@@ -71,6 +71,9 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     auth_coverage_cmd = next(
         cmd for cmd in commands if "scripts/verify_api_auth_coverage.py" in cmd
     )
+    alembic_head_cmd = next(
+        cmd for cmd in commands if "scripts/verify_alembic_head_integrity.py" in cmd
+    )
     jwt_bcp_cmd = next(
         cmd for cmd in commands if "scripts/verify_jwt_bcp_checklist.py" in cmd
     )
@@ -114,6 +117,14 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         "python3",
         "scripts/verify_api_auth_coverage.py",
     ]
+    assert alembic_head_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_alembic_head_integrity.py",
+    ]
+    assert "--migrations-path" in alembic_head_cmd
+    assert "migrations/versions" in alembic_head_cmd
 
     assert ssdf_cmd[:4] == ["uv", "run", "python3", "scripts/verify_ssdf_traceability_matrix.py"]
     assert "--matrix-path" in ssdf_cmd

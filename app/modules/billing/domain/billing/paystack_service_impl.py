@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Protocol, Callable
 from uuid import UUID
 
@@ -46,6 +47,24 @@ class BillingService:
 
     def _build_exchange_rate_service(self) -> _ExchangeRateRuntime:
         return self._exchange_rate_service_factory(self.db)
+
+    @staticmethod
+    def _to_decimal_usd(value: Any) -> Decimal:
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid USD amount: {value}") from exc
+        if amount < 0:
+            raise ValueError(f"Invalid USD amount: {value}")
+        return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @staticmethod
+    def _usd_to_subunit_cents(amount_usd: Decimal) -> int:
+        return int(
+            (amount_usd * Decimal("100")).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        )
 
     @property
     def plan_codes(self) -> dict[PricingTier, str | None]:
@@ -231,6 +250,8 @@ class BillingService:
             if is_annual
             else config["price_usd"]["monthly"]
         )
+        usd_price_decimal = self._to_decimal_usd(usd_price)
+        usd_price_float = float(usd_price_decimal)
 
         checkout_currency = self._resolve_checkout_currency(currency)
         fx_rate: float | None = None
@@ -241,12 +262,14 @@ class BillingService:
             # Convert to NGN using Exchange Rate Service.
             currency_service = self._build_exchange_rate_service()
             ngn_rate = await currency_service.get_ngn_rate()
-            amount_subunits = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
+            amount_subunits = currency_service.convert_usd_to_ngn(
+                usd_price_float, ngn_rate
+            )
             fx_rate = float(ngn_rate)
             fx_provider = shared.PAYSTACK_FX_PROVIDER
         else:
             # USD checkout uses native currency subunits (cents).
-            amount_subunits = int(round(float(usd_price) * 100))
+            amount_subunits = self._usd_to_subunit_cents(usd_price_decimal)
             fx_rate = 1.0
             fx_provider = shared.PAYSTACK_USD_FX_PROVIDER
 
@@ -276,7 +299,7 @@ class BillingService:
                     "tenant_id": str(tenant_id),
                     "tier": tier.value,
                     "billing_cycle": billing_cycle,
-                    "usd_price": usd_price,
+                    "usd_price": usd_price_float,
                     "currency": checkout_currency,
                     "amount_subunits": amount_subunits,
                     "exchange_rate": fx_rate,
@@ -297,7 +320,7 @@ class BillingService:
                 amount_subunits=amount_subunits,
                 reference=reference,
                 fx_rate=fx_rate,
-                usd_price=usd_price,
+                usd_price=usd_price_float,
                 plan_code=plan_code,
                 pricing_mode=pricing_mode,
             )
@@ -316,7 +339,7 @@ class BillingService:
                     details={
                         "provider": "paystack",
                         "tier": tier.value,
-                        "usd_price": usd_price,
+                        "usd_price": usd_price_float,
                         "exchange_rate": fx_rate,
                         "amount_subunits": amount_subunits,
                         "settlement_currency": checkout_currency,
@@ -377,7 +400,7 @@ class BillingService:
         plan_obj = plan_res.scalar_one_or_none()
 
         if plan_obj:
-            usd_price = float(plan_obj.price_usd)
+            usd_price_decimal = self._to_decimal_usd(plan_obj.price_usd)
         else:
             from app.shared.core.pricing import TIER_CONFIG
 
@@ -395,9 +418,10 @@ class BillingService:
             if not config:
                 return False
             price_cfg = config["price_usd"]
-            usd_price = (
-                price_cfg["monthly"] if isinstance(price_cfg, dict) else float(price_cfg)
+            usd_price_decimal = self._to_decimal_usd(
+                price_cfg["monthly"] if isinstance(price_cfg, dict) else price_cfg
             )
+        usd_price_float = float(usd_price_decimal)
 
         raw_currency = getattr(subscription, "billing_currency", None)
         if isinstance(raw_currency, str) and raw_currency.strip():
@@ -412,11 +436,13 @@ class BillingService:
         if renewal_currency == shared.PAYSTACK_CHECKOUT_CURRENCY:
             currency_service = self._build_exchange_rate_service()
             ngn_rate = await currency_service.get_ngn_rate()
-            amount_subunits = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
+            amount_subunits = currency_service.convert_usd_to_ngn(
+                usd_price_float, ngn_rate
+            )
             fx_rate = float(ngn_rate)
             fx_provider = shared.PAYSTACK_FX_PROVIDER
         elif renewal_currency == "USD":
-            amount_subunits = int(round(float(usd_price) * 100))
+            amount_subunits = self._usd_to_subunit_cents(usd_price_decimal)
             fx_rate = 1.0
             fx_provider = shared.PAYSTACK_USD_FX_PROVIDER
         else:
@@ -427,7 +453,9 @@ class BillingService:
             )
             currency_service = self._build_exchange_rate_service()
             ngn_rate = await currency_service.get_ngn_rate()
-            amount_subunits = currency_service.convert_usd_to_ngn(usd_price, ngn_rate)
+            amount_subunits = currency_service.convert_usd_to_ngn(
+                usd_price_float, ngn_rate
+            )
             fx_rate = float(ngn_rate)
             fx_provider = shared.PAYSTACK_FX_PROVIDER
             renewal_currency = shared.PAYSTACK_CHECKOUT_CURRENCY
@@ -502,7 +530,7 @@ class BillingService:
                         details={
                             "provider": "paystack",
                             "event": "charge_renewal",
-                            "usd_price": usd_price,
+                            "usd_price": usd_price_float,
                             "exchange_rate": fx_rate,
                             "amount_subunits": amount_subunits,
                             "settlement_currency": renewal_currency,

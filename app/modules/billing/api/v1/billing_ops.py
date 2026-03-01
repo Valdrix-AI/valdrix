@@ -267,7 +267,16 @@ async def process_paystack_webhook(
         return {"status": "duplicate", "message": "Already queued or processed"}
 
     try:
-        return await handler.handle(request, payload, signature)
+        result = await handler.handle(request, payload, signature)
+        try:
+            await retry_service.mark_inline_processed(job, result)
+        except Exception as completion_exc:  # noqa: BLE001
+            logger.error(
+                "webhook_inline_completion_mark_failed",
+                job_id=str(job.id),
+                error=str(completion_exc),
+            )
+        return result
     except Exception as process_error:
         logger.warning(
             "webhook_processing_failed_will_retry",

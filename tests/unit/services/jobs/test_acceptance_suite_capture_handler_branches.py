@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -176,6 +176,10 @@ def test_acceptance_handler_helpers_cover_edge_cases() -> None:
     assert (
         acceptance_handler._integration_event_type("unknown-channel")
         == AuditEventType.INTEGRATION_TEST_SUITE
+    )
+    assert (
+        acceptance_handler._integration_event_type("tenancy")
+        == AuditEventType.INTEGRATION_TEST_TENANCY
     )
 
 
@@ -403,3 +407,102 @@ async def test_acceptance_handler_records_kpi_capture_exception() -> None:
     assert kpi_events
     assert kpi_events[0].kwargs["success"] is False
     assert kpi_events[0].kwargs["details"]["error"] == "acceptance kpi blew up"
+
+
+@pytest.mark.asyncio
+async def test_acceptance_handler_staging_tenancy_passive_check_fails_when_evidence_missing() -> None:
+    handler = acceptance_handler.AcceptanceSuiteCaptureHandler()
+    db = _db(plan="pro")
+    db.scalar = AsyncMock(
+        side_effect=[
+            SimpleNamespace(plan="pro"),
+            None,
+        ]
+    )
+    job = _job()
+
+    with (
+        _patched_acceptance_environment(
+            feature_flags={
+                FeatureFlag.COMPLIANCE_EXPORTS: False,
+                FeatureFlag.CLOSE_WORKFLOW: False,
+                FeatureFlag.INCIDENT_INTEGRATIONS: False,
+            },
+        ) as patched,
+        patch.object(
+            acceptance_handler,
+            "get_settings",
+            return_value=SimpleNamespace(
+                ENVIRONMENT="staging",
+                TENANT_ISOLATION_EVIDENCE_MAX_AGE_HOURS=24,
+            ),
+        ),
+    ):
+        result = await handler.execute(job, db)
+
+    tenancy_results = [
+        item
+        for item in result["integrations"]["results"]
+        if item.get("channel") == "tenancy"
+    ]
+    assert tenancy_results
+    assert tenancy_results[0]["success"] is False
+
+    tenancy_events = _audit_event_calls(
+        patched["audit"], AuditEventType.INTEGRATION_TEST_TENANCY
+    )
+    assert tenancy_events
+    assert tenancy_events[0].kwargs["success"] is False
+    assert tenancy_events[0].kwargs["details"]["reason"] == "evidence_missing"
+
+
+@pytest.mark.asyncio
+async def test_acceptance_handler_staging_tenancy_passive_check_succeeds_with_fresh_evidence() -> None:
+    handler = acceptance_handler.AcceptanceSuiteCaptureHandler()
+    db = _db(plan="pro")
+    evidence_event = SimpleNamespace(
+        event_timestamp=datetime.now(timezone.utc) - timedelta(hours=2),
+        success=True,
+        correlation_id="tenancy-check-1",
+    )
+    db.scalar = AsyncMock(
+        side_effect=[
+            SimpleNamespace(plan="pro"),
+            evidence_event,
+        ]
+    )
+    job = _job()
+
+    with (
+        _patched_acceptance_environment(
+            feature_flags={
+                FeatureFlag.COMPLIANCE_EXPORTS: False,
+                FeatureFlag.CLOSE_WORKFLOW: False,
+                FeatureFlag.INCIDENT_INTEGRATIONS: False,
+            },
+        ) as patched,
+        patch.object(
+            acceptance_handler,
+            "get_settings",
+            return_value=SimpleNamespace(
+                ENVIRONMENT="staging",
+                TENANT_ISOLATION_EVIDENCE_MAX_AGE_HOURS=24,
+            ),
+        ),
+    ):
+        result = await handler.execute(job, db)
+
+    tenancy_results = [
+        item
+        for item in result["integrations"]["results"]
+        if item.get("channel") == "tenancy"
+    ]
+    assert tenancy_results
+    assert tenancy_results[0]["success"] is True
+
+    tenancy_events = _audit_event_calls(
+        patched["audit"], AuditEventType.INTEGRATION_TEST_TENANCY
+    )
+    assert tenancy_events
+    assert tenancy_events[0].kwargs["success"] is True
+    assert tenancy_events[0].kwargs["details"]["evidence_correlation_id"] == "tenancy-check-1"

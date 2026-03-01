@@ -57,6 +57,10 @@ vi.mock('$lib/edgeProxy', () => ({
 	edgeApiPath: (path: string) => `/api/edge${path}`
 }));
 
+vi.mock('$lib/security/turnstile', () => ({
+	getTurnstileToken: vi.fn().mockResolvedValue(null)
+}));
+
 vi.mock('$lib/supabase', () => ({
 	createSupabaseBrowserClient: () => ({
 		auth: {
@@ -148,7 +152,7 @@ describe('auth login page conversion flow', () => {
 		expect(payload.email).toBe('founder@example.com');
 		expect(payload.options.shouldCreateUser).toBe(true);
 		expect(payload.options.emailRedirectTo).toContain(
-			'/auth/callback?next=%2Fonboarding%3Fintent%3Droi_assessment'
+			'/auth/callback?next=%2Froi-planner%3Fintent%3Droi_assessment'
 		);
 		expect(screen.getByRole('status').textContent).toMatch(/Secure sign-in link sent/i);
 	});

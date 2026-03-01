@@ -904,6 +904,61 @@ async def test_evaluate_gate_computed_context_marks_unavailable_on_cost_query_fa
     assert warning_calls[0][0] == "enforcement_computed_context_unavailable"
     assert warning_calls[0][1]["tenant_id"] == str(tenant.id)
     assert warning_calls[0][1]["error_type"] == "RuntimeError"
+    assert result.decision.decision == EnforcementDecisionType.REQUIRE_APPROVAL
+    assert "computed_context_unavailable" in (result.decision.reason_codes or [])
+    assert "soft_mode_cost_context_escalation" in (result.decision.reason_codes or [])
+
+
+@pytest.mark.asyncio
+async def test_evaluate_gate_computed_context_unavailable_hard_mode_denies(
+    db,
+    monkeypatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 20, 10, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(enforcement_service_module, "_utcnow", lambda: fixed_now)
+
+    tenant = await _seed_tenant(db)
+    service = EnforcementService(db)
+    actor_id = uuid4()
+
+    await service.update_policy(
+        tenant_id=tenant.id,
+        terraform_mode=EnforcementMode.HARD,
+        k8s_admission_mode=EnforcementMode.HARD,
+        require_approval_for_prod=False,
+        require_approval_for_nonprod=False,
+        auto_approve_below_monthly_usd=Decimal("0"),
+        hard_deny_above_monthly_usd=Decimal("5000"),
+        default_ttl_seconds=900,
+    )
+
+    async def _raise_cost_query(**_kwargs):
+        raise RuntimeError("cost backend unavailable")
+
+    monkeypatch.setattr(service, "_load_daily_cost_totals", _raise_cost_query)
+
+    result = await service.evaluate_gate(
+        tenant_id=tenant.id,
+        actor_id=actor_id,
+        source=EnforcementSource.TERRAFORM,
+        gate_input=GateInput(
+            project_id="default",
+            environment="nonprod",
+            action="terraform.apply",
+            resource_reference="module.eks.aws_eks_cluster.main",
+            estimated_monthly_delta_usd=Decimal("42"),
+            estimated_hourly_delta_usd=Decimal("0.07"),
+            metadata={"resource_type": "aws_eks_cluster"},
+            idempotency_key="computed-context-unavailable-hard-1",
+        ),
+    )
+
+    context = (result.decision.response_payload or {}).get("computed_context")
+    assert isinstance(context, dict)
+    assert context.get("data_source_mode") == "unavailable"
+    assert result.decision.decision == EnforcementDecisionType.DENY
+    assert "computed_context_unavailable" in (result.decision.reason_codes or [])
+    assert "hard_mode_cost_context_closed" in (result.decision.reason_codes or [])
 
 
 @pytest.mark.asyncio

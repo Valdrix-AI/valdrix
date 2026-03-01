@@ -50,11 +50,11 @@ def reload_settings_from_environment() -> "Settings":
 
 class Settings(BaseSettings):
     """
-    Main configuration for Valdrix AI.
+    Main configuration for Valdrics AI.
     Uses Pydantic-Settings for environment variable parsing from .env.
     """
 
-    APP_NAME: str = "Valdrix"
+    APP_NAME: str = "Valdrics"
     VERSION: str = "0.1.0"
     DEBUG: bool = False
     # ENVIRONMENT options: local, development, staging, production
@@ -101,6 +101,7 @@ class Settings(BaseSettings):
         PRODUCTION-GRADE: Centralized validation orchestrator.
         Groups validation by concern for clarity and specificity.
         """
+        self._normalize_branding()
         if self.TESTING and self.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}:
             raise ValueError(
                 "TESTING must be false in staging/production runtime environments."
@@ -119,6 +120,24 @@ class Settings(BaseSettings):
         self._validate_environment_safety()
 
         return self
+
+    def _normalize_branding(self) -> None:
+        """Normalize legacy product names to canonical Valdrics branding."""
+        token = str(self.APP_NAME or "").strip().lower()
+        legacy_names = {
+            "valdrix",
+            "cloudsentinel",
+            "cloudsentinel-ai",
+            "cloud sentinel",
+            "cloud sentinel ai",
+        }
+        if token in legacy_names:
+            structlog.get_logger().warning(
+                "legacy_app_name_normalized",
+                provided_app_name=self.APP_NAME,
+                normalized_app_name="Valdrics",
+            )
+            self.APP_NAME = "Valdrics"
 
     def _validate_core_secrets(self) -> None:
         """Validates critical security primitives (SEC-01, SEC-02, SEC-06)."""
@@ -535,9 +554,13 @@ class Settings(BaseSettings):
     # Scheduler
     SCHEDULER_HOUR: int = 8
     SCHEDULER_MINUTE: int = 0
+    # Bound system-scope sweeps to reduce blast radius during incident conditions.
+    SCHEDULER_SYSTEM_SWEEP_MAX_TENANTS: int = 5000
+    SCHEDULER_SYSTEM_SWEEP_MAX_CONNECTIONS: int = 5000
     # Scheduler distributed lock should fail-closed by default.
     # Enable only as temporary emergency bypass.
     SCHEDULER_LOCK_FAIL_OPEN: bool = False
+    TENANT_ISOLATION_EVIDENCE_MAX_AGE_HOURS: int = 168
 
     # Admin API Key
     ADMIN_API_KEY: Optional[str] = None

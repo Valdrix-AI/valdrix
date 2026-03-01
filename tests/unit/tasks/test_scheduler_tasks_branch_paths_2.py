@@ -82,6 +82,42 @@ def test_run_async_callable_and_invalid_type_paths() -> None:
         st.run_async(12345)
 
 
+def test_scheduler_span_records_attributes_and_status_on_success() -> None:
+    mock_span = MagicMock()
+    mock_span_cm = MagicMock()
+    mock_span_cm.__enter__.return_value = mock_span
+    mock_span_cm.__exit__.return_value = None
+    mock_tracer = MagicMock()
+    mock_tracer.start_as_current_span.return_value = mock_span_cm
+
+    with patch.object(st, "tracer", mock_tracer):
+        with st._scheduler_span("scheduler.test", cohort="high_value", retry_count=2):
+            pass
+
+    mock_tracer.start_as_current_span.assert_called_once_with("scheduler.test")
+    mock_span.set_attribute.assert_has_calls(
+        [call("scheduler.cohort", "high_value"), call("scheduler.retry_count", 2)]
+    )
+    mock_span.record_exception.assert_not_called()
+
+
+def test_scheduler_span_records_exception_and_re_raises() -> None:
+    mock_span = MagicMock()
+    mock_span_cm = MagicMock()
+    mock_span_cm.__enter__.return_value = mock_span
+    mock_span_cm.__exit__.return_value = None
+    mock_tracer = MagicMock()
+    mock_tracer.start_as_current_span.return_value = mock_span_cm
+
+    with patch.object(st, "tracer", mock_tracer):
+        with pytest.raises(RuntimeError, match="boom"):
+            with st._scheduler_span("scheduler.test"):
+                raise RuntimeError("boom")
+
+    mock_span.record_exception.assert_called_once()
+    mock_span.set_status.assert_called_once()
+
+
 def test_run_cohort_analysis_accepts_enum_instance_and_value_fallback() -> None:
     with patch("app.tasks.scheduler_tasks.run_async") as mock_run_async:
         st.run_cohort_analysis(TenantCohort.ACTIVE)
@@ -169,6 +205,46 @@ async def test_cohort_analysis_chunk_loop_handles_missing_rowcount_first_chunk()
         await st._cohort_analysis_logic(TenantCohort.DORMANT)
 
     assert db.execute.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_cohort_analysis_caps_tenant_scope_when_limit_exceeded() -> None:
+    db = AsyncMock()
+    _configure_sync_begin(db)
+
+    tenants = [SimpleNamespace(id=uuid4(), plan="starter") for _ in range(3)]
+    db.execute.side_effect = [
+        _scalars_result(tenants),
+        _rowcount_result(0),
+    ]
+
+    with (
+        patch("app.tasks.scheduler_tasks._open_db_session", return_value=_db_cm(db)),
+        patch(
+            "app.tasks.scheduler_tasks.get_settings",
+            return_value=SimpleNamespace(
+                SCHEDULER_SYSTEM_SWEEP_MAX_TENANTS=2,
+                SCHEDULER_SYSTEM_SWEEP_MAX_CONNECTIONS=5000,
+            ),
+        ),
+        patch("app.tasks.scheduler_tasks.datetime") as mock_datetime,
+        patch("app.shared.core.pricing.is_feature_enabled", return_value=False),
+        patch("app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED"),
+        patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_RUNS"),
+        patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_DURATION"),
+        patch("app.tasks.scheduler_tasks.logger") as mock_logger,
+    ):
+        mock_datetime.now.return_value = datetime(2026, 2, 1, 11, 0, tzinfo=timezone.utc)
+        await st._cohort_analysis_logic(TenantCohort.DORMANT)
+
+    mock_logger.warning.assert_any_call(
+        "scheduler_scope_capped",
+        scope="cohort:dormant",
+        total_items=3,
+        capped_items=2,
+        limit=2,
+    )
+    assert db.execute.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -279,6 +355,51 @@ async def test_remediation_sweep_chunk_loop_handles_missing_rowcount_first_chunk
         await st._remediation_sweep_logic()
 
     assert db.execute.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_remediation_sweep_caps_connection_scope_when_limit_exceeded() -> None:
+    db = AsyncMock()
+    _configure_sync_begin(db)
+    db.execute.side_effect = [_rowcount_result(1)]
+
+    connections = [
+        SimpleNamespace(id=uuid4(), tenant_id=uuid4(), provider="aws", region="global")
+        for _ in range(3)
+    ]
+
+    with (
+        patch("app.tasks.scheduler_tasks._open_db_session", return_value=_db_cm(db)),
+        patch(
+            "app.tasks.scheduler_tasks._load_active_remediation_connections",
+            new=AsyncMock(return_value=connections),
+        ),
+        patch("app.tasks.scheduler_tasks.resolve_provider_from_connection", return_value="aws"),
+        patch("app.tasks.scheduler_tasks.normalize_provider", return_value="aws"),
+        patch("app.tasks.scheduler_tasks.resolve_connection_region", return_value="global"),
+        patch("app.tasks.scheduler_tasks.SchedulerOrchestrator"),
+        patch(
+            "app.tasks.scheduler_tasks.get_settings",
+            return_value=SimpleNamespace(
+                SCHEDULER_SYSTEM_SWEEP_MAX_TENANTS=5000,
+                SCHEDULER_SYSTEM_SWEEP_MAX_CONNECTIONS=1,
+            ),
+        ),
+        patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_RUNS"),
+        patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_DURATION"),
+        patch("app.tasks.scheduler_tasks.logger") as mock_logger,
+    ):
+        await st._remediation_sweep_logic()
+
+    mock_logger.warning.assert_any_call(
+        "scheduler_scope_capped",
+        scope="remediation_connections",
+        total_items=3,
+        capped_items=1,
+        limit=1,
+    )
+    # single insert after capping to one connection
+    assert db.execute.call_count == 1
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,109 @@ from app.shared.core.exceptions import ExternalAPIError
 logger = structlog.get_logger()
 
 
+def _optional_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    return None
+
+
+def _coerce_entries(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    entries = payload.get("value", [])
+    if not isinstance(entries, list):
+        return []
+    return [item for item in entries if isinstance(item, dict)]
+
+
+def _normalize_identity_key(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    return normalized or None
+
+
+async def _load_m365_directory_role_admin_keys(
+    runtime: LicenseVendorRuntime,
+    *,
+    headers: dict[str, str],
+) -> set[str]:
+    try:
+        roles_payload = await runtime._get_json(
+            "https://graph.microsoft.com/v1.0/directoryRoles?$select=id,displayName",
+            headers=headers,
+        )
+    except (ExternalAPIError, httpx.HTTPError) as exc:
+        logger.warning("m365_directory_roles_fetch_failed", error=str(exc))
+        return set()
+
+    admin_keys: set[str] = set()
+    for role in _coerce_entries(roles_payload):
+        role_id = role.get("id")
+        display_name = str(role.get("displayName") or "").strip().lower()
+        if not isinstance(role_id, str) or not role_id.strip():
+            continue
+        if "admin" not in display_name and "owner" not in display_name:
+            continue
+        members_url = (
+            "https://graph.microsoft.com/v1.0/directoryRoles/"
+            f"{role_id}/members?$select=id,userPrincipalName"
+        )
+        try:
+            members_payload = await runtime._get_json(members_url, headers=headers)
+        except (ExternalAPIError, httpx.HTTPError) as exc:
+            logger.warning(
+                "m365_directory_role_members_fetch_failed",
+                role_id=role_id,
+                error=str(exc),
+            )
+            continue
+        for member in _coerce_entries(members_payload):
+            member_id = _normalize_identity_key(member.get("id"))
+            if member_id:
+                admin_keys.add(member_id)
+            member_upn = _normalize_identity_key(member.get("userPrincipalName"))
+            if member_upn:
+                admin_keys.add(member_upn)
+
+    return admin_keys
+
+
+async def _load_m365_registration_signals(
+    runtime: LicenseVendorRuntime,
+    *,
+    headers: dict[str, str],
+) -> tuple[dict[str, bool], dict[str, bool]]:
+    try:
+        payload = await runtime._get_json(
+            (
+                "https://graph.microsoft.com/v1.0/reports/"
+                "authenticationMethods/userRegistrationDetails?$top=999"
+            ),
+            headers=headers,
+        )
+    except (ExternalAPIError, httpx.HTTPError) as exc:
+        logger.warning("m365_registration_signals_fetch_failed", error=str(exc))
+        return {}, {}
+
+    mfa_by_key: dict[str, bool] = {}
+    admin_by_key: dict[str, bool] = {}
+    for entry in _coerce_entries(payload):
+        mfa_value = _optional_bool(entry.get("isMfaRegistered"))
+        admin_value = _optional_bool(entry.get("isAdmin"))
+        keys = (
+            _normalize_identity_key(entry.get("id")),
+            _normalize_identity_key(entry.get("userPrincipalName")),
+            _normalize_identity_key(entry.get("userPrincipalNameLower")),
+        )
+        for key in keys:
+            if key is None:
+                continue
+            if mfa_value is not None:
+                mfa_by_key[key] = mfa_value
+            if admin_value is not None:
+                admin_by_key[key] = admin_value
+    return mfa_by_key, admin_by_key
+
+
 async def stream_microsoft_365_license_costs(
     runtime: LicenseVendorRuntime,
     start_date: datetime,
@@ -129,6 +232,7 @@ async def list_microsoft_365_activity(
         for item in admin_upns_raw
         if isinstance(item, str) and item.strip()
     }
+    admin_upns_enabled = bool(admin_upns)
 
     url = (
         "https://graph.microsoft.com/v1.0/users?"
@@ -136,14 +240,25 @@ async def list_microsoft_365_activity(
     )
 
     try:
+        directory_role_admin_keys = await _load_m365_directory_role_admin_keys(
+            runtime,
+            headers=headers,
+        )
+        mfa_by_key, registration_admin_by_key = await _load_m365_registration_signals(
+            runtime,
+            headers=headers,
+        )
         payload = await runtime._get_json(url, headers=headers)
-        users_list = payload.get("value", [])
+        users_list = _coerce_entries(payload)
 
         activity_records = []
         for user in users_list:
             email = user.get("userPrincipalName")
             display_name = user.get("displayName")
             sign_in = user.get("signInActivity", {})
+            user_id = user.get("id")
+            normalized_user_id = _normalize_identity_key(user_id)
+            normalized_email = _normalize_identity_key(email)
 
             last_login_raw = sign_in.get(
                 "lastSuccessfulSignInDateTime"
@@ -156,13 +271,48 @@ async def list_microsoft_365_activity(
                 except (ValueError, TypeError):
                     pass
 
+            registration_admin = (
+                registration_admin_by_key.get(normalized_user_id)
+                if normalized_user_id is not None
+                else None
+            )
+            if registration_admin is None and normalized_email is not None:
+                registration_admin = registration_admin_by_key.get(normalized_email)
+
+            static_admin = bool(
+                normalized_email and admin_upns_enabled and normalized_email in admin_upns
+            )
+            directory_role_admin = bool(
+                normalized_user_id and normalized_user_id in directory_role_admin_keys
+            ) or bool(normalized_email and normalized_email in directory_role_admin_keys)
+
+            is_admin = bool(registration_admin) or directory_role_admin or static_admin
+            admin_sources: list[str] = []
+            if registration_admin is True:
+                admin_sources.append("registration_report")
+            if directory_role_admin:
+                admin_sources.append("directory_role")
+            if static_admin:
+                admin_sources.append("static_config")
+
+            mfa_enabled = (
+                mfa_by_key.get(normalized_user_id)
+                if normalized_user_id is not None
+                else None
+            )
+            if mfa_enabled is None and normalized_email is not None:
+                mfa_enabled = mfa_by_key.get(normalized_email)
+
             activity_records.append(
                 {
-                    "user_id": user.get("id"),
+                    "user_id": user_id,
                     "email": email,
                     "full_name": display_name,
                     "last_active_at": last_active_at,
-                    "is_admin": bool(email and email.lower() in admin_upns),
+                    "is_admin": is_admin,
+                    "admin_sources": admin_sources,
+                    "mfa_enabled": mfa_enabled,
+                    "is_mfa_registered": mfa_enabled,
                     "suspended": not user.get("accountEnabled", True),
                 }
             )

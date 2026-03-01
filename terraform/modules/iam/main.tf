@@ -21,9 +21,9 @@
 
 # IAM Role for Valdrix
 resource "aws_iam_role" "valdrix" {
-  name               = "${var.resource_tag_name}ReadOnly"
-  description        = "Allows Valdrix to read cost data for analysis"
-  max_session_duration = 3600  # 1 hour
+  name                 = "${var.resource_tag_name}ReadOnly"
+  description          = "Allows Valdrix to read cost data for analysis"
+  max_session_duration = 3600 # 1 hour
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -90,39 +90,39 @@ resource "aws_iam_role_policy" "read_only" {
         Resource = "*"
       },
       {
-        Sid    = "RedshiftOnly"
-        Effect = "Allow"
-        Action = ["redshift:DescribeClusters"]
+        Sid      = "RedshiftOnly"
+        Effect   = "Allow"
+        Action   = ["redshift:DescribeClusters"]
         Resource = "*"
       },
       {
-        Sid    = "SageMakerReadOnly"
-        Effect = "Allow"
-        Action = ["sagemaker:ListEndpoints", "sagemaker:ListNotebookInstances", "sagemaker:ListModels"]
+        Sid      = "SageMakerReadOnly"
+        Effect   = "Allow"
+        Action   = ["sagemaker:ListEndpoints", "sagemaker:ListNotebookInstances", "sagemaker:ListModels"]
         Resource = "*"
       },
       {
-        Sid    = "ECRReadOnly"
-        Effect = "Allow"
-        Action = ["ecr:DescribeRepositories", "ecr:DescribeImages"]
+        Sid      = "ECRReadOnly"
+        Effect   = "Allow"
+        Action   = ["ecr:DescribeRepositories", "ecr:DescribeImages"]
         Resource = "*"
       },
       {
-        Sid    = "S3ReadOnly"
-        Effect = "Allow"
-        Action = ["s3:ListAllMyBuckets", "s3:GetBucketLocation", "s3:GetBucketTagging"]
+        Sid      = "S3ReadOnly"
+        Effect   = "Allow"
+        Action   = ["s3:ListAllMyBuckets", "s3:GetBucketLocation", "s3:GetBucketTagging"]
         Resource = "*"
       },
       {
-        Sid    = "CloudWatchRead"
-        Effect = "Allow"
-        Action = ["cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics"]
+        Sid      = "CloudWatchRead"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics"]
         Resource = "*"
       },
       {
-        Sid    = "CURRead"
-        Effect = "Allow"
-        Action = ["cur:DescribeReportDefinitions"]
+        Sid      = "CURRead"
+        Effect   = "Allow"
+        Action   = ["cur:DescribeReportDefinitions"]
         Resource = "*"
       },
       {
@@ -134,13 +134,94 @@ resource "aws_iam_role_policy" "read_only" {
           "arn:aws:s3:::valdrix-cur-*/*"
         ]
       }
-      # OPTIONAL: CUR Automation (Commented out for security)
-      # If you want Valdrix to automatically setup your Cost & Usage Report,
-      # add the following actions to a separate policy:
-      # - "cur:PutReportDefinition",
-      # - "cur:ModifyReportDefinition",
-      # - "s3:CreateBucket",
-      # - "s3:PutBucketPolicy"
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "active_enforcement" {
+  count = var.enable_active_enforcement ? 1 : 0
+
+  name = "${var.resource_tag_name}ActiveEnforcementPolicy"
+  role = aws_iam_role.valdrix.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Ec2LifecycleControlsTagged"
+        Effect = "Allow"
+        Action = [
+          "ec2:StopInstances",
+          "ec2:StartInstances",
+          "ec2:RebootInstances",
+          "ec2:TerminateInstances",
+          "ec2:ModifyInstanceAttribute"
+        ]
+        Resource = "arn:aws:ec2:*:*:instance/*"
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/${var.active_enforcement_resource_tag_key}" = var.active_enforcement_resource_tag_value
+          }
+        }
+      },
+      {
+        Sid    = "RdsLifecycleControlsTagged"
+        Effect = "Allow"
+        Action = [
+          "rds:StartDBInstance",
+          "rds:StopDBInstance",
+          "rds:RebootDBInstance",
+          "rds:ModifyDBInstance"
+        ]
+        Resource = "arn:aws:rds:*:*:db:*"
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/${var.active_enforcement_resource_tag_key}" = var.active_enforcement_resource_tag_value
+          }
+        }
+      },
+      {
+        Sid    = "AsgScaleControlsTagged"
+        Effect = "Allow"
+        Action = [
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:UpdateAutoScalingGroup"
+        ]
+        Resource = "arn:aws:autoscaling:*:*:autoScalingGroup:*:autoScalingGroupName/*"
+        Condition = {
+          StringEquals = {
+            "autoscaling:ResourceTag/${var.active_enforcement_resource_tag_key}" = var.active_enforcement_resource_tag_value
+          }
+        }
+      },
+      {
+        Sid    = "LambdaConcurrencyControlsTagged"
+        Effect = "Allow"
+        Action = [
+          "lambda:PutFunctionConcurrency",
+          "lambda:DeleteFunctionConcurrency",
+          "lambda:UpdateFunctionConfiguration"
+        ]
+        Resource = "arn:aws:lambda:*:*:function:*"
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/${var.active_enforcement_resource_tag_key}" = var.active_enforcement_resource_tag_value
+          }
+        }
+      },
+      {
+        Sid    = "EcsServiceScaleControlsTagged"
+        Effect = "Allow"
+        Action = [
+          "ecs:UpdateService"
+        ]
+        Resource = "arn:aws:ecs:*:*:service/*/*"
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/${var.active_enforcement_resource_tag_key}" = var.active_enforcement_resource_tag_value
+          }
+        }
+      }
     ]
   })
 }
@@ -172,4 +253,9 @@ output "role_arn" {
 output "role_name" {
   description = "The name of the Valdrix role."
   value       = aws_iam_role.valdrix.name
+}
+
+output "active_enforcement_enabled" {
+  description = "Whether the active enforcement policy is attached."
+  value       = var.enable_active_enforcement
 }

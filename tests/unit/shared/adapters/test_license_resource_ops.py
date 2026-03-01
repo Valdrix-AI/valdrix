@@ -26,12 +26,16 @@ def test_build_discovered_license_resources_deduplicates_and_merges() -> None:
                 "full_name": "First User",
                 "last_active_at": datetime(2026, 1, 2, tzinfo=timezone.utc),
                 "is_admin": False,
+                "admin_role": "member",
+                "mfa_enabled": True,
                 "suspended": False,
             },
             {
                 "user_id": "u-1",
                 "last_active_at": datetime(2026, 1, 5, tzinfo=timezone.utc),
                 "is_admin": True,
+                "admin_role": "global_admin",
+                "admin_sources": ["directory_role"],
             },
             {"email": "second@example.com", "suspended": True},
         ],
@@ -45,6 +49,9 @@ def test_build_discovered_license_resources_deduplicates_and_merges() -> None:
     assert resources[0]["status"] == "suspended"
     assert resources[1]["id"] == "u-1"
     assert resources[1]["metadata"]["is_admin"] is True
+    assert resources[1]["metadata"]["admin_role"] == "member"
+    assert resources[1]["metadata"]["mfa_enabled"] is True
+    assert resources[1]["metadata"]["admin_sources"] == ["directory_role"]
     assert resources[1]["metadata"]["last_active_at"] == "2026-01-05T00:00:00+00:00"
 
 
@@ -55,6 +62,8 @@ def test_build_license_usage_rows_filters_by_resource_and_normalizes_defaults() 
                 "user_id": "u-1",
                 "email": "first@example.com",
                 "last_active_at": datetime(2026, 2, 1, tzinfo=timezone.utc),
+                "mfa_enabled": True,
+                "admin_role": "delegated_admin",
             },
             {"email": "second@example.com"},
         ],
@@ -74,6 +83,8 @@ def test_build_license_usage_rows_filters_by_resource_and_normalizes_defaults() 
     assert row["timestamp"] == datetime(2026, 2, 1, tzinfo=timezone.utc)
     assert row["tags"]["vendor"] == "google_workspace"
     assert row["tags"]["email"] == "first@example.com"
+    assert row["tags"]["mfa_enabled"] is True
+    assert row["tags"]["admin_role"] == "delegated_admin"
 
 
 def test_build_license_usage_rows_returns_empty_for_unsupported_service() -> None:

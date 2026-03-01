@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 # Dunning Configuration
 DUNNING_RETRY_SCHEDULE_DAYS = [1, 3, 7]  # Retry on day 1, 3, 7 after first failure
 DUNNING_MAX_ATTEMPTS = 3
+DUNNING_WEBHOOK_DEBOUNCE_SECONDS = 300
 
 
 class DunningService:
@@ -113,6 +114,26 @@ class DunningService:
             return {"status": "error", "reason": "subscription_not_found"}
 
         now = datetime.now(timezone.utc)
+        if is_webhook and subscription.last_dunning_at is not None:
+            last_dunning_at = subscription.last_dunning_at
+            if last_dunning_at.tzinfo is None:
+                last_dunning_at = last_dunning_at.replace(tzinfo=timezone.utc)
+            elapsed_seconds = (now - last_dunning_at).total_seconds()
+            if elapsed_seconds < DUNNING_WEBHOOK_DEBOUNCE_SECONDS:
+                logger.info(
+                    "dunning_duplicate_webhook_ignored",
+                    tenant_id=str(subscription.tenant_id),
+                    subscription_id=str(subscription.id),
+                    attempts=int(subscription.dunning_attempts),
+                    elapsed_seconds=round(elapsed_seconds, 3),
+                    debounce_seconds=DUNNING_WEBHOOK_DEBOUNCE_SECONDS,
+                )
+                return {
+                    "status": "duplicate_ignored",
+                    "attempt": int(subscription.dunning_attempts),
+                    "reason": "webhook_debounce",
+                }
+
         previous_status = subscription.status
         previous_dunning_attempts = subscription.dunning_attempts
         previous_last_dunning_at = subscription.last_dunning_at

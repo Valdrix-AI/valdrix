@@ -38,8 +38,8 @@ export function allowedNavHrefs(persona: unknown, role: unknown): Set<string> {
 			break;
 	}
 
-	// Safety: settings and onboarding should always be discoverable.
-	hrefs.push('/settings', '/onboarding');
+	// Safety: core setup and planning paths should always be discoverable.
+	hrefs.push('/settings', '/onboarding', '/roi-planner');
 
 	// Subscription management is an admin concern, regardless of persona.
 	if (isAdmin) {

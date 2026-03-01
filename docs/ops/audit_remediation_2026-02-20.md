@@ -4,6 +4,131 @@ Source audit: `/home/daretechie/.gemini/antigravity/brain/c6c55133-7d83-4352-ab2
 
 ## Remediation Status
 
+## Additional remediation batch (2026-03-01, source: `.../dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved`)
+
+## Additional remediation batch (2026-03-01B, source: `.../dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved`)
+
+1. Horizontal scaling breaker-state blocker (remediation plane)
+- Closed process-local only factory behavior in:
+  - `app/shared/remediation/circuit_breaker.py`
+- `get_circuit_breaker()` now resolves and injects a distributed Redis client when `CIRCUIT_BREAKER_DISTRIBUTED_STATE=true` and `REDIS_URL` is present, with safe in-memory fallback when unavailable.
+- Added regression coverage:
+  - `tests/unit/remediation/test_circuit_breaker_deep.py`
+    - distributed client injection path
+    - graceful fallback path
+    - distributed resolver behavior
+
+2. Enforcement fail-open risk on spend-context outage
+- Closed fail-open posture when computed spend context is unavailable in:
+  - `app/modules/enforcement/domain/service.py`
+- Behavior now fails by enforcement mode when `computed_context.data_source_mode == "unavailable"` and request delta is positive:
+  - `SHADOW` -> allow with explicit override reason,
+  - `SOFT` -> require approval escalation,
+  - `HARD` -> deny fail-closed.
+- Added regression coverage:
+  - `tests/unit/enforcement/test_enforcement_service.py`
+    - soft-mode escalation on unavailable cost context
+    - hard-mode denial on unavailable cost context
+
+3. Validation evidence (this batch)
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/remediation/test_circuit_breaker_deep.py tests/core/test_circuit_breaker.py tests/unit/enforcement/test_enforcement_service.py -k "computed_context_unavailable or circuit_breaker"` -> `30 passed`.
+- `uv run ruff check app/shared/remediation/circuit_breaker.py app/modules/enforcement/domain/service.py tests/unit/remediation/test_circuit_breaker_deep.py tests/unit/enforcement/test_enforcement_service.py` -> passed.
+- `uv run mypy app/shared/remediation/circuit_breaker.py app/modules/enforcement/domain/service.py --hide-error-context --no-error-summary` -> passed.
+- `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> passed (`2 passed`).
+- `cd dashboard && npm run test:unit -- --run src/routes/layout.server.load.test.ts` -> passed (`4 passed`).
+- `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+
+## Additional remediation batch (2026-03-01C, source: `.../dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved`)
+
+1. Public-edge bot protection hardening (Turnstile propagation)
+- Added shared frontend Turnstile helper:
+  - `dashboard/src/lib/security/turnstile.ts`
+- Wired Turnstile token forwarding for protected public/auth surfaces:
+  - SSO discovery request: `dashboard/src/routes/auth/login/+page.svelte`
+  - onboarding bootstrap request: `dashboard/src/routes/onboarding/+page.svelte`
+- Added deterministic helper coverage:
+  - `dashboard/src/lib/security/turnstile.test.ts`
+  - updated route tests:
+    - `dashboard/src/routes/auth/login/login-page.svelte.test.ts`
+    - `dashboard/src/routes/onboarding/onboarding-page.svelte.test.ts`
+
+2. Public auth-provider failure-mode hardening
+- Hardened `safeGetSession()` against provider/network resolution failures in:
+  - `dashboard/src/hooks.server.ts`
+- Behavior now degrades to anonymous session state instead of crashing request flow.
+
+3. Active-enforcement IAM policy baseline (Terraform)
+- Implemented tag-scoped optional active remediation policy in:
+  - `terraform/modules/iam/main.tf`
+  - `terraform/modules/iam/variables.tf`
+  - root wiring:
+    - `terraform/main.tf`
+    - `terraform/variables.tf`
+    - `terraform/outputs.tf`
+- Control is explicit and disabled by default:
+  - `enable_active_enforcement = false` baseline.
+
+4. Migration graph integrity hardening
+- Added Alembic head-integrity verifier:
+  - `scripts/verify_alembic_head_integrity.py`
+- Added regression coverage:
+  - `tests/unit/ops/test_verify_alembic_head_integrity.py`
+- Wired verifier into enterprise gate command construction:
+  - `scripts/run_enterprise_tdd_gate.py`
+  - updated gate-runner tests:
+    - `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
+
+5. Validation evidence (this batch)
+- `uv run python3 scripts/verify_alembic_head_integrity.py --migrations-path migrations/versions` -> passed.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_alembic_head_integrity.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/remediation/test_circuit_breaker_deep.py tests/unit/enforcement/test_enforcement_service.py -k "alembic or enterprise_tdd_gate_runner or computed_context_unavailable or circuit_breaker"` -> `48 passed`.
+- `uv run ruff check app/shared/remediation/circuit_breaker.py app/modules/enforcement/domain/service.py scripts/verify_alembic_head_integrity.py scripts/run_enterprise_tdd_gate.py tests/unit/remediation/test_circuit_breaker_deep.py tests/unit/enforcement/test_enforcement_service.py tests/unit/ops/test_verify_alembic_head_integrity.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py` -> passed.
+- `uv run mypy app/shared/remediation/circuit_breaker.py app/modules/enforcement/domain/service.py scripts/verify_alembic_head_integrity.py scripts/run_enterprise_tdd_gate.py --hide-error-context --no-error-summary` -> passed.
+- `cd dashboard && npm run test:unit -- --run src/routes/auth/login/login-page.svelte.test.ts src/routes/onboarding/onboarding-page.svelte.test.ts src/lib/security/turnstile.test.ts src/routes/layout.server.load.test.ts` -> passed (`12 passed`).
+- `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+- `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> passed (`2 passed`).
+
+1. Multi-cloud identity parity and unified domain auditing
+- Added deterministic auditors:
+  - `app/modules/governance/domain/security/azure_rbac_auditor.py`
+  - `app/modules/governance/domain/security/gcp_iam_auditor.py`
+  - `app/modules/governance/domain/security/unified_domain_auditor.py`
+  - `app/modules/governance/domain/security/finding_models.py`
+- Added regression tests:
+  - `tests/governance/test_azure_rbac_auditor.py`
+  - `tests/governance/test_gcp_iam_auditor.py`
+  - `tests/governance/test_unified_domain_auditor.py`
+
+2. Scheduler observability hardening
+- Added explicit OTel spans and error-status propagation in:
+  - `app/tasks/scheduler_tasks.py`
+- Added branch-path coverage:
+  - `tests/unit/tasks/test_scheduler_tasks_branch_paths_2.py`
+
+3. Alerting hardening (silent-channel closure)
+- Activated severity receivers in:
+  - `prometheus/alertmanager.yml`
+- Added verifier and enterprise-gate integration:
+  - `scripts/verify_alertmanager_channels.py`
+  - `scripts/run_enterprise_tdd_gate.py`
+- Added tests:
+  - `tests/unit/ops/test_verify_alertmanager_channels.py`
+
+4. Landing maintainability and public-edge failure-mode hardening
+- Extracted large landing marketing content constants to:
+  - `dashboard/src/lib/landing/heroContent.ts`
+- Updated public layout load to degrade gracefully on public-path auth resolution failures while preserving protected-path fail-closed behavior:
+  - `dashboard/src/routes/+layout.server.ts`
+  - `dashboard/src/routes/layout.server.load.test.ts`
+
+5. Validation evidence (this batch)
+- `DEBUG=false uv run pytest -q --no-cov tests/governance/test_azure_rbac_auditor.py tests/governance/test_gcp_iam_auditor.py tests/governance/test_unified_domain_auditor.py tests/unit/ops/test_verify_alertmanager_channels.py tests/unit/tasks/test_scheduler_tasks_branch_paths_2.py tests/unit/tasks/test_scheduler_tasks.py` -> `65 passed`.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py` -> `28 passed`.
+- `uv run ruff check ...` (changed scheduler/security/audit-gate files + tests) -> passed.
+- `uv run mypy app/tasks/scheduler_tasks.py app/modules/governance/domain/security/finding_models.py app/modules/governance/domain/security/azure_rbac_auditor.py app/modules/governance/domain/security/gcp_iam_auditor.py app/modules/governance/domain/security/unified_domain_auditor.py scripts/verify_alertmanager_channels.py scripts/run_enterprise_tdd_gate.py --hide-error-context --no-error-summary` -> passed.
+- `uv run python3 scripts/verify_alertmanager_channels.py --config-path prometheus/alertmanager.yml` -> passed.
+- `cd dashboard && npm run test:unit -- --run src/routes/layout.server.load.test.ts` -> passed (`4 tests`).
+- `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+
 0. Helm `WORKERS: "4"` + multi-replica defaults vs process-local breaker
 - Fixed in `helm/valdrix/values.yaml`:
   - `WORKERS` removed
@@ -939,6 +1064,33 @@ This section consolidates what is now remediated from the Valdrics audit stream 
 - Failure modes: overflow/sr-only/header/toggle regressions are explicit test failures.
 - Operational misconfiguration: no new runtime config surface introduced.
 
+## Additional remediation batch (Valdrix continuation, 2026-03-01M)
+
+- PKG/FIN operational closeout automation added:
+  - `scripts/verify_pkg_fin_operational_readiness.py`
+  - composes policy, finance guardrail, and telemetry verifiers and emits one machine-readable readiness summary.
+- New operational readiness evidence captured:
+  - `docs/ops/evidence/pkg_fin_operational_readiness_2026-03-01.json`
+- New regression coverage:
+  - `tests/unit/ops/test_verify_pkg_fin_operational_readiness.py`
+
+### Validation evidence (this batch)
+
+- `uv run ruff check scripts/verify_pkg_fin_operational_readiness.py tests/unit/ops/test_verify_pkg_fin_operational_readiness.py` -> passed.
+- `uv run mypy scripts/verify_pkg_fin_operational_readiness.py --hide-error-context --no-error-summary` -> passed.
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_pkg_fin_operational_readiness.py tests/unit/ops/test_verify_pkg_fin_policy_decisions.py tests/unit/ops/test_verify_finance_guardrails_evidence.py tests/unit/ops/test_verify_finance_telemetry_snapshot.py` -> `30 passed`.
+- `DEBUG=false uv run python3 scripts/run_enforcement_release_evidence_gate.py ... --finance-evidence-required --finance-telemetry-snapshot-required --pricing-benchmark-register-required --pkg-fin-policy-decisions-required` -> passed (`883 passed`).
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: readiness verifier is stateless/read-only and does not mutate policy or finance artifacts.
+- Observability: single JSON output now makes PKG/FIN residuals explicit (`production_observed telemetry`, `segregated_owners governance`).
+- Deterministic replay: same evidence inputs yield deterministic readiness outputs.
+- Snapshot stability: no API/runtime payload schema changes introduced by this batch.
+- Export integrity: existing evidence schemas are reused and re-verified unchanged.
+- Failure modes: strict readiness requirements fail closed when postlaunch prerequisites are unmet.
+- Operational misconfiguration: malformed or stale evidence fails early through existing composed verifiers.
+
 ## Additional remediation batch (Valdrics continuation, 2026-03-01K)
 
 - Billing webhook idempotency and replay hardening:
@@ -993,3 +1145,331 @@ This section consolidates what is now remediated from the Valdrics audit stream 
 - Export integrity: leadership KPI CSV now includes explicit security posture columns without changing provider/service sort determinism.
 - Failure modes: webhook inline-processing success no longer leaves pending jobs that can replay side effects; invalid FX/amount payloads are safely rejected.
 - Operational misconfiguration: destructive scripts and emergency-token generation now fail closed unless explicit break-glass controls are supplied.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01L)
+
+- SaaS/ITAM security-posture parity hardening for identity activity ingestion:
+  - `app/shared/adapters/license_vendor_github.py`
+    - added organization role lookups (`/memberships/{login}`) with bounded concurrency and lookup caps,
+    - added MFA posture signal ingestion from GitHub 2FA-disabled member filter,
+    - added normalized role/state/MFA fields per identity record (`org_role`, `membership_state`, `mfa_enabled`).
+  - `app/shared/adapters/license_vendor_google.py`
+    - added explicit 2SV posture extraction (`isEnrolledIn2Sv`, `isEnforcedIn2Sv`),
+    - elevated delegated admin support into `is_admin` semantics,
+    - added normalized admin-role field (`super_admin`, `delegated_admin`, `member`).
+  - `app/shared/adapters/license_vendor_microsoft.py`
+    - replaced static-admin-only posture with directory-role + registration-report enrichment,
+    - ingests admin posture from Entra directory roles and Graph registration report,
+    - ingests MFA registration posture (`mfa_enabled`) and records admin provenance (`admin_sources`).
+- Security metadata propagation into normalized license resource/usage surfaces:
+  - `app/shared/adapters/license_resource_ops.py`
+  - resource metadata now carries `admin_role`, `mfa_enabled`, and normalized admin-source lineage,
+  - usage tags now include `admin_role` and `mfa_enabled` for downstream governance/reporting joins.
+- Public-edge auth-noise reduction (landing resilience):
+  - `dashboard/src/routes/+layout.server.ts`
+  - public anonymous requests now skip session resolution when no Supabase session cookies are present,
+  - keeps authenticated public flows intact when Supabase cookies exist.
+- Deployment baseline hardening:
+  - `koyeb.yaml`
+  - raised Koyeb instance class from `nano` to `micro` for safer baseline headroom under ingestion/worker pressure.
+
+### Validation evidence (this batch)
+
+- `DEBUG=false .venv/bin/pytest -q -o addopts='' tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/shared/adapters/test_license_resource_ops.py tests/unit/shared/adapters/test_license_native_dispatch.py` -> `60 passed`.
+- `cd dashboard && npm run test:unit -- --run src/routes/layout.server.load.test.ts src/routes/layout-public-menu.svelte.test.ts` -> `5 passed`.
+- `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> `2 passed`.
+- `.venv/bin/python -m py_compile app/shared/adapters/license_vendor_github.py app/shared/adapters/license_vendor_google.py app/shared/adapters/license_vendor_microsoft.py app/shared/adapters/license_resource_ops.py` -> passed.
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: GitHub membership role lookups are bounded by explicit semaphore + capped member lookup limit to avoid unbounded fan-out.
+- Observability: each optional posture source (directory roles, registration report, GitHub 2FA/admin feeds) now logs explicit fetch-failure events without silent data loss.
+- Deterministic replay: security posture enrichment is deterministic for a fixed vendor snapshot; merged resource metadata remains stable under repeated ingestion.
+- Snapshot stability: landing mobile regression suite still passes after layout server guard changes.
+- Export integrity: normalized license usage rows preserve existing schema while extending tags with additive security metadata only.
+- Failure modes: SaaS posture APIs fail soft (empty enrichment) while core activity ingestion remains available; no connector-wide outage from one optional endpoint.
+- Operational misconfiguration: public anonymous loads no longer require active Supabase session resolution, reducing DNS/config noise impact on the landing surface.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01N)
+
+Implemented:
+1. Landing maintainability hardening:
+   - `dashboard/src/lib/components/LandingHero.svelte`
+   - extracted component-scoped style payload to `dashboard/src/lib/components/LandingHero.css` and imported it from the component.
+   - reduced monolithic Svelte file footprint and isolated style concerns for safer incremental UI refactors.
+2. Public-edge bot protection CSP parity:
+   - `dashboard/svelte.config.js`
+   - added Cloudflare Turnstile domains to CSP (`script-src`, `connect-src`, `frame-src`) so invisible token execution is policy-compliant.
+3. Scheduler blast-radius controls for system-scope sweeps:
+   - `app/tasks/scheduler_tasks.py`
+   - added deterministic scope caps (`_system_sweep_tenant_limit`, `_system_sweep_connection_limit`) and enforced capping in cohort, remediation, acceptance, and enforcement reconciliation sweeps.
+   - added explicit `scheduler_scope_capped` warning telemetry when runtime caps are applied.
+4. Runtime configuration for sweep caps:
+   - `app/shared/core/config.py`
+   - added `SCHEDULER_SYSTEM_SWEEP_MAX_TENANTS` and `SCHEDULER_SYSTEM_SWEEP_MAX_CONNECTIONS`.
+5. Regression coverage for scheduler cap behavior:
+   - `tests/unit/tasks/test_scheduler_tasks_branch_paths_2.py`
+   - added deterministic tests for tenant-scope and connection-scope cap enforcement.
+
+Validation:
+1. `DEBUG=false uv run pytest -q --no-cov tests/unit/tasks/test_scheduler_tasks_branch_paths_2.py tests/unit/core/test_config_audit.py` -> `34 passed`
+2. `uv run ruff check app/tasks/scheduler_tasks.py app/shared/core/config.py tests/unit/tasks/test_scheduler_tasks_branch_paths_2.py` -> passed
+3. `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`)
+4. `cd dashboard && npm run test:unit -- --run src/routes/auth/login/login-page.svelte.test.ts src/routes/onboarding/onboarding-page.svelte.test.ts src/lib/security/turnstile.test.ts src/routes/layout.server.load.test.ts` -> `12 passed`
+5. `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> `2 passed`
+
+Post-closure sanity (release-critical):
+1. Concurrency: scheduler caps bound global-sweep workload fan-out and reduce incident blast radius under retry pressure.
+2. Observability: cap activation emits structured `scheduler_scope_capped` telemetry with scope/total/cap values.
+3. Deterministic replay: capped selection is deterministic for a fixed input ordering and configured cap values.
+4. Snapshot stability: landing regression snapshots remain stable (`390`/`500` viewport checks green).
+5. Export integrity: no reporting/export schema mutations in this batch.
+6. Failure modes: missing/invalid sweep cap settings fail safely to bounded defaults.
+7. Operational misconfiguration: Turnstile runtime now matches declared CSP policy, preventing silent script/frame policy breakage.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01O)
+
+Implemented:
+1. Distributed circuit-breaker backend unavailability now fails closed in staging/production:
+   - `app/shared/remediation/circuit_breaker.py`
+   - when distributed state is required but Redis backend is unavailable, `can_execute()` returns `False`,
+   - state mutation methods (`record_success`, `record_failure`, `reset`) skip safely and log explicit warnings,
+   - status payload now includes backend availability metadata (`distributed_backend_available`, `backend_unavailable_reason`).
+2. Hybrid scheduler observability hardening:
+   - `app/shared/llm/hybrid_scheduler.py`
+   - added OTel spans across run-decision and execution paths:
+     - `hybrid_analysis.should_run_full`
+     - `hybrid_analysis.run`
+     - `hybrid_analysis.full_run`
+     - `hybrid_analysis.delta_run`
+   - spans now record key attributes, success/error status, and exceptions.
+3. Staging/production passive tenancy-isolation evidence checks in acceptance capture:
+   - `app/modules/governance/domain/jobs/handlers/acceptance.py`
+   - `app/modules/governance/domain/security/audit_log.py`
+   - acceptance job now validates freshness/success of latest `TENANCY_ISOLATION_VERIFICATION_CAPTURED` evidence and records integration status under `integration_test.tenancy`,
+   - added configurable freshness ceiling:
+     - `app/shared/core/config.py`: `TENANT_ISOLATION_EVIDENCE_MAX_AGE_HOURS`.
+4. Comprehensive TDD updates for all new control paths:
+   - `tests/unit/remediation/test_circuit_breaker_deep.py`
+   - `tests/unit/llm/test_hybrid_scheduler.py`
+   - `tests/unit/services/jobs/test_acceptance_suite_capture_handler_branches.py`
+
+Validation:
+1. `uv run ruff check app/shared/remediation/circuit_breaker.py app/shared/llm/hybrid_scheduler.py app/modules/governance/domain/jobs/handlers/acceptance.py app/modules/governance/domain/security/audit_log.py app/shared/core/config.py tests/unit/remediation/test_circuit_breaker_deep.py tests/unit/llm/test_hybrid_scheduler.py tests/unit/services/jobs/test_acceptance_suite_capture_handler_branches.py` -> passed.
+2. `uv run mypy app/shared/remediation/circuit_breaker.py app/shared/llm/hybrid_scheduler.py app/modules/governance/domain/jobs/handlers/acceptance.py app/modules/governance/domain/security/audit_log.py app/shared/core/config.py --hide-error-context` -> passed.
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/remediation/test_circuit_breaker_deep.py tests/unit/llm/test_hybrid_scheduler.py tests/unit/llm/test_hybrid_scheduler_exhaustive.py tests/unit/services/jobs/test_acceptance_suite_capture_handler_branches.py tests/unit/core/test_config_audit.py` -> `57 passed`.
+4. `DEBUG=false uv run pytest -q --no-cov tests/unit/tasks/test_scheduler_tasks_branch_paths_2.py tests/unit/ops/test_verify_alembic_head_integrity.py tests/unit/ops/test_verify_alertmanager_channels.py tests/unit/ops/test_verify_pkg_fin_operational_readiness.py` -> `35 passed`.
+5. `DEBUG=false uv run pytest -q --no-cov tests/governance/test_azure_rbac_auditor.py tests/governance/test_gcp_iam_auditor.py tests/governance/test_unified_domain_auditor.py` -> `6 passed`.
+6. `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+7. `cd dashboard && npm run test:unit -- --run src/routes/auth/login/login-page.svelte.test.ts src/routes/onboarding/onboarding-page.svelte.test.ts src/lib/security/turnstile.test.ts src/routes/layout.server.load.test.ts` -> `12 passed`.
+8. `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> `2 passed`.
+
+Post-closure sanity (release-critical):
+1. Concurrency: distributed breaker fail-closed path prevents split-brain mutation when shared backend disappears.
+2. Observability: hybrid scheduler spans and breaker-unavailable telemetry make recovery and latency triage explicit.
+3. Deterministic replay: acceptance tenancy checks use deterministic latest-evidence lookup and explicit freshness thresholds.
+4. Snapshot stability: landing layout audit remains green at mobile breakpoints after hardening batch reruns.
+5. Export integrity: no report/export schema drift introduced; integration/audit additions are additive and typed.
+6. Failure modes: missing, stale, or failed tenancy evidence now blocks staging/production acceptance readiness by design.
+7. Operational misconfiguration: staging/production distributed-state misconfiguration now fails closed instead of silently falling back.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01P)
+
+Implemented:
+1. Frontend architecture decomposition for landing maintainability:
+   - extracted hero copy into:
+     - `dashboard/src/lib/components/landing/LandingHeroCopy.svelte`
+   - extracted realtime signal map card into:
+     - `dashboard/src/lib/components/landing/LandingSignalMapCard.svelte`
+   - extracted spend scenario simulator into:
+     - `dashboard/src/lib/components/landing/LandingRoiSimulator.svelte`
+   - extracted ROI calculator section into:
+     - `dashboard/src/lib/components/landing/LandingRoiCalculator.svelte`
+   - rewired orchestration in:
+     - `dashboard/src/lib/components/LandingHero.svelte`
+2. Added explicit component-level regression coverage for decomposed sections:
+   - `dashboard/src/lib/components/landing/landing_decomposition.svelte.test.ts`
+
+Validation:
+1. `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+2. `cd dashboard && npm run test:unit -- --run src/lib/components/LandingHero.svelte.test.ts src/lib/components/landing/landing_components.svelte.test.ts src/lib/components/landing/landing_decomposition.svelte.test.ts src/routes/auth/login/login-page.svelte.test.ts src/routes/onboarding/onboarding-page.svelte.test.ts src/lib/security/turnstile.test.ts src/routes/layout.server.load.test.ts` -> `21 passed`.
+3. `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> `2 passed`.
+
+Post-closure sanity (release-critical):
+1. Concurrency: signal-map rotation/observer ownership remains centralized in `LandingHero`, preventing duplicate interval schedulers after decomposition.
+2. Observability: telemetry event emitters remained in parent orchestration; CTA, lane, snapshot, and scenario interactions preserve existing instrumentation.
+3. Deterministic replay: snapshot/lane/demo selection behavior remains deterministic; decomposed components are pure prop-driven renders.
+4. Snapshot stability: mobile overflow, `sr-only` clipping, and mobile header-on-screen audits remain green in Playwright regression checks.
+5. Export integrity: no backend schema or export payload changes were introduced by this frontend-only decomposition.
+6. Failure modes: ROI/simulator controls now flow through typed callback boundaries with component tests covering numeric parsing and event propagation.
+7. Operational misconfiguration: decomposition removes monolith coupling without introducing new runtime config knobs.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01Q)
+
+Implemented:
+1. Landing flow length reduction (buyer-first compression) in:
+   - `dashboard/src/lib/components/LandingHero.svelte`
+   - removed duplicate workflow/cloud-hook rendering pass from lower-page flow,
+   - replaced long in-page ROI calculator block with compact ROI CTA card (`Open Full ROI Planner`),
+   - removed redundant standalone cross-surface coverage section and kept a condensed capability preview.
+2. Kept the high-conversion content intact:
+   - hero + realtime signal map
+   - cloud hook/workflow (single pass)
+   - realtime simulator
+   - plans and free-tier CTA
+   - trust/proof section
+3. Updated landing regression assertions:
+   - `dashboard/src/lib/components/LandingHero.svelte.test.ts`
+   - aligned expectations to shorter page structure and condensed capability preview.
+
+Validation:
+1. `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+2. `cd dashboard && npm run test:unit -- --run src/lib/components/LandingHero.svelte.test.ts src/lib/components/landing/landing_components.svelte.test.ts src/lib/components/landing/landing_decomposition.svelte.test.ts src/routes/auth/login/login-page.svelte.test.ts src/routes/onboarding/onboarding-page.svelte.test.ts src/lib/security/turnstile.test.ts src/routes/layout.server.load.test.ts` -> `21 passed`.
+3. `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> `2 passed`.
+
+Post-closure sanity (release-critical):
+1. Concurrency: snapshot/demo rotation lifecycle remains parent-controlled; no duplicate interval ownership introduced.
+2. Observability: CTA and interaction telemetry paths remain intact (`trackCta`, section-view, scenario-adjust).
+3. Deterministic replay: landing section ordering and visible-content flow are deterministic per experiment variant.
+4. Snapshot stability: mobile overflow and header-on-screen layout audits remain green after compression.
+5. Export integrity: no backend export/report schema changes.
+6. Failure modes: removed duplicated section pass to reduce content drift/contradictory messaging risk.
+7. Operational misconfiguration: no new runtime flags or config surfaces introduced.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01R)
+
+Implemented:
+1. Post-auth ROI intent routing is now explicit:
+   - `dashboard/src/lib/auth/publicAuthIntent.ts`
+   - `roi_assessment` now resolves to `/roi-planner` (other intents still resolve to `/onboarding`).
+2. Added dedicated authenticated ROI planner workspace:
+   - `dashboard/src/routes/roi-planner/+page.svelte`
+   - full 12-month planner view is available after signup/login and remains revisitable from app nav.
+3. Added app navigation discovery for ROI planner:
+   - `dashboard/src/routes/+layout.svelte`
+   - `dashboard/src/lib/persona.ts`
+4. Reduced landing component complexity to production-manageable size:
+   - `dashboard/src/lib/components/LandingHero.svelte` reduced from `1020` lines to `609` lines,
+   - extracted section components:
+     - `dashboard/src/lib/components/landing/LandingCloudHookSection.svelte`
+     - `dashboard/src/lib/components/landing/LandingWorkflowSection.svelte`
+     - `dashboard/src/lib/components/landing/LandingBenefitsSection.svelte`
+     - `dashboard/src/lib/components/landing/LandingPlansSection.svelte`
+     - `dashboard/src/lib/components/landing/LandingPersonaSection.svelte`
+     - `dashboard/src/lib/components/landing/LandingCapabilitiesSection.svelte`
+     - `dashboard/src/lib/components/landing/LandingTrustSection.svelte`
+     - `dashboard/src/lib/components/landing/LandingRoiPlannerCta.svelte`
+5. ROI calculator component upgraded for reusable enterprise contexts:
+   - `dashboard/src/lib/components/landing/LandingRoiCalculator.svelte`
+   - supports configurable heading/subtitle/CTA/section ID without duplicating logic.
+
+Validation:
+1. `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+2. `cd dashboard && npm run test:unit -- --run src/lib/auth/publicAuthIntent.test.ts src/routes/auth/login/login-page.svelte.test.ts src/routes/roi-planner/roi-planner-page.svelte.test.ts src/lib/components/LandingHero.svelte.test.ts src/lib/components/landing/landing_decomposition.svelte.test.ts` -> `15 passed`.
+3. `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> `2 passed`.
+
+Post-closure sanity (release-critical):
+1. Concurrency: landing timers/observers stay parent-controlled; extracted sections are stateless render surfaces.
+2. Observability: CTA + funnel attribution hooks remain centralized and unchanged in tracking semantics.
+3. Deterministic replay: ROI intent routing is deterministic (`roi_assessment` -> `/roi-planner`) with preserved UTM/persona context.
+4. Snapshot stability: mobile overflow and responsive header layout audits remain green after section extraction.
+5. Export integrity: no backend export contract changes; changes are frontend routing/composition only.
+6. Failure modes: unauthenticated ROI planner access fails safely via `AuthGate` with explicit sign-in path.
+7. Operational misconfiguration: no new runtime toggles; route behavior depends only on existing auth context parsing.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01T)
+
+- Operational kill-switch hardening for destructive scripts:
+  - added shared guardrail module `scripts/safety_guardrails.py` for confirmation phrase, environment confirmation, protected-environment bypass, and interactive confirmation token checks.
+  - wired into:
+    - `scripts/force_wipe_app.py`
+    - `scripts/database_wipe.py`
+- Emergency-token break-glass hardening:
+  - tightened `scripts/emergency_token.py` with:
+    - protected-environment bypass requirements,
+    - mandatory operator + reason fields,
+    - interactive confirmation token,
+    - target-role restriction (`owner`/`admin` only),
+    - audit event emission for issuance.
+  - added new immutable audit event type:
+    - `app/modules/governance/domain/security/audit_log.py`
+    - `AuditEventType.SECURITY_EMERGENCY_TOKEN_ISSUED`.
+- Landing maintainability regression guard:
+  - added `scripts/verify_landing_component_budget.py` to enforce `LandingHero.svelte` line-budget and required decomposition-component presence.
+  - extended `dashboard/e2e/landing-layout-audit.spec.ts` with a regression check that anonymous landing loads do not trigger unresolved Supabase host errors.
+
+### Validation evidence (this batch)
+
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_script_safety_guardrails.py tests/unit/ops/test_destructive_script_validations.py tests/unit/ops/test_emergency_token_guardrails.py tests/unit/ops/test_verify_landing_component_budget.py` -> `27 passed`.
+- `DEBUG=false uv run pytest -q --no-cov tests/governance/test_audit_log.py` -> `18 passed`.
+- `uv run ruff check scripts/safety_guardrails.py scripts/force_wipe_app.py scripts/database_wipe.py scripts/emergency_token.py scripts/verify_landing_component_budget.py tests/unit/ops/test_script_safety_guardrails.py tests/unit/ops/test_destructive_script_validations.py tests/unit/ops/test_emergency_token_guardrails.py tests/unit/ops/test_verify_landing_component_budget.py app/modules/governance/domain/security/audit_log.py` -> passed.
+- `cd dashboard && npx playwright test e2e/landing-layout-audit.spec.ts` -> `3 passed`.
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: destructive actions now require deliberate, human-in-the-loop confirmations; accidental concurrent invocation risk reduced by explicit guard conditions.
+- Observability: emergency token issuance now creates immutable audit evidence with operator context.
+- Deterministic replay: guardrail validation is deterministic (`--force`, phrase, environment, protected bypass requirements).
+- Snapshot stability: landing layout/mobile overflow regressions re-validated via Playwright spec.
+- Export integrity: no export payload or evidence schema contracts changed in this batch.
+- Failure modes: misconfigured environments fail closed for wipe/token scripts.
+- Operational misconfiguration: protected-environment misuse now requires explicit bypass phrase plus confirmation token.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01U)
+
+- Hybrid scheduler observability latency hardening:
+  - `app/shared/llm/hybrid_scheduler.py`
+  - `_hybrid_span(...)` now records deterministic span duration (`hybrid.duration_ms`) on both success and failure paths.
+  - adds explicit slow-span warning emission (`hybrid_span_latency_spike`) for spans >= 2000ms to improve latency spike triage.
+- Regression coverage extended:
+  - `tests/unit/llm/test_hybrid_scheduler.py`
+  - validates duration attribute capture on success and error paths,
+  - validates slow-span warning behavior.
+
+### Validation evidence (this batch)
+
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/llm/test_hybrid_scheduler.py` -> `7 passed`.
+- `uv run ruff check app/shared/llm/hybrid_scheduler.py tests/unit/llm/test_hybrid_scheduler.py` -> passed.
+- `uv run mypy app/shared/llm/hybrid_scheduler.py --hide-error-context --no-error-summary` -> passed.
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: no shared mutable state introduced; span-duration instrumentation remains request/task-local.
+- Observability: latency duration is now explicitly captured in every hybrid scheduler span with slow-span warnings.
+- Deterministic replay: duration attribute emission is deterministic per span lifecycle.
+- Snapshot stability: no API payload/schema changes introduced.
+- Export integrity: no export/report format changes.
+- Failure modes: exceptions still propagate unchanged while now preserving duration telemetry.
+- Operational misconfiguration: no new runtime env dependency required for this instrumentation.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01V)
+
+- Legacy branding normalization hardening:
+  - `app/shared/core/config.py`
+  - added `_normalize_branding()` in central settings validation to normalize legacy product names (`Valdrix`, `CloudSentinel*`) to canonical `Valdrics` at runtime.
+  - emits explicit structured warning (`legacy_app_name_normalized`) when normalization is applied.
+- Added regression coverage:
+  - `tests/unit/core/test_config_audit.py::test_settings_normalizes_legacy_brand_name`.
+- Updated remaining user-facing dashboard strings from legacy `Valdrix` to `Valdrics` in:
+  - `dashboard/src/lib/api.ts`
+  - `dashboard/src/app.css`
+  - `dashboard/src/lib/components/IdentitySettingsCard.svelte`
+  - `dashboard/src/routes/onboarding/+page.svelte`
+  - `dashboard/src/routes/settings/+page.svelte`
+
+### Validation evidence (this batch)
+
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/core/test_config_audit.py` -> `10 passed`.
+- `uv run ruff check app/shared/core/config.py tests/unit/core/test_config_audit.py` -> passed.
+- `uv run mypy app/shared/core/config.py --hide-error-context --no-error-summary` -> passed.
+- `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+
+### Post-closure sanity check (release-critical)
+
+- Concurrency: branding normalization is settings-local and deterministic; no shared mutable runtime state introduced.
+- Observability: normalization emits explicit structured log for operator traceability.
+- Deterministic replay: same `APP_NAME` inputs normalize to same canonical output.
+- Snapshot stability: no API/schema/payload contract changes.
+- Export integrity: no report/export schemas modified.
+- Failure modes: legacy names no longer leak into runtime identity surfaces.
+- Operational misconfiguration: stale env branding is auto-corrected with warning instead of silent drift.

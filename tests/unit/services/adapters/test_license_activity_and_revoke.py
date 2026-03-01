@@ -274,12 +274,42 @@ async def test_list_microsoft_365_activity_parses_and_handles_errors() -> None:
         ]
     }
 
-    with patch.object(adapter, "_get_json", new=AsyncMock(return_value=payload)):
+    with patch.object(
+        adapter,
+        "_get_json",
+        new=AsyncMock(
+            side_effect=[
+                {"value": [{"id": "role-1", "displayName": "Global Administrator"}]},
+                {"value": [{"id": "u1", "userPrincipalName": "admin@example.com"}]},
+                {
+                    "value": [
+                        {
+                            "id": "u1",
+                            "userPrincipalName": "admin@example.com",
+                            "isAdmin": True,
+                            "isMfaRegistered": True,
+                        },
+                        {
+                            "id": "u2",
+                            "userPrincipalName": "member@example.com",
+                            "isAdmin": False,
+                            "isMfaRegistered": False,
+                        },
+                    ]
+                },
+                payload,
+            ]
+        ),
+    ):
         rows = await vendor_microsoft.list_microsoft_365_activity(adapter, parse_timestamp_fn=parse_timestamp)
     assert len(rows) == 3
     assert rows[0]["is_admin"] is True
+    assert rows[0]["mfa_enabled"] is True
+    assert "directory_role" in rows[0]["admin_sources"]
+    assert "registration_report" in rows[0]["admin_sources"]
     assert rows[0]["last_active_at"] == datetime(2026, 1, 10, tzinfo=timezone.utc)
     assert rows[1]["suspended"] is True
+    assert rows[1]["mfa_enabled"] is False
     assert isinstance(rows[1]["last_active_at"], datetime)
     assert rows[2]["last_active_at"] is None
 
@@ -321,12 +351,18 @@ async def test_github_revoke_and_activity_paths() -> None:
                         {"actor": {"login": "alice"}, "created_at": "bad"},
                     ]
                 },
+                {"members": [{"login": "alice"}]},
+                {"members": []},
+                {"role": "admin", "state": "active"},
             ]
         ),
     ):
         rows = await vendor_github.list_github_activity(adapter, parse_timestamp_fn=parse_timestamp)
     assert rows[0]["user_id"] == "alice"
     assert rows[0]["is_admin"] is True
+    assert rows[0]["org_role"] == "admin"
+    assert rows[0]["mfa_enabled"] is True
+    assert rows[0]["membership_state"] == "active"
     assert isinstance(rows[0]["last_active_at"], datetime)
 
     with patch.object(adapter, "_get_json", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
@@ -503,10 +539,17 @@ async def test_google_workspace_activity_and_misc_methods() -> None:
                         "lastLoginTime": "2026-01-18T00:00:00Z",
                         "name": {"fullName": "GW User"},
                         "isAdmin": True,
+                        "isEnrolledIn2Sv": True,
+                        "isEnforcedIn2Sv": True,
                         "suspended": False,
                         "creationTime": "2025-01-01T00:00:00Z",
                     },
-                    {"primaryEmail": "gw2@example.com", "name": {"fullName": "GW User 2"}},
+                    {
+                        "primaryEmail": "gw2@example.com",
+                        "name": {"fullName": "GW User 2"},
+                        "isDelegatedAdmin": True,
+                        "isEnrolledIn2Sv": False,
+                    },
                 ]
             }
         ),
@@ -514,7 +557,13 @@ async def test_google_workspace_activity_and_misc_methods() -> None:
         rows = await vendor_google.list_google_workspace_activity(adapter, parse_timestamp_fn=parse_timestamp)
     assert rows[0]["email"] == "gw@example.com"
     assert rows[0]["is_admin"] is True
+    assert rows[0]["admin_role"] == "super_admin"
+    assert rows[0]["mfa_enabled"] is True
+    assert rows[0]["mfa_enforced"] is True
     assert rows[0]["last_active_at"] == datetime(2026, 1, 18, tzinfo=timezone.utc)
+    assert rows[1]["is_admin"] is True
+    assert rows[1]["admin_role"] == "delegated_admin"
+    assert rows[1]["mfa_enabled"] is False
     assert rows[1]["last_active_at"] is None
 
     with patch.object(adapter, "_get_json", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
