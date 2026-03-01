@@ -228,7 +228,7 @@ Not validated for external claims:
 - A blanket "zero API cost across all platforms" statement.
 
 Safe external wording:
-- "Valdrix is CUR-first on AWS and avoids Cost Explorer by default."
+- "Valdrics is CUR-first on AWS and avoids Cost Explorer by default."
 - "The platform is engineered for low incremental API costs; actual customer-side cost varies with scan profile, CloudWatch fallback usage, and BigQuery bytes scanned."
 - "Published dollar figures are based on measured tenant workloads and date-stamped provider pricing."
 

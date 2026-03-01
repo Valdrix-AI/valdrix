@@ -6,7 +6,7 @@
 
 ## Context
 
-Valdrix is SaaS-first and must support enterprise tenant isolation, predictable cost scaling, and compliance evidence. A tenancy decision made late is expensive to reverse.
+Valdrics is SaaS-first and must support enterprise tenant isolation, predictable cost scaling, and compliance evidence. A tenancy decision made late is expensive to reverse.
 
 ## Decision
 

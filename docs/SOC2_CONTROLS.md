@@ -2,10 +2,10 @@
 
 ## Overview
 
-This document maps Valdrix security controls to SOC 2 Trust Service Criteria.
+This document maps Valdrics security controls to SOC 2 Trust Service Criteria.
 Use this as the foundation for SOC 2 Type 1 audit preparation.
 
-**Organization:** Valdrix AI  
+**Organization:** Valdrics AI  
 **Audit Scope:** Cloud FinOps Platform  
 **Document Version:** 1.0  
 **Last Updated:** 2026-01-14
@@ -161,7 +161,7 @@ Use this as the foundation for SOC 2 Type 1 audit preparation.
 
 ## Compliance Statement
 
-Valdrix AI maintains a security-first approach to software development. 
+Valdrics AI maintains a security-first approach to software development. 
 Our controls are designed to protect customer data and ensure service reliability.
 We leverage SOC 2 certified infrastructure providers (Supabase, AWS, Koyeb) 
 and implement application-level controls as documented above.

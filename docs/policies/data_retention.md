@@ -1,6 +1,6 @@
 # Data Retention & Purge Policy
 
-**Scope:** All Valdrix Tenant Data
+**Scope:** All Valdrics Tenant Data
 
 ## 1. Purpose
 To ensure compliance with GDPR and other data protection regulations by defining how long data is stored and how it is purged.

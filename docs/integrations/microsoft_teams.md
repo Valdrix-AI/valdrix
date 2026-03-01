@@ -1,6 +1,6 @@
 # Microsoft Teams Integration (Pro+)
 
-Valdrix supports tenant-scoped Microsoft Teams notifications using incoming webhook URLs.
+Valdrics supports tenant-scoped Microsoft Teams notifications using incoming webhook URLs.
 
 ## Availability
 - Tier: **Pro**, **Enterprise**
@@ -12,7 +12,7 @@ Valdrix supports tenant-scoped Microsoft Teams notifications using incoming webh
 - Stores webhook URL encrypted at rest in tenant notification settings.
 
 ## Configure
-1. In Valdrix, open **Settings -> Notifications**.
+1. In Valdrics, open **Settings -> Notifications**.
 2. Enable **Teams policy notifications**.
 3. Paste your Teams incoming webhook URL.
 4. Save settings.

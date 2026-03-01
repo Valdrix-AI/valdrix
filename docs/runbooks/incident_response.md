@@ -1,4 +1,4 @@
-# Valdrix Operational Runbooks
+# Valdrics Operational Runbooks
 
 This document provides step-by-step procedures for handling common operational scenarios and incidents.
 

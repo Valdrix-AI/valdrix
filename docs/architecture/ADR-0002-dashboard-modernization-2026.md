@@ -6,7 +6,7 @@
 
 ## Context
 
-The Valdrix dashboard is a core product surface and must meet modern expectations for:
+The Valdrics dashboard is a core product surface and must meet modern expectations for:
 
 - performance (fast navigations, predictable budgets, good Core Web Vitals)
 - security (strong headers/CSP, safe auth/session handling, dependency auditing)

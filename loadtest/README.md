@@ -1,4 +1,4 @@
-# Load Testing for Valdrix
+# Load Testing for Valdrics
 
 ## k6 (Recommended for CI/CD)
 

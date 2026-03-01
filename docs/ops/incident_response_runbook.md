@@ -2,7 +2,7 @@
 
 **Version:** 1.0 (Audit Remediation)
 **Status:** Operational
-**Scope:** Valdrix CloudSentinel-AI Platform
+**Scope:** Valdrics CloudSentinel-AI Platform
 
 ## 1. Detection and Analysis
 
@@ -27,7 +27,7 @@ If an AWS connection is compromised or performing unauthorized deletions:
 ```bash
 python3 scripts/emergency_disconnect.py --tenant-id <UUID> --provider aws
 ```
-*This attaches an inline 'Deny All' policy to the Valdrix IAM role.*
+*This attaches an inline 'Deny All' policy to the Valdrics IAM role.*
 
 ### Global Kill Switch
 To stop all remediation actions globally (if a systemic bug is suspected):

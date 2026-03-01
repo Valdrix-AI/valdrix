@@ -1,12 +1,12 @@
 # AWS SCP Deployment Guide
 
 ## Overview
-Service Control Policies (SCPs) provide central control over the maximum available permissions for all accounts in an organization. This guide explains how to use SCPs to protect Valdrix integrations.
+Service Control Policies (SCPs) provide central control over the maximum available permissions for all accounts in an organization. This guide explains how to use SCPs to protect Valdrics integrations.
 
 ## Recommended SCPs
 
-### 1. Protect Valdrix IAM Role
-This SCP prevents any user (including the root user) from deleting or modifying the Valdrix cross-account role.
+### 1. Protect Valdrics IAM Role
+This SCP prevents any user (including the root user) from deleting or modifying the Valdrics cross-account role.
 
 ```json
 {
@@ -31,7 +31,7 @@ This SCP prevents any user (including the root user) from deleting or modifying 
 ```
 
 ### 2. Restrict Remediation Regions
-Limit the regions where Valdrix (or any entity) can perform destructive actions.
+Limit the regions where Valdrics (or any entity) can perform destructive actions.
 
 ## Deployment Steps
 1. Login to the AWS Organizations management account.

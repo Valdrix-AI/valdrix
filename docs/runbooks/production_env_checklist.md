@@ -4,7 +4,7 @@ Use this checklist before every production rollout.
 
 ## 1. Ownership model (who sets what)
 
-- Platform operator (you/Valdrix team) sets infrastructure env vars and deploys backend/frontend.
+- Platform operator (you/Valdrics team) sets infrastructure env vars and deploys backend/frontend.
 - Tenant users configure integrations in product UI under `/settings/notifications`.
 - Tenant users do **not** set backend process env vars.
 

@@ -1,14 +1,14 @@
 # IdP Reference Configs (SCIM + SSO Enforcement)
 
-This doc provides **reference configuration values** for common IdPs when integrating with Valdrix.
+This doc provides **reference configuration values** for common IdPs when integrating with Valdrics.
 
-Goal: reduce “tribal knowledge” during enterprise onboarding by documenting the **exact fields** Valdrix expects.
+Goal: reduce “tribal knowledge” during enterprise onboarding by documenting the **exact fields** Valdrics expects.
 
 Note: IdP admin UIs change often. This guide focuses on stable inputs (URLs, auth, attribute mappings) rather than click-path screenshots.
 
 ## SCIM (Enterprise)
 
-### Valdrix SCIM Base URL
+### Valdrics SCIM Base URL
 
 Your SCIM base URL is:
 
@@ -25,7 +25,7 @@ Generate the tenant SCIM token:
 
 ### Required User Attributes (Minimum)
 
-Valdrix requires:
+Valdrics requires:
 
 - `userName` (email)
 
@@ -36,7 +36,7 @@ Recommended:
 
 ### Group Mappings (Recommended)
 
-In Valdrix:
+In Valdrics:
 
 - `Settings -> Identity -> SCIM group mappings`
 - Map IdP group name -> `role` (`admin|member`) and optional default `persona`
@@ -64,14 +64,14 @@ Attribute mapping guidance:
 
 If you use groups:
 
-- Ensure groups are pushed and names match the Valdrix SCIM group mappings (case-insensitive).
+- Ensure groups are pushed and names match the Valdrics SCIM group mappings (case-insensitive).
 
 ## Microsoft Entra ID (Azure AD) (SCIM)
 
 Reference values (Provisioning):
 
 - Tenant URL: `https://<your-valdrix-host>/scim/v2`
-- Secret token: `<SCIM_TOKEN>` (Valdrix tenant SCIM token)
+- Secret token: `<SCIM_TOKEN>` (Valdrics tenant SCIM token)
 
 Recommended provisioning scope:
 
@@ -93,24 +93,24 @@ Google-native admin tooling often does not expose a generic SCIM app-provisionin
 Recommended production pattern:
 
 - Keep Google Workspace/Cloud Identity as source directory.
-- Use an IdP/broker layer that supports generic SCIM push to Valdrix (for example Okta Workforce Identity, Entra ID, or a directory broker).
+- Use an IdP/broker layer that supports generic SCIM push to Valdrics (for example Okta Workforce Identity, Entra ID, or a directory broker).
 
 Reference values (via broker):
 
 - SCIM connector base URL: `https://<your-valdrix-host>/scim/v2`
 - Auth mode: `Authorization: Bearer <SCIM_TOKEN>`
 - Unique identifier: `userName` (email)
-- Group mapping: broker group names should match Valdrix SCIM group mappings.
+- Group mapping: broker group names should match Valdrics SCIM group mappings.
 
 Operational guidance:
 
 - Run `scripts/smoke_test_scim_idp.py` in staging before production cutover.
-- Enable group sync after role/persona mappings are configured in Valdrix.
+- Enable group sync after role/persona mappings are configured in Valdrics.
 - Rotate SCIM token after onboarding and store it in your secret manager.
 
 ## SSO Federation + Enforcement (Pro+)
 
-Valdrix supports:
+Valdrics supports:
 - federated login bootstrap (`domain` or `provider_id` mode via Supabase SSO),
 - plus email-domain allowlist enforcement.
 
@@ -120,7 +120,7 @@ Reference values:
 - Federation mode:
   - `domain` (recommended) when your IdP is configured in Supabase for domain discovery
   - `provider_id` when you need explicit provider routing
-- Guardrail: Valdrix prevents lockout by requiring current admin domain in allowlist when enabling enforcement.
+- Guardrail: Valdrics prevents lockout by requiring current admin domain in allowlist when enabling enforcement.
 
 See:
 

@@ -1,6 +1,6 @@
 # Compliance Pack (Procurement / Audit Bundle)
 
-Valdrix provides a tenant-scoped **compliance pack ZIP** that bundles:
+Valdrics provides a tenant-scoped **compliance pack ZIP** that bundles:
 
 - An audit log export
 - Redacted tenant configuration snapshots (no secrets)

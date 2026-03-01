@@ -1,6 +1,6 @@
 # SSO (Federation + Enforcement) (Pro+)
 
-Valdrix supports two complementary layers:
+Valdrics supports two complementary layers:
 
 1. **Federated login bootstrap** (OIDC/SAML through Supabase SSO)
 2. **Tenant-scoped domain allowlisting enforcement**
@@ -9,7 +9,7 @@ Valdrix supports two complementary layers:
 - Implemented:
   - Domain allowlist enforcement after authentication.
   - Federated login initiation from login page (`Continue with SSO`) using tenant-scoped discovery.
-- Not managed by Valdrix (still configured in Supabase):
+- Not managed by Valdrics (still configured in Supabase):
   - IdP/provider creation, certificates, and metadata lifecycle (SAML/OIDC provider setup remains in Supabase).
 
 ## Availability
@@ -18,13 +18,13 @@ Valdrix supports two complementary layers:
 ## How It Works
 When configured:
 - login page calls `POST /api/v1/public/sso/discovery` with user email.
-- Valdrix resolves tenant federation mode from domain allowlist + tenant identity settings.
+- Valdrics resolves tenant federation mode from domain allowlist + tenant identity settings.
 - browser starts Supabase SSO flow (`domain` or `provider_id` mode).
 - callback completes session at `/auth/callback`.
 - API still enforces allowlist after authentication as a second-layer policy.
 
 ## Configure
-1. In Valdrix, go to **Settings** -> **Identity**.
+1. In Valdrics, go to **Settings** -> **Identity**.
 2. Enable **SSO enforcement**.
 3. Add one or more allowed domains (example: `example.com`).
 4. Enable **Federated SSO login**.
@@ -47,16 +47,16 @@ Key signals:
 - `federation_ready` should be true when federated login is enabled.
 
 ## Self-Lockout Guardrail
-Valdrix prevents accidental lockout:
+Valdrics prevents accidental lockout:
 - when enabling enforcement, the API requires your current admin email domain to be included in the allowlist.
 
 ## Notes
 - Keep allowlisting enabled even when federation is enabled; federation handles login, allowlisting enforces tenant boundary.
 
 ## IdP-Initiated Flow (Optional)
-Valdrix’s supported flow is **SP-initiated** (user clicks `Continue with SSO` on the Valdrix login page).
+Valdrics' supported flow is **SP-initiated** (user clicks `Continue with SSO` on the Valdrics login page).
 
 If your IdP strongly prefers IdP-initiated patterns, keep the federation flow **anchored in Supabase SSO** and
-still rely on Valdrix allowlist enforcement to bind users to the correct tenant. IdP-initiated flows are easy to
+still rely on Valdrics allowlist enforcement to bind users to the correct tenant. IdP-initiated flows are easy to
 misconfigure (and can bypass tenant discovery if you’re not careful), so treat them as an enterprise-only operator
 option and validate with `/api/v1/settings/identity/sso/validation` before rollout.

@@ -1,4 +1,4 @@
-# Valdrix Rollback & Disaster Recovery Plan
+# Valdrics Rollback & Disaster Recovery Plan
 
 Procedures for reverting changes in case of deployment failure.
 

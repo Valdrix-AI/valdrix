@@ -4,7 +4,7 @@
 **Status:** Active  
 
 ## 1. Introduction
-This plan outlines the steps for identifying, responding to, and recovering from security incidents within the Valdrix platform.
+This plan outlines the steps for identifying, responding to, and recovering from security incidents within the Valdrics platform.
 
 ## 2. Severity Levels
 - **P0 (Critical)**: Data breach, full system outage, or compromise of cloud credentials.

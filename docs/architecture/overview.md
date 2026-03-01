@@ -1,9 +1,9 @@
-# Valdrix Enterprise Architecture
+# Valdrics Enterprise Architecture
 > **Elite SaaS Standard: Domain-Driven Modular Monolith**
 
 ## 🏛️ Architectural Philosophy
 
-Valdrix is engineered as a **Modular Monolith** following **Domain-Driven Design (DDD)** and **Hexagonal (Ports & Adapters)** principles. This ensures the platform remains scalable, testable, and maintainable as it evolves from a single-cloud utility to a multi-cloud enterprise platform.
+Valdrics is engineered as a **Modular Monolith** following **Domain-Driven Design (DDD)** and **Hexagonal (Ports & Adapters)** principles. This ensures the platform remains scalable, testable, and maintainable as it evolves from a single-cloud utility to a multi-cloud enterprise platform.
 
 ### Key Pillars
 1.  **Modular Isolation**: Every business capability (Governance, Optimization, Reporting) is isolated into its own module.
@@ -91,15 +91,15 @@ Aggregates raw statistics into actionable business intelligence.
 
 ## 🔐 Security & Multi-Tenancy
 
-- **Identity Isolation**: Valdrix utilizes **Supabase Auth** with strict **Row Level Security (RLS)** in the database.
-- **Cloud Security**: No persistent AWS keys stored. Valdrix uses **AWS STS (AssumeRole)** to generate ephemeral, single-use credentials for every scan operation.
+- **Identity Isolation**: Valdrics utilizes **Supabase Auth** with strict **Row Level Security (RLS)** in the database.
+- **Cloud Security**: No persistent AWS keys stored. Valdrics uses **AWS STS (AssumeRole)** to generate ephemeral, single-use credentials for every scan operation.
 - **Data Protection**: Sensitive cloud configuration data is encrypted at rest using **AES-256**.
 
 ---
 
 ## 💰 Low-Incremental-API-Cost Architecture
 
-Valdrix is designed to minimize incremental cloud API costs billed to the customer's account while preserving scan coverage.
+Valdrics is designed to minimize incremental cloud API costs billed to the customer's account while preserving scan coverage.
 
 ### Data Sources (Customer Cost Profile)
 
@@ -125,7 +125,7 @@ Valdrix is designed to minimize incremental cloud API costs billed to the custom
 
 ## ☸️ Kubernetes Deployment
 
-Valdrix is production-ready with Kubernetes manifests in `k8s/`:
+Valdrics is production-ready with Kubernetes manifests in `k8s/`:
 
 | Manifest | Purpose |
 |---|---|
@@ -150,7 +150,7 @@ kubectl apply -f k8s/
 
 ## 🧪 Load Testing
 
-Valdrix includes comprehensive load testing tools in `loadtest/`:
+Valdrics includes comprehensive load testing tools in `loadtest/`:
 
 | Tool | File | Use Case |
 |---|---|---|
@@ -178,7 +178,7 @@ locust -f loadtest/locustfile.py --host=http://localhost:8000
 
 ## 📋 Compliance & SBOM
 
-Valdrix generates Software Bill of Materials (SBOM) for supply chain security.
+Valdrics generates Software Bill of Materials (SBOM) for supply chain security.
 
 ### Automated Generation
 - **GitHub Action**: `.github/workflows/sbom.yml`
@@ -196,9 +196,9 @@ Generated SBOMs are stored in `sbom/` and include:
 - SOC 2 Type II audit logging
 - GDPR-ready data isolation (RLS)
 - Executive Order 14028 SBOM requirements
-# Valdrix Architecture
+# Valdrics Architecture
 
-This document provides a visual overview of the Valdrix system architecture.
+This document provides a visual overview of the Valdrics system architecture.
 
 ## System Overview
 
@@ -312,7 +312,7 @@ flowchart LR
         BRUTE[Brute-force regional polling]
     end
 
-    subgraph "Valdrix (Cost-Sensitive)"
+    subgraph "Valdrics (Cost-Sensitive)"
         CUR[AWS CUR Export<br/>Primary cost source]
         RE[Resource Explorer + Describe/List<br/>Discovery path]
         CWF[Selective CloudWatch fallback<br/>Only when needed]

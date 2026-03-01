@@ -98,7 +98,7 @@ This evidence is bundled in the compliance pack as `job_slo_evidence.json`.
 
 ## Automated Daily Acceptance Suite Capture (Recommended)
 
-Valdrix also runs a daily, tenant-scoped acceptance capture sweep via the scheduler:
+Valdrics also runs a daily, tenant-scoped acceptance capture sweep via the scheduler:
 
 - Enqueues background jobs: `acceptance_suite_capture`
 - Schedule: **daily 05:00 UTC** (see `SchedulerOrchestrator.start()`).

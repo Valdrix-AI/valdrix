@@ -1,7 +1,7 @@
 # Disaster Recovery Runbook
 
 ## Overview
-This runbook documents recovery procedures for Valdrix infrastructure.
+This runbook documents recovery procedures for Valdrics infrastructure.
 
 **RTO (Recovery Time Objective):** 4 hours  
 **RPO (Recovery Point Objective):** 24 hours (Supabase daily backups)
