@@ -133,6 +133,20 @@ def test_platform_native_vendor_alias_mapping(
     assert adapter._native_vendor == expected
 
 
+def test_platform_native_handler_resolution_maps_supported_vendors() -> None:
+    adapter = PlatformAdapter(_platform_conn(auth_method="api_key", vendor="ledger"))
+    assert adapter._resolve_native_verify_handler("ledger_http") is not None
+    assert adapter._resolve_native_stream_handler("ledger_http") is not None
+    assert adapter._resolve_native_verify_handler("datadog") is not None
+    assert adapter._resolve_native_stream_handler("datadog") is not None
+    assert adapter._resolve_native_verify_handler("newrelic") is not None
+    assert adapter._resolve_native_stream_handler("newrelic") is not None
+    assert adapter._resolve_native_verify_handler("unknown") is None
+    assert adapter._resolve_native_stream_handler("unknown") is None
+    assert adapter._resolve_native_verify_handler(None) is None
+    assert adapter._resolve_native_stream_handler(None) is None
+
+
 def test_platform_helper_resolvers_cover_key_branches() -> None:
     adapter = PlatformAdapter(
         _platform_conn(
@@ -308,6 +322,20 @@ def test_hybrid_native_vendor_alias_mapping(
 ) -> None:
     adapter = HybridAdapter(_hybrid_conn(auth_method=auth_method, vendor=vendor))
     assert adapter._native_vendor == expected
+
+
+def test_hybrid_native_handler_resolution_maps_supported_vendors() -> None:
+    adapter = HybridAdapter(_hybrid_conn(auth_method="api_key", vendor="ledger"))
+    assert adapter._resolve_native_verify_handler("ledger_http") is not None
+    assert adapter._resolve_native_stream_handler("ledger_http") is not None
+    assert adapter._resolve_native_verify_handler("cloudkitty") is not None
+    assert adapter._resolve_native_stream_handler("cloudkitty") is not None
+    assert adapter._resolve_native_verify_handler("vmware") is not None
+    assert adapter._resolve_native_stream_handler("vmware") is not None
+    assert adapter._resolve_native_verify_handler("unknown") is None
+    assert adapter._resolve_native_stream_handler("unknown") is None
+    assert adapter._resolve_native_verify_handler(None) is None
+    assert adapter._resolve_native_stream_handler(None) is None
 
 
 def test_hybrid_helper_resolvers_cover_url_ssl_and_pricing_branches() -> None:

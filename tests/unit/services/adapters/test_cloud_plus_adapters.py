@@ -6,7 +6,9 @@ import httpx
 import pytest
 
 import app.shared.adapters.license as license_module
+import app.shared.adapters.license_native_dispatch as native_dispatch
 import app.shared.adapters.saas as saas_module
+import app.shared.adapters.license_vendor_microsoft as vendor_microsoft
 from app.shared.adapters.hybrid import HybridAdapter
 from app.shared.adapters.license import LicenseAdapter
 from app.shared.adapters.platform import PlatformAdapter
@@ -659,15 +661,17 @@ async def test_license_verify_connection_native_success_and_failure() -> None:
     conn.connector_config = {}
 
     adapter = LicenseAdapter(conn)
-    with patch.object(
-        adapter, "_verify_microsoft_365", new=AsyncMock(return_value=None)
+    with patch.dict(
+        native_dispatch._VERIFY_FN_BY_VENDOR,
+        {"microsoft_365": AsyncMock(return_value=None)},
+        clear=False,
     ):
         assert await adapter.verify_connection() is True
 
-    with patch.object(
-        adapter,
-        "_verify_microsoft_365",
-        new=AsyncMock(side_effect=ExternalAPIError("verify failed")),
+    with patch.dict(
+        native_dispatch._VERIFY_FN_BY_VENDOR,
+        {"microsoft_365": AsyncMock(side_effect=ExternalAPIError("verify failed"))},
+        clear=False,
     ):
         assert await adapter.verify_connection() is False
         assert adapter.last_error is not None
@@ -685,10 +689,10 @@ async def test_license_stream_native_error_falls_back_to_feed() -> None:
     conn.connector_config = {}
 
     adapter = LicenseAdapter(conn)
-    with patch.object(
-        adapter,
-        "_stream_microsoft_365_license_costs",
-        new=_raise_external_api_error,
+    with patch.dict(
+        native_dispatch._STREAM_FN_BY_VENDOR,
+        {"microsoft_365": _raise_external_api_error},
+        clear=False,
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -1033,9 +1037,11 @@ async def test_license_stream_invalid_payload_raises() -> None:
     ):
         with pytest.raises(ExternalAPIError):
             await anext(
-                adapter._stream_microsoft_365_license_costs(
+                vendor_microsoft.stream_microsoft_365_license_costs(
+                    adapter,
                     datetime(2026, 1, 1, tzinfo=timezone.utc),
                     datetime(2026, 1, 31, tzinfo=timezone.utc),
+                    as_float_fn=license_module.as_float,
                 )
             )
 
@@ -1350,3 +1356,90 @@ async def test_hybrid_adapter_native_vmware_estimates_cost_from_inventory() -> N
     # (2 vCPU * $0.1 + 2GB * $0.01) * 24h = $5.28/day
     assert rows[0]["cost_usd"] == pytest.approx(5.28, abs=0.0001)
     assert rows[0]["source_adapter"] == "hybrid_vmware_vcenter"
+
+
+@pytest.mark.asyncio
+async def test_saas_discover_resources_projects_from_cost_rows() -> None:
+    conn = MagicMock()
+    conn.auth_method = "manual"
+    conn.vendor = "generic"
+    conn.spend_feed = [
+        {
+            "timestamp": "2026-02-20T00:00:00Z",
+            "service": "GitHub",
+            "resource_id": "gh-seat-1",
+            "cost_usd": 4.2,
+            "region": "global",
+            "usage_type": "subscription",
+        }
+    ]
+    conn.connector_config = {}
+
+    adapter = SaaSAdapter(conn)
+    adapter.last_error = "stale"
+    resources = await adapter.discover_resources("saas")
+
+    assert len(resources) == 1
+    assert resources[0]["id"] == "gh-seat-1"
+    assert resources[0]["type"] == "saas_subscription"
+    assert resources[0]["provider"] == "saas"
+    assert resources[0]["metadata"]["total_cost_usd"] == pytest.approx(4.2)
+    assert adapter.last_error is None
+
+
+@pytest.mark.asyncio
+async def test_platform_discover_resources_projects_from_cost_rows() -> None:
+    conn = MagicMock()
+    conn.auth_method = "manual"
+    conn.vendor = "generic"
+    conn.spend_feed = [
+        {
+            "timestamp": "2026-02-20T00:00:00Z",
+            "service": "Shared Kubernetes",
+            "resource_id": "plat-svc-1",
+            "cost_usd": 11.0,
+            "region": "us-east-1",
+            "usage_type": "shared_service",
+        }
+    ]
+    conn.connector_config = {}
+
+    adapter = PlatformAdapter(conn)
+    adapter.last_error = "stale"
+    resources = await adapter.discover_resources("platform", region="us-east-1")
+
+    assert len(resources) == 1
+    assert resources[0]["id"] == "plat-svc-1"
+    assert resources[0]["type"] == "platform_service"
+    assert resources[0]["provider"] == "platform"
+    assert resources[0]["region"] == "us-east-1"
+    assert adapter.last_error is None
+
+
+@pytest.mark.asyncio
+async def test_hybrid_discover_resources_projects_from_cost_rows() -> None:
+    conn = MagicMock()
+    conn.auth_method = "manual"
+    conn.vendor = "generic"
+    conn.spend_feed = [
+        {
+            "timestamp": "2026-02-20T00:00:00Z",
+            "system": "VMware Cluster",
+            "resource_id": "hyb-node-1",
+            "amount_usd": 8.5,
+            "region": "eu-west-1",
+            "usage_type": "resource_usage",
+        }
+    ]
+    conn.connector_config = {}
+
+    adapter = HybridAdapter(conn)
+    adapter.last_error = "stale"
+    resources = await adapter.discover_resources("hybrid", region="eu-west-1")
+
+    assert len(resources) == 1
+    assert resources[0]["id"] == "hyb-node-1"
+    assert resources[0]["type"] == "hybrid_resource"
+    assert resources[0]["provider"] == "hybrid"
+    assert resources[0]["region"] == "eu-west-1"
+    assert adapter.last_error is None

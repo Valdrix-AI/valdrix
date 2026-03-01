@@ -232,6 +232,7 @@ async def test_stream_cost_and_usage_raises_cur_configuration_error_on_iteration
 @pytest.mark.asyncio
 async def test_discover_resources_returns_empty_for_unsupported_region() -> None:
     adapter = aws_mt.MultiTenantAWSAdapter(_creds(region="us-east-1"))
+    adapter.last_error = "stale"
 
     with (
         patch.object(
@@ -245,11 +246,14 @@ async def test_discover_resources_returns_empty_for_unsupported_region() -> None
 
     assert out == []
     logger_mock.error.assert_called_once()
+    assert adapter.last_error is not None
+    assert "allowed region list" in adapter.last_error
 
 
 @pytest.mark.asyncio
 async def test_discover_resources_returns_empty_when_resource_mapping_missing() -> None:
     adapter = aws_mt.MultiTenantAWSAdapter(_creds())
+    adapter.last_error = "stale"
     tracer, span = _tracer_with_span()
     registry = MagicMock()
     registry.get_plugins_for_provider.return_value = []
@@ -271,11 +275,14 @@ async def test_discover_resources_returns_empty_when_resource_mapping_missing() 
     logger_mock.warning.assert_called_once_with(
         "plugin_not_found_for_resource", resource_type="unknown-resource"
     )
+    assert adapter.last_error is not None
+    assert "No AWS optimization plugin mapped" in adapter.last_error
 
 
 @pytest.mark.asyncio
 async def test_discover_resources_returns_empty_when_category_plugin_missing() -> None:
     adapter = aws_mt.MultiTenantAWSAdapter(_creds())
+    adapter.last_error = "stale"
     tracer, _span = _tracer_with_span()
     registry = MagicMock()
     registry.get_plugins_for_provider.return_value = [SimpleNamespace(category="storage")]
@@ -296,11 +303,14 @@ async def test_discover_resources_returns_empty_when_category_plugin_missing() -
     logger_mock.warning.assert_called_once_with(
         "plugin_not_found_for_resource", resource_type="eip"
     )
+    assert adapter.last_error is not None
+    assert "No AWS optimization plugin mapped" in adapter.last_error
 
 
 @pytest.mark.asyncio
 async def test_discover_resources_returns_scan_results_for_matching_plugin() -> None:
     adapter = aws_mt.MultiTenantAWSAdapter(_creds())
+    adapter.last_error = "stale"
     tracer, span = _tracer_with_span()
     plugin = SimpleNamespace(category="network")
     plugin.scan = AsyncMock(return_value=[{"resource_id": "eip-1"}])
@@ -323,11 +333,13 @@ async def test_discover_resources_returns_scan_results_for_matching_plugin() -> 
     adapter.get_credentials.assert_awaited_once()
     plugin.scan.assert_awaited_once()
     span.set_attribute.assert_any_call("tenant_id", str(adapter.credentials.tenant_id))
+    assert adapter.last_error is None
 
 
 @pytest.mark.asyncio
 async def test_discover_resources_logs_and_returns_empty_on_scan_error() -> None:
     adapter = aws_mt.MultiTenantAWSAdapter(_creds())
+    adapter.last_error = "stale"
     tracer, _span = _tracer_with_span()
     plugin = SimpleNamespace(category="network")
     plugin.scan = AsyncMock(side_effect=RuntimeError("scan failed"))
@@ -357,6 +369,8 @@ async def test_discover_resources_logs_and_returns_empty_on_scan_error() -> None
         region="us-west-2",
         error="scan failed",
     )
+    assert adapter.last_error is not None
+    assert "AWS resource discovery failed" in adapter.last_error
 
 
 @pytest.mark.asyncio

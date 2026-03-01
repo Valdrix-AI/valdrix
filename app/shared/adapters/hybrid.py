@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from urllib.parse import urljoin
@@ -12,6 +12,7 @@ from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.feed_utils import as_float, is_number, parse_timestamp
 from app.shared.adapters.http_retry import execute_with_http_retry
 from app.shared.adapters.resource_usage_projection import (
+    discover_resources_from_cost_rows,
     project_cost_rows_to_resource_usage,
     resource_usage_lookback_window,
 )
@@ -32,6 +33,17 @@ _LEDGER_HTTP_VENDOR_ALIASES = {
 }
 _OPENSTACK_VENDOR_ALIASES = {"openstack", "cloudkitty"}
 _VMWARE_VENDOR_ALIASES = {"vmware", "vcenter", "vsphere"}
+_DISCOVERY_RESOURCE_TYPE_ALIASES = {
+    "all",
+    "hybrid",
+    "infrastructure",
+    "resource",
+    "resources",
+    "system",
+    "systems",
+    "workload",
+    "workloads",
+}
 
 
 async def _hybrid_get_request(
@@ -184,6 +196,32 @@ class HybridAdapter(BaseAdapter):
             return raw
         return True
 
+    def _resolve_native_verify_handler(
+        self, native_vendor: str | None
+    ) -> Callable[[], Awaitable[None]] | None:
+        if native_vendor is None:
+            return None
+        handlers: dict[str, Callable[[], Awaitable[None]]] = {
+            "ledger_http": self._verify_ledger_http,
+            "cloudkitty": self._verify_cloudkitty,
+            "vmware": self._verify_vmware,
+        }
+        return handlers.get(native_vendor)
+
+    def _resolve_native_stream_handler(
+        self, native_vendor: str | None
+    ) -> Callable[[datetime, datetime], AsyncGenerator[dict[str, Any], None]] | None:
+        if native_vendor is None:
+            return None
+        handlers: dict[
+            str, Callable[[datetime, datetime], AsyncGenerator[dict[str, Any], None]]
+        ] = {
+            "ledger_http": self._stream_ledger_http_cost_and_usage,
+            "cloudkitty": self._stream_cloudkitty_cost_and_usage,
+            "vmware": self._stream_vmware_cost_and_usage,
+        }
+        return handlers.get(native_vendor)
+
     async def verify_connection(self) -> bool:
         self.last_error = None
         native_vendor = self._native_vendor
@@ -202,33 +240,10 @@ class HybridAdapter(BaseAdapter):
             )
             return False
 
-        if native_vendor == "ledger_http":
+        verify_handler = self._resolve_native_verify_handler(native_vendor)
+        if verify_handler is not None:
             try:
-                await self._verify_ledger_http()
-                return True
-            except ExternalAPIError as exc:
-                self.last_error = str(exc)
-                logger.warning(
-                    "hybrid_native_verify_failed",
-                    vendor=native_vendor,
-                    error=str(exc),
-                )
-                return False
-
-        if native_vendor == "cloudkitty":
-            try:
-                await self._verify_cloudkitty()
-                return True
-            except ExternalAPIError as exc:
-                self.last_error = str(exc)
-                logger.warning(
-                    "hybrid_native_verify_failed", vendor=native_vendor, error=str(exc)
-                )
-                return False
-
-        if native_vendor == "vmware":
-            try:
-                await self._verify_vmware()
+                await verify_handler()
                 return True
             except ExternalAPIError as exc:
                 self.last_error = str(exc)
@@ -281,41 +296,10 @@ class HybridAdapter(BaseAdapter):
         granularity: str = "DAILY",
     ) -> AsyncGenerator[dict[str, Any], None]:
         native_vendor = self._native_vendor
-        if native_vendor == "ledger_http":
+        stream_handler = self._resolve_native_stream_handler(native_vendor)
+        if stream_handler is not None:
             try:
-                async for row in self._stream_ledger_http_cost_and_usage(
-                    start_date, end_date
-                ):
-                    yield row
-                return
-            except ExternalAPIError as exc:
-                self.last_error = str(exc)
-                logger.warning(
-                    "hybrid_native_stream_failed_fallback_to_feed",
-                    vendor=native_vendor,
-                    error=str(exc),
-                )
-
-        if native_vendor == "cloudkitty":
-            try:
-                async for row in self._stream_cloudkitty_cost_and_usage(
-                    start_date, end_date
-                ):
-                    yield row
-                return
-            except ExternalAPIError as exc:
-                self.last_error = str(exc)
-                logger.warning(
-                    "hybrid_native_stream_failed_fallback_to_feed",
-                    vendor=native_vendor,
-                    error=str(exc),
-                )
-
-        if native_vendor == "vmware":
-            try:
-                async for row in self._stream_vmware_cost_and_usage(
-                    start_date, end_date
-                ):
+                async for row in stream_handler(start_date, end_date):
                     yield row
                 return
             except ExternalAPIError as exc:
@@ -827,11 +811,37 @@ class HybridAdapter(BaseAdapter):
     async def discover_resources(
         self, resource_type: str, region: str | None = None
     ) -> list[dict[str, Any]]:
-        return []
+        self._clear_last_error()
+        start_date, end_date = resource_usage_lookback_window()
+        try:
+            cost_rows = await self.get_cost_and_usage(
+                start_date=start_date,
+                end_date=end_date,
+                granularity="DAILY",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.last_error = str(exc)
+            logger.warning(
+                "hybrid_discover_resources_failed",
+                resource_type=resource_type,
+                region=region,
+                error=str(exc),
+            )
+            return []
+
+        return discover_resources_from_cost_rows(
+            cost_rows=cost_rows,
+            resource_type=resource_type,
+            supported_resource_types=_DISCOVERY_RESOURCE_TYPE_ALIASES,
+            default_provider="hybrid",
+            default_resource_type="hybrid_resource",
+            region=region,
+        )
 
     async def get_resource_usage(
         self, service_name: str, resource_id: str | None = None
     ) -> list[dict[str, Any]]:
+        self._clear_last_error()
         target_service = service_name.strip()
         if not target_service:
             return []

@@ -133,8 +133,67 @@ async def test_discover_resources_filters_by_type_and_region():
 @pytest.mark.asyncio
 async def test_discover_resources_exception_returns_empty():
     adapter = AzureAdapter(_connection())
+    adapter.last_error = "stale"
     with patch.object(
         adapter, "_get_resource_client", AsyncMock(side_effect=RuntimeError("boom"))
     ):
         results = await adapter.discover_resources(resource_type="compute")
     assert results == []
+    assert adapter.last_error is not None
+    assert "Azure resource discovery failed" in adapter.last_error
+
+
+@pytest.mark.asyncio
+async def test_discover_resources_clears_last_error_on_success():
+    adapter = AzureAdapter(_connection())
+    adapter.last_error = "stale"
+
+    resource_client = MagicMock()
+    res = SimpleNamespace(
+        id="res-1",
+        name="res-1",
+        type="Microsoft.Storage/storageAccounts",
+        location="eastus",
+        tags={"env": "prod"},
+    )
+
+    async def list_resources():
+        yield res
+
+    resource_client.resources.list = list_resources
+
+    with patch.object(
+        adapter, "_get_resource_client", AsyncMock(return_value=resource_client)
+    ):
+        results = await adapter.discover_resources(resource_type="storage")
+
+    assert len(results) == 1
+    assert adapter.last_error is None
+
+
+@pytest.mark.asyncio
+async def test_get_resource_usage_clears_last_error_on_success():
+    adapter = AzureAdapter(_connection())
+    adapter.last_error = "stale"
+    with patch.object(
+        adapter,
+        "get_cost_and_usage",
+        AsyncMock(
+            return_value=[
+                {
+                    "timestamp": datetime(2026, 1, 10, tzinfo=timezone.utc),
+                    "service": "Virtual Machines",
+                    "resource_id": "vm-1",
+                    "usage_type": "compute_hour",
+                    "usage_amount": 2,
+                    "cost_usd": 4.2,
+                    "currency": "USD",
+                    "region": "eastus",
+                }
+            ]
+        ),
+    ):
+        usage = await adapter.get_resource_usage("virtual machines")
+
+    assert len(usage) == 1
+    assert adapter.last_error is None

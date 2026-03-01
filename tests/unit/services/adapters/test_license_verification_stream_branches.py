@@ -6,6 +6,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+import app.shared.adapters.license_native_dispatch as native_dispatch
+import app.shared.adapters.feed_utils as feed_utils
+import app.shared.adapters.license_vendor_github as vendor_github
+import app.shared.adapters.license_vendor_google as vendor_google
+import app.shared.adapters.license_vendor_microsoft as vendor_microsoft
+import app.shared.adapters.license_vendor_salesforce as vendor_salesforce
+import app.shared.adapters.license_vendor_slack as vendor_slack
+import app.shared.adapters.license_vendor_verify as vendor_verify
+import app.shared.adapters.license_vendor_zoom as vendor_zoom
 from app.shared.adapters.license import LicenseAdapter
 from app.shared.core.exceptions import ExternalAPIError
 
@@ -115,7 +124,10 @@ async def test_verify_connection_accepts_valid_manual_feed_and_coerce_bool_unkno
 @pytest.mark.asyncio
 async def test_verify_connection_native_success_and_manual_last_error_preserved() -> None:
     native = LicenseAdapter(_conn(vendor="google_workspace", auth_method="oauth"))
-    with patch.object(native, "_verify_native_vendor", new=AsyncMock(return_value=None)):
+    with patch(
+        "app.shared.adapters.license.verify_native_vendor",
+        new=AsyncMock(return_value=None),
+    ):
         assert await native.verify_connection() is True
 
     manual = LicenseAdapter(_conn(vendor="custom", auth_method="manual"))
@@ -148,76 +160,99 @@ def test_list_manual_feed_activity_covers_parse_exception_and_merge_branches() -
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("vendor", "method_name"),
+    ("vendor",),
     [
-        ("google_workspace", "_list_google_workspace_activity"),
-        ("microsoft_365", "_list_microsoft_365_activity"),
-        ("github", "_list_github_activity"),
-        ("slack", "_list_slack_activity"),
-        ("zoom", "_list_zoom_activity"),
-        ("salesforce", "_list_salesforce_activity"),
+        ("google_workspace",),
+        ("microsoft_365",),
+        ("github",),
+        ("slack",),
+        ("zoom",),
+        ("salesforce",),
     ],
 )
 async def test_list_users_activity_dispatches_all_native_vendors(
-    vendor: str, method_name: str
+    vendor: str,
 ) -> None:
     adapter = LicenseAdapter(_conn(vendor=vendor, auth_method="oauth"))
     mocked = AsyncMock(return_value=[{"vendor": vendor}])
-    with patch.object(adapter, method_name, new=mocked):
+    with patch.dict(
+        native_dispatch._ACTIVITY_FN_BY_VENDOR,
+        {vendor: mocked},
+        clear=False,
+    ):
         rows = await adapter.list_users_activity()
     assert rows == [{"vendor": vendor}]
+    mocked.assert_awaited_once_with(adapter)
 
 
 @pytest.mark.asyncio
 async def test_verify_native_vendor_dispatches_remaining_handlers_and_unsupported() -> None:
     adapter = LicenseAdapter(_conn(vendor="slack", auth_method="oauth"))
+    verify_slack = AsyncMock(return_value=None)
+    verify_zoom = AsyncMock(return_value=None)
+    verify_salesforce = AsyncMock(return_value=None)
     with (
-        patch.object(adapter, "_verify_slack", new=AsyncMock()) as verify_slack,
-        patch.object(adapter, "_verify_zoom", new=AsyncMock()) as verify_zoom,
-        patch.object(adapter, "_verify_salesforce", new=AsyncMock()) as verify_salesforce,
+        patch.dict(
+            native_dispatch._VERIFY_FN_BY_VENDOR,
+            {
+                "slack": verify_slack,
+                "zoom": verify_zoom,
+                "salesforce": verify_salesforce,
+            },
+            clear=False,
+        ),
     ):
-        await adapter._verify_native_vendor("slack")
-        await adapter._verify_native_vendor("zoom")
-        await adapter._verify_native_vendor("salesforce")
+        await native_dispatch.verify_native_vendor(adapter, "slack")
+        await native_dispatch.verify_native_vendor(adapter, "zoom")
+        await native_dispatch.verify_native_vendor(adapter, "salesforce")
 
-    verify_slack.assert_awaited_once()
-    verify_zoom.assert_awaited_once()
-    verify_salesforce.assert_awaited_once()
+    verify_slack.assert_awaited_once_with(adapter)
+    verify_zoom.assert_awaited_once_with(adapter)
+    verify_salesforce.assert_awaited_once_with(adapter)
 
     with pytest.raises(ExternalAPIError, match="Unsupported native license vendor"):
-        await adapter._verify_native_vendor("unknown")
+        await native_dispatch.verify_native_vendor(adapter, "unknown")
 
 
 @pytest.mark.asyncio
 async def test_verify_native_vendor_dispatches_microsoft_google_and_github() -> None:
     adapter = LicenseAdapter(_conn(vendor="google_workspace", auth_method="oauth"))
+    verify_m365 = AsyncMock(return_value=None)
+    verify_google = AsyncMock(return_value=None)
+    verify_github = AsyncMock(return_value=None)
     with (
-        patch.object(adapter, "_verify_microsoft_365", new=AsyncMock()) as verify_m365,
-        patch.object(adapter, "_verify_google_workspace", new=AsyncMock()) as verify_google,
-        patch.object(adapter, "_verify_github", new=AsyncMock()) as verify_github,
+        patch.dict(
+            native_dispatch._VERIFY_FN_BY_VENDOR,
+            {
+                "microsoft_365": verify_m365,
+                "google_workspace": verify_google,
+                "github": verify_github,
+            },
+            clear=False,
+        ),
     ):
-        await adapter._verify_native_vendor("microsoft_365")
-        await adapter._verify_native_vendor("google_workspace")
-        await adapter._verify_native_vendor("github")
+        await native_dispatch.verify_native_vendor(adapter, "microsoft_365")
+        await native_dispatch.verify_native_vendor(adapter, "google_workspace")
+        await native_dispatch.verify_native_vendor(adapter, "github")
 
-    verify_m365.assert_awaited_once()
-    verify_google.assert_awaited_once()
-    verify_github.assert_awaited_once()
+    verify_m365.assert_awaited_once_with(adapter)
+    verify_google.assert_awaited_once_with(adapter)
+    verify_github.assert_awaited_once_with(adapter)
 
 
 @pytest.mark.asyncio
 async def test_verify_slack_zoom_and_salesforce_paths() -> None:
     slack = LicenseAdapter(_conn(vendor="slack", auth_method="oauth"))
     with patch.object(slack, "_get_json", new=AsyncMock(return_value={"ok": True})):
-        await slack._verify_slack()
+        await vendor_verify.verify_slack(slack)
 
     with patch.object(slack, "_get_json", new=AsyncMock(return_value={"ok": False, "error": "denied"})):
         with pytest.raises(ExternalAPIError, match="Slack auth.test failed"):
-            await slack._verify_slack()
+            await vendor_verify.verify_slack(slack)
 
     zoom = LicenseAdapter(_conn(vendor="zoom", auth_method="oauth"))
     with patch.object(zoom, "_get_json", new=AsyncMock(return_value={"id": "u1"})) as zoom_get:
-        await zoom._verify_zoom()
+        await vendor_verify.verify_zoom(zoom)
     zoom_get.assert_awaited_once()
     assert zoom_get.await_args.kwargs["headers"]["Authorization"].startswith("Bearer ")
 
@@ -229,7 +264,7 @@ async def test_verify_slack_zoom_and_salesforce_paths() -> None:
         )
     )
     with patch.object(salesforce, "_get_json", new=AsyncMock(return_value={"limits": []})) as sf_get:
-        await salesforce._verify_salesforce()
+        await vendor_verify.verify_salesforce(salesforce)
     sf_url = sf_get.await_args.args[0]
     assert sf_url == "https://acme.my.salesforce.com/services/data/v60.0/limits"
 
@@ -261,7 +296,11 @@ async def test_stream_cost_and_usage_google_fallback_and_feed_window_filter() ->
         raise ExternalAPIError("google down")
         yield {}
 
-    with patch.object(adapter, "_stream_google_workspace_license_costs", new=_raise_google):
+    with patch.dict(
+        native_dispatch._STREAM_FN_BY_VENDOR,
+        {"google_workspace": _raise_google},
+        clear=False,
+    ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
             end_date=datetime(2026, 1, 31, tzinfo=timezone.utc),
@@ -278,10 +317,10 @@ async def test_stream_cost_and_usage_microsoft_native_short_circuit() -> None:
         _conn(vendor="microsoft_365", auth_method="oauth", license_feed=[{"timestamp": "2026-01-15T00:00:00Z", "cost_usd": 3}])
     )
     expected_row = {"provider": "license", "service": "native-m365"}
-    with patch.object(
-        adapter,
-        "_stream_microsoft_365_license_costs",
-        new=_row_gen(expected_row),
+    with patch.dict(
+        native_dispatch._STREAM_FN_BY_VENDOR,
+        {"microsoft_365": _row_gen(expected_row)},
+        clear=False,
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -304,18 +343,22 @@ async def test_stream_google_workspace_costs_error_and_out_of_range_branches() -
         with pytest.raises(ExternalAPIError, match="failed for all configured SKUs"):
             _ = [
                 row
-                async for row in adapter._stream_google_workspace_license_costs(
+                async for row in vendor_google.stream_google_workspace_license_costs(
+                    adapter,
                     datetime(2026, 1, 1, tzinfo=timezone.utc),
                     datetime(2026, 1, 31, tzinfo=timezone.utc),
+                    as_float_fn=feed_utils.as_float,
                 )
             ]
 
     with patch.object(adapter, "_get_json", new=AsyncMock(return_value={"totalUnits": 2})):
         rows = [
             row
-            async for row in adapter._stream_google_workspace_license_costs(
+            async for row in vendor_google.stream_google_workspace_license_costs(
+                adapter,
                 datetime(2026, 2, 1, tzinfo=timezone.utc),
                 datetime(2026, 1, 1, tzinfo=timezone.utc),
+                as_float_fn=feed_utils.as_float,
             )
         ]
     assert rows == []
@@ -330,9 +373,11 @@ async def test_stream_google_workspace_costs_error_and_out_of_range_branches() -
     with patch.object(non_dict_prices, "_get_json", new=AsyncMock(return_value={"totalUnits": 1})):
         rows = [
             row
-            async for row in non_dict_prices._stream_google_workspace_license_costs(
+            async for row in vendor_google.stream_google_workspace_license_costs(
+                non_dict_prices,
                 datetime(2026, 1, 1, tzinfo=timezone.utc),
                 datetime(2026, 1, 31, tzinfo=timezone.utc),
+                as_float_fn=feed_utils.as_float,
             )
         ]
     assert len(rows) == 2
@@ -355,9 +400,11 @@ async def test_stream_microsoft_costs_skips_non_dict_entries_and_out_of_range() 
     with patch.object(adapter, "_get_json", new=AsyncMock(return_value=payload)):
         rows = [
             row
-            async for row in adapter._stream_microsoft_365_license_costs(
+            async for row in vendor_microsoft.stream_microsoft_365_license_costs(
+                adapter,
                 datetime(2026, 2, 1, tzinfo=timezone.utc),
                 datetime(2026, 1, 1, tzinfo=timezone.utc),
+                as_float_fn=feed_utils.as_float,
             )
         ]
     assert rows == []
@@ -391,7 +438,7 @@ async def test_activity_list_methods_handle_parse_exceptions_for_vendor_records(
     google = LicenseAdapter(_conn(vendor="google_workspace", auth_method="oauth"))
 
     with patch(
-        "app.shared.adapters.license_vendor_ops.parse_timestamp",
+        "app.shared.adapters.feed_utils.parse_timestamp",
         side_effect=ValueError("bad"),
     ):
         with patch.object(
@@ -409,7 +456,10 @@ async def test_activity_list_methods_handle_parse_exceptions_for_vendor_records(
                 }
             ),
         ):
-            m365_rows = await m365._list_microsoft_365_activity()
+            m365_rows = await vendor_microsoft.list_microsoft_365_activity(
+                m365,
+                parse_timestamp_fn=feed_utils.parse_timestamp,
+            )
 
         with patch.object(
             zoom,
@@ -420,7 +470,10 @@ async def test_activity_list_methods_handle_parse_exceptions_for_vendor_records(
                 }
             ),
         ):
-            zoom_rows = await zoom._list_zoom_activity()
+            zoom_rows = await vendor_zoom.list_zoom_activity(
+                zoom,
+                parse_timestamp_fn=feed_utils.parse_timestamp,
+            )
 
         with patch.object(
             salesforce,
@@ -431,7 +484,10 @@ async def test_activity_list_methods_handle_parse_exceptions_for_vendor_records(
                 }
             ),
         ):
-            salesforce_rows = await salesforce._list_salesforce_activity()
+            salesforce_rows = await vendor_salesforce.list_salesforce_activity(
+                salesforce,
+                parse_timestamp_fn=feed_utils.parse_timestamp,
+            )
 
         with patch.object(
             google,
@@ -442,7 +498,10 @@ async def test_activity_list_methods_handle_parse_exceptions_for_vendor_records(
                 }
             ),
         ):
-            google_rows = await google._list_google_workspace_activity()
+            google_rows = await vendor_google.list_google_workspace_activity(
+                google,
+                parse_timestamp_fn=feed_utils.parse_timestamp,
+            )
 
     assert m365_rows[0]["last_active_at"] is None
     assert zoom_rows[0]["last_active_at"] is None
@@ -460,7 +519,10 @@ async def test_list_github_activity_handles_non_list_payload_shapes() -> None:
         "_get_json",
         new=AsyncMock(side_effect=[{"members": {"bad": True}}, {"events": {"bad": True}}]),
     ):
-        rows = await adapter._list_github_activity()
+        rows = await vendor_github.list_github_activity(
+            adapter,
+            parse_timestamp_fn=feed_utils.parse_timestamp,
+        )
     assert rows == []
 
 
@@ -471,7 +533,7 @@ async def test_list_github_activity_ignores_malformed_events_and_members() -> No
     )
     with (
             patch(
-                "app.shared.adapters.license_vendor_ops.parse_timestamp",
+                "app.shared.adapters.feed_utils.parse_timestamp",
                 side_effect=_parse_or_raise,
             ),
         patch.object(
@@ -498,7 +560,10 @@ async def test_list_github_activity_ignores_malformed_events_and_members() -> No
             ),
         ),
     ):
-        rows = await adapter._list_github_activity()
+        rows = await vendor_github.list_github_activity(
+            adapter,
+            parse_timestamp_fn=feed_utils.parse_timestamp,
+        )
 
     assert len(rows) == 1
     assert rows[0]["user_id"] == "alice"
@@ -524,7 +589,7 @@ async def test_list_slack_activity_ignores_logs_without_timestamp_or_user() -> N
             ]
         ),
     ):
-        rows = await adapter._list_slack_activity()
+        rows = await vendor_slack.list_slack_activity(adapter)
 
     assert len(rows) == 1
     assert rows[0]["user_id"] == "U1"
@@ -566,9 +631,8 @@ async def test_license_helper_and_verify_connection_branch_edges() -> None:
     assert "not supported for vendor" in (unsupported.last_error or "")
 
     native_error = LicenseAdapter(_conn(vendor="google_workspace", auth_method="oauth"))
-    with patch.object(
-        native_error,
-        "_verify_native_vendor",
+    with patch(
+        "app.shared.adapters.license.verify_native_vendor",
         new=AsyncMock(side_effect=ExternalAPIError("native verify failed")),
     ):
         assert await native_error.verify_connection() is False
@@ -613,10 +677,14 @@ async def test_license_stream_fallback_and_native_short_circuit_paths() -> None:
         raise ExternalAPIError("m365 down")
         yield {}
 
-    with patch.object(m365, "_stream_microsoft_365_license_costs", new=_raise_m365):
+    with patch.dict(
+        native_dispatch._STREAM_FN_BY_VENDOR,
+        {"microsoft_365": _raise_m365},
+        clear=False,
+    ):
         rows = [
             row
-            async for row in m365._stream_cost_and_usage_impl(
+            async for row in m365.stream_cost_and_usage(
                 datetime(2026, 1, 1, tzinfo=timezone.utc),
                 datetime(2026, 1, 31, tzinfo=timezone.utc),
                 "DAILY",
@@ -629,20 +697,43 @@ async def test_license_stream_fallback_and_native_short_circuit_paths() -> None:
         _conn(vendor="google_workspace", auth_method="oauth", license_feed=[])
     )
     expected = {"provider": "license", "service": "native-google"}
-    with patch.object(
-        google,
-        "_stream_google_workspace_license_costs",
-        new=_row_gen(expected),
+    with patch.dict(
+        native_dispatch._STREAM_FN_BY_VENDOR,
+        {"google_workspace": _row_gen(expected)},
+        clear=False,
     ):
         rows = [
             row
-            async for row in google._stream_cost_and_usage_impl(
+            async for row in google.stream_cost_and_usage(
                 datetime(2026, 1, 1, tzinfo=timezone.utc),
                 datetime(2026, 1, 31, tzinfo=timezone.utc),
                 "DAILY",
             )
         ]
     assert rows == [expected]
+
+
+@pytest.mark.asyncio
+async def test_license_stream_fail_closed_for_unsupported_native_auth_vendor() -> None:
+    adapter = LicenseAdapter(
+        _conn(
+            vendor="custom",
+            auth_method="oauth",
+            license_feed=[{"timestamp": "2026-01-15T00:00:00Z", "cost_usd": 99.0}],
+        )
+    )
+
+    rows = [
+        row
+        async for row in adapter.stream_cost_and_usage(
+            datetime(2026, 1, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 31, tzinfo=timezone.utc),
+            "DAILY",
+        )
+    ]
+
+    assert rows == []
+    assert "not supported for vendor" in str(adapter.last_error or "")
 
 
 @pytest.mark.asyncio
@@ -658,9 +749,9 @@ async def test_license_verify_native_vendor_http_calls_and_stream_branches() -> 
         )
     )
     with patch.object(adapter, "_get_json", new=AsyncMock(return_value={"ok": True})) as get_mock:
-        await adapter._verify_microsoft_365()
-        await adapter._verify_google_workspace()
-        await adapter._verify_github()
+        await vendor_verify.verify_microsoft_365(adapter)
+        await vendor_verify.verify_google_workspace(adapter)
+        await vendor_verify.verify_github(adapter)
     assert get_mock.await_count == 3
 
     with patch.object(
@@ -670,9 +761,11 @@ async def test_license_verify_native_vendor_http_calls_and_stream_branches() -> 
     ):
         rows = [
             row
-            async for row in adapter._stream_google_workspace_license_costs(
+            async for row in vendor_google.stream_google_workspace_license_costs(
+                adapter,
                 datetime(2026, 1, 1, tzinfo=timezone.utc),
                 datetime(2026, 1, 31, tzinfo=timezone.utc),
+                as_float_fn=feed_utils.as_float,
             )
         ]
     assert len(rows) == 1
@@ -683,9 +776,11 @@ async def test_license_verify_native_vendor_http_calls_and_stream_branches() -> 
         with pytest.raises(ExternalAPIError, match="Invalid Microsoft Graph"):
             _ = [
                 row
-                async for row in bad_m365._stream_microsoft_365_license_costs(
+                async for row in vendor_microsoft.stream_microsoft_365_license_costs(
+                    bad_m365,
                     datetime(2026, 1, 1, tzinfo=timezone.utc),
                     datetime(2026, 1, 31, tzinfo=timezone.utc),
+                    as_float_fn=feed_utils.as_float,
                 )
             ]
 
@@ -714,9 +809,11 @@ async def test_license_verify_native_vendor_http_calls_and_stream_branches() -> 
     ):
         rows = [
             row
-            async for row in good_m365._stream_microsoft_365_license_costs(
+            async for row in vendor_microsoft.stream_microsoft_365_license_costs(
+                good_m365,
                 datetime(2026, 1, 1, tzinfo=timezone.utc),
                 datetime(2026, 1, 31, tzinfo=timezone.utc),
+                as_float_fn=feed_utils.as_float,
             )
         ]
     assert len(rows) == 1
@@ -746,9 +843,11 @@ async def test_license_verify_native_vendor_http_calls_and_stream_branches() -> 
     ):
         rows = [
             row
-            async for row in non_string_sku_key._stream_microsoft_365_license_costs(
+            async for row in vendor_microsoft.stream_microsoft_365_license_costs(
+                non_string_sku_key,
                 datetime(2026, 1, 1, tzinfo=timezone.utc),
                 datetime(2026, 1, 31, tzinfo=timezone.utc),
+                as_float_fn=feed_utils.as_float,
             )
         ]
     assert len(rows) == 1

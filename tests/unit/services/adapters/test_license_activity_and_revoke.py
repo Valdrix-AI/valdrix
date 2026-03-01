@@ -6,6 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 import httpx
 import pytest
 
+import app.shared.adapters.license_native_dispatch as native_dispatch
+import app.shared.adapters.license_vendor_github as vendor_github
+import app.shared.adapters.license_vendor_google as vendor_google
+import app.shared.adapters.license_vendor_microsoft as vendor_microsoft
+import app.shared.adapters.license_vendor_salesforce as vendor_salesforce
+import app.shared.adapters.license_vendor_slack as vendor_slack
+import app.shared.adapters.license_vendor_zoom as vendor_zoom
+from app.shared.adapters.feed_utils import parse_timestamp
 from app.shared.adapters.license import LicenseAdapter
 from app.shared.core.exceptions import ExternalAPIError, UnsupportedVendorError
 
@@ -65,29 +73,34 @@ def _conn(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("vendor", "method_name", "expects_sku"),
+    ("vendor", "expects_sku"),
     [
-        ("google_workspace", "_revoke_google_workspace", True),
-        ("microsoft_365", "_revoke_microsoft_365", True),
-        ("github", "_revoke_github", False),
-        ("slack", "_revoke_slack", False),
-        ("zoom", "_revoke_zoom", False),
-        ("salesforce", "_revoke_salesforce", False),
+        ("google_workspace", True),
+        ("microsoft_365", True),
+        ("github", False),
+        ("slack", False),
+        ("zoom", False),
+        ("salesforce", False),
     ],
 )
 async def test_revoke_license_dispatches_to_vendor_handlers(
-    vendor: str, method_name: str, expects_sku: bool
+    vendor: str, expects_sku: bool
 ) -> None:
     adapter = LicenseAdapter(_conn(vendor=vendor, auth_method="oauth"))
     mocked = AsyncMock(return_value=True)
-    with patch.object(adapter, method_name, new=mocked):
+    if expects_sku:
+        patch_target = native_dispatch._REVOKE_WITH_SKU_FN_BY_VENDOR
+    else:
+        patch_target = native_dispatch._REVOKE_NO_SKU_FN_BY_VENDOR
+
+    with patch.dict(patch_target, {vendor: mocked}, clear=False):
         result = await adapter.revoke_license("user-1", "sku-1")
 
     assert result is True
     if expects_sku:
-        mocked.assert_awaited_once_with("user-1", "sku-1")
+        mocked.assert_awaited_once_with(adapter, "user-1", "sku-1")
     else:
-        mocked.assert_awaited_once_with("user-1")
+        mocked.assert_awaited_once_with(adapter, "user-1")
 
 
 @pytest.mark.asyncio
@@ -107,19 +120,35 @@ async def test_list_users_activity_dispatches_manual_native_and_unknown_vendor()
     manual_mock.assert_called_once()
 
     m365_adapter = LicenseAdapter(_conn(vendor="microsoft_365", auth_method="oauth"))
-    with patch.object(
-        m365_adapter,
-        "_list_microsoft_365_activity",
-        new=AsyncMock(return_value=[{"user_id": "ms"}]),
-    ) as m365_mock:
+    m365_mock = AsyncMock(return_value=[{"user_id": "ms"}])
+    with patch.dict(
+        native_dispatch._ACTIVITY_FN_BY_VENDOR,
+        {"microsoft_365": m365_mock},
+        clear=False,
+    ):
         assert await m365_adapter.list_users_activity() == [{"user_id": "ms"}]
-    m365_mock.assert_awaited_once()
+    m365_mock.assert_awaited_once_with(m365_adapter)
 
     unknown_adapter = LicenseAdapter(_conn(vendor="custom", auth_method="manual"))
     with patch.object(
         LicenseAdapter, "_native_vendor", new_callable=PropertyMock, return_value="mystery"
     ):
         assert await unknown_adapter.list_users_activity() == []
+
+
+@pytest.mark.asyncio
+async def test_list_users_activity_fail_closed_for_unsupported_native_auth_vendor() -> None:
+    adapter = LicenseAdapter(
+        _conn(
+            vendor="custom",
+            auth_method="oauth",
+            license_feed=[{"user_id": "u1", "timestamp": "2026-01-01T00:00:00Z"}],
+        )
+    )
+
+    rows = await adapter.list_users_activity()
+    assert rows == []
+    assert "not supported for vendor" in str(adapter.last_error or "")
 
 
 def test_list_manual_feed_activity_consolidates_latest_records() -> None:
@@ -179,35 +208,35 @@ async def test_revoke_google_workspace_handles_success_and_failures() -> None:
 
     success_client = _SequenceClient([_FakeResponse(404), _FakeResponse(204)])
     with patch("app.shared.core.http.get_http_client", return_value=success_client):
-        assert await adapter._revoke_google_workspace("user@example.com") is True
+        assert await vendor_google.revoke_google_workspace(adapter, "user@example.com") is True
     assert len(success_client.calls) == 2
 
     fail_client = _SequenceClient([_FakeResponse(500)])
     with patch("app.shared.core.http.get_http_client", return_value=fail_client):
-        assert await adapter._revoke_google_workspace("user@example.com", "sku-a") is False
+        assert await vendor_google.revoke_google_workspace(adapter, "user@example.com", "sku-a") is False
 
     error_client = _SequenceClient([httpx.ConnectError("boom"), _FakeResponse(404)])
     with patch("app.shared.core.http.get_http_client", return_value=error_client):
-        assert await adapter._revoke_google_workspace("user@example.com", "sku-a") is False
+        assert await vendor_google.revoke_google_workspace(adapter, "user@example.com", "sku-a") is False
 
 
 @pytest.mark.asyncio
 async def test_revoke_microsoft_365_branch_paths() -> None:
     adapter = LicenseAdapter(_conn(vendor="microsoft_365", auth_method="oauth"))
-    assert await adapter._revoke_microsoft_365("user", None) is False
+    assert await vendor_microsoft.revoke_microsoft_365(adapter, "user", None) is False
 
     ok_client = _SequenceClient([_FakeResponse(200)])
     with patch("app.shared.core.http.get_http_client", return_value=ok_client):
-        assert await adapter._revoke_microsoft_365("user", "sku-1") is True
+        assert await vendor_microsoft.revoke_microsoft_365(adapter, "user", "sku-1") is True
     assert ok_client.calls[0][2] == {"addLicenses": [], "removeLicenses": ["sku-1"]}
 
     bad_client = _SequenceClient([_FakeResponse(500)])
     with patch("app.shared.core.http.get_http_client", return_value=bad_client):
-        assert await adapter._revoke_microsoft_365("user", "sku-1") is False
+        assert await vendor_microsoft.revoke_microsoft_365(adapter, "user", "sku-1") is False
 
     err_client = _SequenceClient([httpx.ConnectError("down")])
     with patch("app.shared.core.http.get_http_client", return_value=err_client):
-        assert await adapter._revoke_microsoft_365("user", "sku-1") is False
+        assert await vendor_microsoft.revoke_microsoft_365(adapter, "user", "sku-1") is False
 
 
 @pytest.mark.asyncio
@@ -246,7 +275,7 @@ async def test_list_microsoft_365_activity_parses_and_handles_errors() -> None:
     }
 
     with patch.object(adapter, "_get_json", new=AsyncMock(return_value=payload)):
-        rows = await adapter._list_microsoft_365_activity()
+        rows = await vendor_microsoft.list_microsoft_365_activity(adapter, parse_timestamp_fn=parse_timestamp)
     assert len(rows) == 3
     assert rows[0]["is_admin"] is True
     assert rows[0]["last_active_at"] == datetime(2026, 1, 10, tzinfo=timezone.utc)
@@ -255,7 +284,7 @@ async def test_list_microsoft_365_activity_parses_and_handles_errors() -> None:
     assert rows[2]["last_active_at"] is None
 
     with patch.object(adapter, "_get_json", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
-        assert await adapter._list_microsoft_365_activity() == []
+        assert await vendor_microsoft.list_microsoft_365_activity(adapter, parse_timestamp_fn=parse_timestamp) == []
 
 
 @pytest.mark.asyncio
@@ -266,18 +295,18 @@ async def test_github_revoke_and_activity_paths() -> None:
 
     ok_client = _SequenceClient([_FakeResponse(204)])
     with patch("app.shared.core.http.get_http_client", return_value=ok_client):
-        assert await adapter._revoke_github("alice") is True
+        assert await vendor_github.revoke_github(adapter, "alice") is True
 
     bad_client = _SequenceClient([_FakeResponse(500)])
     with patch("app.shared.core.http.get_http_client", return_value=bad_client):
-        assert await adapter._revoke_github("alice") is False
+        assert await vendor_github.revoke_github(adapter, "alice") is False
 
     with patch("app.shared.core.http.get_http_client", return_value=_SequenceClient([httpx.ConnectError("x")])):
-        assert await adapter._revoke_github("alice") is False
+        assert await vendor_github.revoke_github(adapter, "alice") is False
 
     no_org = LicenseAdapter(_conn(vendor="github", auth_method="oauth", connector_config={}))
-    assert await no_org._revoke_github("alice") is False
-    assert await no_org._list_github_activity() == []
+    assert await vendor_github.revoke_github(no_org, "alice") is False
+    assert await vendor_github.list_github_activity(no_org, parse_timestamp_fn=parse_timestamp) == []
 
     with patch.object(
         adapter,
@@ -295,13 +324,13 @@ async def test_github_revoke_and_activity_paths() -> None:
             ]
         ),
     ):
-        rows = await adapter._list_github_activity()
+        rows = await vendor_github.list_github_activity(adapter, parse_timestamp_fn=parse_timestamp)
     assert rows[0]["user_id"] == "alice"
     assert rows[0]["is_admin"] is True
     assert isinstance(rows[0]["last_active_at"], datetime)
 
     with patch.object(adapter, "_get_json", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
-        assert await adapter._list_github_activity() == []
+        assert await vendor_github.list_github_activity(adapter, parse_timestamp_fn=parse_timestamp) == []
 
 
 @pytest.mark.asyncio
@@ -309,11 +338,11 @@ async def test_zoom_revoke_and_activity_paths() -> None:
     adapter = LicenseAdapter(_conn(vendor="zoom", auth_method="oauth"))
 
     with patch("app.shared.core.http.get_http_client", return_value=_SequenceClient([_FakeResponse(204)])):
-        assert await adapter._revoke_zoom("u1") is True
+        assert await vendor_zoom.revoke_zoom(adapter, "u1") is True
     with patch("app.shared.core.http.get_http_client", return_value=_SequenceClient([_FakeResponse(400)])):
-        assert await adapter._revoke_zoom("u1") is False
+        assert await vendor_zoom.revoke_zoom(adapter, "u1") is False
     with patch("app.shared.core.http.get_http_client", return_value=_SequenceClient([httpx.ConnectError("x")])):
-        assert await adapter._revoke_zoom("u1") is False
+        assert await vendor_zoom.revoke_zoom(adapter, "u1") is False
 
     with patch.object(
         adapter,
@@ -336,14 +365,14 @@ async def test_zoom_revoke_and_activity_paths() -> None:
             }
         ),
     ):
-        rows = await adapter._list_zoom_activity()
+        rows = await vendor_zoom.list_zoom_activity(adapter, parse_timestamp_fn=parse_timestamp)
     assert len(rows) == 3
     assert rows[0]["is_admin"] is True
     assert rows[1]["suspended"] is True
     assert rows[2]["last_active_at"] is None
 
     with patch.object(adapter, "_get_json", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
-        assert await adapter._list_zoom_activity() == []
+        assert await vendor_zoom.list_zoom_activity(adapter, parse_timestamp_fn=parse_timestamp) == []
 
 
 @pytest.mark.asyncio
@@ -360,23 +389,23 @@ async def test_slack_revoke_and_activity_paths() -> None:
         "app.shared.core.http.get_http_client",
         return_value=_SequenceClient([_FakeResponse(200, {"ok": True})]),
     ):
-        assert await adapter._revoke_slack("U1") is True
+        assert await vendor_slack.revoke_slack(adapter, "U1") is True
     with patch(
         "app.shared.core.http.get_http_client",
         return_value=_SequenceClient([_FakeResponse(200, {"ok": False, "error": "cant"})]),
     ):
-        assert await adapter._revoke_slack("U1") is False
+        assert await vendor_slack.revoke_slack(adapter, "U1") is False
     with patch(
         "app.shared.core.http.get_http_client",
         return_value=_SequenceClient([httpx.ConnectError("x")]),
     ):
-        assert await adapter._revoke_slack("U1") is False
+        assert await vendor_slack.revoke_slack(adapter, "U1") is False
 
     no_team = LicenseAdapter(_conn(vendor="slack", auth_method="oauth", connector_config={}))
-    assert await no_team._revoke_slack("U1") is False
+    assert await vendor_slack.revoke_slack(no_team, "U1") is False
 
     with patch.object(adapter, "_get_json", new=AsyncMock(return_value={"ok": False, "error": "plan"})):
-        assert await adapter._list_slack_activity() == []
+        assert await vendor_slack.list_slack_activity(adapter) == []
 
     with patch.object(
         adapter,
@@ -398,13 +427,13 @@ async def test_slack_revoke_and_activity_paths() -> None:
             ]
         ),
     ):
-        rows = await adapter._list_slack_activity()
+        rows = await vendor_slack.list_slack_activity(adapter)
     assert rows[0]["user_id"] == "U1"
     assert rows[0]["is_admin"] is True
     assert rows[0]["last_active_at"] is not None
 
     with patch.object(adapter, "_get_json", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
-        assert await adapter._list_slack_activity() == []
+        assert await vendor_slack.list_slack_activity(adapter) == []
 
 
 @pytest.mark.asyncio
@@ -418,15 +447,15 @@ async def test_salesforce_revoke_and_activity_paths() -> None:
     )
 
     with patch("app.shared.core.http.get_http_client", return_value=_SequenceClient([_FakeResponse(204)])):
-        assert await adapter._revoke_salesforce("u1") is True
+        assert await vendor_salesforce.revoke_salesforce(adapter, "u1") is True
     with patch("app.shared.core.http.get_http_client", return_value=_SequenceClient([_FakeResponse(500)])):
-        assert await adapter._revoke_salesforce("u1") is False
+        assert await vendor_salesforce.revoke_salesforce(adapter, "u1") is False
     with patch("app.shared.core.http.get_http_client", return_value=_SequenceClient([httpx.ConnectError("x")])):
-        assert await adapter._revoke_salesforce("u1") is False
+        assert await vendor_salesforce.revoke_salesforce(adapter, "u1") is False
 
     no_url = LicenseAdapter(_conn(vendor="salesforce", auth_method="oauth", connector_config={}))
-    assert await no_url._revoke_salesforce("u1") is False
-    assert await no_url._list_salesforce_activity() == []
+    assert await vendor_salesforce.revoke_salesforce(no_url, "u1") is False
+    assert await vendor_salesforce.list_salesforce_activity(no_url, parse_timestamp_fn=parse_timestamp) == []
 
     with patch.object(
         adapter,
@@ -448,7 +477,7 @@ async def test_salesforce_revoke_and_activity_paths() -> None:
             }
         ),
     ):
-        rows = await adapter._list_salesforce_activity()
+        rows = await vendor_salesforce.list_salesforce_activity(adapter, parse_timestamp_fn=parse_timestamp)
     assert len(rows) == 3
     assert rows[0]["is_admin"] is True
     assert rows[0]["suspended"] is True
@@ -456,7 +485,7 @@ async def test_salesforce_revoke_and_activity_paths() -> None:
     assert rows[2]["last_active_at"] is None
 
     with patch.object(adapter, "_get_json", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
-        assert await adapter._list_salesforce_activity() == []
+        assert await vendor_salesforce.list_salesforce_activity(adapter, parse_timestamp_fn=parse_timestamp) == []
 
 
 @pytest.mark.asyncio
@@ -482,14 +511,14 @@ async def test_google_workspace_activity_and_misc_methods() -> None:
             }
         ),
     ):
-        rows = await adapter._list_google_workspace_activity()
+        rows = await vendor_google.list_google_workspace_activity(adapter, parse_timestamp_fn=parse_timestamp)
     assert rows[0]["email"] == "gw@example.com"
     assert rows[0]["is_admin"] is True
     assert rows[0]["last_active_at"] == datetime(2026, 1, 18, tzinfo=timezone.utc)
     assert rows[1]["last_active_at"] is None
 
     with patch.object(adapter, "_get_json", new=AsyncMock(side_effect=httpx.ConnectError("x"))):
-        assert await adapter._list_google_workspace_activity() == []
+        assert await vendor_google.list_google_workspace_activity(adapter, parse_timestamp_fn=parse_timestamp) == []
 
     with patch.object(
         adapter,
@@ -541,6 +570,7 @@ async def test_discover_resources_and_usage_from_manual_feed_and_filters() -> No
             ],
         )
     )
+    adapter.last_error = "stale"
 
     discovered = await adapter.discover_resources("licenses", region="eu-west-1")
     assert len(discovered) == 2
@@ -554,6 +584,7 @@ async def test_discover_resources_and_usage_from_manual_feed_and_filters() -> No
     assert usage_rows[0]["cost_usd"] == 29.5
     assert usage_rows[0]["currency"] == "EUR"
     assert usage_rows[0]["tags"]["suspended"] is True
+    assert adapter.last_error is None
 
     assert await adapter.discover_resources("compute") == []
     assert await adapter.get_resource_usage("compute") == []
