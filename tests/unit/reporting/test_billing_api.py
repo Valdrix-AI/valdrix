@@ -455,6 +455,8 @@ async def test_handle_webhook_rightmost_forwarded_ip_is_used():
         mock_settings.ENVIRONMENT = "production"
         mock_settings.TRUST_PROXY_HEADERS = True
         mock_settings.TRUSTED_PROXY_HOPS = 1
+        mock_settings.TRUSTED_PROXY_CIDRS = ["0.0.0.0/0", "::/0"]
+        mock_settings.PAYSTACK_WEBHOOK_ALLOWED_IPS = ["52.31.139.75"]
         async with AsyncClient(transport=transport, base_url="https://test") as ac:
             response = await ac.post(
                 "/api/v1/billing/webhook",

@@ -11,6 +11,7 @@ from app.shared.core.pricing import (
     requires_tier,
     requires_feature,
     get_tenant_tier,
+    clear_tenant_tier_cache,
     TierGuard,
 )
 
@@ -148,32 +149,62 @@ class TestPricingDeep:
         assert mock_db.execute.await_count == 1
 
     @pytest.mark.asyncio
-    async def test_get_tenant_tier_supports_async_scalar_accessor(self, mock_db):
-        """Async scalar accessors should be awaited when present."""
+    async def test_get_tenant_tier_uses_runtime_cache_without_session_info(self, mock_db):
+        tenant_id = uuid.uuid4()
         mock_tenant = MagicMock()
         mock_tenant.plan = PricingTier.GROWTH.value
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none = AsyncMock(return_value=mock_tenant)
+        mock_result.scalar_one_or_none.return_value = mock_tenant
         mock_db.execute.return_value = mock_result
+        mock_db.info = None
 
-        tier = await get_tenant_tier(uuid.uuid4(), mock_db)
+        clear_tenant_tier_cache()
+        first = await get_tenant_tier(tenant_id, mock_db)
+        second = await get_tenant_tier(tenant_id, mock_db)
+        clear_tenant_tier_cache()
 
-        assert tier == PricingTier.GROWTH
-        mock_result.scalar_one_or_none.assert_awaited_once()
+        assert first == PricingTier.GROWTH
+        assert second == PricingTier.GROWTH
+        assert mock_db.execute.await_count == 1
 
     @pytest.mark.asyncio
-    async def test_get_tenant_tier_invalid_plan_returns_free(self, mock_db):
-        """Invalid plan strings should fallback to FREE."""
-        mock_tenant = MagicMock()
-        mock_tenant.plan = "invalid-plan"
+    async def test_get_tenant_tier_runtime_cache_can_be_invalidated(self, mock_db):
+        tenant_id = uuid.uuid4()
+        first_tenant = MagicMock()
+        first_tenant.plan = PricingTier.STARTER.value
+        second_tenant = MagicMock()
+        second_tenant.plan = PricingTier.PRO.value
+
+        first_result = MagicMock()
+        first_result.scalar_one_or_none.return_value = first_tenant
+        second_result = MagicMock()
+        second_result.scalar_one_or_none.return_value = second_tenant
+
+        mock_db.execute.side_effect = [first_result, second_result]
+        mock_db.info = None
+
+        clear_tenant_tier_cache()
+        first = await get_tenant_tier(tenant_id, mock_db)
+        clear_tenant_tier_cache(tenant_id)
+        second = await get_tenant_tier(tenant_id, mock_db)
+        clear_tenant_tier_cache()
+
+        assert first == PricingTier.STARTER
+        assert second == PricingTier.PRO
+        assert mock_db.execute.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_get_tenant_tier_invalid_scalar_result_type_returns_free(self, mock_db):
+        """Unexpected scalar result types should fail closed to FREE."""
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_tenant
+        mock_result.scalar_one_or_none.return_value = {"plan": PricingTier.GROWTH.value}
         mock_db.execute.return_value = mock_result
 
         with patch("app.shared.core.pricing.logger") as mock_logger:
             tier = await get_tenant_tier(uuid.uuid4(), mock_db)
-            assert tier == PricingTier.FREE
-            mock_logger.error.assert_called()
+
+        assert tier == PricingTier.FREE
+        mock_logger.error.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_tenant_tier_invalid_plan_returns_free(self, mock_db):

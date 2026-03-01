@@ -41,7 +41,7 @@ async def test_get_db_yields_session():
             await db_gen.__anext__()
         except StopAsyncIteration:
             pass
-        mock_session.close.assert_called_once()
+        mock_session.__aexit__.assert_awaited_once()
 
 
 @pytest.mark.asyncio

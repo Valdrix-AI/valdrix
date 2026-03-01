@@ -50,6 +50,24 @@ router = APIRouter(tags=["Billing"])
 settings = get_settings()
 
 
+def _trusted_proxy_networks() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    raw = getattr(settings, "TRUSTED_PROXY_CIDRS", [])
+    if isinstance(raw, str):
+        cidr_values = [part.strip() for part in raw.split(",") if part.strip()]
+    elif isinstance(raw, (list, tuple, set)):
+        cidr_values = [str(part).strip() for part in raw if str(part).strip()]
+    else:
+        cidr_values = []
+
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for cidr in cidr_values:
+        try:
+            networks.append(ipaddress.ip_network(cidr, strict=False))
+        except ValueError:
+            logger.warning("billing_invalid_trusted_proxy_cidr_ignored", cidr=cidr)
+    return networks
+
+
 def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
     """
     Validate and normalize user-provided checkout callback URLs.
@@ -120,6 +138,16 @@ def _extract_client_ip(request: Request) -> str:
     else:
         trust_proxy_headers = False
     if not trust_proxy_headers:
+        return fallback
+
+    proxy_networks = _trusted_proxy_networks()
+    if not proxy_networks:
+        return fallback
+    try:
+        remote_peer_ip = ipaddress.ip_address(fallback)
+    except ValueError:
+        return fallback
+    if not any(remote_peer_ip in network for network in proxy_networks):
         return fallback
 
     xff = request.headers.get("x-forwarded-for", "")

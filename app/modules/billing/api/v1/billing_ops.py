@@ -214,7 +214,17 @@ async def process_paystack_webhook(
     from app.modules.billing.domain.billing.webhook_retry import WebhookRetryService
     import json
 
-    paystack_ips = {"52.31.139.75", "52.49.173.169", "52.214.14.220"}
+    configured_paystack_ips = getattr(settings, "PAYSTACK_WEBHOOK_ALLOWED_IPS", None)
+    if isinstance(configured_paystack_ips, (list, tuple, set)):
+        paystack_ips = {
+            str(ip).strip() for ip in configured_paystack_ips if str(ip).strip()
+        }
+    elif isinstance(configured_paystack_ips, str):
+        paystack_ips = {
+            part.strip() for part in configured_paystack_ips.split(",") if part.strip()
+        }
+    else:
+        paystack_ips = set()
     client_ip = extract_client_ip(request)
 
     if settings.ENVIRONMENT in {"production", "staging"} and client_ip not in paystack_ips:

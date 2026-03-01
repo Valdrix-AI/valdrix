@@ -46,7 +46,9 @@ def _settings() -> Settings:
     s.TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT = True
     s.TURNSTILE_REQUIRE_SSO_DISCOVERY = True
     s.TURNSTILE_REQUIRE_ONBOARD = True
+    s.TRUST_PROXY_HEADERS = False
     s.TRUSTED_PROXY_HOPS = 1
+    s.TRUSTED_PROXY_CIDRS = []
     s.ADMIN_API_KEY = "a" * 32
     s.CIRCUIT_BREAKER_DISTRIBUTED_STATE = True
     s.REDIS_URL = "redis://localhost:6379"
@@ -217,6 +219,16 @@ def test_config_billing_validator_branch_paths() -> None:
     with pytest.raises(ValueError, match="cannot be USD"):
         s._validate_billing_config()
 
+    s = _settings()
+    s.PAYSTACK_WEBHOOK_ALLOWED_IPS = []
+    with pytest.raises(ValueError, match="PAYSTACK_WEBHOOK_ALLOWED_IPS must contain at least one IP"):
+        s._validate_billing_config()
+
+    s = _settings()
+    s.PAYSTACK_WEBHOOK_ALLOWED_IPS = ["bad-ip"]
+    with pytest.raises(ValueError, match="PAYSTACK_WEBHOOK_ALLOWED_IPS contains invalid IP address"):
+        s._validate_billing_config()
+
 
 def test_config_turnstile_validator_branch_paths() -> None:
     s = _settings()
@@ -275,6 +287,21 @@ def test_config_environment_safety_branch_paths() -> None:
         with patch.dict(os.environ, {"WEB_CONCURRENCY": "not-an-int"}, clear=False):
             s._validate_environment_safety()
     assert get_logger.return_value.warning.call_count >= 2
+
+    s = _settings()
+    s.TRUSTED_PROXY_CIDRS = ["not-a-cidr"]
+    with pytest.raises(ValueError, match="TRUSTED_PROXY_CIDRS contains invalid CIDR"):
+        s._validate_environment_safety()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.TRUST_PROXY_HEADERS = True
+    s.TRUSTED_PROXY_CIDRS = []
+    with pytest.raises(
+        ValueError,
+        match="TRUSTED_PROXY_CIDRS must be configured when TRUST_PROXY_HEADERS=true",
+    ):
+        s._validate_environment_safety()
 
 
 @pytest.mark.parametrize(

@@ -2,6 +2,7 @@ from functools import lru_cache
 from threading import Lock
 from typing import Optional
 import base64
+import ipaddress
 import os
 import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -89,6 +90,8 @@ class Settings(BaseSettings):
     # Number of trusted reverse-proxy hops when resolving client IP from XFF.
     # 1 = trust the nearest proxy and use the right-most forwarded address.
     TRUSTED_PROXY_HOPS: int = 1
+    # Explicit proxy network allowlist used before trusting X-Forwarded-For.
+    TRUSTED_PROXY_CIDRS: list[str] = []
     SSE_MAX_CONNECTIONS_PER_TENANT: int = 5
     SSE_POLL_INTERVAL_SECONDS: int = 3
 
@@ -250,6 +253,21 @@ class Settings(BaseSettings):
                     "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY cannot be USD when PAYSTACK_ENABLE_USD_CHECKOUT is false."
                 )
 
+        paystack_webhook_ips = [
+            str(value).strip()
+            for value in self.PAYSTACK_WEBHOOK_ALLOWED_IPS
+            if str(value).strip()
+        ]
+        if not paystack_webhook_ips:
+            raise ValueError("PAYSTACK_WEBHOOK_ALLOWED_IPS must contain at least one IP.")
+        for ip_value in paystack_webhook_ips:
+            try:
+                ipaddress.ip_address(ip_value)
+            except ValueError as exc:
+                raise ValueError(
+                    f"PAYSTACK_WEBHOOK_ALLOWED_IPS contains invalid IP address: {ip_value}"
+                ) from exc
+
     def _validate_turnstile_config(self) -> None:
         """Validates Turnstile anti-bot controls for public/auth attack surfaces."""
         if self.TURNSTILE_TIMEOUT_SECONDS <= 0:
@@ -299,6 +317,23 @@ class Settings(BaseSettings):
         """Validates network and deployment safety (SEC-A1, SEC-A2)."""
         if self.TRUSTED_PROXY_HOPS < 1 or self.TRUSTED_PROXY_HOPS > 5:
             raise ValueError("TRUSTED_PROXY_HOPS must be between 1 and 5.")
+        trusted_proxy_cidrs = [str(cidr).strip() for cidr in self.TRUSTED_PROXY_CIDRS if str(cidr).strip()]
+        for cidr in trusted_proxy_cidrs:
+            try:
+                ipaddress.ip_network(cidr, strict=False)
+            except ValueError as exc:
+                raise ValueError(
+                    f"TRUSTED_PROXY_CIDRS contains invalid CIDR: {cidr}"
+                ) from exc
+
+        if (
+            self.TRUST_PROXY_HEADERS
+            and self.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}
+            and not trusted_proxy_cidrs
+        ):
+            raise ValueError(
+                "TRUSTED_PROXY_CIDRS must be configured when TRUST_PROXY_HEADERS=true in staging/production."
+            )
 
         if self.is_production or self.ENVIRONMENT == "staging":
             if not self.ADMIN_API_KEY or len(self.ADMIN_API_KEY) < 32:
@@ -640,6 +675,11 @@ class Settings(BaseSettings):
     PAYSTACK_PLAN_ENTERPRISE_ANNUAL: Optional[str] = None
     PAYSTACK_DEFAULT_CHECKOUT_CURRENCY: str = "NGN"
     PAYSTACK_ENABLE_USD_CHECKOUT: bool = False
+    PAYSTACK_WEBHOOK_ALLOWED_IPS: list[str] = [
+        "52.31.139.75",
+        "52.49.173.169",
+        "52.214.14.220",
+    ]
 
     # Circuit Breaker & Safety Guardrails (Phase 12)
     CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 3
