@@ -3055,6 +3055,80 @@ Validation:
 4. `uv run pytest --no-cov -q tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 5. `uv run pytest --no-cov -q tests/unit/ops`
 
+## Execution update (2026-03-01): VAL-ADAPT-002+ breaking wrapper-seam cleanup completed
+
+Objective:
+1. Close the remaining compatibility seam in the license adapter decomposition track.
+2. Remove legacy private wrapper indirection and switch to direct dispatch/runtime interfaces.
+
+Implemented:
+1. Removed compatibility mixin layer:
+   - deleted `app/shared/adapters/license_native_compat.py`.
+   - dropped `LicenseNativeCompatMixin` inheritance from `app/shared/adapters/license.py`.
+2. Removed legacy private wrapper method seam from `LicenseAdapter`:
+   - verify wrappers (`_verify_*`, `_verify_native_vendor`),
+   - stream wrappers (`_stream_google_workspace_license_costs`, `_stream_microsoft_365_license_costs`),
+   - revoke wrappers (`_revoke_*`),
+   - activity wrappers (`_list_*_activity`).
+3. Upgraded native dispatch to direct function maps:
+   - `app/shared/adapters/license_native_dispatch.py` now maps native vendors directly to vendor-op functions.
+   - removed method-name string dispatch and runtime `getattr` indirection.
+4. Updated all impacted tests to assert direct dispatch behavior and vendor-op integration.
+5. This update supersedes earlier interim notes that wrappers were temporarily preserved during staged decomposition.
+
+Validation:
+1. `uv run ruff check app/shared/adapters/license.py app/shared/adapters/license_native_dispatch.py tests/unit/shared/adapters/test_license_native_dispatch.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py`
+2. `uv run mypy app/shared/adapters/license.py app/shared/adapters/license_native_dispatch.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_license_native_dispatch.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_google_workspace.py`
+4. `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py` -> `883 passed`; all preflight/sanity gates and coverage thresholds satisfied.
+
+Post-closure sanity (mandatory release checks):
+1. Concurrency: dispatch tables are immutable module-level mappings; no mutable wrapper state remains.
+2. Observability: error/warning paths and `last_error` propagation remain intact on public adapter flows.
+3. Deterministic replay: native vendor routing is table-driven and deterministic.
+4. Snapshot stability/export integrity: public adapter output schemas are unchanged; only internal call topology changed.
+5. Failure modes/misconfiguration: unsupported vendor/revoke paths remain explicit fail-closed behavior.
+
+## Execution update (2026-03-01): Cloud+ native-dispatch hardening follow-up (SaaS/Platform/Hybrid)
+
+Objective:
+1. Remove remaining branch-heavy native vendor verify/stream routing patterns from Cloud+ adapters.
+2. Keep runtime behavior unchanged while reducing adapter control-flow concentration risk.
+
+Implemented:
+1. Refactored `app/shared/adapters/saas.py` to table-driven native handler resolution:
+   - `_resolve_native_verify_handler()`
+   - `_resolve_native_stream_handler()`
+2. Refactored `app/shared/adapters/platform.py` to table-driven native handler resolution:
+   - `_resolve_native_verify_handler()`
+   - `_resolve_native_stream_handler()`
+3. Refactored `app/shared/adapters/hybrid.py` to table-driven native handler resolution:
+   - `_resolve_native_verify_handler()`
+   - `_resolve_native_stream_handler()`
+4. Added/expanded branch tests for handler-map contracts and fallback behavior:
+   - `tests/unit/shared/adapters/test_saas_adapter_branch_paths.py`
+   - `tests/unit/services/adapters/test_adapter_helper_branches.py`
+   - existing Cloud+ regression coverage in `tests/unit/services/adapters/test_cloud_plus_adapters.py`.
+5. Removed stub-grade discovery behavior for Cloud+ adapters:
+   - added deterministic projection utility `discover_resources_from_cost_rows()` in `app/shared/adapters/resource_usage_projection.py`,
+   - wired `discover_resources()` in SaaS/Platform/Hybrid adapters to recent cost-row projection with fail-closed error handling.
+6. Added discovery projection tests:
+   - `tests/unit/shared/adapters/test_resource_usage_projection.py`,
+   - expanded `tests/unit/services/adapters/test_cloud_plus_adapters.py`.
+
+Validation:
+1. `uv run ruff check app/shared/adapters/saas.py app/shared/adapters/platform.py app/shared/adapters/hybrid.py app/shared/adapters/resource_usage_projection.py tests/unit/shared/adapters/test_saas_adapter_branch_paths.py tests/unit/services/adapters/test_adapter_helper_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/shared/adapters/test_resource_usage_projection.py`
+2. `uv run mypy app/shared/adapters/saas.py app/shared/adapters/platform.py app/shared/adapters/hybrid.py app/shared/adapters/resource_usage_projection.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_resource_usage_projection.py tests/unit/shared/adapters/test_saas_adapter_branch_paths.py tests/unit/services/adapters/test_adapter_helper_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py` -> `88 passed`.
+4. `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py` -> `883 passed`; all preflight/sanity gates and coverage thresholds satisfied.
+
+Post-closure sanity (mandatory release checks):
+1. Concurrency: no shared mutable dispatch state introduced; handler maps are local immutable dictionaries.
+2. Observability: native verify/stream failures still emit structured vendor/error logs and preserve `last_error`.
+3. Deterministic replay: vendor-path selection is now table-driven for SaaS/Platform/Hybrid native connectors.
+4. Snapshot stability/export integrity: discovery payload shape is deterministic/sorted and cost row payload contracts remain unchanged; fallback-to-feed behavior preserved.
+5. Failure modes/misconfiguration: unsupported vendor/auth mode checks remain explicit fail-closed behavior.
+
 ## Execution update (2026-02-28): VAL-ADAPT-002+ vendor-module split hardening pass
 
 Objective:
@@ -4506,3 +4580,270 @@ Validation:
 3. `uv run ruff check tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 4. `uv run pytest --no-cov -q tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 5. `uv run pytest --no-cov -q tests/unit/ops`
+
+## Execution update (2026-03-01): VAL-ADAPT-002+ no-compat dispatch cleanup and CUR discovery evidence refresh
+
+Implemented:
+1. Removed production compatibility facade for license native vendor ops:
+   - deleted `app/shared/adapters/license_vendor_ops.py`.
+2. Rewired native vendor dispatch to direct vendor modules:
+   - `app/shared/adapters/license_native_dispatch.py` now binds directly to:
+     - `license_vendor_verify.py`
+     - `license_vendor_google.py`
+     - `license_vendor_microsoft.py`
+     - `license_vendor_github.py`
+     - `license_vendor_slack.py`
+     - `license_vendor_zoom.py`
+     - `license_vendor_salesforce.py`
+   - stream/activity wrappers preserve deterministic normalization contracts (`feed_utils.as_float`, `feed_utils.parse_timestamp`).
+3. Removed compatibility-facade callsites from adapter tests:
+   - `tests/unit/services/adapters/test_cloud_plus_adapters.py`
+   - `tests/unit/services/adapters/test_license_activity_and_revoke.py`
+   - `tests/unit/services/adapters/test_license_verification_stream_branches.py`
+4. Refreshed same-pass evidence for Cloud+ CUR resource-discovery hardening:
+   - `app/shared/adapters/aws_cur.py::discover_resources` projection path and fail-closed error handling remain green.
+
+Validation:
+1. `uv run ruff check app/shared/adapters/license_native_dispatch.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/shared/adapters/test_license_native_dispatch.py`
+2. `uv run mypy app/shared/adapters/license_native_dispatch.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_license_native_dispatch.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/services/adapters/test_cloud_plus_adapters.py` -> `97 passed`
+4. `uv run ruff check app/shared/adapters/aws_cur.py tests/unit/shared/adapters/test_aws_cur.py`
+5. `uv run mypy app/shared/adapters/aws_cur.py --hide-error-context --no-error-summary`
+6. `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_aws_cur.py` -> `28 passed`
+7. `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py` -> `883 passed`
+
+Post-closure sanity (release-critical):
+1. Concurrency: immutable dispatch maps; no mutable compatibility seam state.
+2. Observability: structured native-dispatch and discovery error logs unchanged and still emitted.
+3. Deterministic replay: table-driven vendor routing; deterministic wrapper bindings for parse/float normalization.
+4. Snapshot stability: no outward API schema changes.
+5. Export integrity: cost/resource usage payload fields unchanged.
+6. Failure modes: unsupported vendor paths remain explicit fail-closed.
+7. Operational misconfiguration: native-auth/vendor and connector-config guardrails remain enforced.
+
+## Execution update (2026-03-01): adapter error-state consistency hardening + stale trace cleanup
+
+Implemented:
+1. Standardized adapter operation lifecycle for discovery/usage across cloud and Cloud+ adapters:
+   - `discover_resources` and `get_resource_usage` now clear stale `last_error` at operation start.
+2. Hardened fail-closed error visibility in AWS multitenant discovery:
+   - unsupported-region and plugin-not-found branches now set explicit `last_error` messages before returning `[]`.
+3. Ensured discovery exception paths set sanitized adapter errors consistently:
+   - Azure and GCP `discover_resources` now set contextual `last_error` on failures.
+4. Removed stale architecture trace reference to deleted compatibility module:
+   - updated landing capability backend trace doc to point at `license_native_dispatch.py` and `license_vendor_*.py`.
+
+Validation:
+1. `uv run ruff check app/shared/adapters/aws_cur.py app/shared/adapters/aws_multitenant.py app/shared/adapters/azure.py app/shared/adapters/gcp.py app/shared/adapters/saas.py app/shared/adapters/platform.py app/shared/adapters/hybrid.py app/shared/adapters/license.py tests/unit/shared/adapters/test_aws_cur.py tests/unit/shared/adapters/test_aws_multitenant_branch_paths.py tests/unit/shared/adapters/test_azure_adapter.py tests/unit/shared/adapters/test_gcp_adapter.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/services/adapters/test_license_activity_and_revoke.py`
+2. `uv run mypy app/shared/adapters/aws_cur.py app/shared/adapters/aws_multitenant.py app/shared/adapters/azure.py app/shared/adapters/gcp.py app/shared/adapters/saas.py app/shared/adapters/platform.py app/shared/adapters/hybrid.py app/shared/adapters/license.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/shared/adapters/test_aws_cur.py tests/unit/shared/adapters/test_aws_multitenant_branch_paths.py tests/unit/shared/adapters/test_azure_adapter.py tests/unit/shared/adapters/test_gcp_adapter.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/services/adapters/test_license_activity_and_revoke.py` -> `128 passed`
+4. `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py` -> `883 passed`
+
+Post-closure sanity (release-critical):
+1. Concurrency: stale adapter error state is reset at operation entry across adapter discovery/usage surfaces.
+2. Observability: discovery and fail-closed branches emit deterministic structured logs plus sanitized operator-facing `last_error`.
+3. Deterministic replay: operation state transitions are explicit and consistent (`clear -> execute -> set on failure`).
+4. Snapshot stability: no endpoint response-schema drift introduced.
+5. Export integrity: usage/cost/export payload structure unchanged.
+6. Failure modes: previously silent empty-return branches now include explicit error context where applicable.
+7. Operational misconfiguration: unsupported AWS region/plugin mapping now produces actionable operator errors.
+
+## Execution update (2026-03-01): stream seam cleanup + sitemap determinism hardening
+
+Implemented:
+1. Removed remaining private stream-wrapper seams from cloud and Cloud+ adapters:
+   - deleted `_stream_cost_and_usage_impl` method usage from:
+     - `app/shared/adapters/azure.py`
+     - `app/shared/adapters/gcp.py`
+     - `app/shared/adapters/license.py`
+   - streaming now flows only through public `stream_cost_and_usage(...)` contracts.
+2. Updated adapter coverage to lock public-stream behavior:
+   - `tests/unit/services/adapters/test_license_verification_stream_branches.py` migrated from private method probing to public streaming APIs.
+3. Hardened sitemap route for deterministic replay and snapshot stability:
+   - `dashboard/src/routes/sitemap.xml/+server.ts` no longer emits request-time dynamic `lastmod`.
+   - `<lastmod>` now emits only when explicitly configured via valid env (`PUBLIC_SITEMAP_LASTMOD` or `SITEMAP_LASTMOD`).
+4. Added explicit deterministic sitemap tests:
+   - `dashboard/src/routes/sitemap.xml/sitemap.server.test.ts` verifies unset/valid/invalid lastmod configuration branches.
+
+Validation:
+1. `uv run ruff check app/shared/adapters/azure.py app/shared/adapters/gcp.py app/shared/adapters/license.py tests/unit/services/adapters/test_license_verification_stream_branches.py`
+2. `uv run mypy app/shared/adapters/azure.py app/shared/adapters/gcp.py app/shared/adapters/license.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_license_verification_stream_branches.py tests/unit/shared/adapters/test_azure_adapter.py tests/unit/shared/adapters/test_gcp_adapter.py tests/unit/shared/adapters/test_aws_multitenant_branch_paths.py tests/unit/shared/adapters/test_aws_cur.py tests/unit/services/adapters/test_cloud_plus_adapters.py tests/unit/services/adapters/test_license_activity_and_revoke.py` -> `156 passed`
+4. `cd dashboard && npm run test:unit -- --run` -> includes `src/routes/sitemap.xml/sitemap.server.test.ts` pass.
+5. `DEBUG=false uv run python scripts/run_enterprise_tdd_gate.py` -> `883 passed`
+
+Post-closure sanity (release-critical):
+1. Concurrency: stream invocation paths are now consolidated on public interfaces, reducing seam-level race/error leakage risk.
+2. Observability: adapter stream fallback/error logging and `last_error` propagation remain intact.
+3. Deterministic replay: sitemap output is deterministic by default (no request-time clock writes).
+4. Snapshot stability: sitemap snapshots are stable across replays unless explicitly versioned by operator-configured `lastmod`.
+5. Export integrity: XML and adapter payload contracts remain compatible; this pass changed execution topology, not schema.
+6. Failure modes: invalid `lastmod` values are safely ignored, preventing malformed metadata export.
+7. Operational misconfiguration: lastmod is now explicit configuration rather than implicit runtime behavior.
+
+## Execution update (2026-03-01): license unsupported-native fail-closed hardening + Playwright backend env guard
+
+Implemented:
+1. Hardened `LicenseAdapter` native-auth behavior for unsupported vendors:
+   - `app/shared/adapters/license.py`
+   - `list_users_activity()` now fail-closes (sets `last_error`, returns `[]`) when `auth_method=api_key|oauth` and vendor is not supported for native auth.
+   - `stream_cost_and_usage()` now fail-closes in the same condition and no longer silently falls back to manual feed rows.
+   - extracted `_unsupported_native_vendor_message()` to keep verify/activity/stream messaging consistent.
+2. Added regression coverage for unsupported-native fail-closed behavior:
+   - `tests/unit/services/adapters/test_license_activity_and_revoke.py`
+   - `tests/unit/services/adapters/test_license_verification_stream_branches.py`
+3. Hardened dashboard e2e backend startup command:
+   - `dashboard/playwright.config.ts` backend `webServer` command now enforces `DEBUG=false` to avoid invalid boolean env parsing from inherited shell values.
+
+Validation:
+1. `uv run ruff check app/shared/adapters/license.py tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py`
+2. `uv run mypy app/shared/adapters/license.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/services/adapters/test_license_activity_and_revoke.py tests/unit/services/adapters/test_license_verification_stream_branches.py` -> `49 passed`
+4. `cd dashboard && npx playwright test --list` -> passed
+5. `cd dashboard && npm run test:e2e -- e2e/critical-paths.spec.ts --grep "robots.txt references sitemap"` -> `1 passed`
+6. `DEBUG=false uv run python scripts/run_enterprise_tdd_gate.py` -> `883 passed`
+
+Post-closure sanity (release-critical):
+1. Concurrency: unsupported-native branches now terminate deterministically without manual-feed fallback races.
+2. Observability: unsupported-native auth paths emit explicit warnings and operator-facing `last_error` context.
+3. Deterministic replay: native-auth mismatch behavior is now deterministic across verify/activity/stream flows.
+4. Snapshot stability: no payload schema changes; behavior hardening only.
+5. Export integrity: existing adapter/export contracts remain unchanged.
+6. Failure modes: unsupported native-auth vendors can no longer silently execute feed fallback in stream paths.
+7. Operational misconfiguration: Playwright backend startup now tolerates inherited non-boolean `DEBUG` env values.
+
+## Execution update (2026-03-01): pricing-tier runtime cache hardening + DB dependency no-compat cleanup
+
+Implemented:
+1. Completed `VAL-CORE-003` performance hardening with explicit runtime cache controls:
+   - `app/shared/core/pricing.py`
+   - added bounded tenant-tier runtime cache (`TTL=60s`, `max_entries=4096`) for `get_tenant_tier(...)`,
+   - added `clear_tenant_tier_cache()` for deterministic invalidation and test/runtime control.
+2. Enforced plan-sync cache coherency:
+   - `app/modules/billing/domain/billing/entitlement_policy.py`
+   - `sync_tenant_plan(...)` now invalidates tenant tier runtime cache immediately after successful plan update.
+3. Removed remaining DB dependency compatibility indirection seams:
+   - `app/shared/db/session.py`
+   - removed `_get_db_impl_ref` and `_get_system_db_impl_ref` alias proxies,
+   - `get_db()` / `get_system_db()` now delegate directly to concrete implementation generators.
+4. Updated unit tests to patch direct DB implementation seams and codified cache behavior:
+   - `tests/unit/db/test_session_branch_paths_2.py`
+   - `tests/unit/core/test_pricing_deep.py`
+   - `tests/unit/services/billing/test_entitlement_policy.py`
+
+Validation:
+1. `uv run ruff check app/shared/core/pricing.py app/modules/billing/domain/billing/entitlement_policy.py tests/unit/core/test_pricing_deep.py tests/unit/services/billing/test_entitlement_policy.py`
+2. `uv run mypy app/shared/core/pricing.py app/modules/billing/domain/billing/entitlement_policy.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/core/test_pricing_deep.py tests/unit/services/billing/test_entitlement_policy.py` -> `26 passed`
+4. `uv run ruff check app/shared/db/session.py tests/unit/db/test_session_branch_paths_2.py`
+5. `uv run mypy app/shared/db/session.py --hide-error-context --no-error-summary`
+6. `DEBUG=false uv run pytest -q --no-cov tests/unit/db/test_session_branch_paths_2.py tests/unit/db/test_session.py tests/unit/core/test_session.py tests/security/test_rls_security.py` -> `34 passed`
+7. `DEBUG=false uv run python scripts/run_enterprise_tdd_gate.py` -> `883 passed`
+
+Post-closure sanity (release-critical):
+1. Concurrency: tenant-tier runtime cache writes/evictions are lock-guarded; direct DB dependency delegation removes mutable alias seam risk.
+2. Observability: cache and DB session failure/edge logs remain explicit; no silent branch introduced.
+3. Deterministic replay: cache invalidation is explicit and deterministic (`clear_tenant_tier_cache` + post-plan-sync invalidation).
+4. Snapshot stability: no endpoint/export schema changes; runtime behavior hardening only.
+5. Export integrity: report/enforcement export contracts unchanged.
+6. Failure modes: stale-tier risk reduced through bounded TTL + explicit invalidation; DB dependency behavior remains fail-closed where required.
+7. Operational misconfiguration: removal of compatibility alias indirection reduces override drift and hidden dependency-hooking mismatches.
+
+## Execution update (2026-03-01): webhook proxy trust fail-closed hardening + DB session lifecycle cleanup
+
+Implemented:
+1. Hardened webhook source-IP extraction against proxy-hop/XFF misconfiguration drift:
+   - `app/modules/billing/api/v1/billing.py`
+   - `_extract_client_ip()` now accepts XFF only when:
+     - proxy headers are explicitly enabled,
+     - request peer is inside configured trusted proxy CIDRs,
+     - valid forwarded chain is present.
+2. Added explicit trusted-proxy CIDR policy controls in runtime configuration:
+   - `app/shared/core/config.py`
+   - introduced `TRUSTED_PROXY_CIDRS`,
+   - environment safety validation now rejects invalid CIDRs and requires explicit CIDR allowlist when `TRUST_PROXY_HEADERS=true` in staging/production.
+3. Removed redundant manual DB session close paths:
+   - `app/shared/db/session.py`
+   - `_get_db_impl()` and `_get_system_db_impl()` now rely solely on `async with` lifecycle management (no duplicate manual `session.close()` in `finally`).
+4. Updated tests for security and lifecycle behavior:
+   - `tests/unit/api/v1/test_billing.py`
+   - `tests/unit/reporting/test_billing_api.py`
+   - `tests/unit/core/test_config_branch_paths.py`
+   - `tests/unit/db/test_session.py`
+
+Validation:
+1. `uv run ruff check app/shared/core/config.py app/modules/billing/api/v1/billing.py app/shared/db/session.py tests/unit/core/test_config_branch_paths.py tests/unit/api/v1/test_billing.py tests/unit/reporting/test_billing_api.py tests/unit/db/test_session.py`
+2. `uv run mypy app/shared/core/config.py app/modules/billing/api/v1/billing.py app/shared/db/session.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/core/test_config_branch_paths.py tests/unit/api/v1/test_billing.py tests/unit/reporting/test_billing_api.py tests/unit/db/test_session.py tests/unit/db/test_session_branch_paths_2.py tests/unit/shared/db/test_session_coverage.py tests/security/test_rls_security.py` -> `105 passed`
+4. `DEBUG=false uv run python scripts/run_enterprise_tdd_gate.py` -> `883 passed`
+
+Post-closure sanity (release-critical):
+1. Concurrency: session lifecycle now has a single owner (`async with`) and avoids redundant close-path races.
+2. Observability: invalid CIDR and proxy trust branches emit explicit warning/error telemetry.
+3. Deterministic replay: client-IP attribution behavior is now policy-driven and deterministic under explicit trusted-proxy CIDRs.
+4. Snapshot stability: no response schema changes; only security/lifecycle behavior tightened.
+5. Export integrity: enforcement/reporting export contracts unchanged.
+6. Failure modes: misconfigured proxy trust now fails closed for XFF consumption.
+7. Operational misconfiguration: staging/production with proxy-header trust now requires explicit trusted CIDRs.
+
+## Execution update (2026-03-01): pricing scalar-contract cleanup + Paystack IP allowlist config hardening
+
+Implemented:
+1. Removed legacy async-scalar compatibility branch in tenant-tier lookup:
+   - `app/shared/core/pricing.py`
+   - `get_tenant_tier(...)` now enforces a single scalar contract path,
+   - invalid scalar result types fail closed to `FREE` with explicit telemetry.
+2. Made webhook source allowlist fully config-governed:
+   - `app/shared/core/config.py`
+   - introduced/validated `PAYSTACK_WEBHOOK_ALLOWED_IPS` (non-empty, valid IPs).
+3. Removed hardcoded Paystack webhook IP constants from runtime webhook handler path:
+   - `app/modules/billing/api/v1/billing_ops.py`
+   - origin authorization now uses validated runtime config.
+4. Updated and tightened test coverage:
+   - `tests/unit/core/test_pricing_deep.py`
+   - `tests/unit/core/test_config_branch_paths.py`
+   - `tests/unit/reporting/test_billing_api.py`
+   - `tests/unit/api/v1/test_billing.py`
+
+Validation:
+1. `uv run ruff check app/shared/core/pricing.py app/shared/core/config.py app/modules/billing/api/v1/billing_ops.py tests/unit/core/test_pricing_deep.py tests/unit/core/test_config_branch_paths.py tests/unit/reporting/test_billing_api.py`
+2. `uv run mypy app/shared/core/pricing.py app/shared/core/config.py app/modules/billing/api/v1/billing_ops.py --hide-error-context --no-error-summary`
+3. `DEBUG=false uv run pytest -q --no-cov tests/unit/core/test_pricing_deep.py tests/unit/core/test_config_branch_paths.py tests/unit/reporting/test_billing_api.py tests/unit/api/v1/test_billing.py` -> `91 passed`
+4. `DEBUG=false uv run python scripts/run_enterprise_tdd_gate.py` -> passed (exit `0`)
+
+Post-closure sanity (release-critical):
+1. Concurrency: no new shared mutable state or race-prone compatibility seams introduced.
+2. Observability: invalid scalar and webhook allowlist misconfiguration paths now produce explicit operator-facing telemetry.
+3. Deterministic replay: pricing tier resolution now follows a single deterministic scalar contract.
+4. Snapshot stability: no schema or payload format changes.
+5. Export integrity: enforcement/reporting export contracts remain unchanged.
+6. Failure modes: malformed paystack allowlists and invalid tier lookup result shapes fail closed.
+7. Operational misconfiguration: webhook origin policy is now centralized in validated settings.
+
+## Execution update (2026-03-01): canonical closure sync for VAL-ADAPT-002/002+ and VAL-FE-*
+
+Implemented:
+1. Added canonical status disposition for adapter decomposition track:
+   - `VAL-ADAPT-002`: `CLOSED`.
+   - `VAL-ADAPT-002+`: `CLOSED`.
+2. Explicitly superseded earlier staged notes that marked `VAL-ADAPT-002+` as open maintainability backlog during intermediate decomposition batches.
+3. Added validated frontend issue dispositions from `VALDRX_CODEBASE_AUDIT_2026-02-28.md.resolved`:
+   - `VAL-FE-001` (mobile horizontal overflow): `CLOSED`.
+   - `VAL-FE-002` (`sr-only` clipping/layout break): `CLOSED`.
+   - `VAL-FE-003` (off-screen mobile header action): `CLOSED`.
+   - `VAL-FE-004` (hero toggle clipping): `CLOSED`.
+4. Bound frontend closure to machine-checkable regression tests:
+   - `dashboard/e2e/landing-layout-audit.spec.ts`.
+
+Validation:
+1. `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts`
+2. Result: `2 passed` (`horizontal overflow + sr-only clipping` and `mobile header action on-screen` checks green).
+
+Post-closure sanity (release-critical):
+1. Concurrency: no new mutable runtime state introduced by this disposition sync.
+2. Observability: `VAL-FE-*` layout regressions remain machine-detected by dedicated Playwright checks.
+3. Deterministic replay: viewport-specific landing-layout assertions are deterministic.
+4. Snapshot stability: no backend/API contract changes in this batch.
+5. Export integrity: enforcement/reporting/export payload schemas remain unchanged.
+6. Failure modes: overflow/sr-only/off-screen/toggle clipping regressions fail fast in CI.
+7. Operational misconfiguration: no new configuration knobs introduced in this pass.
