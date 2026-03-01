@@ -13,7 +13,7 @@
 
 ```bash
 # Clone and setup
-git clone https://github.com/Valdrix-AI/valdrix.git
+git clone https://github.com/Valdrics/valdrics.git
 cd valdrix
 
 # Install dependencies (using uv)
