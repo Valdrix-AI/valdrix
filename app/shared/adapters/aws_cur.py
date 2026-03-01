@@ -19,6 +19,7 @@ from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.aws_pagination import iter_aws_paginator_pages
 from app.shared.adapters.aws_utils import resolve_aws_region_hint
 from app.shared.adapters.resource_usage_projection import (
+    discover_resources_from_cost_rows,
     project_cost_rows_to_resource_usage,
     resource_usage_lookback_window,
 )
@@ -27,6 +28,25 @@ from app.shared.core.credentials import AWSCredentials
 from app.schemas.costs import CloudUsageSummary, CostRecord
 
 logger = structlog.get_logger()
+
+_DISCOVERY_RESOURCE_TYPE_ALIASES = {
+    "all",
+    "aws",
+    "compute",
+    "container",
+    "containers",
+    "database",
+    "ec2",
+    "eks",
+    "elasticache",
+    "lambda",
+    "network",
+    "resource",
+    "resources",
+    "s3",
+    "security",
+    "storage",
+}
 
 
 class AWSCURAdapter(BaseAdapter):
@@ -225,10 +245,37 @@ class AWSCURAdapter(BaseAdapter):
         self, resource_type: str, region: str | None = None
     ) -> List[Dict[str, Any]]:
         """
-        CUR adapters do not typically discover live resources; they process
-        historical billing records. Use AWSAdapter for live discovery.
+        Project CUR cost rows into deterministic resource inventory snapshots.
         """
-        return []
+        self._clear_last_error()
+        start_date, end_date = resource_usage_lookback_window()
+        try:
+            raw_rows = await self.get_cost_and_usage(
+                start_date=start_date,
+                end_date=end_date,
+                granularity="DAILY",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._set_last_error_from_exception(
+                exc, prefix="AWS CUR resource discovery failed"
+            )
+            logger.warning(
+                "aws_cur_discover_resources_failed",
+                resource_type=resource_type,
+                region=region,
+                error=str(exc),
+            )
+            return []
+
+        normalized_rows = self._normalize_rows_for_projection(raw_rows)
+        return discover_resources_from_cost_rows(
+            cost_rows=normalized_rows,
+            resource_type=resource_type,
+            supported_resource_types=_DISCOVERY_RESOURCE_TYPE_ALIASES,
+            default_provider="aws",
+            default_resource_type="aws_resource",
+            region=region,
+        )
 
     async def stream_cost_and_usage(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
@@ -640,6 +687,7 @@ class AWSCURAdapter(BaseAdapter):
         CUR may not always include explicit resource identifiers in every record; in such
         cases this returns service-level usage rows with `resource_id=None`.
         """
+        self._clear_last_error()
         target_service = service_name.strip()
         if not target_service:
             return []
@@ -663,6 +711,19 @@ class AWSCURAdapter(BaseAdapter):
             )
             return []
 
+        normalized_rows = self._normalize_rows_for_projection(raw_rows)
+
+        return project_cost_rows_to_resource_usage(
+            cost_rows=normalized_rows,
+            service_name=target_service,
+            resource_id=resource_id,
+            default_provider="aws",
+            default_source_adapter="cur_data_export",
+        )
+
+    def _normalize_rows_for_projection(
+        self, raw_rows: List[Dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         normalized_rows: list[dict[str, Any]] = []
         for row in raw_rows:
             if not isinstance(row, dict):
@@ -688,11 +749,4 @@ class AWSCURAdapter(BaseAdapter):
                     "tags": row.get("tags") if isinstance(row.get("tags"), dict) else {},
                 }
             )
-
-        return project_cost_rows_to_resource_usage(
-            cost_rows=normalized_rows,
-            service_name=target_service,
-            resource_id=resource_id,
-            default_provider="aws",
-            default_source_adapter="cur_data_export",
-        )
+        return normalized_rows

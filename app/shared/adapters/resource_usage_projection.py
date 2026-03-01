@@ -19,6 +19,99 @@ _TAG_RESOURCE_KEYS = (
 )
 
 
+def discover_resources_from_cost_rows(
+    *,
+    cost_rows: list[dict[str, Any]],
+    resource_type: str,
+    supported_resource_types: set[str],
+    default_provider: str,
+    default_resource_type: str,
+    region: str | None = None,
+) -> list[dict[str, Any]]:
+    requested_type = _normalize_optional_str(resource_type)
+    if requested_type is None:
+        return []
+    requested_type_lc = requested_type.lower()
+    if requested_type_lc not in {item.lower() for item in supported_resource_types}:
+        return []
+
+    requested_region = _normalize_optional_str(region)
+    requested_region_lc = requested_region.lower() if requested_region else None
+
+    aggregated: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in cost_rows:
+        if not isinstance(row, dict):
+            continue
+
+        resolved_region = _normalize_optional_str(row.get("region")) or "global"
+        if (
+            requested_region_lc is not None
+            and resolved_region.lower() != requested_region_lc
+        ):
+            continue
+
+        resolved_service = _resolve_service(row) or default_resource_type
+        resolved_resource_id = _resolve_resource_id(row)
+        if resolved_resource_id is None:
+            resolved_resource_id = f"{resolved_service}:{resolved_region}".lower()
+
+        key = (resolved_resource_id, resolved_region)
+        usage_type = _normalize_optional_str(row.get("usage_type")) or "resource_usage"
+        source_adapter = (
+            _normalize_optional_str(row.get("source_adapter"))
+            or f"{default_provider}_cost_feed"
+        )
+        tags = row.get("tags") if isinstance(row.get("tags"), dict) else {}
+        cost_usd = _coerce_optional_float(row.get("cost_usd"))
+        if cost_usd is None:
+            cost_usd = _coerce_optional_float(row.get("amount_usd"))
+        if cost_usd is None:
+            cost_usd = _coerce_optional_float(row.get("amount_raw"))
+        if cost_usd is None:
+            cost_usd = 0.0
+        observed_at = _coerce_optional_datetime(row.get("timestamp"))
+
+        existing = aggregated.get(key)
+        if existing is None:
+            aggregated[key] = {
+                "id": resolved_resource_id,
+                "name": resolved_resource_id,
+                "type": default_resource_type,
+                "provider": _normalize_optional_str(row.get("provider"))
+                or default_provider,
+                "region": resolved_region,
+                "status": "active",
+                "metadata": {
+                    "resource_type": default_resource_type,
+                    "service": resolved_service,
+                    "usage_type": usage_type,
+                    "source_adapter": source_adapter,
+                    "record_count": 1,
+                    "total_cost_usd": round(cost_usd, 6),
+                    "last_seen_at": (
+                        observed_at.isoformat() if observed_at is not None else None
+                    ),
+                    "tags": tags,
+                },
+            }
+            continue
+
+        metadata = existing["metadata"]
+        metadata["record_count"] = int(metadata.get("record_count", 0)) + 1
+        metadata["total_cost_usd"] = round(
+            float(metadata.get("total_cost_usd", 0.0)) + cost_usd,
+            6,
+        )
+        last_seen_raw = metadata.get("last_seen_at")
+        last_seen = _coerce_optional_datetime(last_seen_raw)
+        if observed_at is not None and (last_seen is None or observed_at > last_seen):
+            metadata["last_seen_at"] = observed_at.isoformat()
+
+    resources = list(aggregated.values())
+    resources.sort(key=lambda row: (str(row.get("id") or ""), str(row.get("region") or "")))
+    return resources
+
+
 def resource_usage_lookback_window(
     *, lookback_days: int = _DEFAULT_LOOKBACK_DAYS, now: datetime | None = None
 ) -> tuple[datetime, datetime]:
@@ -153,3 +246,19 @@ def _normalize_optional_str(value: Any) -> str | None:
     text = str(value).strip()
     return text if text else None
 
+
+def _coerce_optional_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except (TypeError, ValueError):
+            return None
+    return None

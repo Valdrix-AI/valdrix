@@ -270,18 +270,16 @@ class GCPAdapter(BaseAdapter):
     def stream_cost_and_usage(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> AsyncGenerator[dict[str, Any], None]:
-        return self._stream_cost_and_usage_impl(start_date, end_date, granularity)
-
-    async def _stream_cost_and_usage_impl(
-        self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
-    ) -> AsyncGenerator[dict[str, Any], None]:
         """
         Stream GCP costs from BigQuery.
         Yields records one-by-one from the BigQuery result set.
         """
-        records = await self.get_cost_and_usage(start_date, end_date, granularity)
-        for record in records:
-            yield record
+        async def _iterate() -> AsyncGenerator[dict[str, Any], None]:
+            records = await self.get_cost_and_usage(start_date, end_date, granularity)
+            for row in records:
+                yield row
+
+        return _iterate()
 
     async def discover_resources(
         self, resource_type: str, region: str | None = None
@@ -289,6 +287,7 @@ class GCPAdapter(BaseAdapter):
         """
         Discover GCP resources with OTel tracing.
         """
+        self._clear_last_error()
         from app.shared.core.tracing import get_tracer
 
         tracer = get_tracer(__name__)
@@ -345,12 +344,16 @@ class GCPAdapter(BaseAdapter):
                     )
                 return resources
             except Exception as e:
+                self._set_last_error_from_exception(
+                    e, prefix="GCP resource discovery failed"
+                )
                 logger.error("gcp_discovery_failed", error=str(e))
                 return []
 
     async def get_resource_usage(
         self, service_name: str, resource_id: str | None = None
     ) -> list[dict[str, Any]]:
+        self._clear_last_error()
         target_service = service_name.strip()
         if not target_service:
             return []

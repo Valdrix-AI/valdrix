@@ -127,6 +127,20 @@ def test_saas_resolve_api_key_missing_and_blank() -> None:
         blank._resolve_api_key()
 
 
+def test_saas_native_handler_resolution_maps_supported_vendors() -> None:
+    adapter = SaaSAdapter(
+        _saas_credentials(platform="stripe", auth_method="api_key", api_key="sk_live")
+    )
+    assert adapter._resolve_native_verify_handler("stripe") is not None
+    assert adapter._resolve_native_stream_handler("stripe") is not None
+    assert adapter._resolve_native_verify_handler("salesforce") is not None
+    assert adapter._resolve_native_stream_handler("salesforce") is not None
+    assert adapter._resolve_native_verify_handler("unknown") is None
+    assert adapter._resolve_native_stream_handler("unknown") is None
+    assert adapter._resolve_native_verify_handler(None) is None
+    assert adapter._resolve_native_stream_handler(None) is None
+
+
 @pytest.mark.asyncio
 async def test_saas_verify_connection_manual_valid_and_generic_error_message_branch() -> None:
     valid = SaaSAdapter(

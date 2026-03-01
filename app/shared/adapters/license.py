@@ -16,12 +16,12 @@ from app.shared.adapters.license_feed_ops import (
     normalize_text as feed_normalize_text,
     validate_manual_feed,
 )
-from app.shared.adapters.license_native_compat import LicenseNativeCompatMixin
 from app.shared.adapters.license_native_dispatch import (
     list_native_activity,
     resolve_native_stream_method,
     revoke_native_license,
     supported_native_vendors,
+    verify_native_vendor,
 )
 from app.shared.adapters.license_resource_ops import (
     build_discovered_license_resources,
@@ -50,7 +50,7 @@ async def _license_get_request(
         return await client.get(url, headers=headers, params=params)
 
 
-class LicenseAdapter(LicenseNativeCompatMixin, BaseAdapter):
+class LicenseAdapter(BaseAdapter):
     """
     Cloud+ adapter for license/ITAM spend.
 
@@ -80,6 +80,14 @@ class LicenseAdapter(LicenseNativeCompatMixin, BaseAdapter):
     def _native_vendor(self) -> str | None:
         return resolve_native_vendor(auth_method=self._auth_method, vendor=self._vendor)
 
+    def _unsupported_native_vendor_message(self) -> str:
+        supported_vendors = ", ".join(supported_native_vendors())
+        return (
+            f"Native license auth is not supported for vendor '{self._vendor}'. "
+            f"Supported vendor aliases: {supported_vendors} (and common aliases). "
+            "Use auth_method manual/csv for custom vendors."
+        )
+
     def _resolve_api_key(self) -> str:
         token = self.credentials.api_key
         if not token:
@@ -107,17 +115,12 @@ class LicenseAdapter(LicenseNativeCompatMixin, BaseAdapter):
         self.last_error = None
         native_vendor = self._native_vendor
         if self._auth_method in {"api_key", "oauth"} and native_vendor is None:
-            supported_vendors = ", ".join(supported_native_vendors())
-            self.last_error = (
-                f"Native license auth is not supported for vendor '{self._vendor}'. "
-                f"Supported vendor aliases: {supported_vendors} (and common aliases). "
-                "Use auth_method manual/csv for custom vendors."
-            )
+            self.last_error = self._unsupported_native_vendor_message()
             return False
 
         if native_vendor is not None:
             try:
-                await self._verify_native_vendor(native_vendor)
+                await verify_native_vendor(self, native_vendor)
                 return True
             except ExternalAPIError as exc:
                 self.last_error = str(exc)
@@ -157,43 +160,46 @@ class LicenseAdapter(LicenseNativeCompatMixin, BaseAdapter):
         end_date: datetime,
         granularity: str = "DAILY",
     ) -> AsyncGenerator[dict[str, Any], None]:
-        return self._stream_cost_and_usage_impl(start_date, end_date, granularity)
-
-    async def _stream_cost_and_usage_impl(
-        self,
-        start_date: datetime,
-        end_date: datetime,
-        granularity: str = "DAILY",
-    ) -> AsyncGenerator[dict[str, Any], None]:
-        native_vendor = self._native_vendor
-        stream_method = (
-            resolve_native_stream_method(self, native_vendor)
-            if native_vendor is not None
-            else None
-        )
-        if stream_method is not None:
-            try:
-                async for row in stream_method(start_date, end_date):
-                    yield row
-                return
-            except ExternalAPIError as exc:
-                self.last_error = str(exc)
+        async def _iterate() -> AsyncGenerator[dict[str, Any], None]:
+            native_vendor = self._native_vendor
+            if self._auth_method in {"api_key", "oauth"} and native_vendor is None:
+                self.last_error = self._unsupported_native_vendor_message()
                 logger.warning(
-                    "license_native_stream_failed_fallback_to_feed",
-                    vendor=native_vendor,
-                    error=str(exc),
+                    "license_native_stream_unsupported_vendor",
+                    vendor=self._vendor,
+                    auth_method=self._auth_method,
                 )
+                return
+            stream_method = (
+                resolve_native_stream_method(native_vendor)
+                if native_vendor is not None
+                else None
+            )
+            if stream_method is not None:
+                try:
+                    async for row in stream_method(self, start_date, end_date):
+                        yield row
+                    return
+                except ExternalAPIError as exc:
+                    self.last_error = str(exc)
+                    logger.warning(
+                        "license_native_stream_failed_fallback_to_feed",
+                        vendor=native_vendor,
+                        error=str(exc),
+                    )
 
-        feed = self.credentials.license_feed
-        for row in iter_manual_cost_rows(
-            feed=feed,
-            start_date=start_date,
-            end_date=end_date,
-            parse_timestamp_fn=parse_timestamp,
-            as_float_fn=as_float,
-            is_number_fn=is_number,
-        ):
-            yield row
+            feed = self.credentials.license_feed
+            for row in iter_manual_cost_rows(
+                feed=feed,
+                start_date=start_date,
+                end_date=end_date,
+                parse_timestamp_fn=parse_timestamp,
+                as_float_fn=as_float,
+                is_number_fn=is_number,
+            ):
+                yield row
+
+        return _iterate()
 
     def _salesforce_instance_url(self) -> str:
         raw = self._connector_config.get("salesforce_instance_url") or self._connector_config.get("instance_url")
@@ -267,6 +273,14 @@ class LicenseAdapter(LicenseNativeCompatMixin, BaseAdapter):
         Supported for: google_workspace, microsoft_365, github, slack, zoom, salesforce
         """
         native_vendor = self._native_vendor
+        if self._auth_method in {"api_key", "oauth"} and native_vendor is None:
+            self.last_error = self._unsupported_native_vendor_message()
+            logger.warning(
+                "license_native_activity_unsupported_vendor",
+                vendor=self._vendor,
+                auth_method=self._auth_method,
+            )
+            return []
         if native_vendor is None:
             return self._list_manual_feed_activity()
         return await list_native_activity(self, native_vendor)
@@ -287,6 +301,7 @@ class LicenseAdapter(LicenseNativeCompatMixin, BaseAdapter):
     async def discover_resources(
         self, resource_type: str, region: str | None = None
     ) -> list[dict[str, Any]]:
+        self._clear_last_error()
         if not supports_license_discovery_resource_type(resource_type):
             return []
         try:
@@ -310,6 +325,7 @@ class LicenseAdapter(LicenseNativeCompatMixin, BaseAdapter):
     async def get_resource_usage(
         self, service_name: str, resource_id: str | None = None
     ) -> list[dict[str, Any]]:
+        self._clear_last_error()
         if not supports_license_usage_service(service_name):
             return []
         try:

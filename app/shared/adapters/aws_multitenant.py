@@ -236,10 +236,14 @@ class MultiTenantAWSAdapter(BaseAdapter):
         """
         Discover zombie resources with OTel tracing.
         """
+        self._clear_last_error()
         # BE-ADAPT-1: Regional white-listing
         settings = get_settings()
         target_region = region or self.credentials.region
         if target_region not in settings.AWS_SUPPORTED_REGIONS:
+            self._set_last_error(
+                f"AWS region '{target_region}' is not in the allowed region list"
+            )
             logger.error(
                 "unsupported_aws_region_skip_scan",
                 region=target_region,
@@ -285,6 +289,9 @@ class MultiTenantAWSAdapter(BaseAdapter):
                         break
 
             if not target_plugin:
+                self._set_last_error(
+                    f"No AWS optimization plugin mapped for resource type '{resource_type}'"
+                )
                 logger.warning(
                     "plugin_not_found_for_resource", resource_type=resource_type
                 )
@@ -298,6 +305,9 @@ class MultiTenantAWSAdapter(BaseAdapter):
                     self.session, target_region, creds, config=BOTO_CONFIG
                 )
             except Exception as e:
+                self._set_last_error_from_exception(
+                    e, prefix="AWS resource discovery failed"
+                )
                 logger.error(
                     "resource_discovery_failed",
                     resource_type=resource_type,
@@ -309,6 +319,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
     async def get_resource_usage(
         self, service_name: str, resource_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
+        self._clear_last_error()
         target_service = service_name.strip()
         if not target_service:
             return []

@@ -133,16 +133,20 @@ async def test_discover_resources_success():
 @pytest.mark.asyncio
 async def test_discover_resources_failure_returns_empty():
     adapter = GCPAdapter(_connection())
+    adapter.last_error = "stale"
     asset_client = MagicMock()
     asset_client.list_assets.side_effect = RuntimeError("boom")
     with patch.object(adapter, "_get_asset_client", return_value=asset_client):
         results = await adapter.discover_resources(resource_type="compute")
     assert results == []
+    assert adapter.last_error is not None
+    assert "GCP resource discovery failed" in adapter.last_error
 
 
 @pytest.mark.asyncio
 async def test_get_resource_usage_projects_and_filters_rows():
     adapter = GCPAdapter(_connection())
+    adapter.last_error = "stale"
     rows = [
         {
             "timestamp": datetime(2026, 1, 10, tzinfo=timezone.utc),
@@ -179,6 +183,7 @@ async def test_get_resource_usage_projects_and_filters_rows():
     assert usage_rows[0]["usage_unit"] == "unit"
     assert mock_fetch.await_count == 1
     assert mock_fetch.await_args.kwargs["granularity"] == "DAILY"
+    assert adapter.last_error is None
 
 
 @pytest.mark.asyncio
