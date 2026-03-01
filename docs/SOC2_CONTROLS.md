@@ -130,7 +130,7 @@ Use this as the foundation for SOC 2 Type 1 audit preparation.
 
 | Evidence Type | Location |
 |---------------|----------|
-| Code repository | github.com/Valdrix-AI/valdrix |
+| Code repository | github.com/Valdrics/valdrics |
 | CI/CD history | GitHub Actions logs |
 | Security scans | CI artifacts |
 | Access logs | Supabase dashboard |
