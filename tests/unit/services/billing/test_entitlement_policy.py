@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -26,15 +26,20 @@ def test_normalize_pricing_tier_value_rejects_invalid() -> None:
 async def test_sync_tenant_plan_executes_update() -> None:
     db = MagicMock()
     db.execute = AsyncMock(return_value=MagicMock(rowcount=1))
+    tenant_id = uuid4()
 
-    await sync_tenant_plan(
-        db=db,
-        tenant_id=uuid4(),
-        tier=PricingTier.ENTERPRISE,
-        source="test",
-    )
+    with patch(
+        "app.modules.billing.domain.billing.entitlement_policy.clear_tenant_tier_cache"
+    ) as cache_clear:
+        await sync_tenant_plan(
+            db=db,
+            tenant_id=tenant_id,
+            tier=PricingTier.ENTERPRISE,
+            source="test",
+        )
 
     db.execute.assert_awaited_once()
+    cache_clear.assert_called_once_with(tenant_id)
 
 
 @pytest.mark.asyncio

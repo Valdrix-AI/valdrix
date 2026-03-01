@@ -376,7 +376,7 @@ async def test_get_system_db_impl_and_wrapper() -> None:
     async def _fake_system_gen():
         yield "sys-session"
 
-    with patch.object(session_mod, "_get_system_db_impl_ref", _fake_system_gen):
+    with patch.object(session_mod, "_get_system_db_impl", _fake_system_gen):
         values = []
         async for item in session_mod.get_system_db():
             values.append(item)

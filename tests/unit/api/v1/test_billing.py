@@ -266,7 +266,11 @@ def test_extract_client_ip_ignores_xff_when_proxy_headers_untrusted() -> None:
 
     with patch(
         "app.modules.billing.api.v1.billing.settings",
-        SimpleNamespace(TRUST_PROXY_HEADERS=False, TRUSTED_PROXY_HOPS=1),
+        SimpleNamespace(
+            TRUST_PROXY_HEADERS=False,
+            TRUSTED_PROXY_HOPS=1,
+            TRUSTED_PROXY_CIDRS=[],
+        ),
     ):
         assert _extract_client_ip(request) == "203.0.113.10"
 
@@ -278,6 +282,26 @@ def test_extract_client_ip_uses_xff_when_proxy_headers_trusted() -> None:
 
     with patch(
         "app.modules.billing.api.v1.billing.settings",
-        SimpleNamespace(TRUST_PROXY_HEADERS=True, TRUSTED_PROXY_HOPS=1),
+        SimpleNamespace(
+            TRUST_PROXY_HEADERS=True,
+            TRUSTED_PROXY_HOPS=1,
+            TRUSTED_PROXY_CIDRS=["203.0.113.10/32"],
+        ),
     ):
         assert _extract_client_ip(request) == "198.51.100.21"
+
+
+def test_extract_client_ip_ignores_xff_when_remote_not_in_trusted_proxy_cidrs() -> None:
+    request = MagicMock()
+    request.client.host = "203.0.113.10"
+    request.headers.get.return_value = "198.51.100.20, 198.51.100.21"
+
+    with patch(
+        "app.modules.billing.api.v1.billing.settings",
+        SimpleNamespace(
+            TRUST_PROXY_HEADERS=True,
+            TRUSTED_PROXY_HOPS=1,
+            TRUSTED_PROXY_CIDRS=["198.51.100.0/24"],
+        ),
+    ):
+        assert _extract_client_ip(request) == "203.0.113.10"

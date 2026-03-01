@@ -396,9 +396,6 @@ async def _get_db_impl(
 ) -> AsyncGenerator[AsyncSession, None]:
     """
     Internal implementation for FastAPI DB dependency.
-
-    Wrapped by `get_db` to keep dependency callable identity stable across
-    module reloads (critical for dependency overrides).
     """
     async with async_session_maker() as session:
         rls_context_set = False
@@ -449,20 +446,14 @@ async def _get_db_impl(
         conn.info["rls_context_set"] = rls_context_set
         conn.info["rls_system_context"] = False
 
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
 
 
-_get_db_impl_ref = _get_db_impl
-if "get_db" not in globals():
-
-    async def get_db(
-        request: Request = cast(Request, None),
-    ) -> AsyncGenerator[AsyncSession, None]:
-        async for session in _get_db_impl_ref(request):
-            yield session
+async def get_db(
+    request: Request = cast(Request, None),
+) -> AsyncGenerator[AsyncSession, None]:
+    async for session in _get_db_impl(request):
+        yield session
 
 
 async def mark_session_system_context(session: AsyncSession) -> None:
@@ -501,18 +492,12 @@ async def _get_system_db_impl() -> AsyncGenerator[AsyncSession, None]:
     """
     async with async_session_maker() as session:
         await mark_session_system_context(session)
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
 
 
-_get_system_db_impl_ref = _get_system_db_impl
-if "get_system_db" not in globals():
-
-    async def get_system_db() -> AsyncGenerator[AsyncSession, None]:
-        async for session in _get_system_db_impl_ref():
-            yield session
+async def get_system_db() -> AsyncGenerator[AsyncSession, None]:
+    async for session in _get_system_db_impl():
+        yield session
 
 
 async def clear_session_tenant_context(session: AsyncSession) -> None:

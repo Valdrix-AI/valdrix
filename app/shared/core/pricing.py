@@ -1,8 +1,9 @@
 import uuid
-from inspect import isawaitable
+import time
 from enum import Enum
 from functools import wraps
 from contextlib import suppress
+from threading import Lock
 from typing import TYPE_CHECKING, Any, Callable, Union, cast
 
 if TYPE_CHECKING:
@@ -31,6 +32,7 @@ __all__ = [
     "requires_tier",
     "requires_feature",
     "get_tenant_tier",
+    "clear_tenant_tier_cache",
     "TierGuard",
 ]
 
@@ -214,6 +216,55 @@ FEATURE_MATURITY: dict[FeatureFlag, FeatureMaturity] = {
     )
     for flag in FeatureFlag
 }
+
+_TENANT_TIER_CACHE_TTL_SECONDS = 60.0
+_TENANT_TIER_CACHE_MAX_ENTRIES = 4096
+_tenant_tier_runtime_cache: dict[str, tuple[float, "PricingTier"]] = {}
+_tenant_tier_runtime_cache_lock = Lock()
+
+
+def _runtime_cache_get(tenant_key: str, *, now: float | None = None) -> "PricingTier | None":
+    with _tenant_tier_runtime_cache_lock:
+        cached_entry = _tenant_tier_runtime_cache.get(tenant_key)
+        if cached_entry is None:
+            return None
+        cached_at, cached_tier = cached_entry
+        current = time.monotonic() if now is None else now
+        if current - cached_at > _TENANT_TIER_CACHE_TTL_SECONDS:
+            _tenant_tier_runtime_cache.pop(tenant_key, None)
+            return None
+        return cached_tier
+
+
+def _runtime_cache_set(tenant_key: str, tier: "PricingTier", *, now: float | None = None) -> None:
+    current = time.monotonic() if now is None else now
+    with _tenant_tier_runtime_cache_lock:
+        _tenant_tier_runtime_cache[tenant_key] = (current, tier)
+
+        if len(_tenant_tier_runtime_cache) <= _TENANT_TIER_CACHE_MAX_ENTRIES:
+            return
+
+        expiry_cutoff = current - _TENANT_TIER_CACHE_TTL_SECONDS
+        for key, (cached_at, _) in list(_tenant_tier_runtime_cache.items()):
+            if cached_at <= expiry_cutoff:
+                _tenant_tier_runtime_cache.pop(key, None)
+
+        while len(_tenant_tier_runtime_cache) > _TENANT_TIER_CACHE_MAX_ENTRIES:
+            oldest_key = next(iter(_tenant_tier_runtime_cache))
+            _tenant_tier_runtime_cache.pop(oldest_key, None)
+
+
+def clear_tenant_tier_cache(tenant_id: Union[str, uuid.UUID, None] = None) -> None:
+    """
+    Clear process-level tenant tier cache.
+
+    `tenant_id=None` clears all entries. Supplying a tenant id removes one entry.
+    """
+    with _tenant_tier_runtime_cache_lock:
+        if tenant_id is None:
+            _tenant_tier_runtime_cache.clear()
+            return
+        _tenant_tier_runtime_cache.pop(str(tenant_id), None)
 
 
 # Tier configuration - USD pricing
@@ -667,26 +718,39 @@ async def get_tenant_tier(
     if cache is not None and tenant_key in cache:
         return cache[tenant_key]
 
+    runtime_cached_tier = _runtime_cache_get(tenant_key)
+    if runtime_cached_tier is not None:
+        if cache is not None:
+            cache[tenant_key] = runtime_cached_tier
+        return runtime_cached_tier
+
     try:
         result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
         scalar_one_or_none = getattr(result, "scalar_one_or_none", None)
         tenant: Any = None
         if callable(scalar_one_or_none):
-            tenant_candidate = scalar_one_or_none()
-            tenant = (
-                await tenant_candidate
-                if isawaitable(tenant_candidate)
-                else tenant_candidate
+            tenant = scalar_one_or_none()
+        if tenant is not None and not hasattr(tenant, "plan"):
+            logger.error(
+                "tenant_lookup_invalid_result_type",
+                tenant_id=str(tenant_id),
+                result_type=type(tenant).__name__,
             )
+            if cache is not None:
+                cache[tenant_key] = PricingTier.FREE
+            _runtime_cache_set(tenant_key, PricingTier.FREE)
+            return PricingTier.FREE
 
         if not tenant:
             if cache is not None:
                 cache[tenant_key] = PricingTier.FREE
+            _runtime_cache_set(tenant_key, PricingTier.FREE)
             return PricingTier.FREE
         try:
             resolved = PricingTier(tenant.plan)
             if cache is not None:
                 cache[tenant_key] = resolved
+            _runtime_cache_set(tenant_key, resolved)
             return resolved
         except ValueError:
             logger.error(
@@ -694,6 +758,7 @@ async def get_tenant_tier(
             )
             if cache is not None:
                 cache[tenant_key] = PricingTier.FREE
+            _runtime_cache_set(tenant_key, PricingTier.FREE)
             return PricingTier.FREE
     except Exception as e:
         logger.error("get_tenant_tier_failed", tenant_id=str(tenant_id), error=str(e))

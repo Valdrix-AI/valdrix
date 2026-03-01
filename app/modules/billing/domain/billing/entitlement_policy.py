@@ -9,7 +9,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant import Tenant
-from app.shared.core.pricing import PricingTier
+from app.shared.core.pricing import PricingTier, clear_tenant_tier_cache
 
 logger = structlog.get_logger()
 
@@ -45,6 +45,8 @@ async def sync_tenant_plan(
             "Tenant plan sync failed due to missing or duplicated tenant row "
             f"(tenant_id={tenant_id}, updated_rows={rowcount})"
         )
+
+    clear_tenant_tier_cache(tenant_id)
 
     logger.info(
         "billing_entitlement_synced",
