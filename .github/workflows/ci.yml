@@ -236,7 +236,7 @@ jobs:
         env:
           CODECARBON_LOG_LEVEL: "info"
         run: |
-          python -c "
+          uv run python -c "
           from codecarbon import EmissionsTracker
           tracker = EmissionsTracker(project_name='Valdrix-CI', output_dir='.')
           tracker.start()
@@ -380,6 +380,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      PUBLIC_API_URL: "https://api.example.com/api/v1"
+      PUBLIC_SUPABASE_URL: "https://example.supabase.co"
+      PUBLIC_SUPABASE_ANON_KEY: "ci-public-anon-key"
     strategy:
       fail-fast: false
       matrix:
