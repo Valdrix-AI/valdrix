@@ -78,9 +78,9 @@
  M app/shared/llm/analyzer.py
  M app/shared/llm/prompts.yaml
  M app/shared/llm/providers/base.py
- D assets/valdrix_icon.png
- D cloudformation/valdrix-cur-setup.yaml
- D cloudformation/valdrix-role.yaml
+ D assets/valdrics_icon.png
+ D cloudformation/valdrics-cur-setup.yaml
+ D cloudformation/valdrics-role.yaml
  M codealike.json
  M coverage-enterprise-gate.xml
  M dashboard/LandingHero_legacy.svelte
@@ -114,7 +114,7 @@
  M dashboard/src/routes/pricing/+page.svelte
  M dashboard/src/routes/settings/+page.svelte
  M dashboard/src/routes/settings/settings-page.svelte.test.ts
- D dashboard/static/valdrix_icon.png
+ D dashboard/static/valdrics_icon.png
  M dashboard/svelte.config.js
  M dashboard/tests/e2e/scenarios.test.ts
  M data/emissions.csv
@@ -140,8 +140,8 @@
  M docs/ops/evidence/README.md
  M docs/ops/evidence/enforcement_failure_injection_2026-02-27.json
  M docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json
- D docs/ops/evidence/valdrix_disposition_register_2026-02-28.json
- D docs/ops/evidence/valdrix_disposition_register_TEMPLATE.json
+ D docs/ops/evidence/valdrics_disposition_register_2026-02-28.json
+ D docs/ops/evidence/valdrics_disposition_register_TEMPLATE.json
  M docs/ops/incident_response_runbook.md
  M docs/ops/pricing_competitiveness_fact_check_2026-02-17.md
  M docs/runbooks/disaster_recovery.md
@@ -153,19 +153,19 @@
  M grafana/dashboards/api-overview.json
  M grafana/dashboards/dashboards.yml
  M grafana/dashboards/finops-overview.json
- D helm/valdrix/Chart.yaml
- D helm/valdrix/templates/_helpers.tpl
- D helm/valdrix/templates/configmap-grafana.yaml
- D helm/valdrix/templates/deployment.yaml
- D helm/valdrix/templates/enforcement-validating-webhook.yaml
- D helm/valdrix/templates/enforcement-webhook-pdb.yaml
- D helm/valdrix/templates/hpa.yaml
- D helm/valdrix/templates/ingress.yaml
- D helm/valdrix/templates/service.yaml
- D helm/valdrix/templates/serviceaccount.yaml
- D helm/valdrix/templates/worker-deployment.yaml
- D helm/valdrix/values.schema.json
- D helm/valdrix/values.yaml
+ D helm/valdrics/Chart.yaml
+ D helm/valdrics/templates/_helpers.tpl
+ D helm/valdrics/templates/configmap-grafana.yaml
+ D helm/valdrics/templates/deployment.yaml
+ D helm/valdrics/templates/enforcement-validating-webhook.yaml
+ D helm/valdrics/templates/enforcement-webhook-pdb.yaml
+ D helm/valdrics/templates/hpa.yaml
+ D helm/valdrics/templates/ingress.yaml
+ D helm/valdrics/templates/service.yaml
+ D helm/valdrics/templates/serviceaccount.yaml
+ D helm/valdrics/templates/worker-deployment.yaml
+ D helm/valdrics/values.schema.json
+ D helm/valdrics/values.yaml
  M koyeb.yaml
  M loadtest/README.md
  M loadtest/k6-test.js
@@ -236,7 +236,7 @@
  M scripts/verify_enforcement_post_closure_sanity.py
  M scripts/verify_pending_approval_flow.py
  M scripts/verify_tenant_isolation.py
- D scripts/verify_valdrix_disposition_freshness.py
+ D scripts/verify_valdrics_disposition_freshness.py
  M terraform/main.tf
  M terraform/modules/cache/main.tf
  M terraform/modules/db/main.tf
@@ -343,10 +343,10 @@
  M tests/unit/ops/test_enforcement_webhook_helm_contract.py
  M tests/unit/ops/test_generate_enforcement_failure_injection_evidence.py
  M tests/unit/ops/test_release_artifact_templates_pack.py
- D tests/unit/ops/test_valdrix_disposition_register_pack.py
+ D tests/unit/ops/test_valdrics_disposition_register_pack.py
  M tests/unit/ops/test_verify_enforcement_post_closure_sanity.py
  M tests/unit/ops/test_verify_pkg_fin_policy_decisions.py
- D tests/unit/ops/test_verify_valdrix_disposition_freshness.py
+ D tests/unit/ops/test_verify_valdrics_disposition_freshness.py
  M tests/unit/optimization/test_remediation_service_audit.py
  M tests/unit/optimization/test_saas_action_wiring.py
  M tests/unit/optimization/test_strategies_api.py
