@@ -17,7 +17,7 @@ def mock_auth_user_multi():
     tenant_id = uuid4()
     user = CurrentUser(
         id=uuid4(),
-        email="multi@valdrix.ai",
+        email="multi@valdrics.ai",
         tenant_id=tenant_id,
         role=UserRole.ADMIN,
         tier=PricingTier.ENTERPRISE,

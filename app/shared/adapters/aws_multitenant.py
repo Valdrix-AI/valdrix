@@ -176,7 +176,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
             try:
                 response = await sts_client.assume_role(
                     RoleArn=self.credentials.role_arn,
-                    RoleSessionName="ValdrixCostFetch",
+                    RoleSessionName="ValdricsCostFetch",
                     ExternalId=self.credentials.external_id,
                     DurationSeconds=3600,
                 )

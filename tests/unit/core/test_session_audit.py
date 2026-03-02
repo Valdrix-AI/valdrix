@@ -6,7 +6,7 @@ from app.shared.db.session import (
     after_cursor_execute,
     check_rls_policy,
 )
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 from uuid import uuid4
 
 
@@ -96,7 +96,7 @@ def test_rls_policy_enforcement_metric_increment():
             mock_settings.TESTING = False
             conn.info = {"rls_context_set": False}
 
-            with pytest.raises(ValdrixException):
+            with pytest.raises(ValdricsException):
                 check_rls_policy(conn, None, "DELETE FROM costs", {}, None, False)
 
             mock_metric.labels.assert_called_with(statement_type="DELETE")
@@ -144,7 +144,7 @@ def test_rls_policy_enforcement_violation():
         # 1. RLS Status is False (explicitly missing context)
         conn.info = {"rls_context_set": False}
 
-        with pytest.raises(ValdrixException) as exc:
+        with pytest.raises(ValdricsException) as exc:
             check_rls_policy(
                 conn, None, "UPDATE sensitive_data SET x=1", {}, None, False
             )

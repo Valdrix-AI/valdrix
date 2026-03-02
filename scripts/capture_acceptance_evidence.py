@@ -49,7 +49,7 @@ async def _bootstrap_in_process_app_and_token() -> tuple[httpx.ASGITransport, st
     _ensure_test_env_for_in_process()
 
     # Use a file-backed sqlite DB so multiple connections share the same state.
-    sqlite_path = Path("/tmp/valdrix_acceptance_capture.sqlite")
+    sqlite_path = Path("/tmp/valdrics_acceptance_capture.sqlite")
     os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{sqlite_path}")
 
     # Import after env is set.
@@ -92,7 +92,7 @@ async def _bootstrap_in_process_app_and_token() -> tuple[httpx.ASGITransport, st
 
         tenant_id = UUID("00000000-0000-0000-0000-000000000001")
         user_id = UUID("00000000-0000-0000-0000-000000000002")
-        email = "admin@valdrix.local"
+        email = "admin@valdrics.local"
 
         session_maker = async_sessionmaker(
             async_engine, class_=AsyncSession, expire_on_commit=False
@@ -124,9 +124,9 @@ async def _bootstrap_in_process_app_and_token() -> tuple[httpx.ASGITransport, st
             {"sub": str(user_id), "email": email}, timedelta(hours=2)
         )
 
-        from app.main import app as valdrix_app
+        from app.main import app as valdrics_app
 
-        return httpx.ASGITransport(app=valdrix_app), token
+        return httpx.ASGITransport(app=valdrics_app), token
     finally:
         stop_wakeup.set()
         wakeup_task.cancel()
@@ -177,7 +177,7 @@ def _normalize_base_url(raw: str) -> str:
     """
     Normalize a base URL for httpx/urljoin.
 
-    Operators frequently set VALDRIX_API_URL as `127.0.0.1:8000` without a scheme.
+    Operators frequently set VALDRICS_API_URL as `127.0.0.1:8000` without a scheme.
     We accept that and infer a scheme:
     - localhost/127.0.0.1/0.0.0.0 -> http
     - everything else -> https
@@ -1032,12 +1032,12 @@ async def capture_acceptance_evidence(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Capture Valdrix acceptance evidence artifacts."
+        description="Capture Valdrics acceptance evidence artifacts."
     )
     parser.add_argument(
-        "--url", default=os.environ.get("VALDRIX_API_URL", "http://127.0.0.1:8000")
+        "--url", default=os.environ.get("VALDRICS_API_URL", "http://127.0.0.1:8000")
     )
-    parser.add_argument("--token", default=os.environ.get("VALDRIX_TOKEN"))
+    parser.add_argument("--token", default=os.environ.get("VALDRICS_TOKEN"))
     parser.add_argument("--output-root", default="reports/acceptance")
     parser.add_argument(
         "--in-process",
@@ -1066,11 +1066,11 @@ def main() -> int:
         base_url = "http://test"
     else:
         if not raw_url:
-            # This happens when operators run: --url "$VALDRIX_API_URL" but the var is unset.
+            # This happens when operators run: --url "$VALDRICS_API_URL" but the var is unset.
             # Fall back to the CLI default behavior instead of producing a full bundle of
             # "missing protocol" errors.
             fallback = (
-                os.environ.get("VALDRIX_API_URL", "").strip() or "http://127.0.0.1:8000"
+                os.environ.get("VALDRICS_API_URL", "").strip() or "http://127.0.0.1:8000"
             )
             print(f"[acceptance] warning: empty --url; defaulting to {fallback}")
             raw_url = fallback
@@ -1080,14 +1080,14 @@ def main() -> int:
         token = sanitize_bearer_token(token)
     except ValueError as exc:
         raise SystemExit(
-            "Invalid token (VALDRIX_TOKEN/--token). "
+            "Invalid token (VALDRICS_TOKEN/--token). "
             "Ensure it's a single JWT string. "
             f"Details: {exc}"
         ) from None
 
     if not token:
         raise SystemExit(
-            "Missing token. Set VALDRIX_TOKEN or pass --token (or use --in-process)."
+            "Missing token. Set VALDRICS_TOKEN or pass --token (or use --in-process)."
         )
 
     if args.start_date and args.end_date:
@@ -1130,7 +1130,7 @@ def main() -> int:
     print(f"[acceptance] results: {ok_count}/{len(results)} ok")
     if ok_count == 0:
         print(
-            "[acceptance] error: 0 captures succeeded. Check VALDRIX_API_URL/--url and VALDRIX_TOKEN."
+            "[acceptance] error: 0 captures succeeded. Check VALDRICS_API_URL/--url and VALDRICS_TOKEN."
         )
         print(f"[acceptance] details: {bundle_dir / 'manifest.json'}")
         return 2

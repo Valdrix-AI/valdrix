@@ -13,7 +13,7 @@ variable "environment" {
 
 variable "cluster_name" {
   type    = string
-  default = "valdrix"
+  default = "valdrics"
 }
 
 variable "node_instance_types" {

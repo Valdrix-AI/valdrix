@@ -358,7 +358,7 @@ class TestCarbonCalculatorMetrics:
         for field in required_metadata_fields:
             assert field in metadata_one
 
-        assert metadata_one["methodology_version"] == "valdrix-carbon-v2.0"
+        assert metadata_one["methodology_version"] == "valdrics-carbon-v2.0"
         assert metadata_one["provider"] == "gcp"
         assert (
             metadata_one["factors_checksum_sha256"]
@@ -620,5 +620,5 @@ class TestCarbonCalculatorEdgeCases:
         assert result["includes_embodied_emissions"] is True
         assert (
             result["methodology"]
-            == "Valdrix 2026 (CCF + multi-cloud provider factors v2.0)"
+            == "Valdrics 2026 (CCF + multi-cloud provider factors v2.0)"
         )

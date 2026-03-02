@@ -19,7 +19,7 @@ async def test_capture_and_list_partitioning_evidence(
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-partitioning@valdrix.io",
+        email="admin-partitioning@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

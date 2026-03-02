@@ -33,7 +33,7 @@ async def test_end_to_end_cost_ingestion_pipeline(db):
         id=uuid.uuid4(),
         tenant_id=tenant.id,
         aws_account_id="123456789012",
-        role_arn="arn:aws:iam::123456789012:role/Valdrix",
+        role_arn="arn:aws:iam::123456789012:role/Valdrics",
         external_id="ext-123",
         region="us-east-1",
         status="active",

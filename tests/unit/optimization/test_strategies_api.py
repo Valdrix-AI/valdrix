@@ -254,7 +254,7 @@ async def test_backtest_seeds_defaults_when_unfiltered_and_empty() -> None:
 async def test_feature_gate_rejects_starter_for_commitment_optimization() -> None:
     starter_user = CurrentUser(
         id=uuid4(),
-        email="starter@valdrix.io",
+        email="starter@valdrics.io",
         tenant_id=uuid4(),
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,

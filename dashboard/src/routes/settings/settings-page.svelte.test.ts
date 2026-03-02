@@ -104,7 +104,7 @@ function setupApiMocks({
 			alert_threshold_percent: 80,
 			default_region: 'us-west-2',
 			email_enabled: true,
-			email_recipients: 'ops@valdrix.test'
+			email_recipients: 'ops@valdrics.test'
 		}),
 		[endpoint('/settings/llm/models')]: jsonResponse({
 			groq: ['llama-3.3-70b-versatile'],
@@ -179,7 +179,7 @@ function setupApiMocks({
 				federation_enabled: false,
 				federation_mode: 'domain',
 				federation_ready: false,
-				current_admin_domain: 'valdrix.test',
+				current_admin_domain: 'valdrics.test',
 				current_admin_domain_allowed: true,
 				issues: []
 			},
@@ -205,7 +205,7 @@ function setupApiMocks({
 				federation_enabled: false,
 				federation_mode: 'domain',
 				federation_ready: false,
-				current_admin_domain: 'valdrix.test',
+				current_admin_domain: 'valdrics.test',
 				current_admin_domain_allowed: true,
 				issues: []
 			},

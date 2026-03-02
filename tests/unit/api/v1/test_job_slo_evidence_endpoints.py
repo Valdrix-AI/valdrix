@@ -19,7 +19,7 @@ async def test_capture_and_list_job_slo_evidence(async_client, app, db, test_ten
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-jobs-slo@valdrix.io",
+        email="admin-jobs-slo@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

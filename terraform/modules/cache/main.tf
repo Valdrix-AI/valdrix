@@ -4,12 +4,12 @@ data "aws_vpc" "selected" {
 }
 
 resource "aws_elasticache_subnet_group" "main" {
-  name       = "valdrix-cache-subnet-group-${var.environment}"
+  name       = "valdrics-cache-subnet-group-${var.environment}"
   subnet_ids = var.private_subnet_ids
 }
 
 resource "aws_security_group" "redis" {
-  name        = "valdrix-redis-sg-${var.environment}"
+  name        = "valdrics-redis-sg-${var.environment}"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -28,8 +28,8 @@ resource "aws_security_group" "redis" {
 }
 
 resource "aws_elasticache_replication_group" "main" {
-  replication_group_id = "valdrix-redis-${var.environment}"
-  description          = "Valdrix Redis cache (${var.environment})"
+  replication_group_id = "valdrics-redis-${var.environment}"
+  description          = "Valdrics Redis cache (${var.environment})"
   engine               = "redis"
   engine_version       = "7.0"
   node_type            = "cache.t3.micro"
@@ -44,7 +44,7 @@ resource "aws_elasticache_replication_group" "main" {
   multi_az_enabled           = false
 
   tags = {
-    Name        = "valdrix-redis-${var.environment}"
+    Name        = "valdrics-redis-${var.environment}"
     Environment = var.environment
   }
 }

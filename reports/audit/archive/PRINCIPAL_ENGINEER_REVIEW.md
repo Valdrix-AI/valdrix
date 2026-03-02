@@ -1,4 +1,4 @@
-# PRINCIPAL ENGINEER REVIEW: Valdrix FinOps Platform
+# PRINCIPAL ENGINEER REVIEW: Valdrics FinOps Platform
 
 **Reviewer Context:** 15+ years across FAANG (Amazon, Google, Meta), led SaaS financial data systems, participated in Series-A technical due diligence and acquisitions.
 
@@ -11,7 +11,7 @@
 
 ### One-Line Summary
 
-**Valdrix has hardened its critical paths and eliminated obvious single-points-of-failure, but remains a "good idea with unfinished execution" — it can handle Series-A due diligence NOW, but will collapse at 10× workload without architectural changes.**
+**Valdrics has hardened its critical paths and eliminated obvious single-points-of-failure, but remains a "good idea with unfinished execution" — it can handle Series-A due diligence NOW, but will collapse at 10× workload without architectural changes.**
 
 ### Series-A Readiness Assessment
 
@@ -53,7 +53,7 @@
 - ✅ Runtime alerting on >2% cost changes (prevents silent corruption)
 
 **Why This Matters:**
-A Fortune 500 FinOps team will reconcile Valdrix numbers against their AWS bill. The forensic trail is now credible enough to explain any discrepancy. You pass this due diligence test.
+A Fortune 500 FinOps team will reconcile Valdrics numbers against their AWS bill. The forensic trail is now credible enough to explain any discrepancy. You pass this due diligence test.
 
 **Caveat:**
 You still need to close the loop on "48-hour finalization workflow" — the schema exists, but enforcement in the ingestion pipeline needs verification. Verify in code that:
@@ -248,7 +248,7 @@ Customer's Actual Costs (Jan):
 - Week 1-3: $100K/week (steady state)
 - Week 4: $200K (batch processing job scheduled monthly)
 - Forecast prediction: $110K/week (smooths out the spike)
-- Customer's finance: "Why does Valdrix predict $480K for Feb, but we see $500K in reality?"
+- Customer's finance: "Why does Valdrics predict $480K for Feb, but we see $500K in reality?"
 ```
 
 **Why This Breaks:**
@@ -346,7 +346,7 @@ cost_status: Mapped[str] = mapped_column(String, default="PRELIMINARY")
 Unclear. Schema exists, but pipeline enforcement unknown.
 
 **Why This Matters:**
-A customer's controller reconciles Valdrix to AWS bill on Jan 20. Cost for Jan 15 is $10K. On Jan 25, it changes to $11K due to restatement. Customer has no warning this happened.
+A customer's controller reconciles Valdrics to AWS bill on Jan 20. Cost for Jan 15 is $10K. On Jan 25, it changes to $11K due to restatement. Customer has no warning this happened.
 
 **Fix Timeline:** 2 weeks (add pipeline enforcement + dashboard disclosure)
 
@@ -667,7 +667,7 @@ SENSITIVE_FIELDS = {
 - Verify cost_status enforcement pipeline is real (not just schema)
 - Verify cost_audit_logs captures all changes
 - Verify >2% change alerts work in production
-- Create internal documentation: "How cost accuracy works in Valdrix"
+- Create internal documentation: "How cost accuracy works in Valdrics"
 
 **Work:**
 
@@ -829,7 +829,7 @@ If you execute these in parallel over 8 weeks, you'll be in a strong position fo
 
 **DON'T SELL THE DREAM. SELL THE WORK.**
 
-Don't tell investors "Valdrix allocates costs to teams." Tell them "We're building cost allocation rules, here's our roadmap, here's the foundation work we've already done."
+Don't tell investors "Valdrics allocates costs to teams." Tell them "We're building cost allocation rules, here's our roadmap, here's the foundation work we've already done."
 
 ---
 

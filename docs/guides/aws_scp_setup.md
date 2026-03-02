@@ -13,7 +13,7 @@ This SCP prevents any user (including the root user) from deleting or modifying 
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "DenyDeleteValdrixRole",
+      "Sid": "DenyDeleteValdricsRole",
       "Effect": "Deny",
       "Action": [
         "iam:DeleteRole",
@@ -23,7 +23,7 @@ This SCP prevents any user (including the root user) from deleting or modifying 
         "iam:UpdateRoleDescription"
       ],
       "Resource": [
-        "arn:aws:iam::*:role/Valdrix-AI-Role"
+        "arn:aws:iam::*:role/Valdrics-AI-Role"
       ]
     }
   ]

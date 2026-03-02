@@ -42,7 +42,7 @@ async def test_saas_detector_wires_connection_credentials_for_github_plugin() ->
     conn.api_key = "ghp_test_token"
     conn.spend_feed = []
     conn.connector_config = {
-        "github_org": "valdrix-org",
+        "github_org": "valdrics-org",
         "unused_threshold_days": 30,
         "seat_cost_usd": 22.0,
     }

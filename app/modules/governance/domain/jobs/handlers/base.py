@@ -12,12 +12,12 @@ from typing import Dict, Any
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob, JobStatus
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 
 logger = structlog.get_logger()
 
 
-class JobTimeoutError(ValdrixException):
+class JobTimeoutError(ValdricsException):
     """Raised when a job exceeds its timeout."""
 
     def __init__(self, job_id: str, timeout_seconds: int):
@@ -43,7 +43,7 @@ class BaseJobHandler(ABC):
     Subclasses must:
     1. Define timeout_seconds class attribute
     2. Implement execute() method
-    3. Handle ValdrixException gracefully
+    3. Handle ValdricsException gracefully
     """
 
     # PRODUCTION: Override in subclasses
@@ -69,7 +69,7 @@ class BaseJobHandler(ABC):
             Result dictionary with job output
 
         Raises:
-            ValdrixException: For expected errors (caught and retried)
+            ValdricsException: For expected errors (caught and retried)
             Exception: For unexpected errors (moved to DLQ)
         """
         pass
@@ -146,9 +146,9 @@ class BaseJobHandler(ABC):
             )
             raise
 
-        except ValdrixException as e:
+        except ValdricsException as e:
             # Expected errors - may be retryable
-            return await self._handle_valdrix_exception(job, e, db)
+            return await self._handle_valdrics_exception(job, e, db)
 
         except Exception as e:
             # Unexpected errors - move to DLQ
@@ -226,13 +226,13 @@ class BaseJobHandler(ABC):
         except Exception:
             pass
 
-    async def _handle_valdrix_exception(
-        self, job: BackgroundJob, exc: ValdrixException, db: AsyncSession
+    async def _handle_valdrics_exception(
+        self, job: BackgroundJob, exc: ValdricsException, db: AsyncSession
     ) -> Dict[str, Any]:
-        """Handle expected ValdrixExceptions with retry logic."""
+        """Handle expected ValdricsExceptions with retry logic."""
 
         logger.warning(
-            "job_valdrix_exception",
+            "job_valdrics_exception",
             job_id=str(job.id),
             job_type=job.job_type,
             error_code=exc.code,

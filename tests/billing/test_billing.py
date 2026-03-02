@@ -50,9 +50,9 @@ class TestCheckoutRequest:
     def test_checkout_request_with_callback(self) -> None:
         """CheckoutRequest should accept callback_url."""
         request = CheckoutRequest(
-            tier=PricingTier.STARTER, callback_url="https://app.valdrix.ai/billing?success=true"
+            tier=PricingTier.STARTER, callback_url="https://app.valdrics.ai/billing?success=true"
         )
-        assert request.callback_url == "https://app.valdrix.ai/billing?success=true"
+        assert request.callback_url == "https://app.valdrics.ai/billing?success=true"
 
 
 class TestBillingService:

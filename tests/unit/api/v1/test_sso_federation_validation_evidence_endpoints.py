@@ -19,7 +19,7 @@ async def test_capture_and_list_sso_federation_validation_evidence(
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-sso@valdrix.io",
+        email="admin-sso@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
@@ -41,9 +41,9 @@ async def test_capture_and_list_sso_federation_validation_evidence(
             "runner": "scripts/smoke_test_sso_federation.py",
             "passed": True,
             "federation_mode": "domain",
-            "frontend_url": "https://app.valdrix.example",
-            "expected_redirect_url": "https://app.valdrix.example/auth/callback",
-            "discovery_endpoint": "https://api.valdrix.example/api/v1/public/sso/discovery",
+            "frontend_url": "https://app.valdrics.example",
+            "expected_redirect_url": "https://app.valdrics.example/auth/callback",
+            "discovery_endpoint": "https://api.valdrics.example/api/v1/public/sso/discovery",
             "checks": [
                 {
                     "name": "admin.sso_validation",

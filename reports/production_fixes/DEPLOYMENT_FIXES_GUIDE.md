@@ -17,11 +17,11 @@ Rollback: Yes, but requires data migration rollback (see notes)
 BEFORE YOU START:
 
 [ ] 1. Create backup of production database
-        $ pg_dump -h prod-db.internal -U postgres -d valdrix > backup_$(date +%s).sql
-        $ aws s3 cp backup_*.sql s3://valdrix-backups/
+        $ pg_dump -h prod-db.internal -U postgres -d valdrics > backup_$(date +%s).sql
+        $ aws s3 cp backup_*.sql s3://valdrics-backups/
         
 [ ] 2. Verify no active deployments
-        $ kubectl rollout status deployment/valdrix-api -n prod
+        $ kubectl rollout status deployment/valdrics-api -n prod
         
 [ ] 3. Create feature branch
         $ git checkout -b fix/production-hardening
@@ -60,7 +60,7 @@ BEFORE:
 
 AFTER:
     if rls_status is False:
-        raise ValdrixException(
+        raise ValdricsException(
             message="RLS context missing - query execution aborted",
             code="rls_enforcement_failed",
             status_code=500
@@ -73,7 +73,7 @@ DEPLOYMENT STEPS:
    @pytest.mark.asyncio
    async def test_rls_enforcement_fails_without_context():
        db = AsyncSession(...)
-       with pytest.raises(ValdrixException) as exc:
+       with pytest.raises(ValdricsException) as exc:
            # Query without tenant context
            db.execute(select(AWSAccount))
        assert exc.value.code == "rls_enforcement_failed"
@@ -218,15 +218,15 @@ STEP 5: Test budget enforcement:
 
 STEP 6: Deploy migration:
     
-    $ kubectl exec -it valdrix-api-pod -- alembic upgrade head
+    $ kubectl exec -it valdrics-api-pod -- alembic upgrade head
     
 STEP 7: Gradual rollout:
     
     First, canary 5% of traffic:
-        $ kubectl set image deployment/valdrix-api \\
-          valdrix=valdrix:new-hash \\
+        $ kubectl set image deployment/valdrics-api \\
+          valdrics=valdrics:new-hash \\
           --record -n prod
-        $ kubectl rollout status deployment/valdrix-api -n prod
+        $ kubectl rollout status deployment/valdrics-api -n prod
         
     Monitor for 30 minutes:
         - Check logs for "budget_exceeded" (expected for over-quota tenants)
@@ -234,10 +234,10 @@ STEP 7: Gradual rollout:
         - Check error rates (should be ~same)
         
     If stable, roll out 100%:
-        $ kubectl set replicas deployment/valdrix-api --replicas=10
+        $ kubectl set replicas deployment/valdrics-api --replicas=10
 
 ROLLBACK:
-    $ kubectl rollout undo deployment/valdrix-api
+    $ kubectl rollout undo deployment/valdrics-api
     $ alembic downgrade -1
     
 MONITORING:
@@ -316,8 +316,8 @@ STEP 4: Database migration (if job table changed):
 
 STEP 5: Deploy and monitor:
     
-    $ kubectl set image deployment/valdrix-scheduler \\
-      valdrix-scheduler=valdrix:new-hash
+    $ kubectl set image deployment/valdrics-scheduler \\
+      valdrics-scheduler=valdrics:new-hash
     
     Monitor:
     - job_execution_duration (should be same or faster)
@@ -335,12 +335,12 @@ TESTING:
         assert handler.tenant_id == 'tenant-123'
         
         # Job should not access other tenants
-        with pytest.raises(ValdrixException) as exc:
+        with pytest.raises(ValdricsException) as exc:
             await handler.query_accounts('other-tenant')
         assert exc.value.code == "rls_enforcement_failed"
 
 ROLLBACK:
-    $ kubectl rollout undo deployment/valdrix-scheduler
+    $ kubectl rollout undo deployment/valdrics-scheduler
     $ No database migration to rollback (schema-compatible)
 
 MONITORING:
@@ -433,19 +433,19 @@ STEP 3: Monitor for deadlocks:
 
 STEP 4: Deploy to new pod:
     
-    $ kubectl create deployment valdrix-scheduler-v2 \\
-      --image=valdrix:new-hash \\
+    $ kubectl create deployment valdrics-scheduler-v2 \\
+      --image=valdrics:new-hash \\
       --replicas=1
     
     Watch pod logs:
-        $ kubectl logs -f valdrix-scheduler-v2-xxx
+        $ kubectl logs -f valdrics-scheduler-v2-xxx
     
     Verify no deadlock errors for 30 minutes
     
 STEP 5: Cut over traffic:
     
-    $ kubectl scale deployment valdrix-scheduler --replicas=0
-    $ kubectl scale deployment valdrix-scheduler-v2 --replicas=3
+    $ kubectl scale deployment valdrics-scheduler --replicas=0
+    $ kubectl scale deployment valdrics-scheduler-v2 --replicas=3
     
     Monitor:
     - scheduler_job_runs_total (should increase steadily)
@@ -472,8 +472,8 @@ TESTING:
         assert "deadlock detected" not in logs
 
 ROLLBACK:
-    $ kubectl scale deployment valdrix-scheduler-v2 --replicas=0
-    $ kubectl scale deployment valdrix-scheduler --replicas=3
+    $ kubectl scale deployment valdrics-scheduler-v2 --replicas=0
+    $ kubectl scale deployment valdrics-scheduler --replicas=3
     
 MONITORING:
     Prometheus metrics to add:
@@ -521,7 +521,7 @@ STEP 2: Update config:
     File: /app/core/config.py
     
     OLD:
-        KDF_SALT: str = "valdrix-default-salt-2026"  # HARDCODED - INSECURE!
+        KDF_SALT: str = "valdrics-default-salt-2026"  # HARDCODED - INSECURE!
     
     NEW:
         KDF_SALT: str = Field(
@@ -601,7 +601,7 @@ STEP 6: Deploy with new salt:
     apiVersion: v1
     kind: Secret
     metadata:
-      name: valdrix-encryption
+      name: valdrics-encryption
       namespace: prod
     type: Opaque
     stringData:
@@ -610,8 +610,8 @@ STEP 6: Deploy with new salt:
     
     $ kubectl apply -f kdf-secret.yaml
     
-    $ kubectl set env deployment/valdrix-api \\
-      KDF_SALT="$(kubectl get secret valdrix-encryption -o jsonpath='{.data.KDF_SALT}')" \\
+    $ kubectl set env deployment/valdrics-api \\
+      KDF_SALT="$(kubectl get secret valdrics-encryption -o jsonpath='{.data.KDF_SALT}')" \\
       -n prod
 
 STEP 7: Test encryption/decryption:
@@ -699,7 +699,7 @@ DEPLOY IN THIS ORDER (minimizes risk):
      a. Update /app/db/session.py
      b. Add test to verify exception
      c. Run tests: pytest tests/db/test_session.py
-     d. Deploy: kubectl set image deployment/valdrix-api valdrix=new-hash
+     d. Deploy: kubectl set image deployment/valdrics-api valdrics=new-hash
      e. Monitor for "rls_enforcement_failed" errors (should be 0 in normal operation)
 
 2. **Encryption Salt Management** (0 downtime, config-only)
@@ -813,26 +813,26 @@ DATADOG / NEW RELIC:
 If something breaks, rollback in reverse order:
 
 ROLLBACK SCHEDULER (if deadlock detection fails):
-  $ kubectl rollout undo deployment/valdrix-scheduler
+  $ kubectl rollout undo deployment/valdrics-scheduler
   Wait 2 minutes for scheduler to restart
   
 ROLLBACK JOB TIMEOUT (if jobs are timing out too fast):
-  $ kubectl rollout undo deployment/valdrix-scheduler
+  $ kubectl rollout undo deployment/valdrics-scheduler
   Remove timeout_seconds from job handlers
   
 ROLLBACK LLM BUDGET (if tenants can't run analysis):
-  $ kubectl rollout undo deployment/valdrix-api
+  $ kubectl rollout undo deployment/valdrics-api
   $ alembic downgrade -1
   Wait for migration to complete
   
 ROLLBACK ENCRYPTION SALT (if decryption fails):
-  $ kubectl set env deployment/valdrix-api KDF_SALT=<old-value>
+  $ kubectl set env deployment/valdrics-api KDF_SALT=<old-value>
   Restart pods
   
 FULL ROLLBACK:
   $ git revert <commit-hash>
-  $ kubectl rollout undo deployment/valdrix-api
-  $ kubectl rollout undo deployment/valdrix-scheduler
+  $ kubectl rollout undo deployment/valdrics-api
+  $ kubectl rollout undo deployment/valdrics-scheduler
   $ alembic downgrade -1
 
 Each rollback should:

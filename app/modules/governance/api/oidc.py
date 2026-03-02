@@ -2,7 +2,7 @@
 OIDC Discovery Router
 
 Exposes the standard OIDC metadata and JWKS endpoints required
-for cloud providers to verify Valdrix identity tokens.
+for cloud providers to verify Valdrics identity tokens.
 """
 
 from typing import Any, Dict

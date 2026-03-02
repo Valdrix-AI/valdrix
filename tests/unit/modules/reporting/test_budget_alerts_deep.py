@@ -222,7 +222,7 @@ class TestCarbonBudgetService:
             # SLACK DISABLED
             mock_app_settings = MagicMock()
             mock_app_settings.SLACK_BOT_TOKEN = None
-            mock_app_settings.SMTP_HOST = "smtp.valdrix.io"
+            mock_app_settings.SMTP_HOST = "smtp.valdrics.io"
             mock_get_settings.return_value = mock_app_settings
 
             mock_email_instance = MockEmailService.return_value
@@ -239,7 +239,7 @@ class TestCarbonBudgetService:
                 MagicMock(
                     scalar_one_or_none=MagicMock(
                         return_value=MagicMock(
-                            email_enabled=True, email_recipients="dev@valdrix.io"
+                            email_enabled=True, email_recipients="dev@valdrics.io"
                         )
                     )
                 ),  # email settings check

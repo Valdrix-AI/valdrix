@@ -1,7 +1,7 @@
 services:
   api:
-    container_name: valdrix-api-prod
-    image: ${REGISTRY:-ghcr.io/valdrix}/valdrix-backend:${VERSION:-latest}
+    container_name: valdrics-api-prod
+    image: ${REGISTRY:-ghcr.io/valdrics}/valdrics-backend:${VERSION:-latest}
     pull_policy: always
     ports:
       - "8000:8000"
@@ -16,8 +16,8 @@ services:
       retries: 3
 
   dashboard:
-    container_name: valdrix-dashboard-prod
-    image: ${REGISTRY:-ghcr.io/valdrix}/valdrix-dashboard:${VERSION:-latest}
+    container_name: valdrics-dashboard-prod
+    image: ${REGISTRY:-ghcr.io/valdrics}/valdrics-dashboard:${VERSION:-latest}
     pull_policy: always
     ports:
       - "3000:3000"

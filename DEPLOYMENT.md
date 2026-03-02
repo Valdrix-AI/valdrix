@@ -14,7 +14,7 @@
 ```bash
 # Clone and setup
 git clone https://github.com/Valdrics/valdrics.git
-cd valdrix
+cd valdrics
 
 # Install dependencies (using uv)
 uv sync
@@ -38,14 +38,14 @@ uv run uvicorn app.main:app --reload
 
 ```bash
 # Build
-docker build -t valdrix/api:latest .
+docker build -t valdrics/api:latest .
 
 # Run
 docker run -d \
-  --name valdrix-api \
+  --name valdrics-api \
   -p 8000:8000 \
   --env-file .env \
-  valdrix/api:latest
+  valdrics/api:latest
 ```
 
 ---
@@ -56,10 +56,10 @@ docker run -d \
 
 ```bash
 # Add the helm chart (if using a repo) or use the local one
-helm upgrade --install valdrix ./helm/valdrix --namespace valdrix --create-namespace
+helm upgrade --install valdrics ./helm/valdrics --namespace valdrics --create-namespace
 
 # Verify deployment
-kubectl get pods -n valdrix -l app.kubernetes.io/name=valdrix
+kubectl get pods -n valdrics -l app.kubernetes.io/name=valdrics
 ```
 
 ### Helm Chart Structure
@@ -76,7 +76,7 @@ kubectl get pods -n valdrix -l app.kubernetes.io/name=valdrix
 
 Create before deployment:
 ```bash
-kubectl create secret generic valdrix-secrets \
+kubectl create secret generic valdrics-secrets \
   --from-literal=database-url='postgresql://...' \
   --from-literal=encryption-key='your-key' \
   --from-literal=openai-api-key='sk-...'

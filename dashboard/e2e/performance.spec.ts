@@ -18,14 +18,14 @@ const CLS_BUDGET = 0.1;
 
 async function collectLandingMetrics(page: Parameters<typeof test>[0]['page']) {
 	await page.addInitScript(() => {
-		(window as Window & { __valdrixPerf?: { cls: number; lcp: number } }).__valdrixPerf = {
+		(window as Window & { __valdricsPerf?: { cls: number; lcp: number } }).__valdricsPerf = {
 			cls: 0,
 			lcp: 0
 		};
 
 		new PerformanceObserver((entryList) => {
-			const state = (window as Window & { __valdrixPerf?: { cls: number; lcp: number } })
-				.__valdrixPerf;
+			const state = (window as Window & { __valdricsPerf?: { cls: number; lcp: number } })
+				.__valdricsPerf;
 			if (!state) return;
 			for (const entry of entryList.getEntries()) {
 				const layoutShift = entry as PerformanceEntry & {
@@ -39,8 +39,8 @@ async function collectLandingMetrics(page: Parameters<typeof test>[0]['page']) {
 		}).observe({ type: 'layout-shift', buffered: true });
 
 		new PerformanceObserver((entryList) => {
-			const state = (window as Window & { __valdrixPerf?: { cls: number; lcp: number } })
-				.__valdrixPerf;
+			const state = (window as Window & { __valdricsPerf?: { cls: number; lcp: number } })
+				.__valdricsPerf;
 			if (!state) return;
 			const entries = entryList.getEntries();
 			const latest = entries[entries.length - 1];
@@ -59,8 +59,8 @@ async function collectLandingMetrics(page: Parameters<typeof test>[0]['page']) {
 			| PerformanceNavigationTiming
 			| undefined;
 		const fcp = performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? null;
-		const perfState = (window as Window & { __valdrixPerf?: { cls: number; lcp: number } })
-			.__valdrixPerf;
+		const perfState = (window as Window & { __valdricsPerf?: { cls: number; lcp: number } })
+			.__valdricsPerf;
 		return {
 			ttfb: nav?.responseStart ?? null,
 			domComplete: nav?.domComplete ?? null,

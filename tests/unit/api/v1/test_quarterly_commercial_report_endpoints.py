@@ -15,7 +15,7 @@ async def test_quarterly_commercial_report_json_and_csv(
 
     user = CurrentUser(
         id=uuid.uuid4(),
-        email="quarterly@valdrix.io",
+        email="quarterly@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
@@ -87,7 +87,7 @@ async def test_capture_and_list_quarterly_commercial_report_evidence(
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-quarterly@valdrix.io",
+        email="admin-quarterly@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

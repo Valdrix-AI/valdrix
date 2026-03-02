@@ -131,7 +131,7 @@ Alembic revisions under `migrations/versions/` (merge heads, add tables/columns,
 ### 3.3 app/shared/core
 
 - **Reviewed:** config, auth, dependencies, exceptions, session, logging, middleware.
-- **Findings:** Exceptions hierarchy (ValdrixException, AdapterError, AuthError, etc.) is consistent. Auth uses JWT, role hierarchy, tenant context, RLS. Session sets tenant_id and uses PostgreSQL/NullPool for tests. No issues.
+- **Findings:** Exceptions hierarchy (ValdricsException, AdapterError, AuthError, etc.) is consistent. Auth uses JWT, role hierarchy, tenant context, RLS. Session sets tenant_id and uses PostgreSQL/NullPool for tests. No issues.
 
 ### 3.4 app/modules
 

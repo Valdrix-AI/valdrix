@@ -7,7 +7,7 @@ from app.shared.db.session import (
     after_cursor_execute,
     check_rls_policy,
 )
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 
 
 class TestSessionDeep:
@@ -79,7 +79,7 @@ class TestSessionDeep:
             mock_settings.TESTING = False
             mock_conn = MagicMock()
             mock_conn.info = {"rls_context_set": False}
-            with pytest.raises(ValdrixException) as exc:
+            with pytest.raises(ValdricsException) as exc:
                 check_rls_policy(
                     mock_conn, None, "SELECT * FROM sensitive_data", {}, None, False
                 )
@@ -105,7 +105,7 @@ class TestSessionDeep:
             mock_settings.TESTING = False
             mock_conn = MagicMock()
             mock_conn.info = {"rls_context_set": False}
-            with pytest.raises(ValdrixException) as exc:
+            with pytest.raises(ValdricsException) as exc:
                 check_rls_policy(
                     mock_conn, None, "SELECT * FROM sensitive_data", {}, None, False
                 )

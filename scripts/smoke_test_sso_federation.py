@@ -9,8 +9,8 @@ This script:
 - Optionally publishes the evidence: POST /api/v1/audit/identity/sso-federation/evidence
 
 Usage:
-  export VALDRIX_API_URL="http://127.0.0.1:8000"
-  export VALDRIX_TOKEN="<bearer jwt>"
+  export VALDRICS_API_URL="http://127.0.0.1:8000"
+  export VALDRICS_TOKEN="<bearer jwt>"
   uv run python scripts/smoke_test_sso_federation.py --email admin@example.com --out reports/acceptance/sso.json
   uv run python scripts/smoke_test_sso_federation.py --email admin@example.com --publish
 """
@@ -82,7 +82,7 @@ def _exit_with_connectivity_error(base_url: str, exc: httpx.RequestError) -> NoR
     request_url = str(exc.request.url) if exc.request is not None else base_url
     raise SystemExit(
         "Connection failed while calling "
-        f"{request_url}. Ensure the API is running and --url/VALDRIX_API_URL is correct "
+        f"{request_url}. Ensure the API is running and --url/VALDRICS_API_URL is correct "
         f"(current base URL: {base_url}). Underlying error: {exc.__class__.__name__}: {exc}"
     )
 
@@ -92,9 +92,9 @@ def main() -> int:
         description="Smoke test SSO federation discovery + validation."
     )
     parser.add_argument(
-        "--url", default=os.environ.get("VALDRIX_API_URL", "http://127.0.0.1:8000")
+        "--url", default=os.environ.get("VALDRICS_API_URL", "http://127.0.0.1:8000")
     )
-    parser.add_argument("--token", default=os.environ.get("VALDRIX_TOKEN"))
+    parser.add_argument("--token", default=os.environ.get("VALDRICS_TOKEN"))
     parser.add_argument(
         "--email",
         required=True,
@@ -119,7 +119,7 @@ def main() -> int:
     raw_url = str(args.url or "").strip()
     if not raw_url:
         fallback = (
-            os.environ.get("VALDRIX_API_URL", "").strip() or "http://127.0.0.1:8000"
+            os.environ.get("VALDRICS_API_URL", "").strip() or "http://127.0.0.1:8000"
         )
         print(f"[sso-smoke] warning: empty --url; defaulting to {fallback}")
         raw_url = fallback
@@ -137,7 +137,7 @@ def main() -> int:
             token = sanitize_bearer_token(token)
         except ValueError as exc:
             raise SystemExit(
-                "Invalid token (VALDRIX_TOKEN/--token). "
+                "Invalid token (VALDRICS_TOKEN/--token). "
                 "Ensure it's a single JWT string. "
                 f"Details: {exc}"
             ) from None
@@ -196,7 +196,7 @@ def main() -> int:
                     name="admin.sso_validation",
                     passed=False,
                     status_code=None,
-                    detail="Missing token. Set VALDRIX_TOKEN or pass --token.",
+                    detail="Missing token. Set VALDRICS_TOKEN or pass --token.",
                 )
             )
         else:
@@ -310,7 +310,7 @@ def main() -> int:
 
         if args.publish:
             if not token:
-                raise SystemExit("Missing token. Set VALDRIX_TOKEN or pass --token.")
+                raise SystemExit("Missing token. Set VALDRICS_TOKEN or pass --token.")
             publish_url = _build_url(
                 base_url, "/api/v1/audit/identity/sso-federation/evidence"
             )

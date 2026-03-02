@@ -15,23 +15,23 @@ This artifact pack captures the minimum viable operational evidence for enforcem
 
 ## Alert IDs and Trigger Methods
 
-1. `ValdrixEnforcementErrorBudgetBurnFast`
+1. `ValdricsEnforcementErrorBudgetBurnFast`
    - Trigger method: force fail-safe gate path (`timeout` or `lock_contended`) under sustained load for at least 1 hour so both 1h and 5m burn windows cross 14.4x on the 99.9% error-budget baseline.
-2. `ValdrixEnforcementErrorBudgetBurnSlow`
+2. `ValdricsEnforcementErrorBudgetBurnSlow`
    - Trigger method: keep elevated fail-safe rate over a 6-hour period so both 6h and 30m windows cross 6x on the 99.9% error-budget baseline.
-3. `ValdrixEnforcementGateTimeoutSpike`
+3. `ValdricsEnforcementGateTimeoutSpike`
    - Trigger method: induce repeated gate timeouts by temporarily lowering `ENFORCEMENT_GATE_TIMEOUT_SECONDS` and running slow gate requests.
-4. `ValdrixEnforcementGateLockContentionSpike`
+4. `ValdricsEnforcementGateLockContentionSpike`
    - Trigger method: run concurrent gate requests for same tenant with reduced lock timeout to generate `contended`/`timeout` events.
-5. `ValdrixEnforcementGateLatencyP95High`
+5. `ValdricsEnforcementGateLatencyP95High`
    - Trigger method: execute sustained gate load and inject DB latency.
-6. `ValdrixEnforcementGlobalThrottleHits`
+6. `ValdricsEnforcementGlobalThrottleHits`
    - Trigger method: burst gate traffic across multiple tenants above global cap.
-7. `ValdrixEnforcementApprovalQueueBacklogHigh`
+7. `ValdricsEnforcementApprovalQueueBacklogHigh`
    - Trigger method: seed pending approvals without processing approvals queue.
-8. `ValdrixEnforcementExportParityMismatch`
+8. `ValdricsEnforcementExportParityMismatch`
    - Trigger method: force mismatch path in export parity test harness.
-9. `ValdrixLLMFairUseDenialsSpike`
+9. `ValdricsLLMFairUseDenialsSpike`
    - Trigger method: exceed fair-use guardrails in controlled staging workload.
 
 ## Evidence Validation
@@ -46,8 +46,8 @@ Unit validation verifies:
 
 Hold release promotion when either burn-rate alert is firing:
 
-1. `ValdrixEnforcementErrorBudgetBurnFast` (critical)
-2. `ValdrixEnforcementErrorBudgetBurnSlow` (warning)
+1. `ValdricsEnforcementErrorBudgetBurnFast` (critical)
+2. `ValdricsEnforcementErrorBudgetBurnSlow` (warning)
 
 Clear hold only after:
 

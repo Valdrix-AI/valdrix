@@ -1,5 +1,5 @@
 """
-Request Timeout Middleware for Valdrix
+Request Timeout Middleware for Valdrics
 
 Enforces maximum request duration to prevent zombie scans from blocking workers.
 """

@@ -4,7 +4,7 @@
 services:
   prometheus:
     image: prom/prometheus:v2.54.1
-    container_name: valdrix-prometheus
+    container_name: valdrics-prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -23,7 +23,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.4.0
-    container_name: valdrix-grafana
+    container_name: valdrics-grafana
     ports:
       - "3000:3000"
     environment:
@@ -43,7 +43,7 @@ services:
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
-    container_name: valdrix-alertmanager
+    container_name: valdrics-alertmanager
     ports:
       - "9093:9093"
     volumes:
@@ -59,7 +59,7 @@ services:
   # Redis for caching (optional, for local dev)
   redis:
     image: redis:7-alpine
-    container_name: valdrix-redis
+    container_name: valdrics-redis
     ports:
       - "6379:6379"
     volumes:

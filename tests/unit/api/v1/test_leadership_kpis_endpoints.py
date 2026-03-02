@@ -15,7 +15,7 @@ from app.shared.core.pricing import PricingTier
 def _user() -> CurrentUser:
     return CurrentUser(
         id=uuid4(),
-        email="leadership@valdrix.io",
+        email="leadership@valdrics.io",
         tenant_id=uuid4(),
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

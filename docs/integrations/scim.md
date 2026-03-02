@@ -9,7 +9,7 @@ Valdrics supports **tenant-scoped SCIM 2.0 provisioning** for **Users** and (opt
 
 ## Base URL
 Your SCIM base URL is:
-`https://<your-valdrix-host>/scim/v2`
+`https://<your-valdrics-host>/scim/v2`
 
 Examples:
 - `GET /scim/v2/ServiceProviderConfig`
@@ -35,7 +35,7 @@ This endpoint never returns the stored token. It only confirms whether the submi
 
 ## IdP Configuration (Generic)
 Set the following:
-- SCIM Base URL: `https://<your-valdrix-host>/scim/v2`
+- SCIM Base URL: `https://<your-valdrics-host>/scim/v2`
 - Authentication: Bearer Token
 - Token: the SCIM token you generated in Valdrics
 

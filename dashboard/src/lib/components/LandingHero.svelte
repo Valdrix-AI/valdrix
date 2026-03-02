@@ -69,7 +69,7 @@
 	const DEFAULT_SIGNAL_SNAPSHOT = REALTIME_SIGNAL_SNAPSHOTS[0];
 	const SUBSCRIBE_API_PATH = `${base}/api/marketing/subscribe`;
 	const RESOURCES_HREF = `${base}/resources`;
-	const ROI_WORKSHEET_HREF = `${base}/resources/valdrics-roi-assumptions.csv`;
+	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`;
 	const TALK_TO_SALES_PATH = `${base}/talk-to-sales`;
 	const HERO_PLAIN_COPY: Record<BuyerPersona, { title: string; subtitle: string }> = Object.freeze({
 		cto: {
@@ -688,9 +688,7 @@
 
 	<LandingRoiPlannerCta
 		href={buildSignupHref('roi_assessment', { source: 'simulator' })}
-		worksheetHref={ROI_WORKSHEET_HREF}
 		onTrackCta={() => trackCta('cta_click', 'roi', 'start_roi_assessment')}
-		onTrackWorksheetCta={() => trackCta('cta_click', 'roi', 'download_roi_worksheet')}
 	/>
 
 	<LandingBenefitsSection />
@@ -711,8 +709,9 @@
 	<LandingCapabilitiesSection onTrackCta={trackCta} />
 
 	<LandingTrustSection
-		onTrackCta={() => trackCta('cta_click', 'trust', 'request_named_references')}
+		onTrackCta={(value) => trackCta('cta_click', 'trust', value)}
 		requestReferencesHref={buildSignupHref('named_references', { source: 'trust' })}
+		onePagerHref={ONE_PAGER_HREF}
 	/>
 
 	<LandingLeadCaptureSection

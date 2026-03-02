@@ -89,7 +89,7 @@ def _get_async_client() -> Optional[AsyncRedis]:
 
 class CacheService:
     """
-    Async caching service for Valdrix.
+    Async caching service for Valdrics.
 
     Falls back gracefully when Redis is not configured.
     """

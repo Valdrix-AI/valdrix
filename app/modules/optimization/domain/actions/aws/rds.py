@@ -9,13 +9,13 @@ from app.modules.optimization.domain.actions.factory import RemediationActionFac
 class BaseRDSSnapshotAction(BaseAWSAction):
     async def create_backup(self, resource_id: str, context: RemediationContext) -> Optional[str]:
         """Create a DB snapshot backup before deleting an RDS instance."""
-        snapshot_id = f"valdrix-backup-{resource_id}-{int(time.time())}"
+        snapshot_id = f"valdrics-backup-{resource_id}-{int(time.time())}"
         async with await self._get_client("rds", context) as rds:
             await rds.create_db_snapshot(
                 DBSnapshotIdentifier=snapshot_id,
                 DBInstanceIdentifier=resource_id,
                 Tags=[
-                    {"Key": "Valdrix", "Value": "remediation-backup"},
+                    {"Key": "Valdrics", "Value": "remediation-backup"},
                 ],
             )
             return snapshot_id

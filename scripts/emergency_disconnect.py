@@ -48,7 +48,7 @@ async def disconnect_aws(connection_id: UUID, dry_run: bool = True):
 
                 # 2. Optional: Invalidate IAM Role via AWS SDK
                 # This requires administrative credentials set in environment
-                # Extract role name from ARN: arn:aws:iam::123456789012:role/ValdrixRole
+                # Extract role name from ARN: arn:aws:iam::123456789012:role/ValdricsRole
                 role_name = role_arn.split("/")[-1]
 
                 async with aioboto3.Session().client("iam") as iam:

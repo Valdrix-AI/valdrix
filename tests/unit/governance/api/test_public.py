@@ -42,7 +42,7 @@ async def test_run_public_assessment(async_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_run_public_assessment_validation_error(async_client: AsyncClient):
     """POST /assessment should return 400 on ValueError."""
-    # Valdrix exception format: {"error": "...", "code": "VALUE_ERROR", "message": "..."}
+    # Valdrics exception format: {"error": "...", "code": "VALUE_ERROR", "message": "..."}
     with patch(
         "app.modules.governance.api.v1.public.assessment_service.run_assessment",
         side_effect=ValueError("Invalid account"),

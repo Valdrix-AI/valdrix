@@ -73,7 +73,7 @@ describe('IdentitySettingsCard', () => {
 		getMock.mockResolvedValueOnce(
 			jsonResponse({
 				sso_enabled: false,
-				allowed_email_domains: ['valdrix.io'],
+				allowed_email_domains: ['valdrics.io'],
 				sso_federation_enabled: false,
 				sso_federation_mode: 'domain',
 				sso_federation_provider_id: null,
@@ -87,12 +87,12 @@ describe('IdentitySettingsCard', () => {
 				tier: 'pro',
 				sso: {
 					enabled: false,
-					allowed_email_domains: ['valdrix.io'],
+					allowed_email_domains: ['valdrics.io'],
 					enforcement_active: false,
 					federation_enabled: false,
 					federation_mode: 'domain',
 					federation_ready: false,
-					current_admin_domain: 'valdrix.io',
+					current_admin_domain: 'valdrics.io',
 					current_admin_domain_allowed: true,
 					issues: []
 				},
@@ -147,7 +147,7 @@ describe('IdentitySettingsCard', () => {
 		await screen.findByText(/Enable SSO enforcement/i);
 		expect(screen.getByLabelText('Allowed Email Domains')).toBeTruthy();
 		const textarea = screen.getByLabelText('Allowed Email Domains') as HTMLTextAreaElement;
-		expect(textarea.value).toContain('valdrix.io');
+		expect(textarea.value).toContain('valdrics.io');
 	});
 
 	it('saves enterprise SCIM group mappings in identity settings payload', async () => {
@@ -174,7 +174,7 @@ describe('IdentitySettingsCard', () => {
 					federation_enabled: false,
 					federation_mode: 'domain',
 					federation_ready: false,
-					current_admin_domain: 'valdrix.io',
+					current_admin_domain: 'valdrics.io',
 					current_admin_domain_allowed: true,
 					issues: []
 				},
@@ -216,7 +216,7 @@ describe('IdentitySettingsCard', () => {
 					federation_enabled: false,
 					federation_mode: 'domain',
 					federation_ready: false,
-					current_admin_domain: 'valdrix.io',
+					current_admin_domain: 'valdrics.io',
 					current_admin_domain_allowed: true,
 					issues: []
 				},

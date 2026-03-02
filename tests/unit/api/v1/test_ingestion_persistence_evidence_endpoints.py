@@ -19,7 +19,7 @@ async def test_capture_and_list_ingestion_persistence_evidence(
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-ingest@valdrix.io",
+        email="admin-ingest@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

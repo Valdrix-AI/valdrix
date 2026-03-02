@@ -1,5 +1,5 @@
 """
-Slack notification service for Valdrix.
+Slack notification service for Valdrics.
 Sends alerts and daily digests to configured Slack channel.
 """
 
@@ -172,7 +172,7 @@ class SlackService:
                 },
                 {
                     "type": "context",
-                    "elements": [{"type": "mrkdwn", "text": "Powered by Valdrix"}],
+                    "elements": [{"type": "mrkdwn", "text": "Powered by Valdrics"}],
                 },
             ],
         )

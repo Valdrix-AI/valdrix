@@ -11,7 +11,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
 
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 from app.shared.core.ops_metrics import API_ERRORS_TOTAL
 
 logger = structlog.get_logger()
@@ -41,11 +41,11 @@ def handle_exception(
         "kill_switch_triggered",
     }
 
-    if isinstance(exc, ValdrixException):
-        valdrix_exc = exc
+    if isinstance(exc, ValdricsException):
+        valdrics_exc = exc
         # SEC-07: Sanitize message in production if it's not a known safe-to-leak type
-        if is_prod and valdrix_exc.code not in safe_codes:
-            valdrix_exc.message = "An error occurred while processing your request"
+        if is_prod and valdrics_exc.code not in safe_codes:
+            valdrics_exc.message = "An error occurred while processing your request"
     elif exc.__class__.__name__ == "CsrfProtectError":
         status_code = 403
         raw_status = getattr(exc, "status_code", None)
@@ -63,7 +63,7 @@ def handle_exception(
                 status_code = first[0]
 
         msg = "Invalid or missing CSRF token" if is_prod else str(exc)
-        valdrix_exc = ValdrixException(
+        valdrics_exc = ValdricsException(
             message=msg,
             code="csrf_error",
             status_code=status_code,
@@ -71,7 +71,7 @@ def handle_exception(
     elif isinstance(exc, ValueError):
         # Business logic validation errors should be 400
         msg = "Invalid request parameters" if is_prod else str(exc)
-        valdrix_exc = ValdrixException(
+        valdrics_exc = ValdricsException(
             message=msg,
             code="value_error",
             status_code=400,
@@ -86,7 +86,7 @@ def handle_exception(
     else:
         # Always sanitize unhandled exceptions to avoid leaking secrets via message bodies.
         msg = "An unexpected internal error occurred"
-        valdrix_exc = ValdrixException(
+        valdrics_exc = ValdricsException(
             message=msg,
             code="internal_error",
             status_code=500,
@@ -106,8 +106,8 @@ def handle_exception(
         span.set_attribute("http.method", request.method)
 
         # Call the built-in OTel recorder on the exception
-        if hasattr(valdrix_exc, "record_to_otel"):
-            valdrix_exc.record_to_otel()
+        if hasattr(valdrics_exc, "record_to_otel"):
+            valdrics_exc.record_to_otel()
         else:
             span.record_exception(exc)
             span.set_status(trace.Status(trace.StatusCode.ERROR, str(exc)))
@@ -116,29 +116,29 @@ def handle_exception(
     API_ERRORS_TOTAL.labels(
         path=request.url.path,
         method=request.method,
-        status_code=valdrix_exc.status_code,
+        status_code=valdrics_exc.status_code,
     ).inc()
 
     # 4. Structured Logging
     logger.error(
         "api_error",
         error_id=error_id,
-        code=valdrix_exc.code,
-        message=valdrix_exc.message,
-        status_code=valdrix_exc.status_code,
+        code=valdrics_exc.code,
+        message=valdrics_exc.message,
+        status_code=valdrics_exc.status_code,
         path=request.url.path,
-        details=valdrix_exc.details,
+        details=valdrics_exc.details,
     )
 
     from typing import Optional, Dict, Any
-    response_details: Optional[Dict[str, Any]] = valdrix_exc.details
-    if is_prod and valdrix_exc.code not in safe_codes:
+    response_details: Optional[Dict[str, Any]] = valdrics_exc.details
+    if is_prod and valdrics_exc.code not in safe_codes:
         response_details = None
 
     response_payload = {
         "error": {
-            "message": valdrix_exc.message,
-            "code": valdrix_exc.code,
+            "message": valdrics_exc.message,
+            "code": valdrics_exc.code,
             "id": error_id,
             "details": response_details if response_details else None,
         }
@@ -146,6 +146,6 @@ def handle_exception(
 
     # 5. Production Response (Sanitized)
     return JSONResponse(
-        status_code=valdrix_exc.status_code,
+        status_code=valdrics_exc.status_code,
         content=response_payload,
     )

@@ -19,7 +19,7 @@ async def test_capture_and_list_identity_idp_smoke_evidence(
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-identity@valdrix.io",
+        email="admin-identity@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
@@ -40,7 +40,7 @@ async def test_capture_and_list_identity_idp_smoke_evidence(
         payload = {
             "runner": "scripts/smoke_test_scim_idp.py",
             "idp": "okta",
-            "scim_base_url": "https://example.valdrix.io/scim/v2",
+            "scim_base_url": "https://example.valdrics.io/scim/v2",
             "write_mode": False,
             "passed": True,
             "checks": [

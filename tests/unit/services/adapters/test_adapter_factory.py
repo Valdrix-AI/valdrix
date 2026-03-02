@@ -21,7 +21,7 @@ def test_get_adapter_aws_requires_cur():
 
     mock_conn = MagicMock(spec=AWSConnection)
     mock_conn.aws_account_id = "123456789012"
-    mock_conn.role_arn = "arn:aws:iam::123456789012:role/ValdrixRole"
+    mock_conn.role_arn = "arn:aws:iam::123456789012:role/ValdricsRole"
     mock_conn.external_id = "ext-123"
     mock_conn.region = "us-east-1"
     mock_conn.cur_bucket_name = None
@@ -39,7 +39,7 @@ def test_get_adapter_aws_cur():
 
     mock_conn = MagicMock(spec=AWSConnection)
     mock_conn.aws_account_id = "123456789012"
-    mock_conn.role_arn = "arn:aws:iam::123456789012:role/ValdrixRole"
+    mock_conn.role_arn = "arn:aws:iam::123456789012:role/ValdricsRole"
     mock_conn.external_id = "ext-123"
     mock_conn.region = "us-east-1"
     mock_conn.cur_bucket_name = "my-cur-bucket"
@@ -58,7 +58,7 @@ def test_get_adapter_aws_cur_global_region_uses_config_default():
 
     mock_conn = MagicMock(spec=AWSConnection)
     mock_conn.aws_account_id = "123456789012"
-    mock_conn.role_arn = "arn:aws:iam::123456789012:role/ValdrixRole"
+    mock_conn.role_arn = "arn:aws:iam::123456789012:role/ValdricsRole"
     mock_conn.external_id = "ext-123"
     mock_conn.region = "global"
     mock_conn.cur_bucket_name = "my-cur-bucket"

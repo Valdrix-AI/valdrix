@@ -17,7 +17,7 @@ async def test_get_profile_returns_persona(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="persona@valdrix.io",
+        email="persona@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
         persona=UserPersona.PLATFORM,
@@ -28,7 +28,7 @@ async def test_get_profile_returns_persona(async_client: AsyncClient, app):
         response = await async_client.get("/api/v1/settings/profile")
         assert response.status_code == 200
         payload = response.json()
-        assert payload["email"] == "persona@valdrix.io"
+        assert payload["email"] == "persona@valdrics.io"
         assert payload["persona"] == "platform"
         assert payload["role"] == "admin"
         assert payload["tier"] == "pro"
@@ -46,7 +46,7 @@ async def test_update_profile_updates_persona(async_client: AsyncClient, db, app
         User(
             id=user_id,
             tenant_id=tenant_id,
-            email="persona-update@valdrix.io",
+            email="persona-update@valdrics.io",
             role=UserRole.ADMIN.value,
             persona=UserPersona.ENGINEERING.value,
             is_active=True,
@@ -57,7 +57,7 @@ async def test_update_profile_updates_persona(async_client: AsyncClient, db, app
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="persona-update@valdrix.io",
+        email="persona-update@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
         persona=UserPersona.ENGINEERING,
@@ -104,7 +104,7 @@ async def test_update_profile_rejects_invalid_persona(async_client: AsyncClient,
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=uuid.uuid4(),
-        email="persona-invalid@valdrix.io",
+        email="persona-invalid@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -124,7 +124,7 @@ async def test_update_profile_requires_tenant_context(async_client: AsyncClient,
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=None,
-        email="persona-no-tenant@valdrix.io",
+        email="persona-no-tenant@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
         persona=UserPersona.ENGINEERING,
@@ -150,7 +150,7 @@ async def test_update_profile_user_not_found(async_client: AsyncClient, db, app)
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
-        email="persona-missing@valdrix.io",
+        email="persona-missing@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
         persona=UserPersona.PLATFORM,
@@ -177,7 +177,7 @@ async def test_update_profile_audit_uses_forwarded_ip(async_client: AsyncClient,
         User(
             id=user_id,
             tenant_id=tenant_id,
-            email="persona-ip@valdrix.io",
+            email="persona-ip@valdrics.io",
             role=UserRole.ADMIN.value,
             persona=UserPersona.ENGINEERING.value,
             is_active=True,
@@ -188,7 +188,7 @@ async def test_update_profile_audit_uses_forwarded_ip(async_client: AsyncClient,
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="persona-ip@valdrix.io",
+        email="persona-ip@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
         persona=UserPersona.ENGINEERING,

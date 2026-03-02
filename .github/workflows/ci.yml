@@ -1,4 +1,4 @@
-name: Valdrix CI
+name: Valdrics CI
 
 on:
   push:
@@ -239,7 +239,7 @@ jobs:
         run: |
           uv run python -c "
           from codecarbon import EmissionsTracker
-          tracker = EmissionsTracker(project_name='Valdrix-CI', output_dir='.')
+          tracker = EmissionsTracker(project_name='Valdrics-CI', output_dir='.')
           tracker.start()
           import subprocess
           subprocess.run(['uv', 'run', 'pytest', 'tests/', '-x', '--no-cov'], check=False)
@@ -479,10 +479,10 @@ jobs:
           version: v3.14.0
 
       - name: Lint Helm chart
-        run: helm lint helm/valdrix/
+        run: helm lint helm/valdrics/
 
       - name: Template Helm chart (dry-run)
         run: |
-          helm template valdrix helm/valdrix/ \
+          helm template valdrics helm/valdrics/ \
             --set existingSecrets.name=test-secrets \
             --debug > /dev/null

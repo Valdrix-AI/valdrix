@@ -21,7 +21,7 @@ class ConnectionInstructionService:
             f"Audience: api://AzureADTokenExchange\n"
             f"\n# Or run this via Azure CLI:\n"
             f"az ad app federated-credential create --id <YOUR_CLIENT_ID> "
-            f'--parameters \'{{"name":"ValdrixTrust","issuer":"{issuer}","subject":"tenant:{tenant_id}","audiences":["api://AzureADTokenExchange"]}}\''
+            f'--parameters \'{{"name":"ValdricsTrust","issuer":"{issuer}","subject":"tenant:{tenant_id}","audiences":["api://AzureADTokenExchange"]}}\''
         )
 
         return {
@@ -38,11 +38,11 @@ class ConnectionInstructionService:
         issuer = settings.API_URL.rstrip("/")
 
         snippet = (
-            f"# Run this to create an Identity Pool and Provider for Valdrix\n"
-            f"# IMPORTANT: Your Valdrix instance must be reachable at {issuer}\n"
-            f'gcloud iam workload-identity-pools create "valdrix-pool" --location="global" --display-name="Valdrix Pool"\n'
-            f'gcloud iam workload-identity-pools providers create-oidc "valdrix-provider" '
-            f'--location="global" --workload-identity-pool="valdrix-pool" '
+            f"# Run this to create an Identity Pool and Provider for Valdrics\n"
+            f"# IMPORTANT: Your Valdrics instance must be reachable at {issuer}\n"
+            f'gcloud iam workload-identity-pools create "valdrics-pool" --location="global" --display-name="Valdrics Pool"\n'
+            f'gcloud iam workload-identity-pools providers create-oidc "valdrics-provider" '
+            f'--location="global" --workload-identity-pool="valdrics-pool" '
             f'--issuer-uri="{issuer}" '
             f'--attribute-mapping="google.subject=assertion.sub,attribute.tenant_id=assertion.tenant_id"'
         )

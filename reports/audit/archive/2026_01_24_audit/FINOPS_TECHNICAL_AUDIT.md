@@ -1,4 +1,4 @@
-# Valdrix: FinOps-Specific Technical Audit
+# Valdrics: FinOps-Specific Technical Audit
 
 **Reviewer:** Principal Engineer, 15+ years cloud platforms (AWS, Google, Meta)  
 **Focus:** Cost accuracy, attribution, multi-tenant safety, enterprise readiness  
@@ -8,7 +8,7 @@
 
 ## EXECUTIVE SUMMARY (FinOps Lens)
 
-Valdrix is an early-stage FinOps platform with solid zombie detection and LLM analysis capabilities, but **severe gaps in cost accuracy, attribution, and explainability that will erode customer trust in enterprise deployments.**
+Valdrics is an early-stage FinOps platform with solid zombie detection and LLM analysis capabilities, but **severe gaps in cost accuracy, attribution, and explainability that will erode customer trust in enterprise deployments.**
 
 **The Core Problem:**  
 You can detect waste. You cannot yet definitively explain cost attribution to teams/services or reliably forecast under volatile workloads. At scale, cost discrepancies of 1-3% will emerge and go undetected.
@@ -25,7 +25,7 @@ You can detect waste. You cannot yet definitively explain cost attribution to te
 - � **Multi-tenant safety: Needs query limits and partitioning**
 
 **Enterprise Adoption Blocker:**  
-A Fortune 500 company's FinOps team will run Valdrix cost numbers against their internal billing system. Any discrepancy >0.5% will trigger "do you have hidden costs or missing data?" questions that you cannot answer.
+A Fortune 500 company's FinOps team will run Valdrics cost numbers against their internal billing system. Any discrepancy >0.5% will trigger "do you have hidden costs or missing data?" questions that you cannot answer.
 
 ---
 
@@ -34,7 +34,7 @@ A Fortune 500 company's FinOps team will run Valdrix cost numbers against their 
 ### 1. **Cost Accuracy Cannot Be Audited (CRITICAL - RESOLVED)**
 
 **Problem:**  
-In Phase 0, Valdrix had no data lineage. Total costs were "silent" aggregates.
+In Phase 0, Valdrics had no data lineage. Total costs were "silent" aggregates.
 
 **Remediation (Jan 2026):**
 
@@ -79,7 +79,7 @@ select(
 5. **RI Amortization:** "Spread RI upfront costs across 12 months, not charged at purchase"
 
 **Why This Matters:**
-A customer with 100 untagged resources worth `$50K/month` cannot explain those costs to engineering. Valdrix cannot help because you only support tags. Customer leaves.
+A customer with 100 untagged resources worth `$50K/month` cannot explain those costs to engineering. Valdrics cannot help because you only support tags. Customer leaves.
 
 **Real-World Example:**
 
@@ -88,7 +88,7 @@ NAT Gateway:               $100/day = $3000/month
 Ingress Costs:             $50/day = $1500/month
 Total: $4500/month
 
-Valdrix groups by:
+Valdrics groups by:
   service='AmazonEC2'
   region='us-east-1'
 
@@ -194,7 +194,7 @@ Your cost persistence model uses PostgreSQL upsert (ON CONFLICT DO UPDATE) with 
 
 **Why This Breaks:**
 
-1. **Month-End Audits:** Customer's controller reconciles AWS bill to Valdrix. Cost changed 2 days after you ingested it. You have no way to show the change.
+1. **Month-End Audits:** Customer's controller reconciles AWS bill to Valdrics. Cost changed 2 days after you ingested it. You have no way to show the change.
 2. **Cost Accountability:** If a team was charged `$10K` on Jan 15, then the cost is restated to `$11K` on Jan 17, which version is "correct"? No audit trail.
 3. **Forecast Retraining:** You retrain your forecast model on data that changes. Same training set, different actuals → model degrades silently.
 
@@ -268,7 +268,7 @@ Customer A's forecast request times out → churn
 ### Risk 6: Runaway LLM/AI Spend (CRITICAL - RESOLVED)
 
 **Problem:**  
-As a platform that interprets cloud waste using LLMs, Valdrix is itself a FinOps risk. Unbounded LLM spend for scanning 10,000 resources could cost more in tokens than it saves in AWS waste.
+As a platform that interprets cloud waste using LLMs, Valdrics is itself a FinOps risk. Unbounded LLM spend for scanning 10,000 resources could cost more in tokens than it saves in AWS waste.
 
 **Hardening Update (Jan 2026):**
 
@@ -551,7 +551,7 @@ Do not implement:
 - ❌ **Budget forecasting as primary feature.** Forecasting is secondary to cost accuracy. Get accuracy right first.
 - ❌ **Allocation rules with unlimited complexity.** Start with 3 rule types (percentage, per-unit, manual). Stop.
 - ❌ **Real-time cost updates.** No. Costs are notoriously delayed. Set expectations: "Updated daily, finalized after 48h."
-- ❌ **Chargeback automation.** Chargebacks require billing system integration. Out of scope. Valdrix provides data; customer implements chargeback.
+- ❌ **Chargeback automation.** Chargebacks require billing system integration. Out of scope. Valdrics provides data; customer implements chargeback.
 
 ---
 
@@ -580,13 +580,13 @@ Do not implement:
 
 **Pitch to Enterprise CIO:**
 
-> "Valdrix gives you zombie detection that saves 15-30% of cloud spend. But more importantly, we give you cost attribution you can trust. Every dollar is traceable to a team, project, or environment. Your finance team can actually close the books on cloud spend instead of writing off the discrepancy."
+> "Valdrics gives you zombie detection that saves 15-30% of cloud spend. But more importantly, we give you cost attribution you can trust. Every dollar is traceable to a team, project, or environment. Your finance team can actually close the books on cloud spend instead of writing off the discrepancy."
 
 **Before Series-A Conversations:**
 Prepare one enterprise customer audit case study:
 
 - "Customer X: $50M annual AWS spend"
-- "Valdrix detected $8M in annual waste (16% of spend)"
+- "Valdrics detected $8M in annual waste (16% of spend)"
 - "Remediation roadmap prioritized by ROI"
 - "Cost attribution enabled $3M chargeback to teams"
 - "Forecast accuracy: 87% MAPE, improved to 94% after 3 months"

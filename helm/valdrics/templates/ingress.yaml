@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "valdrix.fullname" . }}
+  name: {{ include "valdrics.fullname" . }}
   labels:
-    {{- include "valdrix.labels" . | nindent 4 }}
+    {{- include "valdrics.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -34,7 +34,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "valdrix.fullname" $ }}
+                name: {{ include "valdrics.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}

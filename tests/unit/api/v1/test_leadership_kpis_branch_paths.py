@@ -111,7 +111,7 @@ def _quarterly_payload():
 def test_get_leadership_kpis_requires_tenant_context() -> None:
     user = CurrentUser(
         id=uuid4(),
-        email="tenantless@valdrix.io",
+        email="tenantless@valdrics.io",
         tenant_id=None,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

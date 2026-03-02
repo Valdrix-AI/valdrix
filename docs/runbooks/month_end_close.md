@@ -39,8 +39,8 @@ Valdrics “month-end close” is a deterministic reconciliation package meant f
 Capture an audit-safe bundle under `reports/acceptance/`:
 
 ```bash
-export VALDRIX_API_URL="http://127.0.0.1:8000"
-export VALDRIX_TOKEN="your-bearer-jwt"
+export VALDRICS_API_URL="http://127.0.0.1:8000"
+export VALDRICS_TOKEN="your-bearer-jwt"
 uv run python scripts/capture_acceptance_evidence.py \
   --close-start-date 2026-01-01 \
   --close-end-date 2026-01-31 \

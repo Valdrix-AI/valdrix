@@ -1,6 +1,6 @@
 {
-  "title": "Valdrix Enforcement Control Plane",
-  "uid": "valdrix-enforcement-control-plane",
+  "title": "Valdrics Enforcement Control Plane",
+  "uid": "valdrics-enforcement-control-plane",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
@@ -17,7 +17,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum by (source, decision, path) (rate(valdrix_ops_enforcement_gate_decisions_total[5m]))",
+          "expr": "sum by (source, decision, path) (rate(valdrics_ops_enforcement_gate_decisions_total[5m]))",
           "refId": "A"
         }
       ]
@@ -27,19 +27,19 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "valdrix:enforcement_gate_error_ratio_5m",
+          "expr": "valdrics:enforcement_gate_error_ratio_5m",
           "refId": "A1"
         },
         {
-          "expr": "valdrix:enforcement_gate_error_ratio_1h",
+          "expr": "valdrics:enforcement_gate_error_ratio_1h",
           "refId": "A2"
         },
         {
-          "expr": "valdrix:enforcement_gate_error_ratio_30m",
+          "expr": "valdrics:enforcement_gate_error_ratio_30m",
           "refId": "A3"
         },
         {
-          "expr": "valdrix:enforcement_gate_error_ratio_6h",
+          "expr": "valdrics:enforcement_gate_error_ratio_6h",
           "refId": "A4"
         }
       ]
@@ -49,7 +49,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum by (source, failure_type) (increase(valdrix_ops_enforcement_gate_failures_total[5m]))",
+          "expr": "sum by (source, failure_type) (increase(valdrics_ops_enforcement_gate_failures_total[5m]))",
           "refId": "B"
         }
       ]
@@ -59,7 +59,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum by (source, event) (increase(valdrix_ops_enforcement_gate_lock_events_total{event=~\"contended|timeout|not_acquired\"}[10m]))",
+          "expr": "sum by (source, event) (increase(valdrics_ops_enforcement_gate_lock_events_total{event=~\"contended|timeout|not_acquired\"}[10m]))",
           "refId": "H"
         }
       ]
@@ -69,7 +69,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, source, path) (rate(valdrix_ops_enforcement_gate_latency_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le, source, path) (rate(valdrics_ops_enforcement_gate_latency_seconds_bucket[5m])))",
           "refId": "C"
         }
       ]
@@ -79,7 +79,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "max by (viewer_role) (valdrix_ops_enforcement_approval_queue_backlog)",
+          "expr": "max by (viewer_role) (valdrics_ops_enforcement_approval_queue_backlog)",
           "refId": "D"
         }
       ]
@@ -89,7 +89,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(increase(valdrix_ops_enforcement_export_events_total{artifact=~\"bundle|parity|archive\", outcome=\"mismatch\"}[15m]))",
+          "expr": "sum(increase(valdrics_ops_enforcement_export_events_total{artifact=~\"bundle|parity|archive\", outcome=\"mismatch\"}[15m]))",
           "refId": "E"
         }
       ]
@@ -99,7 +99,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(increase(valdrix_security_rate_limit_exceeded_total{path=~\"/api/v1/enforcement/gate.*\"}[10m]))",
+          "expr": "sum(increase(valdrics_security_rate_limit_exceeded_total{path=~\"/api/v1/enforcement/gate.*\"}[10m]))",
           "refId": "F"
         }
       ]
@@ -109,7 +109,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum by (gate, tenant_tier) (increase(valdrix_ops_llm_fair_use_denials_total[15m]))",
+          "expr": "sum by (gate, tenant_tier) (increase(valdrics_ops_llm_fair_use_denials_total[15m]))",
           "refId": "G"
         }
       ]

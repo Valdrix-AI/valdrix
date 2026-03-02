@@ -30,5 +30,5 @@ class FreeAssessmentService:
                 "potential_optimization_percent": 18.2,
                 "confidence": "High (Rule-based)",
             },
-            "next_steps": "Sign up for Valdrix Pro to get resource-level insights and automated remediation.",
+            "next_steps": "Sign up for Valdrics Pro to get resource-level insights and automated remediation.",
         }

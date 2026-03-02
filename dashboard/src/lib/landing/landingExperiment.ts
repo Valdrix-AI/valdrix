@@ -16,7 +16,7 @@ export interface StorageLike {
 	setItem(key: string, value: string): void;
 }
 
-const VISITOR_ID_STORAGE_KEY = 'valdrix.landing.visitor_id.v1';
+const VISITOR_ID_STORAGE_KEY = 'valdrics.landing.visitor_id.v1';
 const BUYER_PERSONAS: readonly BuyerPersona[] = ['cto', 'finops', 'security', 'cfo'];
 const HERO_VARIANTS: readonly HeroVariant[] = ['control_every_dollar', 'from_metrics_to_control'];
 const CTA_VARIANTS: readonly CtaVariant[] = ['start_free', 'book_briefing'];

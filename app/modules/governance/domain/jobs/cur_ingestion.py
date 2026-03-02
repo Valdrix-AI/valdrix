@@ -76,7 +76,7 @@ class CURIngestionJob:
         # In production, we'd read the manifest file.
         bucket = (
             connection.cur_bucket_name
-            or f"valdrix-cur-{connection.aws_account_id}-{resolved_region}"
+            or f"valdrics-cur-{connection.aws_account_id}-{resolved_region}"
         )
 
         # For demonstration, we assume a path. Real discovery would use s3.list_objects_v2
@@ -118,7 +118,7 @@ class CURIngestionJob:
         )
 
         prefix = connection.cur_prefix or ""
-        report_name = connection.cur_report_name or "valdrix-cur"
+        report_name = connection.cur_report_name or "valdrics-cur"
 
         try:
             # 1. Look for all manifests matching the report name

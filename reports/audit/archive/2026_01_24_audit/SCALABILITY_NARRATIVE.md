@@ -3,13 +3,13 @@
 **Prepared for:** Technical Due Diligence  
 **Last Updated:** January 2026
 
-This document explains how Valdrix is architected to scale from current load to 10× without redesign.
+This document explains how Valdrics is architected to scale from current load to 10× without redesign.
 
 ---
 
 ## Executive Summary
 
-Valdrix is designed for horizontal scalability across all critical paths:
+Valdrics is designed for horizontal scalability across all critical paths:
 
 | Component | Current | 10× Strategy |
 |-----------|---------|--------------|
@@ -222,7 +222,7 @@ cost_records_2026_* → Hot storage (PostgreSQL)
 
 ## Conclusion
 
-Valdrix is already architected for scale:
+Valdrics is already architected for scale:
 
 1. **Partitioned database** for query performance
 2. **Connection pooling** for concurrent users

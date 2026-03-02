@@ -21,7 +21,7 @@ def _user(
     return CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id if tenant_id is not None else uuid4(),
-        email="leader@valdrix.io",
+        email="leader@valdrics.io",
         role=UserRole.MEMBER,
         tier=tier,
     )
@@ -44,7 +44,7 @@ def test_leaderboard_require_tenant_context_raises() -> None:
     user = CurrentUser(
         id=uuid4(),
         tenant_id=None,
-        email="leader-no-tenant@valdrix.io",
+        email="leader-no-tenant@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.GROWTH,
     )
@@ -97,14 +97,14 @@ async def test_leaderboard_allows_starter_tier() -> None:
 async def test_leaderboard_populated_all_time_with_mapping_rows() -> None:
     row1 = SimpleNamespace(
         _mapping={
-            "user_email": "user1@valdrix.io",
+            "user_email": "user1@valdrics.io",
             "total_savings": 120.5,
             "remediation_count": 3,
         }
     )
     row2 = SimpleNamespace(
         _mapping={
-            "user_email": "user2@valdrix.io",
+            "user_email": "user2@valdrics.io",
             "total_savings": 50.0,
             "remediation_count": 1,
         }
@@ -124,7 +124,7 @@ async def test_leaderboard_populated_all_time_with_mapping_rows() -> None:
     assert payload.period == "All Time"
     assert len(payload.entries) == 2
     assert payload.entries[0].rank == 1
-    assert payload.entries[0].user_email == "user1@valdrix.io"
+    assert payload.entries[0].user_email == "user1@valdrics.io"
     assert payload.entries[0].savings_usd == 120.5
     assert payload.entries[0].remediation_count == 3
     assert payload.total_team_savings == 170.5
@@ -137,7 +137,7 @@ async def test_leaderboard_cache_hit_bypasses_db() -> None:
         "entries": [
             {
                 "rank": 1,
-                "user_email": "cached@valdrix.io",
+                "user_email": "cached@valdrics.io",
                 "savings_usd": 99.0,
                 "remediation_count": 2,
             }
@@ -157,7 +157,7 @@ async def test_leaderboard_cache_hit_bypasses_db() -> None:
         )
 
     assert payload.total_team_savings == 99.0
-    assert payload.entries[0].user_email == "cached@valdrix.io"
+    assert payload.entries[0].user_email == "cached@valdrics.io"
     db.execute.assert_not_awaited()
     cache.set.assert_not_awaited()
 
@@ -165,7 +165,7 @@ async def test_leaderboard_cache_hit_bypasses_db() -> None:
 @pytest.mark.asyncio
 async def test_leaderboard_invalid_cache_falls_through_and_sets_cache() -> None:
     row = SimpleNamespace(
-        user_email="fallback@valdrix.io",
+        user_email="fallback@valdrics.io",
         total_savings=20.0,
         remediation_count=1,
     )
@@ -184,7 +184,7 @@ async def test_leaderboard_invalid_cache_falls_through_and_sets_cache() -> None:
             db=db,
         )
 
-    assert payload.entries[0].user_email == "fallback@valdrix.io"
+    assert payload.entries[0].user_email == "fallback@valdrics.io"
     assert payload.total_team_savings == 20.0
     logger_mock.warning.assert_called_once()
     cache.set.assert_awaited_once()
@@ -194,7 +194,7 @@ async def test_leaderboard_invalid_cache_falls_through_and_sets_cache() -> None:
 @pytest.mark.asyncio
 async def test_leaderboard_non_dict_cache_payload_falls_through() -> None:
     row = SimpleNamespace(
-        user_email="fallback2@valdrix.io",
+        user_email="fallback2@valdrics.io",
         total_savings=10.0,
         remediation_count=2,
     )
@@ -220,7 +220,7 @@ async def test_leaderboard_non_dict_cache_payload_falls_through() -> None:
 async def test_leaderboard_replay_is_deterministic_for_same_inputs() -> None:
     row = SimpleNamespace(
         _mapping={
-            "user_email": "repeat@valdrix.io",
+            "user_email": "repeat@valdrics.io",
             "total_savings": 42.5,
             "remediation_count": 2,
         }

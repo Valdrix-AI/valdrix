@@ -14,12 +14,12 @@ class AWSDeleteVolumeAction(BaseAWSAction):
         async with await self._get_client("ec2", context) as ec2:
             response = await ec2.create_snapshot(
                 VolumeId=resource_id,
-                Description=f"Valdrix backup before deletion of {resource_id}",
+                Description=f"Valdrics backup before deletion of {resource_id}",
                 TagSpecifications=[
                     {
                         "ResourceType": "snapshot",
                         "Tags": [
-                            {"Key": "Valdrix", "Value": "remediation-backup"},
+                            {"Key": "Valdrics", "Value": "remediation-backup"},
                             {"Key": "OriginalVolume", "Value": resource_id},
                         ],
                     }

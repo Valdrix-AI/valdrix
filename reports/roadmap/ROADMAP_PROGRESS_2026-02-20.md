@@ -1,4 +1,4 @@
-# Valdrix Roadmap Progress Snapshot
+# Valdrics Roadmap Progress Snapshot
 
 Date: **2026-02-20**
 
@@ -11,7 +11,7 @@ This is a progress archive (what shipped + evidence pointers). For the previous 
 Acceptance capture was re-run against the live API and completed with a full pass.
 
 - Run:
-  - `scripts/capture_acceptance_evidence.py --url "http://127.0.0.1:8000" --token "$VALDRIX_TOKEN"`
+  - `scripts/capture_acceptance_evidence.py --url "http://127.0.0.1:8000" --token "$VALDRICS_TOKEN"`
 - Result:
   - `26/26 ok`
 - Evidence bundle:
@@ -23,7 +23,7 @@ Acceptance capture was re-run against the live API and completed with a full pas
 SSO federation smoke validation was executed successfully after tier-aligned sign-off configuration.
 
 - Run:
-  - `scripts/smoke_test_sso_federation.py --url "http://127.0.0.1:8000" --token "$VALDRIX_TOKEN" --email "admin@yourcompany.com" --publish --timeout 60`
+  - `scripts/smoke_test_sso_federation.py --url "http://127.0.0.1:8000" --token "$VALDRICS_TOKEN" --email "admin@yourcompany.com" --publish --timeout 60`
 - Result:
   - `passed: true`
   - `public.sso_discovery: 200`

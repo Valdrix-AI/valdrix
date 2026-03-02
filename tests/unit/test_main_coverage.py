@@ -75,17 +75,17 @@ async def test_health_check_healthy(client):
         assert response.json()["status"] == "healthy"
 
 
-def test_valdrix_exception_handler(client):
+def test_valdrics_exception_handler(client):
     from app.main import app
-    from app.shared.core.exceptions import ValdrixException
+    from app.shared.core.exceptions import ValdricsException
 
-    @app.get("/test-valdrix-exc")
+    @app.get("/test-valdrics-exc")
     async def trigger_exc():
-        raise ValdrixException(
+        raise ValdricsException(
             message="Test message", code="test_code", status_code=418
         )
 
-    response = client.get("/test-valdrix-exc")
+    response = client.get("/test-valdrics-exc")
     assert response.status_code == 418
     assert response.json()["error"]["code"] == "test_code"
 

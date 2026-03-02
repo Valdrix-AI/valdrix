@@ -104,6 +104,43 @@ Source audit: `/home/daretechie/.gemini/antigravity/brain/c6c55133-7d83-4352-ab2
 - `uv run python scripts/verify_landing_component_budget.py` -> passed (`hero_lines=775 max=800 components=14`).
 - `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_landing_component_budget.py` -> passed (`3 passed`).
 
+## Additional remediation batch (2026-03-02B, report re-validation closure)
+
+1. Residual content-marketing gap closed:
+- added public insights hub:
+  - `dashboard/src/routes/insights/+page.svelte`
+  - `dashboard/src/routes/insights/insights-page.svelte.test.ts`
+- wired insights into public navigation and docs/resources hubs:
+  - `dashboard/src/lib/landing/publicNav.ts`
+  - `dashboard/src/routes/docs/+page.svelte`
+  - `dashboard/src/routes/resources/+page.svelte`
+
+2. CFO pre-signup friction further reduced:
+- ROI CTA now offers ungated worksheet download in addition to gated planner:
+  - `dashboard/src/lib/components/landing/LandingRoiPlannerCta.svelte`
+  - `dashboard/src/lib/components/LandingHero.svelte`
+  - `dashboard/src/lib/components/LandingHero.svelte.test.ts`
+
+3. Public-edge routing/discovery coverage updated:
+- `dashboard/src/lib/routeProtection.ts`
+- `dashboard/src/routes/sitemap.xml/+server.ts`
+- tests:
+  - `dashboard/src/lib/routeProtection.test.ts`
+  - `dashboard/src/routes/sitemap.xml/sitemap.server.test.ts`
+  - `dashboard/src/lib/landing/publicNav.test.ts`
+  - `dashboard/src/routes/docs/docs-page.svelte.test.ts`
+  - `dashboard/src/routes/resources/resources-page.svelte.test.ts`
+
+4. Evidence register produced:
+- `docs/ops/landing_page_audit_closure_2026-03-02.md`
+
+5. Validation evidence (this batch):
+- `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+- `cd dashboard && npm run test:unit -- --run` -> passed (`59 files`, `195 tests`).
+- `cd dashboard && npx playwright test e2e/landing-layout-audit.spec.ts` -> passed (`3 passed`).
+- `uv run python scripts/verify_landing_component_budget.py` -> passed (`hero_lines=775 max=800 components=14`).
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_landing_component_budget.py` -> passed (`3 passed`).
+
 ## Additional remediation batch (2026-03-01, source: `.../dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved`)
 
 ## Additional remediation batch (2026-03-01B, source: `.../dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved`)
@@ -230,7 +267,7 @@ Source audit: `/home/daretechie/.gemini/antigravity/brain/c6c55133-7d83-4352-ab2
 - `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
 
 0. Helm `WORKERS: "4"` + multi-replica defaults vs process-local breaker
-- Fixed in `helm/valdrix/values.yaml`:
+- Fixed in `helm/valdrics/values.yaml`:
   - `WORKERS` removed
   - `WEB_CONCURRENCY: "1"` added
   - API default `replicaCount` set to `1`
@@ -604,8 +641,8 @@ This section consolidates what is now remediated from the Valdrics audit stream 
 ## Valdrics remaining finding dispositions (post-remediation review)
 
 - Disposition evidence is now machine-checkable and release-gated via:
-  - register artifact: `docs/ops/evidence/valdrix_disposition_register_2026-02-28.json`
-  - verifier: `scripts/verify_valdrix_disposition_freshness.py`
+  - register artifact: `docs/ops/evidence/valdrics_disposition_register_2026-02-28.json`
+  - verifier: `scripts/verify_valdrics_disposition_freshness.py`
   - enterprise gate wiring: `scripts/run_enterprise_tdd_gate.py`
 - `VAL-ADAPT-001`: reduced in practice by standardized adapter retry/error pathways and explicit `last_error` handling in Cloud+ adapters; further normalization is tracked with `VAL-ADAPT-002+` decomposition work.
 - `VAL-DB-002`: backend resolution complexity retained intentionally with fail-closed semantics and exhaustive session-path tests; no release-critical fail-open path confirmed.
@@ -1164,7 +1201,7 @@ This section consolidates what is now remediated from the Valdrics audit stream 
 - Failure modes: overflow/sr-only/header/toggle regressions are explicit test failures.
 - Operational misconfiguration: no new runtime config surface introduced.
 
-## Additional remediation batch (Valdrix continuation, 2026-03-01M)
+## Additional remediation batch (Valdrics continuation, 2026-03-01M)
 
 - PKG/FIN operational closeout automation added:
   - `scripts/verify_pkg_fin_operational_readiness.py`
@@ -1546,11 +1583,11 @@ Post-closure sanity (release-critical):
 
 - Legacy branding normalization hardening:
   - `app/shared/core/config.py`
-  - added `_normalize_branding()` in central settings validation to normalize legacy product names (`Valdrix`, `CloudSentinel*`) to canonical `Valdrics` at runtime.
+  - added `_normalize_branding()` in central settings validation to normalize legacy product names (`Valdrics`, `Valdrics*`) to canonical `Valdrics` at runtime.
   - emits explicit structured warning (`legacy_app_name_normalized`) when normalization is applied.
 - Added regression coverage:
   - `tests/unit/core/test_config_audit.py::test_settings_normalizes_legacy_brand_name`.
-- Updated remaining user-facing dashboard strings from legacy `Valdrix` to `Valdrics` in:
+- Updated remaining user-facing dashboard strings from legacy `Valdrics` to `Valdrics` in:
   - `dashboard/src/lib/api.ts`
   - `dashboard/src/app.css`
   - `dashboard/src/lib/components/IdentitySettingsCard.svelte`

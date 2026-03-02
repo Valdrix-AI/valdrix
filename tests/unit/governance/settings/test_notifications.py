@@ -20,7 +20,7 @@ async def test_get_notification_settings_creates_default(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -41,7 +41,7 @@ async def test_update_notification_settings(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     settings = NotificationSettings(
@@ -70,7 +70,7 @@ async def test_update_notification_settings_creates_if_missing(
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="creator@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="creator@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -104,7 +104,7 @@ async def test_test_slack_notification(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     mock_slack = AsyncMock()
@@ -131,7 +131,7 @@ async def test_test_slack_notification_missing_config(async_client: AsyncClient,
     user_id = uuid.uuid4()
     tenant_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="admin@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -153,7 +153,7 @@ async def test_test_slack_notification_uses_override(
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="admin@valdrics.io", role=UserRole.ADMIN
     )
 
     db.add(
@@ -193,7 +193,7 @@ async def test_test_slack_notification_failure_and_exception(
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="admin@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -912,8 +912,8 @@ async def test_update_notification_settings_with_workflow_config(
                 "slack_enabled": True,
                 "jira_enabled": False,
                 "workflow_github_enabled": True,
-                "workflow_github_owner": "Valdrix-AI",
-                "workflow_github_repo": "valdrix",
+                "workflow_github_owner": "Valdrics-AI",
+                "workflow_github_repo": "valdrics",
                 "workflow_github_workflow_id": "remediation.yml",
                 "workflow_github_ref": "main",
                 "workflow_github_token": "gh_token_value_123",
@@ -923,7 +923,7 @@ async def test_update_notification_settings_with_workflow_config(
                 "workflow_gitlab_ref": "main",
                 "workflow_gitlab_trigger_token": "gl_token_value_123",
                 "workflow_webhook_enabled": True,
-                "workflow_webhook_url": "https://ci.example.com/hooks/valdrix",
+                "workflow_webhook_url": "https://ci.example.com/hooks/valdrics",
                 "workflow_webhook_bearer_token": "webhook_token_value_123",
                 "digest_schedule": "daily",
                 "digest_hour": 9,
@@ -964,8 +964,8 @@ async def test_update_notification_settings_workflow_requires_incident_tier(
                 "slack_enabled": True,
                 "jira_enabled": False,
                 "workflow_github_enabled": True,
-                "workflow_github_owner": "Valdrix-AI",
-                "workflow_github_repo": "valdrix",
+                "workflow_github_owner": "Valdrics-AI",
+                "workflow_github_repo": "valdrics",
                 "workflow_github_workflow_id": "remediation.yml",
                 "workflow_github_ref": "main",
                 "workflow_github_token": "gh_token_value_123",
@@ -1002,8 +1002,8 @@ async def test_update_notification_settings_workflow_missing_fields_returns_422(
                 "slack_enabled": True,
                 "jira_enabled": False,
                 "workflow_github_enabled": True,
-                "workflow_github_owner": "Valdrix-AI",
-                "workflow_github_repo": "valdrix",
+                "workflow_github_owner": "Valdrics-AI",
+                "workflow_github_repo": "valdrics",
                 "workflow_github_ref": "main",
                 "digest_schedule": "daily",
                 "digest_hour": 9,

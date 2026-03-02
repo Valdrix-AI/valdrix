@@ -43,7 +43,7 @@ class _Rows:
 def _owner_user(tenant_id: object) -> CurrentUser:
     return CurrentUser(
         id=uuid4(),
-        email="owner-audit@valdrix.io",
+        email="owner-audit@valdrics.io",
         tenant_id=tenant_id,
         role=UserRole.OWNER,
         tier=PricingTier.PRO,
@@ -53,7 +53,7 @@ def _owner_user(tenant_id: object) -> CurrentUser:
 def _admin_user(tenant_id: object | None) -> CurrentUser:
     return CurrentUser(
         id=uuid4(),
-        email="admin-audit@valdrix.io",
+        email="admin-audit@valdrics.io",
         tenant_id=tenant_id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

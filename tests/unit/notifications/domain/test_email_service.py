@@ -10,7 +10,7 @@ def email_service():
         smtp_port=587,
         smtp_user="user",
         smtp_password="password",
-        from_email="noreply@valdrix.io",
+        from_email="noreply@valdrics.io",
     )
 
 
@@ -34,7 +34,7 @@ async def test_send_carbon_alert_success(email_service):
         mock_server.starttls.assert_called_once()
         mock_server.login.assert_called_once_with("user", "password")
         mock_server.sendmail.assert_called_once_with(
-            "noreply@valdrix.io", recipients, ANY
+            "noreply@valdrics.io", recipients, ANY
         )
 
 

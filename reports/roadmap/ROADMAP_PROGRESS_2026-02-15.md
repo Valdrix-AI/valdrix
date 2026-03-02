@@ -1,4 +1,4 @@
-# Valdrix Roadmap Progress Snapshot
+# Valdrics Roadmap Progress Snapshot
 
 Date: **2026-02-15**
 

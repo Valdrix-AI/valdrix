@@ -2,10 +2,10 @@
 apiVersion: 1
 
 providers:
-  - name: 'Valdrix Dashboards'
+  - name: 'Valdrics Dashboards'
     orgId: 1
-    folder: 'Valdrix'
-    folderUid: 'valdrix'
+    folder: 'Valdrics'
+    folderUid: 'valdrics'
     type: file
     disableDeletion: false
     editable: true

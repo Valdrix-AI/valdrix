@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/valdrix_icon.png" alt="Valdrics" width="200" />
+  <img src="assets/valdrics_icon.png" alt="Valdrics" width="200" />
 </p>
 
 <h1 align="center">Valdrics</h1>
@@ -208,7 +208,7 @@ We're paranoid, so you don't have to be:
 
 ```bash
 git clone https://github.com/Valdrics/valdrics.git
-cd valdrix
+cd valdrics
 cp .env.example .env
 ```
 
@@ -257,18 +257,18 @@ Valdrics includes production-ready infrastructure components:
 ### Kubernetes Deployment
 ```bash
 # Deploy with Helm
-helm install valdrix helm/valdrix/ \
+helm install valdrics helm/valdrics/ \
   --set image.tag=latest \
-  --set existingSecrets.name=valdrix-secrets
+  --set existingSecrets.name=valdrics-secrets
 
 # Or customize values
-helm install valdrix helm/valdrix/ -f my-values.yaml
+helm install valdrics helm/valdrics/ -f my-values.yaml
 ```
 
 ### Pre-configured Components
 | Component | Location | Description |
 |-----------|----------|-------------|
-| **Helm Chart** | `helm/valdrix/` | Full K8s deployment (HPA, Ingress, Service) |
+| **Helm Chart** | `helm/valdrics/` | Full K8s deployment (HPA, Ingress, Service) |
 | **K8s Manifests** | `k8s/` | Raw YAML manifests for non-Helm deploys |
 | **Grafana Dashboards** | `grafana/dashboards/` | API Overview + FinOps metrics |
 | **Load Tests** | `loadtest/` | k6 + Locust performance tests |

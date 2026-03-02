@@ -80,7 +80,7 @@ jobs:
         uses: CycloneDX/gh-python-generate-sbom@v2
         with:
           input: ./pyproject.toml
-          output: ./sbom/valdrix-python-sbom.json
+          output: ./sbom/valdrics-python-sbom.json
           format: json
 
       - name: Set up Docker Buildx
@@ -93,22 +93,22 @@ jobs:
           context: .
           push: false
           load: true
-          tags: valdrix/api:${{ github.sha }}
+          tags: valdrics/api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
       - name: Generate Container SBOM (Syft)
         uses: anchore/sbom-action@v0
         with:
-          image: valdrix/api:${{ github.sha }}
+          image: valdrics/api:${{ github.sha }}
           format: cyclonedx-json
-          output-file: ./sbom/valdrix-container-sbom.json
+          output-file: ./sbom/valdrics-container-sbom.json
       
       # Vulnerability Scan
       - name: Scan SBOM for Vulnerabilities (Grype)
         uses: anchore/scan-action@v5
         with:
-          sbom: ./sbom/valdrix-container-sbom.json
+          sbom: ./sbom/valdrics-container-sbom.json
           fail-build: true
           severity-cutoff: high
 
@@ -145,8 +145,8 @@ jobs:
           uv run python scripts/verify_supply_chain_attestations.py \
             --repo "${GITHUB_REPOSITORY}" \
             --signer-workflow .github/workflows/sbom.yml \
-            --artifact ./sbom/valdrix-python-sbom.json \
-            --artifact ./sbom/valdrix-container-sbom.json \
+            --artifact ./sbom/valdrics-python-sbom.json \
+            --artifact ./sbom/valdrics-container-sbom.json \
             --artifact ./provenance/supply-chain-manifest.json
       
       # Intentionally do not push directly to main from CI.
@@ -176,7 +176,7 @@ jobs:
           echo "" >> compliance-report.md
           echo "## Python Dependencies" >> compliance-report.md
           jq -r '.components[] | "- \(.name)@\(.version): \(.licenses[0].license.id // "Unknown")"' \
-            ./evidence/sbom/valdrix-python-sbom.json >> compliance-report.md 2>/dev/null || echo "- No components found" >> compliance-report.md
+            ./evidence/sbom/valdrics-python-sbom.json >> compliance-report.md 2>/dev/null || echo "- No components found" >> compliance-report.md
       
       - name: Upload Compliance Report
         uses: actions/upload-artifact@v4

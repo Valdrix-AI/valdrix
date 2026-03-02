@@ -18,7 +18,7 @@ from app.modules.optimization.domain import ZombieService, RemediationService
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag, PricingTier, normalize_tier
 from app.shared.core.rate_limit import rate_limit
-from app.shared.core.exceptions import ResourceNotFoundError, ValdrixException
+from app.shared.core.exceptions import ResourceNotFoundError, ValdricsException
 from app.shared.core.provider import normalize_provider
 from app.shared.core.remediation_results import (
     normalize_remediation_status,
@@ -88,7 +88,7 @@ def _parse_remediation_action(action: str) -> RemediationAction:
     try:
         return RemediationAction(action)
     except ValueError as exc:
-        raise ValdrixException(
+        raise ValdricsException(
             message=f"Invalid action: {action}",
             code="invalid_remediation_action",
             status_code=400,
@@ -104,7 +104,7 @@ def _raise_if_failed_execution(executed_request: RemediationRequest) -> None:
         getattr(executed_request, "execution_error", None)
     )
 
-    raise ValdrixException(
+    raise ValdricsException(
         message=failure.message,
         code=failure.reason,
         status_code=failure.status_code or 400,
@@ -491,17 +491,17 @@ async def execute_remediation(
         }
     except ResourceNotFoundError:
         raise
-    except ValdrixException:
+    except ValdricsException:
         raise
     except ValueError as exc:
-        raise ValdrixException(
+        raise ValdricsException(
             message=str(exc),
             code="remediation_execution_failed",
             status_code=400,
         ) from exc
     except Exception:
         logger.exception("remediation_api_execution_failed", request_id=str(request_id))
-        raise ValdrixException(
+        raise ValdricsException(
             message="Failed to execute remediation request.",
             code="remediation_execution_failed",
             status_code=500,

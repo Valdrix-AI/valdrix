@@ -154,7 +154,7 @@ async def test_analyze_graviton_opportunities_success(
     mock_result = MagicMock()
     connection = MagicMock()
     connection.aws_account_id = "123456789012"
-    connection.role_arn = "arn:aws:iam::123456789012:role/ValdrixRole"
+    connection.role_arn = "arn:aws:iam::123456789012:role/ValdricsRole"
     connection.external_id = "external-id"
     connection.region = "us-east-1"
     connection.tenant_id = "tenant-123"

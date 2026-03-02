@@ -22,13 +22,13 @@ def _write(path: Path, content: str = "x") -> None:
 def test_build_verify_command_includes_repo_workflow_and_json_output() -> None:
     cmd = build_verify_command(
         artifact=Path("/tmp/sbom.json"),
-        repo="acme/valdrix",
+        repo="acme/valdrics",
         signer_workflow=".github/workflows/sbom.yml",
     )
 
     assert cmd[:4] == ["gh", "attestation", "verify", "/tmp/sbom.json"]
     assert "--repo" in cmd
-    assert "acme/valdrix" in cmd
+    assert "acme/valdrics" in cmd
     assert "--signer-workflow" in cmd
     assert ".github/workflows/sbom.yml" in cmd
     assert cmd[-2:] == ["--format", "json"]
@@ -50,7 +50,7 @@ def test_verify_attestations_requires_repo() -> None:
 def test_verify_attestations_requires_at_least_one_artifact() -> None:
     with pytest.raises(ValueError, match="At least one --artifact"):
         verify_attestations(
-            repo="acme/valdrix",
+            repo="acme/valdrics",
             signer_workflow=".github/workflows/sbom.yml",
             artifacts=(),
             dry_run=True,
@@ -60,7 +60,7 @@ def test_verify_attestations_requires_at_least_one_artifact() -> None:
 def test_verify_attestations_rejects_missing_artifact_file() -> None:
     with pytest.raises(FileNotFoundError, match="Artifact path does not exist"):
         verify_attestations(
-            repo="acme/valdrix",
+            repo="acme/valdrics",
             signer_workflow=".github/workflows/sbom.yml",
             artifacts=(Path("missing.json"),),
             dry_run=True,
@@ -203,7 +203,7 @@ def test_verify_attestations_executes_gh_verify_for_each_artifact(
     )
 
     exit_code = verify_attestations(
-        repo="acme/valdrix",
+        repo="acme/valdrics",
         signer_workflow=".github/workflows/sbom.yml",
         artifacts=(artifact_one, artifact_two),
         dry_run=False,
@@ -248,7 +248,7 @@ def test_verify_attestations_rejects_empty_verification_results(
 
     with pytest.raises(RuntimeError, match="no entries"):
         verify_attestations(
-            repo="acme/valdrix",
+            repo="acme/valdrics",
             signer_workflow=".github/workflows/sbom.yml",
             artifacts=(artifact,),
             dry_run=False,
@@ -262,7 +262,7 @@ def test_main_dry_run_succeeds(tmp_path: Path) -> None:
     exit_code = main(
         [
             "--repo",
-            "acme/valdrix",
+            "acme/valdrics",
             "--signer-workflow",
             ".github/workflows/sbom.yml",
             "--artifact",

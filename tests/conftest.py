@@ -1,5 +1,5 @@
 """
-Global pytest fixtures for Valdrix test suite.
+Global pytest fixtures for Valdrics test suite.
 
 Provides:
 - Async database session with SQLite in-memory
@@ -175,13 +175,13 @@ async def db_session(async_engine) -> AsyncGenerator["AsyncSession", None]:
 
 @pytest.fixture
 def app():
-    """Use the real Valdrix app for integration tests."""
-    from app.main import app as valdrix_app
+    """Use the real Valdrics app for integration tests."""
+    from app.main import app as valdrics_app
     from app.main import settings
 
     # Force TESTING mode to True to bypass CSRF and other secure middlewares
     settings.TESTING = True
-    return valdrix_app
+    return valdrics_app
 
 
 @pytest.fixture
@@ -290,7 +290,7 @@ def mock_user(mock_tenant_id, mock_user_id):
 
     return CurrentUser(
         id=mock_user_id,
-        email="test@valdrix.io",
+        email="test@valdrics.io",
         tenant_id=mock_tenant_id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
@@ -304,7 +304,7 @@ def member_user(mock_tenant_id, mock_user_id):
 
     return CurrentUser(
         id=mock_user_id,
-        email="member@valdrix.io",
+        email="member@valdrics.io",
         tenant_id=mock_tenant_id,
         role=UserRole.MEMBER,
         tier=PricingTier.PRO,
@@ -360,11 +360,11 @@ def mock_aws_connection(mock_tenant_id):
     conn.id = uuid4()
     conn.tenant_id = mock_tenant_id
     conn.provider = "aws"
-    conn.role_arn = "arn:aws:iam::123456789012:role/ValdrixReadOnly"
-    conn.external_id = "valdrix-test-external-id"
+    conn.role_arn = "arn:aws:iam::123456789012:role/ValdricsReadOnly"
+    conn.external_id = "valdrics-test-external-id"
     conn.region = "us-east-1"
     conn.is_cur_enabled = True
-    conn.cur_bucket = "valdrix-cur-test"
+    conn.cur_bucket = "valdrics-cur-test"
     conn.status = "active"
     return conn
 
@@ -376,7 +376,7 @@ def mock_gcp_connection(mock_tenant_id):
     conn.id = uuid4()
     conn.tenant_id = mock_tenant_id
     conn.provider = "gcp"
-    conn.project_id = "valdrix-test-project"
+    conn.project_id = "valdrics-test-project"
     conn.billing_export_dataset = "billing_export"
     conn.status = "active"
     return conn

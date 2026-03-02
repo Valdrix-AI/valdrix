@@ -12,8 +12,8 @@ def test_generate_evidence_requires_separation_of_duties(tmp_path: Path) -> None
     with pytest.raises(ValueError, match="must be distinct"):
         generator.generate_evidence(
             output=tmp_path / "artifact.json",
-            executed_by="same@valdrix.local",
-            approved_by="same@valdrix.local",
+            executed_by="same@valdrics.local",
+            approved_by="same@valdrics.local",
             profile="enforcement_failure_injection",
             cwd=tmp_path,
         )
@@ -47,8 +47,8 @@ def test_generate_evidence_writes_summary_and_scenarios(
     output = tmp_path / "evidence.json"
     artifact, overall_passed = generator.generate_evidence(
         output=output,
-        executed_by="executor@valdrix.local",
-        approved_by="approver@valdrix.local",
+        executed_by="executor@valdrics.local",
+        approved_by="approver@valdrics.local",
         profile="enforcement_failure_injection",
         cwd=tmp_path,
     )
@@ -94,9 +94,9 @@ def test_main_exit_code_follows_overall_result(
             "--output",
             str(tmp_path / "artifact.json"),
             "--executed-by",
-            "exec@valdrix.local",
+            "exec@valdrics.local",
             "--approved-by",
-            "approve@valdrix.local",
+            "approve@valdrics.local",
         ]
     )
     assert exit_code == 0

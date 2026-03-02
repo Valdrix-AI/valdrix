@@ -1,4 +1,4 @@
-# Valdrix Roadmap Progress Snapshot
+# Valdrics Roadmap Progress Snapshot
 
 Date: **2026-02-14**
 
@@ -348,7 +348,7 @@ Removes prototype “dummy config” strategy execution and makes commitment opt
   - `tests/unit/optimization/test_optimization_service.py`
 
 ### 29) SCIM Group Mappings (Enterprise RBAC/Persona)
-Adds tenant-configurable SCIM group mappings so IdP groups can deterministically assign Valdrix `role` and optional default `persona` during provisioning (Enterprise identity hardening).
+Adds tenant-configurable SCIM group mappings so IdP groups can deterministically assign Valdrics `role` and optional default `persona` during provisioning (Enterprise identity hardening).
 
 - Model:
   - `app/models/tenant_identity_settings.py` (`TenantIdentitySettings.scim_group_mappings`)

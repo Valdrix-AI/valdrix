@@ -4,9 +4,9 @@ import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch, MagicMock
 
-from app.main import app as valdrix_app
+from app.main import app as valdrics_app
 from app.main import (
-    valdrix_exception_handler,
+    valdrics_exception_handler,
     http_exception_handler,
     csrf_protect_exception_handler,
     validation_exception_handler,
@@ -17,7 +17,7 @@ from app.main import (
     _resolve_csrf_settings,
 )
 from app.main import settings
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 from app.shared.db.session import get_db
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -37,11 +37,11 @@ async def lite_client() -> AsyncGenerator[AsyncClient, None]:
     async def override_get_db():
         yield MagicMock()
 
-    valdrix_app.dependency_overrides[get_db] = override_get_db
-    transport = ASGITransport(app=valdrix_app)
+    valdrics_app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=valdrics_app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    valdrix_app.dependency_overrides.pop(get_db, None)
+    valdrics_app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.asyncio
@@ -84,7 +84,7 @@ async def test_not_found(lite_client: AsyncClient):
 
 def test_gzip_middleware_registered():
     """API should register gzip middleware for larger responses."""
-    assert any(m.cls == GZipMiddleware for m in valdrix_app.user_middleware)
+    assert any(m.cls == GZipMiddleware for m in valdrics_app.user_middleware)
 
 
 def _make_request(path: str = "/boom", method: str = "GET") -> Request:
@@ -118,12 +118,12 @@ def _make_request_with_headers(
 
 
 @pytest.mark.asyncio
-async def test_valdrix_exception_handler_records_metrics():
+async def test_valdrics_exception_handler_records_metrics():
     request = _make_request(path="/fail", method="POST")
-    exc = ValdrixException("boom", code="oops", status_code=418, details={"x": 1})
+    exc = ValdricsException("boom", code="oops", status_code=418, details={"x": 1})
 
     with patch("app.shared.core.error_governance.API_ERRORS_TOTAL") as mock_metric:
-        response = await valdrix_exception_handler(request, exc)
+        response = await valdrics_exception_handler(request, exc)
         mock_metric.labels.assert_called_once_with(
             path="/fail", method="POST", status_code=418
         )

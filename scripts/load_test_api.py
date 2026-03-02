@@ -6,7 +6,7 @@ This wraps `app.shared.core.performance_testing.LoadTester` so we can
 standardize how we measure p95/p99 for key endpoints during hardening.
 
 Example:
-  export VALDRIX_TOKEN="$(uv run python scripts/dev_bearer_token.py --email owner@valdrix.io)"
+  export VALDRICS_TOKEN="$(uv run python scripts/dev_bearer_token.py --email owner@valdrics.io)"
   uv run python scripts/load_test_api.py --url http://127.0.0.1:8000 --endpoint /health/live --endpoint /api/v1/costs/acceptance/kpis
 
 Perf smoke (dashboard profile):
@@ -422,13 +422,13 @@ async def main() -> None:
 
     headers: dict[str, str] = {}
     token = ""
-    raw_token = os.getenv("VALDRIX_TOKEN", "").strip()
+    raw_token = os.getenv("VALDRICS_TOKEN", "").strip()
     if raw_token:
         try:
             token = sanitize_bearer_token(raw_token)
         except ValueError as exc:
             raise SystemExit(
-                "Invalid VALDRIX_TOKEN. Ensure it's a single JWT string. "
+                "Invalid VALDRICS_TOKEN. Ensure it's a single JWT string. "
                 f"Details: {exc}"
             ) from None
         headers["Authorization"] = f"Bearer {token}"
@@ -709,7 +709,7 @@ async def main() -> None:
 
     if args.publish:
         if not token:
-            raise SystemExit("VALDRIX_TOKEN is required for --publish.")
+            raise SystemExit("VALDRICS_TOKEN is required for --publish.")
 
         publish_url = f"{config.target_url}/api/v1/audit/performance/load-test/evidence"
         async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:

@@ -146,6 +146,6 @@ async def test_execute_rds_backup_integration(db, remediation_service, test_tena
         await db.refresh(request)
         assert request.status == RemediationStatus.COMPLETED
         assert request.backup_resource_id is not None
-        assert request.backup_resource_id.startswith("valdrix-backup-db-backup-")
+        assert request.backup_resource_id.startswith("valdrics-backup-db-backup-")
         mock_rds.create_db_snapshot.assert_called_once()
         mock_rds.delete_db_instance.assert_called_once()

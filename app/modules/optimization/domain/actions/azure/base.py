@@ -22,7 +22,7 @@ class BaseAzureAction(BaseRemediationAction):
     async def _get_credentials(self, context: RemediationContext) -> ClientSecretCredential:
         if not self._credential:
             creds = context.credentials or {}
-            # Valdrix typically stores these in SecretStr or sensitive dicts
+            # Valdrics typically stores these in SecretStr or sensitive dicts
             # Assuming context.credentials contains client_id, tenant_id, client_secret
             tenant_id = str(creds.get("tenant_id", ""))
             client_id = str(creds.get("client_id", ""))

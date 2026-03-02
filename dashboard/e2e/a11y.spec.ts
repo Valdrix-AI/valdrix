@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { getViolations, injectAxe } from 'axe-playwright';
 
 const CRITICAL_AND_SERIOUS = ['critical', 'serious'] as const;
-const E2E_AUTH_HEADER_NAME = 'x-valdrix-e2e-auth';
+const E2E_AUTH_HEADER_NAME = 'x-valdrics-e2e-auth';
 const E2E_AUTH_HEADER_VALUE = process.env.E2E_AUTH_SECRET || 'playwright';
 
 type RouteCase = {

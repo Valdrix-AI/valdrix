@@ -16,8 +16,8 @@ from app.shared.core.exceptions import ConfigurationError
 def _creds(*, region: str = "us-east-1") -> AWSCredentials:
     return AWSCredentials(
         account_id="123456789012",
-        role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
-        external_id="valdrix-test",
+        role_arn="arn:aws:iam::123456789012:role/ValdricsRole",
+        external_id="valdrics-test",
         region=region,
         tenant_id=uuid4(),
     )

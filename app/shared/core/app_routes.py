@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.db.session import get_system_db
 
 SYSTEM_HEALTH = Gauge(
-    "valdrix_system_health",
+    "valdrics_system_health",
     "System health status (1=healthy, 0.5=degraded, 0=unhealthy)",
 )
 

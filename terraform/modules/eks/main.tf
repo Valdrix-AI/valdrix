@@ -1,7 +1,7 @@
 
 # IAM Role for EKS Cluster
 resource "aws_iam_role" "cluster" {
-  name = "valdrix-eks-cluster-role-${var.environment}"
+  name = "valdrics-eks-cluster-role-${var.environment}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -22,7 +22,7 @@ resource "aws_iam_role_policy_attachment" "cluster_AmazonEKSClusterPolicy" {
 
 # IAM Role for Node Group
 resource "aws_iam_role" "nodes" {
-  name = "valdrix-eks-node-role-${var.environment}"
+  name = "valdrics-eks-node-role-${var.environment}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -72,7 +72,7 @@ resource "aws_eks_cluster" "main" {
 # Managed Node Group
 resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
-  node_group_name = "valdrix-nodes-${var.environment}"
+  node_group_name = "valdrics-nodes-${var.environment}"
   node_role_arn   = aws_iam_role.nodes.arn
   subnet_ids      = var.private_subnet_ids
 

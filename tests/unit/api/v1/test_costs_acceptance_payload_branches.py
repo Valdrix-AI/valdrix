@@ -68,7 +68,7 @@ def _user() -> CurrentUser:
     return CurrentUser(
         id=uuid4(),
         tenant_id=uuid4(),
-        email="acceptance@valdrix.io",
+        email="acceptance@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -78,7 +78,7 @@ def _free_user() -> CurrentUser:
     return CurrentUser(
         id=uuid4(),
         tenant_id=uuid4(),
-        email="acceptance-free@valdrix.io",
+        email="acceptance-free@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.FREE,
     )

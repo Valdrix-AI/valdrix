@@ -2,8 +2,8 @@ from typing import Optional, Dict, Any
 import re
 
 
-class ValdrixException(Exception):
-    """Base exception for all Valdrix errors."""
+class ValdricsException(Exception):
+    """Base exception for all Valdrics errors."""
 
     def __init__(
         self,
@@ -32,7 +32,7 @@ class ValdrixException(Exception):
         return f"[{self.code}] {self.message} (Status: {self.status_code})"
 
 
-class AdapterError(ValdrixException):
+class AdapterError(ValdricsException):
     """
     Raised when an external cloud adapter fails.
     BE-ADAPT-3: Automatically sanitizes error messages to avoid leaking internal cloud details.
@@ -64,15 +64,15 @@ class AdapterError(ValdrixException):
         )
         # Simplify common cloud errors to user-friendly versions
         if "AccessDenied" in msg or "Unauthorized" in msg:
-            return "Permission denied: Ensure the Valdrix IAM role has the required read permissions."
+            return "Permission denied: Ensure the Valdrics IAM role has the required read permissions."
         if "Throttling" in msg or "RequestLimitExceeded" in msg:
             return (
-                "Cloud provider rate limit exceeded. Valdrix is retrying with backoff."
+                "Cloud provider rate limit exceeded. Valdrics is retrying with backoff."
             )
         return msg
 
 
-class AuthError(ValdrixException):
+class AuthError(ValdricsException):
     """Raised when authentication or authorization fails."""
 
     def __init__(
@@ -84,7 +84,7 @@ class AuthError(ValdrixException):
         super().__init__(message, code=code, status_code=401, details=details)
 
 
-class ConfigurationError(ValdrixException):
+class ConfigurationError(ValdricsException):
     """Raised when application configuration is invalid or missing."""
 
     def __init__(
@@ -96,7 +96,7 @@ class ConfigurationError(ValdrixException):
         super().__init__(message, code=code, status_code=500, details=details)
 
 
-class DecryptionError(ValdrixException):
+class DecryptionError(ValdricsException):
     """Raised when encrypted data cannot be decrypted."""
 
     def __init__(
@@ -109,7 +109,7 @@ class DecryptionError(ValdrixException):
         )
 
 
-class ResourceNotFoundError(ValdrixException):
+class ResourceNotFoundError(ValdricsException):
     """Raised when a requested resource is not found."""
 
     def __init__(
@@ -121,7 +121,7 @@ class ResourceNotFoundError(ValdrixException):
         super().__init__(message, code=code, status_code=404, details=details)
 
 
-class BillingError(ValdrixException):
+class BillingError(ValdricsException):
     """Raised when payment or subscription processing fails."""
 
     def __init__(
@@ -133,7 +133,7 @@ class BillingError(ValdrixException):
         super().__init__(message, code=code, status_code=400, details=details)
 
 
-class AIAnalysisError(ValdrixException):
+class AIAnalysisError(ValdricsException):
     """Raised when LLM/AI analysis fails."""
 
     def __init__(
@@ -145,7 +145,7 @@ class AIAnalysisError(ValdrixException):
         super().__init__(message, code=code, status_code=500, details=details)
 
 
-class BudgetExceededError(ValdrixException):
+class BudgetExceededError(ValdricsException):
     """Raised when an LLM request is blocked due to budget constraints."""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
@@ -163,7 +163,7 @@ class LLMFairUseExceededError(BudgetExceededError):
     """
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
-        ValdrixException.__init__(
+        ValdricsException.__init__(
             self,
             message,
             code="llm_fair_use_exceeded",
@@ -172,7 +172,7 @@ class LLMFairUseExceededError(BudgetExceededError):
         )
 
 
-class KillSwitchTriggeredError(ValdrixException):
+class KillSwitchTriggeredError(ValdricsException):
     """Raised when a remediation action is blocked by the safety kill switch."""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
@@ -181,7 +181,7 @@ class KillSwitchTriggeredError(ValdrixException):
         )
 
 
-class ExternalAPIError(ValdrixException):
+class ExternalAPIError(ValdricsException):
     """Raised when an external API (LLM, Cloud Provider, etc.) fails."""
 
     def __init__(
@@ -193,7 +193,7 @@ class ExternalAPIError(ValdrixException):
         super().__init__(message, code=code, status_code=502, details=details)
 
 
-class UnsupportedVendorError(ValdrixException):
+class UnsupportedVendorError(ValdricsException):
     """Raised when a requested vendor/integration is not supported for the operation."""
 
     def __init__(

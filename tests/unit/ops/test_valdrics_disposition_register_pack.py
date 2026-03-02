@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.verify_valdrix_disposition_freshness import verify_disposition_register
+from scripts.verify_valdrics_disposition_freshness import verify_disposition_register
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EVIDENCE_DIR = REPO_ROOT / "docs" / "ops" / "evidence"
-REGISTER_PATH = EVIDENCE_DIR / "valdrix_disposition_register_2026-02-28.json"
-TEMPLATE_PATH = EVIDENCE_DIR / "valdrix_disposition_register_TEMPLATE.json"
+REGISTER_PATH = EVIDENCE_DIR / "valdrics_disposition_register_2026-02-28.json"
+TEMPLATE_PATH = EVIDENCE_DIR / "valdrics_disposition_register_TEMPLATE.json"
 
 
-def test_valdrix_disposition_pack_contains_register_and_template() -> None:
+def test_valdrics_disposition_pack_contains_register_and_template() -> None:
     assert REGISTER_PATH.exists(), str(REGISTER_PATH)
     assert TEMPLATE_PATH.exists(), str(TEMPLATE_PATH)
 
 
-def test_valdrix_disposition_register_pack_verifies() -> None:
+def test_valdrics_disposition_register_pack_verifies() -> None:
     assert (
         verify_disposition_register(
             register_path=REGISTER_PATH,

@@ -7,7 +7,7 @@ from the browser. The token is signed with `SUPABASE_JWT_SECRET` (same as the AP
 
 Examples:
   uv run python scripts/dev_bearer_token.py --user-id 00000000-0000-0000-0000-000000000000
-  uv run python scripts/dev_bearer_token.py --email owner@valdrix.io --hours 2
+  uv run python scripts/dev_bearer_token.py --email owner@valdrics.io --hours 2
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ async def _resolve_user(args: argparse.Namespace) -> tuple[str, str]:
 async def main() -> None:
     args = _parse_args()
     # IMPORTANT: keep stdout clean so operators can safely do:
-    #   export VALDRIX_TOKEN="$(python scripts/dev_bearer_token.py ...)"
+    #   export VALDRICS_TOKEN="$(python scripts/dev_bearer_token.py ...)"
     with contextlib.redirect_stdout(sys.stderr):
         uid, email = await _resolve_user(args)
         from app.shared.core.auth import create_access_token

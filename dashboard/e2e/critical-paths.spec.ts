@@ -11,7 +11,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 // Test configuration
 const BASE_URL = process.env.DASHBOARD_URL || 'http://localhost:4173';
-const E2E_AUTH_HEADER_NAME = 'x-valdrix-e2e-auth';
+const E2E_AUTH_HEADER_NAME = 'x-valdrics-e2e-auth';
 const E2E_AUTH_HEADER_VALUE = process.env.E2E_AUTH_SECRET || 'playwright';
 
 // Helper to wait for page load
@@ -27,7 +27,7 @@ test.describe('Onboarding Flow', () => {
 		await waitForPageLoad(page);
 
 		// Check for key elements - title is in the header link
-		await expect(page.locator('header')).toContainText('Valdrix');
+		await expect(page.locator('header')).toContainText('Valdrics');
 		await expect(page.locator('h1')).toContainText('Cloud Cost');
 		await expect(page.getByRole('link', { name: /Get Started Free/i }).first()).toBeVisible();
 	});

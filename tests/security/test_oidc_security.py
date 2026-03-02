@@ -74,7 +74,7 @@ async def test_oidc_token_creation(db):
 
 @pytest.mark.asyncio
 async def test_oidc_no_active_keys(db):
-    from app.shared.core.exceptions import ValdrixException
+    from app.shared.core.exceptions import ValdricsException
 
     # Use AsyncMock for execute to handle 'await'
     with patch(
@@ -85,7 +85,7 @@ async def test_oidc_no_active_keys(db):
         mock_result.scalars.return_value.first.return_value = None
         mock_exec.return_value = mock_result
 
-        with pytest.raises(ValdrixException, match="No active OIDC key"):
+        with pytest.raises(ValdricsException, match="No active OIDC key"):
             await OIDCService.create_token("t1", "a1", db=db)
 
 

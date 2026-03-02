@@ -34,8 +34,8 @@ Template seed (for schema orientation only): `docs/ops/evidence/enforcement_fail
 ```bash
 DEBUG=false uv run python3 scripts/generate_enforcement_failure_injection_evidence.py \
   --output docs/ops/evidence/enforcement_failure_injection_2026-02-27.json \
-  --executed-by sre.executor@valdrix.local \
-  --approved-by release.approver@valdrix.local
+  --executed-by sre.executor@valdrics.local \
+  --approved-by release.approver@valdrics.local
 ```
 
 3. Validate artifact with:

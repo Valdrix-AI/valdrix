@@ -1,4 +1,4 @@
-# Valdrix: Updated AI Coding Instructions & Technical Review
+# Valdrics: Updated AI Coding Instructions & Technical Review
 
 Two documents have been created/updated:
 
@@ -104,7 +104,7 @@ Two documents have been created/updated:
 
 ## The Real Truth
 
-Valdrix is **now a production-hardened platform ready for Series-A growth.**
+Valdrics is **now a production-hardened platform ready for Series-A growth.**
 
 The critical operational barriers have been removed:
 

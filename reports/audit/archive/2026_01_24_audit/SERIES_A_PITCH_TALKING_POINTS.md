@@ -10,7 +10,7 @@
 
 ### What You Built
 
-"Valdrix is a FinOps platform that detects cloud waste and helps enterprise teams understand and optimize their cloud costs. We ingest from AWS, Azure, and GCP, run anomaly detection and cost allocation, and provide AI-powered insights."
+"Valdrics is a FinOps platform that detects cloud waste and helps enterprise teams understand and optimize their cloud costs. We ingest from AWS, Azure, and GCP, run anomaly detection and cost allocation, and provide AI-powered insights."
 
 ### Why Now
 
@@ -303,7 +303,7 @@ Every database session sets `app.current_tenant_id`, so if Tenant A's connection
 
 ### The Narrative
 
-"Valdrix is built for the next generation of FinOps: transparent, honest about limitations, and built for product-first companies. We've learned from FAANG how to handle financial data correctly. We're not over-promising. We're shipping the features customers actually need."
+"Valdrics is built for the next generation of FinOps: transparent, honest about limitations, and built for product-first companies. We've learned from FAANG how to handle financial data correctly. We're not over-promising. We're shipping the features customers actually need."
 
 ### The Ask
 
@@ -367,4 +367,4 @@ Every database session sets `app.current_tenant_id`, so if Tenant A's connection
 
 You've built something credible. You've been honest about limitations. You've documented the decisions. Now sell confidence, not perfection.
 
-Investors back teams that understand their business deeply. Show them you understand Valdrix' strengths and weaknesses. That builds trust.
+Investors back teams that understand their business deeply. Show them you understand Valdrics' strengths and weaknesses. That builds trust.

@@ -3,7 +3,7 @@
 - Snapshot date: 2026-02-27
 - Scope: Runtime-registered FastAPI routes excluding docs/openapi helper routes.
 - Total endpoints audited: 241
-- Source method: live route graph extraction (`app.main.valdrix_app`) + dependency closure decoding + in-handler gate signal scan.
+- Source method: live route graph extraction (`app.main.valdrics_app`) + dependency closure decoding + in-handler gate signal scan.
 
 ## Endpoint Counts by Auth Surface
 

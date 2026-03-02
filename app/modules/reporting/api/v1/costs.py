@@ -1687,7 +1687,7 @@ async def export_focus_v13_costs_csv(
     Export a FOCUS v1.3-aligned **core** CSV for the tenant.
 
     This is intentionally a "core" export: it includes the required cost + period + identity columns
-    that are fully derivable from Valdrix's normalized billing ledger, without claiming SKU/unit-price
+    that are fully derivable from Valdrics's normalized billing ledger, without claiming SKU/unit-price
     conformance for columns we do not persist yet.
     """
     if start_date > end_date:

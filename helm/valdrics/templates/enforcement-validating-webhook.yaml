@@ -53,21 +53,21 @@
 {{- if and (eq $failurePolicy "Fail") (not $hasHostAntiAffinity) -}}
 {{- fail "enforcementWebhook.failurePolicy=Fail requires hard pod anti-affinity on topologyKey=kubernetes.io/hostname" -}}
 {{- end -}}
-{{- $webhookName := printf "%s-enforcement-gate" (include "valdrix.fullname" .) -}}
-{{- $serviceName := default (include "valdrix.fullname" .) $cfg.service.name -}}
+{{- $webhookName := printf "%s-enforcement-gate" (include "valdrics.fullname" .) -}}
+{{- $serviceName := default (include "valdrics.fullname" .) $cfg.service.name -}}
 {{- $serviceNamespace := default .Release.Namespace $cfg.service.namespace -}}
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: {{ $webhookName }}
   labels:
-    {{- include "valdrix.labels" . | nindent 4 }}
+    {{- include "valdrics.labels" . | nindent 4 }}
   {{- if and $cfg.certManager.enabled $cfg.certManager.injectorSecretName }}
   annotations:
     cert-manager.io/inject-ca-from: "{{ $serviceNamespace }}/{{ $cfg.certManager.injectorSecretName }}"
   {{- end }}
 webhooks:
-  - name: gate.enforcement.{{ include "valdrix.fullname" . }}.svc
+  - name: gate.enforcement.{{ include "valdrics.fullname" . }}.svc
     admissionReviewVersions:
       {{- toYaml $cfg.admissionReviewVersions | nindent 6 }}
     sideEffects: {{ $cfg.sideEffects | quote }}

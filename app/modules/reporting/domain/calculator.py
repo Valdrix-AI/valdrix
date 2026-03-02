@@ -118,7 +118,7 @@ EMBODIED_EMISSIONS_FACTOR = 0.025
 CARBON_FACTOR_SOURCE = "Electricity Maps + EPA eGRID + provider sustainability reports"
 CARBON_FACTOR_VERSION = "2025-12-01"
 CARBON_FACTOR_TIMESTAMP = "2025-12-01"
-CARBON_METHODOLOGY_VERSION = "valdrix-carbon-v2.0"
+CARBON_METHODOLOGY_VERSION = "valdrics-carbon-v2.0"
 
 
 def build_carbon_factor_payload() -> Dict[str, Any]:
@@ -395,7 +395,7 @@ class CarbonCalculator:
             "region": region,
             "carbon_intensity_gco2_kwh": carbon_intensity,
             "equivalencies": equivalencies,
-            "methodology": "Valdrix 2026 (CCF + multi-cloud provider factors v2.0)",
+            "methodology": "Valdrics 2026 (CCF + multi-cloud provider factors v2.0)",
             "methodology_metadata": methodology_metadata,
             "includes_embodied_emissions": True,
             "forecast_30d": self.forecast_emissions(

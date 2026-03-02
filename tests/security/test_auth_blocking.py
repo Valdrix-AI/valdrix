@@ -57,7 +57,7 @@ class TestAuthBlockingSoftDeletedTenants:
         with patch("app.shared.core.auth.decode_jwt") as mock_decode:
             mock_decode.return_value = {
                 "sub": str(user_id),
-                "email": "victim@valdrix.io",
+                "email": "victim@valdrics.io",
             }
 
             from app.shared.core.auth import get_current_user
@@ -99,7 +99,7 @@ class TestAuthBlockingSoftDeletedTenants:
         with patch("app.shared.core.auth.decode_jwt") as mock_decode:
             mock_decode.return_value = {
                 "sub": str(user_id),
-                "email": "user@valdrix.io",
+                "email": "user@valdrics.io",
             }
 
             from app.shared.core.auth import get_current_user

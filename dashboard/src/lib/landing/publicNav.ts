@@ -41,7 +41,7 @@ export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#trust', label: 'Trust' },
 	{ href: '/privacy', label: 'Privacy' },
 	{ href: '/terms', label: 'Terms' },
-	{ href: 'https://github.com/Valdrix-AI/valdrix', label: 'GitHub', external: true },
+	{ href: 'https://github.com/Valdrics-AI/valdrics', label: 'GitHub', external: true },
 	{ href: '/status', label: 'Status' }
 ]);
 

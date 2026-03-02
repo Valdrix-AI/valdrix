@@ -1,7 +1,7 @@
 """
 Microsoft Teams notification service (tenant-scoped, SaaS-safe).
 
-Valdrix supports Teams via an incoming webhook URL configured per tenant.
+Valdrics supports Teams via an incoming webhook URL configured per tenant.
 We treat the webhook URL as a secret (encrypted at rest) because it grants
 message-post capability into the channel.
 
@@ -151,7 +151,7 @@ class TeamsService:
             logger.warning("teams_webhook_url_invalid", error=str(exc))
             return False
 
-        safe_title = _truncate(str(title or "Valdrix Alert"), 256)
+        safe_title = _truncate(str(title or "Valdrics Alert"), 256)
         safe_message = _truncate(str(message or ""), 7000)
         safe_severity = (severity or "warning").strip().lower()
         color = {

@@ -23,7 +23,7 @@ async def test_export_compliance_pack_returns_zip(async_client, app, db, test_te
 
     owner_user = CurrentUser(
         id=uuid4(),
-        email="owner@valdrix.io",
+        email="owner@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.OWNER,
         tier=PricingTier.PRO,
@@ -48,7 +48,7 @@ async def test_export_compliance_pack_returns_zip(async_client, app, db, test_te
             slack_enabled=True,
             jira_enabled=True,
             jira_base_url="https://example.atlassian.net",
-            jira_email="owner@valdrix.io",
+            jira_email="owner@valdrics.io",
             jira_project_key="FINOPS",
             jira_issue_type="Task",
             jira_api_token="super-secret-token",
@@ -65,7 +65,7 @@ async def test_export_compliance_pack_returns_zip(async_client, app, db, test_te
         TenantIdentitySettings(
             tenant_id=test_tenant.id,
             sso_enabled=True,
-            allowed_email_domains=["valdrix.io"],
+            allowed_email_domains=["valdrics.io"],
             scim_enabled=False,
         )
     )
@@ -141,7 +141,7 @@ async def test_export_compliance_pack_returns_zip(async_client, app, db, test_te
     identity_snapshot = json.loads(zf.read("identity_settings.json").decode("utf-8"))
     assert identity_snapshot["exists"] is True
     assert identity_snapshot["sso_enabled"] is True
-    assert identity_snapshot["allowed_email_domains"] == ["valdrix.io"]
+    assert identity_snapshot["allowed_email_domains"] == ["valdrics.io"]
     assert identity_snapshot["has_scim_token"] is False
     assert identity_snapshot["scim_group_mappings"] == []
     assert "scim_bearer_token" not in identity_snapshot
@@ -164,7 +164,7 @@ async def test_export_compliance_pack_can_include_focus_export(
 
     owner_user = CurrentUser(
         id=uuid4(),
-        email="owner-focus@valdrix.io",
+        email="owner-focus@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.OWNER,
         tier=PricingTier.PRO,
@@ -176,7 +176,7 @@ async def test_export_compliance_pack_can_include_focus_export(
             id=account_id,
             tenant_id=test_tenant.id,
             aws_account_id="123456789012",
-            role_arn="arn:aws:iam::123456789012:role/ValdrixReadOnly",
+            role_arn="arn:aws:iam::123456789012:role/ValdricsReadOnly",
             external_id="vx-test-external-id",
             region="us-east-1",
             status="active",
@@ -263,7 +263,7 @@ async def test_export_compliance_pack_can_include_savings_proof_and_close_packag
 
     owner_user = CurrentUser(
         id=uuid4(),
-        email="owner-pack@valdrix.io",
+        email="owner-pack@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.OWNER,
         tier=PricingTier.PRO,
@@ -274,7 +274,7 @@ async def test_export_compliance_pack_can_include_savings_proof_and_close_packag
         User(
             id=requester_id,
             tenant_id=test_tenant.id,
-            email="requester-pack@valdrix.io",
+            email="requester-pack@valdrics.io",
             role=UserRole.OWNER,
         )
     )

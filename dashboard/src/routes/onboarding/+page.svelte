@@ -769,7 +769,7 @@
 	// Download template as file
 	function downloadTemplate() {
 		const template = selectedTab === 'cloudformation' ? cloudformationYaml : terraformHcl;
-		const filename = selectedTab === 'cloudformation' ? 'valdrix-role.yaml' : 'valdrix-role.tf';
+		const filename = selectedTab === 'cloudformation' ? 'valdrics-role.yaml' : 'valdrics-role.tf';
 
 		const blob = new Blob([template], { type: 'text/plain' });
 		const url = URL.createObjectURL(blob);
@@ -1490,7 +1490,7 @@
 					<div class="code-container">
 						<div class="code-header">
 							<span
-								>{selectedTab === 'cloudformation' ? 'valdrix-role.yaml' : 'valdrix-role.tf'}</span
+								>{selectedTab === 'cloudformation' ? 'valdrics-role.yaml' : 'valdrics-role.tf'}</span
 							>
 							<div class="code-actions">
 								<button type="button" class="icon-btn" onclick={copyTemplate}

@@ -14,7 +14,7 @@ def scim_user_schema_resource(*, base_url: str) -> dict[str, Any]:
         "schemas": [SCIM_SCHEMA_SCHEMA],
         "id": SCIM_USER_SCHEMA,
         "name": "User",
-        "description": "Valdrix user account",
+        "description": "Valdrics user account",
         "attributes": [
             {
                 "name": "userName",
@@ -71,7 +71,7 @@ def scim_group_schema_resource(*, base_url: str) -> dict[str, Any]:
         "schemas": [SCIM_SCHEMA_SCHEMA],
         "id": SCIM_GROUP_SCHEMA,
         "name": "Group",
-        "description": "Valdrix SCIM group",
+        "description": "Valdrics SCIM group",
         "attributes": [
             {
                 "name": "displayName",

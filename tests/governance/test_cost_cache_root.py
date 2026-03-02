@@ -154,13 +154,13 @@ class TestCostCacheKeyGeneration:
         assert key1 != key2
 
     def test_key_starts_with_prefix(self):
-        """Keys should start with valdrix prefix."""
+        """Keys should start with valdrics prefix."""
         backend = InMemoryCache()
         cache = CostCache(backend)
 
         key = cache._generate_key("costs", "tenant", "period")
 
-        assert key.startswith("valdrix:")
+        assert key.startswith("valdrics:")
 
 
 class TestCostCacheFactory:

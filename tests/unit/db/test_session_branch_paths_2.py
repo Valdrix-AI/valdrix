@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 import app.shared.db.session as session_mod
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 
 
 @pytest.fixture(autouse=True)
@@ -482,7 +482,7 @@ def test_check_rls_policy_additional_branch_paths() -> None:
     conn_false = MagicMock()
     conn_false.info = {"rls_context_set": False}
     with patch.object(session_mod, "settings", SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True)):
-        with pytest.raises(ValdrixException):
+        with pytest.raises(ValdricsException):
             session_mod.check_rls_policy(conn_false, None, "   ", {}, None, False)
 
     with (
@@ -491,7 +491,7 @@ def test_check_rls_policy_additional_branch_paths() -> None:
         patch("app.shared.db.session.logger") as mock_logger,
     ):
         mock_metric.labels.side_effect = RuntimeError("metric failed")
-        with pytest.raises(ValdrixException):
+        with pytest.raises(ValdricsException):
             session_mod.check_rls_policy(conn_false, None, "SELECT * FROM z", {}, None, False)
     mock_logger.debug.assert_any_call("rls_metric_increment_failed", error="metric failed")
 
@@ -502,7 +502,7 @@ def test_check_rls_policy_additional_branch_paths() -> None:
         "settings",
         SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
     ):
-        with pytest.raises(ValdrixException):
+        with pytest.raises(ValdricsException):
             session_mod.check_rls_policy(
                 conn_ambiguous, None, "SELECT * FROM accounts", {}, None, False
             )

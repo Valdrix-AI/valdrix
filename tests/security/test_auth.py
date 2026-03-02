@@ -19,14 +19,14 @@ class TestAuthLogic:
     def test_jwt_lifecycle(self):
         """Test creating and then decoding a token."""
         user_id = uuid4()
-        data = {"sub": str(user_id), "email": "test@valdrix.io", "role": UserRole.ADMIN.value}
+        data = {"sub": str(user_id), "email": "test@valdrics.io", "role": UserRole.ADMIN.value}
 
         token = create_access_token(data)
         assert isinstance(token, str)
 
         decoded = decode_jwt(token)
         assert decoded["sub"] == str(user_id)
-        assert decoded["email"] == "test@valdrix.io"
+        assert decoded["email"] == "test@valdrics.io"
         assert decoded["role"] == "admin"
         assert "exp" in decoded
 
@@ -42,7 +42,7 @@ class TestAuthLogic:
         """Test dependency that extracts user from JWT without DB."""
         user_id = uuid4()
         token = create_access_token(
-            {"sub": str(user_id), "email": "onboard@valdrix.io"}
+            {"sub": str(user_id), "email": "onboard@valdrics.io"}
         )
 
         credentials = MagicMock()
@@ -50,7 +50,7 @@ class TestAuthLogic:
 
         user = await get_current_user_from_jwt(credentials)
         assert user.id == user_id
-        assert user.email == "onboard@valdrix.io"
+        assert user.email == "onboard@valdrics.io"
 
     def test_role_hierarchy_enforcement(self):
         """Verify owner > admin > member logic."""

@@ -1,8 +1,8 @@
-# **PRODUCTION READINESS AUDIT: CloudSentinel-AI (Valdrix)**
+# **PRODUCTION READINESS AUDIT: Valdrics-AI (Valdrics)**
 ## **Comprehensive Security, Architecture, and Data Integrity Review**
 
 **Audit Date:** January 22, 2026  
-**System:** Valdrix FinOps & GreenOps Intelligence Platform  
+**System:** Valdrics FinOps & GreenOps Intelligence Platform  
 **Reviewed Scope:** Backend (FastAPI), Frontend (SvelteKit), Database (PostgreSQL), Scheduler, Security, Data Flows  
 **Verdict:** **⚠️ CRITICAL ISSUES FOUND - NOT PRODUCTION READY**
 
@@ -10,7 +10,7 @@
 
 ## **EXECUTIVE SUMMARY**
 
-CloudSentinel-AI exhibits **intelligent architecture patterns** with thoughtful security considerations, but **multiple critical vulnerabilities and design flaws** make it unsafe for production without immediate hardening. The system was built rapidly with AI assistance—evident in both its strengths (comprehensive plugin system, multi-cloud abstraction) and weaknesses (incomplete implementations, silent failures, state inconsistencies, unvetted assumptions).
+Valdrics-AI exhibits **intelligent architecture patterns** with thoughtful security considerations, but **multiple critical vulnerabilities and design flaws** make it unsafe for production without immediate hardening. The system was built rapidly with AI assistance—evident in both its strengths (comprehensive plugin system, multi-cloud abstraction) and weaknesses (incomplete implementations, silent failures, state inconsistencies, unvetted assumptions).
 
 **System Solidity Score: 4.5/10**
 
@@ -52,7 +52,7 @@ CloudSentinel-AI exhibits **intelligent architecture patterns** with thoughtful 
          # NO EXCEPTION RAISED - continues executing!
      ```
    - **Real-World Attack:** Attacker/malicious code path creates a DB session without tenant context, reads all tenant's zombie resources, costs, etc.
-   - **Fix Required:** Convert to hard exception: `raise ValdrixSecurityError("RLS context missing")`
+   - **Fix Required:** Convert to hard exception: `raise ValdricsSecurityError("RLS context missing")`
 
 2. **Scheduler Transaction Deadlock Risk**
    - **Location:** [app/services/scheduler/orchestrator.py](app/services/scheduler/orchestrator.py#L60-L105)
@@ -198,7 +198,7 @@ CloudSentinel-AI exhibits **intelligent architecture patterns** with thoughtful 
 2. **Adapter Errors Leak Internal Details**
    - **Location:** [app/core/exceptions.py](app/core/exceptions.py#L15-L50)
    - **Issue:** `AdapterError._sanitize()` attempts to redact but regex patterns are simplistic
-   - **Example Leak:** Error message contains `"assume_role=arn:aws:iam::123456789012:role/ValdrixReadOnly"` → gets partially redacted
+   - **Example Leak:** Error message contains `"assume_role=arn:aws:iam::123456789012:role/ValdricsReadOnly"` → gets partially redacted
    - **Recommended:** Never include cloud resource ARNs, account IDs, or credentials in error messages; log separately
 
 3. **No Circuit Breaker for AWS API Failures**
@@ -252,7 +252,7 @@ CloudSentinel-AI exhibits **intelligent architecture patterns** with thoughtful 
 
 4. **Blind Index Generation Uses Fixed Salt**
    - **Location:** [app/core/config.py](app/core/config.py#L175)
-   - **Code:** `KDF_SALT: str = "valdrix-default-salt-2026"`
+   - **Code:** `KDF_SALT: str = "valdrics-default-salt-2026"`
    - **Issue:** Hard-coded salt in source code; if source leaked, blind indexes are compromised
    - **Recommended:** Generate random salt per-environment, store securely
 
@@ -511,7 +511,7 @@ stmt = insert(BackgroundJob).values(...).on_conflict_do_nothing(...)
 #### **3. Encrypted Passwords But Hardcoded Salt**
 ```python
 # app/core/security.py
-kdf = PBKDF2HMAC(..., salt=b"valdrix-default-salt-2026", ...)
+kdf = PBKDF2HMAC(..., salt=b"valdrics-default-salt-2026", ...)
 ```
 **Reality:** Salt is in source code (GitHub). Salt is the entire point of using KDF; hardcoded salt is as good as no salt.
 
@@ -653,7 +653,7 @@ CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 3
 - [ ] **Fix 1:** Convert RLS listener to throw exception on bypass
   ```python
   if rls_status is False:
-      raise ValdrixSecurityError("RLS context missing - query aborted")
+      raise ValdricsSecurityError("RLS context missing - query aborted")
   ```
 - [ ] **Fix 2:** Add `require_tenant_access` to ALL endpoints
   - Audit each route in `/api/v1/**/*.py`
@@ -781,7 +781,7 @@ CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 3
 #### Week 11: Infrastructure & IaC
 - [ ] **Fix 24:** Implement CloudFormation drift detection
   ```bash
-  aws cloudformation detect-stack-drift --stack-name valdrix-role
+  aws cloudformation detect-stack-drift --stack-name valdrics-role
   ```
   - Run daily; alert if drift detected
 - [ ] **Fix 25:** Pin all dependency versions
@@ -828,9 +828,9 @@ if rls_status is False:
 With:
 ```python
 if rls_status is False:
-    from app.core.exceptions import ValdrixException
+    from app.core.exceptions import ValdricsException
     logger.critical("rls_enforcement_bypass_attempt", ...)
-    raise ValdrixException(
+    raise ValdricsException(
         "RLS context missing - query execution aborted",
         code="rls_enforcement_failed",
         status_code=500
@@ -974,7 +974,7 @@ async def cohort_analysis_job(self, target_cohort: TenantCohort):
 
 ## **CONCLUSION**
 
-CloudSentinel-AI exhibits **thoughtful architecture and intent-driven design**, but **execution gaps and incomplete implementations** make it unsafe for production. The system **can be hardened** within 90 days with disciplined focus on the identified 30 fixes.
+Valdrics-AI exhibits **thoughtful architecture and intent-driven design**, but **execution gaps and incomplete implementations** make it unsafe for production. The system **can be hardened** within 90 days with disciplined focus on the identified 30 fixes.
 
 **The core risk is not that the system is broken—it's that failures are silent.** RLS logging doesn't prevent leaks. Deduplication doesn't guarantee idempotence. Encryption with hardcoded salt doesn't actually encrypt. 
 

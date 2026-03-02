@@ -32,7 +32,7 @@ async def test_tenant(db):
 async def test_user(db, test_tenant):
     user = User(
         id=uuid4(),
-        email="test@valdrix.io",
+        email="test@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
     )
@@ -141,7 +141,7 @@ async def test_cloud_plus_setup_templates(ac, override_auth):
 async def test_create_aws_connection(ac, override_auth, auth_user, db):
     payload = {
         "aws_account_id": "123456789012",
-        "role_arn": "arn:aws:iam::123456789012:role/Valdrix",
+        "role_arn": "arn:aws:iam::123456789012:role/Valdrics",
         "external_id": "vx-12345678901234567890123456789012",
         "region": "us-east-1",
         "is_management_account": True,
@@ -161,7 +161,7 @@ async def test_create_aws_connection_defaults_region_global(
 ):
     payload = {
         "aws_account_id": "210987654321",
-        "role_arn": "arn:aws:iam::210987654321:role/Valdrix",
+        "role_arn": "arn:aws:iam::210987654321:role/Valdrics",
         "external_id": "vx-21098765432121098765432121098765",
     }
     resp = await ac.post("/api/v1/settings/connections/aws", json=payload)
@@ -176,7 +176,7 @@ async def test_duplicate_aws_connection(ac, db, override_auth, auth_user):
     conn = AWSConnection(
         tenant_id=auth_user.tenant_id,
         aws_account_id="999999999999",
-        role_arn="arn:aws:iam::999999999999:role/Valdrix",
+        role_arn="arn:aws:iam::999999999999:role/Valdrics",
         external_id="vx-99999999999999999999999999999999",
         status="pending",
     )
@@ -185,7 +185,7 @@ async def test_duplicate_aws_connection(ac, db, override_auth, auth_user):
 
     payload = {
         "aws_account_id": "999999999999",
-        "role_arn": "arn:aws:iam::999999999999:role/Valdrix",
+        "role_arn": "arn:aws:iam::999999999999:role/Valdrics",
         "external_id": "vx-99999999999999999999999999999999",
         "region": "us-east-1",
     }
@@ -199,7 +199,7 @@ async def test_sync_aws_org(ac, db, override_auth, auth_user):
     conn = AWSConnection(
         tenant_id=auth_user.tenant_id,
         aws_account_id="112233445566",
-        role_arn="arn:aws:iam::112233445566:role/Valdrix",
+        role_arn="arn:aws:iam::112233445566:role/Valdrics",
         external_id="vx-11223344556611223344556611223344",
         is_management_account=True,
         status="active",
@@ -222,7 +222,7 @@ async def test_sync_aws_org_not_management(ac, db, override_auth, auth_user):
     conn = AWSConnection(
         tenant_id=auth_user.tenant_id,
         aws_account_id="998877665544",
-        role_arn="arn:aws:iam::998877665544:role/Valdrix",
+        role_arn="arn:aws:iam::998877665544:role/Valdrics",
         external_id="vx-998877665544",
         is_management_account=False,
         status="active",
@@ -299,7 +299,7 @@ async def test_delete_aws_connection_tenant_isolation(ac, db, override_auth, aut
     conn = AWSConnection(
         tenant_id=other_tenant.id,
         aws_account_id="123456789012",
-        role_arn="arn:aws:iam::123456789012:role/Valdrix",
+        role_arn="arn:aws:iam::123456789012:role/Valdrics",
         external_id="vx-12345678901234567890123456789012",
         status="pending",
     )
@@ -1103,7 +1103,7 @@ async def test_link_discovered_account(ac, db, override_auth, auth_user):
     mgmt = AWSConnection(
         tenant_id=auth_user.tenant_id,
         aws_account_id="111122223333",
-        role_arn="arn:aws:iam::111122223333:role/Valdrix",
+        role_arn="arn:aws:iam::111122223333:role/Valdrics",
         external_id="vx-11112222333311112222333311112222",
         is_management_account=True,
         status="active",

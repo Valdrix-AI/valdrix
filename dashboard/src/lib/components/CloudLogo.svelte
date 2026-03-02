@@ -1,5 +1,5 @@
 <script lang="ts">
-	export let provider: string = 'aws'; // aws, azure, gcp, valdrix
+	export let provider: string = 'aws'; // aws, azure, gcp, valdrics
 	export let size: number = 16;
 	export let className: string = '';
 
@@ -9,7 +9,7 @@
 		aws: '/aws-logo.svg',
 		azure: '/azure-logo.png',
 		gcp: '/gcp.svg',
-		valdrix: '/valdrix_icon.png'
+		valdrics: '/valdrics_icon.png'
 	};
 </script>
 

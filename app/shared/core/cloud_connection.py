@@ -193,11 +193,11 @@ class CloudConnectionService:
         """AWS specific onboarding templates."""
         console_region = CloudConnectionService._resolve_aws_console_region()
         return {
-            "magic_link": f"https://console.aws.amazon.com/cloudformation/home?region={console_region}#/stacks/create/review?stackName=ValdrixAccess&templateURL=https://valdrix-public.s3.amazonaws.com/templates/aws-access.yaml&param_ExternalId={external_id}",
-            "cfn_template": "https://valdrix-public.s3.amazonaws.com/templates/aws-access.yaml",
+            "magic_link": f"https://console.aws.amazon.com/cloudformation/home?region={console_region}#/stacks/create/review?stackName=ValdricsAccess&templateURL=https://valdrics-public.s3.amazonaws.com/templates/aws-access.yaml&param_ExternalId={external_id}",
+            "cfn_template": "https://valdrics-public.s3.amazonaws.com/templates/aws-access.yaml",
             "terraform_snippet": (
-                'resource "aws_iam_role" "valdrix_access" {\n'
-                '  name = "ValdrixAccessRole"\n'
+                'resource "aws_iam_role" "valdrics_access" {\n'
+                '  name = "ValdricsAccessRole"\n'
                 f'  assume_role_policy = jsonencode({{... external_id = "{external_id}" ...}})\n'
                 "}"
             ),

@@ -25,7 +25,7 @@ def management_connection():
     return AWSConnection(
         id=uuid4(),
         aws_account_id="111111111111",
-        role_arn="arn:aws:iam::111111111111:role/ValdrixAccess",
+        role_arn="arn:aws:iam::111111111111:role/ValdricsAccess",
         external_id="vx-123",
         is_management_account=True,
     )

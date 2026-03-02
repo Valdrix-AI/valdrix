@@ -37,7 +37,7 @@ class OrganizationsDiscoveryService:
             ) as sts:
                 role = await sts.assume_role(
                     RoleArn=connection.role_arn,
-                    RoleSessionName="ValdrixDiscovery",
+                    RoleSessionName="ValdricsDiscovery",
                     ExternalId=connection.external_id,
                 )
                 creds = role["Credentials"]

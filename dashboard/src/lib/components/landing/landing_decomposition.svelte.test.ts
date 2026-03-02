@@ -4,6 +4,8 @@ import LandingHeroCopy from '$lib/components/landing/LandingHeroCopy.svelte';
 import LandingSignalMapCard from '$lib/components/landing/LandingSignalMapCard.svelte';
 import LandingRoiSimulator from '$lib/components/landing/LandingRoiSimulator.svelte';
 import LandingRoiCalculator from '$lib/components/landing/LandingRoiCalculator.svelte';
+import LandingRoiPlannerCta from '$lib/components/landing/LandingRoiPlannerCta.svelte';
+import LandingTrustSection from '$lib/components/landing/LandingTrustSection.svelte';
 import LandingLeadCaptureSection from '$lib/components/landing/LandingLeadCaptureSection.svelte';
 import LandingExitIntentPrompt from '$lib/components/landing/LandingExitIntentPrompt.svelte';
 import { REALTIME_SIGNAL_SNAPSHOTS } from '$lib/landing/realtimeSignalMap';
@@ -132,6 +134,39 @@ describe('Landing component decomposition', () => {
 		expect(onScenarioWasteWithChange).toHaveBeenCalledWith(8);
 		expect(onScenarioWindowChange).toHaveBeenCalledWith(11);
 		expect(onTrackScenarioAdjust).toHaveBeenCalledTimes(3);
+	});
+
+	it('renders static ROI snapshot preview and tracks planner CTA', async () => {
+		const onTrackCta = vi.fn();
+		render(LandingRoiPlannerCta, {
+			props: {
+				href: '/auth/login?intent=roi_assessment',
+				onTrackCta
+			}
+		});
+
+		expect(screen.getByText(/example 12-month model snapshot/i)).toBeTruthy();
+		expect(screen.getByText(/projected annual spend/i)).toBeTruthy();
+		expect(screen.getAllByText(/controllable waste opportunity/i).length).toBeGreaterThan(0);
+		await fireEvent.click(screen.getByRole('link', { name: /open full roi planner/i }));
+		expect(onTrackCta).toHaveBeenCalledTimes(1);
+	});
+
+	it('renders trust references and one-pager collateral CTAs', async () => {
+		const onTrackCta = vi.fn();
+		render(LandingTrustSection, {
+			props: {
+				requestReferencesHref: '/auth/login?intent=named_references',
+				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+				onTrackCta
+			}
+		});
+
+		await fireEvent.click(screen.getByRole('link', { name: /request named references/i }));
+		expect(onTrackCta).toHaveBeenCalledWith('request_named_references');
+
+		await fireEvent.click(screen.getByRole('link', { name: /download executive one-pager/i }));
+		expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
 	});
 
 	it('updates ROI controls and CTA callback from calculator component', async () => {

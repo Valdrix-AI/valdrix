@@ -15,7 +15,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { isPublicPath } from '$lib/routeProtection';
 import { canUseE2EAuthBypass, shouldUseSecureCookies } from '$lib/serverSecurity';
 
-const E2E_AUTH_HEADER = 'x-valdrix-e2e-auth';
+const E2E_AUTH_HEADER = 'x-valdrics-e2e-auth';
 
 function buildE2EBypassAuth(): { session: Session; user: User } {
 	const now = Math.floor(Date.now() / 1000);
@@ -23,7 +23,7 @@ function buildE2EBypassAuth(): { session: Session; user: User } {
 		id: '00000000-0000-4000-8000-000000000001',
 		aud: 'authenticated',
 		role: 'authenticated',
-		email: 'e2e@valdrix.test',
+		email: 'e2e@valdrics.test',
 		email_confirmed_at: new Date(0).toISOString(),
 		phone: '',
 		app_metadata: { provider: 'email', providers: ['email'] },

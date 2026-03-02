@@ -15,7 +15,7 @@ All 6 critical production fixes have been **integrated into existing files** and
 #### **Fix #1: RLS Enforcement Exception**
 - **File**: `/app/db/session.py`
 - **Status**: ✅ ALREADY INTEGRATED (lines 200-220)
-- **Change**: `check_rls_policy()` listener raises `ValdrixException` instead of logging
+- **Change**: `check_rls_policy()` listener raises `ValdricsException` instead of logging
 - **Verification**: Tested in `/tests/fixes/test_all_fixes.py::TestRLSEnforcement`
 
 #### **Fix #2: LLM Budget Pre-Check**

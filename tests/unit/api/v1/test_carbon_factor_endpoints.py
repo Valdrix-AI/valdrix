@@ -28,7 +28,7 @@ async def test_carbon_factor_stage_activate_and_list(
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-carbon-factors@valdrix.io",
+        email="admin-carbon-factors@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
@@ -96,7 +96,7 @@ async def test_carbon_factor_auto_activate_latest(async_client, app, db, test_te
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-carbon-auto@valdrix.io",
+        email="admin-carbon-auto@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

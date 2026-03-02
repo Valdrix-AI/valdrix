@@ -15,7 +15,7 @@ async def test_get_safety_status(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     # Mock CircuitBreaker
@@ -54,7 +54,7 @@ async def test_reset_circuit_breaker(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     mock_cb = AsyncMock()
@@ -80,7 +80,7 @@ async def test_get_safety_status_exception_returns_defaults(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -113,7 +113,7 @@ async def test_reset_circuit_breaker_failure(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     mock_cb = AsyncMock()
@@ -142,7 +142,7 @@ async def test_reset_circuit_breaker_requires_admin(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="member@valdrix.io", role=UserRole.MEMBER
+        id=user_id, tenant_id=tenant_id, email="member@valdrics.io", role=UserRole.MEMBER
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user

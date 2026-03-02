@@ -1,5 +1,5 @@
 """
-Notification Settings Model for Valdrix.
+Notification Settings Model for Valdrics.
 Stores per-tenant notification preferences.
 """
 

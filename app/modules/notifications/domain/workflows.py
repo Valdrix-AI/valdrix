@@ -148,10 +148,10 @@ class GitLabCIDispatcher:
         form = {
             "token": self.trigger_token,
             "ref": self.ref,
-            "variables[VALDRIX_EVENT_TYPE]": event_type[:64],
-            "variables[VALDRIX_TENANT_ID]": str(payload.get("tenant_id", ""))[:128],
-            "variables[VALDRIX_REQUEST_ID]": str(payload.get("request_id", ""))[:128],
-            "variables[VALDRIX_PAYLOAD_JSON]": _serialize_payload(payload)[:10000],
+            "variables[VALDRICS_EVENT_TYPE]": event_type[:64],
+            "variables[VALDRICS_TENANT_ID]": str(payload.get("tenant_id", ""))[:128],
+            "variables[VALDRICS_REQUEST_ID]": str(payload.get("request_id", ""))[:128],
+            "variables[VALDRICS_PAYLOAD_JSON]": _serialize_payload(payload)[:10000],
         }
         try:
             from app.shared.core.http import get_http_client

@@ -36,7 +36,7 @@ def test_aws_role_template_excludes_cost_explorer_actions() -> None:
     """
     Guardrail: customer IAM template must not grant ce:* actions.
     """
-    template_path = REPO_ROOT / "cloudformation" / "valdrix-role.yaml"
+    template_path = REPO_ROOT / "cloudformation" / "valdrics-role.yaml"
     content = template_path.read_text(encoding="utf-8")
     listed_actions = re.findall(
         r"^\s*-\s*([a-zA-Z0-9:*._-]+)\s*$",

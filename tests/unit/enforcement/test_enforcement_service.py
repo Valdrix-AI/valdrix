@@ -724,7 +724,7 @@ async def test_evaluate_gate_computed_context_populates_decision_and_ledger(
     assert result.decision.risk_class == "high"
     assert int(result.decision.risk_score or 0) >= 6
     assert result.decision.anomaly_signal is True
-    assert result.decision.policy_document_schema_version == "valdrix.enforcement.policy.v1"
+    assert result.decision.policy_document_schema_version == "valdrics.enforcement.policy.v1"
     assert len(result.decision.policy_document_sha256) == 64
 
     payload = result.decision.response_payload or {}
@@ -760,7 +760,7 @@ async def test_evaluate_gate_computed_context_populates_decision_and_ledger(
     assert ledger_row.risk_class == "high"
     assert int(ledger_row.risk_score or 0) >= 6
     assert ledger_row.anomaly_signal is True
-    assert ledger_row.policy_document_schema_version == "valdrix.enforcement.policy.v1"
+    assert ledger_row.policy_document_schema_version == "valdrics.enforcement.policy.v1"
     assert len(ledger_row.policy_document_sha256) == 64
     assert ledger_row.policy_document_sha256 == result.decision.policy_document_sha256
 
@@ -1656,7 +1656,7 @@ async def test_consume_approval_token_accepts_rotated_fallback_secret(
     ) -> SimpleNamespace:
         return SimpleNamespace(
             SUPABASE_JWT_SECRET=secret,
-            API_URL="https://api.valdrix.local",
+            API_URL="https://api.valdrics.local",
             JWT_SIGNING_KID="",
             ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=list(fallback or []),
         )
@@ -1703,7 +1703,7 @@ async def test_consume_approval_token_rejects_rotated_secret_without_fallback(
     ) -> SimpleNamespace:
         return SimpleNamespace(
             SUPABASE_JWT_SECRET=secret,
-            API_URL="https://api.valdrix.local",
+            API_URL="https://api.valdrics.local",
             JWT_SIGNING_KID="",
             ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=list(fallback or []),
         )
@@ -3508,7 +3508,7 @@ async def test_build_export_bundle_reconciles_counts_and_is_deterministic(db) ->
     decision_rows = list(csv.DictReader(io.StringIO(first_bundle.decisions_csv)))
     assert len(decision_rows) == 2
     assert all(
-        row["policy_document_schema_version"] == "valdrix.enforcement.policy.v1"
+        row["policy_document_schema_version"] == "valdrics.enforcement.policy.v1"
         and len(row["policy_document_sha256"]) == 64
         for row in decision_rows
     )

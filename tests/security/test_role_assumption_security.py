@@ -39,7 +39,7 @@ async def test_credential_isolation():
     (Issue R3: Security testing for role assumption)
     """
     mock_conn = MagicMock(spec=AWSConnection)
-    mock_conn.role_arn = "arn:aws:iam::123456789012:role/ValdrixRole"
+    mock_conn.role_arn = "arn:aws:iam::123456789012:role/ValdricsRole"
     mock_conn.external_id = "vx-abcdef"
     mock_conn.account_id = "123456789012"
 
@@ -64,8 +64,8 @@ async def test_credential_isolation():
 
     # Verify STS was called with correct parameters
     mock_sts.assume_role.assert_called_once_with(
-        RoleArn="arn:aws:iam::123456789012:role/ValdrixRole",
-        RoleSessionName="ValdrixCostFetch",
+        RoleArn="arn:aws:iam::123456789012:role/ValdricsRole",
+        RoleSessionName="ValdricsCostFetch",
         ExternalId="vx-abcdef",
         DurationSeconds=3600,
     )

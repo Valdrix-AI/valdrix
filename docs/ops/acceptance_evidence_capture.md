@@ -24,16 +24,16 @@ Artifacts are written under `reports/acceptance/` (gitignored by default).
 ## Prerequisites
 
 1. You need a valid bearer token:
-- `VALDRIX_TOKEN` (required)
+- `VALDRICS_TOKEN` (required)
 
 2. API base URL:
-- `VALDRIX_API_URL` (optional, default `http://127.0.0.1:8000`)
+- `VALDRICS_API_URL` (optional, default `http://127.0.0.1:8000`)
 
 ## Run
 
 ```bash
-export VALDRIX_API_URL="http://127.0.0.1:8000"
-export VALDRIX_TOKEN="your-bearer-jwt"
+export VALDRICS_API_URL="http://127.0.0.1:8000"
+export VALDRICS_TOKEN="your-bearer-jwt"
 uv run python scripts/capture_acceptance_evidence.py
 ```
 
@@ -113,7 +113,7 @@ This gives you continuous “production sign-off” evidence without manual oper
 Run a small load test and publish the evidence into audit logs:
 
 ```bash
-export VALDRIX_TOKEN="your-bearer-jwt"
+export VALDRICS_TOKEN="your-bearer-jwt"
 uv run python scripts/load_test_api.py --profile ops --duration 30 --users 10 \
   --p95-target 2.0 --max-error-rate 1.0 --publish
 ```
@@ -121,7 +121,7 @@ uv run python scripts/load_test_api.py --profile ops --duration 30 --users 10 \
 Soak variant (multiple rounds, captures per-round results in evidence):
 
 ```bash
-export VALDRIX_TOKEN="your-bearer-jwt"
+export VALDRICS_TOKEN="your-bearer-jwt"
 uv run python scripts/load_test_api.py --profile soak --rounds 5 --pause 2 --duration 30 --users 10 \
   --p95-target 2.0 --max-error-rate 1.0 --publish
 ```
@@ -172,8 +172,8 @@ DB partitioning validation evidence can also be captured (useful for “10x read
 End-to-end ingestion soak evidence can be published after running a soak run:
 
 ```bash
-export VALDRIX_TOKEN="your-bearer-jwt"
-export VALDRIX_TENANT_ID="your-tenant-uuid"
+export VALDRICS_TOKEN="your-bearer-jwt"
+export VALDRICS_TENANT_ID="your-tenant-uuid"
 uv run python scripts/soak_ingestion_jobs.py --jobs 5 --workers 2 --batch-limit 10 \
   --p95-target 60 --max-error-rate 5 --publish
 ```
@@ -188,9 +188,9 @@ Evidence endpoints:
 Run an IdP interoperability smoke test (SCIM) and publish evidence into audit logs:
 
 ```bash
-export VALDRIX_SCIM_BASE_URL="https://<your-valdrix-host>/scim/v2"
-export VALDRIX_SCIM_TOKEN="tenant-scim-token"
-export VALDRIX_TOKEN="your-bearer-jwt"  # admin; required for --publish
+export VALDRICS_SCIM_BASE_URL="https://<your-valdrics-host>/scim/v2"
+export VALDRICS_SCIM_TOKEN="tenant-scim-token"
+export VALDRICS_TOKEN="your-bearer-jwt"  # admin; required for --publish
 uv run python scripts/smoke_test_scim_idp.py --write --publish --idp okta
 ```
 
@@ -204,7 +204,7 @@ Evidence endpoints:
 Run the focused tenant isolation regression suite and publish evidence into audit logs:
 
 ```bash
-export VALDRIX_TOKEN="your-bearer-jwt"
+export VALDRICS_TOKEN="your-bearer-jwt"
 uv run python scripts/verify_tenant_isolation.py --publish
 ```
 
@@ -217,7 +217,7 @@ Published tenancy evidence is included in the compliance pack:
 Capture a carbon methodology + factor snapshot into audit logs:
 
 ```bash
-export VALDRIX_TOKEN="your-bearer-jwt"
+export VALDRICS_TOKEN="your-bearer-jwt"
 uv run python scripts/capture_carbon_assurance_evidence.py --notes "pre-prod signoff"
 ```
 

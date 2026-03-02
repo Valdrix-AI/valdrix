@@ -21,7 +21,7 @@ def test_distributed_config_defaults_when_settings_unavailable() -> None:
     with patch("app.shared.core.config.get_settings", side_effect=RuntimeError("no settings")):
         enabled, prefix = breaker._distributed_config()
     assert enabled is False
-    assert prefix == "valdrix:circuit"
+    assert prefix == "valdrics:circuit"
 
 
 def test_distributed_config_reads_enabled_flag_and_prefix() -> None:

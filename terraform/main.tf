@@ -33,7 +33,7 @@ module "cache" {
 module "iam" {
   source                                = "./modules/iam"
   external_id                           = var.external_id
-  valdrix_account_id                    = var.valdrix_account_id
+  valdrics_account_id                    = var.valdrics_account_id
   enable_active_enforcement             = var.enable_active_enforcement
   active_enforcement_resource_tag_key   = var.active_enforcement_resource_tag_key
   active_enforcement_resource_tag_value = var.active_enforcement_resource_tag_value

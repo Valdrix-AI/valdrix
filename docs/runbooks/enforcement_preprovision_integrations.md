@@ -100,9 +100,9 @@ Recommended alignment with enforcement rollout mode:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: valdrix-enforcement-gate
+  name: valdrics-enforcement-gate
 webhooks:
-  - name: gate.enforcement.valdrix.io
+  - name: gate.enforcement.valdrics.io
     failurePolicy: Ignore
     timeoutSeconds: 2
     sideEffects: None
@@ -114,8 +114,8 @@ webhooks:
         resources: ["*/*"]
     clientConfig:
       service:
-        namespace: valdrix
-        name: valdrix-api
+        namespace: valdrics
+        name: valdrics-api
         path: /api/v1/enforcement/gate/k8s/admission/review
 ```
 
@@ -131,8 +131,8 @@ enforcementWebhook:
   failurePolicy: Ignore   # soft rollout profile
   timeoutSeconds: 2
   service:
-    namespace: valdrix
-    name: valdrix-api
+    namespace: valdrics
+    name: valdrics-api
     port: 80
   path: /api/v1/enforcement/gate/k8s/admission/review
 ```
@@ -174,7 +174,7 @@ Guardrails enforced by chart contract:
 2. Treat approval consume failure as a hard stop; never bypass with stale token.
 3. Keep webhook timeout low (`<= 2s`) and run API behind HA before using `failurePolicy: Fail`.
 4. Monitor gate failure reason distribution; distinguish policy denies from infrastructure reasons (`gate_lock_timeout`, `gate_timeout`, `gate_evaluation_error`).
-5. Monitor gate lock contention events (`valdrix_ops_enforcement_gate_lock_events_total`) and alert on sustained `contended`/`timeout` spikes.
+5. Monitor gate lock contention events (`valdrics_ops_enforcement_gate_lock_events_total`) and alert on sustained `contended`/`timeout` spikes.
 6. For audit exports, verify `policy_lineage_sha256` and `policy_lineage` are present so each decision can be tied to its decision-time policy hash.
 7. For computed decision determinism audits, verify `computed_context_lineage_sha256` and `computed_context_lineage` are present in export parity/archive artifacts.
 

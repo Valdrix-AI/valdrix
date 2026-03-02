@@ -31,7 +31,7 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-_POLICY_DOCUMENT_SCHEMA_VERSION = "valdrix.enforcement.policy.v1"
+_POLICY_DOCUMENT_SCHEMA_VERSION = "valdrics.enforcement.policy.v1"
 _EMPTY_POLICY_DOCUMENT_SHA256 = "0" * 64
 
 

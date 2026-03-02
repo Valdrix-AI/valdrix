@@ -4,16 +4,16 @@ data "aws_vpc" "selected" {
 }
 
 resource "aws_db_subnet_group" "main" {
-  name       = "valdrix-db-subnet-group-${var.environment}"
+  name       = "valdrics-db-subnet-group-${var.environment}"
   subnet_ids = var.private_subnet_ids
 
   tags = {
-    Name = "Valdrix DB Subnet Group"
+    Name = "Valdrics DB Subnet Group"
   }
 }
 
 resource "aws_security_group" "rds" {
-  name        = "valdrix-rds-sg-${var.environment}"
+  name        = "valdrics-rds-sg-${var.environment}"
   description = "Allow inbound traffic from EKS"
   vpc_id      = var.vpc_id
 
@@ -32,7 +32,7 @@ resource "aws_security_group" "rds" {
   }
 
   tags = {
-    Name = "valdrix-rds-sg-${var.environment}"
+    Name = "valdrics-rds-sg-${var.environment}"
   }
 }
 
@@ -57,7 +57,7 @@ resource "aws_db_instance" "main" {
   copy_tags_to_snapshot   = true
 
   tags = {
-    Name        = "valdrix-db-${var.environment}"
+    Name        = "valdrics-db-${var.environment}"
     Environment = var.environment
   }
 }

@@ -86,7 +86,7 @@ async def test_identity_sso_validation_default_non_federated_path(
     assert checks["sso.federation_enabled"]["passed"] is False
     assert checks["sso.federation_enabled"]["severity"] == "info"
     assert checks["supabase.expected_redirect_url_computed"]["passed"] is True
-    assert checks["valdrix.discovery_endpoint_computed"]["passed"] is True
+    assert checks["valdrics.discovery_endpoint_computed"]["passed"] is True
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,19 @@
+apiVersion: v2
+name: valdrics
+description: Valdrics - FinOps & GreenOps Cloud Cost Optimization Platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - finops
+  - greenops
+  - cloud-cost
+  - kubernetes
+  - zombie-detection
+maintainers:
+  - name: Valdrics Team
+    email: team@valdrics.ai
+home: https://valdrics.ai
+sources:
+  - https://github.com/Valdrics-AI/valdrics
+dependencies: []

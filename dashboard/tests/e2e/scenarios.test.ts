@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const E2E_AUTH_HEADER_NAME = 'x-valdrix-e2e-auth';
+const E2E_AUTH_HEADER_NAME = 'x-valdrics-e2e-auth';
 const E2E_AUTH_HEADER_VALUE = process.env.E2E_AUTH_SECRET || 'playwright';
 
 test.describe('Authentication Flow', () => {

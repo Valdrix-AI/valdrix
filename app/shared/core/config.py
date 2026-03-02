@@ -125,11 +125,11 @@ class Settings(BaseSettings):
         """Normalize legacy product names to canonical Valdrics branding."""
         token = str(self.APP_NAME or "").strip().lower()
         legacy_names = {
-            "valdrix",
-            "cloudsentinel",
-            "cloudsentinel-ai",
-            "cloud sentinel",
-            "cloud sentinel ai",
+            "valdrics",
+            "valdrics",
+            "valdrics-ai",
+            "valdrics",
+            "valdrics ai",
         }
         if token in legacy_names:
             structlog.get_logger().warning(
@@ -503,7 +503,7 @@ class Settings(BaseSettings):
     )
 
     # CloudFormation Template (Configurable for S3/GitHub)
-    CLOUDFORMATION_TEMPLATE_URL: str = "https://raw.githubusercontent.com/valdrix/valdrix/main/cloudformation/valdrix-role.yaml"
+    CLOUDFORMATION_TEMPLATE_URL: str = "https://raw.githubusercontent.com/valdrics/valdrics/main/cloudformation/valdrics-role.yaml"
 
     # Reload trigger: 2026-01-14
 
@@ -642,7 +642,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
-    SMTP_FROM: str = "alerts@valdrix.ai"
+    SMTP_FROM: str = "alerts@valdrics.ai"
 
     # GreenOps & Carbon APIs
     WATT_TIME_API_KEY: Optional[str] = None
@@ -710,7 +710,7 @@ class Settings(BaseSettings):
     CIRCUIT_BREAKER_MAX_DAILY_SAVINGS: float = 1000.0
     CIRCUIT_BREAKER_CACHE_SIZE: int = 1000
     CIRCUIT_BREAKER_DISTRIBUTED_STATE: bool = True
-    CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX: str = "valdrix:circuit"
+    CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX: str = "valdrics:circuit"
     # REMEDIATION KILL SWITCH: Stop all deletions if daily cost impact hits $500
     REMEDIATION_KILL_SWITCH_THRESHOLD: float = 500.0
     REMEDIATION_KILL_SWITCH_SCOPE: str = Field(

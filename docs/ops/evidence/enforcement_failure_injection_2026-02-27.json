@@ -1,7 +1,7 @@
 {
-  "approved_by": "release.approver@valdrix.local",
+  "approved_by": "release.approver@valdrics.local",
   "captured_at": "2026-02-27T16:45:32.944207+00:00",
-  "executed_by": "sre.executor@valdrix.local",
+  "executed_by": "sre.executor@valdrics.local",
   "execution_class": "staged",
   "profile": "enforcement_failure_injection",
   "runner": "staged_failure_injection",

@@ -33,8 +33,8 @@ def test_sbom_workflow_verifies_attestations_before_promotion() -> None:
 
     assert "scripts/verify_supply_chain_attestations.py" in text
     assert "--signer-workflow .github/workflows/sbom.yml" in text
-    assert "--artifact ./sbom/valdrix-python-sbom.json" in text
-    assert "--artifact ./sbom/valdrix-container-sbom.json" in text
+    assert "--artifact ./sbom/valdrics-python-sbom.json" in text
+    assert "--artifact ./sbom/valdrics-container-sbom.json" in text
     assert "--artifact ./provenance/supply-chain-manifest.json" in text
 
 

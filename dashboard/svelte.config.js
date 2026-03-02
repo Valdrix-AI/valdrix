@@ -5,7 +5,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 const connectSrc = [
 	'self',
 	'https://*.supabase.co',
-	'https://*.valdrix.ai',
+	'https://*.valdrics.ai',
 	'https://challenges.cloudflare.com'
 ];
 

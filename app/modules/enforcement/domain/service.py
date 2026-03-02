@@ -71,7 +71,7 @@ from app.shared.core.ops_metrics import (
 logger = structlog.get_logger()
 
 
-_POLICY_DOCUMENT_SCHEMA_VERSION_DEFAULT = "valdrix.enforcement.policy.v1"
+_POLICY_DOCUMENT_SCHEMA_VERSION_DEFAULT = "valdrics.enforcement.policy.v1"
 _POLICY_DOCUMENT_SHA256_EMPTY = "0" * 64
 
 
@@ -3539,7 +3539,7 @@ class EnforcementService:
         bundle: EnforcementExportBundle,
     ) -> EnforcementSignedExportManifest:
         content_payload: dict[str, Any] = {
-            "schema_version": "valdrix.enforcement.export_manifest.v1",
+            "schema_version": "valdrics.enforcement.export_manifest.v1",
             "tenant_id": str(tenant_id),
             "window_start": bundle.window_start,
             "window_end": bundle.window_end,
@@ -3570,7 +3570,7 @@ class EnforcementService:
         signature_key_id = self._resolve_export_manifest_signing_key_id()
 
         return EnforcementSignedExportManifest(
-            schema_version="valdrix.enforcement.export_manifest.v1",
+            schema_version="valdrics.enforcement.export_manifest.v1",
             generated_at=bundle.generated_at,
             tenant_id=tenant_id,
             window_start=bundle.window_start,

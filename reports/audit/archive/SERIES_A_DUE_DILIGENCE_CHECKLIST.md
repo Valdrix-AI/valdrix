@@ -3,7 +3,7 @@
 **For:** Investors, Acquirers, Technical Partners  
 **Updated:** January 2026
 
-Use this checklist during due diligence calls. Each section maps to a Valdrix subsystem.
+Use this checklist during due diligence calls. Each section maps to a Valdrics subsystem.
 
 ---
 

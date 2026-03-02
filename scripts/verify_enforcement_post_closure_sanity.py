@@ -27,11 +27,11 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
     "observability": (
         EvidenceToken(
             "ops/alerts/enforcement_control_plane_rules.yml",
-            "ValdrixEnforcementGateLockContentionSpike",
+            "ValdricsEnforcementGateLockContentionSpike",
         ),
         EvidenceToken(
             "ops/alerts/enforcement_control_plane_rules.yml",
-            "ValdrixEnforcementErrorBudgetBurnFast",
+            "ValdricsEnforcementErrorBudgetBurnFast",
         ),
         EvidenceToken(
             "docs/ops/alert-evidence-2026-02-25.md",
@@ -43,7 +43,7 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
         ),
         EvidenceToken(
             "docs/runbooks/enforcement_preprovision_integrations.md",
-            "valdrix_ops_enforcement_gate_lock_events_total",
+            "valdrics_ops_enforcement_gate_lock_events_total",
         ),
     ),
     "deterministic_replay": (

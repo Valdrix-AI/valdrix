@@ -78,7 +78,7 @@ async def test_create_aws_connection(async_client: AsyncClient, db_session, mock
     """Test creating an AWS connection (all tiers)."""
     payload = {
         "aws_account_id": "123456789012",
-        "role_arn": "arn:aws:iam::123456789012:role/Valdrix",
+        "role_arn": "arn:aws:iam::123456789012:role/Valdrics",
         "external_id": "vx-" + "a" * 32,
         "region": "us-east-1",
     }
@@ -156,7 +156,7 @@ async def test_verify_aws_connection(async_client: AsyncClient, db_session, mock
     conn = AWSConnection(
         tenant_id=mock_user.tenant_id,
         aws_account_id="123456789012",
-        role_arn="arn:aws:iam::123456789012:role/Valdrix",
+        role_arn="arn:aws:iam::123456789012:role/Valdrics",
         external_id="ext-id",
     )
     db_session.add(conn)

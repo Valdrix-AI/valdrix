@@ -26,7 +26,7 @@ variable "db_instance_class" {
 
 variable "db_name" {
   type    = string
-  default = "valdrix"
+  default = "valdrics"
 }
 
 variable "db_password" {
@@ -38,7 +38,7 @@ variable "db_password" {
 variable "db_username" {
   description = "Username for the RDS instance."
   type        = string
-  default     = "valdrix_admin"
+  default     = "valdrics_admin"
 }
 
 variable "skip_final_snapshot" {

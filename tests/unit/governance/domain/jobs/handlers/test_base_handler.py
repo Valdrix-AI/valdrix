@@ -7,7 +7,7 @@ from app.modules.governance.domain.jobs.handlers.base import (
     JobTimeoutError,
 )
 from app.models.background_job import BackgroundJob, JobStatus
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 import asyncio
 
 
@@ -33,9 +33,9 @@ class ErrorHandler(BaseJobHandler):
         raise ValueError("Unexpected boom")
 
 
-class ValdrixErrorHandler(BaseJobHandler):
+class ValdricsErrorHandler(BaseJobHandler):
     async def execute(self, job: BackgroundJob, db: AsyncSession):
-        raise ValdrixException("Expected boom", code="test_error", status_code=400)
+        raise ValdricsException("Expected boom", code="test_error", status_code=400)
 
 
 @pytest.fixture
@@ -85,11 +85,11 @@ async def test_process_timeout(mock_db, job):
 
 
 @pytest.mark.asyncio
-async def test_process_retry_valdrix_exception(mock_db, job):
-    handler = ValdrixErrorHandler()
+async def test_process_retry_valdrics_exception(mock_db, job):
+    handler = ValdricsErrorHandler()
     handler.max_retries = 3
 
-    with pytest.raises(ValdrixException):
+    with pytest.raises(ValdricsException):
         await handler.process(job, mock_db)
 
     assert job.status == JobStatus.FAILED
@@ -99,11 +99,11 @@ async def test_process_retry_valdrix_exception(mock_db, job):
 
 @pytest.mark.asyncio
 async def test_process_max_retries_exceeded(mock_db, job):
-    handler = ValdrixErrorHandler()
+    handler = ValdricsErrorHandler()
     handler.max_retries = 1
     job.attempts = 1  # Already tried once
 
-    with pytest.raises(ValdrixException):
+    with pytest.raises(ValdricsException):
         await handler.process(job, mock_db)
 
     assert job.status == JobStatus.DEAD_LETTER

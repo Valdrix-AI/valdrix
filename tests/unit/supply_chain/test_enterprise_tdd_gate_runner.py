@@ -14,9 +14,9 @@ from scripts.run_enterprise_tdd_gate import (
     DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS,
     DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS,
     DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH,
-    DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_MAX_AGE_DAYS,
-    DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_MAX_REVIEW_WINDOW_DAYS,
-    DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_REGISTER_PATH,
+    DEFAULT_ENFORCEMENT_VALDRICS_DISPOSITION_MAX_AGE_DAYS,
+    DEFAULT_ENFORCEMENT_VALDRICS_DISPOSITION_MAX_REVIEW_WINDOW_DAYS,
+    DEFAULT_ENFORCEMENT_VALDRICS_DISPOSITION_REGISTER_PATH,
     DEFAULT_ENFORCEMENT_STRESS_MIN_CONCURRENT_USERS,
     DEFAULT_ENFORCEMENT_STRESS_MIN_DURATION_SECONDS,
     DEFAULT_ENFORCEMENT_STRESS_REQUIRED_DATABASE_ENGINE,
@@ -44,9 +44,9 @@ from scripts.run_enterprise_tdd_gate import (
     ENFORCEMENT_KEY_ROTATION_DRILL_PATH_ENV,
     ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS_ENV,
     ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS_ENV,
-    ENFORCEMENT_VALDRIX_DISPOSITION_MAX_AGE_DAYS_ENV,
-    ENFORCEMENT_VALDRIX_DISPOSITION_MAX_REVIEW_WINDOW_DAYS_ENV,
-    ENFORCEMENT_VALDRIX_DISPOSITION_REGISTER_PATH_ENV,
+    ENFORCEMENT_VALDRICS_DISPOSITION_MAX_AGE_DAYS_ENV,
+    ENFORCEMENT_VALDRICS_DISPOSITION_MAX_REVIEW_WINDOW_DAYS_ENV,
+    ENFORCEMENT_VALDRICS_DISPOSITION_REGISTER_PATH_ENV,
     ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS_ENV,
     ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH_ENV,
     ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED_ENV,
@@ -98,10 +98,10 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         for cmd in commands
         if "scripts/verify_monthly_finance_evidence_refresh.py" in cmd
     )
-    valdrix_disposition_cmd = next(
+    valdrics_disposition_cmd = next(
         cmd
         for cmd in commands
-        if "scripts/verify_valdrix_disposition_freshness.py" in cmd
+        if "scripts/verify_valdrics_disposition_freshness.py" in cmd
     )
     guard_cmd = next(
         cmd for cmd in commands if "scripts/verify_enterprise_placeholder_guards.py" in cmd
@@ -179,26 +179,26 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         DEFAULT_ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS
         in monthly_refresh_cmd
     )
-    assert valdrix_disposition_cmd[:4] == [
+    assert valdrics_disposition_cmd[:4] == [
         "uv",
         "run",
         "python3",
-        "scripts/verify_valdrix_disposition_freshness.py",
+        "scripts/verify_valdrics_disposition_freshness.py",
     ]
-    assert "--register-path" in valdrix_disposition_cmd
+    assert "--register-path" in valdrics_disposition_cmd
     assert (
-        DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_REGISTER_PATH
-        in valdrix_disposition_cmd
+        DEFAULT_ENFORCEMENT_VALDRICS_DISPOSITION_REGISTER_PATH
+        in valdrics_disposition_cmd
     )
-    assert "--max-artifact-age-days" in valdrix_disposition_cmd
+    assert "--max-artifact-age-days" in valdrics_disposition_cmd
     assert (
-        DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_MAX_AGE_DAYS
-        in valdrix_disposition_cmd
+        DEFAULT_ENFORCEMENT_VALDRICS_DISPOSITION_MAX_AGE_DAYS
+        in valdrics_disposition_cmd
     )
-    assert "--max-review-window-days" in valdrix_disposition_cmd
+    assert "--max-review-window-days" in valdrics_disposition_cmd
     assert (
-        DEFAULT_ENFORCEMENT_VALDRIX_DISPOSITION_MAX_REVIEW_WINDOW_DAYS
-        in valdrix_disposition_cmd
+        DEFAULT_ENFORCEMENT_VALDRICS_DISPOSITION_MAX_REVIEW_WINDOW_DAYS
+        in valdrics_disposition_cmd
     )
 
     assert pytest_cmd[:3] == ["uv", "run", "pytest"]
@@ -670,16 +670,16 @@ def test_build_gate_commands_applies_monthly_finance_refresh_env_overrides(
     assert "7" in monthly_refresh_cmd
 
 
-def test_build_gate_commands_applies_valdrix_disposition_env_overrides(
+def test_build_gate_commands_applies_valdrics_disposition_env_overrides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
-        ENFORCEMENT_VALDRIX_DISPOSITION_REGISTER_PATH_ENV,
-        "docs/ops/evidence/valdrix_disposition_register_current.json",
+        ENFORCEMENT_VALDRICS_DISPOSITION_REGISTER_PATH_ENV,
+        "docs/ops/evidence/valdrics_disposition_register_current.json",
     )
-    monkeypatch.setenv(ENFORCEMENT_VALDRIX_DISPOSITION_MAX_AGE_DAYS_ENV, "30")
+    monkeypatch.setenv(ENFORCEMENT_VALDRICS_DISPOSITION_MAX_AGE_DAYS_ENV, "30")
     monkeypatch.setenv(
-        ENFORCEMENT_VALDRIX_DISPOSITION_MAX_REVIEW_WINDOW_DAYS_ENV,
+        ENFORCEMENT_VALDRICS_DISPOSITION_MAX_REVIEW_WINDOW_DAYS_ENV,
         "90",
     )
     commands = build_gate_commands()
@@ -687,10 +687,10 @@ def test_build_gate_commands_applies_valdrix_disposition_env_overrides(
     disposition_cmd = next(
         cmd
         for cmd in commands
-        if "scripts/verify_valdrix_disposition_freshness.py" in cmd
+        if "scripts/verify_valdrics_disposition_freshness.py" in cmd
     )
     assert "--register-path" in disposition_cmd
-    assert "docs/ops/evidence/valdrix_disposition_register_current.json" in disposition_cmd
+    assert "docs/ops/evidence/valdrics_disposition_register_current.json" in disposition_cmd
     assert "--max-artifact-age-days" in disposition_cmd
     assert "30" in disposition_cmd
     assert "--max-review-window-days" in disposition_cmd

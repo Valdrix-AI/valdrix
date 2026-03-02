@@ -584,8 +584,8 @@ async def test_gate_k8s_admission_review_contract_allow(async_client, db) -> Non
                     "object": {
                         "metadata": {
                             "labels": {
-                                "valdrix.io/project-id": "platform",
-                                "valdrix.io/environment": "nonprod",
+                                "valdrics.io/project-id": "platform",
+                                "valdrics.io/environment": "nonprod",
                             }
                         }
                     },
@@ -598,8 +598,8 @@ async def test_gate_k8s_admission_review_contract_allow(async_client, db) -> Non
         assert payload["kind"] == "AdmissionReview"
         assert payload["response"]["uid"] == "admission-uid-1"
         assert payload["response"]["allowed"] is True
-        assert payload["response"]["auditAnnotations"]["valdrix.io/decision-id"]
-        assert payload["response"]["auditAnnotations"]["valdrix.io/request-fingerprint"]
+        assert payload["response"]["auditAnnotations"]["valdrics.io/decision-id"]
+        assert payload["response"]["auditAnnotations"]["valdrics.io/request-fingerprint"]
     finally:
         _clear_user_override(async_client)
 
@@ -660,10 +660,10 @@ async def test_gate_k8s_admission_review_uses_annotation_cost_inputs_for_deny(
                     "object": {
                         "metadata": {
                             "annotations": {
-                                "valdrix.io/project-id": "payments",
-                                "valdrix.io/environment": "prod",
-                                "valdrix.io/estimated-monthly-delta-usd": "50",
-                                "valdrix.io/estimated-hourly-delta-usd": "0.07",
+                                "valdrics.io/project-id": "payments",
+                                "valdrics.io/environment": "prod",
+                                "valdrics.io/estimated-monthly-delta-usd": "50",
+                                "valdrics.io/estimated-hourly-delta-usd": "0.07",
                             }
                         }
                     },
@@ -676,7 +676,7 @@ async def test_gate_k8s_admission_review_uses_annotation_cost_inputs_for_deny(
         assert payload["response"]["status"]["code"] == 403
         assert "decision=DENY" in payload["response"]["status"]["message"]
         assert (
-            payload["response"]["auditAnnotations"]["valdrix.io/decision"] == "DENY"
+            payload["response"]["auditAnnotations"]["valdrics.io/decision"] == "DENY"
         )
     finally:
         _clear_user_override(async_client)
@@ -715,7 +715,7 @@ async def test_gate_k8s_admission_review_rejects_invalid_cost_annotation(
                     "object": {
                         "metadata": {
                             "annotations": {
-                                "valdrix.io/estimated-monthly-delta-usd": "not-a-number",
+                                "valdrics.io/estimated-monthly-delta-usd": "not-a-number",
                             }
                         }
                     },
@@ -935,12 +935,12 @@ async def test_policy_budget_and_credit_endpoints(async_client, db) -> None:
         assert get_policy.json()["terraform_mode"] in {"shadow", "soft", "hard"}
         assert (
             get_policy.json()["policy_document_schema_version"]
-            == "valdrix.enforcement.policy.v1"
+            == "valdrics.enforcement.policy.v1"
         )
         assert len(get_policy.json()["policy_document_sha256"]) == 64
         assert (
             get_policy.json()["policy_document"]["schema_version"]
-            == "valdrix.enforcement.policy.v1"
+            == "valdrics.enforcement.policy.v1"
         )
 
         update_policy = await async_client.post(
@@ -1031,7 +1031,7 @@ async def test_policy_upsert_accepts_policy_document_contract(async_client, db) 
                 "hard_deny_above_monthly_usd": "10",
                 "default_ttl_seconds": 900,
                 "policy_document": {
-                    "schema_version": "valdrix.enforcement.policy.v1",
+                    "schema_version": "valdrics.enforcement.policy.v1",
                     "mode_matrix": {
                         "terraform_default": "hard",
                         "terraform_prod": "hard",
@@ -2417,7 +2417,7 @@ async def test_decision_ledger_endpoint_admin(async_client, db) -> None:
         assert first["burn_rate_daily_usd"] is not None
         assert first["forecast_eom_usd"] is not None
         assert first["risk_class"] in {"low", "medium", "high"}
-        assert first["policy_document_schema_version"] == "valdrix.enforcement.policy.v1"
+        assert first["policy_document_schema_version"] == "valdrics.enforcement.policy.v1"
         assert len(first["policy_document_sha256"]) == 64
         assert first["approval_request_id"] is None
         assert first["approval_status"] is None
