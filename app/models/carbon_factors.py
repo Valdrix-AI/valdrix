@@ -6,7 +6,7 @@ Enterprise carbon reporting needs reproducibility:
 - changes must be auditable
 - calculations must reference the active factor set used at the time
 
-Valdrix stores carbon factors as a first-class, DB-backed artifact so updates can be staged,
+Valdrics stores carbon factors as a first-class, DB-backed artifact so updates can be staged,
 guardrailed, and activated without a code deploy.
 """
 

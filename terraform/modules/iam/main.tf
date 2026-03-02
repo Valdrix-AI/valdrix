@@ -1,28 +1,28 @@
-# Valdrix - Read-Only IAM Role for Cost Analysis
+# Valdrics - Read-Only IAM Role for Cost Analysis
 #
-# This Terraform module creates an IAM role that allows Valdrix to read
+# This Terraform module creates an IAM role that allows Valdrics to read
 # your AWS cost data. The role uses cross-account AssumeRole with
 # an External ID for security.
 #
 # Usage:
-#   module "valdrix" {
-#     source      = "./valdrix"
+#   module "valdrics" {
+#     source      = "./valdrics"
 #     external_id = "vx-YOUR_EXTERNAL_ID_HERE"
 #   }
 #
-# After apply, copy the role_arn output to Valdrix dashboard.
+# After apply, copy the role_arn output to Valdrics dashboard.
 
-# Tag name used for resources (can be Valdrix or Valtric)
+# Tag name used for resources (can be Valdrics or Valtric)
 # variable "resource_tag_name" {
 #   description = "Application name used for tagging and resource naming"
 #   type        = string
-#   default     = "Valdrix"
+#   default     = "Valdrics"
 # }
 
-# IAM Role for Valdrix
-resource "aws_iam_role" "valdrix" {
+# IAM Role for Valdrics
+resource "aws_iam_role" "valdrics" {
   name                 = "${var.resource_tag_name}ReadOnly"
-  description          = "Allows Valdrix to read cost data for analysis"
+  description          = "Allows Valdrics to read cost data for analysis"
   max_session_duration = 3600 # 1 hour
 
   assume_role_policy = jsonencode({
@@ -31,7 +31,7 @@ resource "aws_iam_role" "valdrix" {
       {
         Effect = "Allow"
         Principal = {
-          AWS = "arn:aws:iam::${var.valdrix_account_id}:root"
+          AWS = "arn:aws:iam::${var.valdrics_account_id}:root"
         }
         Action = "sts:AssumeRole"
         Condition = {
@@ -51,7 +51,7 @@ resource "aws_iam_role" "valdrix" {
 
 resource "aws_iam_role_policy" "read_only" {
   name = "${var.resource_tag_name}ReadOnlyPolicy"
-  role = aws_iam_role.valdrix.id
+  role = aws_iam_role.valdrics.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -130,8 +130,8 @@ resource "aws_iam_role_policy" "read_only" {
         Effect = "Allow"
         Action = ["s3:GetBucketPolicy", "s3:ListBucket", "s3:GetObject"]
         Resource = [
-          "arn:aws:s3:::valdrix-cur-*",
-          "arn:aws:s3:::valdrix-cur-*/*"
+          "arn:aws:s3:::valdrics-cur-*",
+          "arn:aws:s3:::valdrics-cur-*/*"
         ]
       }
     ]
@@ -142,7 +142,7 @@ resource "aws_iam_role_policy" "active_enforcement" {
   count = var.enable_active_enforcement ? 1 : 0
 
   name = "${var.resource_tag_name}ActiveEnforcementPolicy"
-  role = aws_iam_role.valdrix.id
+  role = aws_iam_role.valdrics.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -230,12 +230,12 @@ resource "aws_iam_role_policy" "active_enforcement" {
 # ---------------------------------------------------------
 # INFRASTRUCTURE RELIABILITY: RDS BACKUP POLICY
 # ---------------------------------------------------------
-# This section ensures that the Valdrix database has automated
+# This section ensures that the Valdrics database has automated
 # backups enabled with a 30-day retention period.
 # Note: In a real environment, this would be part of the 
 # DB instance resource definition.
 
-# resource "aws_db_instance" "valdrix" {
+# resource "aws_db_instance" "valdrics" {
 #   # ... other config ...
 #   backup_retention_period = 30
 #   backup_window           = "03:00-04:00"
@@ -246,13 +246,13 @@ resource "aws_iam_role_policy" "active_enforcement" {
 
 # Outputs
 output "role_arn" {
-  description = "The ARN of the Valdrix role. Copy this to Valdrix dashboard."
-  value       = aws_iam_role.valdrix.arn
+  description = "The ARN of the Valdrics role. Copy this to Valdrics dashboard."
+  value       = aws_iam_role.valdrics.arn
 }
 
 output "role_name" {
-  description = "The name of the Valdrix role."
-  value       = aws_iam_role.valdrix.name
+  description = "The name of the Valdrics role."
+  value       = aws_iam_role.valdrics.name
 }
 
 output "active_enforcement_enabled" {

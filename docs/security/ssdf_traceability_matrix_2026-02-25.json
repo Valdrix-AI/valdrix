@@ -64,7 +64,7 @@
       "summary": "Runtime environment contract checks and deployment guardrails are enforced, with ongoing hardening tracked in the gap register.",
       "evidence": [
         "scripts/validate_runtime_env.py",
-        "helm/valdrix/values.schema.json",
+        "helm/valdrics/values.schema.json",
         "tests/unit/ops/test_enforcement_webhook_helm_contract.py"
       ]
     },
@@ -184,8 +184,8 @@
       "status": "implemented_baseline",
       "summary": "Secure deployment defaults and fail-closed guardrails are codified in chart schema and template-level enforcement.",
       "evidence": [
-        "helm/valdrix/values.yaml",
-        "helm/valdrix/values.schema.json",
+        "helm/valdrics/values.yaml",
+        "helm/valdrics/values.schema.json",
         "tests/unit/ops/test_enforcement_webhook_helm_contract.py"
       ]
     },

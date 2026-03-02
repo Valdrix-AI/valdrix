@@ -2,7 +2,7 @@
 
 **Version:** 1.0 (Audit Remediation)
 **Status:** Operational
-**Scope:** Valdrics CloudSentinel-AI Platform
+**Scope:** Valdrics Valdrics-AI Platform
 
 ## 1. Detection and Analysis
 

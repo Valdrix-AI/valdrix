@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from app.modules.optimization.api.v1 import zombies
 from app.models.remediation import RemediationAction
 from app.shared.core.auth import CurrentUser, UserRole
-from app.shared.core.exceptions import ResourceNotFoundError, ValdrixException
+from app.shared.core.exceptions import ResourceNotFoundError, ValdricsException
 from app.shared.core.pricing import PricingTier
 
 
@@ -84,7 +84,7 @@ async def test_preview_remediation_policy_payload_invalid_action() -> None:
         provider="aws",
     )
 
-    with pytest.raises(ValdrixException, match="Invalid action"):
+    with pytest.raises(ValdricsException, match="Invalid action"):
         await zombies.preview_remediation_policy_payload(
             payload=payload,
             tenant_id=tenant_id,
@@ -357,7 +357,7 @@ async def test_execute_remediation_wraps_service_error() -> None:
         service.execute = AsyncMock(
             side_effect=ValueError("No AWS connection found for this tenant")
         )
-        with pytest.raises(ValdrixException, match="No AWS connection found"):
+        with pytest.raises(ValdricsException, match="No AWS connection found"):
             await zombies.execute_remediation(
                 request=MagicMock(),
                 request_id=request_id,
@@ -388,7 +388,7 @@ async def test_execute_remediation_value_error_is_wrapped() -> None:
         service = service_cls.return_value
         service.execute = AsyncMock(side_effect=ValueError("grace period active"))
 
-        with pytest.raises(ValdrixException, match="grace period active"):
+        with pytest.raises(ValdricsException, match="grace period active"):
             await zombies.execute_remediation(
                 request=MagicMock(),
                 request_id=request_id,
@@ -419,7 +419,7 @@ async def test_execute_remediation_unexpected_error_is_sanitized() -> None:
         service = service_cls.return_value
         service.execute = AsyncMock(side_effect=RuntimeError("raw upstream timeout"))
 
-        with pytest.raises(ValdrixException) as exc_info:
+        with pytest.raises(ValdricsException) as exc_info:
             await zombies.execute_remediation(
                 request=MagicMock(),
                 request_id=request_id,
@@ -461,7 +461,7 @@ async def test_execute_remediation_failed_status_propagates_code_and_status() ->
         service = service_cls.return_value
         service.execute = AsyncMock(return_value=failed_request)
 
-        with pytest.raises(ValdrixException) as exc_info:
+        with pytest.raises(ValdricsException) as exc_info:
             await zombies.execute_remediation(
                 request=MagicMock(),
                 request_id=request_id,
@@ -501,7 +501,7 @@ async def test_execute_remediation_failed_status_without_error_uses_default() ->
         service = service_cls.return_value
         service.execute = AsyncMock(return_value=failed_request)
 
-        with pytest.raises(ValdrixException) as exc_info:
+        with pytest.raises(ValdricsException) as exc_info:
             await zombies.execute_remediation(
                 request=MagicMock(),
                 request_id=request_id,

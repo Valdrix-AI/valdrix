@@ -29,7 +29,7 @@ describe('docs page', () => {
 
 		const repoLink = screen.getByRole('link', { name: /browse github docs/i });
 		expect(repoLink.getAttribute('href')).toBe(
-			'https://github.com/Valdrix-AI/valdrix/tree/main/docs'
+			'https://github.com/Valdrics-AI/valdrics/tree/main/docs'
 		);
 	});
 });

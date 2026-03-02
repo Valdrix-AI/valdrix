@@ -1,50 +1,50 @@
 groups:
-  - name: valdrix-enforcement-control-plane
+  - name: valdrics-enforcement-control-plane
     interval: 30s
     rules:
-      - record: valdrix:enforcement_gate_error_ratio_5m
+      - record: valdrics:enforcement_gate_error_ratio_5m
         expr: |
-          sum by (source) (rate(valdrix_ops_enforcement_gate_failures_total[5m]))
+          sum by (source) (rate(valdrics_ops_enforcement_gate_failures_total[5m]))
           /
           clamp_min(
-            sum by (source) (rate(valdrix_ops_enforcement_gate_decisions_total[5m])),
+            sum by (source) (rate(valdrics_ops_enforcement_gate_decisions_total[5m])),
             0.001
           )
 
-      - record: valdrix:enforcement_gate_error_ratio_30m
+      - record: valdrics:enforcement_gate_error_ratio_30m
         expr: |
-          sum by (source) (rate(valdrix_ops_enforcement_gate_failures_total[30m]))
+          sum by (source) (rate(valdrics_ops_enforcement_gate_failures_total[30m]))
           /
           clamp_min(
-            sum by (source) (rate(valdrix_ops_enforcement_gate_decisions_total[30m])),
+            sum by (source) (rate(valdrics_ops_enforcement_gate_decisions_total[30m])),
             0.001
           )
 
-      - record: valdrix:enforcement_gate_error_ratio_1h
+      - record: valdrics:enforcement_gate_error_ratio_1h
         expr: |
-          sum by (source) (rate(valdrix_ops_enforcement_gate_failures_total[1h]))
+          sum by (source) (rate(valdrics_ops_enforcement_gate_failures_total[1h]))
           /
           clamp_min(
-            sum by (source) (rate(valdrix_ops_enforcement_gate_decisions_total[1h])),
+            sum by (source) (rate(valdrics_ops_enforcement_gate_decisions_total[1h])),
             0.001
           )
 
-      - record: valdrix:enforcement_gate_error_ratio_6h
+      - record: valdrics:enforcement_gate_error_ratio_6h
         expr: |
-          sum by (source) (rate(valdrix_ops_enforcement_gate_failures_total[6h]))
+          sum by (source) (rate(valdrics_ops_enforcement_gate_failures_total[6h]))
           /
           clamp_min(
-            sum by (source) (rate(valdrix_ops_enforcement_gate_decisions_total[6h])),
+            sum by (source) (rate(valdrics_ops_enforcement_gate_decisions_total[6h])),
             0.001
           )
 
-      - alert: ValdrixEnforcementErrorBudgetBurnFast
+      - alert: ValdricsEnforcementErrorBudgetBurnFast
         expr: |
-          valdrix:enforcement_gate_error_ratio_1h > (14.4 * 0.001)
+          valdrics:enforcement_gate_error_ratio_1h > (14.4 * 0.001)
           and
-          valdrix:enforcement_gate_error_ratio_5m > (14.4 * 0.001)
+          valdrics:enforcement_gate_error_ratio_5m > (14.4 * 0.001)
           and
-          sum by (source) (increase(valdrix_ops_enforcement_gate_decisions_total[1h])) >= 200
+          sum by (source) (increase(valdrics_ops_enforcement_gate_decisions_total[1h])) >= 200
         for: 2m
         labels:
           severity: critical
@@ -55,13 +55,13 @@ groups:
           description: "1h and 5m burn-rate windows exceeded the 14.4x threshold for a 99.9% SLO."
           runbook: "docs/runbooks/enforcement_incident_response.md"
 
-      - alert: ValdrixEnforcementErrorBudgetBurnSlow
+      - alert: ValdricsEnforcementErrorBudgetBurnSlow
         expr: |
-          valdrix:enforcement_gate_error_ratio_6h > (6 * 0.001)
+          valdrics:enforcement_gate_error_ratio_6h > (6 * 0.001)
           and
-          valdrix:enforcement_gate_error_ratio_30m > (6 * 0.001)
+          valdrics:enforcement_gate_error_ratio_30m > (6 * 0.001)
           and
-          sum by (source) (increase(valdrix_ops_enforcement_gate_decisions_total[6h])) >= 600
+          sum by (source) (increase(valdrics_ops_enforcement_gate_decisions_total[6h])) >= 600
         for: 15m
         labels:
           severity: warning
@@ -72,8 +72,8 @@ groups:
           description: "6h and 30m burn-rate windows exceeded the 6x threshold for a 99.9% SLO."
           runbook: "docs/runbooks/enforcement_incident_response.md"
 
-      - alert: ValdrixEnforcementGateTimeoutSpike
-        expr: increase(valdrix_ops_enforcement_gate_failures_total{failure_type="timeout"}[10m]) > 5
+      - alert: ValdricsEnforcementGateTimeoutSpike
+        expr: increase(valdrics_ops_enforcement_gate_failures_total{failure_type="timeout"}[10m]) > 5
         for: 5m
         labels:
           severity: warning
@@ -83,8 +83,8 @@ groups:
           description: "Gate timeout fallback triggered more than 5 times in 10 minutes."
           runbook: "docs/runbooks/enforcement_incident_response.md"
 
-      - alert: ValdrixEnforcementGateLockContentionSpike
-        expr: increase(valdrix_ops_enforcement_gate_lock_events_total{event=~"contended|timeout|not_acquired"}[10m]) > 20
+      - alert: ValdricsEnforcementGateLockContentionSpike
+        expr: increase(valdrics_ops_enforcement_gate_lock_events_total{event=~"contended|timeout|not_acquired"}[10m]) > 20
         for: 5m
         labels:
           severity: warning
@@ -94,8 +94,8 @@ groups:
           description: "Gate lock contention/timeout events exceeded 20 in 10 minutes."
           runbook: "docs/runbooks/enforcement_incident_response.md"
 
-      - alert: ValdrixEnforcementGateLatencyP95High
-        expr: histogram_quantile(0.95, sum by (le, source, path) (rate(valdrix_ops_enforcement_gate_latency_seconds_bucket[10m]))) > 2
+      - alert: ValdricsEnforcementGateLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le, source, path) (rate(valdrics_ops_enforcement_gate_latency_seconds_bucket[10m]))) > 2
         for: 10m
         labels:
           severity: warning
@@ -105,8 +105,8 @@ groups:
           description: "p95 gate evaluation latency exceeded 2 seconds for 10 minutes."
           runbook: "docs/runbooks/enforcement_incident_response.md"
 
-      - alert: ValdrixEnforcementGlobalThrottleHits
-        expr: increase(valdrix_security_rate_limit_exceeded_total{path=~"/api/v1/enforcement/gate.*"}[10m]) > 50
+      - alert: ValdricsEnforcementGlobalThrottleHits
+        expr: increase(valdrics_security_rate_limit_exceeded_total{path=~"/api/v1/enforcement/gate.*"}[10m]) > 50
         for: 5m
         labels:
           severity: warning
@@ -116,8 +116,8 @@ groups:
           description: "Rate-limit exceeded events on enforcement gate endpoints exceeded 50 in 10 minutes."
           runbook: "docs/runbooks/enforcement_incident_response.md"
 
-      - alert: ValdrixEnforcementApprovalQueueBacklogHigh
-        expr: max by (viewer_role) (valdrix_ops_enforcement_approval_queue_backlog) > 100
+      - alert: ValdricsEnforcementApprovalQueueBacklogHigh
+        expr: max by (viewer_role) (valdrics_ops_enforcement_approval_queue_backlog) > 100
         for: 15m
         labels:
           severity: warning
@@ -127,8 +127,8 @@ groups:
           description: "Visible approval backlog exceeded 100 for at least 15 minutes."
           runbook: "docs/runbooks/enforcement_incident_response.md"
 
-      - alert: ValdrixEnforcementExportParityMismatch
-        expr: increase(valdrix_ops_enforcement_export_events_total{artifact=~"bundle|parity|archive",outcome="mismatch"}[15m]) > 0
+      - alert: ValdricsEnforcementExportParityMismatch
+        expr: increase(valdrics_ops_enforcement_export_events_total{artifact=~"bundle|parity|archive",outcome="mismatch"}[15m]) > 0
         for: 1m
         labels:
           severity: critical
@@ -138,8 +138,8 @@ groups:
           description: "At least one export parity mismatch was observed in the last 15 minutes."
           runbook: "docs/runbooks/enforcement_incident_response.md"
 
-      - alert: ValdrixLLMFairUseDenialsSpike
-        expr: increase(valdrix_ops_llm_fair_use_denials_total{gate=~"global_abuse|daily_user|daily_tenant"}[15m]) > 100
+      - alert: ValdricsLLMFairUseDenialsSpike
+        expr: increase(valdrics_ops_llm_fair_use_denials_total{gate=~"global_abuse|daily_user|daily_tenant"}[15m]) > 100
         for: 10m
         labels:
           severity: warning

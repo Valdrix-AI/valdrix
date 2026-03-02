@@ -46,7 +46,7 @@ async def setup_opt_data(db):
         id=uuid4(),
         tenant_id=tenant.id,
         aws_account_id="123456789012",
-        role_arn="arn:aws:iam::123456789012:role/ValdrixTestRole",
+        role_arn="arn:aws:iam::123456789012:role/ValdricsTestRole",
         region="us-east-1",
         status="active",
     )

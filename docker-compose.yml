@@ -1,8 +1,8 @@
 services:
   # The main application
   api:
-    container_name: valdrix-api
-    image: valdrix-api
+    container_name: valdrics-api
+    image: valdrics-api
     build: . 
     ports:
       - "8000:8000"
@@ -35,8 +35,8 @@ services:
       - prometheus
 
   dashboard:
-    container_name: valdrix-dashboard
-    image: valdrix-dashboard
+    container_name: valdrics-dashboard
+    image: valdrics-dashboard
     build:
       context: .
       dockerfile: Dockerfile.dashboard

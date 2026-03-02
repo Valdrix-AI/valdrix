@@ -28,7 +28,7 @@ async def test_saas_github_action_builds_typed_credentials_from_dict() -> None:
             "vendor": "github",
             "auth_method": "api_key",
             "api_key": "ghp_test_token",
-            "connector_config": {"github_org": "valdrix-org"},
+            "connector_config": {"github_org": "valdrics-org"},
             "spend_feed": [],
         },
     )
@@ -50,7 +50,7 @@ async def test_saas_github_action_builds_typed_credentials_from_dict() -> None:
 
     assert result.status == ExecutionStatus.SUCCESS
     assert result.metadata is not None
-    assert result.metadata["organization"] == "valdrix-org"
+    assert result.metadata["organization"] == "valdrics-org"
 
 
 @pytest.mark.asyncio
@@ -108,11 +108,11 @@ def test_saas_credentials_support_connector_fields() -> None:
         platform="github",
         api_key="ghp_test_token",
         auth_method="api_key",
-        connector_config={"github_org": "valdrix-org"},
+        connector_config={"github_org": "valdrics-org"},
         spend_feed=[{"cost_usd": 1.0}],
     )
     assert creds.auth_method == "api_key"
-    assert creds.connector_config["github_org"] == "valdrix-org"
+    assert creds.connector_config["github_org"] == "valdrics-org"
     assert creds.spend_feed[0]["cost_usd"] == 1.0
 
 

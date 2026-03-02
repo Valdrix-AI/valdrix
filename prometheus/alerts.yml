@@ -1,6 +1,6 @@
-# Prometheus Alerting Rules for Valdrix
+# Prometheus Alerting Rules for Valdrics
 groups:
-  - name: valdrix-api
+  - name: valdrics-api
     rules:
       # High latency alert
       - alert: HighLatency
@@ -24,19 +24,19 @@ groups:
 
       # API down
       - alert: APIDown
-        expr: up{job="valdrix-api"} == 0
+        expr: up{job="valdrics-api"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Valdrix API is down"
+          summary: "Valdrics API is down"
           description: "The API has been unreachable for more than 1 minute"
 
-  - name: valdrix-finops
+  - name: valdrics-finops
     rules:
       # LLM budget exceeded
       - alert: LLMBudgetExceeded
-        expr: sum(valdrix_llm_cost_usd) > 50
+        expr: sum(valdrics_llm_cost_usd) > 50
         for: 1m
         labels:
           severity: warning
@@ -46,7 +46,7 @@ groups:
 
       # Many zombies detected (opportunity alert)
       - alert: HighZombieCount
-        expr: sum(valdrix_zombies_detected_total) > 100
+        expr: sum(valdrics_zombies_detected_total) > 100
         for: 10m
         labels:
           severity: info
@@ -56,7 +56,7 @@ groups:
 
       # Scan failure
       - alert: ScanFailure
-        expr: increase(valdrix_scan_errors_total[1h]) > 5
+        expr: increase(valdrics_scan_errors_total[1h]) > 5
         for: 5m
         labels:
           severity: warning
@@ -64,7 +64,7 @@ groups:
           summary: "Multiple scan failures detected"
           description: "{{ $value }} scan errors in the last hour"
 
-  - name: valdrix-infrastructure
+  - name: valdrics-infrastructure
     rules:
       # High memory usage
       - alert: HighMemoryUsage
@@ -86,11 +86,11 @@ groups:
           summary: "Redis is down"
           description: "Redis has been unreachable for more than 1 minute"
 
-  - name: valdrix-greenops
+  - name: valdrics-greenops
     rules:
       # Carbon emissions spike
       - alert: HighCarbonEmissions
-        expr: sum(increase(valdrix_carbon_emissions_kg[24h])) > 10
+        expr: sum(increase(valdrics_carbon_emissions_kg[24h])) > 10
         for: 1h
         labels:
           severity: info

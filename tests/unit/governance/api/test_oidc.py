@@ -7,10 +7,10 @@ from unittest.mock import patch, AsyncMock
 async def test_oidc_discovery(async_client: AsyncClient):
     """Test standard OIDC discovery endpoint."""
     mock_discovery = {
-        "issuer": "https://auth.valdrix.ai",
-        "authorization_endpoint": "https://auth.valdrix.ai/oauth/authorize",
-        "token_endpoint": "https://auth.valdrix.ai/oauth/token",
-        "jwks_uri": "https://auth.valdrix.ai/.well-known/jwks.json",
+        "issuer": "https://auth.valdrics.ai",
+        "authorization_endpoint": "https://auth.valdrics.ai/oauth/authorize",
+        "token_endpoint": "https://auth.valdrics.ai/oauth/token",
+        "jwks_uri": "https://auth.valdrics.ai/.well-known/jwks.json",
     }
 
     with patch(

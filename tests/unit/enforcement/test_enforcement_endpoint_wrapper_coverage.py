@@ -725,7 +725,7 @@ async def test_reservations_and_ledger_endpoint_wrappers_and_common_guard(monkey
                         decision=SimpleNamespace(value="ALLOW"),
                         reason_codes=["within_budget"],
                         policy_version=3,
-                        policy_document_schema_version="valdrix.enforcement.policy.v1",
+                        policy_document_schema_version="valdrics.enforcement.policy.v1",
                         policy_document_sha256="9" * 64,
                         request_fingerprint="a" * 64,
                         idempotency_key="idem-ledger",
@@ -889,11 +889,11 @@ async def test_enforcement_endpoint_wrappers_cover_preflight_and_k8s_review_bran
                 "object": {
                     "metadata": {
                         "name": "web",
-                        "labels": {"valdrix.io/project-id": "billing"},
+                        "labels": {"valdrics.io/project-id": "billing"},
                         "annotations": {
-                            "valdrix.io/environment": "prod",
-                            "valdrix.io/estimated-monthly-delta-usd": "25",
-                            "valdrix.io/estimated-hourly-delta-usd": "0.03",
+                            "valdrics.io/environment": "prod",
+                            "valdrics.io/estimated-monthly-delta-usd": "25",
+                            "valdrics.io/estimated-hourly-delta-usd": "0.03",
                         },
                     }
                 },
@@ -912,8 +912,8 @@ async def test_enforcement_endpoint_wrappers_cover_preflight_and_k8s_review_bran
     assert deny_review.response.status is not None
     assert deny_review.response.status.code == 403
     assert "budget_exceeded" in str(deny_review.response.status.message)
-    assert deny_review.response.warnings == ["valdrix:budget_exceeded"]
-    assert deny_review.response.audit_annotations["valdrix.io/decision"] == "DENY"
+    assert deny_review.response.warnings == ["valdrics:budget_exceeded"]
+    assert deny_review.response.audit_annotations["valdrics.io/decision"] == "DENY"
 
     allow_review = await _unwrap(enforcement_api.gate_k8s_admission_review)(
         request=_request(),
@@ -923,4 +923,4 @@ async def test_enforcement_endpoint_wrappers_cover_preflight_and_k8s_review_bran
     )
     assert allow_review.response.allowed is True
     assert allow_review.response.status is None
-    assert allow_review.response.audit_annotations["valdrix.io/decision"] == "ALLOW_WITH_CREDITS"
+    assert allow_review.response.audit_annotations["valdrics.io/decision"] == "ALLOW_WITH_CREDITS"

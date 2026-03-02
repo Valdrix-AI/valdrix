@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Configuration
-API_URL="${API_URL:-https://api.valdrix.ai}"
+API_URL="${API_URL:-https://api.valdrics.ai}"
 OPENAPI_URL="${API_URL}/openapi.json"
 OUTPUT_DIR="dashboard/src/lib/api"
 
@@ -50,7 +50,7 @@ openapi-generator-cli generate \
     -i /tmp/openapi.json \
     -g typescript-fetch \
     -o "${OUTPUT_DIR}" \
-    --additional-properties=typescriptThreePlus=true,supportsES6=true,npmName=@valdrix/api-client
+    --additional-properties=typescriptThreePlus=true,supportsES6=true,npmName=@valdrics/api-client
 
 # Alternative: Use openapi-typescript for types only
 # npm install -g openapi-typescript

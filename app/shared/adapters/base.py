@@ -54,7 +54,7 @@ class BaseAdapter(ABC):
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        Stream cost data normalized to the standard Valdrix format.
+        Stream cost data normalized to the standard Valdrics format.
         Used for memory-efficient ingestion.
         """
         raise NotImplementedError()

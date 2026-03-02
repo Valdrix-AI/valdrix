@@ -11,7 +11,7 @@ Flow:
 5) Optionally approve escalated request and (optionally) execute post-approval.
 
 Usage:
-  export VALDRIX_TOKEN="<bearer_jwt>"
+  export VALDRICS_TOKEN="<bearer_jwt>"
   .venv/bin/python scripts/verify_pending_approval_flow.py --approve --execute-after-approve
 """
 
@@ -93,7 +93,7 @@ def main() -> None:
         description="Verify pending_approval remediation flow against live API."
     )
     parser.add_argument(
-        "--base-url", default=os.getenv("VALDRIX_BASE_URL", "http://127.0.0.1:8000")
+        "--base-url", default=os.getenv("VALDRICS_BASE_URL", "http://127.0.0.1:8000")
     )
     parser.add_argument(
         "--request-id", default=None, help="Optional remediation request ID to test."
@@ -108,12 +108,12 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    token = _must_env("VALDRIX_TOKEN")
+    token = _must_env("VALDRICS_TOKEN")
     try:
         token = sanitize_bearer_token(token)
     except ValueError as exc:
         raise SystemExit(
-            f"Invalid VALDRIX_TOKEN. Ensure it's a single JWT string. Details: {exc}"
+            f"Invalid VALDRICS_TOKEN. Ensure it's a single JWT string. Details: {exc}"
         ) from None
     if args.execute_after_approve and not args.approve:
         raise SystemExit("--execute-after-approve requires --approve")

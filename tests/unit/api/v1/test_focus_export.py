@@ -34,7 +34,7 @@ async def test_focus_export_returns_csv_with_expected_columns_and_ids(
         id=account_uuid,
         tenant_id=tenant_id,
         aws_account_id="123456789012",
-        role_arn="arn:aws:iam::123456789012:role/ValdrixReadOnly",
+        role_arn="arn:aws:iam::123456789012:role/ValdricsReadOnly",
         external_id="vx-test-external-id",
         region="us-east-1",
         status="active",
@@ -82,7 +82,7 @@ async def test_focus_export_returns_csv_with_expected_columns_and_ids(
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
-        email="focus-export@valdrix.io",
+        email="focus-export@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -128,7 +128,7 @@ async def test_focus_export_requires_compliance_exports_feature(
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
-        email="focus-export-denied@valdrix.io",
+        email="focus-export-denied@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.GROWTH,
     )
@@ -153,7 +153,7 @@ async def test_focus_export_rejects_date_window_beyond_limit(
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
-        email="focus-export-window@valdrix.io",
+        email="focus-export-window@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )

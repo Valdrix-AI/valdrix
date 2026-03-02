@@ -252,11 +252,11 @@ class CostCache:
         # Switch from MD5 to SHA256 for stronger collision resistance (SEC-05)
         digest = hashlib.sha256(key_string.encode()).hexdigest()
         # Keep tenant and prefix in plaintext to allow precise invalidation patterns.
-        return f"valdrix:{tenant_id}:{prefix}:{digest}"
+        return f"valdrics:{tenant_id}:{prefix}:{digest}"
 
     def _tenant_pattern(self, tenant_id: str) -> str:
         """Generate pattern for all tenant keys."""
-        return f"valdrix:{tenant_id}:*"
+        return f"valdrics:{tenant_id}:*"
 
     # Daily Costs
     async def get_daily_costs(
@@ -342,7 +342,7 @@ class CostCache:
 
     async def invalidate_zombies(self, tenant_id: str) -> int:
         """Invalidate zombie scan cache for fresh scan."""
-        pattern = f"valdrix:{tenant_id}:zombies:*"
+        pattern = f"valdrics:{tenant_id}:zombies:*"
         deleted = await self.backend.delete_pattern(pattern)
         logger.debug("zombie_cache_invalidated", tenant_id=tenant_id, keys=deleted)
         return deleted

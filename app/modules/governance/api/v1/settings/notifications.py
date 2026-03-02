@@ -455,8 +455,8 @@ async def _run_slack_connectivity_test(
 
     try:
         ok = await slack.send_alert(
-            title="Valdrix Slack Connectivity Test",
-            message=f"This is a test alert from Valdrix.\n\nUser: {current_user.email}",
+            title="Valdrics Slack Connectivity Test",
+            message=f"This is a test alert from Valdrics.\n\nUser: {current_user.email}",
             severity="info",
         )
     except Exception as exc:
@@ -518,12 +518,12 @@ async def _run_jira_connectivity_test(
 
     try:
         success = await jira.create_issue(
-            summary="Valdrix Jira Connectivity Test",
+            summary="Valdrics Jira Connectivity Test",
             description=(
                 "h2. Connectivity test\n"
-                "This issue verifies Valdrix can create Jira incidents for policy events."
+                "This issue verifies Valdrics can create Jira incidents for policy events."
             ),
-            labels=["valdrix", "connectivity-test"],
+            labels=["valdrics", "connectivity-test"],
         )
     except Exception as exc:
         logger.error("jira_test_failed", error=str(exc))
@@ -597,8 +597,8 @@ async def _run_teams_connectivity_test(
 
     try:
         ok = await teams.send_alert(
-            title="Valdrix Teams Connectivity Test",
-            message=f"This is a test alert from Valdrix.\n\nUser: {current_user.email}",
+            title="Valdrics Teams Connectivity Test",
+            message=f"This is a test alert from Valdrics.\n\nUser: {current_user.email}",
             severity="info",
         )
     except Exception as exc:
@@ -676,7 +676,7 @@ async def _run_workflow_connectivity_test(
         "tenant_id": str(current_user.tenant_id),
         "request_id": None,
         "decision": "warn",
-        "summary": "Valdrix workflow connectivity test event",
+        "summary": "Valdrics workflow connectivity test event",
         "resource_id": "workflow-connectivity-check",
         "action": "test_dispatch",
         "severity": "info",

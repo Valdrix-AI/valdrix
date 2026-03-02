@@ -39,7 +39,7 @@ async def test_http_client_production_settings():
     client = get_http_client()
 
     assert client.timeout.read == 20.0
-    assert client.headers["User-Agent"] == "Valdrix-AI/2026.02"
+    assert client.headers["User-Agent"] == "Valdrics-AI/2026.02"
 
     with respx.mock:
         respx.get("https://www.google.com").mock(return_value=httpx.Response(200))

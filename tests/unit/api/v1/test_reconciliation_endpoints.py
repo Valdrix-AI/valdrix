@@ -15,7 +15,7 @@ async def test_close_package_endpoint_json(async_client, app) -> None:
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="close-json@valdrix.io",
+        email="close-json@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -49,7 +49,7 @@ async def test_close_package_endpoint_csv(async_client, app) -> None:
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="close-csv@valdrix.io",
+        email="close-csv@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -89,7 +89,7 @@ async def test_close_package_endpoint_returns_conflict(async_client, app) -> Non
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="close-conflict@valdrix.io",
+        email="close-conflict@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -119,7 +119,7 @@ async def test_restatement_history_endpoint_json_and_csv(async_client, app) -> N
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="restatement@valdrix.io",
+        email="restatement@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -176,7 +176,7 @@ async def test_restatement_runs_endpoint_json_and_csv(async_client, app) -> None
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="restatement-runs@valdrix.io",
+        email="restatement-runs@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -231,7 +231,7 @@ async def test_close_package_endpoint_rejects_invalid_date_order(
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="close-invalid-window@valdrix.io",
+        email="close-invalid-window@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -253,7 +253,7 @@ async def test_restatement_history_rejects_max_window(async_client, app) -> None
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="restatement-window-limit@valdrix.io",
+        email="restatement-window-limit@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -279,7 +279,7 @@ async def test_restatement_runs_rejects_invalid_date_order(async_client, app) ->
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="restatement-runs-invalid-window@valdrix.io",
+        email="restatement-runs-invalid-window@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -301,7 +301,7 @@ async def test_list_provider_invoices_returns_transformed_payload(async_client, 
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="invoice-list@valdrix.io",
+        email="invoice-list@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -344,7 +344,7 @@ async def test_upsert_provider_invoice_success(async_client, app) -> None:
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="invoice-upsert@valdrix.io",
+        email="invoice-upsert@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -398,7 +398,7 @@ async def test_upsert_provider_invoice_rejects_invalid_window(async_client, app)
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="invoice-upsert-invalid-window@valdrix.io",
+        email="invoice-upsert-invalid-window@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -428,7 +428,7 @@ async def test_upsert_provider_invoice_maps_service_validation_error(
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="invoice-upsert-service-error@valdrix.io",
+        email="invoice-upsert-service-error@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -463,7 +463,7 @@ async def test_update_provider_invoice_status_success_and_not_found(
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="invoice-status@valdrix.io",
+        email="invoice-status@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -505,7 +505,7 @@ async def test_delete_provider_invoice_success_and_not_found(async_client, app) 
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="invoice-delete@valdrix.io",
+        email="invoice-delete@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -542,7 +542,7 @@ async def test_export_focus_endpoint_validations_and_stream(async_client, app) -
     user = CurrentUser(
         id=uuid4(),
         tenant_id=tenant_id,
-        email="focus-export@valdrix.io",
+        email="focus-export@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )

@@ -39,9 +39,9 @@ Validate incident response readiness for enforcement control-plane failures and 
 ## Follow-Up Actions
 
 1. Wire production dashboards for the new gate metrics:
-   - `valdrix_ops_enforcement_gate_decisions_total`
-   - `valdrix_ops_enforcement_gate_decision_reasons_total`
-   - `valdrix_ops_enforcement_gate_latency_seconds`
-   - `valdrix_ops_enforcement_gate_failures_total`
+   - `valdrics_ops_enforcement_gate_decisions_total`
+   - `valdrics_ops_enforcement_gate_decision_reasons_total`
+   - `valdrics_ops_enforcement_gate_latency_seconds`
+   - `valdrics_ops_enforcement_gate_failures_total`
 2. Execute the same scenario set in staging with on-call participants and capture screenshots/log excerpts for go-live evidence.
 3. Attach incident communication templates and escalation contacts to this drill artifact before production gate review.

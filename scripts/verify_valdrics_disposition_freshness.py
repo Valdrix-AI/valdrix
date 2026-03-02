@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify Valdrix audit disposition evidence freshness and ownership."""
+"""Verify Valdrics audit disposition evidence freshness and ownership."""
 
 from __future__ import annotations
 
@@ -79,14 +79,14 @@ def _parse_non_empty_str(value: Any, *, field: str) -> str:
 def _load_payload(path: Path) -> dict[str, Any]:
     resolved = path.resolve()
     if not resolved.exists() or not resolved.is_file():
-        raise FileNotFoundError(f"Valdrix disposition register not found: {path}")
+        raise FileNotFoundError(f"Valdrics disposition register not found: {path}")
     raw = resolved.read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Valdrix disposition register is not valid JSON: {path}") from exc
+        raise ValueError(f"Valdrics disposition register is not valid JSON: {path}") from exc
     if not isinstance(payload, dict):
-        raise ValueError("Valdrix disposition register payload must be a JSON object")
+        raise ValueError("Valdrics disposition register payload must be a JSON object")
     return payload
 
 
@@ -196,7 +196,7 @@ def verify_disposition_register(
         )
 
     print(
-        "Valdrix disposition freshness verified: "
+        "Valdrics disposition freshness verified: "
         f"findings={len(seen_ids)} "
         f"captured_at={captured_at.isoformat()} "
         f"latest_review_by={latest_review_by.isoformat()}"
@@ -207,13 +207,13 @@ def verify_disposition_register(
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Verify Valdrix disposition evidence freshness, ownership, and review windows."
+            "Verify Valdrics disposition evidence freshness, ownership, and review windows."
         ),
     )
     parser.add_argument(
         "--register-path",
         required=True,
-        help="Path to Valdrix disposition register JSON artifact.",
+        help="Path to Valdrics disposition register JSON artifact.",
     )
     parser.add_argument(
         "--max-artifact-age-days",
@@ -233,7 +233,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[],
         help=(
             "Required finding ID; may be repeated. "
-            "Defaults to the built-in Valdrix disposition set when omitted."
+            "Defaults to the built-in Valdrics disposition set when omitted."
         ),
     )
     parser.add_argument(

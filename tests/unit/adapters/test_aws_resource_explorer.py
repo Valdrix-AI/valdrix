@@ -11,7 +11,7 @@ def mock_connection():
     conn.tenant_id = "test-tenant-id"
     conn.aws_account_id = "123456789012"
     conn.region = "us-east-1"
-    conn.role_arn = "arn:aws:iam::123456789012:role/ValdrixReadOnly"
+    conn.role_arn = "arn:aws:iam::123456789012:role/ValdricsReadOnly"
     conn.external_id = "test-external-id"
     return conn
 

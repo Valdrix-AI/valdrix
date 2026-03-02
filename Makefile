@@ -1,11 +1,11 @@
-# Valdrix Makefile
+# Valdrics Makefile
 # Developer convenience commands using uv
 
 .PHONY: help install dev test lint format security clean docker-build docker-up helm-install
 
 # Default target
 help:
-	@echo "Valdrix Development Commands"
+	@echo "Valdrics Development Commands"
 	@echo ""
 	@echo "  make install     - Install dependencies with uv"
 	@echo "  make dev         - Start development servers"
@@ -68,7 +68,7 @@ clean:
 
 # Docker
 docker-build:
-	docker build -t valdrix:latest .
+	docker build -t valdrics:latest .
 
 docker-up:
 	docker-compose up -d
@@ -79,7 +79,7 @@ docker-down:
 observability:
 	docker-compose -f docker-compose.observability.yml up -d
 	@echo "Prometheus: http://localhost:9090"
-	@echo "Grafana: http://localhost:3000 (admin/valdrix)"
+	@echo "Grafana: http://localhost:3000 (admin/valdrics)"
 	@echo "Alertmanager: http://localhost:9093"
 
 observability-down:
@@ -95,20 +95,20 @@ migrate-create:
 
 # Kubernetes/Helm
 helm-lint:
-	helm lint helm/valdrix/
+	helm lint helm/valdrics/
 
 helm-template:
-	helm template valdrix helm/valdrix/ --debug
+	helm template valdrics helm/valdrics/ --debug
 
 helm-install:
-	helm install valdrix helm/valdrix/ \
-		--set existingSecrets.name=valdrix-secrets
+	helm install valdrics helm/valdrics/ \
+		--set existingSecrets.name=valdrics-secrets
 
 helm-upgrade:
-	helm upgrade valdrix helm/valdrix/
+	helm upgrade valdrics helm/valdrics/
 
 helm-uninstall:
-	helm uninstall valdrix
+	helm uninstall valdrics
 
 # Pre-commit
 hooks-install:
@@ -128,12 +128,12 @@ generate-client:
 
 deploy:
 	@echo "🚀 Deploying to Koyeb..."
-	koyeb app init valdrix --docker ghcr.io/valdrix-ai/valdrix:latest || true
+	koyeb app init valdrics --docker ghcr.io/valdrics-ai/valdrics:latest || true
 	koyeb deploy -f koyeb.yaml
 	@echo "✅ Koyeb deployment started"
 	@echo "Dashboard: https://app.koyeb.com"
 
 deploy-status:
 	@echo "Koyeb status:"
-	koyeb service list --app valdrix
+	koyeb service list --app valdrics
 

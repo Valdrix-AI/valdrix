@@ -2,7 +2,7 @@
 """
 SCIM IdP Smoke Test Runner (Operator).
 
-This script validates SCIM interoperability against a running Valdrix environment.
+This script validates SCIM interoperability against a running Valdrics environment.
 
 Modes:
 - Read-only (default): validates discovery endpoints only.
@@ -11,7 +11,7 @@ Modes:
 Publishing:
 - If --publish is set, posts an evidence payload to:
   POST /api/v1/audit/identity/idp-smoke/evidence
-  This requires VALDRIX_TOKEN (admin) and does NOT transmit the SCIM token.
+  This requires VALDRICS_TOKEN (admin) and does NOT transmit the SCIM token.
 """
 
 from __future__ import annotations
@@ -33,24 +33,24 @@ from app.shared.core.evidence_capture import sanitize_bearer_token
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run a SCIM IdP smoke test against Valdrix."
+        description="Run a SCIM IdP smoke test against Valdrics."
     )
     parser.add_argument(
         "--scim-base-url",
         dest="scim_base_url",
-        default=os.getenv("VALDRIX_SCIM_BASE_URL", "").strip(),
-        help="SCIM base URL, e.g. https://host/scim/v2 (or set VALDRIX_SCIM_BASE_URL)",
+        default=os.getenv("VALDRICS_SCIM_BASE_URL", "").strip(),
+        help="SCIM base URL, e.g. https://host/scim/v2 (or set VALDRICS_SCIM_BASE_URL)",
     )
     parser.add_argument(
         "--scim-token",
         dest="scim_token",
-        default=os.getenv("VALDRIX_SCIM_TOKEN", "").strip(),
-        help="Tenant SCIM bearer token (or set VALDRIX_SCIM_TOKEN)",
+        default=os.getenv("VALDRICS_SCIM_TOKEN", "").strip(),
+        help="Tenant SCIM bearer token (or set VALDRICS_SCIM_TOKEN)",
     )
     parser.add_argument(
         "--idp",
         dest="idp",
-        default=os.getenv("VALDRIX_IDP_VENDOR", "").strip(),
+        default=os.getenv("VALDRICS_IDP_VENDOR", "").strip(),
         help="IdP vendor label for evidence (okta/entra/etc). Optional.",
     )
     parser.add_argument(
@@ -82,13 +82,13 @@ def _parse_args() -> argparse.Namespace:
         "--publish",
         dest="publish",
         action="store_true",
-        help="Publish evidence to /api/v1/audit/identity/idp-smoke/evidence (requires VALDRIX_TOKEN).",
+        help="Publish evidence to /api/v1/audit/identity/idp-smoke/evidence (requires VALDRICS_TOKEN).",
     )
     parser.add_argument(
         "--api-url",
         dest="api_url",
-        default=os.getenv("VALDRIX_API_URL", "http://127.0.0.1:8000").strip(),
-        help="API base URL used for --publish (defaults to VALDRIX_API_URL)",
+        default=os.getenv("VALDRICS_API_URL", "http://127.0.0.1:8000").strip(),
+        help="API base URL used for --publish (defaults to VALDRICS_API_URL)",
     )
     return parser.parse_args()
 
@@ -107,7 +107,7 @@ def _ensure_url(value: str, *, name: str) -> str:
 def _auth_headers(token: str) -> dict[str, str]:
     token = str(token or "").strip()
     if not token:
-        raise SystemExit("VALDRIX_SCIM_TOKEN/--scim-token is required.")
+        raise SystemExit("VALDRICS_SCIM_TOKEN/--scim-token is required.")
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -217,7 +217,7 @@ def main() -> int:
 
     scim_base_url = _ensure_url(
         args.scim_base_url,
-        name="SCIM base URL (--scim-base-url or VALDRIX_SCIM_BASE_URL)",
+        name="SCIM base URL (--scim-base-url or VALDRICS_SCIM_BASE_URL)",
     )
     scim_headers = _auth_headers(args.scim_token)
     idp = str(args.idp or "").strip() or None
@@ -228,8 +228,8 @@ def main() -> int:
 
     # Test identifiers: deterministic, unique, and obviously “smoke”.
     nonce = uuid4().hex[:10]
-    user_email = f"valdrix-smoke-{nonce}@example.com"
-    group_name = f"Valdrix Smoke Group {nonce}"
+    user_email = f"valdrics-smoke-{nonce}@example.com"
+    group_name = f"Valdrics Smoke Group {nonce}"
 
     timeout = httpx.Timeout(float(args.timeout))
     with httpx.Client(timeout=timeout, headers=scim_headers) as client:
@@ -486,19 +486,19 @@ def main() -> int:
 
     if args.publish:
         api_url = _ensure_url(
-            args.api_url, name="API URL (--api-url or VALDRIX_API_URL)"
+            args.api_url, name="API URL (--api-url or VALDRICS_API_URL)"
         )
-        raw_token = os.getenv("VALDRIX_TOKEN", "").strip()
+        raw_token = os.getenv("VALDRICS_TOKEN", "").strip()
         try:
             token = sanitize_bearer_token(raw_token)
         except ValueError as exc:
             raise SystemExit(
-                "Invalid VALDRIX_TOKEN. Ensure it's a single JWT string. "
+                "Invalid VALDRICS_TOKEN. Ensure it's a single JWT string. "
                 f"Details: {exc}"
             ) from None
         if not token:
             raise SystemExit(
-                "VALDRIX_TOKEN is required for --publish (admin bearer JWT)."
+                "VALDRICS_TOKEN is required for --publish (admin bearer JWT)."
             )
         headers = {
             "Authorization": f"Bearer {token}",

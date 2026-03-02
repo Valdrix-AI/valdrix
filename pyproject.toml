@@ -1,5 +1,5 @@
 [project]
-name = "valdrix"
+name = "valdrics"
 version = "0.1.0"
 description = "Value Intelligence for Cloud Spend - The Autonomous FinOps & GreenOps Guardian"
 authors = [
@@ -76,9 +76,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/valdrix/valdrix"
-Repository = "https://github.com/valdrix/valdrix"
-Issues = "https://github.com/valdrix/valdrix/issues"
+Homepage = "https://github.com/valdrics/valdrics"
+Repository = "https://github.com/valdrics/valdrics"
+Issues = "https://github.com/valdrics/valdrics/issues"
 
 [project.optional-dependencies]
 dev = [

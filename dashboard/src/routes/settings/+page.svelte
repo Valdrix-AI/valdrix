@@ -1789,7 +1789,7 @@
 										type="text"
 										id="workflow_github_repo"
 										bind:value={settings.workflow_github_repo}
-										placeholder="valdrix"
+										placeholder="valdrics"
 										disabled={!settings.workflow_github_enabled ||
 											!['pro', 'enterprise'].includes(data.subscription?.tier)}
 									/>
@@ -1933,7 +1933,7 @@
 										type="url"
 										id="workflow_webhook_url"
 										bind:value={settings.workflow_webhook_url}
-										placeholder="https://ci.example.com/hooks/valdrix"
+										placeholder="https://ci.example.com/hooks/valdrics"
 										disabled={!settings.workflow_webhook_enabled ||
 											!['pro', 'enterprise'].includes(data.subscription?.tier)}
 									/>

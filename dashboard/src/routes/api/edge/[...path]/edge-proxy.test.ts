@@ -34,7 +34,7 @@ describe('edge proxy auth forwarding', () => {
 		const [, init] = upstreamFetch.mock.calls[0] as [string, RequestInit];
 		const headers = init.headers as Headers;
 		expect(headers.get('authorization')).toBe('Bearer session-token');
-		expect(headers.get('x-valdrix-edge-proxy')).toBe('1');
+		expect(headers.get('x-valdrics-edge-proxy')).toBe('1');
 	});
 
 	it('does not accept query-string token fallback for jobs stream', async () => {

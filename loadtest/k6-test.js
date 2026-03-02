@@ -1,5 +1,5 @@
 /**
- * Valdrix Load Test - k6
+ * Valdrics Load Test - k6
  * 
  * Run: k6 run loadtest/k6-test.js
  * With options: k6 run --vus 50 --duration 5m loadtest/k6-test.js

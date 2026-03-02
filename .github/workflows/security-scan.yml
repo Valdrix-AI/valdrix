@@ -94,7 +94,7 @@ jobs:
           context: .
           push: false
           load: true
-          tags: valdrix-backend:latest
+          tags: valdrics-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -105,14 +105,14 @@ jobs:
           file: ./Dockerfile.dashboard
           push: false
           load: true
-          tags: valdrix-dashboard:latest
+          tags: valdrics-dashboard:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner (Backend)
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: 'valdrix-backend:latest'
+          image-ref: 'valdrics-backend:latest'
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
           ignore-unfixed: true
@@ -122,7 +122,7 @@ jobs:
       - name: Run Trivy vulnerability scanner (Dashboard)
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: 'valdrix-dashboard:latest'
+          image-ref: 'valdrics-dashboard:latest'
           format: 'sarif'
           output: 'trivy-dashboard-results.sarif'
           ignore-unfixed: true

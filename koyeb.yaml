@@ -1,11 +1,11 @@
 # Valdrics Koyeb Configuration
 # https://www.koyeb.com/docs/deploy/koyeb-files
 
-name: valdrix-api
+name: valdrics-api
 type: WEB
 definition:
   git:
-    repository: github.com/Valdrix-AI/valdrix
+    repository: github.com/Valdrics-AI/valdrics
     branch: main
     builder: docker
     dockerfile: Dockerfile
@@ -48,7 +48,7 @@ definition:
     - name: SAAS_STRICT_INTEGRATIONS
       value: "true"
     - name: CORS_ORIGINS
-      value: "[\"https://dashboard.valdrix.ai\"]"
+      value: "[\"https://dashboard.valdrics.ai\"]"
     # Prophet is not bundled by default; use controlled break-glass fallback metadata.
     - name: FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK
       value: "true"
@@ -58,24 +58,24 @@ definition:
       value: "2099-01-01T00:00:00Z"
     # Secrets - set via Koyeb dashboard
     - name: DATABASE_URL
-      secret: valdrix-database-url
+      secret: valdrics-database-url
     - name: REDIS_URL
-      secret: valdrix-redis-url
+      secret: valdrics-redis-url
     - name: SUPABASE_JWT_SECRET
-      secret: valdrix-jwt-secret
+      secret: valdrics-jwt-secret
     - name: ENCRYPTION_KEY
-      secret: valdrix-encryption-key
+      secret: valdrics-encryption-key
     - name: KDF_SALT
-      secret: valdrix-kdf-salt
+      secret: valdrics-kdf-salt
     - name: CSRF_SECRET_KEY
-      secret: valdrix-csrf-secret
+      secret: valdrics-csrf-secret
     - name: ADMIN_API_KEY
-      secret: valdrix-admin-api-key
+      secret: valdrics-admin-api-key
     - name: GROQ_API_KEY
-      secret: valdrix-groq-key
+      secret: valdrics-groq-key
     - name: PAYSTACK_SECRET_KEY
-      secret: valdrix-paystack-secret
+      secret: valdrics-paystack-secret
     - name: PAYSTACK_PUBLIC_KEY
-      secret: valdrix-paystack-public
+      secret: valdrics-paystack-public
     - name: SENTRY_DSN
-      secret: valdrix-sentry-dsn
+      secret: valdrics-sentry-dsn

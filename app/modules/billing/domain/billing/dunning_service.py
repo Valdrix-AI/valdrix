@@ -83,7 +83,7 @@ class DunningService:
             smtp_port=int(settings.SMTP_PORT),
             smtp_user=str(settings.SMTP_USER),
             smtp_password=str(settings.SMTP_PASSWORD),
-            from_email=str(getattr(settings, "SMTP_FROM", "billing@valdrix.io")),
+            from_email=str(getattr(settings, "SMTP_FROM", "billing@valdrics.io")),
         )
 
     def _build_email_service(self) -> "EmailService":

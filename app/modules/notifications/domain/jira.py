@@ -1,5 +1,5 @@
 """
-Jira notification service for Valdrix policy violations and escalations.
+Jira notification service for Valdrics policy violations and escalations.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class JiraService:
     @staticmethod
     def _sanitize_label(label: str) -> str:
         sanitized = re.sub(r"[^a-zA-Z0-9_-]+", "-", label.strip().lower()).strip("-")
-        return sanitized[:64] if sanitized else "valdrix"
+        return sanitized[:64] if sanitized else "valdrics"
 
     async def create_issue(
         self,
@@ -121,9 +121,9 @@ class JiraService:
         action: str,
         severity: str,
     ) -> bool:
-        summary = f"[Valdrix Policy {decision.upper()}] {action} on {resource_id}"
+        summary = f"[Valdrics Policy {decision.upper()}] {action} on {resource_id}"
         description = (
-            f"h2. Valdrix remediation policy event\n"
+            f"h2. Valdrics remediation policy event\n"
             f"*Tenant:* {tenant_id}\n"
             f"*Decision:* {decision}\n"
             f"*Severity:* {severity}\n"
@@ -134,7 +134,7 @@ class JiraService:
         return await self.create_issue(
             summary=summary,
             description=description,
-            labels=["valdrix", "policy", decision, severity],
+            labels=["valdrics", "policy", decision, severity],
         )
 
     async def create_cost_anomaly_issue(
@@ -165,9 +165,9 @@ class JiraService:
             f"?target_date={day}&provider={provider}&min_severity={severity}"
         )
 
-        summary = f"[Valdrix Cost Anomaly {severity.upper()}] {service} ({kind}) {day}"
+        summary = f"[Valdrics Cost Anomaly {severity.upper()}] {service} ({kind}) {day}"
         description = (
-            "h2. Valdrix cost anomaly detected\n"
+            "h2. Valdrics cost anomaly detected\n"
             f"*Tenant:* {tenant_id}\n"
             f"*Date:* {day}\n"
             f"*Provider:* {provider}\n"
@@ -187,7 +187,7 @@ class JiraService:
         return await self.create_issue(
             summary=summary,
             description=description,
-            labels=["valdrix", "cost-anomaly", severity, provider, kind],
+            labels=["valdrics", "cost-anomaly", severity, provider, kind],
         )
 
 

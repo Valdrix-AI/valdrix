@@ -5,7 +5,7 @@ import { error, type RequestHandler } from '@sveltejs/kit';
 const CACHEABLE_GET_PREFIXES = ['/health/live', '/api/v1/billing/plans'];
 const EDGE_CACHE_S_MAXAGE_SECONDS = 30;
 const EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 30;
-const EDGE_CACHE_NAMESPACE = 'valdrix-edge-proxy';
+const EDGE_CACHE_NAMESPACE = 'valdrics-edge-proxy';
 const JOB_STREAM_SUFFIX = '/jobs/stream';
 
 function resolveBackendOrigin(): string {
@@ -59,7 +59,7 @@ function buildUpstreamHeaders(requestHeaders: Headers): Headers {
 		}
 	}
 
-	headers.set('x-valdrix-edge-proxy', '1');
+	headers.set('x-valdrics-edge-proxy', '1');
 	return headers;
 }
 
@@ -92,8 +92,8 @@ async function proxyRequest(event: Parameters<RequestHandler>[0]): Promise<Respo
 		const cached = await cacheApi.match(cacheKey);
 		if (cached) {
 			const headers = new Headers(cached.headers);
-			headers.set('x-valdrix-edge-cache', 'HIT');
-			headers.set('x-valdrix-edge-proxy', '1');
+			headers.set('x-valdrics-edge-cache', 'HIT');
+			headers.set('x-valdrics-edge-proxy', '1');
 			return new Response(cached.body, { status: cached.status, headers });
 		}
 	}
@@ -117,7 +117,7 @@ async function proxyRequest(event: Parameters<RequestHandler>[0]): Promise<Respo
 	}
 
 	const responseHeaders = new Headers(upstreamResponse.headers);
-	responseHeaders.set('x-valdrix-edge-proxy', '1');
+	responseHeaders.set('x-valdrics-edge-proxy', '1');
 
 	const isCacheable = isSafeCacheableRequest(
 		method,
@@ -131,7 +131,7 @@ async function proxyRequest(event: Parameters<RequestHandler>[0]): Promise<Respo
 			'Cache-Control',
 			`public, s-maxage=${EDGE_CACHE_S_MAXAGE_SECONDS}, stale-while-revalidate=${EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS}`
 		);
-		responseHeaders.set('x-valdrix-edge-cache', 'MISS');
+		responseHeaders.set('x-valdrics-edge-cache', 'MISS');
 	} else if (!responseHeaders.has('Cache-Control')) {
 		responseHeaders.set('Cache-Control', 'no-store');
 	}

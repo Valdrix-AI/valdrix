@@ -27,14 +27,14 @@ class AWSConnectionService:
     @staticmethod
     def get_setup_templates(external_id: str) -> dict[str, Any]:
         """
-        Returns CloudFormation and Terraform snippets for provisioning the Valdrix role.
+        Returns CloudFormation and Terraform snippets for provisioning the Valdrics role.
         """
         # Simplistic implementation for now, usually reads from files or templates
         return {
             "external_id": external_id,
-            "cloudformation_yaml": f"https://valdrix-public.s3.amazonaws.com/templates/valdrix-role.yaml?external_id={external_id}",
-            "terraform_hcl": f'module "valdrix_connection" {{ source = "valdrix/aws-connection" external_id = "{external_id}" }}',
-            "magic_link": f"https://app.valdrix.ai/onboard/aws?external_id={external_id}",
+            "cloudformation_yaml": f"https://valdrics-public.s3.amazonaws.com/templates/valdrics-role.yaml?external_id={external_id}",
+            "terraform_hcl": f'module "valdrics_connection" {{ source = "valdrics/aws-connection" external_id = "{external_id}" }}',
+            "magic_link": f"https://app.valdrics.ai/onboard/aws?external_id={external_id}",
             "instructions": "Follow the link to setup your AWS connection.",
             "permissions_summary": ["sts:AssumeRole"],
         }

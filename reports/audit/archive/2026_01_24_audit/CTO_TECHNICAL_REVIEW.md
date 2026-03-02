@@ -1,4 +1,4 @@
-# Valdrix: Founder-Engineer Technical Review
+# Valdrics: Founder-Engineer Technical Review
 
 **Date:** January 2026  
 **Verdict:** This can scale but it's fragile. Ship it now, but be ready to sweat.
@@ -28,11 +28,11 @@
 
 ## TOP 5 "THIS WILL HURT YOU" ISSUES
 
-- `valdrix_background_jobs_queued` (by job_type)
-- `valdrix_zombie_scan_latency_seconds` (histogram by account_size)
-- `valdrix_llm_spend_per_tenant` (gauge, updated daily)
-- `valdrix_aws_api_errors` (by service, by region)
-- `valdrix_remediation_execution_time` (by action type)
+- `valdrics_background_jobs_queued` (by job_type)
+- `valdrics_zombie_scan_latency_seconds` (histogram by account_size)
+- `valdrics_llm_spend_per_tenant` (gauge, updated daily)
+- `valdrics_aws_api_errors` (by service, by region)
+- `valdrics_remediation_execution_time` (by action type)
 
 **Fix Required (Before Series-A):**
 
@@ -330,7 +330,7 @@ _(This is honest and shows self-awareness, which investors respect more than fal
 
 ## THE BOTTOM LINE
 
-Valdrix is now a **hardened, production-ready product** that has resolved its primary scaling and security risks.
+Valdrics is now a **hardened, production-ready product** that has resolved its primary scaling and security risks.
 
 **Verdict for Investors:**
 
@@ -352,4 +352,4 @@ Valdrix is now a **hardened, production-ready product** that has resolved its pr
 - Standardize infrastructure scaling (Phase 4: Auto-scaling benchmarks)
 - Full Chaos engineering suite for multi-cloud outages.
 
-**Valdrix is ready for Series-A investment.**
+**Valdrics is ready for Series-A investment.**

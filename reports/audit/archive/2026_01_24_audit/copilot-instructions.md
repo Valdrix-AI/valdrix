@@ -1,8 +1,8 @@
-# Valdrix: AI Coding Instructions
+# Valdrics: AI Coding Instructions
 
 ## Project Summary
 
-**Valdrix** is a multi-cloud FinOps & GreenOps intelligence platform that detects cloud waste, optimizes costs, and provides AI-powered recommendations. It's a FastAPI backend + SvelteKit frontend deployed across Supabase (database), Koyeb (API), and Vercel (dashboard).
+**Valdrics** is a multi-cloud FinOps & GreenOps intelligence platform that detects cloud waste, optimizes costs, and provides AI-powered recommendations. It's a FastAPI backend + SvelteKit frontend deployed across Supabase (database), Koyeb (API), and Vercel (dashboard).
 
 **Tech Stack:**
 
@@ -162,13 +162,13 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production deployment (Supabase
 ### 1. **Error Handling & Logging**
 
 - Use `structlog` for all logging (not `print()` or `logging`)
-- Custom exceptions inherit from `ValdrixException` (see [app/core/exceptions.py](app/core))
+- Custom exceptions inherit from `ValdricsException` (see [app/core/exceptions.py](app/core))
 - HTTP 422: validation errors, 400: business logic, 401/403: auth/permission
 
 Example:
 
 ```python
-from app.core.exceptions import ValdrixException
+from app.core.exceptions import ValdricsException
 import structlog
 
 logger = structlog.get_logger()
@@ -178,7 +178,7 @@ async def some_operation():
         ...
     except SomeError as e:
         logger.warning("operation_failed", error=str(e), tenant_id=tenant_id)
-        raise ValdrixException("User-friendly message") from e
+        raise ValdricsException("User-friendly message") from e
 ```
 
 ### 2. **Security Validation (see app/core/config.py)**

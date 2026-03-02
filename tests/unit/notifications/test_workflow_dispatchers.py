@@ -24,8 +24,8 @@ def _async_client_cm(client: AsyncMock) -> AsyncMock:
 @pytest.mark.asyncio
 async def test_github_dispatch_success_and_failure() -> None:
     dispatcher = GitHubActionsDispatcher(
-        owner="valdrix-ai",
-        repo="valdrix",
+        owner="valdrics-ai",
+        repo="valdrics",
         workflow_id="remediation.yml",
         ref="main",
         token="ghp_token",
@@ -77,13 +77,13 @@ async def test_gitlab_dispatch_success() -> None:
         )
     assert ok is True
     call_data = client.post.await_args.kwargs["data"]
-    assert call_data["variables[VALDRIX_EVENT_TYPE]"] == "remediation.completed"
+    assert call_data["variables[VALDRICS_EVENT_TYPE]"] == "remediation.completed"
 
 
 @pytest.mark.asyncio
 async def test_generic_dispatch_validates_allowlist_and_posts() -> None:
     dispatcher = GenericCIWebhookDispatcher(
-        url="https://ci.example.com/hooks/valdrix",
+        url="https://ci.example.com/hooks/valdrics",
         bearer_token="secret-token",
         timeout_seconds=5.0,
     )
@@ -137,8 +137,8 @@ def test_get_workflow_dispatchers_returns_all_enabled() -> None:
         SAAS_STRICT_INTEGRATIONS=False,
         WORKFLOW_DISPATCH_TIMEOUT_SECONDS=7.0,
         GITHUB_ACTIONS_ENABLED=True,
-        GITHUB_ACTIONS_OWNER="valdrix-ai",
-        GITHUB_ACTIONS_REPO="valdrix",
+        GITHUB_ACTIONS_OWNER="valdrics-ai",
+        GITHUB_ACTIONS_REPO="valdrics",
         GITHUB_ACTIONS_WORKFLOW_ID="remediation.yml",
         GITHUB_ACTIONS_REF="main",
         GITHUB_ACTIONS_TOKEN="gh-token",
@@ -166,7 +166,7 @@ def test_get_workflow_dispatchers_skips_incomplete_provider() -> None:
         WORKFLOW_DISPATCH_TIMEOUT_SECONDS=7.0,
         GITHUB_ACTIONS_ENABLED=True,
         GITHUB_ACTIONS_OWNER=None,
-        GITHUB_ACTIONS_REPO="valdrix",
+        GITHUB_ACTIONS_REPO="valdrics",
         GITHUB_ACTIONS_WORKFLOW_ID="remediation.yml",
         GITHUB_ACTIONS_REF="main",
         GITHUB_ACTIONS_TOKEN="gh-token",
@@ -191,8 +191,8 @@ def test_get_workflow_dispatchers_returns_empty_in_strict_mode() -> None:
         SAAS_STRICT_INTEGRATIONS=True,
         WORKFLOW_DISPATCH_TIMEOUT_SECONDS=7.0,
         GITHUB_ACTIONS_ENABLED=True,
-        GITHUB_ACTIONS_OWNER="valdrix-ai",
-        GITHUB_ACTIONS_REPO="valdrix",
+        GITHUB_ACTIONS_OWNER="valdrics-ai",
+        GITHUB_ACTIONS_REPO="valdrics",
         GITHUB_ACTIONS_WORKFLOW_ID="remediation.yml",
         GITHUB_ACTIONS_REF="main",
         GITHUB_ACTIONS_TOKEN="gh-token",
@@ -219,8 +219,8 @@ async def test_get_tenant_workflow_dispatchers_builds_from_notification_settings
     db = MagicMock()
     notif = SimpleNamespace(
         workflow_github_enabled=True,
-        workflow_github_owner="Valdrix-AI",
-        workflow_github_repo="valdrix",
+        workflow_github_owner="Valdrics-AI",
+        workflow_github_repo="valdrics",
         workflow_github_workflow_id="remediation.yml",
         workflow_github_ref="main",
         workflow_github_token="gh-token",

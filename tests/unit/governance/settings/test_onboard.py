@@ -76,7 +76,7 @@ async def test_onboard_with_cloud_verification_success(async_client: AsyncClient
         "tenant_name": "Cloud Tenant",
         "cloud_config": {
             "platform": "aws",
-            "role_arn": "arn:aws:iam::123456789012:role/ValdrixRole",
+            "role_arn": "arn:aws:iam::123456789012:role/ValdricsRole",
             "external_id": "ext-123",
         },
     }
@@ -130,7 +130,7 @@ async def test_onboard_rejects_http_cloud_credentials_in_production(
         "tenant_name": "Secure Tenant",
         "cloud_config": {
             "platform": "aws",
-            "role_arn": "arn:aws:iam::123456789012:role/ValdrixRole",
+            "role_arn": "arn:aws:iam::123456789012:role/ValdricsRole",
             "external_id": "ext-123",
         },
     }

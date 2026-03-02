@@ -19,7 +19,7 @@ async def test_costs_endpoint_supports_saas_provider_filter(
     tenant = Tenant(id=tenant_id, name="Cloud Plus Tenant", plan="pro")
     user = User(
         id=user_id,
-        email="cloudplus@valdrix.io",
+        email="cloudplus@valdrics.io",
         tenant_id=tenant_id,
         role=UserRole.ADMIN,
     )

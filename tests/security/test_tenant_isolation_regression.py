@@ -28,7 +28,7 @@ async def test_connections_list_is_tenant_scoped(async_client: AsyncClient, db, 
             AWSConnection(
                 tenant_id=tenant_a.id,
                 aws_account_id="111111111111",
-                role_arn="arn:aws:iam::111111111111:role/ValdrixReadOnly",
+                role_arn="arn:aws:iam::111111111111:role/ValdricsReadOnly",
                 external_id="vx-" + ("a" * 32),
                 region="us-east-1",
                 status="active",
@@ -36,7 +36,7 @@ async def test_connections_list_is_tenant_scoped(async_client: AsyncClient, db, 
             AWSConnection(
                 tenant_id=tenant_b.id,
                 aws_account_id="222222222222",
-                role_arn="arn:aws:iam::222222222222:role/ValdrixReadOnly",
+                role_arn="arn:aws:iam::222222222222:role/ValdricsReadOnly",
                 external_id="vx-" + ("b" * 32),
                 region="us-east-1",
                 status="active",
@@ -48,7 +48,7 @@ async def test_connections_list_is_tenant_scoped(async_client: AsyncClient, db, 
     current_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=tenant_a.id,
-        email="user-a@valdrix.io",
+        email="user-a@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.PRO,
     )
@@ -105,7 +105,7 @@ async def test_notification_settings_get_is_tenant_scoped(
     current_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=tenant_b.id,
-        email="user-b@valdrix.io",
+        email="user-b@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.PRO,
     )
@@ -132,7 +132,7 @@ async def test_audit_logs_endpoint_is_tenant_scoped(async_client: AsyncClient, d
     await audit_a.log(
         event_type=AuditEventType.SETTINGS_UPDATED,
         actor_id=None,
-        actor_email="a@valdrix.io",
+        actor_email="a@valdrics.io",
         resource_type="tenant",
         resource_id=str(tenant_a.id),
         details={"marker": "a"},
@@ -142,7 +142,7 @@ async def test_audit_logs_endpoint_is_tenant_scoped(async_client: AsyncClient, d
     await audit_b.log(
         event_type=AuditEventType.SETTINGS_UPDATED,
         actor_id=None,
-        actor_email="b@valdrix.io",
+        actor_email="b@valdrics.io",
         resource_type="tenant",
         resource_id=str(tenant_b.id),
         details={"marker": "b"},
@@ -158,7 +158,7 @@ async def test_audit_logs_endpoint_is_tenant_scoped(async_client: AsyncClient, d
     current_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=tenant_a.id,
-        email="admin-a@valdrix.io",
+        email="admin-a@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )

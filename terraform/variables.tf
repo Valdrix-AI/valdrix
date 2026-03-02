@@ -8,12 +8,12 @@ variable "environment" {
 }
 
 variable "external_id" {
-  description = "External ID for Valdrix cross-account access"
+  description = "External ID for Valdrics cross-account access"
   type        = string
 }
 
-variable "valdrix_account_id" {
-  description = "Valdrix's central account ID"
+variable "valdrics_account_id" {
+  description = "Valdrics's central account ID"
   type        = string
 }
 

@@ -17,7 +17,7 @@ async def test_capture_and_list_load_test_evidence(async_client, app, db, test_t
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-perf@valdrix.io",
+        email="admin-perf@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

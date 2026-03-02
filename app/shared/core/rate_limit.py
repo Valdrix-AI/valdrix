@@ -1,5 +1,5 @@
 """
-Rate Limiting Middleware for Valdrix
+Rate Limiting Middleware for Valdrics
 
 Provides API rate limiting using slowapi (built on limits library).
 Configurable via environment variables.

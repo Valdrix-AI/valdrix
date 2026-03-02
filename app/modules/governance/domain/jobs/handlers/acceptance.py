@@ -192,7 +192,7 @@ class AcceptanceSuiteCaptureHandler(BaseJobHandler):
         # We need a CurrentUser-like object because KPI computation is tier-aware.
         system_user = CurrentUser(
             id=uuid4(),
-            email="system@valdrix.local",
+            email="system@valdrics.local",
             tenant_id=tenant_id,
             role=UserRole.ADMIN,
             tier=tier,

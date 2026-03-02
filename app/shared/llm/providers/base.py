@@ -5,7 +5,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 class BaseProvider(ABC):
     """
-    Standard interface for all LLM providers in Valdrix.
+    Standard interface for all LLM providers in Valdrics.
     Ensures consistent API key validation and model creation.
     """
 

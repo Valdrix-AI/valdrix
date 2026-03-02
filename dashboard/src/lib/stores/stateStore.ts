@@ -20,7 +20,7 @@ type StoredValue<T> = {
  * Creates a reactive, persistent state store.
  */
 export function createPersistentState<T>(key: string, initialValue: T, expiryHours = 24) {
-	const storageKey = `valdrix_state_${key}`;
+	const storageKey = `valdrics_state_${key}`;
 
 	// Internal state
 	let state = $state<T>(initialValue);

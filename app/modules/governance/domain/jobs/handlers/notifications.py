@@ -93,7 +93,7 @@ class NotificationHandler(BaseJobHandler):
 
         payload = job.payload or {}
         message = payload.get("message")
-        title = payload.get("title", "Valdrix Notification")
+        title = payload.get("title", "Valdrics Notification")
         severity = payload.get("severity", "info")
 
         if not message:

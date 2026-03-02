@@ -53,8 +53,8 @@ export interface LandingTelemetryTarget {
 }
 
 const MAX_TOKEN_LENGTH = 96;
-const LANDING_EVENT_TYPE = 'valdrix:landing_event';
-const DATA_LAYER_EVENT_NAME = 'valdrix_landing_event';
+const LANDING_EVENT_TYPE = 'valdrics:landing_event';
+const DATA_LAYER_EVENT_NAME = 'valdrics_landing_event';
 const LANDING_BACKEND_PATH = '/public/landing/events';
 
 function normalizeToken(input: string | null | undefined, fallback: string): string {

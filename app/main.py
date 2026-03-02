@@ -36,7 +36,7 @@ from app.shared.core.runtime_dependencies import validate_runtime_dependencies
 from app.shared.core.timeout import TimeoutMiddleware
 from app.shared.core.tracing import setup_tracing
 from app.shared.db.session import async_session_maker, get_engine
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 from app.shared.core.rate_limit import (
     setup_rate_limiting,
 )
@@ -230,7 +230,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 # Application instance
-valdrix_app = FastAPI(
+valdrics_app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
     lifespan=lifespan,
@@ -239,25 +239,25 @@ valdrix_app = FastAPI(
 )
 # Justification (Finding #C1): Uvicorn requires 'app' name by default in start parameters.
 # Standard pattern to resolve FastAPI type collision with module-level common variable.
-app: FastAPI = valdrix_app  # noqa: A001  # type: ignore[no-redef]
-router = valdrix_app
+app: FastAPI = valdrics_app  # noqa: A001  # type: ignore[no-redef]
+router = valdrics_app
 
-__all__ = ["app", "valdrix_app", "lifespan"]
+__all__ = ["app", "valdrics_app", "lifespan"]
 
 # Initialize Tracing
-setup_tracing(valdrix_app)
+setup_tracing(valdrics_app)
 
 
-@valdrix_app.exception_handler(ValdrixException)
-async def valdrix_exception_handler(
-    request: Request, exc: ValdrixException
+@valdrics_app.exception_handler(ValdricsException)
+async def valdrics_exception_handler(
+    request: Request, exc: ValdricsException
 ) -> JSONResponse:
     """Handle custom application exceptions."""
     from app.shared.core.error_governance import handle_exception
     return handle_exception(request, exc)
 
 
-@valdrix_app.exception_handler(CsrfProtectError)
+@valdrics_app.exception_handler(CsrfProtectError)
 async def csrf_protect_exception_handler(
     request: Request, exc: CsrfProtectError
 ) -> JSONResponse:
@@ -267,7 +267,7 @@ async def csrf_protect_exception_handler(
     return handle_exception(request, exc)
 
 
-@valdrix_app.exception_handler(HTTPException)
+@valdrics_app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     """Handle FastAPI HTTP exceptions with standardized format."""
     is_prod = settings.ENVIRONMENT.lower() in {"production", "staging"}
@@ -292,7 +292,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     )
 
 
-@valdrix_app.exception_handler(RequestValidationError)
+@valdrics_app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
@@ -332,24 +332,24 @@ async def validation_exception_handler(
     )
 
 
-@valdrix_app.exception_handler(ValueError)
+@valdrics_app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
     """Handle business logic ValueErrors via central governance."""
     from app.shared.core.error_governance import handle_exception
     return handle_exception(request, exc)
 
 
-@valdrix_app.exception_handler(ScimError)
+@valdrics_app.exception_handler(ScimError)
 async def scim_error_handler(_request: Request, exc: ScimError) -> JSONResponse:
     """Return SCIM-compliant error responses for /scim/v2 endpoints."""
     return scim_error_response(exc)
 
 
 # Setup rate limiting early for test visibility
-setup_rate_limiting(valdrix_app)
+setup_rate_limiting(valdrics_app)
 
 # Serve static files for local Swagger UI
-valdrix_app.mount("/static", StaticFiles(directory="app/static"), name="static")
+valdrics_app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 def _compute_sri(file_path: str) -> str | None:
@@ -371,12 +371,12 @@ def _attach_sri(content: str, *, marker: str, sri_hash: str | None) -> str:
     )
 
 
-@valdrix_app.get("/docs", include_in_schema=False)
+@valdrics_app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html() -> Any:
     response = get_swagger_ui_html(
-        openapi_url=valdrix_app.openapi_url or "/openapi.json",
-        title=valdrix_app.title + " - Swagger UI",
-        oauth2_redirect_url=valdrix_app.swagger_ui_oauth2_redirect_url,
+        openapi_url=valdrics_app.openapi_url or "/openapi.json",
+        title=valdrics_app.title + " - Swagger UI",
+        oauth2_redirect_url=valdrics_app.swagger_ui_oauth2_redirect_url,
         swagger_js_url="/static/swagger-ui-bundle.js",
         swagger_css_url="/static/swagger-ui.css",
         swagger_favicon_url="/static/favicon.png",
@@ -395,11 +395,11 @@ async def custom_swagger_ui_html() -> Any:
     return HTMLResponse(content=content, status_code=response.status_code)
 
 
-@valdrix_app.get("/redoc", include_in_schema=False)
+@valdrics_app.get("/redoc", include_in_schema=False)
 async def redoc_html() -> Any:
     response = get_redoc_html(
-        openapi_url=valdrix_app.openapi_url or "/openapi.json",
-        title=valdrix_app.title + " - ReDoc",
+        openapi_url=valdrics_app.openapi_url or "/openapi.json",
+        title=valdrics_app.title + " - ReDoc",
         redoc_js_url="/static/redoc.standalone.js",
         redoc_favicon_url="/static/favicon.png",
     )
@@ -414,7 +414,7 @@ async def redoc_html() -> Any:
 
 # Override handler to include metrics (SEC-03)
 # MyPy: 'exception_handlers' is dynamic on FastAPI instance
-original_handler = valdrix_app.exception_handlers.get(
+original_handler = valdrics_app.exception_handlers.get(
     RateLimitExceeded, _rate_limit_exceeded_handler
 )
 
@@ -438,10 +438,10 @@ async def custom_rate_limit_handler(request: Request, exc: Exception) -> Respons
     return res
 
 
-valdrix_app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
+valdrics_app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 
 
-@valdrix_app.exception_handler(Exception)
+@valdrics_app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     Handle unhandled exceptions with standardized 2026 Error Governance.
@@ -453,28 +453,28 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 # Keep app entrypoint lean by registering lifecycle/health routes in a focused module.
 register_lifecycle_routes(
-    valdrix_app,
+    valdrics_app,
     app_name=settings.APP_NAME,
     version=settings.VERSION,
 )
 
 
 # Initialize Prometheus Metrics
-Instrumentator().instrument(valdrix_app).expose(valdrix_app)
+Instrumentator().instrument(valdrics_app).expose(valdrics_app)
 
 # IMPORTANT: Middleware order matters in FastAPI!
 # Middleware is processed in REVERSE order of addition.
 # CORS must be added LAST so it processes FIRST for incoming requests.
 
 # Add timeout middleware (5 minutes for long zombie scans)
-valdrix_app.add_middleware(TimeoutMiddleware, timeout_seconds=300)
+valdrics_app.add_middleware(TimeoutMiddleware, timeout_seconds=300)
 
 # Compress larger JSON responses to reduce bandwidth/latency on dashboard-heavy endpoints
-valdrix_app.add_middleware(GZipMiddleware, minimum_size=1000)
+valdrics_app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Security headers and request ID
-valdrix_app.add_middleware(SecurityHeadersMiddleware)
-valdrix_app.add_middleware(RequestIDMiddleware)
+valdrics_app.add_middleware(SecurityHeadersMiddleware)
+valdrics_app.add_middleware(RequestIDMiddleware)
 
 # CORS - added LAST so it processes FIRST
 # This ensures OPTIONS preflight requests are handled before other middleware
@@ -487,7 +487,7 @@ if settings.CORS_ORIGINS and "*" in settings.CORS_ORIGINS:
 else:
     cors_allowed_origins = settings.CORS_ORIGINS
 
-valdrix_app.add_middleware(
+valdrics_app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_allowed_origins,
     allow_credentials=True,
@@ -497,7 +497,7 @@ valdrix_app.add_middleware(
 
 
 # CSRF Protection Middleware - processes after CORS but before auth
-@valdrix_app.middleware("http")
+@valdrics_app.middleware("http")
 async def csrf_protect_middleware(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
@@ -539,4 +539,4 @@ async def csrf_protect_middleware(
 
 
 # Register API routers in a dedicated registry module for maintainability.
-register_api_routers(valdrix_app)
+register_api_routers(valdrics_app)

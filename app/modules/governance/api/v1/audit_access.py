@@ -434,7 +434,7 @@ async def request_data_erasure(
             "next_steps": [
                 "Your account will remain active until you close it via /api/v1/settings/account",
                 "Audit logs are retained for 90 days per SOC2 requirements",
-                "Contact support@valdrix.com for any questions",
+                "Contact support@valdrics.com for any questions",
             ],
         }
 

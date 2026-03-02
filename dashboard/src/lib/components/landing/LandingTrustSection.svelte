@@ -10,10 +10,12 @@
 
 	let {
 		onTrackCta,
-		requestReferencesHref
+		requestReferencesHref,
+		onePagerHref
 	}: {
-		onTrackCta: () => void;
+		onTrackCta: (value: 'request_named_references' | 'download_executive_one_pager') => void;
 		requestReferencesHref: string;
+		onePagerHref: string;
 	} = $props();
 </script>
 
@@ -90,9 +92,22 @@
 		<p class="landing-p">
 			Need named references for diligence? Request curated references and outcome packs under NDA.
 		</p>
-		<a href={requestReferencesHref} class="btn btn-secondary w-fit" onclick={onTrackCta}>
-			Request Named References
-		</a>
+		<div class="landing-lead-actions">
+			<a
+				href={requestReferencesHref}
+				class="btn btn-secondary w-fit"
+				onclick={() => onTrackCta('request_named_references')}
+			>
+				Request Named References
+			</a>
+			<a
+				href={onePagerHref}
+				class="btn btn-secondary w-fit"
+				onclick={() => onTrackCta('download_executive_one_pager')}
+			>
+				Download Executive One-Pager
+			</a>
+		</div>
 	</div>
 	<p class="landing-trust-note">
 		Customer examples are anonymized and benchmark ranges are directional. Validate against your own

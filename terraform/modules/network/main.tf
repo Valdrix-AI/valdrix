@@ -5,7 +5,7 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name        = "valdrix-vpc-${var.environment}"
+    Name        = "valdrics-vpc-${var.environment}"
     Environment = var.environment
   }
 }
@@ -14,7 +14,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name        = "valdrix-igw-${var.environment}"
+    Name        = "valdrics-igw-${var.environment}"
     Environment = var.environment
   }
 }
@@ -27,10 +27,10 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name                                           = "valdrix-public-${count.index}-${var.environment}"
+    Name                                           = "valdrics-public-${count.index}-${var.environment}"
     Environment                                    = var.environment
     "kubernetes.io/role/elb"                       = "1"
-    "kubernetes.io/cluster/valdrix-${var.environment}" = "shared"
+    "kubernetes.io/cluster/valdrics-${var.environment}" = "shared"
   }
 }
 
@@ -41,17 +41,17 @@ resource "aws_subnet" "private" {
   availability_zone = var.availability_zones[count.index]
 
   tags = {
-    Name                                           = "valdrix-private-${count.index}-${var.environment}"
+    Name                                           = "valdrics-private-${count.index}-${var.environment}"
     Environment                                    = var.environment
     "kubernetes.io/role/internal-elb"              = "1"
-    "kubernetes.io/cluster/valdrix-${var.environment}" = "shared"
+    "kubernetes.io/cluster/valdrics-${var.environment}" = "shared"
   }
 }
 
 resource "aws_eip" "nat" {
   domain = "vpc"
   tags = {
-    Name = "valdrix-nat-eip-${var.environment}"
+    Name = "valdrics-nat-eip-${var.environment}"
   }
 }
 
@@ -60,7 +60,7 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[0].id
 
   tags = {
-    Name = "valdrix-nat-${var.environment}"
+    Name = "valdrics-nat-${var.environment}"
   }
 
   depends_on = [aws_internet_gateway.main]
@@ -75,7 +75,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "valdrix-public-rt-${var.environment}"
+    Name = "valdrics-public-rt-${var.environment}"
   }
 }
 
@@ -88,7 +88,7 @@ resource "aws_route_table" "private" {
   }
 
   tags = {
-    Name = "valdrix-private-rt-${var.environment}"
+    Name = "valdrics-private-rt-${var.environment}"
   }
 }
 

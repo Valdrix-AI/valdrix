@@ -30,7 +30,7 @@ def test_pii_redactor_regex():
     """Verify regex-based PII redaction for unstructured text in logs."""
     event_dict = {
         "event": "User login failed for admin@example.com from +234 803 123 4567",
-        "details": "Contact support at help@valdrix.ai",
+        "details": "Contact support at help@valdrics.ai",
     }
 
     redacted = pii_redactor(None, None, event_dict)
@@ -39,7 +39,7 @@ def test_pii_redactor_regex():
     assert "[EMAIL_REDACTED]" in redacted["event"]
     assert "+234 803 123 4567" not in redacted["event"]
     assert "[PHONE_REDACTED]" in redacted["event"]
-    assert "help@valdrix.ai" not in redacted["details"]
+    assert "help@valdrics.ai" not in redacted["details"]
     assert "[EMAIL_REDACTED]" in redacted["details"]
 
 

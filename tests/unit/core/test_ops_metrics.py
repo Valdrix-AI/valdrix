@@ -22,7 +22,7 @@ def test_zombie_metrics_behavior():
     ).inc()
 
     val = REGISTRY.get_sample_value(
-        "valdrix_ops_zombies_detected_total",
+        "valdrics_ops_zombies_detected_total",
         labels={
             "provider": "aws",
             "account_id": "123456789012",
@@ -36,7 +36,7 @@ def test_zombie_metrics_behavior():
     )
 
     savings = REGISTRY.get_sample_value(
-        "valdrix_ops_potential_savings_monthly",
+        "valdrics_ops_potential_savings_monthly",
         labels={"provider": "aws", "account_id": "123456789012"},
     )
     assert savings == 99.99
@@ -50,7 +50,7 @@ def test_existing_metrics_integrity():
         path="/test", method="GET", status_code="500"
     ).inc()
     val = REGISTRY.get_sample_value(
-        "valdrix_ops_api_errors_total",
+        "valdrics_ops_api_errors_total",
         labels={"path": "/test", "method": "GET", "status_code": "500"},
     )
     assert val == 1.0
@@ -63,7 +63,7 @@ def test_llm_fair_use_metrics_existence_and_behavior():
 
     ops_metrics.LLM_FAIR_USE_DENIALS.labels(gate="unit_test", tenant_tier="pro").inc()
     denial_val = REGISTRY.get_sample_value(
-        "valdrix_ops_llm_fair_use_denials_total",
+        "valdrics_ops_llm_fair_use_denials_total",
         labels={"gate": "unit_test", "tenant_tier": "pro"},
     )
     assert denial_val == 1.0
@@ -74,7 +74,7 @@ def test_llm_fair_use_metrics_existence_and_behavior():
         tenant_tier="pro",
     ).inc()
     eval_val = REGISTRY.get_sample_value(
-        "valdrix_ops_llm_fair_use_evaluations_total",
+        "valdrics_ops_llm_fair_use_evaluations_total",
         labels={"gate": "unit_test", "outcome": "allow", "tenant_tier": "pro"},
     )
     assert eval_val == 1.0
@@ -84,7 +84,7 @@ def test_llm_fair_use_metrics_existence_and_behavior():
         tenant_tier="pro",
     ).set(3)
     observed_val = REGISTRY.get_sample_value(
-        "valdrix_ops_llm_fair_use_observed",
+        "valdrics_ops_llm_fair_use_observed",
         labels={"gate": "unit_test", "tenant_tier": "pro"},
     )
     assert observed_val == 3.0

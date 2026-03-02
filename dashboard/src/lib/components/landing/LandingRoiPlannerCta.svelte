@@ -1,14 +1,10 @@
 <script lang="ts">
 	let {
 		href,
-		worksheetHref,
-		onTrackCta,
-		onTrackWorksheetCta
+		onTrackCta
 	}: {
 		href: string;
-		worksheetHref: string;
 		onTrackCta: () => void;
-		onTrackWorksheetCta: () => void;
 	} = $props();
 </script>
 
@@ -17,14 +13,38 @@
 		<p class="landing-proof-k">Advanced ROI Planning</p>
 		<h2 class="landing-h2">Need the full 12-month ROI planner?</h2>
 		<p class="landing-p">
-			Start free for deeper team-specific scenarios, or download a worksheet first for internal
-			review.
+			Start free for deeper team-specific scenarios. Preview the model snapshot below before you open
+			the full planner.
 		</p>
-		<div class="landing-lead-actions">
-			<a href={href} class="btn btn-primary" onclick={onTrackCta}>Open Full ROI Planner</a>
-			<a href={worksheetHref} class="btn btn-secondary" onclick={onTrackWorksheetCta}>
-				Download ROI Assumptions Worksheet
-			</a>
+
+		<div class="landing-roi-snapshot" aria-label="Example ROI model snapshot">
+			<p class="landing-roi-snapshot-k">Example 12-month model snapshot</p>
+			<div class="landing-roi-snapshot-metrics">
+				<div class="landing-roi-snapshot-metric">
+					<p>Projected annual spend</p>
+					<strong>$1.44M</strong>
+				</div>
+				<div class="landing-roi-snapshot-metric">
+					<p>Controllable waste opportunity</p>
+					<strong class="is-positive">$172K</strong>
+				</div>
+				<div class="landing-roi-snapshot-metric">
+					<p>Modeled payback window</p>
+					<strong>6-9 weeks</strong>
+				</div>
+			</div>
+			<div class="landing-roi-snapshot-bars" aria-hidden="true">
+				<div class="landing-roi-snapshot-row">
+					<span>Reactive path</span>
+					<div><i style="width: 100%;"></i></div>
+				</div>
+				<div class="landing-roi-snapshot-row">
+					<span>Governed path</span>
+					<div><i style="width: 62%;"></i></div>
+				</div>
+			</div>
 		</div>
+
+		<a href={href} class="btn btn-primary w-fit" onclick={onTrackCta}>Open Full ROI Planner</a>
 	</div>
 </section>

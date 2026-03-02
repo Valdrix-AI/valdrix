@@ -82,10 +82,9 @@ describe('LandingHero', () => {
 		expect(screen.getByLabelText(/decision window \(months\)/i)).toBeTruthy();
 		expect(screen.getByText(/Scenario Delta/i)).toBeTruthy();
 		expect(screen.getByRole('link', { name: /Open Full ROI Planner/i })).toBeTruthy();
-		const roiWorksheetLink = screen.getByRole('link', {
-			name: /download roi assumptions worksheet/i
-		});
-		expect(roiWorksheetLink.getAttribute('href')).toBe('/resources/valdrics-roi-assumptions.csv');
+		expect(screen.getByText(/Example 12-month model snapshot/i)).toBeTruthy();
+		expect(screen.getByText(/Projected annual spend/i)).toBeTruthy();
+		expect(screen.getByText(/Modeled payback window/i)).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /not ready to sign up today\?/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /open resources/i })).toBeTruthy();
 		expect(
@@ -208,6 +207,8 @@ describe('LandingHero', () => {
 		).toBeNull();
 		const namedReferenceLink = screen.getByRole('link', { name: /request named references/i });
 		expect(namedReferenceLink.getAttribute('href') || '').toContain('intent=named_references');
+		const onePagerLink = screen.getByRole('link', { name: /download executive one-pager/i });
+		expect(onePagerLink.getAttribute('href')).toBe('/resources/valdrics-enterprise-one-pager.md');
 		expect(screen.queryByRole('link', { name: /explore docs/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /review api surfaces/i })).toBeNull();
 		expect(screen.queryByText(/http_retry\.py/i)).toBeNull();
@@ -228,7 +229,7 @@ describe('LandingHero', () => {
 		expect(dispatchSpy).toHaveBeenCalled();
 		expect(dataLayer.length).toBeGreaterThan(0);
 		const payload = dataLayer[dataLayer.length - 1] as Record<string, unknown>;
-		expect(payload.event).toBe('valdrix_landing_event');
+		expect(payload.event).toBe('valdrics_landing_event');
 		expect(payload.funnelStage).toBeTruthy();
 		expect(payload.experiment).toBeTruthy();
 

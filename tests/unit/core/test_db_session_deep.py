@@ -7,7 +7,7 @@ from app.shared.db.session import (
     check_rls_policy,
     before_cursor_execute,
     after_cursor_execute,
-    ValdrixException,
+    ValdricsException,
 )
 
 
@@ -112,7 +112,7 @@ class TestDBSessionDeep:
         # Temporarily disable TESTING mode for this test
         with patch("app.shared.db.session.settings") as mock_settings:
             mock_settings.TESTING = False
-            with pytest.raises(ValdrixException) as exc:
+            with pytest.raises(ValdricsException) as exc:
                 check_rls_policy(
                     conn, None, "SELECT * FROM secret_data", None, None, None
                 )

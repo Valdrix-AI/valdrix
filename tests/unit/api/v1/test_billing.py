@@ -77,8 +77,8 @@ async def test_create_checkout_success(
     mock_user: MagicMock,
 ) -> None:
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
-    mock_settings.FRONTEND_URL = "https://app.valdrix.io"
-    mock_settings.CORS_ORIGINS = ["https://app.valdrix.io"]
+    mock_settings.FRONTEND_URL = "https://app.valdrics.io"
+    mock_settings.CORS_ORIGINS = ["https://app.valdrics.io"]
     mock_settings.ENVIRONMENT = "development"
 
     checkout_req = MagicMock()
@@ -108,8 +108,8 @@ async def test_create_checkout_rejects_untrusted_callback(
     mock_user: MagicMock,
 ) -> None:
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
-    mock_settings.FRONTEND_URL = "https://app.valdrix.io"
-    mock_settings.CORS_ORIGINS = ["https://app.valdrix.io"]
+    mock_settings.FRONTEND_URL = "https://app.valdrics.io"
+    mock_settings.CORS_ORIGINS = ["https://app.valdrics.io"]
     mock_settings.ENVIRONMENT = "production"
 
     checkout_req = MagicMock()

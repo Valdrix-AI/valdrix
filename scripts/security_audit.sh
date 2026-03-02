@@ -1,10 +1,10 @@
 #!/bin/bash
-# Valdrix Security Audit Automation Script
+# Valdrics Security Audit Automation Script
 # Runs SAST, Dependency Scanning, Secret Checks, and Leak Detection
 
 set -e # Fail-fast: Stop on any error for CI integration (SEC-01)
 
-echo "--- Starting Valdrix Security Audit ---"
+echo "--- Starting Valdrics Security Audit ---"
 
 # 1. Python SAST (Bandit)
 echo "Running Bandit SAST..."

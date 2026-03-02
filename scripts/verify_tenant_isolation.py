@@ -102,9 +102,9 @@ def main() -> int:
         "--publish", action="store_true", help="Publish evidence to the API endpoint."
     )
     parser.add_argument(
-        "--url", default=os.environ.get("VALDRIX_API_URL", "http://127.0.0.1:8000")
+        "--url", default=os.environ.get("VALDRICS_API_URL", "http://127.0.0.1:8000")
     )
-    parser.add_argument("--token", default=os.environ.get("VALDRIX_TOKEN"))
+    parser.add_argument("--token", default=os.environ.get("VALDRICS_TOKEN"))
     parser.add_argument("--notes", default=None)
     parser.add_argument("--tests", nargs="*", default=DEFAULT_TESTS)
     args = parser.parse_args()
@@ -140,12 +140,12 @@ def main() -> int:
         token = sanitize_bearer_token(token)
     except ValueError as exc:
         raise SystemExit(
-            "Invalid token (VALDRIX_TOKEN/--token). "
+            "Invalid token (VALDRICS_TOKEN/--token). "
             "Ensure it's a single JWT string. "
             f"Details: {exc}"
         ) from None
     if not token:
-        raise SystemExit("Missing token. Set VALDRIX_TOKEN or pass --token.")
+        raise SystemExit("Missing token. Set VALDRICS_TOKEN or pass --token.")
 
     url = str(args.url).rstrip("/")
     endpoint = f"{url}/api/v1/audit/tenancy/isolation/evidence"

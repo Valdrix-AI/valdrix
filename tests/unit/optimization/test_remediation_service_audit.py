@@ -279,7 +279,7 @@ async def test_execute_with_backup_aws_rds(mock_db, tenant_id):
         mock_audit_instance.log = AsyncMock()
 
         MockNotify.notify_remediation_completed = AsyncMock()
-        backup_id = "valdrix-backup-db-1-123456"
+        backup_id = "valdrics-backup-db-1-123456"
         strategy = MagicMock()
         strategy.execute = AsyncMock(
             return_value=ExecutionResult(

@@ -86,7 +86,7 @@ VALIDATE ALL NEW FILES EXIST:
         [ ] _transition_to_completed() async method
         [ ] _transition_to_failed() async method
         [ ] _transition_to_dead_letter() async method
-        [ ] _handle_valdrix_exception() async method
+        [ ] _handle_valdrics_exception() async method
       Key Patterns:
         [ ] async with asyncio.timeout(self.timeout_seconds):
         [ ] Atomic state transitions with db.flush()
@@ -255,12 +255,12 @@ DEPENDENCY LIST (verify installed):
 VALIDATE DATABASE SCHEMA FOR NEW TABLES:
 
 [ ] 1. Check if llm_budgets table exists
-      Command: psql -h localhost -U postgres -d valdrix -c "\\dt llm_budgets"
+      Command: psql -h localhost -U postgres -d valdrics -c "\\dt llm_budgets"
       Expected: Table "public.llm_budgets" should exist
       If missing: Create migration (see DEPLOYMENT_FIXES_GUIDE.md)
 
 [ ] 2. Check llm_budgets schema
-      Command: psql -h localhost -U postgres -d valdrix -c "\\d+ llm_budgets"
+      Command: psql -h localhost -U postgres -d valdrics -c "\\d+ llm_budgets"
       Expected columns:
         [ ] id (UUID, primary key)
         [ ] tenant_id (VARCHAR, unique, foreign key to tenants)
@@ -271,11 +271,11 @@ VALIDATE DATABASE SCHEMA FOR NEW TABLES:
         [ ] updated_at (TIMESTAMP)
 
 [ ] 3. Check llm_reservations table exists
-      Command: psql -h localhost -U postgres -d valdrix -c "\\dt llm_reservations"
+      Command: psql -h localhost -U postgres -d valdrics -c "\\dt llm_reservations"
       Expected: Table "public.llm_reservations" should exist
 
 [ ] 4. Check llm_reservations schema
-      Command: psql -h localhost -U postgres -d valdrix -c "\\d+ llm_reservations"
+      Command: psql -h localhost -U postgres -d valdrics -c "\\d+ llm_reservations"
       Expected columns:
         [ ] id (UUID, primary key)
         [ ] budget_id (UUID, foreign key to llm_budgets)
@@ -286,15 +286,15 @@ VALIDATE DATABASE SCHEMA FOR NEW TABLES:
         [ ] expires_at (TIMESTAMP)
 
 [ ] 5. Check llm_usage table exists
-      Command: psql -h localhost -U postgres -d valdrix -c "\\dt llm_usage"
+      Command: psql -h localhost -U postgres -d valdrics -c "\\dt llm_usage"
       Expected: Table "public.llm_usage" should exist
 
 [ ] 6. Check encryption_key_version columns added
-      Command: psql -h localhost -U postgres -d valdrix -c "\\d+ aws_accounts" | grep encryption
+      Command: psql -h localhost -U postgres -d valdrics -c "\\d+ aws_accounts" | grep encryption
       Expected: encryption_key_version column visible
       
 [ ] 7. Verify indexes created
-      Command: psql -h localhost -U postgres -d valdrix -c "\\di" | grep llm_
+      Command: psql -h localhost -U postgres -d valdrics -c "\\di" | grep llm_
       Expected:
         [ ] ix_llm_budgets_tenant_id
         [ ] ix_llm_reservations_expires_at
@@ -467,7 +467,7 @@ TEST SUMMARY:
 VALIDATE SECURITY ASSUMPTIONS:
 
 [ ] 1. Verify no hardcoded secrets in source
-      Command: grep -r "valdrix-default-salt-2026" app/
+      Command: grep -r "valdrics-default-salt-2026" app/
       Expected: No matches (or only in comments)
 
 [ ] 2. Verify no hardcoded encryption keys
@@ -492,7 +492,7 @@ VALIDATE SECURITY ASSUMPTIONS:
 
 [ ] 7. Verify RLS is enforced by exception
       Command: grep -A 5 "rls_enforcement_failed" app/db/session.py
-      Expected: Raises ValdrixException (not just logging)
+      Expected: Raises ValdricsException (not just logging)
 
 [ ] 8. Verify job timeout is enforced
       Command: grep "asyncio.timeout" app/services/jobs/handlers/base_production.py

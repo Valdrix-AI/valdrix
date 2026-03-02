@@ -9,7 +9,7 @@ backend_url = settings.REDIS_URL or "redis://localhost:6379/0"
 
 # Initialize Celery app
 celery_app = Celery(
-    "valdrix_worker",
+    "valdrics_worker",
     broker=broker_url,
     backend=backend_url,
     include=["app.tasks.scheduler_tasks", "app.tasks.license_tasks"],

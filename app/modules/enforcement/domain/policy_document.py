@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enforcement import EnforcementMode
 
-POLICY_DOCUMENT_SCHEMA_VERSION = "valdrix.enforcement.policy.v1"
+POLICY_DOCUMENT_SCHEMA_VERSION = "valdrics.enforcement.policy.v1"
 
 
 class ApprovalRoutingRule(BaseModel):
@@ -69,8 +69,8 @@ class PolicyDocumentExecutionMatrix(BaseModel):
 class PolicyDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["valdrix.enforcement.policy.v1"] = (
-        "valdrix.enforcement.policy.v1"
+    schema_version: Literal["valdrics.enforcement.policy.v1"] = (
+        "valdrics.enforcement.policy.v1"
     )
     mode_matrix: PolicyDocumentModeMatrix = Field(
         default_factory=PolicyDocumentModeMatrix

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Valdrix will be documented in this file.
+All notable changes to Valdrics will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Helm chart for Kubernetes deployment (`helm/valdrix/`)
+- Helm chart for Kubernetes deployment (`helm/valdrics/`)
 - Grafana dashboards for API and FinOps metrics
 - Pre-commit hooks for code quality
 - Prometheus alerting rules

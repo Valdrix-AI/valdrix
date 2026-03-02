@@ -48,7 +48,7 @@ logger = structlog.get_logger()
 
 class FinOpsAnalyzer:
     """
-    The 'Brain' of Valdrix.
+    The 'Brain' of Valdrics.
 
     This class wraps a LangChain ChatModel and orchestrates the analysis of cost data.
     It uses a specialized System Prompt to enforce strict JSON output for programmatic use.

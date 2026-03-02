@@ -57,7 +57,7 @@ def test_dimension_tokens_include_lock_contention_and_snapshot_export_evidence()
     ) in observability
     assert (
         "docs/runbooks/enforcement_preprovision_integrations.md",
-        "valdrix_ops_enforcement_gate_lock_events_total",
+        "valdrics_ops_enforcement_gate_lock_events_total",
     ) in observability
     assert (
         "docs/ops/key-rotation-drill-2026-02-27.md",

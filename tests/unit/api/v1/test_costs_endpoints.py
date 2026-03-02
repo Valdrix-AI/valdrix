@@ -28,7 +28,7 @@ async def test_get_costs_and_breakdown(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="costs@valdrix.io",
+        email="costs@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -72,7 +72,7 @@ async def test_get_cost_attribution_summary(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="allocation@valdrix.io",
+        email="allocation@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.GROWTH,
     )
@@ -110,7 +110,7 @@ async def test_get_cost_attribution_coverage(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="coverage@valdrix.io",
+        email="coverage@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.GROWTH,
     )
@@ -148,7 +148,7 @@ async def test_get_canonical_quality_with_alert(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="canonical@valdrix.io",
+        email="canonical@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -200,7 +200,7 @@ async def test_get_canonical_quality_rejects_invalid_provider(
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="canonical-invalid@valdrix.io",
+        email="canonical-invalid@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -228,7 +228,7 @@ async def test_get_cost_forecast_paths(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="forecast@valdrix.io",
+        email="forecast@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -276,7 +276,7 @@ async def test_get_cost_anomalies_paths(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="anomalies@valdrix.io",
+        email="anomalies@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.GROWTH,
     )
@@ -334,7 +334,7 @@ async def test_get_cost_anomalies_requires_growth(async_client: AsyncClient, app
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=uuid.uuid4(),
-        email="anomalies-denied@valdrix.io",
+        email="anomalies-denied@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.STARTER,
     )
@@ -358,7 +358,7 @@ async def test_analyze_costs_paths(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="analyze@valdrix.io",
+        email="analyze@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -412,7 +412,7 @@ async def test_analyze_costs_available_on_starter(async_client: AsyncClient, app
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="starter@valdrix.io",
+        email="starter@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.STARTER,
     )
@@ -434,7 +434,7 @@ async def test_trigger_ingest(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="ingest@valdrix.io",
+        email="ingest@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.STARTER,
     )
@@ -462,7 +462,7 @@ async def test_trigger_ingest_with_backfill_window(async_client: AsyncClient, ap
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="ingest-range@valdrix.io",
+        email="ingest-range@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.GROWTH,
     )
@@ -499,7 +499,7 @@ async def test_trigger_ingest_backfill_requires_growth_tier(
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="ingest-backfill-denied@valdrix.io",
+        email="ingest-backfill-denied@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.STARTER,
     )
@@ -525,7 +525,7 @@ async def test_trigger_ingest_backfill_requires_both_dates(
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="ingest-invalid@valdrix.io",
+        email="ingest-invalid@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.STARTER,
     )
@@ -548,7 +548,7 @@ async def test_get_costs_returns_data_quality_metadata(async_client: AsyncClient
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="quality@valdrix.io",
+        email="quality@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -589,7 +589,7 @@ async def test_get_costs_requires_tenant_context(async_client: AsyncClient, app)
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=None,
-        email="no-tenant@valdrix.io",
+        email="no-tenant@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -610,7 +610,7 @@ async def test_get_costs_large_dataset_returns_accepted(async_client: AsyncClien
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
-        email="large@valdrix.io",
+        email="large@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -652,7 +652,7 @@ async def test_trigger_ingest_rejects_invalid_date_order(
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=uuid.uuid4(),
-        email="ingest-order@valdrix.io",
+        email="ingest-order@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.STARTER,
     )
@@ -675,7 +675,7 @@ async def test_get_unit_economics_rejects_invalid_date_order(
     mock_user = CurrentUser(
         id=uuid.uuid4(),
         tenant_id=uuid.uuid4(),
-        email="unit-order@valdrix.io",
+        email="unit-order@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.PRO,
     )
@@ -863,7 +863,7 @@ async def test_get_ingestion_sla_metrics(async_client: AsyncClient, app, db):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="sla@valdrix.io",
+        email="sla@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -938,7 +938,7 @@ async def test_get_ingestion_sla_no_jobs(async_client: AsyncClient, app, db):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="sla-empty@valdrix.io",
+        email="sla-empty@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -968,7 +968,7 @@ async def test_get_acceptance_kpis(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="q2-kpi@valdrix.io",
+        email="q2-kpi@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.PRO,
     )
@@ -1068,7 +1068,7 @@ async def test_get_acceptance_kpis_includes_license_governance_metrics(
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="acceptance-kpi-license@valdrix.io",
+        email="acceptance-kpi-license@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -1230,7 +1230,7 @@ async def test_get_acceptance_kpis_includes_ledger_quality_metrics_when_data_exi
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="acceptance-kpi-ledger@valdrix.io",
+        email="acceptance-kpi-ledger@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
@@ -1487,7 +1487,7 @@ async def test_get_acceptance_kpis_marks_unavailable_features(
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="q2-kpi-starter@valdrix.io",
+        email="q2-kpi-starter@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )
@@ -1567,7 +1567,7 @@ async def test_get_acceptance_kpis_csv_export(async_client: AsyncClient, app):
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="q2-kpi-csv@valdrix.io",
+        email="q2-kpi-csv@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.PRO,
     )
@@ -1668,7 +1668,7 @@ async def test_capture_acceptance_kpis_persists_audit_evidence(
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
-        email="kpi-capture-admin@valdrix.io",
+        email="kpi-capture-admin@valdrics.io",
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )

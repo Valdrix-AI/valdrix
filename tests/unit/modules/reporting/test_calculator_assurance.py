@@ -19,7 +19,7 @@ def test_calculation_includes_methodology_metadata() -> None:
     )
 
     metadata = result["methodology_metadata"]
-    assert metadata["methodology_version"] == "valdrix-carbon-v2.0"
+    assert metadata["methodology_version"] == "valdrics-carbon-v2.0"
     assert metadata["provider"] == "aws"
     assert metadata["factor_source"]
     assert metadata["factor_version"]

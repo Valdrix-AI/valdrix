@@ -1,5 +1,5 @@
 """
-Integration tests for critical paths in CloudSentinel-AI.
+Integration tests for critical paths in Valdrics-AI.
 Tests end-to-end workflows for zombie detection and remediation.
 """
 

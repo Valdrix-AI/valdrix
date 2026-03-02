@@ -184,10 +184,10 @@ Implementation references:
 ## Fair-Use Observability Gates (2026-02-19)
 
 Added metrics for rollout monitoring:
-- `valdrix_ops_llm_fair_use_denials_total` (counter; labels: `gate`, `tenant_tier`)
-- `valdrix_ops_llm_fair_use_evaluations_total` (counter; labels: `gate`, `outcome`, `tenant_tier`)
-- `valdrix_ops_llm_fair_use_observed` (gauge; labels: `gate`, `tenant_tier`)
-- Existing `valdrix_ops_llm_pre_auth_denials_total` now also tags fair-use denial reasons.
+- `valdrics_ops_llm_fair_use_denials_total` (counter; labels: `gate`, `tenant_tier`)
+- `valdrics_ops_llm_fair_use_evaluations_total` (counter; labels: `gate`, `outcome`, `tenant_tier`)
+- `valdrics_ops_llm_fair_use_observed` (gauge; labels: `gate`, `tenant_tier`)
+- Existing `valdrics_ops_llm_pre_auth_denials_total` now also tags fair-use denial reasons.
 - Admin runtime visibility endpoint is available at:
   - `GET /api/v1/admin/health-dashboard/fair-use`
   - Includes `guards_enabled`, `tenant_tier`, `active_for_tenant`, and threshold values.
@@ -216,7 +216,7 @@ Operational rollout sequence:
 Status: **partially valid; current code supports low incremental cost posture, but absolute fixed-dollar claims are not yet defensible.**
 
 Validated in repository:
-- AWS Cost Explorer is intentionally excluded from customer role policy (`cloudformation/valdrix-role.yaml`).
+- AWS Cost Explorer is intentionally excluded from customer role policy (`cloudformation/valdrics-role.yaml`).
 - CUR-first AWS ingestion path is implemented and CE access is blocked in adapter flow (`app/shared/adapters/factory.py`, `app/shared/adapters/aws_multitenant.py`).
 - Many AWS zombie plugins can still call CloudWatch metrics when CUR-based signal is missing (`app/modules/optimization/adapters/aws/plugins/compute.py`, `app/modules/optimization/adapters/aws/plugins/database.py`, `app/modules/optimization/adapters/aws/plugins/network.py`, `app/modules/optimization/adapters/aws/plugins/storage.py`).
 - GCP cost path uses BigQuery query jobs (`app/shared/adapters/gcp.py`), so query bytes scanned can create variable cost.

@@ -19,9 +19,9 @@ Primary source:
 
 Runtime/Helm contract in repository:
 
-1. `helm/valdrix/templates/enforcement-validating-webhook.yaml`
-2. `helm/valdrix/templates/enforcement-webhook-pdb.yaml`
-3. `helm/valdrix/values.schema.json`
+1. `helm/valdrics/templates/enforcement-validating-webhook.yaml`
+2. `helm/valdrics/templates/enforcement-webhook-pdb.yaml`
+3. `helm/valdrics/values.schema.json`
 4. `docs/runbooks/enforcement_preprovision_integrations.md`
 
 Production profile requirements:

@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "valdrix.name" -}}
+{{- define "valdrics.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "valdrix.fullname" -}}
+{{- define "valdrics.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,16 +24,16 @@ Create a default fully qualified app name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "valdrix.chart" -}}
+{{- define "valdrics.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "valdrix.labels" -}}
-helm.sh/chart: {{ include "valdrix.chart" . }}
-{{ include "valdrix.selectorLabels" . }}
+{{- define "valdrics.labels" -}}
+helm.sh/chart: {{ include "valdrics.chart" . }}
+{{ include "valdrics.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -43,17 +43,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "valdrix.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "valdrix.name" . }}
+{{- define "valdrics.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "valdrics.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "valdrix.serviceAccountName" -}}
+{{- define "valdrics.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "valdrix.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "valdrics.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

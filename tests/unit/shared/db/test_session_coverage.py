@@ -8,7 +8,7 @@ from app.shared.db.session import (
     after_cursor_execute,
     check_rls_policy,
 )
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 
 
 @pytest.mark.asyncio
@@ -105,7 +105,7 @@ def test_check_rls_policy_violation():
     with patch("app.shared.db.session.settings") as mock_settings:
         mock_settings.TESTING = False  # Force enforcement logic
 
-        with pytest.raises(ValdrixException) as exc:
+        with pytest.raises(ValdricsException) as exc:
             check_rls_policy(
                 mock_conn, None, "SELECT * FROM sensitive_data", (), None, False
             )

@@ -19,7 +19,7 @@ async def test_capture_and_list_tenant_isolation_evidence(
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-tenancy@valdrix.io",
+        email="admin-tenancy@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

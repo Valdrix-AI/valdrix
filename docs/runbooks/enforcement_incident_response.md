@@ -33,10 +33,10 @@ Target SLO for enforcement gate reliability: `99.9%` (error budget `0.1%`).
 
 Burn-rate alerts and thresholds:
 
-1. `ValdrixEnforcementErrorBudgetBurnFast` (`critical`)
+1. `ValdricsEnforcementErrorBudgetBurnFast` (`critical`)
    - windows: `1h` + `5m`
    - threshold: `14.4x` burn (`error_ratio > 14.4 * 0.001`)
-2. `ValdrixEnforcementErrorBudgetBurnSlow` (`warning`)
+2. `ValdricsEnforcementErrorBudgetBurnSlow` (`warning`)
    - windows: `6h` + `30m`
    - threshold: `6x` burn (`error_ratio > 6 * 0.001`)
 
@@ -53,9 +53,9 @@ Release-gate rule:
 
 ### Detection Signals
 
-- `valdrix_ops_llm_fair_use_denials_total`
-- `valdrix_ops_enforcement_gate_failures_total`
-- `valdrix_ops_enforcement_gate_decisions_total` rapid surge with deny/failsafe skew
+- `valdrics_ops_llm_fair_use_denials_total`
+- `valdrics_ops_enforcement_gate_failures_total`
+- `valdrics_ops_enforcement_gate_decisions_total` rapid surge with deny/failsafe skew
 
 ### Immediate Response
 
@@ -79,7 +79,7 @@ Release-gate rule:
 ### Detection Signals
 
 - sudden rise in `DENY` or `REQUIRE_APPROVAL` for known-good paths.
-- spike in `valdrix_ops_enforcement_gate_decision_reasons_total` for a single reason.
+- spike in `valdrics_ops_enforcement_gate_decision_reasons_total` for a single reason.
 - escalation from customer support or on-call pipeline failures.
 
 ### Immediate Response
@@ -123,7 +123,7 @@ Release-gate rule:
 
 ### Detection Signals
 
-- spike in `valdrix_ops_enforcement_reservation_drift_usd_total`
+- spike in `valdrics_ops_enforcement_reservation_drift_usd_total`
 - elevated `overage`/`savings` exceptions from reconciliation endpoints.
 - alert hooks for `drift_exception` and `sla_release`.
 

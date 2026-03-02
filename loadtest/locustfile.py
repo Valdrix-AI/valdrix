@@ -1,5 +1,5 @@
 """
-Valdrix Load Test - Locust
+Valdrics Load Test - Locust
 
 Run: locust -f loadtest/locustfile.py --host=http://localhost:8000
 Web UI: http://localhost:8089
@@ -11,8 +11,8 @@ import random
 
 import os
 
-class ValdrixUser(HttpUser):
-    """Simulates a typical Valdrix dashboard user."""
+class ValdricsUser(HttpUser):
+    """Simulates a typical Valdrics dashboard user."""
     
     wait_time = between(1, 5)  # Think time between requests
     

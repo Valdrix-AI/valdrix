@@ -39,7 +39,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tenant-id",
         dest="tenant_id",
-        default=os.getenv("VALDRIX_TENANT_ID", "").strip(),
+        default=os.getenv("VALDRICS_TENANT_ID", "").strip(),
         help="Tenant UUID. If omitted, uses the first tenant in DB (dev convenience).",
     )
     parser.add_argument(
@@ -94,7 +94,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--api-url",
         dest="api_url",
-        default=os.getenv("VALDRIX_API_URL", "http://127.0.0.1:8000").strip(),
+        default=os.getenv("VALDRICS_API_URL", "http://127.0.0.1:8000").strip(),
         help="API base URL for --publish",
     )
     return parser.parse_args()
@@ -128,7 +128,7 @@ async def _resolve_tenant_id(raw: str) -> UUID:
         )
         if not isinstance(value, str) or not value.strip():
             raise SystemExit(
-                "No tenants found in DB. Provide --tenant-id or VALDRIX_TENANT_ID."
+                "No tenants found in DB. Provide --tenant-id or VALDRICS_TENANT_ID."
             )
         return UUID(value.strip())
 
@@ -384,16 +384,16 @@ async def main() -> None:
             json.dump(evidence_payload, fp, indent=2, sort_keys=True)
 
     if args.publish:
-        raw_token = os.getenv("VALDRIX_TOKEN", "").strip()
+        raw_token = os.getenv("VALDRICS_TOKEN", "").strip()
         try:
             token = sanitize_bearer_token(raw_token)
         except ValueError as exc:
             raise SystemExit(
-                "Invalid VALDRIX_TOKEN. Ensure it's a single JWT string. "
+                "Invalid VALDRICS_TOKEN. Ensure it's a single JWT string. "
                 f"Details: {exc}"
             ) from None
         if not token:
-            raise SystemExit("VALDRIX_TOKEN is required for --publish.")
+            raise SystemExit("VALDRICS_TOKEN is required for --publish.")
         api_url = str(args.api_url or "").strip().rstrip("/")
         publish_url = f"{api_url}/api/v1/audit/performance/ingestion/soak/evidence"
         headers = {"Authorization": f"Bearer {token}"}

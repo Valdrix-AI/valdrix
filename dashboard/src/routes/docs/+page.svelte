@@ -84,7 +84,7 @@
 			Deployment and runbook documentation is maintained in the project repository.
 		</p>
 		<a
-			href="https://github.com/Valdrix-AI/valdrix/tree/main/docs"
+			href="https://github.com/Valdrics-AI/valdrics/tree/main/docs"
 			target="_blank"
 			rel="noopener noreferrer"
 			class="btn btn-secondary w-fit"

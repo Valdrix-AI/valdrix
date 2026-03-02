@@ -17,7 +17,7 @@ def mock_auth_user() -> CurrentUser:
     tenant_id = uuid4()
     user = CurrentUser(
         id=uuid4(),
-        email="test@valdrix.ai",
+        email="test@valdrics.ai",
         tenant_id=tenant_id,
         role=UserRole.MEMBER,
         tier=PricingTier.ENTERPRISE,

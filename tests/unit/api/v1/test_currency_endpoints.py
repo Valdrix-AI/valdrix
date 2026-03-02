@@ -15,7 +15,7 @@ def _user() -> CurrentUser:
     return CurrentUser(
         id=uuid4(),
         tenant_id=uuid4(),
-        email="currency@valdrix.io",
+        email="currency@valdrics.io",
         role=UserRole.MEMBER,
         tier=PricingTier.STARTER,
     )

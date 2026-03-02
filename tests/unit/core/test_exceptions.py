@@ -3,7 +3,7 @@ Tests for app/shared/core/exceptions.py - Custom exception classes
 """
 
 from app.shared.core.exceptions import (
-    ValdrixException,
+    ValdricsException,
     AdapterError,
     AuthError,
     ConfigurationError,
@@ -15,12 +15,12 @@ from app.shared.core.exceptions import (
 )
 
 
-class TestValdrixException:
-    """Test ValdrixException custom exception class."""
+class TestValdricsException:
+    """Test ValdricsException custom exception class."""
 
-    def test_valdrix_exception_creation(self):
-        """Test creating a ValdrixException with all parameters."""
-        exc = ValdrixException(
+    def test_valdrics_exception_creation(self):
+        """Test creating a ValdricsException with all parameters."""
+        exc = ValdricsException(
             message="Test error message",
             code="TEST_ERROR",
             status_code=400,
@@ -32,54 +32,54 @@ class TestValdrixException:
         assert exc.status_code == 400
         assert exc.details == {"field": "value"}
 
-    def test_valdrix_exception_creation_minimal(self):
-        """Test creating a ValdrixException with minimal parameters."""
-        exc = ValdrixException(message="Simple error")
+    def test_valdrics_exception_creation_minimal(self):
+        """Test creating a ValdricsException with minimal parameters."""
+        exc = ValdricsException(message="Simple error")
 
         assert exc.message == "Simple error"
         assert exc.code == "internal_error"  # Default
         assert exc.status_code == 500  # Default
         assert exc.details == {}  # Default empty dict
 
-    def test_valdrix_exception_str_representation(self):
-        """Test string representation of ValdrixException."""
-        exc = ValdrixException(message="Test error", code="TEST_CODE", status_code=422)
+    def test_valdrics_exception_str_representation(self):
+        """Test string representation of ValdricsException."""
+        exc = ValdricsException(message="Test error", code="TEST_CODE", status_code=422)
 
         str_repr = str(exc)
         assert "Test error" in str_repr
         assert "TEST_CODE" in str_repr
         assert "422" in str_repr
 
-    def test_valdrix_exception_inheritance(self):
-        """Test that ValdrixException inherits from Exception."""
-        exc = ValdrixException(message="Test")
+    def test_valdrics_exception_inheritance(self):
+        """Test that ValdricsException inherits from Exception."""
+        exc = ValdricsException(message="Test")
 
         assert isinstance(exc, Exception)
-        assert isinstance(exc, ValdrixException)
+        assert isinstance(exc, ValdricsException)
 
-    def test_valdrix_exception_with_none_details(self):
-        """Test ValdrixException with None details."""
-        exc = ValdrixException(message="Test", code="TEST", details=None)
+    def test_valdrics_exception_with_none_details(self):
+        """Test ValdricsException with None details."""
+        exc = ValdricsException(message="Test", code="TEST", details=None)
 
         assert exc.details == {}  # None details becomes empty dict
 
-    def test_valdrix_exception_with_empty_details(self):
-        """Test ValdrixException with empty details dict."""
-        exc = ValdrixException(message="Test", code="TEST", details={})
+    def test_valdrics_exception_with_empty_details(self):
+        """Test ValdricsException with empty details dict."""
+        exc = ValdricsException(message="Test", code="TEST", details={})
 
         assert exc.details == {}
 
-    def test_valdrix_exception_status_code_validation(self):
+    def test_valdrics_exception_status_code_validation(self):
         """Test that status_code accepts valid HTTP status codes."""
         # Test various valid status codes
         for status in [200, 400, 401, 403, 404, 422, 500, 502, 503]:
-            exc = ValdrixException(
+            exc = ValdricsException(
                 message=f"Error with status {status}", status_code=status
             )
             assert exc.status_code == status
 
-    def test_valdrix_exception_code_types(self):
-        """Test ValdrixException with different code types."""
+    def test_valdrics_exception_code_types(self):
+        """Test ValdricsException with different code types."""
         test_cases = [
             ("VALIDATION_ERROR", 422),
             ("NOT_FOUND", 404),
@@ -91,7 +91,7 @@ class TestValdrixException:
         ]
 
         for code, expected_status in test_cases:
-            exc = ValdrixException(
+            exc = ValdricsException(
                 message=f"Test with code: {code}",
                 code=code or "internal_error",
                 status_code=expected_status,
@@ -104,7 +104,7 @@ class TestValdrixException:
 
 
 class TestCustomExceptions:
-    """Test specific ValdrixException subclasses."""
+    """Test specific ValdricsException subclasses."""
 
     def test_adapter_error_sanitization(self):
         """Test that AdapterError sanitizes sensitive info."""

@@ -27,12 +27,12 @@ async def seed_data():
                 
                 # Prepare Data
                 tenant_id = uuid4()
-                tenant_name = "Valdrix Dev"
+                tenant_name = "Valdrics Dev"
                 tenant_name_enc = encrypt_string(tenant_name)
                 tenant_name_bidx = generate_blind_index(tenant_name)
                 
                 user_id = uuid4()
-                user_email = "admin@valdrix.com"
+                user_email = "admin@valdrics.com"
                 user_email_enc = encrypt_string(user_email)
                 user_email_bidx = generate_blind_index(user_email)
                 
@@ -72,8 +72,8 @@ async def seed_data():
                     }
                 )
                 
-                print(f"  + Created Tenant: Valdrix Dev ({tenant_id})", flush=True)
-                print(f"  + Created User: admin@valdrix.com ({user_id})", flush=True)
+                print(f"  + Created Tenant: Valdrics Dev ({tenant_id})", flush=True)
+                print(f"  + Created User: admin@valdrics.com ({user_id})", flush=True)
                 print("  ! NOTE: Create this user in Supabase Auth with this UUID!", flush=True)
                 print(f"  ! User ID: {user_id}", flush=True)
             else:

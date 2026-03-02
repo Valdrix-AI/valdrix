@@ -202,7 +202,7 @@ class TestCostCache:
         cache = CostCache(backend)
 
         await cache.invalidate_tenant("tenant-1")
-        backend.delete_pattern.assert_called_once_with("valdrix:tenant-1:*")
+        backend.delete_pattern.assert_called_once_with("valdrics:tenant-1:*")
 
     @pytest.mark.asyncio
     async def test_invalidate_zombies_pattern(self):
@@ -211,7 +211,7 @@ class TestCostCache:
         cache = CostCache(backend)
 
         await cache.invalidate_zombies("tenant-1")
-        backend.delete_pattern.assert_called_once_with("valdrix:tenant-1:zombies:*")
+        backend.delete_pattern.assert_called_once_with("valdrics:tenant-1:zombies:*")
 
     @pytest.mark.asyncio
     async def test_keys_include_tenant_and_prefix(self):
@@ -225,11 +225,11 @@ class TestCostCache:
 
         await cache.set_daily_costs(tenant_id, start, end, [])
         key = backend.set.call_args[0][0]
-        assert key.startswith("valdrix:tenant-1:costs:")
+        assert key.startswith("valdrics:tenant-1:costs:")
 
         await cache.get_daily_costs(tenant_id, start, end)
         key = backend.get.call_args[0][0]
-        assert key.startswith("valdrix:tenant-1:costs:")
+        assert key.startswith("valdrics:tenant-1:costs:")
 
 
 @pytest.mark.asyncio

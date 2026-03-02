@@ -160,5 +160,5 @@ async def test_remediation_service_iac_allowed_pro():
         request.action.value = "terminate"
 
         plan = await service.generate_iac_plan(request, tenant_id)
-        assert "Valdrix GitOps Remediation Plan" in plan
+        assert "Valdrics GitOps Remediation Plan" in plan
         assert "res-id" in plan

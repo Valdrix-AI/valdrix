@@ -114,9 +114,9 @@ async def test_create_token(db, rsa_keys):
 async def test_create_token_no_key(db):
     """Test error handling when no key is found."""
     # Ensure no active keys
-    from app.shared.core.exceptions import ValdrixException
+    from app.shared.core.exceptions import ValdricsException
 
     tenant_id = str(uuid4())
 
-    with pytest.raises(ValdrixException, match="No active OIDC key found"):
+    with pytest.raises(ValdricsException, match="No active OIDC key found"):
         await OIDCService.create_token(tenant_id=tenant_id, audience="test", db=db)

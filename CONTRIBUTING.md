@@ -1,6 +1,6 @@
-# Contributing to Valdrix
+# Contributing to Valdrics
 
-Thank you for your interest in contributing to Valdrix! This guide will help you get started.
+Thank you for your interest in contributing to Valdrics! This guide will help you get started.
 
 ## Development Setup
 
@@ -14,8 +14,8 @@ Thank you for your interest in contributing to Valdrix! This guide will help you
 
 ```bash
 # Clone the repository
-git clone https://github.com/Valdrix-AI/valdrix.git
-cd valdrix
+git clone https://github.com/Valdrics-AI/valdrics.git
+cd valdrics
 
 # Install dependencies
 uv sync --dev
@@ -94,7 +94,7 @@ app/
 - Never commit secrets or credentials
 - Use `.env.example` as template
 - All AWS access uses STS AssumeRole (no long-lived credentials)
-- Report security vulnerabilities privately to security@valdrix.ai
+- Report security vulnerabilities privately to security@valdrics.ai
 
 ## License
 

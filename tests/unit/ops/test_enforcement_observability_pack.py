@@ -17,31 +17,31 @@ def test_enforcement_alert_rules_pack_exists_and_covers_required_signals() -> No
     raw = ALERT_RULES_PATH.read_text(encoding="utf-8")
 
     required_alerts = [
-        "ValdrixEnforcementErrorBudgetBurnFast",
-        "ValdrixEnforcementErrorBudgetBurnSlow",
-        "ValdrixEnforcementGateTimeoutSpike",
-        "ValdrixEnforcementGateLockContentionSpike",
-        "ValdrixEnforcementGateLatencyP95High",
-        "ValdrixEnforcementGlobalThrottleHits",
-        "ValdrixEnforcementApprovalQueueBacklogHigh",
-        "ValdrixEnforcementExportParityMismatch",
-        "ValdrixLLMFairUseDenialsSpike",
+        "ValdricsEnforcementErrorBudgetBurnFast",
+        "ValdricsEnforcementErrorBudgetBurnSlow",
+        "ValdricsEnforcementGateTimeoutSpike",
+        "ValdricsEnforcementGateLockContentionSpike",
+        "ValdricsEnforcementGateLatencyP95High",
+        "ValdricsEnforcementGlobalThrottleHits",
+        "ValdricsEnforcementApprovalQueueBacklogHigh",
+        "ValdricsEnforcementExportParityMismatch",
+        "ValdricsLLMFairUseDenialsSpike",
     ]
     required_metrics = [
-        "valdrix_ops_enforcement_gate_failures_total",
-        "valdrix_ops_enforcement_gate_lock_events_total",
-        "valdrix_ops_enforcement_gate_latency_seconds_bucket",
-        "valdrix_ops_enforcement_gate_decisions_total",
-        "valdrix_security_rate_limit_exceeded_total",
-        "valdrix_ops_enforcement_approval_queue_backlog",
-        "valdrix_ops_enforcement_export_events_total",
-        "valdrix_ops_llm_fair_use_denials_total",
+        "valdrics_ops_enforcement_gate_failures_total",
+        "valdrics_ops_enforcement_gate_lock_events_total",
+        "valdrics_ops_enforcement_gate_latency_seconds_bucket",
+        "valdrics_ops_enforcement_gate_decisions_total",
+        "valdrics_security_rate_limit_exceeded_total",
+        "valdrics_ops_enforcement_approval_queue_backlog",
+        "valdrics_ops_enforcement_export_events_total",
+        "valdrics_ops_llm_fair_use_denials_total",
     ]
     required_recording_rules = [
-        "record: valdrix:enforcement_gate_error_ratio_5m",
-        "record: valdrix:enforcement_gate_error_ratio_30m",
-        "record: valdrix:enforcement_gate_error_ratio_1h",
-        "record: valdrix:enforcement_gate_error_ratio_6h",
+        "record: valdrics:enforcement_gate_error_ratio_5m",
+        "record: valdrics:enforcement_gate_error_ratio_30m",
+        "record: valdrics:enforcement_gate_error_ratio_1h",
+        "record: valdrics:enforcement_gate_error_ratio_6h",
     ]
 
     for alert_name in required_alerts:
@@ -55,7 +55,7 @@ def test_enforcement_alert_rules_pack_exists_and_covers_required_signals() -> No
 def test_enforcement_dashboard_pack_is_valid_json_and_references_required_metrics() -> None:
     assert DASHBOARD_PATH.exists()
     payload = json.loads(DASHBOARD_PATH.read_text(encoding="utf-8"))
-    assert payload["title"] == "Valdrix Enforcement Control Plane"
+    assert payload["title"] == "Valdrics Enforcement Control Plane"
 
     panels = payload.get("panels")
     assert isinstance(panels, list)
@@ -71,15 +71,15 @@ def test_enforcement_dashboard_pack_is_valid_json_and_references_required_metric
                 expressions.append(target["expr"])
 
     required_expression_snippets = [
-        "valdrix_ops_enforcement_gate_decisions_total",
-        "valdrix_ops_enforcement_gate_failures_total",
-        "valdrix_ops_enforcement_gate_lock_events_total",
-        "valdrix_ops_enforcement_gate_latency_seconds_bucket",
-        "valdrix_ops_enforcement_approval_queue_backlog",
-        "valdrix_ops_enforcement_export_events_total",
-        "valdrix_security_rate_limit_exceeded_total",
-        "valdrix:enforcement_gate_error_ratio_5m",
-        "valdrix:enforcement_gate_error_ratio_1h",
+        "valdrics_ops_enforcement_gate_decisions_total",
+        "valdrics_ops_enforcement_gate_failures_total",
+        "valdrics_ops_enforcement_gate_lock_events_total",
+        "valdrics_ops_enforcement_gate_latency_seconds_bucket",
+        "valdrics_ops_enforcement_approval_queue_backlog",
+        "valdrics_ops_enforcement_export_events_total",
+        "valdrics_security_rate_limit_exceeded_total",
+        "valdrics:enforcement_gate_error_ratio_5m",
+        "valdrics:enforcement_gate_error_ratio_1h",
     ]
     for snippet in required_expression_snippets:
         assert any(snippet in expr for expr in expressions), snippet
@@ -89,7 +89,7 @@ def test_enforcement_observability_evidence_doc_exists() -> None:
     assert EVIDENCE_DOC_PATH.exists()
     raw = EVIDENCE_DOC_PATH.read_text(encoding="utf-8")
     assert "Enforcement Ops Evidence Pack" in raw
-    assert "ValdrixEnforcementErrorBudgetBurnFast" in raw
-    assert "ValdrixEnforcementErrorBudgetBurnSlow" in raw
-    assert "ValdrixEnforcementGateLockContentionSpike" in raw
-    assert "ValdrixEnforcementExportParityMismatch" in raw
+    assert "ValdricsEnforcementErrorBudgetBurnFast" in raw
+    assert "ValdricsEnforcementErrorBudgetBurnSlow" in raw
+    assert "ValdricsEnforcementGateLockContentionSpike" in raw
+    assert "ValdricsEnforcementExportParityMismatch" in raw

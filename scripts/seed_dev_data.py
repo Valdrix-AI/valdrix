@@ -27,7 +27,7 @@ async def seed_data():
                 tenant_id = uuid4()
                 tenant = Tenant(
                     id=tenant_id,
-                    name="Valdrix Dev",
+                    name="Valdrics Dev",
                     plan="growth",
                     # trial_started_at=datetime.utcnow() 
                 )
@@ -38,15 +38,15 @@ async def seed_data():
                 user = User(
                     id=user_id,
                     tenant_id=tenant_id,
-                    email="admin@valdrix.com",
+                    email="admin@valdrics.com",
                     role=UserRole.OWNER.value,
                     persona=UserPersona.ENGINEERING.value,
                     is_active=True
                 )
                 db.add(user)
                 
-                print(f"  + Created Tenant: Valdrix Dev ({tenant_id})", flush=True)
-                print(f"  + Created User: admin@valdrix.com ({user_id})", flush=True)
+                print(f"  + Created Tenant: Valdrics Dev ({tenant_id})", flush=True)
+                print(f"  + Created User: admin@valdrics.com ({user_id})", flush=True)
                 print("  ! NOTE: Create this user in Supabase Auth with this UUID!", flush=True)
                 print(f"  ! User ID: {user_id}", flush=True)
             else:

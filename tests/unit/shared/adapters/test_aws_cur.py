@@ -64,7 +64,7 @@ class _Paginator:
 def mock_creds() -> AWSCredentials:
     return AWSCredentials(
         account_id="123456789012",
-        role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
+        role_arn="arn:aws:iam::123456789012:role/ValdricsRole",
         external_id="ext-id",
         region="us-east-1",
     )
@@ -89,7 +89,7 @@ class TestAWSCURAdapter:
     async def test_constructor_resolves_global_region_hint(self) -> None:
         creds = AWSCredentials(
             account_id="123456789012",
-            role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
+            role_arn="arn:aws:iam::123456789012:role/ValdricsRole",
             external_id="ext-id",
             region="global",
         )
@@ -104,7 +104,7 @@ class TestAWSCURAdapter:
             adapter = AWSCURAdapter(creds)
 
         assert adapter._resolved_region == "eu-west-1"
-        assert adapter.bucket_name == "valdrix-cur-123456789012-eu-west-1"
+        assert adapter.bucket_name == "valdrics-cur-123456789012-eu-west-1"
 
     async def test_verify_connection_success(self, mock_creds: AWSCredentials) -> None:
         mock_s3 = AsyncMock()
@@ -196,7 +196,7 @@ class TestAWSCURAdapter:
         call_args = mock_cur.put_report_definition.call_args[1]
         assert (
             call_args["ReportDefinition"]["ReportName"]
-            == f"valdrix-cur-{mock_creds.account_id}"
+            == f"valdrics-cur-{mock_creds.account_id}"
         )
 
     async def test_setup_cur_automation_non_us_east_adds_location_constraint(
@@ -204,7 +204,7 @@ class TestAWSCURAdapter:
     ) -> None:
         creds = AWSCredentials(
             account_id="123456789012",
-            role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
+            role_arn="arn:aws:iam::123456789012:role/ValdricsRole",
             external_id="ext-id",
             region="eu-west-1",
         )

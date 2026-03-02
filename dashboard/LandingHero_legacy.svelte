@@ -23,12 +23,12 @@
 </script>
 
 <div class="landing" itemscope itemtype="https://schema.org/SoftwareApplication">
-	<meta itemprop="name" content="Valdrix" />
+	<meta itemprop="name" content="Valdrics" />
 	<meta itemprop="operatingSystem" content="Web" />
 	<meta itemprop="applicationCategory" content="BusinessApplication" />
 	<meta
 		itemprop="description"
-		content="Valdrix unifies FinOps, GreenOps, and ActiveOps into a single cloud intelligence surface with policy-driven remediation and audit-ready evidence."
+		content="Valdrics unifies FinOps, GreenOps, and ActiveOps into a single cloud intelligence surface with policy-driven remediation and audit-ready evidence."
 	/>
 	<meta itemprop="url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
 	<meta itemprop="image" content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()} />
@@ -141,7 +141,7 @@
 							</svg>
 
 							<div class="signal-label signal-label--center" aria-hidden="true">
-								<p class="signal-label-k">Valdrix</p>
+								<p class="signal-label-k">Valdrics</p>
 								<p class="signal-label-v">Signals</p>
 							</div>
 							<div class="signal-label signal-label--a" aria-hidden="true">
@@ -158,7 +158,7 @@
 							</div>
 
 							<div id="signal-map-summary" class="sr-only">
-								Signal map summary: Valdrix signals connect FinOps spend and anomaly detection,
+								Signal map summary: Valdrics signals connect FinOps spend and anomaly detection,
 								GreenOps carbon and Graviton opportunities, and ActiveOps policy-driven remediation.
 								Current highlights show budget drift at minus twelve percent, carbon improvement at
 								minus eight percent, and fourteen queued zombie remediation targets.
@@ -310,7 +310,7 @@
 		<div class="landing-section-head">
 			<h2 class="landing-h2">30% of cloud spend is often unaccounted for</h2>
 			<p class="landing-section-sub">
-				Valdrix is built for the moment when a team knows spend is rising but cannot explain why,
+				Valdrics is built for the moment when a team knows spend is rising but cannot explain why,
 				where, or what to do safely next.
 			</p>
 		</div>
@@ -386,7 +386,7 @@
 				<p class="landing-proof-k">Architecture principle</p>
 				<h2 class="landing-h2">Zero hidden API cost design</h2>
 				<p class="landing-p">
-					Valdrix prioritizes free describe-style cloud APIs and exported billing feeds so cost
+					Valdrics prioritizes free describe-style cloud APIs and exported billing feeds so cost
 					analysis does not introduce heavy metering side effects.
 				</p>
 			</div>
@@ -449,7 +449,7 @@
 
 		<div class="landing-faq-list">
 			<details class="landing-faq-item glass-panel">
-				<summary>Will Valdrix increase our cloud API spend?</summary>
+				<summary>Will Valdrics increase our cloud API spend?</summary>
 				<p class="landing-p">
 					The platform is designed around low-overhead cloud telemetry patterns and cost exports,
 					avoiding heavy paid API fan-out patterns where possible.
@@ -463,7 +463,7 @@
 				</p>
 			</details>
 			<details class="landing-faq-item glass-panel">
-				<summary>Does Valdrix auto-delete resources without review?</summary>
+				<summary>Does Valdrics auto-delete resources without review?</summary>
 				<p class="landing-p">
 					No. The workflow is preview-first and policy-gated, with explicit human approval before
 					execution.
@@ -488,7 +488,7 @@
 			</blockquote>
 			<div class="landing-author">
 				<p class="landing-author-name">Dare AbdulGoniyy</p>
-				<p class="landing-author-role">Creator, Valdrix</p>
+				<p class="landing-author-role">Creator, Valdrics</p>
 			</div>
 		</div>
 	</section>

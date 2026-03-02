@@ -40,6 +40,27 @@ Validation evidence (2026-03-01D):
 4. `uv run python scripts/verify_landing_component_budget.py` -> passed (`hero_lines=772 max=800 components=14`).
 5. `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_landing_component_budget.py` -> passed (`3 passed`).
 
+Execution update (2026-03-02B): landing report residual closeout
+1. Closed content-hub residual by adding public `Insights` surface and nav wiring:
+   - `dashboard/src/routes/insights/+page.svelte`
+   - `dashboard/src/lib/landing/publicNav.ts`
+2. Closed CFO pre-signup planning friction further:
+   - ROI CTA now includes ungated assumptions worksheet download:
+     - `dashboard/src/lib/components/landing/LandingRoiPlannerCta.svelte`
+     - `dashboard/src/lib/components/LandingHero.svelte`
+3. Updated public-route and sitemap controls for new public path:
+   - `dashboard/src/lib/routeProtection.ts`
+   - `dashboard/src/routes/sitemap.xml/+server.ts`
+4. Published explicit closure matrix against report findings:
+   - `docs/ops/landing_page_audit_closure_2026-03-02.md`
+
+Validation evidence (2026-03-02B):
+1. `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+2. `cd dashboard && npm run test:unit -- --run` -> passed (`59 files`, `195 tests`).
+3. `cd dashboard && npx playwright test e2e/landing-layout-audit.spec.ts` -> passed (`3 passed`).
+4. `uv run python scripts/verify_landing_component_budget.py` -> passed (`hero_lines=775 max=800 components=14`).
+5. `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_landing_component_budget.py` -> passed (`3 passed`).
+
 Execution update (2026-03-01A): full-step hardening pass from latest audit report
 1. Closed multi-cloud identity parity gap with deterministic domain auditors:
    - `app/modules/governance/domain/security/azure_rbac_auditor.py`
@@ -1201,7 +1222,7 @@ Status update (2026-02-25): DONE
 
 Status update (2026-02-25): DONE
 - Closure summary:
-  - Added an explicit, versioned policy-document contract (`valdrix.enforcement.policy.v1`) as first-class schema.
+  - Added an explicit, versioned policy-document contract (`valdrics.enforcement.policy.v1`) as first-class schema.
   - Implemented deterministic policy canonicalization + SHA-256 digesting and persisted both on `enforcement_policies`:
     - `policy_document_schema_version`
     - `policy_document_sha256`
@@ -2085,7 +2106,7 @@ This section maps those controls to repository evidence and current readiness in
 4. Validation tests:
    - `tests/unit/ops/test_enforcement_observability_pack.py`
 5. New queue backlog metric:
-   - `valdrix_ops_enforcement_approval_queue_backlog`
+   - `valdrics_ops_enforcement_approval_queue_backlog`
    - Evidence: `app/shared/core/ops_metrics.py`, `app/modules/enforcement/api/v1/approvals.py`.
 6. External standards/reference basis:
    - Prometheus alerting rule specification: `https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/`
@@ -2321,8 +2342,8 @@ Status updates for the `CTRL-011` blocker set:
 
 5. `LLM-005` -> `Done` (authenticated abuse telemetry baseline with IP risk signal).
    - Added authenticated abuse signal metrics:
-     - `valdrix_ops_llm_auth_abuse_signals_total`
-     - `valdrix_ops_llm_auth_ip_risk_score`
+     - `valdrics_ops_llm_auth_abuse_signals_total`
+     - `valdrics_ops_llm_auth_ip_risk_score`
    - Added optional client IP propagation from authenticated API/job surfaces into LLM pre-auth guardrails.
    - Added client IP bucket/risk classification with high-risk audit events.
    - Evidence:
@@ -3015,8 +3036,8 @@ Implemented:
    - `policy_document_sha256`
    - File: `app/modules/enforcement/api/v1/ledger.py`
 4. Added deployable helm template for Kubernetes validating webhook with explicit failure policy profile:
-   - File: `helm/valdrix/templates/enforcement-validating-webhook.yaml`
-   - Values contract: `helm/valdrix/values.yaml` (`enforcementWebhook.*`)
+   - File: `helm/valdrics/templates/enforcement-validating-webhook.yaml`
+   - Values contract: `helm/valdrics/values.yaml` (`enforcementWebhook.*`)
    - Operational runbook updated:
      - `docs/runbooks/enforcement_preprovision_integrations.md`
 
@@ -3046,7 +3067,7 @@ Objective:
 
 Implemented:
 1. Added lock contention alerting and dashboard coverage:
-   - Alert: `ValdrixEnforcementGateLockContentionSpike` (contention/timeout/not-acquired lock events).
+   - Alert: `ValdricsEnforcementGateLockContentionSpike` (contention/timeout/not-acquired lock events).
    - Dashboard panel: `Gate Lock Contention Events (10m increase)`.
    - Files:
      - `ops/alerts/enforcement_control_plane_rules.yml`
@@ -3123,23 +3144,23 @@ Implemented:
    - enforces `failurePolicy=Fail -> timeoutSeconds <= 5`,
    - enforces cert-manager injector secret requirement,
    - disallows mixed CA sources (`certManager.enabled` + `caBundle`).
-   - File: `helm/valdrix/values.schema.json`
+   - File: `helm/valdrics/values.schema.json`
 2. Hardened webhook template with explicit render-time guardrails (`fail`):
    - cert-manager secret required when enabled,
    - CA source conflict detection,
    - fail-closed timeout guard.
-   - File: `helm/valdrix/templates/enforcement-validating-webhook.yaml`
+   - File: `helm/valdrics/templates/enforcement-validating-webhook.yaml`
 3. Hardened default selector posture:
    - default namespace exclusion for control-plane namespaces.
-   - File: `helm/valdrix/values.yaml`
+   - File: `helm/valdrics/values.yaml`
 4. Added chart-level tests (schema + helm render contract/failure paths):
    - File: `tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 5. Updated integration runbook with enforced chart guardrails.
    - File: `docs/runbooks/enforcement_preprovision_integrations.md`
 
 Validation:
-1. `helm lint helm/valdrix`
-2. `helm template valdrix-dev helm/valdrix`
+1. `helm lint helm/valdrics`
+2. `helm template valdrics-dev helm/valdrics`
 3. `uv run ruff check tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 4. `uv run pytest --no-cov -q tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 
@@ -3154,15 +3175,15 @@ Implemented:
    - `failurePolicy=Fail` now requires:
      - `autoscaling.enabled=true` with `autoscaling.minReplicas >= 2`, or
      - `autoscaling.enabled=false` with `replicaCount >= 2`.
-   - File: `helm/valdrix/templates/enforcement-validating-webhook.yaml`
+   - File: `helm/valdrics/templates/enforcement-validating-webhook.yaml`
 2. Extended Helm values schema with root-level HA constraints:
    - cross-field validation for fail-closed + replica policy,
    - `replicaCount` and `autoscaling.minReplicas` minimums.
-   - File: `helm/valdrix/values.schema.json`
+   - File: `helm/valdrics/values.schema.json`
 3. Tightened `LabelSelectorRequirement` schema semantics:
    - `operator in {In, NotIn}` requires non-empty `values`,
    - `operator in {Exists, DoesNotExist}` disallows non-empty `values`.
-   - File: `helm/valdrix/values.schema.json`
+   - File: `helm/valdrics/values.schema.json`
 4. Expanded webhook chart tests for fail-closed HA pass/fail paths:
    - fail when fail-closed runs with single replica and autoscaling disabled,
    - pass when fail-closed runs with manual `replicaCount>=2`,
@@ -3170,12 +3191,12 @@ Implemented:
    - File: `tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 5. Updated chart/runbook comments to surface HA requirement explicitly.
    - Files:
-     - `helm/valdrix/values.yaml`
+     - `helm/valdrics/values.yaml`
      - `docs/runbooks/enforcement_preprovision_integrations.md`
 
 Validation:
-1. `helm lint helm/valdrix`
-2. `helm template valdrix-dev helm/valdrix`
+1. `helm lint helm/valdrics`
+2. `helm template valdrics-dev helm/valdrics`
 3. `uv run ruff check tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 4. `uv run pytest --no-cov -q tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 5. `uv run pytest --no-cov -q tests/unit/ops`
@@ -4012,7 +4033,7 @@ Implemented:
 1. Tightened `scripts/verify_enforcement_post_closure_sanity.py` evidence contract:
    - added explicit observability evidence for lock contention/timeout operator clarity:
      - `test_gate_lock_failures_route_to_failsafe_with_lock_reason_codes`
-     - `valdrix_ops_enforcement_gate_lock_events_total`
+     - `valdrics_ops_enforcement_gate_lock_events_total`
    - added explicit snapshot/export stability evidence:
      - deterministic export bundle test (`test_build_export_bundle_reconciles_counts_and_is_deterministic`)
      - exported snapshot metadata fields (`computed_context_month_start`, `computed_context_data_source_mode`)
@@ -4192,14 +4213,14 @@ Objective:
 
 Implemented:
 1. Added enforcement burn-rate recording rules:
-   - `valdrix:enforcement_gate_error_ratio_5m`
-   - `valdrix:enforcement_gate_error_ratio_30m`
-   - `valdrix:enforcement_gate_error_ratio_1h`
-   - `valdrix:enforcement_gate_error_ratio_6h`
+   - `valdrics:enforcement_gate_error_ratio_5m`
+   - `valdrics:enforcement_gate_error_ratio_30m`
+   - `valdrics:enforcement_gate_error_ratio_1h`
+   - `valdrics:enforcement_gate_error_ratio_6h`
    - File: `ops/alerts/enforcement_control_plane_rules.yml`
 2. Added multi-window burn-rate alerts for 99.9% SLO:
-   - `ValdrixEnforcementErrorBudgetBurnFast` (1h + 5m, `14.4x`, critical)
-   - `ValdrixEnforcementErrorBudgetBurnSlow` (6h + 30m, `6x`, warning)
+   - `ValdricsEnforcementErrorBudgetBurnFast` (1h + 5m, `14.4x`, critical)
+   - `ValdricsEnforcementErrorBudgetBurnSlow` (6h + 30m, `6x`, warning)
    - includes low-traffic eligibility guards to reduce false positives.
    - File: `ops/alerts/enforcement_control_plane_rules.yml`
 3. Added dashboard visibility for burn-rate ratios:
@@ -4240,9 +4261,9 @@ Reviewed feedback source:
 
 1. Webhook HA gap (`Advice 2`) -> `Addressed`.
    - Evidence:
-     - `helm/valdrix/templates/enforcement-validating-webhook.yaml` (fail-closed guardrails for timeout, replicas/HPA, PDB, rollout strategy, anti-affinity)
-     - `helm/valdrix/templates/enforcement-webhook-pdb.yaml`
-     - `helm/valdrix/values.schema.json` (non-bypassable fail-closed constraints)
+     - `helm/valdrics/templates/enforcement-validating-webhook.yaml` (fail-closed guardrails for timeout, replicas/HPA, PDB, rollout strategy, anti-affinity)
+     - `helm/valdrics/templates/enforcement-webhook-pdb.yaml`
+     - `helm/valdrics/values.schema.json` (non-bypassable fail-closed constraints)
      - `tests/unit/ops/test_enforcement_webhook_helm_contract.py` (pass/fail contract coverage)
 2. Terraform preflight run-task terminology alignment (`Advice 3`) -> `Partial`.
    - Baseline contract is implemented (`ECP-007` done), but explicit advisory/soft/hard mapping to Terraform nomenclature remains mostly doc-level and can be expanded.
@@ -4610,8 +4631,8 @@ Implemented:
    - File: `scripts/verify_supply_chain_attestations.py`
 2. Wired non-bypassable verification step into SBOM workflow:
    - verifies attestation for:
-     - `./sbom/valdrix-python-sbom.json`
-     - `./sbom/valdrix-container-sbom.json`
+     - `./sbom/valdrics-python-sbom.json`
+     - `./sbom/valdrics-container-sbom.json`
      - `./provenance/supply-chain-manifest.json`
    - enforces signer workflow binding: `.github/workflows/sbom.yml`.
    - File: `.github/workflows/sbom.yml`
@@ -4635,24 +4656,24 @@ Implemented:
    - `deploymentStrategy.type`
    - `deploymentStrategy.rollingUpdate.maxUnavailable`
    - `deploymentStrategy.rollingUpdate.maxSurge`
-   - File: `helm/valdrix/values.yaml`
+   - File: `helm/valdrics/values.yaml`
 2. Wired deployment template to render explicit strategy:
-   - File: `helm/valdrix/templates/deployment.yaml`
+   - File: `helm/valdrics/templates/deployment.yaml`
 3. Added fail-closed guardrails in webhook template:
    - reject non-`RollingUpdate` strategy,
    - reject `maxUnavailable != 0`,
    - reject `maxSurge < 1`,
    - reject missing hard anti-affinity requirements,
    - reject anti-affinity not anchored to `kubernetes.io/hostname`.
-   - File: `helm/valdrix/templates/enforcement-validating-webhook.yaml`
+   - File: `helm/valdrics/templates/enforcement-validating-webhook.yaml`
 4. Extended values schema for non-bypassable validation:
    - root `deploymentStrategy` contract,
    - root `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`,
    - fail-closed conditional checks for rollout strategy and host anti-affinity.
-   - File: `helm/valdrix/values.schema.json`
+   - File: `helm/valdrics/values.schema.json`
 5. Strengthened defaults for hard anti-affinity in values:
    - `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`.
-   - File: `helm/valdrix/values.yaml`
+   - File: `helm/valdrics/values.yaml`
 6. Expanded helm contract tests:
    - reject fail-closed with `Recreate` strategy,
    - reject fail-closed without host-level hard anti-affinity,
@@ -4662,8 +4683,8 @@ Implemented:
    - File: `docs/runbooks/enforcement_preprovision_integrations.md`
 
 Validation:
-1. `helm lint helm/valdrix`
-2. `helm template valdrix-dev helm/valdrix`
+1. `helm lint helm/valdrics`
+2. `helm template valdrics-dev helm/valdrics`
 3. `uv run ruff check tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 4. `uv run pytest --no-cov -q tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 5. `uv run pytest --no-cov -q tests/unit/ops`
@@ -4678,18 +4699,18 @@ Implemented:
 1. Added webhook-adjacent API PodDisruptionBudget template:
    - renders when `enforcementWebhook.enabled=true` and `enforcementWebhook.podDisruptionBudget.enabled=true`.
    - targets API pods (`app.kubernetes.io/component=api`) with configured `maxUnavailable`.
-   - File: `helm/valdrix/templates/enforcement-webhook-pdb.yaml`
+   - File: `helm/valdrics/templates/enforcement-webhook-pdb.yaml`
 2. Added values contract for disruption budget:
    - `enforcementWebhook.podDisruptionBudget.enabled`
    - `enforcementWebhook.podDisruptionBudget.maxUnavailable`
-   - File: `helm/valdrix/values.yaml`
+   - File: `helm/valdrics/values.yaml`
 3. Extended schema and guardrails for fail-closed mode:
    - `failurePolicy=Fail` now requires `podDisruptionBudget.enabled=true`,
    - `failurePolicy=Fail` now requires `podDisruptionBudget.maxUnavailable <= 1`.
-   - File: `helm/valdrix/values.schema.json`
+   - File: `helm/valdrics/values.schema.json`
 4. Added render-time template assertions for same constraints:
    - explicit `fail` on unsafe fail-closed PDB configuration.
-   - File: `helm/valdrix/templates/enforcement-validating-webhook.yaml`
+   - File: `helm/valdrics/templates/enforcement-validating-webhook.yaml`
 5. Expanded ops tests for PDB rendering and rejection paths:
    - verifies PDB resource renders in fail-closed contract,
    - verifies fail-open profile does not render PDB by default,
@@ -4700,8 +4721,8 @@ Implemented:
    - File: `docs/runbooks/enforcement_preprovision_integrations.md`
 
 Validation:
-1. `helm lint helm/valdrix`
-2. `helm template valdrix-dev helm/valdrix`
+1. `helm lint helm/valdrics`
+2. `helm template valdrics-dev helm/valdrics`
 3. `uv run ruff check tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 4. `uv run pytest --no-cov -q tests/unit/ops/test_enforcement_webhook_helm_contract.py`
 5. `uv run pytest --no-cov -q tests/unit/ops`
@@ -5245,7 +5266,7 @@ Post-closure sanity checks (release-critical)
 
 1. Added canonical product-name normalization in runtime settings:
    - `app/shared/core/config.py`
-   - legacy names (`Valdrix`, `CloudSentinel*`) are normalized to `Valdrics` through `_normalize_branding()`.
+   - legacy names (`Valdrics`, `Valdrics*`) are normalized to `Valdrics` through `_normalize_branding()`.
    - emits `legacy_app_name_normalized` warning when correction occurs.
 2. Added regression guard:
    - `tests/unit/core/test_config_audit.py::test_settings_normalizes_legacy_brand_name`.

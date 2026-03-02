@@ -67,7 +67,7 @@ async def init_http_client() -> None:
             keepalive_expiry=30.0,
         ),
         # Add production headers here if needed
-        headers={"User-Agent": "Valdrix-AI/2026.02"},
+        headers={"User-Agent": "Valdrics-AI/2026.02"},
     )
     logger.info("http_client_initialized", http2=True, max_connections=500)
 

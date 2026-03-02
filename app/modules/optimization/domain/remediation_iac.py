@@ -72,7 +72,7 @@ async def generate_iac_plan_for_request(
     tf_id = sanitize_tf_identifier(provider, request.resource_type, resource_id)
 
     planlines = [
-        "# Valdrix GitOps Remediation Plan",
+        "# Valdrics GitOps Remediation Plan",
         f"# Resource: {resource_id} ({request.resource_type})",
         f"# Savings: ${request.estimated_monthly_savings}/mo",
         f"# Action: {request.action.value}",
@@ -129,7 +129,7 @@ async def bulk_generate_iac_plan_for_requests(
         for req in requests
     ]
     header = (
-        "# Valdrix Bulk IaC Remediation Plan\n"
+        "# Valdrics Bulk IaC Remediation Plan\n"
         f"# Generated: {datetime.now(timezone.utc).isoformat()}\n\n"
     )
     return header + "\n\n" + "\n" + "-" * 40 + "\n".join(plans)

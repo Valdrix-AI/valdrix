@@ -27,9 +27,9 @@ def _build_decision_item(
         "id": item_id,
         "owner_function": "finance" if item_id.startswith("FIN-") else "product",
         "owner": (
-            "finance-owner@valdrix.io"
+            "finance-owner@valdrics.io"
             if item_id.startswith("FIN-")
-            else "product-owner@valdrix.io"
+            else "product-owner@valdrics.io"
         ),
         "decision_summary": f"{item_id} policy resolution recorded for release evidence.",
         "resolution": resolution,
@@ -134,9 +134,9 @@ def _valid_payload() -> dict[str, object]:
             "migration_window_days": 90,
         },
         "approvals": {
-            "finance_owner": "finance-owner@valdrix.io",
-            "product_owner": "product-owner@valdrix.io",
-            "go_to_market_owner": "gtm-owner@valdrix.io",
+            "finance_owner": "finance-owner@valdrics.io",
+            "product_owner": "product-owner@valdrics.io",
+            "go_to_market_owner": "gtm-owner@valdrics.io",
             "governance_mode": "founder_acting_roles_prelaunch",
             "approval_record_ref": "PKG-FIN-APPROVAL-2026-02-28",
             "approved_at": "2026-02-28T05:45:00Z",

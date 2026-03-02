@@ -203,7 +203,7 @@
 				<li>Custom integrations</li>
 			</ul>
 		</div>
-		<a href="mailto:enterprise@valdrix.io" class="enterprise-cta">Contact Sales</a>
+		<a href="mailto:enterprise@valdrics.io" class="enterprise-cta">Contact Sales</a>
 	</div>
 
 	<!-- Payment Note -->

@@ -219,7 +219,7 @@ def test_build_verification_adapter_aws_uses_multitenant_and_resolves_region():
     service = CloudConnectionService(AsyncMock())
     connection = MagicMock(spec=AWSConnection)
     connection.aws_account_id = "123456789012"
-    connection.role_arn = "arn:aws:iam::123456789012:role/ValdrixRole"
+    connection.role_arn = "arn:aws:iam::123456789012:role/ValdricsRole"
     connection.external_id = "ext-123"
     connection.region = "global"
     connection.cur_bucket_name = None

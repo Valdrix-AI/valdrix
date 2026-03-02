@@ -97,14 +97,14 @@ class CircuitBreaker:
                     getattr(
                         settings,
                         "CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX",
-                        "valdrix:circuit",
+                        "valdrics:circuit",
                     )
                 ).strip()
-                or "valdrix:circuit"
+                or "valdrics:circuit"
             )
             return enabled, prefix
         except Exception:
-            return False, "valdrix:circuit"
+            return False, "valdrics:circuit"
 
     async def _get_redis_client(self) -> Any | None:
         enabled, _ = self._distributed_config()

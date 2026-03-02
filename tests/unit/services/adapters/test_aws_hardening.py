@@ -36,7 +36,7 @@ async def test_adapter_wraps_sts_error():
         await adapter.get_credentials()
 
     # Assert error is sanitized (AdapterError sanitizes AccessDenied messages)
-    assert "Permission denied" in str(exc_info.value) or "Valdrix IAM role" in str(
+    assert "Permission denied" in str(exc_info.value) or "Valdrics IAM role" in str(
         exc_info.value
     )
     assert exc_info.value.code == "AccessDenied"

@@ -74,9 +74,9 @@ class OIDCService:
         key_record = result.scalars().first()
 
         if not key_record:
-            from app.shared.core.exceptions import ValdrixException
+            from app.shared.core.exceptions import ValdricsException
 
-            raise ValdrixException("No active OIDC key found for signing")
+            raise ValdricsException("No active OIDC key found for signing")
 
         payload = {
             "iss": settings.API_URL.rstrip("/"),

@@ -71,13 +71,13 @@ describe('landingTelemetry', () => {
 		});
 
 		expect(createCustomEvent).toHaveBeenCalledTimes(1);
-		expect(createCustomEvent).toHaveBeenCalledWith('valdrix:landing_event', {
+		expect(createCustomEvent).toHaveBeenCalledWith('valdrics:landing_event', {
 			detail: payload
 		});
 		expect(dispatchEvent).toHaveBeenCalledWith(customEvent);
 		expect(dataLayer).toHaveLength(1);
 		expect(dataLayer[0]).toMatchObject({
-			event: 'valdrix_landing_event',
+			event: 'valdrics_landing_event',
 			name: 'hook_toggle',
 			section: 'cloud_hook',
 			value: 'with'

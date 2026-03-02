@@ -28,7 +28,7 @@ def test_generate_provenance_manifest_emits_sha256_for_dependency_inputs(tmp_pat
     _write(tmp_path / "sbom/python.json", '{"bomFormat":"CycloneDX"}\n')
 
     env = {
-        "GITHUB_REPOSITORY": "acme/valdrix",
+        "GITHUB_REPOSITORY": "acme/valdrics",
         "GITHUB_SHA": "abc123",
         "GITHUB_REF": "refs/heads/main",
         "GITHUB_RUN_ID": "777",
@@ -47,7 +47,7 @@ def test_generate_provenance_manifest_emits_sha256_for_dependency_inputs(tmp_pat
     assert manifest["build"]["workflow_run_id"] == "777"
     assert (
         manifest["build"]["workflow_run_url"]
-        == "https://github.com/acme/valdrix/actions/runs/777"
+        == "https://github.com/acme/valdrics/actions/runs/777"
     )
     assert len(manifest["dependency_inputs"]) == len(DEFAULT_DEPENDENCY_INPUTS)
 

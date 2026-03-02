@@ -12,7 +12,7 @@ import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CHART_DIR = REPO_ROOT / "helm" / "valdrix"
+CHART_DIR = REPO_ROOT / "helm" / "valdrics"
 VALUES_SCHEMA_PATH = CHART_DIR / "values.schema.json"
 
 
@@ -26,7 +26,7 @@ def _helm_template(overrides: dict[str, object]) -> subprocess.CompletedProcess[
 
     try:
         return subprocess.run(
-            ["helm", "template", "valdrix-test", str(CHART_DIR), "-f", str(values_path)],
+            ["helm", "template", "valdrics-test", str(CHART_DIR), "-f", str(values_path)],
             check=False,
             capture_output=True,
             text=True,
@@ -85,7 +85,7 @@ def _valid_enforcement_webhook_values() -> dict[str, object]:
                 }
             ],
             "podDisruptionBudget": {"enabled": False, "maxUnavailable": 1},
-            "service": {"namespace": "valdrix", "name": "valdrix-api", "port": 80},
+            "service": {"namespace": "valdrics", "name": "valdrics-api", "port": 80},
             "certManager": {"enabled": False, "injectorSecretName": ""},
             "caBundle": "",
         }
@@ -155,7 +155,7 @@ def test_enforcement_webhook_values_schema_rejects_invalid_contracts() -> None:
                     **valid["enforcementWebhook"],
                     "certManager": {
                         "enabled": True,
-                        "injectorSecretName": "valdrix-webhook-ca",
+                        "injectorSecretName": "valdrics-webhook-ca",
                     },
                     "caBundle": "c3RhdGljLWNhLWJ1bmRsZQ==",
                 }
@@ -325,7 +325,7 @@ def test_helm_webhook_enabled_renders_hardened_defaults_and_match_conditions() -
         {
             "enforcementWebhook": {
                 "enabled": True,
-                "service": {"namespace": "valdrix", "name": "valdrix-api", "port": 80},
+                "service": {"namespace": "valdrics", "name": "valdrics-api", "port": 80},
                 "matchConditions": [
                     {
                         "name": "exclude-leases",
@@ -378,7 +378,7 @@ def test_helm_webhook_rejects_cert_manager_and_ca_bundle_combo() -> None:
                 "enabled": True,
                 "certManager": {
                     "enabled": True,
-                    "injectorSecretName": "valdrix-webhook-ca",
+                    "injectorSecretName": "valdrics-webhook-ca",
                 },
                 "caBundle": "c3RhdGljLWNhLWJ1bmRsZQ==",
             }

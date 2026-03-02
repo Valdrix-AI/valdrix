@@ -39,7 +39,7 @@ class TestOrganizationsDiscoveryDeep:
         conn = AWSConnection(
             id=uuid4(),
             is_management_account=True,
-            role_arn="arn:aws:iam::123456789012:role/Valdrix",
+            role_arn="arn:aws:iam::123456789012:role/Valdrics",
             external_id="ext-123",
             aws_account_id="123456789012",
         )

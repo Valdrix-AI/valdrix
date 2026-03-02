@@ -77,7 +77,7 @@
 		{ href: '/admin/health', label: 'Admin Health', icon: '🩺' }
 	];
 
-	const NAV_SHOW_ALL_KEY = 'valdrix.nav.show_all.v1';
+	const NAV_SHOW_ALL_KEY = 'valdrics.nav.show_all.v1';
 	let showAllNav = $state(false);
 	let navPreferenceLoaded = $state(false);
 	let prefersReducedMotion = $state(false);
@@ -257,7 +257,7 @@
 		<aside id="sidebar" class="sidebar" class:sidebar-collapsed={!uiState.isSidebarOpen}>
 			<!-- Logo -->
 			<div class="flex items-center gap-3 px-5 py-5 border-b border-ink-800">
-				<CloudLogo provider="valdrix" size={32} />
+				<CloudLogo provider="valdrics" size={32} />
 				<span class="text-lg font-semibold text-gradient">Valdrics</span>
 			</div>
 
@@ -442,7 +442,7 @@
 				class="container public-top-nav mx-auto flex items-center justify-between gap-4 px-6 py-4"
 			>
 				<a href={toAppPath('/')} class="flex items-center gap-2">
-					<CloudLogo provider="valdrix" size={32} />
+					<CloudLogo provider="valdrics" size={32} />
 					<span class="text-xl font-bold text-gradient hidden sm:inline">Valdrics</span>
 				</a>
 

@@ -61,7 +61,7 @@ async def verify_active_ops() -> None:
                 tenant_id=tenant_id,
                 aws_account_id="123456789012",
                 # name="E2E Mock AWS",  # Removed: Not in model
-                role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
+                role_arn="arn:aws:iam::123456789012:role/ValdricsRole",
                 external_id="e2e-external-id",
                 region="us-east-1",
                 status="active",

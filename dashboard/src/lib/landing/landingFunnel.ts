@@ -65,9 +65,9 @@ export interface LandingFunnelTelemetryContext {
 	utm?: LandingUtmParams;
 }
 
-const ATTRIBUTION_STORAGE_KEY = 'valdrix.landing.attribution.v1';
-const FUNNEL_STORAGE_KEY = 'valdrix.landing.funnel.v1';
-const WEEKLY_FUNNEL_STORAGE_KEY = 'valdrix.landing.weekly_funnel.v1';
+const ATTRIBUTION_STORAGE_KEY = 'valdrics.landing.attribution.v1';
+const FUNNEL_STORAGE_KEY = 'valdrics.landing.funnel.v1';
+const WEEKLY_FUNNEL_STORAGE_KEY = 'valdrics.landing.weekly_funnel.v1';
 
 const EMPTY_COUNTS: LandingFunnelCounts = Object.freeze({
 	view: 0,

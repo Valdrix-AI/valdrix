@@ -202,15 +202,15 @@ class TestCloudConnectionsDeep:
     def test_aws_setup_templates(self):
         templates = AWSConnectionService.get_setup_templates("ext-123")
         assert templates["external_id"] == "ext-123"
-        assert "valdrix-role" in templates["cloudformation_yaml"]
-        assert "valdrix/aws-connection" in templates["terraform_hcl"]
+        assert "valdrics-role" in templates["cloudformation_yaml"]
+        assert "valdrics/aws-connection" in templates["terraform_hcl"]
 
     def test_aws_build_verification_adapter_resolves_global_region(self):
         conn = AWSConnection(
             id=uuid4(),
             tenant_id=uuid4(),
             aws_account_id="123456789012",
-            role_arn="arn:aws:iam::123456789012:role/ValdrixRole",
+            role_arn="arn:aws:iam::123456789012:role/ValdricsRole",
             external_id="ext-123",
             region="global",
         )

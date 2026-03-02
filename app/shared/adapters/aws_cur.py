@@ -65,7 +65,7 @@ class AWSCURAdapter(BaseAdapter):
         # Use dynamic bucket name from automated setup, fallback to connection-derived if needed
         self.bucket_name = (
             credentials.cur_bucket_name
-            or f"valdrix-cur-{credentials.account_id}-{self._resolved_region}"
+            or f"valdrics-cur-{credentials.account_id}-{self._resolved_region}"
         )
 
     async def verify_connection(self) -> bool:
@@ -172,7 +172,7 @@ class AWSCURAdapter(BaseAdapter):
         ) as cur:
             try:
                 # 4. Create CUR Report Definition
-                report_name = f"valdrix-cur-{self.credentials.account_id}"
+                report_name = f"valdrics-cur-{self.credentials.account_id}"
                 await cur.put_report_definition(
                     ReportDefinition={
                         "ReportName": report_name,

@@ -11,7 +11,7 @@ This directory stores staged enforcement evidence artifacts used by release gate
 5. PKG/FIN policy decision artifact: `pkg_fin_policy_decisions_YYYY-MM-DD.json`
 6. Finance telemetry snapshot artifact: `finance_telemetry_snapshot_YYYY-MM-DD.json`
 7. Finance committee assumptions artifact: `finance_committee_packet_assumptions_YYYY-MM-DD.json`
-8. Valdrics disposition register artifact: `valdrix_disposition_register_YYYY-MM-DD.json`
+8. Valdrics disposition register artifact: `valdrics_disposition_register_YYYY-MM-DD.json`
 9. PKG/FIN operational readiness summary (optional but recommended): `pkg_fin_operational_readiness_YYYY-MM-DD.json`
 
 ## Template Seeds
@@ -23,7 +23,7 @@ This directory stores staged enforcement evidence artifacts used by release gate
 5. `pkg_fin_policy_decisions_TEMPLATE.json`
 6. `finance_telemetry_snapshot_TEMPLATE.json`
 7. `finance_committee_packet_assumptions_TEMPLATE.json`
-8. `valdrix_disposition_register_TEMPLATE.json`
+8. `valdrics_disposition_register_TEMPLATE.json`
 
 ## Staged Failure-Injection Capture
 
@@ -32,8 +32,8 @@ Generate the failure-injection artifact from the FI matrix selectors:
 ```bash
 DEBUG=false uv run python3 scripts/generate_enforcement_failure_injection_evidence.py \
   --output docs/ops/evidence/enforcement_failure_injection_YYYY-MM-DD.json \
-  --executed-by sre.executor@valdrix.local \
-  --approved-by release.approver@valdrix.local
+  --executed-by sre.executor@valdrics.local \
+  --approved-by release.approver@valdrics.local
 ```
 
 Use templates only as schema seeds. Do not submit templates as staged-run evidence.
@@ -89,7 +89,7 @@ docs/ops/evidence/finance_committee_packet_assumptions_YYYY-MM-DD.json
 Valdrics disposition register should be captured to:
 
 ```text
-docs/ops/evidence/valdrix_disposition_register_YYYY-MM-DD.json
+docs/ops/evidence/valdrics_disposition_register_YYYY-MM-DD.json
 ```
 
 ## Verification Commands
@@ -189,8 +189,8 @@ uv run python3 scripts/verify_monthly_finance_evidence_refresh.py \
 Valdrics disposition freshness verifier (risk-review reminder gate):
 
 ```bash
-uv run python3 scripts/verify_valdrix_disposition_freshness.py \
-  --register-path docs/ops/evidence/valdrix_disposition_register_YYYY-MM-DD.json \
+uv run python3 scripts/verify_valdrics_disposition_freshness.py \
+  --register-path docs/ops/evidence/valdrics_disposition_register_YYYY-MM-DD.json \
   --max-artifact-age-days 45 \
   --max-review-window-days 120
 ```

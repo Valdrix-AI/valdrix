@@ -5,7 +5,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from app.shared.connections.oidc import OIDCService
 from app.models.security import OIDCKey
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 
 # Generate a small RSA key for testing
 private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -66,7 +66,7 @@ class TestOIDCDeep:
         mock_session.execute.return_value = mock_result
 
         with patch("app.shared.connections.oidc.get_settings"):
-            with pytest.raises(ValdrixException, match="No active OIDC key found"):
+            with pytest.raises(ValdricsException, match="No active OIDC key found"):
                 await OIDCService.create_token("t1", "aud1", db=mock_session)
 
     @pytest.mark.asyncio

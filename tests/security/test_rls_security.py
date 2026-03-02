@@ -78,11 +78,11 @@ async def test_rls_listener_emits_log_on_missing_context():
         ):
             mock_settings_obj.TESTING = False
 
-            from app.shared.core.exceptions import ValdrixException
+            from app.shared.core.exceptions import ValdricsException
 
             # Executing a query with RLS FALSE should trigger the listener and RAISE
             # Use 'audit_logs' as it is NOT in the bypass whitelist (tenants IS whitelisted)
-            with pytest.raises(ValdrixException) as exc:
+            with pytest.raises(ValdricsException) as exc:
                 await session.execute(
                     text("SELECT * FROM audit_logs LIMIT 1"),
                     execution_options={"rls_context_set": False},

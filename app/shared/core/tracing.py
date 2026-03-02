@@ -27,7 +27,7 @@ def setup_tracing(app: FastAPI | None = None) -> None:
     # 1. Define Resource
     resource = Resource(
         attributes={
-            ResourceAttributes.SERVICE_NAME: "valdrix-api",
+            ResourceAttributes.SERVICE_NAME: "valdrics-api",
             "env": os.getenv("ENV", "development"),
         }
     )

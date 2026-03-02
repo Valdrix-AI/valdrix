@@ -1,6 +1,6 @@
 {
   "annotations": {"list": []},
-  "description": "Valdrix FinOps & GreenOps Cost Optimization Metrics",
+  "description": "Valdrics FinOps & GreenOps Cost Optimization Metrics",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -34,7 +34,7 @@
         "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
       },
       "targets": [
-        {"expr": "sum(valdrix_zombie_potential_savings_usd)", "legendFormat": "Potential Savings"}
+        {"expr": "sum(valdrics_zombie_potential_savings_usd)", "legendFormat": "Potential Savings"}
       ],
       "title": "Total Potential Savings",
       "type": "stat"
@@ -56,7 +56,7 @@
       "id": 2,
       "options": {"colorMode": "value", "graphMode": "area"},
       "targets": [
-        {"expr": "sum(valdrix_zombies_detected_total)", "legendFormat": "Zombies Found"}
+        {"expr": "sum(valdrics_zombies_detected_total)", "legendFormat": "Zombies Found"}
       ],
       "title": "Zombie Resources Detected",
       "type": "stat"
@@ -82,7 +82,7 @@
       "id": 3,
       "options": {"colorMode": "value", "graphMode": "area"},
       "targets": [
-        {"expr": "sum(valdrix_carbon_emissions_kg)", "legendFormat": "Carbon Emissions"}
+        {"expr": "sum(valdrics_carbon_emissions_kg)", "legendFormat": "Carbon Emissions"}
       ],
       "title": "Carbon Emissions (GreenOps)",
       "type": "stat"
@@ -100,7 +100,7 @@
       "id": 4,
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
       "targets": [
-        {"expr": "sum(valdrix_zombies_detected_total) by (resource_type)", "legendFormat": "{{resource_type}}"}
+        {"expr": "sum(valdrics_zombies_detected_total) by (resource_type)", "legendFormat": "{{resource_type}}"}
       ],
       "title": "Zombies by Resource Type",
       "type": "barchart"
@@ -117,7 +117,7 @@
       "gridPos": {"h": 10, "w": 12, "x": 12, "y": 8},
       "id": 5,
       "targets": [
-        {"expr": "sum(valdrix_zombie_potential_savings_usd) by (cloud_provider)", "legendFormat": "{{cloud_provider}}"}
+        {"expr": "sum(valdrics_zombie_potential_savings_usd) by (cloud_provider)", "legendFormat": "{{cloud_provider}}"}
       ],
       "title": "Savings by Cloud Provider",
       "type": "barchart"
@@ -134,7 +134,7 @@
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 18},
       "id": 6,
       "targets": [
-        {"expr": "sum(valdrix_zombie_potential_savings_usd) by (tenant_id)", "legendFormat": "Tenant: {{tenant_id}}"}
+        {"expr": "sum(valdrics_zombie_potential_savings_usd) by (tenant_id)", "legendFormat": "Tenant: {{tenant_id}}"}
       ],
       "title": "Savings Trend by Tenant",
       "type": "timeseries"
@@ -151,7 +151,7 @@
       "gridPos": {"h": 8, "w": 12, "x": 0, "y": 26},
       "id": 7,
       "targets": [
-        {"expr": "sum(rate(valdrix_scans_completed_total[1h]))", "legendFormat": "Scans/hour"}
+        {"expr": "sum(rate(valdrics_scans_completed_total[1h]))", "legendFormat": "Scans/hour"}
       ],
       "title": "Scan Rate",
       "type": "timeseries"
@@ -168,7 +168,7 @@
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 26},
       "id": 8,
       "targets": [
-        {"expr": "sum(valdrix_llm_cost_usd)", "legendFormat": "LLM API Cost"}
+        {"expr": "sum(valdrics_llm_cost_usd)", "legendFormat": "LLM API Cost"}
       ],
       "title": "LLM API Cost (Budget Tracking)",
       "type": "timeseries"
@@ -177,7 +177,7 @@
   "refresh": "1m",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["valdrix", "finops", "greenops", "cost-optimization"],
+  "tags": ["valdrics", "finops", "greenops", "cost-optimization"],
   "templating": {
     "list": [
       {
@@ -189,7 +189,7 @@
     ]
   },
   "time": {"from": "now-24h", "to": "now"},
-  "title": "Valdrix FinOps & GreenOps",
-  "uid": "valdrix-finops",
+  "title": "Valdrics FinOps & GreenOps",
+  "uid": "valdrics-finops",
   "version": 1
 }

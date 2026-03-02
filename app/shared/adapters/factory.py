@@ -58,7 +58,7 @@ class AdapterFactory:
                 return AWSCURAdapter(aws_creds)
             
             raise ConfigurationError(
-                "AWS Cost Explorer is not supported in Valdrix. "
+                "AWS Cost Explorer is not supported in Valdrics. "
                 "Cost ingestion requires CUR (Cost and Usage Report) in S3 via Data Exports."
             )
 

@@ -19,7 +19,7 @@ async def test_capture_and_list_carbon_assurance_evidence(
 
     admin_user = CurrentUser(
         id=uuid.uuid4(),
-        email="admin-carbon@valdrix.io",
+        email="admin-carbon@valdrics.io",
         tenant_id=test_tenant.id,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,

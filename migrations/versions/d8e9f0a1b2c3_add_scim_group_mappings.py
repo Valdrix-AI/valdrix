@@ -5,7 +5,7 @@ Revises: c6d7e8f9a0b1
 Create Date: 2026-02-14
 
 This adds a DB-backed list of SCIM group mappings so tenants can map IdP groups
-to Valdrix roles/personas deterministically (Enterprise packaging hardening).
+to Valdrics roles/personas deterministically (Enterprise packaging hardening).
 """
 
 from __future__ import annotations

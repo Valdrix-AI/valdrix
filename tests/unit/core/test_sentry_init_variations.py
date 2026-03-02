@@ -32,7 +32,7 @@ def test_init_sentry_production_sampling_and_release():
 
     _, kwargs = sentry_module.sentry_sdk.init.call_args
     assert kwargs["environment"] == "production"
-    assert kwargs["release"] == "valdrix@2.3.4"
+    assert kwargs["release"] == "valdrics@2.3.4"
     assert kwargs["traces_sample_rate"] == 0.1
     assert kwargs["profiles_sample_rate"] == 0.1
 
@@ -47,7 +47,7 @@ def test_init_sentry_default_env_and_sampling():
 
     _, kwargs = sentry_module.sentry_sdk.init.call_args
     assert kwargs["environment"] == "development"
-    assert kwargs["release"] == "valdrix@0.1.0"
+    assert kwargs["release"] == "valdrics@0.1.0"
     assert kwargs["traces_sample_rate"] == 1.0
     assert kwargs["profiles_sample_rate"] == 1.0
 

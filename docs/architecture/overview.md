@@ -118,8 +118,8 @@ Valdrics is designed to minimize incremental cloud API costs billed to the custo
 
 ### CloudFormation Templates
 
-*   [valdrix-role.yaml](../cloudformation/valdrix-role.yaml) - IAM role for read-only access (NO Cost Explorer permissions).
-*   [valdrix-cur-setup.yaml](../cloudformation/valdrix-cur-setup.yaml) - Automated S3 bucket and CUR report creation.
+*   [valdrics-role.yaml](../cloudformation/valdrics-role.yaml) - IAM role for read-only access (NO Cost Explorer permissions).
+*   [valdrics-cur-setup.yaml](../cloudformation/valdrics-cur-setup.yaml) - Automated S3 bucket and CUR report creation.
 
 ---
 

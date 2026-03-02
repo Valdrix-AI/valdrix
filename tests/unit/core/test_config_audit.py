@@ -33,7 +33,7 @@ def test_settings_defaults():
 
 def test_settings_normalizes_legacy_brand_name() -> None:
     settings = Settings(
-        APP_NAME="Valdrix",
+        APP_NAME="Valdrics",
         SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
         DATABASE_URL="postgresql://user:pass@host/db",
         CSRF_SECRET_KEY=FAKE_CSRF_SECRET,

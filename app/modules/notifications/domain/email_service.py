@@ -85,7 +85,7 @@ class EmailService:
 
         try:
             status = budget_status.get("alert_status", "unknown")
-            subject = f"⚠️ Valdrix: Carbon Budget {'Exceeded' if status == 'exceeded' else 'Warning'}"
+            subject = f"⚠️ Valdrics: Carbon Budget {'Exceeded' if status == 'exceeded' else 'Warning'}"
 
             html_body = self._build_email_html(budget_status)
 
@@ -139,7 +139,7 @@ class EmailService:
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌱 Valdrix Carbon Alert</h1>
+            <h1>🌱 Valdrics Carbon Alert</h1>
         </div>
         <div class="content">
             <p class="status">{status_text}</p>
@@ -159,8 +159,8 @@ class EmailService:
             </div>
 
             <p style="color: #64748b; font-size: 12px;">
-                Sent by Valdrix GreenOps Dashboard<br>
-                <a href="https://valdrix.io/greenops">View Dashboard</a>
+                Sent by Valdrics GreenOps Dashboard<br>
+                <a href="https://valdrics.io/greenops">View Dashboard</a>
             </p>
         </div>
     </div>
@@ -181,7 +181,7 @@ class EmailService:
         """
 
         try:
-            subject = f"⚠️ Valdrix: Payment Failed ({attempt}/{max_attempts})"
+            subject = f"⚠️ Valdrics: Payment Failed ({attempt}/{max_attempts})"
 
             html_body = f"""
 <!DOCTYPE html>
@@ -210,12 +210,12 @@ class EmailService:
             
             <p>To avoid service interruption, please ensure your payment method is updated:</p>
             
-            <a href="https://app.valdrix.io/settings/billing" class="cta">Update Payment Method</a>
+            <a href="https://app.valdrics.io/settings/billing" class="cta">Update Payment Method</a>
             
             <p>If you have any questions, contact our support team.</p>
             
             <p style="color: #64748b; font-size: 12px;">
-                Sent by Valdrix Billing
+                Sent by Valdrics Billing
             </p>
         </div>
     </div>
@@ -242,7 +242,7 @@ class EmailService:
     async def send_payment_recovered_notification(self, to_email: str) -> bool:
         """Send payment recovered confirmation."""
         try:
-            subject = "✅ Valdrix: Payment Successful - Account Reactivated"
+            subject = "✅ Valdrics: Payment Successful - Account Reactivated"
 
             html_body = """
 <!DOCTYPE html>
@@ -263,12 +263,12 @@ class EmailService:
         <div class="content">
             <p>Great news! Your payment has been processed successfully.</p>
             
-            <p>Your Valdrix subscription is now active and you have full access to all features.</p>
+            <p>Your Valdrics subscription is now active and you have full access to all features.</p>
             
-            <p>Thank you for your continued trust in Valdrix.</p>
+            <p>Thank you for your continued trust in Valdrics.</p>
             
             <p style="color: #64748b; font-size: 12px;">
-                Sent by Valdrix Billing
+                Sent by Valdrics Billing
             </p>
         </div>
     </div>
@@ -295,7 +295,7 @@ class EmailService:
     async def send_account_downgraded_notification(self, to_email: str) -> bool:
         """Send account downgraded notice."""
         try:
-            subject = "🔻 Valdrix: Account Downgraded to Free Tier"
+            subject = "🔻 Valdrics: Account Downgraded to Free Tier"
 
             html_body = """
 <!DOCTYPE html>
@@ -321,12 +321,12 @@ class EmailService:
             
             <p>You can resubscribe at any time to regain full access to premium features:</p>
             
-            <a href="https://app.valdrix.io/settings/billing" class="cta">Resubscribe Now</a>
+            <a href="https://app.valdrics.io/settings/billing" class="cta">Resubscribe Now</a>
             
             <p>Your data is safe and will remain accessible on the Free Tier.</p>
             
             <p style="color: #64748b; font-size: 12px;">
-                Sent by Valdrix Billing
+                Sent by Valdrics Billing
             </p>
         </div>
     </div>

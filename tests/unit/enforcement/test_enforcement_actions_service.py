@@ -100,7 +100,7 @@ async def _seed_approved_decision(
     service = EnforcementService(db)
     reviewer = CurrentUser(
         id=uuid4(),
-        email="owner@valdrix.local",
+        email="owner@valdrics.local",
         tenant_id=tenant_id,
         role=UserRole.OWNER,
     )
@@ -485,7 +485,7 @@ async def test_action_retry_is_policy_governed_and_terminal_after_max_attempts(d
         hard_deny_above_monthly_usd=Decimal("1000"),
         default_ttl_seconds=900,
         policy_document={
-            "schema_version": "valdrix.enforcement.policy.v1",
+            "schema_version": "valdrics.enforcement.policy.v1",
             "mode_matrix": {
                 "terraform_default": "soft",
                 "terraform_prod": "soft",

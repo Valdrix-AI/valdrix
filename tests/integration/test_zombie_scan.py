@@ -44,7 +44,7 @@ class TestZombieDetectorFactory:
         """Create a mock AWS connection with credentials."""
         connection = MagicMock()
         type(connection).__name__ = "AWSConnection"
-        connection.role_arn = "arn:aws:iam::123456789012:role/ValdrixRole"
+        connection.role_arn = "arn:aws:iam::123456789012:role/ValdricsRole"
         connection.external_id = "secure-external-id-123"
         connection.aws_account_id = "123456789012"
         connection.is_verified = True

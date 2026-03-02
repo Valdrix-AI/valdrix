@@ -18,7 +18,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-_POLICY_SCHEMA_VERSION = "valdrix.enforcement.policy.v1"
+_POLICY_SCHEMA_VERSION = "valdrics.enforcement.policy.v1"
 _EMPTY_POLICY_HASH = "0" * 64
 
 

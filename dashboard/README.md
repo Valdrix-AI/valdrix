@@ -24,7 +24,7 @@ pnpm audit --audit-level=high
 Playwright authenticated-route tests use a test-only auth bypass in `hooks.server.ts`.
 
 - It is active only when `TESTING=true`.
-- It requires header `x-valdrix-e2e-auth` matching `E2E_AUTH_SECRET`.
+- It requires header `x-valdrics-e2e-auth` matching `E2E_AUTH_SECRET`.
 - `playwright.config.ts` sets these values for the local E2E web server.
 
 This avoids hardcoded test credentials and removes auth-related E2E skips while keeping production behavior unchanged.

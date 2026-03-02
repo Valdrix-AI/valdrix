@@ -22,7 +22,7 @@ from sqlalchemy.pool import NullPool, StaticPool
 
 from app.shared.core.config import get_settings
 from app.shared.core.constants import RLS_EXEMPT_TABLES
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 from app.shared.core.ops_metrics import RLS_CONTEXT_MISSING, RLS_ENFORCEMENT_LATENCY
 
 logger = structlog.get_logger()
@@ -648,7 +648,7 @@ def check_rls_policy(
                 rls_system_context=rls_system_context,
                 error="Query executed with no explicit RLS/session context marker",
             )
-            raise ValdrixException(
+            raise ValdricsException(
                 message="RLS context unresolved - query execution aborted",
                 code="rls_context_unresolved",
                 status_code=500,
@@ -684,7 +684,7 @@ def check_rls_policy(
         )
 
         # PRODUCTION: Hard exception - no execution allowed
-        raise ValdrixException(
+        raise ValdricsException(
             message="RLS context missing - query execution aborted",
             code="rls_enforcement_failed",
             status_code=500,

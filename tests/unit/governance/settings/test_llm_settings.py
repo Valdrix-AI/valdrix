@@ -19,7 +19,7 @@ async def test_get_llm_settings_creates_default(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -39,7 +39,7 @@ async def test_update_llm_settings(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     budget = LLMBudget(
@@ -73,7 +73,7 @@ async def test_get_llm_models(
     mock_user = CurrentUser(
         id=uuid.UUID(str(mock_user_id)),
         tenant_id=uuid.UUID(str(mock_tenant_id)),
-        email="test@valdrix.io",
+        email="test@valdrics.io",
         role=UserRole.ADMIN,
     )
     app.dependency_overrides[get_current_user_with_db_context] = lambda: mock_user
@@ -98,7 +98,7 @@ async def test_update_llm_settings_creates_with_keys(
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="admin@valdrics.io", role=UserRole.ADMIN
     )
 
     update_data = {
@@ -131,7 +131,7 @@ async def test_update_llm_settings_threshold_logging(
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="admin@valdrics.io", role=UserRole.ADMIN
     )
 
     db.add(
@@ -183,7 +183,7 @@ async def test_get_llm_settings_flags(async_client: AsyncClient, db, app):
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="admin@valdrics.io", role=UserRole.ADMIN
     )
 
     db.add(

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.verify_valdrix_disposition_freshness import (
+from scripts.verify_valdrics_disposition_freshness import (
     DEFAULT_REQUIRED_FINDING_IDS,
     main,
     verify_disposition_register,
@@ -44,10 +44,10 @@ def _valid_payload() -> dict[str, object]:
     }
 
 
-def test_verify_valdrix_disposition_freshness_accepts_valid_payload(
+def test_verify_valdrics_disposition_freshness_accepts_valid_payload(
     tmp_path: Path,
 ) -> None:
-    path = tmp_path / "valdrix-disposition.json"
+    path = tmp_path / "valdrics-disposition.json"
     _write(path, _valid_payload())
 
     assert (
@@ -61,12 +61,12 @@ def test_verify_valdrix_disposition_freshness_accepts_valid_payload(
     )
 
 
-def test_verify_valdrix_disposition_freshness_rejects_overdue_review(
+def test_verify_valdrics_disposition_freshness_rejects_overdue_review(
     tmp_path: Path,
 ) -> None:
     payload = _valid_payload()
     payload["dispositions"][0]["review_by"] = "2026-03-01"
-    path = tmp_path / "valdrix-disposition.json"
+    path = tmp_path / "valdrics-disposition.json"
     _write(path, payload)
 
     with pytest.raises(ValueError, match="review_by is overdue"):
@@ -78,12 +78,12 @@ def test_verify_valdrix_disposition_freshness_rejects_overdue_review(
         )
 
 
-def test_verify_valdrix_disposition_freshness_rejects_placeholder_owner(
+def test_verify_valdrics_disposition_freshness_rejects_placeholder_owner(
     tmp_path: Path,
 ) -> None:
     payload = _valid_payload()
     payload["dispositions"][0]["owner"] = "owner@example.com"
-    path = tmp_path / "valdrix-disposition.json"
+    path = tmp_path / "valdrics-disposition.json"
     _write(path, payload)
 
     with pytest.raises(ValueError, match="must not contain placeholder tokens"):
@@ -95,12 +95,12 @@ def test_verify_valdrix_disposition_freshness_rejects_placeholder_owner(
         )
 
 
-def test_verify_valdrix_disposition_freshness_rejects_missing_required_finding(
+def test_verify_valdrics_disposition_freshness_rejects_missing_required_finding(
     tmp_path: Path,
 ) -> None:
     payload = _valid_payload()
     payload["dispositions"] = payload["dispositions"][:-1]
-    path = tmp_path / "valdrix-disposition.json"
+    path = tmp_path / "valdrics-disposition.json"
     _write(path, payload)
 
     with pytest.raises(ValueError, match="missing required finding IDs"):
@@ -113,7 +113,7 @@ def test_verify_valdrix_disposition_freshness_rejects_missing_required_finding(
 
 
 def test_main_accepts_valid_payload(tmp_path: Path) -> None:
-    path = tmp_path / "valdrix-disposition.json"
+    path = tmp_path / "valdrics-disposition.json"
     _write(path, _valid_payload())
     assert (
         main(

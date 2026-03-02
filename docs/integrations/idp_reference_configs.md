@@ -12,7 +12,7 @@ Note: IdP admin UIs change often. This guide focuses on stable inputs (URLs, aut
 
 Your SCIM base URL is:
 
-`https://<your-valdrix-host>/scim/v2`
+`https://<your-valdrics-host>/scim/v2`
 
 Authentication:
 
@@ -47,7 +47,7 @@ This is the cleanest way to keep “who owns what” aligned with how your org a
 
 Reference values:
 
-- SCIM connector base URL: `https://<your-valdrix-host>/scim/v2`
+- SCIM connector base URL: `https://<your-valdrics-host>/scim/v2`
 - Auth mode: `HTTP Header`
 - Token: `Bearer <SCIM_TOKEN>`
 - Unique identifier: `userName` (email)
@@ -70,7 +70,7 @@ If you use groups:
 
 Reference values (Provisioning):
 
-- Tenant URL: `https://<your-valdrix-host>/scim/v2`
+- Tenant URL: `https://<your-valdrics-host>/scim/v2`
 - Secret token: `<SCIM_TOKEN>` (Valdrics tenant SCIM token)
 
 Recommended provisioning scope:
@@ -97,7 +97,7 @@ Recommended production pattern:
 
 Reference values (via broker):
 
-- SCIM connector base URL: `https://<your-valdrix-host>/scim/v2`
+- SCIM connector base URL: `https://<your-valdrics-host>/scim/v2`
 - Auth mode: `Authorization: Bearer <SCIM_TOKEN>`
 - Unique identifier: `userName` (email)
 - Group mapping: broker group names should match Valdrics SCIM group mappings.

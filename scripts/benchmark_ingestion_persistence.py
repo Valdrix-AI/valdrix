@@ -44,7 +44,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--url",
         dest="url",
-        default=os.environ.get("VALDRIX_API_URL", "http://127.0.0.1:8000"),
+        default=os.environ.get("VALDRICS_API_URL", "http://127.0.0.1:8000"),
         help="Base URL (used only for --publish).",
     )
     parser.add_argument(
@@ -115,7 +115,7 @@ def _parse_args() -> argparse.Namespace:
         "--publish",
         dest="publish",
         action="store_true",
-        help="Publish the benchmark evidence to the tenant audit log (requires VALDRIX_TOKEN).",
+        help="Publish the benchmark evidence to the tenant audit log (requires VALDRICS_TOKEN).",
     )
     return parser.parse_args()
 
@@ -328,16 +328,16 @@ async def main() -> None:
         print(json.dumps(payload, indent=2, sort_keys=True))
 
         if args.publish:
-            raw_token = os.environ.get("VALDRIX_TOKEN", "").strip()
+            raw_token = os.environ.get("VALDRICS_TOKEN", "").strip()
             try:
                 token = sanitize_bearer_token(raw_token)
             except ValueError as exc:
                 raise SystemExit(
-                    "Invalid VALDRIX_TOKEN. Ensure it's a single JWT string. "
+                    "Invalid VALDRICS_TOKEN. Ensure it's a single JWT string. "
                     f"Details: {exc}"
                 ) from None
             if not token:
-                raise SystemExit("VALDRIX_TOKEN is required for --publish.")
+                raise SystemExit("VALDRICS_TOKEN is required for --publish.")
             base_url = str(args.url).rstrip("/")
             publish_url = (
                 f"{base_url}/api/v1/audit/performance/ingestion/persistence/evidence"

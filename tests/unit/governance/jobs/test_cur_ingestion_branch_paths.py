@@ -22,7 +22,7 @@ def _conn(**overrides: object) -> SimpleNamespace:
         "id": "conn-1",
         "region": "us-east-1",
         "cur_prefix": "cur",
-        "cur_report_name": "valdrix-cur",
+        "cur_report_name": "valdrics-cur",
         "aws_account_id": "123456789012",
         "cur_bucket_name": None,
     }
@@ -58,7 +58,7 @@ async def test_find_latest_cur_key_warns_when_no_manifest_files_exist() -> None:
     mock_s3.list_objects_v2.return_value = {
         "Contents": [
             {
-                "Key": "cur/valdrix-cur/2026-02-01/data.parquet",
+                "Key": "cur/valdrics-cur/2026-02-01/data.parquet",
                 "LastModified": datetime(2026, 2, 1, tzinfo=timezone.utc),
             }
         ]
@@ -76,7 +76,7 @@ async def test_find_latest_cur_key_warns_when_no_manifest_files_exist() -> None:
 
     assert key is None
     logger_mock.warning.assert_called_once_with(
-        "cur_manifest_not_found", bucket="cur-bucket", report="valdrix-cur"
+        "cur_manifest_not_found", bucket="cur-bucket", report="valdrics-cur"
     )
 
 
@@ -85,7 +85,7 @@ async def test_find_latest_cur_key_warns_when_manifest_has_no_report_keys() -> N
     job = CURIngestionJob()
     conn = _conn()
     mock_s3 = MagicMock()
-    manifest_key = "cur/valdrix-cur/2026-02-01/valdrix-cur-Manifest.json"
+    manifest_key = "cur/valdrics-cur/2026-02-01/valdrics-cur-Manifest.json"
     mock_s3.list_objects_v2.return_value = {
         "Contents": [
             {

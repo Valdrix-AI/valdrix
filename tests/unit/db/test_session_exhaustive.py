@@ -7,7 +7,7 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 import app.shared.db.session as session_mod
 from app.shared.core.config import get_settings
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 
 
 @pytest.fixture
@@ -255,7 +255,7 @@ class TestSessionExhaustive:
             mock_conn = MagicMock()
             mock_conn.info = {"rls_context_set": False}
 
-            with pytest.raises(ValdrixException, match="RLS context missing"):
+            with pytest.raises(ValdricsException, match="RLS context missing"):
                 session_mod.check_rls_policy(
                     mock_conn, None, "SELECT * FROM sensitive_data", {}, None, False
                 )

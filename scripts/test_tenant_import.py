@@ -42,7 +42,7 @@ async def seed_data():
             u = User(
                 id=user_id,
                 tenant_id=tenant_id,
-                email="admin@valdrix.com",
+                email="admin@valdrics.com",
                 role=UserRole.OWNER.value,
                 persona=UserPersona.ENGINEERING.value,
                 is_active=True

@@ -1,5 +1,5 @@
 """
-CLOUDSENTINEL-AI: PRODUCTION HARDENING - COMPLETE IMPLEMENTATION SUMMARY
+VALDRICS-AI: PRODUCTION HARDENING - COMPLETE IMPLEMENTATION SUMMARY
 
 This document summarizes all 6 critical production fixes with implementation status,
 files created/modified, testing strategy, and deployment instructions.
@@ -17,7 +17,7 @@ Downtime: 0 hours (rolling deployments)
 
 """
 PROBLEM STATEMENT:
-CloudSentinel-AI (Valdrix FinOps platform) had 6 critical blockers preventing
+Valdrics-AI (Valdrics FinOps platform) had 6 critical blockers preventing
 production deployment:
 
 1. RLS Context Not Enforced → Cross-tenant data leakage risk
@@ -121,7 +121,7 @@ NEXT STEPS:
 
 2. /app/core/config.py
    - ADD: KDF_SALT configuration (per-environment)
-   - REMOVE: Hardcoded "valdrix-default-salt-2026"
+   - REMOVE: Hardcoded "valdrics-default-salt-2026"
    - ADD: ENCRYPTION_FALLBACK_KEYS for key rotation
 
 3. /app/core/security.py
@@ -177,7 +177,7 @@ Status: ✅ IMPLEMENTATION COMPLETE
 Location: /app/db/session.py (listener modification)
 Code Change: 
     BEFORE: logger.warning("RLS context missing")
-    AFTER: raise ValdrixException("RLS context missing", code="rls_enforcement_failed", status_code=500)
+    AFTER: raise ValdricsException("RLS context missing", code="rls_enforcement_failed", status_code=500)
 Testing: ✅ Tests in test_all_fixes.py lines 50-90
 Deployment: 30 minutes (no database migration needed)
 Risk: LOW (prevents silent failures)
@@ -352,12 +352,12 @@ EXPECTED RESULTS:
 BEFORE DEPLOYING ANY FIX:
 
 [ ] 1. Create database backup
-        Command: pg_dump -h prod-db -U postgres -d valdrix > backup_$(date +%s).sql
+        Command: pg_dump -h prod-db -U postgres -d valdrics > backup_$(date +%s).sql
         Verify: ls -lh backup_*.sql
 
 [ ] 2. Verify no active deployments
-        Command: kubectl rollout status deployment/valdrix-api -n prod
-        Expected: "deployment \"valdrix-api\" successfully rolled out"
+        Command: kubectl rollout status deployment/valdrics-api -n prod
+        Expected: "deployment \"valdrics-api\" successfully rolled out"
 
 [ ] 3. Create feature branch
         Command: git checkout -b fix/production-hardening
@@ -377,9 +377,9 @@ BEFORE DEPLOYING ANY FIX:
 
 [ ] 6. Store salt securely
         Options:
-          - AWS Secrets Manager: aws secretsmanager create-secret --name valdrix-kdf-salt --secret-string "..."
-          - HashiCorp Vault: vault kv put secret/valdrix/encryption kdf_salt="..."
-          - Kubernetes Secret: kubectl create secret generic valdrix-encryption --from-literal=KDF_SALT="..."
+          - AWS Secrets Manager: aws secretsmanager create-secret --name valdrics-kdf-salt --secret-string "..."
+          - HashiCorp Vault: vault kv put secret/valdrics/encryption kdf_salt="..."
+          - Kubernetes Secret: kubectl create secret generic valdrics-encryption --from-literal=KDF_SALT="..."
 
 [ ] 7. Run full test suite
         Command: pytest tests/ -v --tb=short
@@ -395,7 +395,7 @@ BEFORE DEPLOYING ANY FIX:
         Expected: No syntax errors
 
 [ ] 10. Verify no hardcoded secrets
-         Command: grep -r "valdrix-default-salt" app/
+         Command: grep -r "valdrics-default-salt" app/
          Expected: No matches (if running before deployment)
 
 NEXT: See DEPLOYMENT_FIXES_GUIDE.md for step-by-step deployment
@@ -507,34 +507,34 @@ LOG AGGREGATION (search for these):
 IF SOMETHING BREAKS:
 
 ROLLBACK #5 - Scheduler Atomicity:
-  $ kubectl rollout undo deployment/valdrix-scheduler
+  $ kubectl rollout undo deployment/valdrics-scheduler
   Wait for scheduler to restart
-  Check logs: kubectl logs -f valdrix-scheduler-pod
+  Check logs: kubectl logs -f valdrics-scheduler-pod
   Expected: No deadlock errors
 
 ROLLBACK #4 - Job Timeout:
-  $ kubectl rollout undo deployment/valdrix-scheduler
+  $ kubectl rollout undo deployment/valdrics-scheduler
   Remove timeout_seconds from handlers
   Redeploy
 
 ROLLBACK #3 - LLM Budget:
-  $ kubectl rollout undo deployment/valdrix-api
+  $ kubectl rollout undo deployment/valdrics-api
   $ alembic downgrade -1
   Wait for migration to complete
 
 ROLLBACK #2 - Encryption Salt:
-  $ kubectl set env deployment/valdrix-api KDF_SALT=<old-value>
+  $ kubectl set env deployment/valdrics-api KDF_SALT=<old-value>
   Restart pods
   (No data loss - old salt in fallback keys)
 
 ROLLBACK #1 - RLS Enforcement:
-  $ kubectl rollout undo deployment/valdrix-api
+  $ kubectl rollout undo deployment/valdrics-api
   Restart pods
 
 FULL ROLLBACK:
   $ git revert <commit-hash>
-  $ kubectl rollout undo deployment/valdrix-api
-  $ kubectl rollout undo deployment/valdrix-scheduler
+  $ kubectl rollout undo deployment/valdrics-api
+  $ kubectl rollout undo deployment/valdrics-scheduler
   $ alembic downgrade -1
 
 Each rollback should:
@@ -569,11 +569,11 @@ MANUAL VALIDATION:
 
 PERFORMANCE VALIDATION:
   Baseline (before deployment):
-    $ curl https://api.valdrix.com/health/metrics | grep -E "api_request_duration|job_execution|scheduler"
+    $ curl https://api.valdrics.com/health/metrics | grep -E "api_request_duration|job_execution|scheduler"
     Record p50, p95, p99 latency for each
   
   Post-Deployment (1 hour after):
-    $ curl https://api.valdrix.com/health/metrics | grep -E "api_request_duration|job_execution|scheduler"
+    $ curl https://api.valdrics.com/health/metrics | grep -E "api_request_duration|job_execution|scheduler"
     Compare to baseline
     ✓ API latency: ±10%
     ✓ Job latency: ±10%

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       url:
-        description: "Base URL of the environment to test (for example: https://staging.valdrix.ai)"
+        description: "Base URL of the environment to test (for example: https://staging.valdrics.ai)"
         required: true
         default: "http://127.0.0.1:8000"
       profile:
@@ -77,7 +77,7 @@ jobs:
         env:
           # Optional: provide a tenant-scoped bearer token for authenticated routes.
           # If absent, the runner will still test unauthenticated endpoints (health).
-          VALDRIX_TOKEN: ${{ secrets.VALDRIX_TOKEN }}
+          VALDRICS_TOKEN: ${{ secrets.VALDRICS_TOKEN }}
         run: |
           set -euo pipefail
           OUT="reports/performance/perf_gate_${{ github.run_id }}.json"

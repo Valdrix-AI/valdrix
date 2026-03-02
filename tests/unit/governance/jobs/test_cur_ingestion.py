@@ -146,7 +146,7 @@ async def test_ingest_uses_resolved_region_for_bucket_suffix_when_hint_is_global
     mock_logger.info.assert_called_once_with(
         "cur_ingestion_simulated_success",
         connection_id="conn-4",
-        bucket="valdrix-cur-123456789012-eu-west-1",
+        bucket="valdrics-cur-123456789012-eu-west-1",
     )
 
 
@@ -157,7 +157,7 @@ async def test_find_latest_cur_key_resolves_global_region_for_s3_client():
         aws_account_id="123456789012",
         region="global",
         cur_prefix="cur",
-        cur_report_name="valdrix-cur",
+        cur_report_name="valdrics-cur",
     )
     job = CURIngestionJob()
 

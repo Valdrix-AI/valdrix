@@ -108,7 +108,7 @@ class ScimGroupMapping(BaseModel):
     )
     role: str = Field(
         ...,
-        description="Valdrix role to assign when user is in the group: admin|member.",
+        description="Valdrics role to assign when user is in the group: admin|member.",
     )
     persona: str | None = Field(
         default=None,
@@ -524,8 +524,8 @@ async def get_sso_federation_validation(
     """
     Operator-facing SSO federation validation.
 
-    This is intentionally deterministic and "configuration-only": Valdrix does not manage
-    the external IdP/provider lifecycle (that is configured in Supabase), but Valdrix
+    This is intentionally deterministic and "configuration-only": Valdrics does not manage
+    the external IdP/provider lifecycle (that is configured in Supabase), but Valdrics
     can validate tenant-scoped settings and compute the expected callback/discovery URLs.
     """
     tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
@@ -662,7 +662,7 @@ async def get_sso_federation_validation(
         detail=f"Allow this redirect URL in Supabase SSO provider: {expected_redirect_url}",
     )
     add(
-        "valdrix.discovery_endpoint_computed",
+        "valdrics.discovery_endpoint_computed",
         True,
         severity="info",
         detail=f"Login uses tenant-scoped discovery endpoint: {discovery_endpoint}",

@@ -7,13 +7,13 @@ describe('serverSecurity', () => {
 			expect(isLocalHostname('localhost')).toBe(true);
 			expect(isLocalHostname('127.0.0.1')).toBe(true);
 			expect(isLocalHostname('::1')).toBe(true);
-			expect(isLocalHostname('api.valdrix.ai')).toBe(false);
+			expect(isLocalHostname('api.valdrics.ai')).toBe(false);
 		});
 	});
 
 	describe('shouldUseSecureCookies', () => {
 		it('uses secure cookies for https requests', () => {
-			expect(shouldUseSecureCookies(new URL('https://app.valdrix.ai/'), 'production')).toBe(true);
+			expect(shouldUseSecureCookies(new URL('https://app.valdrics.ai/'), 'production')).toBe(true);
 		});
 
 		it('keeps secure cookies disabled for localhost over http', () => {
@@ -21,7 +21,7 @@ describe('serverSecurity', () => {
 		});
 
 		it('fails closed in production on non-local http URLs', () => {
-			expect(shouldUseSecureCookies(new URL('http://app.valdrix.ai/'), 'production')).toBe(true);
+			expect(shouldUseSecureCookies(new URL('http://app.valdrics.ai/'), 'production')).toBe(true);
 		});
 	});
 
@@ -51,7 +51,7 @@ describe('serverSecurity', () => {
 					testingMode: true,
 					allowProdPreviewBypass: true,
 					isDevBuild: false,
-					hostname: 'app.valdrix.ai'
+					hostname: 'app.valdrics.ai'
 				})
 			).toBe(false);
 		});

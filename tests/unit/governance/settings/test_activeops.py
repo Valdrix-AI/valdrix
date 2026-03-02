@@ -16,7 +16,7 @@ async def test_get_activeops_settings_creates_default(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -37,7 +37,7 @@ async def test_get_activeops_settings_creates_default_for_new_tenant(
     user_id = uuid.uuid4()
     tenant_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="fresh@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="fresh@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -59,7 +59,7 @@ async def test_update_activeops_settings(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
     )
 
     settings = RemediationSettings(
@@ -85,7 +85,7 @@ async def test_reactivate_hard_cap_endpoint(async_client: AsyncClient, app):
     user_id = uuid.uuid4()
     tenant_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="admin@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -123,7 +123,7 @@ async def test_reactivate_hard_cap_endpoint_returns_not_found(
     user_id = uuid.uuid4()
     tenant_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="admin@valdrix.io", role=UserRole.ADMIN
+        id=user_id, tenant_id=tenant_id, email="admin@valdrics.io", role=UserRole.ADMIN
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user

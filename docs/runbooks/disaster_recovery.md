@@ -56,18 +56,18 @@ This runbook documents recovery procedures for Valdrics infrastructure.
 
 2. **Restart Service**
    ```bash
-   koyeb service redeploy valdrix-api
+   koyeb service redeploy valdrics-api
    ```
 
 3. **If Persistent Failure**
-   - Check logs: `koyeb logs valdrix-api`
+   - Check logs: `koyeb logs valdrics-api`
    - Verify DATABASE_URL is correct
    - Redeploy from latest commit
 
 4. **Failover to Backup Region** (if configured)
    ```bash
    # Promote backup instance
-   koyeb service scale valdrix-api-backup --instances 1
+   koyeb service scale valdrics-api-backup --instances 1
    # Update DNS/load balancer
    ```
 
@@ -106,7 +106,7 @@ This runbook documents recovery procedures for Valdrics infrastructure.
 
 1. **Check Dead Letter Queue**
    ```bash
-   curl -X GET https://api.valdrix.ai/jobs/list?status=dead_letter
+   curl -X GET https://api.valdrics.ai/jobs/list?status=dead_letter
    ```
 
 2. **Reprocess Failed Webhooks**
@@ -120,7 +120,7 @@ This runbook documents recovery procedures for Valdrics infrastructure.
 
 3. **Trigger Processing**
    ```bash
-   curl -X POST https://api.valdrix.ai/jobs/process
+   curl -X POST https://api.valdrics.ai/jobs/process
    ```
 
 ---
@@ -141,7 +141,7 @@ The system automatically falls back through providers:
 # Set preferred provider temporarily
 export LLM_PROVIDER=google  # or openai
 # Restart service
-koyeb service redeploy valdrix-api
+koyeb service redeploy valdrics-api
 ```
 
 ---

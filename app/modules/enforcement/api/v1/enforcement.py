@@ -526,8 +526,8 @@ async def gate_k8s_admission_review(
     name = str(review_request.name or "").strip() or metadata_name or "unnamed"
     project_id = (
         str(
-            annotations.get("valdrix.io/project-id")
-            or labels.get("valdrix.io/project-id")
+            annotations.get("valdrics.io/project-id")
+            or labels.get("valdrics.io/project-id")
             or namespace
         )
         .strip()
@@ -536,8 +536,8 @@ async def gate_k8s_admission_review(
     )
     environment = (
         str(
-            annotations.get("valdrix.io/environment")
-            or labels.get("valdrix.io/environment")
+            annotations.get("valdrics.io/environment")
+            or labels.get("valdrics.io/environment")
             or "nonprod"
         )
         .strip()
@@ -549,12 +549,12 @@ async def gate_k8s_admission_review(
     resource_reference = f"{resource_type}/{namespace}/{name}"
     estimated_monthly_delta_usd = _annotation_decimal(
         annotations,
-        key="valdrix.io/estimated-monthly-delta-usd",
+        key="valdrics.io/estimated-monthly-delta-usd",
         default=Decimal("0"),
     )
     estimated_hourly_delta_usd = _annotation_decimal(
         annotations,
-        key="valdrix.io/estimated-hourly-delta-usd",
+        key="valdrics.io/estimated-hourly-delta-usd",
         default=Decimal("0"),
     )
     gate_input = GateInput(
@@ -595,7 +595,7 @@ async def gate_k8s_admission_review(
             code=403,
             reason="Forbidden",
             message=(
-                f"Valdrix admission decision={decision}; "
+                f"Valdrics admission decision={decision}; "
                 f"reason_codes={','.join(reason_codes) or 'none'}"
             ),
         )
@@ -604,14 +604,14 @@ async def gate_k8s_admission_review(
         uid=review_request.uid,
         allowed=allowed,
         status=status,
-        warnings=[f"valdrix:{reason}" for reason in reason_codes[:8]],
+        warnings=[f"valdrics:{reason}" for reason in reason_codes[:8]],
         audit_annotations={
-            "valdrix.io/decision-id": str(gate_response.decision_id),
-            "valdrix.io/decision": decision,
-            "valdrix.io/policy-version": str(gate_response.policy_version),
-            "valdrix.io/request-fingerprint": gate_response.request_fingerprint,
-            "valdrix.io/approval-required": str(bool(gate_response.approval_required)).lower(),
-            "valdrix.io/approval-request-id": (
+            "valdrics.io/decision-id": str(gate_response.decision_id),
+            "valdrics.io/decision": decision,
+            "valdrics.io/policy-version": str(gate_response.policy_version),
+            "valdrics.io/request-fingerprint": gate_response.request_fingerprint,
+            "valdrics.io/approval-required": str(bool(gate_response.approval_required)).lower(),
+            "valdrics.io/approval-request-id": (
                 str(gate_response.approval_request_id)
                 if gate_response.approval_request_id is not None
                 else ""

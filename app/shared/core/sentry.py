@@ -100,7 +100,7 @@ def init_sentry() -> bool:
     sentry_sdk.init(
         dsn=dsn,
         environment=environment,
-        release=f"valdrix@{release}",
+        release=f"valdrics@{release}",
         # Performance monitoring
         traces_sample_rate=0.1 if environment == "production" else 1.0,
         profiles_sample_rate=0.1 if environment == "production" else 1.0,

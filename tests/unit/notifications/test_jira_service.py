@@ -22,7 +22,7 @@ def _async_client_cm(client: AsyncMock) -> AsyncMock:
 
 def test_sanitize_label_handles_empty_and_truncation() -> None:
     assert JiraService._sanitize_label(" Prod Team / Alerts ") == "prod-team-alerts"
-    assert JiraService._sanitize_label("$$$") == "valdrix"
+    assert JiraService._sanitize_label("$$$") == "valdrics"
     assert len(JiraService._sanitize_label("a" * 100)) == 64
 
 

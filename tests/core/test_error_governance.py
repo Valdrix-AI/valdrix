@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock, patch, ANY
 from fastapi import Request
 from app.shared.core.error_governance import handle_exception
-from app.shared.core.exceptions import ValdrixException
+from app.shared.core.exceptions import ValdricsException
 
 
 @pytest.fixture
@@ -15,9 +15,9 @@ def mock_request():
 
 
 @pytest.mark.asyncio
-async def test_handle_valdrix_exception(mock_request):
-    """Verify that handle_exception correctly processes a ValdrixException."""
-    exc = ValdrixException(message="Test Error", code="test_error", status_code=400)
+async def test_handle_valdrics_exception(mock_request):
+    """Verify that handle_exception correctly processes a ValdricsException."""
+    exc = ValdricsException(message="Test Error", code="test_error", status_code=400)
 
     with patch("app.shared.core.error_governance.tracer") as mock_tracer:
         # We need to mock the span context manager
@@ -57,8 +57,8 @@ async def test_handle_generic_exception(mock_request):
 
 
 @pytest.mark.asyncio
-async def test_handle_valdrix_exception_sanitizes_unsafe_details_in_production(mock_request):
-    exc = ValdrixException(
+async def test_handle_valdrics_exception_sanitizes_unsafe_details_in_production(mock_request):
+    exc = ValdricsException(
         message="db password leaked",
         code="db_error",
         status_code=500,
@@ -161,10 +161,10 @@ async def test_handle_unhandled_exception_uses_internal_error_and_logs_exception
 
 
 @pytest.mark.asyncio
-async def test_handle_exception_records_raw_exception_when_valdrix_otel_hook_missing(
+async def test_handle_exception_records_raw_exception_when_valdrics_otel_hook_missing(
     mock_request,
 ):
-    class FakeValdrixException(Exception):
+    class FakeValdricsException(Exception):
         def __init__(
             self,
             message: str,
@@ -184,7 +184,7 @@ async def test_handle_exception_records_raw_exception_when_valdrix_otel_hook_mis
             "app.shared.core.config.get_settings",
             return_value=MagicMock(ENVIRONMENT="development"),
         ),
-        patch("app.shared.core.error_governance.ValdrixException", FakeValdrixException),
+        patch("app.shared.core.error_governance.ValdricsException", FakeValdricsException),
         patch("app.shared.core.error_governance.tracer") as mock_tracer,
     ):
         mock_span = MagicMock()

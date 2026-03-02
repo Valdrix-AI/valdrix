@@ -38,7 +38,7 @@ This project is released under the Business Source License 1.1 (BSL 1.1). The le
 
 Yes, for your own internal operations.
 
-### Can Valdrix-AI offer an official hosted SaaS?
+### Can Valdrics-AI offer an official hosted SaaS?
 
 Yes. The BSL restriction targets third parties offering competing hosted services. It does not block the project owner from operating the official Valdrics SaaS.
 
@@ -58,9 +58,9 @@ Not under default BSL terms before the change date. This requires a separate com
 
 On January 12, 2029, per the change terms in `LICENSE`.
 
-### Does Apache conversion stop Valdrix-AI from making money?
+### Does Apache conversion stop Valdrics-AI from making money?
 
-No. Valdrix-AI can continue monetizing through the official SaaS, enterprise features, support, compliance packaging, and commercial agreements.
+No. Valdrics-AI can continue monetizing through the official SaaS, enterprise features, support, compliance packaging, and commercial agreements.
 
 ## Related Policy Documents
 

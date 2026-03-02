@@ -1,5 +1,5 @@
 """
-CloudSentinel-AI Production Hardening: Complete File Index & Navigation Guide
+Valdrics-AI Production Hardening: Complete File Index & Navigation Guide
 
 This file serves as a quick navigation guide to all deliverables for the
 production hardening project. Use this to find what you need quickly.
@@ -208,13 +208,13 @@ EXISTING FILES TO MODIFY (Reference Guides Provided):
    What to Change: RLS enforcement listener (check_rls_policy)
    Where: ~line 150-160 (find check_rls_policy function)
    From: logger.warning("RLS context missing")
-   To: raise ValdrixException("RLS context missing", ...)
+   To: raise ValdricsException("RLS context missing", ...)
    Reference: See DEPLOYMENT_FIXES_GUIDE.md Section 2
 
 2. /app/core/config.py
    What to Change: KDF_SALT configuration
    Add: KDF_SALT field to Settings class
-   Remove: Hardcoded "valdrix-default-salt-2026"
+   Remove: Hardcoded "valdrics-default-salt-2026"
    Reference: See DEPLOYMENT_FIXES_GUIDE.md Section 6
 
 3. /app/core/security.py

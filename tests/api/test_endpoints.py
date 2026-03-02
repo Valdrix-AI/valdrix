@@ -1,5 +1,5 @@
 """
-Comprehensive API endpoint tests for all REST APIs in CloudSentinel-AI.
+Comprehensive API endpoint tests for all REST APIs in Valdrics-AI.
 Tests cover authentication, authorization, rate limiting, error handling, and business logic.
 """
 
@@ -445,7 +445,7 @@ class TestZombieAPIs:
             id=test_tenant.id,  # SEC: API uses tenant_id as PK for lookup here
             tenant_id=test_tenant.id,
             region="us-east-1",
-            role_arn="arn:aws:iam::123456789012:role/ValdrixReadOnly",
+            role_arn="arn:aws:iam::123456789012:role/ValdricsReadOnly",
             external_id="vx-test-id",
             aws_account_id="123456789012",
         )
@@ -518,7 +518,7 @@ class TestZombieAPIs:
         test_remediation_request,
     ):
         """Test remediation execution surfaces aws_connection_missing from service."""
-        from app.shared.core.exceptions import ValdrixException
+        from app.shared.core.exceptions import ValdricsException
 
         # Mock authentication by overriding the app's dependency
         from app.shared.core.auth import (
@@ -546,7 +546,7 @@ class TestZombieAPIs:
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
             mock_service = AsyncMock()
-            mock_service.execute.side_effect = ValdrixException(
+            mock_service.execute.side_effect = ValdricsException(
                 message="No AWS connection found for this tenant",
                 code="aws_connection_missing",
                 status_code=400,
@@ -652,7 +652,7 @@ class TestZombieAPIs:
         ) as mock_service_cls:
             mock_service = mock_service_cls.return_value
             mock_service.get_by_id = AsyncMock(return_value=test_remediation_request)
-            mock_service.generate_iac_plan = AsyncMock(return_value="# Valdrix GitOps Remediation Plan\n# Resource: i-test123 (ec2_instance)\n# Savings: $50.00/mo\n# Action: stop_instance\n\n# Option 1: Manual State Removal\nterraform state rm cloud_resource.i_test123\n\n# Option 2: Terraform 'removed' block (Recommended for TF 1.7+)\nremoved {\n  from = cloud_resource.i_test123\n  lifecycle {\n    destroy = true\n  }\n}")
+            mock_service.generate_iac_plan = AsyncMock(return_value="# Valdrics GitOps Remediation Plan\n# Resource: i-test123 (ec2_instance)\n# Savings: $50.00/mo\n# Action: stop_instance\n\n# Option 1: Manual State Removal\nterraform state rm cloud_resource.i_test123\n\n# Option 2: Terraform 'removed' block (Recommended for TF 1.7+)\nremoved {\n  from = cloud_resource.i_test123\n  lifecycle {\n    destroy = true\n  }\n}")
 
             response = await ac.get(
                 f"/api/v1/zombies/plan/{test_remediation_request.id}"
@@ -661,7 +661,7 @@ class TestZombieAPIs:
             assert response.status_code == 200
             data = response.json()
             assert data["status"] == "success"
-            assert "Valdrix GitOps Remediation Plan" in data["plan"]
+            assert "Valdrics GitOps Remediation Plan" in data["plan"]
             assert data["resource_id"] == "i-test123"
 
         # Clean up overrides
@@ -1289,7 +1289,7 @@ class TestCORSAndPreflight:
         response = await ac.options(
             "/api/v1/zombies",
             headers={
-                "Origin": "https://app.valdrix.ai",
+                "Origin": "https://app.valdrics.ai",
                 "Access-Control-Request-Method": "GET",
             },
         )

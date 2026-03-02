@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: |
-  Valdrix - Read-Only IAM Role for Cost Analysis
+  Valdrics - Read-Only IAM Role for Cost Analysis
   
-  This template creates an IAM role that allows Valdrix to read
+  This template creates an IAM role that allows Valdrics to read
   your AWS cost data. The role uses cross-account AssumeRole with
   an External ID for security.
   
@@ -16,16 +16,16 @@ Parameters:
   ExternalId:
     Type: String
     Description: |
-      The External ID provided by Valdrix. 
+      The External ID provided by Valdrics. 
       This is required for security and prevents unauthorized access.
     AllowedPattern: 'vx-[a-f0-9]{32}'
     ConstraintDescription: External ID must be in format 'vx-' followed by 32 hex characters
 
 Resources:
-  ValdrixRole:
+  ValdricsRole:
     Type: AWS::IAM::Role
     Properties:
-      Description: Allows Valdrix to read cost data for analysis
+      Description: Allows Valdrics to read cost data for analysis
       MaxSessionDuration: 3600  # 1 hour (minimum for security)
       
       # Trust policy: Who can assume this role
@@ -34,7 +34,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              # Valdrix's AWS Account
+              # Valdrics's AWS Account
               # In production, replace with your actual AWS account ID
               AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
             Action: sts:AssumeRole
@@ -45,15 +45,15 @@ Resources:
       
       # Inline policy: What this role can do
       Policies:
-        - PolicyName: ValdrixReadOnly
+        - PolicyName: ValdricsReadOnly
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               # IMPORTANT: Cost Explorer APIs (ce:*) are EXPLICITLY REMOVED to prevent
-              # unintended charges to the customer ($0.01/request). Valdrix MUST use
+              # unintended charges to the customer ($0.01/request). Valdrics MUST use
               # CUR (Cost & Usage Reports) via S3 for cost data. DO NOT re-add ce:*
               # permissions without explicit architectural approval.
-              # See valdrix-cur-setup.yaml for the CUR automation template.
+              # See valdrics-cur-setup.yaml for the CUR automation template.
 
               
               # Read EC2 instances for zombie detection
@@ -161,7 +161,7 @@ Resources:
                   - cur:DescribeReportDefinitions
                 Resource: '*'
 
-              # S3 Reading for CUR delivery (strictly mapped to Valdrix prefix)
+              # S3 Reading for CUR delivery (strictly mapped to Valdrics prefix)
               - Sid: S3ReadForCUR
                 Effect: Allow
                 Action:
@@ -169,11 +169,11 @@ Resources:
                   - s3:ListBucket
                   - s3:GetObject
                 Resource: 
-                  - 'arn:aws:s3:::valdrix-cur-*'
-                  - 'arn:aws:s3:::valdrix-cur-*/*'
+                  - 'arn:aws:s3:::valdrics-cur-*'
+                  - 'arn:aws:s3:::valdrics-cur-*/*'
 
               # OPTIONAL: CUR Automation (Commented out for security)
-              # If you want Valdrix to automatically setup your Cost & Usage Report,
+              # If you want Valdrics to automatically setup your Cost & Usage Report,
               # add the following actions to a separate policy:
               # - cur:PutReportDefinition
               # - cur:ModifyReportDefinition
@@ -183,12 +183,12 @@ Resources:
 
       Tags:
         - Key: Purpose
-          Value: Valdrix-CostAnalysis
+          Value: Valdrics-CostAnalysis
         - Key: ManagedBy
-          Value: Valdrix
+          Value: Valdrics
 
 Outputs:
   RoleArn:
-    Description: The ARN of the Valdrix role. Copy this to Valdrix dashboard.
-    Value: !GetAtt ValdrixRole.Arn
+    Description: The ARN of the Valdrics role. Copy this to Valdrics dashboard.
+    Value: !GetAtt ValdricsRole.Arn
   

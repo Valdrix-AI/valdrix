@@ -1,5 +1,5 @@
 """
-Leaderboards API Endpoints for Valdrix.
+Leaderboards API Endpoints for Valdrics.
 Shows team savings rankings ("Who saved the most?").
 """
 

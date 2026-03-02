@@ -11,11 +11,11 @@ This guide defines the current production path for Valdrics:
 ## Architecture
 
 ```
-Cloudflare Pages (dashboard.valdrix.ai)
+Cloudflare Pages (dashboard.valdrics.ai)
             |
             | /api/edge/* (SvelteKit endpoint on Pages Functions) + direct API calls
             v
-Koyeb (api.valdrix.ai, FastAPI)
+Koyeb (api.valdrics.ai, FastAPI)
             |
             | SQL + JWT verification
             v
@@ -65,7 +65,7 @@ Also create:
 | `ADMIN_API_KEY` | `...` | Admin secret |
 | `LLM_PROVIDER` | `groq` | Default managed provider |
 | `GROQ_API_KEY` | `gsk_...` | If not BYOK-only |
-| `CORS_ORIGINS` | `["https://dashboard.valdrix.ai"]` | Must match dashboard origin |
+| `CORS_ORIGINS` | `["https://dashboard.valdrics.ai"]` | Must match dashboard origin |
 | `SENTRY_DSN` | `https://...` | Optional error tracking DSN (`sentry-sdk` required when set) |
 | `SAAS_STRICT_INTEGRATIONS` | `true` | Recommended |
 | `UPSTASH_REDIS_URL` | `https://...` | Optional |
@@ -127,15 +127,15 @@ The dashboard is now configured for Cloudflare runtime via `@sveltejs/adapter-cl
 
 | Variable | Example |
 |---|---|
-| `PUBLIC_API_URL` | `https://api.valdrix.ai` |
-| `PRIVATE_API_ORIGIN` | `https://api.valdrix.ai` |
+| `PUBLIC_API_URL` | `https://api.valdrics.ai` |
+| `PRIVATE_API_ORIGIN` | `https://api.valdrics.ai` |
 | `PUBLIC_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
 | `PUBLIC_SUPABASE_ANON_KEY` | `<anon-key>` |
 
 `PRIVATE_API_ORIGIN` is used server-side by the edge proxy endpoint so upstream origin resolution is explicit and not dependent on public URL parsing.
 
 5. Deploy and record your Pages URL.
-6. Add custom domain `dashboard.valdrix.ai` (or your preferred domain).
+6. Add custom domain `dashboard.valdrics.ai` (or your preferred domain).
 7. Update Koyeb `CORS_ORIGINS` to the final dashboard URL.
 
 ## Step 6: Verify Deployment
@@ -143,7 +143,7 @@ The dashboard is now configured for Cloudflare runtime via `@sveltejs/adapter-cl
 1. API health check:
 
 ```bash
-curl -fsS https://api.valdrix.ai/health
+curl -fsS https://api.valdrics.ai/health
 ```
 
 2. Dashboard auth flow:
@@ -157,9 +157,9 @@ curl -fsS https://api.valdrix.ai/health
 4. Fair-use guardrails (if explicitly enabled):
 - Confirm 429 responses include `llm_fair_use_exceeded` when limits are hit.
 - Confirm metrics emit:
-  - `valdrix_ops_llm_fair_use_denials_total`
-  - `valdrix_ops_llm_fair_use_evaluations_total`
-  - `valdrix_ops_llm_fair_use_observed`
+  - `valdrics_ops_llm_fair_use_denials_total`
+  - `valdrics_ops_llm_fair_use_evaluations_total`
+  - `valdrics_ops_llm_fair_use_observed`
 - Confirm tenant-scoped runtime visibility endpoint responds:
   - `GET /api/v1/admin/health-dashboard/fair-use` (admin-authenticated)
 - Confirm no CORS errors in browser console
@@ -167,10 +167,10 @@ curl -fsS https://api.valdrix.ai/health
 5. Edge proxy connectivity:
 
 ```bash
-curl -i https://dashboard.valdrix.ai/api/edge/health/live
+curl -i https://dashboard.valdrics.ai/api/edge/health/live
 ```
 
-Expect `x-valdrix-edge-proxy: 1` on the response.
+Expect `x-valdrics-edge-proxy: 1` on the response.
 
 ## Troubleshooting
 

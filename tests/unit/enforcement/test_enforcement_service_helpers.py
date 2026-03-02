@@ -1060,7 +1060,7 @@ def test_policy_document_hash_and_gate_timeout_helper_branches(monkeypatch) -> N
 
     assert (
         enforcement_service_module._normalize_policy_document_schema_version(None)
-        == "valdrix.enforcement.policy.v1"
+        == "valdrics.enforcement.policy.v1"
     )
     assert len(
         enforcement_service_module._normalize_policy_document_schema_version("x" * 100)

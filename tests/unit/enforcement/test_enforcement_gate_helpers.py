@@ -202,7 +202,7 @@ def test_build_cloud_event_gate_input_derivation_and_extensions() -> None:
 async def test_run_gate_input_handles_fingerprint_and_failsafe_paths(monkeypatch) -> None:
     current_user = CurrentUser(
         id=uuid4(),
-        email="member@valdrix.local",
+        email="member@valdrics.local",
         tenant_id=uuid4(),
         role=UserRole.MEMBER,
     )
@@ -303,7 +303,7 @@ async def test_run_gate_input_handles_fingerprint_and_failsafe_paths(monkeypatch
 async def test_run_gate_input_non_lock_http_exception_bubbles(monkeypatch) -> None:
     current_user = CurrentUser(
         id=uuid4(),
-        email="member@valdrix.local",
+        email="member@valdrics.local",
         tenant_id=uuid4(),
         role=UserRole.MEMBER,
     )
