@@ -1,19 +1,25 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { FREE_TIER_HIGHLIGHTS, PLAN_COMPARE_CARDS } from '$lib/landing/heroContent';
+	import {
+		FREE_TIER_HIGHLIGHTS,
+		IMPLEMENTATION_COST_FACTS,
+		PLAN_COMPARE_CARDS
+	} from '$lib/landing/heroContent';
 
 	let {
 		buildFreeTierCtaHref,
 		buildPlanCtaHref,
+		talkToSalesHref,
 		onTrackCta
 	}: {
 		buildFreeTierCtaHref: () => string;
 		buildPlanCtaHref: (planId: string) => string;
+		talkToSalesHref: string;
 		onTrackCta: (action: string, section: string, value: string) => void;
 	} = $props();
 </script>
 
-<section id="plans" class="container mx-auto px-6 pb-20 landing-section-lazy" data-landing-section="plans">
+<section id="plans" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="plans">
 	<div class="landing-section-head">
 		<h2 class="landing-h2">Choose a plan and launch in one sprint</h2>
 		<p class="landing-section-sub">
@@ -89,5 +95,28 @@
 		>
 			View full pricing and feature details
 		</a>
+	</div>
+
+	<div class="landing-implementation-card glass-panel">
+		<p class="landing-proof-k">Implementation and TCO clarity</p>
+		<h3 class="landing-h3">Know total rollout effort before procurement review</h3>
+		<p class="landing-p">
+			Finance and engineering teams can model software cost plus rollout effort up front so approvals
+			are based on full cost visibility, not subscription price alone.
+		</p>
+		<ul class="landing-plan-features">
+			{#each IMPLEMENTATION_COST_FACTS as detail (detail)}
+				<li>{detail}</li>
+			{/each}
+		</ul>
+		<div class="landing-free-tier-cta">
+			<a
+				href={talkToSalesHref}
+				class="btn btn-secondary"
+				onclick={() => onTrackCta('cta_click', 'plans', 'talk_to_sales')}
+			>
+				Talk to Sales
+			</a>
+		</div>
 	</div>
 </section>

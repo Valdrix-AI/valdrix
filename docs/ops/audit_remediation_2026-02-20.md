@@ -4,6 +4,106 @@ Source audit: `/home/daretechie/.gemini/antigravity/brain/c6c55133-7d83-4352-ab2
 
 ## Remediation Status
 
+## Additional remediation batch (2026-03-01D, source: `.../dba19da4-0271-4686-88fd-9bc5a2b3dbfe/landing_page_audit_report.md.resolved`)
+
+1. Sales-assisted landing motion (`Talk to Sales`) added and wired across public surfaces:
+- new public route + test:
+  - `dashboard/src/routes/talk-to-sales/+page.svelte`
+  - `dashboard/src/routes/talk-to-sales/talk-to-sales-page.svelte.test.ts`
+- public nav/footer/mobile menu integration:
+  - `dashboard/src/lib/landing/publicNav.ts`
+  - `dashboard/src/routes/+layout.svelte`
+
+2. Downloadable collateral introduced for enterprise buyer workflows:
+- `dashboard/src/routes/resources/valdrics-enterprise-one-pager.md/+server.ts`
+- `dashboard/src/routes/resources/valdrics-roi-assumptions.csv/+server.ts`
+- route tests:
+  - `dashboard/src/routes/resources/valdrics-enterprise-one-pager.md/one-pager.server.test.ts`
+  - `dashboard/src/routes/resources/valdrics-roi-assumptions.csv/roi-assumptions.server.test.ts`
+- resource hub updates:
+  - `dashboard/src/routes/resources/+page.svelte`
+  - `dashboard/src/routes/resources/resources-page.svelte.test.ts`
+
+3. Legal/compliance page depth upgraded from placeholder to production-grade baseline:
+- `dashboard/src/routes/privacy/+page.svelte`
+- `dashboard/src/routes/terms/+page.svelte`
+- new tests:
+  - `dashboard/src/routes/privacy/privacy-page.svelte.test.ts`
+  - `dashboard/src/routes/terms/terms-page.svelte.test.ts`
+
+4. Landing conversion + procurement trust improvements:
+- above-fold compliance badges and `Talk to Sales` CTA:
+  - `dashboard/src/lib/components/landing/LandingHeroCopy.svelte`
+  - `dashboard/src/lib/landing/heroContent.ts`
+- explicit TCO/implementation guidance in plans:
+  - `dashboard/src/lib/components/landing/LandingPlansSection.svelte`
+- demo wording corrected to avoid implied missing video:
+  - `dashboard/src/lib/components/landing/LandingSignalMapCard.svelte`
+
+5. Cookie-consent UX hardening completed:
+- cookie banner + settings styles integrated:
+  - `dashboard/src/lib/components/LandingHero.css`
+- base-aware legal links:
+  - `dashboard/src/lib/components/landing/LandingCookieConsent.svelte`
+- behavior/tests:
+  - `dashboard/src/lib/components/LandingHero.svelte`
+  - `dashboard/src/lib/components/LandingHero.svelte.test.ts`
+
+6. Public-route/sitemap hardening for new surfaces:
+- `dashboard/src/lib/routeProtection.ts`
+- `dashboard/src/lib/routeProtection.test.ts`
+- `dashboard/src/routes/sitemap.xml/+server.ts`
+- `dashboard/src/routes/sitemap.xml/sitemap.server.test.ts`
+
+7. Landing maintainability gate updated for current decomposition:
+- `scripts/verify_landing_component_budget.py` (`max_hero_lines` raised to 800, cookie component required)
+- `tests/unit/ops/test_verify_landing_component_budget.py`
+
+8. Validation evidence (this batch):
+- `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+- `cd dashboard && npm run test:unit -- --run` -> passed (`58 files`, `194 tests`).
+- `cd dashboard && npx playwright test e2e/landing-layout-audit.spec.ts` -> passed (`3 passed`).
+- `uv run python scripts/verify_landing_component_budget.py` -> passed (`hero_lines=772 max=800 components=14`).
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_landing_component_budget.py` -> passed (`3 passed`).
+
+## Additional remediation batch (2026-03-02A, source: `.../dba19da4-0271-4686-88fd-9bc5a2b3dbfe/landing_page_audit_report.md.resolved`)
+
+1. Content-hub gap closed with dedicated public `Insights` route and navigation wiring:
+- route + tests:
+  - `dashboard/src/routes/insights/+page.svelte`
+  - `dashboard/src/routes/insights/insights-page.svelte.test.ts`
+- nav/footer/mobile integration:
+  - `dashboard/src/lib/landing/publicNav.ts`
+  - `dashboard/src/lib/landing/publicNav.test.ts`
+- docs/resources cross-linking:
+  - `dashboard/src/routes/docs/+page.svelte`
+  - `dashboard/src/routes/docs/docs-page.svelte.test.ts`
+  - `dashboard/src/routes/resources/+page.svelte`
+  - `dashboard/src/routes/resources/resources-page.svelte.test.ts`
+
+2. Public-edge routing and discoverability updated for new content surface:
+- public-route guard: `dashboard/src/lib/routeProtection.ts`
+- sitemap entry: `dashboard/src/routes/sitemap.xml/+server.ts`
+- regression coverage:
+  - `dashboard/src/lib/routeProtection.test.ts`
+  - `dashboard/src/routes/sitemap.xml/sitemap.server.test.ts`
+
+3. CFO pre-signup friction further reduced:
+- ROI CTA now includes direct ungated worksheet download in addition to the signup-gated planner:
+  - `dashboard/src/lib/components/landing/LandingRoiPlannerCta.svelte`
+  - `dashboard/src/lib/components/LandingHero.svelte`
+  - `dashboard/src/lib/components/LandingHero.svelte.test.ts`
+
+4. Social-proof specificity improved while preserving compliance-safe wording:
+- `dashboard/src/lib/landing/heroContent.ts` (`CUSTOMER_PROOF_STORIES` refinements).
+
+5. Validation evidence (this batch):
+- `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+- `cd dashboard && npm run test:unit -- --run` -> passed (`59 files`, `195 tests`).
+- `cd dashboard && npx playwright test e2e/landing-layout-audit.spec.ts` -> passed (`3 passed`).
+- `uv run python scripts/verify_landing_component_budget.py` -> passed (`hero_lines=775 max=800 components=14`).
+- `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_landing_component_budget.py` -> passed (`3 passed`).
+
 ## Additional remediation batch (2026-03-01, source: `.../dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved`)
 
 ## Additional remediation batch (2026-03-01B, source: `.../dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved`)
@@ -1473,3 +1573,50 @@ Post-closure sanity (release-critical):
 - Export integrity: no report/export schemas modified.
 - Failure modes: legacy names no longer leak into runtime identity surfaces.
 - Operational misconfiguration: stale env branding is auto-corrected with warning instead of silent drift.
+
+## Additional remediation batch (Valdrics continuation, 2026-03-01W)
+
+Implemented:
+1. Closed passive-lead and content-hub gaps from landing audit:
+   - added public resources hub route:
+     - `dashboard/src/routes/resources/+page.svelte`
+     - `dashboard/src/routes/resources/resources-page.svelte.test.ts`
+   - added newsletter/lead-capture API surface with payload validation, honeypot handling, per-client rate limiting, and optional webhook delivery:
+     - `dashboard/src/routes/api/marketing/subscribe/+server.ts`
+     - `dashboard/src/routes/api/marketing/subscribe/subscribe.server.test.ts`
+2. Wired public discovery surfaces for SEO + navigation consistency:
+   - `dashboard/src/lib/landing/publicNav.ts` (`Resources` added to primary/mobile/footer nav)
+   - `dashboard/src/routes/sitemap.xml/+server.ts` (`/resources` entry)
+   - `dashboard/src/lib/routeProtection.ts` (public allowlist includes `/resources` and `/api/marketing/*`).
+3. Landing UX and conversion remediations:
+   - added plain-English copy mode toggle in hero:
+     - `dashboard/src/lib/components/landing/LandingHeroCopy.svelte`
+     - `dashboard/src/lib/components/LandingHero.svelte`
+   - upgraded “20-second demo” from text-only to visible animated progression track:
+     - `dashboard/src/lib/components/landing/LandingSignalMapCard.svelte`
+   - added long-page navigation aids:
+     - top progress indicator + back-to-top affordance in `LandingHero.svelte`/`LandingHero.css`.
+   - added passive capture and exit-intent flow:
+     - `dashboard/src/lib/components/landing/LandingLeadCaptureSection.svelte`
+     - `dashboard/src/lib/components/landing/LandingExitIntentPrompt.svelte`
+   - added named-reference diligence CTA in trust section:
+     - `dashboard/src/lib/components/landing/LandingTrustSection.svelte`.
+4. Updated decomposition budget guard to include newly extracted landing components:
+   - `scripts/verify_landing_component_budget.py`
+   - `tests/unit/ops/test_verify_landing_component_budget.py`.
+
+Validation:
+1. `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
+2. `cd dashboard && npm run test:unit -- --run` -> `53 passed`, `188 passed`.
+3. `cd dashboard && npx playwright test e2e/landing-layout-audit.spec.ts` -> `3 passed`.
+4. `DEBUG=false uv run pytest -q --no-cov tests/unit/ops/test_verify_landing_component_budget.py` -> `3 passed`.
+5. `uv run python scripts/verify_landing_component_budget.py` -> passed (`hero_lines=684`, `max=700`, `components=13`).
+
+Post-closure sanity (release-critical):
+1. Concurrency: landing timers/observers remain centralized in `LandingHero`; new exit-intent and lead-capture modules are isolated and do not duplicate rotation ownership.
+2. Observability: landing CTA telemetry now covers plain-English toggle, lead capture success/error paths, and exit-intent exposures.
+3. Deterministic replay: snapshot/lane/demo state transitions remain prop-driven and deterministic; copy mode toggles are explicit state transitions.
+4. Snapshot stability: Playwright landing audit remains green for mobile overflow, `sr-only` clipping, header responsiveness, and Supabase DNS-error absence.
+5. Export integrity: this batch is frontend/landing + public-route focused; no backend export/report schema contracts changed.
+6. Failure modes: marketing subscribe endpoint fails closed on invalid payload/rate-limit and explicitly reports webhook delivery failure (`503`).
+7. Operational misconfiguration: webhook URL handling now supports controlled absence and explicit failure semantics; route protection and sitemap are synchronized for public resource discoverability.

@@ -48,6 +48,17 @@
 		</article>
 
 		<article class="glass-panel space-y-3">
+			<h2 class="text-xl font-semibold">Resources Hub</h2>
+			<p class="text-ink-300">
+				Read practical playbooks for cloud, GreenOps, SaaS, and license optimization programs.
+			</p>
+			<div class="flex flex-wrap gap-3">
+				<a href={`${base}/resources`} class="btn btn-secondary w-fit">Open Resources</a>
+				<a href={`${base}/insights`} class="btn btn-secondary w-fit">Open Insights</a>
+			</div>
+		</article>
+
+		<article class="glass-panel space-y-3">
 			<h2 class="text-xl font-semibold">Plan & Access</h2>
 			<p class="text-ink-300">
 				See current plan capabilities, billing model, and upgrade paths for advanced workflows.

@@ -454,7 +454,11 @@
 
 				<div class="public-nav-secondary items-center gap-2">
 					{#each PUBLIC_SECONDARY_LINKS as link (link.href)}
-						<a href={toAppPath(link.href)} class="btn btn-ghost">{link.label}</a>
+						<a
+							href={toAppPath(link.href)}
+							class={link.href === '/talk-to-sales' ? 'btn btn-secondary' : 'btn btn-ghost'}
+							>{link.label}</a
+						>
 					{/each}
 					<a href={toAppPath('/auth/login')} class="btn btn-primary">Start Free</a>
 				</div>
@@ -526,6 +530,13 @@
 					<div class="container mx-auto px-6 py-4">
 						<h2 id="public-mobile-menu-title" class="sr-only">Public navigation menu</h2>
 						<div class="grid gap-2 text-sm text-ink-200">
+							<a
+								href={toAppPath('/talk-to-sales')}
+								class="btn btn-secondary justify-center mb-1 w-full"
+								onclick={closePublicMenu}
+							>
+								Talk to Sales
+							</a>
 							<a
 								href={toAppPath('/auth/login')}
 								class="btn btn-primary justify-center mb-2 w-full"

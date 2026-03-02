@@ -45,6 +45,12 @@
 	onDestroy(() => {
 		onSignalMapElementChange(null);
 	});
+
+	function stepProgressWidth(index: number): number {
+		if (demoStepIndex > index) return 100;
+		if (demoStepIndex < index) return 0;
+		return 62;
+	}
 </script>
 
 <div class="landing-preview fade-in-up" style="animation-delay: 170ms;">
@@ -175,7 +181,24 @@
 		</div>
 
 		<div class="landing-demo-strip" aria-label="Guided product moment">
-			<p class="landing-demo-k">20-second Cloud Control Demo</p>
+			<p class="landing-demo-k">20-second guided control walkthrough</p>
+			<div class="landing-demo-visual" aria-hidden="true">
+				{#each MICRO_DEMO_STEPS as step, index (step.id)}
+					<div class="landing-demo-visual-step">
+						<div
+							class="landing-demo-visual-dot"
+							class:is-active={demoStepIndex === index}
+							class:is-complete={demoStepIndex > index}
+						></div>
+						<div class="landing-demo-visual-meta">
+							<p>{step.title}</p>
+							<div class="landing-demo-visual-track">
+								<span style={`width:${stepProgressWidth(index)}%;`}></span>
+							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
 			<div class="landing-demo-steps" role="group" aria-label="Control loop demo steps">
 				{#each MICRO_DEMO_STEPS as step, index (step.id)}
 					<button

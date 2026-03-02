@@ -3,6 +3,12 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import LandingHero from './LandingHero.svelte';
 
+vi.mock('$env/dynamic/public', () => ({
+	env: {
+		PUBLIC_API_URL: 'https://example.com/api/v1'
+	}
+}));
+
 vi.mock('$app/paths', () => ({
 	assets: '',
 	base: ''
@@ -15,12 +21,15 @@ vi.mock('$app/stores', () => ({
 }));
 
 describe('LandingHero', () => {
-	it('renders control-plane messaging, evidence, map a11y wiring, and cloud-hook toggles', async () => {
-		const dataLayer: unknown[] = [];
-		(window as Window & { dataLayer?: unknown[] }).dataLayer = dataLayer;
-		const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+	it(
+		'renders control-plane messaging, evidence, map a11y wiring, and cloud-hook toggles',
+		async () => {
+			const dataLayer: unknown[] = [];
+			(window as Window & { dataLayer?: unknown[] }).dataLayer = dataLayer;
+			const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+			window.localStorage.setItem('valdrics.cookie_consent.v1', 'accepted');
 
-		render(LandingHero);
+			render(LandingHero);
 
 		const mainHeading = screen.getByRole('heading', { level: 1 });
 		expect(mainHeading).toBeTruthy();
@@ -51,6 +60,13 @@ describe('LandingHero', () => {
 			screen.getByText(/The problem is not visibility\. The problem is delayed action\./i)
 		).toBeTruthy();
 		expect(screen.getByRole('link', { name: /run the spend scenario simulator/i })).toBeTruthy();
+		const talkToSalesLinks = screen.getAllByRole('link', { name: /talk to sales/i });
+		expect(talkToSalesLinks.length).toBeGreaterThan(0);
+		expect(talkToSalesLinks[0]?.getAttribute('href') || '').toContain('/talk-to-sales?');
+		const copyModeToggle = screen.getByRole('button', { name: /switch to plain english/i });
+		expect(copyModeToggle).toBeTruthy();
+		await fireEvent.click(copyModeToggle);
+		expect(screen.getByRole('button', { name: /switch to expert copy/i })).toBeTruthy();
 		expect(
 			screen.getByRole('heading', { name: /realtime spend scenario simulator/i })
 		).toBeTruthy();
@@ -60,12 +76,18 @@ describe('LandingHero', () => {
 		expect(screen.getAllByText(/permanent free tier/i).length).toBeGreaterThan(0);
 		expect(screen.getByText(/start free\. upgrade only when ready\./i)).toBeTruthy();
 
-		expect(screen.getByText(/20-second Cloud Control Demo/i)).toBeTruthy();
+		expect(screen.getByText(/20-second guided control walkthrough/i)).toBeTruthy();
 		expect(screen.getByLabelText(/reactive waste rate/i)).toBeTruthy();
 		expect(screen.getByLabelText(/managed waste rate/i)).toBeTruthy();
 		expect(screen.getByLabelText(/decision window \(months\)/i)).toBeTruthy();
 		expect(screen.getByText(/Scenario Delta/i)).toBeTruthy();
 		expect(screen.getByRole('link', { name: /Open Full ROI Planner/i })).toBeTruthy();
+		const roiWorksheetLink = screen.getByRole('link', {
+			name: /download roi assumptions worksheet/i
+		});
+		expect(roiWorksheetLink.getAttribute('href')).toBe('/resources/valdrics-roi-assumptions.csv');
+		expect(screen.getByRole('heading', { name: /not ready to sign up today\?/i })).toBeTruthy();
+		expect(screen.getByRole('link', { name: /open resources/i })).toBeTruthy();
 		expect(
 			screen.getByText(/Realtime cloud anomaly is detected and scoped to impacted workloads\./i)
 		).toBeTruthy();
@@ -184,6 +206,8 @@ describe('LandingHero', () => {
 		expect(
 			screen.queryByText(/go deeper without turning the homepage into an audit log/i)
 		).toBeNull();
+		const namedReferenceLink = screen.getByRole('link', { name: /request named references/i });
+		expect(namedReferenceLink.getAttribute('href') || '').toContain('intent=named_references');
 		expect(screen.queryByRole('link', { name: /explore docs/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /review api surfaces/i })).toBeNull();
 		expect(screen.queryByText(/http_retry\.py/i)).toBeNull();
@@ -208,8 +232,21 @@ describe('LandingHero', () => {
 		expect(payload.funnelStage).toBeTruthy();
 		expect(payload.experiment).toBeTruthy();
 
-		dispatchSpy.mockRestore();
-		delete (window as Window & { dataLayer?: unknown[] }).dataLayer;
+			dispatchSpy.mockRestore();
+			window.localStorage.removeItem('valdrics.cookie_consent.v1');
+			delete (window as Window & { dataLayer?: unknown[] }).dataLayer;
+		},
+		15000
+	);
+
+	it('shows cookie consent controls before analytics is accepted', async () => {
+		window.localStorage.removeItem('valdrics.cookie_consent.v1');
+		render(LandingHero);
+
+		expect(screen.getByRole('dialog', { name: /cookie preferences/i })).toBeTruthy();
+		const declineButton = screen.getByRole('button', { name: /decline analytics/i });
+		await fireEvent.click(declineButton);
+		expect(window.localStorage.getItem('valdrics.cookie_consent.v1')).toBe('rejected');
 	});
 
 	it('cleans rotating intervals on unmount for concurrency safety', () => {

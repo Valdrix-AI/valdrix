@@ -19,6 +19,11 @@ describe('docs page', () => {
 		const validationLink = screen.getByRole('link', { name: /open technical validation/i });
 		expect(validationLink.getAttribute('href')).toBe('/docs/technical-validation');
 
+		const resourcesLink = screen.getByRole('link', { name: /open resources/i });
+		expect(resourcesLink.getAttribute('href')).toBe('/resources');
+		const insightsLink = screen.getByRole('link', { name: /open insights/i });
+		expect(insightsLink.getAttribute('href')).toBe('/insights');
+
 		const pricingLink = screen.getByRole('link', { name: /view pricing/i });
 		expect(pricingLink.getAttribute('href')).toBe('/pricing');
 

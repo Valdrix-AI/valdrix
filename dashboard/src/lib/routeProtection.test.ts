@@ -36,6 +36,11 @@ describe('isPublicPath', () => {
 		expect(isPublicPath('/docs')).toBe(true);
 		expect(isPublicPath('/docs/api')).toBe(true);
 		expect(isPublicPath('/status')).toBe(true);
+		expect(isPublicPath('/resources')).toBe(true);
+		expect(isPublicPath('/insights')).toBe(true);
+		expect(isPublicPath('/resources/valdrics-enterprise-one-pager.md')).toBe(true);
+		expect(isPublicPath('/talk-to-sales')).toBe(true);
+		expect(isPublicPath('/api/marketing/subscribe')).toBe(true);
 	});
 
 	it('protects app routes by default', () => {

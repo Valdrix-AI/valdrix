@@ -6,6 +6,8 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
 	'/sitemap.xml',
 	'/terms',
 	'/privacy',
+	'/insights',
+	'/talk-to-sales',
 	'/status'
 ]);
 
@@ -14,6 +16,8 @@ const PUBLIC_SEGMENT_PREFIXES = [
 	'/auth',
 	'/pricing',
 	'/docs',
+	'/resources',
+	'/api/marketing',
 	'/_app' // SvelteKit build assets
 ];
 
