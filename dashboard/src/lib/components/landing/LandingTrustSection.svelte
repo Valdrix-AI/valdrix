@@ -7,14 +7,21 @@
 		TRUST_BENCHMARK_OUTCOMES,
 		TRUST_ECOSYSTEM_BADGES
 	} from '$lib/landing/heroContent';
+
+	let {
+		onTrackCta,
+		requestReferencesHref
+	}: {
+		onTrackCta: () => void;
+		requestReferencesHref: string;
+	} = $props();
 </script>
 
-<section id="trust" class="container mx-auto px-6 pb-20 landing-section-lazy" data-landing-section="proof">
+<section id="trust" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="proof">
 	<div class="landing-section-head">
 		<h2 class="landing-h2">Proof from teams reducing spend waste</h2>
 		<p class="landing-section-sub">
-			Buyers need outcomes, not marketing claims. Valdrics is designed to show clear
-			before-and-after operating results.
+			Buyers need outcomes, not claims. Valdrics is built to show clear before-and-after results.
 		</p>
 	</div>
 
@@ -77,6 +84,15 @@
 				<span class="landing-trust-badge">{badge}</span>
 			{/each}
 		</div>
+	</div>
+	<div class="landing-validation-cta glass-panel">
+		<p class="landing-proof-k">Reference Program</p>
+		<p class="landing-p">
+			Need named references for diligence? Request curated references and outcome packs under NDA.
+		</p>
+		<a href={requestReferencesHref} class="btn btn-secondary w-fit" onclick={onTrackCta}>
+			Request Named References
+		</a>
 	</div>
 	<p class="landing-trust-note">
 		Customer examples are anonymized and benchmark ranges are directional. Validate against your own

@@ -77,6 +77,13 @@ export const HERO_OUTCOME_CHIPS = Object.freeze([
 	}
 ]);
 
+export const ABOVE_FOLD_TRUST_BADGES = Object.freeze([
+	'SOC 2 program alignment',
+	'GDPR data-rights support',
+	'SSO + SCIM access controls',
+	'Tenant-isolated workspaces'
+]);
+
 export const SIGNAL_VALUE_CARDS = Object.freeze([
 	{
 		label: 'Clarity',
@@ -259,22 +266,23 @@ export const BUYER_ROLE_VIEWS = Object.freeze([
 
 export const CUSTOMER_PROOF_STORIES = Object.freeze([
 	{
-		title: 'B2B SaaS Platform',
-		before: 'Monthly spend spikes discovered late with no clear owner.',
-		after: 'Ownership and approvals moved into the daily operating loop.',
-		impact: 'Design-partner pattern: 10-15% controllable spend opportunity surfaced early.'
+		title: 'Growth B2B SaaS Platform',
+		before: 'Monthly spikes were discovered late and routed through ad-hoc escalation threads.',
+		after: 'Ownership and approvals moved into weekly operating reviews with named decision owners.',
+		impact:
+			'Design-partner pattern: double-digit controllable spend opportunity surfaced before month-end close.'
 	},
 	{
 		title: 'Digital Commerce Group',
-		before: 'Finance and engineering escalations happened near close every month.',
-		after: 'Spend issues triaged weekly with accountable owners and clear action paths.',
-		impact: 'Design-partner pattern: fewer late-cycle escalations and faster decision cycles.'
+		before: 'Finance and engineering escalations clustered around month-end close.',
+		after: 'Spend issues were triaged weekly with clear owners and explicit action deadlines.',
+		impact: 'Design-partner pattern: fewer late-cycle escalations and faster owner handoffs.'
 	},
 	{
 		title: 'Multi-Region Platform Team',
-		before: 'Cloud and SaaS actions were tracked in disconnected workflows.',
-		after: 'Cloud+, SaaS, and license decisions executed through one shared operating loop.',
-		impact: 'Design-partner pattern: unified operating narrative for leadership reviews.'
+		before: 'Cloud and SaaS actions were tracked in disconnected channels and ticket queues.',
+		after: 'Cloud+, SaaS, and license decisions ran in one shared operating loop across teams.',
+		impact: 'Design-partner pattern: unified signal-to-action narrative for leadership reviews.'
 	}
 ]);
 
@@ -338,6 +346,13 @@ export const FREE_TIER_HIGHLIGHTS = Object.freeze([
 	'Cloud and software signal map access',
 	'Owner routing and baseline action workflows',
 	'BYOK available with tier limits'
+]);
+
+export const IMPLEMENTATION_COST_FACTS = Object.freeze([
+	'Typical rollout: 3-10 business days for first production workflow.',
+	'Common team footprint: one engineering owner + one finance/FinOps owner.',
+	'No mandatory professional-services retainer for core onboarding.',
+	'Implementation effort is visible upfront in the ROI planner assumptions.'
 ]);
 
 export const CROSS_SURFACE_COVERAGE = Object.freeze([

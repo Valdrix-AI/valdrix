@@ -8,7 +8,7 @@ from typing import Any
 
 DEFAULT_HERO_PATH = Path("dashboard/src/lib/components/LandingHero.svelte")
 DEFAULT_COMPONENT_DIR = Path("dashboard/src/lib/components/landing")
-DEFAULT_MAX_HERO_LINES = 700
+DEFAULT_MAX_HERO_LINES = 800
 REQUIRED_COMPONENT_FILES = (
     "LandingHeroCopy.svelte",
     "LandingSignalMapCard.svelte",
@@ -21,6 +21,9 @@ REQUIRED_COMPONENT_FILES = (
     "LandingCapabilitiesSection.svelte",
     "LandingTrustSection.svelte",
     "LandingRoiPlannerCta.svelte",
+    "LandingLeadCaptureSection.svelte",
+    "LandingExitIntentPrompt.svelte",
+    "LandingCookieConsent.svelte",
 )
 
 

@@ -13,14 +13,14 @@
 
 <section
 	id="capabilities"
-	class="container mx-auto px-6 pb-20 landing-section-lazy"
+	class="container mx-auto px-6 pb-16 landing-section-lazy"
 	data-landing-section="capabilities"
 >
 	<div class="landing-section-head">
 		<h2 class="landing-h2">One platform for cloud, SaaS, and license spend control</h2>
 		<p class="landing-section-sub">
-			Valdrics combines cloud economics, GreenOps, SaaS/license management, remediation, and
-			executive proof in one operating layer.
+			Valdrics combines cloud economics, GreenOps, SaaS/license management, remediation, and executive
+			proof in one layer.
 		</p>
 	</div>
 
@@ -35,8 +35,7 @@
 	<div class="landing-validation-cta glass-panel">
 		<p class="landing-proof-k">Technical Validation</p>
 		<p class="landing-p">
-			See the public capability-to-API validation summary used for buyer diligence and security
-			reviews.
+			See the public capability-to-API validation summary for diligence and security review.
 		</p>
 		<a
 			href={`${base}/docs/technical-validation`}

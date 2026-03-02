@@ -58,7 +58,7 @@
 	}
 </script>
 
-<section id="simulator" class="container mx-auto px-6 pb-20 landing-section-lazy" data-landing-section="simulator">
+<section id="simulator" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="simulator">
 	<div class="landing-section-head">
 		<h2 class="landing-h2">Realtime spend scenario simulator</h2>
 		<p class="landing-section-sub">

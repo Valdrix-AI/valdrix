@@ -111,7 +111,7 @@ describe('public layout mobile menu', () => {
 
 		await waitFor(() => {
 			const active = document.activeElement as HTMLElement | null;
-			expect(active?.textContent?.trim()).toMatch(/start free/i);
+			expect(active?.textContent?.trim()).toMatch(/talk to sales/i);
 		});
 
 		await fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
@@ -123,7 +123,7 @@ describe('public layout mobile menu', () => {
 		await fireEvent.keyDown(window, { key: 'Tab' });
 		await waitFor(() => {
 			const active = document.activeElement as HTMLElement | null;
-			expect(active?.textContent?.trim()).toMatch(/start free/i);
+			expect(active?.textContent?.trim()).toMatch(/talk to sales/i);
 		});
 
 		await fireEvent.keyDown(window, { key: 'Escape' });

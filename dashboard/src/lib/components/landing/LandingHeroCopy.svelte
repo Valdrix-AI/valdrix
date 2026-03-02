@@ -1,5 +1,9 @@
 <script lang="ts">
-	import { HERO_OUTCOME_CHIPS, HERO_PROOF_POINTS } from '$lib/landing/heroContent';
+	import {
+		ABOVE_FOLD_TRUST_BADGES,
+		HERO_OUTCOME_CHIPS,
+		HERO_PROOF_POINTS
+	} from '$lib/landing/heroContent';
 
 	let {
 		heroTitle,
@@ -9,9 +13,13 @@
 		secondaryCtaLabel,
 		secondaryCtaHref,
 		primaryCtaHref,
+		talkToSalesHref,
+		plainLanguageMode,
 		onPrimaryCta,
 		onSecondaryCta,
-		onSimulatorCta
+		onSimulatorCta,
+		onTalkToSalesCta,
+		onTogglePlainLanguage
 	}: {
 		heroTitle: string;
 		heroSubtitle: string;
@@ -20,9 +28,13 @@
 		secondaryCtaLabel: string;
 		secondaryCtaHref: string;
 		primaryCtaHref: string;
+		talkToSalesHref: string;
+		plainLanguageMode: boolean;
 		onPrimaryCta: () => void;
 		onSecondaryCta: () => void;
 		onSimulatorCta: () => void;
+		onTalkToSalesCta: () => void;
+		onTogglePlainLanguage: () => void;
 	} = $props();
 </script>
 
@@ -31,6 +43,16 @@
 		<span class="badge badge-accent">Cloud + Software Spend Control</span>
 		<span class="landing-sep" aria-hidden="true">•</span>
 		<span class="landing-kicker-text">See waste early. Act faster. Protect margin.</span>
+	</div>
+	<div class="landing-copy-mode-toggle fade-in-up" style="animation-delay: 30ms;">
+		<button
+			type="button"
+			class="landing-copy-mode-btn"
+			aria-pressed={plainLanguageMode}
+			onclick={onTogglePlainLanguage}
+		>
+			{plainLanguageMode ? 'Switch to Expert Copy' : 'Switch to Plain English'}
+		</button>
 	</div>
 
 	<div class="landing-problem-hook fade-in-up" style="animation-delay: 70ms;">
@@ -80,6 +102,11 @@
 	<p class="landing-cta-note fade-in-up" style="animation-delay: 360ms;">
 		One sign-up path. One workspace. Control cloud and software spend from day one.
 	</p>
+	<div class="landing-trust-inline fade-in-up" style="animation-delay: 372ms;">
+		{#each ABOVE_FOLD_TRUST_BADGES as badge (badge)}
+			<span class="landing-trust-inline-badge">{badge}</span>
+		{/each}
+	</div>
 	<a
 		href="#simulator"
 		class="landing-cta-link fade-in-up"
@@ -87,6 +114,14 @@
 		onclick={onSimulatorCta}
 	>
 		Run the spend scenario simulator
+	</a>
+	<a
+		href={talkToSalesHref}
+		class="landing-cta-link fade-in-up"
+		style="animation-delay: 402ms;"
+		onclick={onTalkToSalesCta}
+	>
+		Talk to Sales
 	</a>
 
 	<div class="landing-proof fade-in-up" style="animation-delay: 420ms;">

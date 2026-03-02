@@ -13,7 +13,7 @@ from scripts.verify_landing_component_budget import (
 def test_verify_landing_component_budget_accepts_repo_state() -> None:
     summary = verify_landing_component_budget()
     assert summary["hero_lines"] <= summary["max_hero_lines"]
-    assert summary["required_component_count"] >= 10
+    assert summary["required_component_count"] >= 13
 
 
 def test_verify_landing_component_budget_rejects_excessive_hero_lines(
@@ -36,6 +36,9 @@ def test_verify_landing_component_budget_rejects_excessive_hero_lines(
         "LandingCapabilitiesSection.svelte",
         "LandingTrustSection.svelte",
         "LandingRoiPlannerCta.svelte",
+        "LandingLeadCaptureSection.svelte",
+        "LandingExitIntentPrompt.svelte",
+        "LandingCookieConsent.svelte",
     ):
         (component_dir / name).write_text("<div />\n", encoding="utf-8")
 

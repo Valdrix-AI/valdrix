@@ -4,6 +4,8 @@ import LandingHeroCopy from '$lib/components/landing/LandingHeroCopy.svelte';
 import LandingSignalMapCard from '$lib/components/landing/LandingSignalMapCard.svelte';
 import LandingRoiSimulator from '$lib/components/landing/LandingRoiSimulator.svelte';
 import LandingRoiCalculator from '$lib/components/landing/LandingRoiCalculator.svelte';
+import LandingLeadCaptureSection from '$lib/components/landing/LandingLeadCaptureSection.svelte';
+import LandingExitIntentPrompt from '$lib/components/landing/LandingExitIntentPrompt.svelte';
 import { REALTIME_SIGNAL_SNAPSHOTS } from '$lib/landing/realtimeSignalMap';
 import { calculateLandingRoi, normalizeLandingRoiInputs } from '$lib/landing/roiCalculator';
 
@@ -12,6 +14,7 @@ describe('Landing component decomposition', () => {
 		const onPrimaryCta = vi.fn();
 		const onSecondaryCta = vi.fn();
 		const onSimulatorCta = vi.fn();
+		const onTalkToSalesCta = vi.fn();
 
 		render(LandingHeroCopy, {
 			props: {
@@ -22,9 +25,13 @@ describe('Landing component decomposition', () => {
 				secondaryCtaLabel: 'See Plans',
 				secondaryCtaHref: '#plans',
 				primaryCtaHref: '/auth/login',
+				talkToSalesHref: '/talk-to-sales',
+				plainLanguageMode: false,
 				onPrimaryCta,
 				onSecondaryCta,
-				onSimulatorCta
+				onSimulatorCta,
+				onTalkToSalesCta,
+				onTogglePlainLanguage: vi.fn()
 			}
 		});
 
@@ -32,9 +39,11 @@ describe('Landing component decomposition', () => {
 		await fireEvent.click(screen.getByRole('link', { name: /start free/i }));
 		await fireEvent.click(screen.getByRole('link', { name: /see plans/i }));
 		await fireEvent.click(screen.getByRole('link', { name: /run the spend scenario simulator/i }));
+		await fireEvent.click(screen.getByRole('link', { name: /talk to sales/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
 		expect(onSimulatorCta).toHaveBeenCalledTimes(1);
+		expect(onTalkToSalesCta).toHaveBeenCalledTimes(1);
 	});
 
 	it('renders signal map card and propagates interactions', async () => {
@@ -181,5 +190,82 @@ describe('Landing component decomposition', () => {
 		expect(onRoiBlendedHourlyChange).toHaveBeenCalledWith(150);
 		expect(onRoiControlInput).toHaveBeenCalledTimes(5);
 		expect(onRoiCta).toHaveBeenCalledTimes(1);
+	});
+
+	it('submits newsletter capture and routes CTA interactions', async () => {
+		const onTrackCta = vi.fn();
+		const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+			new Response(JSON.stringify({ ok: true, accepted: true }), {
+				status: 202,
+				headers: { 'content-type': 'application/json' }
+			})
+		);
+
+		render(LandingLeadCaptureSection, {
+			props: {
+				subscribeApiPath: '/api/marketing/subscribe',
+				startFreeHref: '/auth/login?intent=start_free',
+				resourcesHref: '/resources',
+				onTrackCta
+			}
+		});
+
+		await fireEvent.input(screen.getByLabelText(/work email/i), {
+			target: { value: 'buyer@example.com' }
+		});
+		const submitButton = screen.getByRole('button', { name: /send me weekly insights/i });
+		const form = submitButton.closest('form');
+		expect(form).toBeTruthy();
+		if (!form) {
+			return;
+		}
+		await fireEvent.submit(form);
+
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(onTrackCta).toHaveBeenCalledWith(
+			'cta_click',
+			'lead_capture',
+			'newsletter_subscribe_success'
+		);
+		expect(screen.getByText(/subscribed\. check your inbox/i)).toBeTruthy();
+	});
+
+	it('opens exit intent prompt on desktop mouseout and supports dismissal', async () => {
+		Object.defineProperty(window, 'matchMedia', {
+			writable: true,
+			value: vi.fn().mockReturnValue({ matches: false })
+		});
+		localStorage.clear();
+		const onTrackCta = vi.fn();
+		vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+			new Response(JSON.stringify({ ok: true, accepted: true }), {
+				status: 202,
+				headers: { 'content-type': 'application/json' }
+			})
+		);
+
+		render(LandingExitIntentPrompt, {
+			props: {
+				startFreeHref: '/auth/login?intent=start_free',
+				resourcesHref: '/resources',
+				subscribeApiPath: '/api/marketing/subscribe',
+				onTrackCta
+			}
+		});
+
+		window.dispatchEvent(
+			new MouseEvent('mouseout', {
+				clientY: 0,
+				relatedTarget: null
+			})
+		);
+
+		expect(
+			await screen.findByRole('heading', { name: /want a weekly spend-control brief instead/i })
+		).toBeTruthy();
+		expect(onTrackCta).toHaveBeenCalledWith('cta_view', 'exit_prompt', 'desktop_exit_intent');
+
+		await fireEvent.click(screen.getByRole('button', { name: /close prompt/i }));
+		expect(localStorage.getItem('valdrics.landing.exit_prompt.dismissed.v1')).toBe('1');
 	});
 });

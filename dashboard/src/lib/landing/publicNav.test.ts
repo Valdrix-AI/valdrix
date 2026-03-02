@@ -58,6 +58,12 @@ describe('publicNav', () => {
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/pricing')).toBe(true);
 		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/docs')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/docs')).toBe(true);
+		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/insights')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/insights')).toBe(true);
+		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/insights')).toBe(true);
+		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
+		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
 	});
 
 	it('keeps only customer-facing strip and badge language', () => {

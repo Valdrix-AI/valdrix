@@ -1,6 +1,6 @@
 <section
 	id="workflow"
-	class="container mx-auto px-6 pb-20 landing-section-lazy"
+	class="container mx-auto px-6 pb-16 landing-section-lazy"
 	data-landing-section="workflow"
 >
 	<div class="landing-section-head">
