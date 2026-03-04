@@ -2,6 +2,7 @@
 import jwt
 import os
 import base64
+import binascii
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 
@@ -10,7 +11,7 @@ secret_str = os.getenv('SUPABASE_JWT_SECRET')
 # Supabase secrets are often base64 encoded.
 try:
     secret = base64.b64decode(secret_str)
-except Exception:
+except (binascii.Error, TypeError, ValueError):
     secret = secret_str
 
 uid = "ffb600f6-46cc-410e-a9f3-275d942663f3"

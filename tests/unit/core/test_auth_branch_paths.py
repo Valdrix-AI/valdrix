@@ -8,6 +8,7 @@ from uuid import uuid4
 import jwt
 import pytest
 from fastapi import HTTPException, Request
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.tenant import UserRole
 from app.shared.core.auth import (
@@ -136,7 +137,7 @@ async def test_get_current_user_schema_mismatch_fallback_without_optional_column
     db = AsyncMock()
     db.begin_nested = MagicMock(return_value=_AsyncNullContext())
     db.execute.side_effect = [
-        Exception('column "persona" does not exist'),
+        SQLAlchemyError('column "persona" does not exist'),
         _auth_result_row_without_optional(user_id, tenant_id),
         _identity_result(None),
     ]
@@ -212,7 +213,7 @@ async def test_get_current_user_sqlite_schema_mismatch_rolls_back_then_retries()
     db.begin_nested = MagicMock(side_effect=AssertionError("must not be called"))
     db.rollback = AsyncMock()
     db.execute.side_effect = [
-        Exception('column "persona" does not exist'),
+        SQLAlchemyError('column "persona" does not exist'),
         _auth_result_row_without_optional(user_id, tenant_id),
         _identity_result(None),
     ]

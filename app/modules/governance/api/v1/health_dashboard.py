@@ -1,22 +1,12 @@
-"""
-Investor Health Dashboard API - Tier 3: Polish
-
-Provides real-time operational health metrics for investor due diligence:
-- System uptime and availability
-- Active tenant metrics
-- Job queue health
-- LLM usage and budget status
-- Core cloud and Cloud+ connection status
-
-Endpoint: GET /admin/health-dashboard
-"""
+"""Investor health dashboard API for due-diligence operational metrics."""
 
 from typing import Annotated, Any
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, func, and_
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 import structlog
 
 from app.shared.db.session import get_db
@@ -42,6 +32,8 @@ from app.models.remediation import (
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Investor Health"])
+HEALTH_DASHBOARD_CACHE_RECOVERABLE_EXCEPTIONS = (ValidationError, RuntimeError, TypeError, ValueError)
+HEALTH_DASHBOARD_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS = (SQLAlchemyError, RuntimeError, TypeError, ValueError)
 
 
 class SystemHealth(BaseModel):
@@ -193,7 +185,7 @@ async def get_investor_health_dashboard(
         if isinstance(cached_payload, dict):
             try:
                 return InvestorHealthDashboard.model_validate(cached_payload)
-            except Exception as exc:
+            except HEALTH_DASHBOARD_CACHE_RECOVERABLE_EXCEPTIONS as exc:
                 logger.warning("health_dashboard_cache_decode_failed", error=str(exc))
 
     # System Health
@@ -274,7 +266,7 @@ async def get_llm_fair_use_runtime(
         if isinstance(cached_payload, dict):
             try:
                 return LLMFairUseRuntime.model_validate(cached_payload)
-            except Exception as exc:
+            except HEALTH_DASHBOARD_CACHE_RECOVERABLE_EXCEPTIONS as exc:
                 logger.warning(
                     "health_dashboard_fair_use_cache_decode_failed", error=str(exc)
                 )
@@ -284,7 +276,7 @@ async def get_llm_fair_use_runtime(
     if _user.tenant_id:
         try:
             tenant_tier = await get_tenant_tier(_user.tenant_id, db)
-        except Exception as exc:
+        except HEALTH_DASHBOARD_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning(
                 "health_dashboard_fair_use_tier_lookup_failed",
                 tenant_id=str(_user.tenant_id),

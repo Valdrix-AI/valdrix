@@ -434,6 +434,37 @@ async def test_execute_remediation_unexpected_error_is_sanitized() -> None:
 
 
 @pytest.mark.asyncio
+async def test_execute_remediation_does_not_swallow_fatal_errors() -> None:
+    tenant_id = uuid4()
+    request_id = uuid4()
+    db = AsyncMock()
+    request_row = _authorized_nonprod_request_row(request_id)
+    db.execute = AsyncMock(return_value=_scalar_one_or_none_result(request_row))
+    user = CurrentUser(
+        id=uuid4(),
+        email="admin@example.com",
+        tenant_id=tenant_id,
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+
+    with patch(
+        "app.modules.optimization.api.v1.zombies.RemediationService"
+    ) as service_cls:
+        service = service_cls.return_value
+        service.execute = AsyncMock(side_effect=KeyboardInterrupt())
+
+        with pytest.raises(KeyboardInterrupt):
+            await zombies.execute_remediation(
+                request=MagicMock(),
+                request_id=request_id,
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+            )
+
+
+@pytest.mark.asyncio
 async def test_execute_remediation_failed_status_propagates_code_and_status() -> None:
     tenant_id = uuid4()
     request_id = uuid4()

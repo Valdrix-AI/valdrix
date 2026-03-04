@@ -125,6 +125,30 @@ async def test_save_records_stream(persistence_service, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_save_records_stream_does_not_swallow_base_exceptions(
+    persistence_service,
+):
+    class FatalUsageAmount:
+        def __str__(self) -> str:  # pragma: no cover - exercised through parser
+            raise KeyboardInterrupt("stop")
+
+    async def record_stream():
+        yield {
+            "service": "S3",
+            "region": "us-east-1",
+            "cost_usd": Decimal("1.00"),
+            "timestamp": datetime.now(timezone.utc),
+            "usage_type": "DataTransfer",
+            "usage_amount": FatalUsageAmount(),
+        }
+
+    with pytest.raises(KeyboardInterrupt, match="stop"):
+        await persistence_service.save_records_stream(
+            record_stream(), str(uuid4()), str(uuid4())
+        )
+
+
+@pytest.mark.asyncio
 async def test_check_for_significant_adjustments_no_change(
     persistence_service, mock_db
 ):

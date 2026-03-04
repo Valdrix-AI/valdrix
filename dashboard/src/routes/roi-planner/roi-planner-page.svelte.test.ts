@@ -27,9 +27,9 @@ describe('ROI planner page', () => {
 
 		expect(screen.getByRole('heading', { level: 1, name: /roi planner workspace/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /build your 12-month roi plan/i })).toBeTruthy();
-		expect(screen.getByRole('link', { name: /continue to guided setup/i }).getAttribute('href')).toBe(
-			'/onboarding?intent=roi_assessment'
-		);
+		expect(
+			screen.getByRole('link', { name: /continue to guided setup/i }).getAttribute('href')
+		).toBe('/onboarding?intent=roi_assessment');
 	});
 
 	it('prompts unauthenticated users to sign in', () => {

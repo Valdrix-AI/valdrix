@@ -1,6 +1,7 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from typing import Any
 import structlog
 from app.models.aws_connection import AWSConnection
@@ -9,6 +10,13 @@ from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
 from app.shared.core.exceptions import ResourceNotFoundError, AdapterError
 
 logger = structlog.get_logger()
+AWS_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class AWSConnectionService:
@@ -78,7 +86,7 @@ class AWSConnectionService:
             connection.status = "error"
             await self.db.commit()
             return {"status": "error", "message": str(e), "code": e.code}
-        except Exception as e:
+        except AWS_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS as e:
             logger.error(
                 "aws_verification_unexpected_error",
                 error=str(e),

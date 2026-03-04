@@ -522,7 +522,7 @@ def _send_alert_if_needed(
             raise RuntimeError(
                 f"alert webhook rejected payload with status={response.status_code}"
             )
-    except Exception as exc:
+    except (httpx.HTTPError, OSError, RuntimeError, TypeError, ValueError) as exc:
         if webhook_fail_on_error:
             raise RuntimeError(f"failed to send finance alert webhook: {exc}") from exc
 

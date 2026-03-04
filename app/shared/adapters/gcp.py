@@ -1,14 +1,16 @@
 import json
 import logging
 import re
+from json import JSONDecodeError
 from datetime import date, datetime, timezone
 from typing import Any, AsyncGenerator, cast
 import structlog
+from google.api_core.exceptions import GoogleAPICallError, ServiceUnavailable, DeadlineExceeded
+from google.auth.exceptions import GoogleAuthError
 from google.auth.credentials import Credentials as GoogleCredentials
 from google.cloud import bigquery
 from google.cloud import asset_v1
 from google.oauth2 import service_account
-from google.api_core.exceptions import ServiceUnavailable, DeadlineExceeded
 import tenacity
 
 from app.shared.adapters.base import BaseAdapter
@@ -17,7 +19,7 @@ from app.shared.adapters.resource_usage_projection import (
     resource_usage_lookback_window,
 )
 from app.shared.core.credentials import GCPCredentials
-from app.shared.core.exceptions import ConfigurationError
+from app.shared.core.exceptions import AdapterError, ConfigurationError
 from app.schemas.costs import CloudUsageSummary
 
 logger = structlog.get_logger()
@@ -32,6 +34,38 @@ gcp_retry = tenacity.retry(
 
 # BE-ADAPT-8: Project ID format validation
 PROJECT_ID_PATTERN = re.compile(r"^[a-z][a-z0-9\-]{4,28}[a-z0-9]$")
+
+GCP_CREDENTIAL_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    JSONDecodeError,
+    GoogleAuthError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    KeyError,
+)
+GCP_OPERATION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    GoogleAPICallError,
+    ServiceUnavailable,
+    DeadlineExceeded,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+GCP_RESOURCE_USAGE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    AdapterError,
+    GoogleAPICallError,
+    ServiceUnavailable,
+    DeadlineExceeded,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 def validate_project_id(project_id: str) -> bool:
@@ -68,7 +102,7 @@ class GCPAdapter(BaseAdapter):
                     GoogleCredentials,
                     service_account.Credentials.from_service_account_info(info),  # type: ignore[no-untyped-call]
                 )
-            except Exception as e:
+            except GCP_CREDENTIAL_RECOVERABLE_ERRORS as e:
                 logger.error("gcp_credentials_load_error", error=str(e))
         return None  # Fallback to default credentials
 
@@ -91,7 +125,7 @@ class GCPAdapter(BaseAdapter):
             )
             list(client.list_datasets(project=billing_project, max_results=1))
             return True
-        except Exception as e:
+        except GCP_OPERATION_RECOVERABLE_ERRORS as e:
             self._set_last_error_from_exception(
                 e, prefix="GCP credential verification failed"
             )
@@ -155,9 +189,7 @@ class GCPAdapter(BaseAdapter):
             results = query_job.result()
 
             return [self._parse_row(row) for row in results]
-        except Exception as e:
-            from app.shared.core.exceptions import AdapterError
-
+        except GCP_OPERATION_RECOVERABLE_ERRORS as e:
             logger.error("gcp_bq_query_failed", table=table_path, error=str(e))
             raise AdapterError(f"GCP BigQuery cost fetch failed: {str(e)}") from e
 
@@ -343,7 +375,7 @@ class GCPAdapter(BaseAdapter):
                         }
                     )
                 return resources
-            except Exception as e:
+            except GCP_OPERATION_RECOVERABLE_ERRORS as e:
                 self._set_last_error_from_exception(
                     e, prefix="GCP resource discovery failed"
                 )
@@ -365,7 +397,7 @@ class GCPAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except GCP_RESOURCE_USAGE_RECOVERABLE_ERRORS as exc:
             self._set_last_error_from_exception(
                 exc, prefix="GCP resource usage lookup failed"
             )

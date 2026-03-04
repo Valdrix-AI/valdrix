@@ -11,12 +11,14 @@ from uuid import UUID
 from typing import Any
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select
 from fastapi import HTTPException
 
 from app.shared.adapters.factory import AdapterFactory
 from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
+from app.shared.core.exceptions import AdapterError
 from app.shared.core.connection_queries import (
     CONNECTION_MODEL_PAIRS,
     get_connection_model,
@@ -27,6 +29,16 @@ from app.shared.core.logging import audit_log
 from app.shared.core.provider import normalize_provider, resolve_provider_from_connection
 
 logger = structlog.get_logger()
+CLOUD_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS = (
+    AdapterError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    TimeoutError,
+    ConnectionError,
+    OSError,
+    SQLAlchemyError,
+)
 
 
 class CloudConnectionService:
@@ -133,8 +145,7 @@ class CloudConnectionService:
 
         except HTTPException:
             raise
-        except Exception as e:
-            from app.shared.core.exceptions import AdapterError
+        except CLOUD_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS as e:
             adapter_err = AdapterError(str(e))
             
             logger.error(

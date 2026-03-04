@@ -30,7 +30,7 @@ async def test_verify_connection_sanitizes_raw_exceptions():
         "AWS Error: AccessDenied for arn:aws:iam::123456789012:user/admin "
         "with SecretKey=ABC12345"
     )
-    mock_adapter.verify_connection.side_effect = Exception(raw_error)
+    mock_adapter.verify_connection.side_effect = RuntimeError(raw_error)
 
     with patch(
         "app.shared.core.cloud_connection.CloudConnectionService._build_verification_adapter",
@@ -73,7 +73,7 @@ async def test_verify_connection_sanitizes_throttling_errors():
     mock_db.execute.return_value = mock_res
 
     mock_adapter = AsyncMock()
-    mock_adapter.verify_connection.side_effect = Exception(
+    mock_adapter.verify_connection.side_effect = RuntimeError(
         "Throttling: Rate exceeded for operation DescribeInstances"
     )
 
@@ -108,7 +108,7 @@ async def test_verify_connection_updates_status_on_error():
     mock_db.execute.return_value = mock_res
 
     mock_adapter = AsyncMock()
-    mock_adapter.verify_connection.side_effect = Exception("Some cloud error")
+    mock_adapter.verify_connection.side_effect = RuntimeError("Some cloud error")
 
     with patch(
         "app.shared.core.cloud_connection.CloudConnectionService._build_verification_adapter",

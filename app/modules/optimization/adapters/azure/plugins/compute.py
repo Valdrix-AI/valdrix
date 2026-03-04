@@ -5,6 +5,7 @@ Detects idle VMs using Cost Management export data.
 """
 
 from typing import List, Dict, Any
+from azure.core.exceptions import AzureError
 from azure.mgmt.compute.aio import ComputeManagementClient
 from azure.identity.aio import ClientSecretCredential, DefaultAzureCredential
 import structlog
@@ -13,6 +14,17 @@ from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
+
+AZURE_COMPUTE_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    AzureError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
 
 
 def _resolve_azure_credentials(credentials: Any) -> Any:
@@ -111,7 +123,7 @@ class IdleVmsPlugin(ZombiePlugin):
                                 "explainability_notes": "GPU VM flagged for utilization review. Enable Cost Export for accurate idle detection.",
                             }
                         )
-        except Exception as e:
+        except AZURE_COMPUTE_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_vm_scan_error", error=str(e))
 
         return zombies
@@ -219,7 +231,7 @@ class StoppedVmsPlugin(ZombiePlugin):
                             "explainability_notes": f"VM is {power_state}. You are still paying ~${round(monthly_cost, 2)}/mo for its attached disks.",
                         }
                     )
-        except Exception as e:
+        except AZURE_COMPUTE_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_stopped_vm_scan_error", error=str(e))
 
         return zombies

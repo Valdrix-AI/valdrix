@@ -23,6 +23,7 @@ from collections.abc import Callable
 
 from upstash_redis import Redis
 from upstash_redis.asyncio import Redis as AsyncRedis
+from upstash_redis.errors import UpstashError
 
 from app.shared.core.config import get_settings
 
@@ -40,6 +41,17 @@ PREFIX_COSTS = "costs"
 # Singleton instances
 _sync_client: Optional[Redis] = None
 _async_client: Optional[AsyncRedis] = None
+
+# Upstash operations and JSON serialization failures are treated as
+# recoverable cache-path errors; non-recoverable exceptions should bubble.
+CACHE_RECOVERABLE_ERRORS = (
+    UpstashError,
+    OSError,
+    RuntimeError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+)
 
 
 def _safe_json_loads(payload: str, key: str) -> Optional[Any]:
@@ -130,8 +142,8 @@ class CacheService:
             await self.client.delete(f"{PREFIX_ANALYSIS}:{tenant_id}")
             logger.info("cache_invalidated", tenant_id=str(tenant_id))
             return True
-        except Exception as e:
-            logger.warning("cache_invalidate_error", error=str(e))
+        except CACHE_RECOVERABLE_ERRORS as exc:
+            logger.warning("cache_invalidate_error", error=str(exc))
             return False
 
     async def get(self, key: str) -> Optional[Any]:
@@ -174,8 +186,10 @@ class CacheService:
                     "cache_pattern_deleted", pattern=pattern, count=total_deleted
                 )
             return True
-        except Exception as e:
-            logger.warning("cache_delete_pattern_error", pattern=pattern, error=str(e))
+        except CACHE_RECOVERABLE_ERRORS as exc:
+            logger.warning(
+                "cache_delete_pattern_error", pattern=pattern, error=str(exc)
+            )
             return False
 
     async def _get(self, key: str) -> Optional[Any]:
@@ -206,8 +220,8 @@ class CacheService:
                     payload_type=type(data).__name__,
                 )
                 return None
-        except Exception as e:
-            logger.warning("cache_get_error", key=key, error=str(e))
+        except CACHE_RECOVERABLE_ERRORS as exc:
+            logger.warning("cache_get_error", key=key, error=str(exc))
         return None
 
     async def _set(self, key: str, value: Any, ttl: timedelta) -> bool:
@@ -220,8 +234,8 @@ class CacheService:
             )
             logger.debug("cache_set", key=key, ttl_seconds=int(ttl.total_seconds()))
             return True
-        except Exception as e:
-            logger.warning("cache_set_error", key=key, error=str(e))
+        except CACHE_RECOVERABLE_ERRORS as exc:
+            logger.warning("cache_set_error", key=key, error=str(exc))
             return False
 
 
@@ -275,8 +289,8 @@ class QueryCache:
                 return None
             logger.debug("cache_miss", key=cache_key)
             return None
-        except Exception as e:
-            logger.warning("cache_get_error", error=str(e), key=cache_key)
+        except CACHE_RECOVERABLE_ERRORS as exc:
+            logger.warning("cache_get_error", error=str(exc), key=cache_key)
             return None
 
     async def set_cached_result(
@@ -290,8 +304,8 @@ class QueryCache:
             ttl = ttl or self.default_ttl
             await self.redis.set(cache_key, json.dumps(result, default=str), ex=ttl)
             logger.debug("cache_set", key=cache_key, ttl=ttl)
-        except Exception as e:
-            logger.warning("cache_set_error", error=str(e), key=cache_key)
+        except CACHE_RECOVERABLE_ERRORS as exc:
+            logger.warning("cache_set_error", error=str(exc), key=cache_key)
 
     async def invalidate_tenant_cache(self, tenant_id: str) -> None:
         """Invalidate all cached queries for a tenant."""
@@ -313,9 +327,9 @@ class QueryCache:
                     )
                 if cursor == 0:
                     break
-        except Exception as e:
+        except CACHE_RECOVERABLE_ERRORS as exc:
             logger.warning(
-                "cache_invalidation_error", error=str(e), tenant_id=tenant_id
+                "cache_invalidation_error", error=str(exc), tenant_id=tenant_id
             )
 
     def cached_query(
@@ -379,11 +393,11 @@ class QueryCache:
                                 nx=True,
                             )
                         )
-                    except Exception as e:
+                    except CACHE_RECOVERABLE_ERRORS as exc:
                         logger.warning(
                             "cache_lock_acquire_error",
                             key=lock_key,
-                            error=str(e),
+                            error=str(exc),
                         )
                         lock_acquired = False
 
@@ -405,11 +419,11 @@ class QueryCache:
                                     nx=True,
                                 )
                             )
-                        except Exception as e:
+                        except CACHE_RECOVERABLE_ERRORS as exc:
                             logger.warning(
                                 "cache_lock_reacquire_error",
                                 key=lock_key,
-                                error=str(e),
+                                error=str(exc),
                             )
                             lock_acquired = False
                         if not lock_acquired:
@@ -430,11 +444,11 @@ class QueryCache:
                     if self.redis and lock_acquired:
                         try:
                             await self.redis.delete(lock_key)
-                        except Exception as e:
+                        except CACHE_RECOVERABLE_ERRORS as exc:
                             logger.warning(
                                 "cache_lock_release_error",
                                 key=lock_key,
-                                error=str(e),
+                                error=str(exc),
                             )
 
                 return result

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import aiohttp
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.pricing import ExchangeRate
 from app.shared.core.config import get_settings
@@ -88,7 +89,14 @@ async def update_exchange_rates():
             await session.commit()
             logger.info("exchange_rate_update_complete")
 
-    except Exception as e:
+    except (
+        aiohttp.ClientError,
+        SQLAlchemyError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as e:
         logger.error("exchange_rate_update_failed", error=str(e))
 
 

@@ -7,6 +7,23 @@ from app.shared.adapters.aws_utils import resolve_aws_region_hint
 from app.shared.db.session import async_session_maker, mark_session_system_context
 
 logger = structlog.get_logger()
+CUR_CONNECTION_INGEST_RECOVERABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
+CUR_MANIFEST_DISCOVERY_RECOVERABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    KeyError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
 
 
 class CURIngestionJob:
@@ -59,7 +76,7 @@ class CURIngestionJob:
         for conn in connections:
             try:
                 await self.ingest_for_connection(conn)
-            except Exception as e:
+            except CUR_CONNECTION_INGEST_RECOVERABLE_EXCEPTIONS as e:
                 logger.error(
                     "cur_ingestion_connection_failed",
                     connection_id=str(conn.id),
@@ -107,7 +124,9 @@ class CURIngestionJob:
         """
         import boto3
         from botocore.config import Config
+        from botocore.exceptions import BotoCoreError, ClientError
         import json
+        from typing import cast
 
         # 2026 Standard: Use regional endpoints and non-blocking patterns where possible
         resolved_region = resolve_aws_region_hint(connection.region)
@@ -160,9 +179,11 @@ class CURIngestionJob:
 
             # Return the latest file (usually CUR overwrites or versioning applies)
             # For multi-part, we'd return a list, but simplified here to the newest key.
-            from typing import cast
             return cast(Optional[str], report_keys[0])
 
-        except Exception as e:
+        except (
+            CUR_MANIFEST_DISCOVERY_RECOVERABLE_EXCEPTIONS
+            + (BotoCoreError, ClientError, json.JSONDecodeError)
+        ) as e:
             logger.error("cur_manifest_discovery_failed", error=str(e), bucket=bucket)
             raise

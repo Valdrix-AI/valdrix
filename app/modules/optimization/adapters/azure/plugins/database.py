@@ -12,6 +12,17 @@ from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
 
+AZURE_DATABASE_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    IndexError,
+    AttributeError,
+)
+
 
 @registry.register("azure")
 class IdleSqlDatabasesPlugin(ZombiePlugin):
@@ -101,7 +112,7 @@ class IdleSqlDatabasesPlugin(ZombiePlugin):
                                 "explainability_notes": "SQL Database flagged for review. Enable Cost Export for accurate idle detection.",
                             }
                         )
-        except Exception as e:
+        except AZURE_DATABASE_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_sql_scan_error", error=str(e))
 
         return zombies

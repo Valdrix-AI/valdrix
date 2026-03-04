@@ -22,7 +22,9 @@ describe('insights page', () => {
 			})
 		).toBeTruthy();
 		expect(
-			screen.getByRole('heading', { name: /cfo brief: building a procurement-ready tco narrative/i })
+			screen.getByRole('heading', {
+				name: /cfo brief: building a procurement-ready tco narrative/i
+			})
 		).toBeTruthy();
 
 		expect(screen.getByRole('link', { name: /open playbook/i }).getAttribute('href')).toBe(
@@ -31,8 +33,8 @@ describe('insights page', () => {
 		expect(screen.getByRole('link', { name: /open greenops guide/i }).getAttribute('href')).toBe(
 			'/greenops'
 		);
-		expect(
-			screen.getByRole('link', { name: /download roi worksheet/i }).getAttribute('href')
-		).toBe('/resources/valdrics-roi-assumptions.csv');
+		expect(screen.getByRole('link', { name: /download roi worksheet/i }).getAttribute('href')).toBe(
+			'/resources/valdrics-roi-assumptions.csv'
+		);
 	});
 });

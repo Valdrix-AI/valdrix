@@ -110,7 +110,7 @@ async def test_acceptance_sweep_job(orchestrator: SchedulerOrchestrator) -> None
 async def test_maintenance_sweep_job_failure(orchestrator: SchedulerOrchestrator) -> None:
     """Test maintenance sweep job handles Celery being unavailable."""
     with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
-        mock_send.side_effect = Exception("Redis connection error")
+        mock_send.side_effect = RuntimeError("Redis connection error")
         # Should not raise
         await orchestrator.maintenance_sweep_job()
         mock_send.assert_called_once()

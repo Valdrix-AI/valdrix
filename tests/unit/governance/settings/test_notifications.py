@@ -211,7 +211,7 @@ async def test_test_slack_notification_failure_and_exception(
 
     # Exception branch
     mock_slack = AsyncMock()
-    mock_slack.send_alert.side_effect = Exception("boom")
+    mock_slack.send_alert.side_effect = RuntimeError("boom")
     with patch(
         "app.modules.notifications.domain.get_tenant_slack_service",
         new=AsyncMock(return_value=mock_slack),
@@ -518,7 +518,7 @@ async def test_test_teams_notification_failure_and_exception(
         assert "Failed to send Teams notification" in response.json()["error"]
 
     mock_teams = AsyncMock()
-    mock_teams.send_alert.side_effect = Exception("teams boom")
+    mock_teams.send_alert.side_effect = RuntimeError("teams boom")
     with patch(
         "app.modules.notifications.domain.get_tenant_teams_service",
         new=AsyncMock(return_value=mock_teams),
@@ -742,7 +742,7 @@ async def test_test_jira_notification_failure_and_exception(
         assert "Failed to create Jira test issue" in response.json()["error"]
 
     mock_jira = AsyncMock()
-    mock_jira.create_issue.side_effect = Exception("jira boom")
+    mock_jira.create_issue.side_effect = RuntimeError("jira boom")
     with patch(
         "app.modules.notifications.domain.get_tenant_jira_service",
         return_value=mock_jira,

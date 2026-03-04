@@ -34,7 +34,7 @@ async def test_gcp_adapter_verify_connection_success(gcp_adapter):
 
 @pytest.mark.asyncio
 async def test_gcp_adapter_verify_connection_failure(gcp_adapter):
-    with patch("google.cloud.bigquery.Client", side_effect=Exception("Auth error")):
+    with patch("google.cloud.bigquery.Client", side_effect=RuntimeError("Auth error")):
         result = await gcp_adapter.verify_connection()
         assert result is False
 
@@ -67,7 +67,7 @@ async def test_gcp_adapter_get_cost_and_usage_success(gcp_adapter):
 @pytest.mark.asyncio
 async def test_gcp_adapter_get_cost_and_usage_error(gcp_adapter):
     mock_client = MagicMock()
-    mock_client.query.side_effect = Exception("BigQuery Error")
+    mock_client.query.side_effect = RuntimeError("BigQuery Error")
 
     with patch("google.cloud.bigquery.Client", return_value=mock_client):
         start = datetime(2026, 1, 1, tzinfo=timezone.utc)

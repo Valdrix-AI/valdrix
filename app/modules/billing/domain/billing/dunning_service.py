@@ -9,7 +9,9 @@ Implements production-grade dunning for failed payments:
 
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
+from httpx import HTTPError
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 from typing import TYPE_CHECKING, Any, Dict, Optional, Callable
@@ -35,6 +37,32 @@ if TYPE_CHECKING:
 DUNNING_RETRY_SCHEDULE_DAYS = [1, 3, 7]  # Retry on day 1, 3, 7 after first failure
 DUNNING_MAX_ATTEMPTS = 3
 DUNNING_WEBHOOK_DEBOUNCE_SECONDS = 300
+
+DUNNING_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    HTTPError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+)
+DUNNING_ROLLBACK_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+)
+DUNNING_EMAIL_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
 
 
 class DunningService:
@@ -173,7 +201,7 @@ class DunningService:
                 payload={"subscription_id": subscription.id, "attempt": attempt + 1},
                 scheduled_for=next_retry,
             )
-        except Exception as e:
+        except DUNNING_RECOVERABLE_ERRORS as e:
             logger.error(
                 "dunning_enqueue_failed",
                 subscription_id=str(subscription.id),
@@ -185,7 +213,7 @@ class DunningService:
             subscription.dunning_next_retry_at = previous_next_retry_at
             try:
                 await self.db.rollback()
-            except Exception as rollback_exc:
+            except DUNNING_ROLLBACK_RECOVERABLE_ERRORS as rollback_exc:
                 logger.error(
                     "dunning_enqueue_failed_rollback_failed",
                     subscription_id=str(subscription.id),
@@ -238,7 +266,7 @@ class DunningService:
                     subscription.id, is_webhook=False
                 )
 
-        except Exception as e:
+        except DUNNING_RECOVERABLE_ERRORS as e:
             logger.error(
                 "dunning_charge_exception",
                 subscription_id=str(subscription_id),
@@ -329,7 +357,7 @@ class DunningService:
                 tier=subscription.tier,
             )
 
-        except Exception as e:
+        except DUNNING_EMAIL_RECOVERABLE_ERRORS as e:
             # Don't fail dunning if email fails
             logger.error("dunning_email_failed", error=str(e))
 
@@ -345,7 +373,7 @@ class DunningService:
             email_service = self._build_email_service()
             await email_service.send_payment_recovered_notification(to_email=email)
 
-        except Exception as e:
+        except DUNNING_EMAIL_RECOVERABLE_ERRORS as e:
             logger.error("dunning_recovery_email_failed", error=str(e))
 
     async def _send_account_downgraded_email(
@@ -360,5 +388,5 @@ class DunningService:
             email_service = self._build_email_service()
             await email_service.send_account_downgraded_notification(to_email=email)
 
-        except Exception as e:
+        except DUNNING_EMAIL_RECOVERABLE_ERRORS as e:
             logger.error("dunning_downgrade_email_failed", error=str(e))

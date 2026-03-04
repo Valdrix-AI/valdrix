@@ -21,6 +21,10 @@ from app.shared.core.auth import CurrentUser, UserRole, get_current_user
 from app.shared.core.pricing import PricingTier
 
 
+class _FatalTestSignal(BaseException):
+    """Sentinel fatal error used to assert broad Exception handlers do not swallow BaseException."""
+
+
 class _ScalarRows:
     def __init__(self, rows: list[object]) -> None:
         self._rows = rows
@@ -209,13 +213,24 @@ async def test_compute_partitioning_evidence_postgres_path(monkeypatch) -> None:
 async def test_compute_partitioning_evidence_handles_catalog_errors() -> None:
     mock_db = AsyncMock()
     mock_db.bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
-    mock_db.execute = AsyncMock(side_effect=Exception("catalog unavailable"))
+    mock_db.execute = AsyncMock(side_effect=RuntimeError("catalog unavailable"))
     mock_db.scalar = AsyncMock()
 
     payload = await _compute_partitioning_evidence(mock_db)
     assert payload.dialect == "postgresql"
     assert payload.partitioning_supported is True
     assert all(item.exists is False for item in payload.tables)
+
+
+@pytest.mark.asyncio
+async def test_compute_partitioning_evidence_does_not_swallow_fatal_exceptions() -> None:
+    mock_db = AsyncMock()
+    mock_db.bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+    mock_db.execute = AsyncMock(side_effect=_FatalTestSignal())
+    mock_db.scalar = AsyncMock()
+
+    with pytest.raises(_FatalTestSignal):
+        await _compute_partitioning_evidence(mock_db)
 
 
 @pytest.mark.asyncio

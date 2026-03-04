@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Callable, Awaitable
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+import httpx
 import structlog
 
 from app.shared.core.config import get_settings
@@ -23,6 +24,9 @@ from app.shared.core.ops_metrics import (
 
 logger = structlog.get_logger()
 settings = get_settings()
+PERFORMANCE_LOAD_REQUEST_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (httpx.HTTPError, RuntimeError, OSError, TimeoutError, TypeError, ValueError, ArithmeticError)
+PERFORMANCE_BASELINE_LOAD_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (OSError, TypeError, ValueError)
+PERFORMANCE_BASELINE_SAVE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (OSError, TypeError, ValueError)
 
 
 def format_exception_message(exc: BaseException) -> str:
@@ -179,7 +183,7 @@ class LoadTester:
                         self.results.max_response_time, response_time
                     )
 
-                except Exception as e:
+                except PERFORMANCE_LOAD_REQUEST_RECOVERABLE_EXCEPTIONS as e:
                     response_time = time.time() - request_start
                     self.results.total_requests += 1
                     self.results.failed_requests += 1
@@ -425,7 +429,7 @@ class PerformanceRegressionDetector:
                     self.baselines[result.name] = result
         except FileNotFoundError:
             logger.warning("baseline_file_not_found", file=self.baseline_file)
-        except Exception as e:
+        except PERFORMANCE_BASELINE_LOAD_RECOVERABLE_EXCEPTIONS as e:
             logger.error("failed_to_load_baselines", error=str(e))
 
     def save_baselines(self, benchmark_summary: Dict[str, Any]) -> None:
@@ -436,7 +440,7 @@ class PerformanceRegressionDetector:
             with open(self.baseline_file, "w") as f:
                 json.dump(benchmark_summary, f, indent=2, default=str)
             logger.info("baselines_saved", file=self.baseline_file)
-        except Exception as e:
+        except PERFORMANCE_BASELINE_SAVE_RECOVERABLE_EXCEPTIONS as e:
             logger.error("failed_to_save_baselines", error=str(e))
 
     def detect_regressions(

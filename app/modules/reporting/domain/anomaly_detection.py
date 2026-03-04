@@ -17,6 +17,7 @@ from statistics import median
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import structlog
@@ -26,6 +27,20 @@ from app.shared.core.cache import CacheService
 from app.shared.core.notifications import NotificationDispatcher
 
 logger = structlog.get_logger()
+ANOMALY_JIRA_BOOTSTRAP_RECOVERABLE_EXCEPTIONS = (
+    ImportError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    SQLAlchemyError,
+)
+ANOMALY_DISPATCH_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    TypeError,
+    ValueError,
+    OSError,
+    SQLAlchemyError,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,7 +376,7 @@ async def dispatch_cost_anomaly_alerts(
             jira_allowed = is_feature_enabled(tier, FeatureFlag.INCIDENT_INTEGRATIONS)
             if jira_allowed:
                 jira = await get_tenant_jira_service(db, tenant_id)
-        except Exception:
+        except ANOMALY_JIRA_BOOTSTRAP_RECOVERABLE_EXCEPTIONS:
             jira_allowed = False
             jira = None
     alerted = 0
@@ -420,7 +435,7 @@ async def dispatch_cost_anomaly_alerts(
                     db=db,
                     tenant_id=str(tenant_id),
                 )
-            except Exception as e:
+            except ANOMALY_DISPATCH_RECOVERABLE_EXCEPTIONS as e:
                 # Keep anomaly notifications best-effort; workflow automation can be optional per tenant.
                 logger.debug(
                     "anomaly_workflow_dispatch_failed", error=str(e), exc_info=True
@@ -448,7 +463,7 @@ async def dispatch_cost_anomaly_alerts(
                         confidence=float(item.confidence),
                         probable_cause=item.probable_cause,
                     )
-                except Exception as e:
+                except ANOMALY_DISPATCH_RECOVERABLE_EXCEPTIONS as e:
                     logger.debug(
                         "anomaly_jira_issue_failed", error=str(e), exc_info=True
                     )
@@ -458,7 +473,7 @@ async def dispatch_cost_anomaly_alerts(
                 ttl=timedelta(hours=suppression_hours),
             )
             alerted += 1
-        except Exception as e:
+        except ANOMALY_DISPATCH_RECOVERABLE_EXCEPTIONS as e:
             # Keep dispatch best-effort; callers can handle global failure metrics.
             logger.debug("anomaly_dispatch_item_failed", error=str(e), exc_info=True)
             continue

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
@@ -23,6 +23,7 @@ from app.shared.core.pricing import FeatureFlag
 logger = structlog.get_logger()
 router = APIRouter(tags=["Leaderboards"])
 LEADERBOARD_CACHE_TTL = timedelta(seconds=30)
+LEADERBOARD_CACHE_PAYLOAD_ERRORS = (ValidationError, TypeError, ValueError)
 
 
 def _require_tenant_id(user: CurrentUser) -> UUID:
@@ -85,7 +86,7 @@ async def get_leaderboard(
         if isinstance(cached_payload, dict):
             try:
                 return LeaderboardResponse.model_validate(cached_payload)
-            except Exception as exc:
+            except LEADERBOARD_CACHE_PAYLOAD_ERRORS as exc:
                 logger.warning("leaderboard_cache_decode_failed", error=str(exc))
 
     # Calculate date range

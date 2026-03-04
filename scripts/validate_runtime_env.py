@@ -50,7 +50,7 @@ def main() -> int:
     try:
         settings = get_settings()
         validate_runtime_dependencies(settings)
-    except Exception as exc:
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
         print(f"runtime_env_validation_failed: {exc}", file=sys.stderr)
         return 1
 
@@ -64,4 +64,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

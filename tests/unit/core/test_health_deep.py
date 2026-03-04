@@ -37,7 +37,7 @@ async def test_check_cache_set_get_failed():
 async def test_check_external_services_exception():
     service = HealthService()
     mock_client = MagicMock()
-    mock_client.__aenter__ = AsyncMock(side_effect=Exception("boom"))
+    mock_client.__aenter__ = AsyncMock(side_effect=RuntimeError("boom"))
 
     with patch("app.shared.core.http.get_http_client", return_value=mock_client):
         result = await service._check_external_services()
@@ -73,7 +73,7 @@ async def test_check_circuit_breakers_open():
 async def test_check_circuit_breakers_exception():
     service = HealthService()
     with patch(
-        "app.shared.core.health.get_all_circuit_breakers", side_effect=Exception("oops")
+        "app.shared.core.health.get_all_circuit_breakers", side_effect=RuntimeError("oops")
     ):
         result = await service._check_circuit_breakers()
 
@@ -107,7 +107,7 @@ async def test_check_system_resources_exception():
     service = HealthService()
     with patch(
         "app.shared.core.health.psutil.virtual_memory",
-        side_effect=Exception("psutil fail"),
+        side_effect=RuntimeError("psutil fail"),
     ):
         result = await service._check_system_resources()
 
@@ -161,7 +161,7 @@ async def test_check_background_jobs_queue_stats():
 @pytest.mark.asyncio
 async def test_check_background_jobs_exception():
     db = AsyncMock()
-    db.execute.side_effect = Exception("db fail")
+    db.execute.side_effect = RuntimeError("db fail")
     service = HealthService(db=db)
 
     result = await service._check_background_jobs()
@@ -181,7 +181,7 @@ async def test_handle_check_errors():
     service = HealthService()
 
     async def boom():
-        raise Exception("boom")
+        raise RuntimeError("boom")
 
     result = await service._handle_check_errors(boom())
     assert result["status"] == "error"

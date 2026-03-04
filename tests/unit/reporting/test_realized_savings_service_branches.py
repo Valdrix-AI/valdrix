@@ -63,6 +63,15 @@ def test_decimal_and_build_window_validation() -> None:
         )
 
 
+def test_decimal_does_not_swallow_base_exceptions() -> None:
+    class FatalString:
+        def __str__(self) -> str:  # pragma: no cover - exercised via _decimal
+            raise KeyboardInterrupt("stop")
+
+    with pytest.raises(KeyboardInterrupt, match="stop"):
+        _decimal(FatalString())
+
+
 @pytest.mark.asyncio
 async def test_compute_for_request_returns_none_for_ineligible_inputs() -> None:
     tenant_id = uuid4()

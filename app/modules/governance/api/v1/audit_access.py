@@ -5,6 +5,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import asc, desc, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.governance.api.v1.audit_common import _rowcount, _sanitize_csv_cell
@@ -17,6 +18,15 @@ from app.shared.db.session import get_db
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Audit"])
+AUDIT_ACCESS_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 @router.get("/logs", response_model=List[AuditLogResponse])
 async def get_audit_logs(
@@ -78,7 +88,7 @@ async def get_audit_logs(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except AUDIT_ACCESS_RECOVERABLE_ERRORS as e:
         logger.error("audit_logs_fetch_failed", error=str(e))
         raise HTTPException(500, "Failed to fetch audit logs") from e
 
@@ -123,7 +133,7 @@ async def get_audit_log_detail(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except AUDIT_ACCESS_RECOVERABLE_ERRORS as e:
         logger.error("audit_log_detail_failed", error=str(e))
         raise HTTPException(500, "Failed to fetch audit log") from e
 
@@ -226,7 +236,7 @@ async def export_audit_logs(
             },
         )
 
-    except Exception as e:
+    except AUDIT_ACCESS_RECOVERABLE_ERRORS + (csv.Error,) as e:
         logger.error("audit_export_failed", error=str(e))
         raise HTTPException(500, "Failed to export audit logs") from e
 
@@ -440,7 +450,7 @@ async def request_data_erasure(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except AUDIT_ACCESS_RECOVERABLE_ERRORS as e:
         await db.rollback()
         logger.error("gdpr_erasure_failed", error=str(e), tenant_id=str(user.tenant_id))
         raise HTTPException(500, "Data erasure failed. Please contact support.") from e

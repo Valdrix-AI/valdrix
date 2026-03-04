@@ -1,6 +1,60 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Landing layout audit regressions', () => {
+	test('aligns signal hotspot circles with rendered lane nodes', async ({ page }) => {
+		await page.setViewportSize({ width: 1365, height: 820 });
+		await page.goto('/');
+		await page.waitForLoadState('networkidle');
+
+		const signalSection = page.locator('section#signal-map');
+		await signalSection.scrollIntoViewIfNeeded();
+		await expect(page.locator('section#signal-map .signal-map')).toBeVisible();
+
+		const alignment = await page.evaluate(() => {
+			const hotspotElements = Array.from(
+				document.querySelectorAll<HTMLElement>('#signal-map .signal-hotspot')
+			);
+			const nodeElements = Array.from(
+				document.querySelectorAll<SVGCircleElement>(
+					'#signal-map .signal-svg .sig-node:not(.sig-node--center)'
+				)
+			);
+
+			const hotspots = hotspotElements.map((element) => {
+				const rect = element.getBoundingClientRect();
+				return {
+					x: rect.left + rect.width / 2,
+					y: rect.top + rect.height / 2
+				};
+			});
+			const nodes = nodeElements.map((element) => {
+				const rect = element.getBoundingClientRect();
+				return {
+					x: rect.left + rect.width / 2,
+					y: rect.top + rect.height / 2
+				};
+			});
+
+			const distances = hotspots.map((hotspot, index) => {
+				const node = nodes[index];
+				if (!node) {
+					return Number.POSITIVE_INFINITY;
+				}
+				return Math.hypot(hotspot.x - node.x, hotspot.y - node.y);
+			});
+
+			return {
+				hotspotCount: hotspots.length,
+				nodeCount: nodes.length,
+				maxDistance: distances.length > 0 ? Math.max(...distances) : Number.POSITIVE_INFINITY
+			};
+		});
+
+		expect(alignment.hotspotCount).toBe(4);
+		expect(alignment.nodeCount).toBe(4);
+		expect(alignment.maxDistance).toBeLessThanOrEqual(8);
+	});
+
 	test('does not trigger unresolved Supabase host errors on anonymous landing loads', async ({
 		page
 	}) => {
@@ -80,6 +134,22 @@ test.describe('Landing layout audit regressions', () => {
 				expect(toggleBounds.x).toBeGreaterThanOrEqual(0);
 				expect(toggleBounds.x + toggleBounds.width).toBeLessThanOrEqual(390);
 			}
+
+			await page.evaluate(() => {
+				window.scrollTo({ top: Math.round(document.documentElement.scrollHeight * 0.35) });
+			});
+			await page.waitForTimeout(120);
+
+			const backToTop = page.getByRole('link', { name: /back to top/i });
+			await expect(backToTop).toBeVisible();
+
+			const progressWidthPx = await page
+				.locator('.landing-scroll-progress > span')
+				.evaluate((element) => {
+					const rect = (element as HTMLElement).getBoundingClientRect();
+					return rect.width;
+				});
+			expect(progressWidthPx).toBeGreaterThan(0);
 		});
 	});
 

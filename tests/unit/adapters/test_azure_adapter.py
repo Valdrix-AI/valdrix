@@ -54,7 +54,7 @@ async def test_azure_adapter_verify_connection_success(azure_adapter):
 @pytest.mark.asyncio
 async def test_azure_adapter_verify_connection_failure(azure_adapter):
     with patch.object(
-        azure_adapter, "_get_resource_client", side_effect=Exception("Azure Down")
+        azure_adapter, "_get_resource_client", side_effect=RuntimeError("Azure Down")
     ):
         result = await azure_adapter.verify_connection()
         assert result is False
@@ -82,7 +82,7 @@ async def test_azure_adapter_get_cost_and_usage_success(azure_adapter):
 @pytest.mark.asyncio
 async def test_azure_adapter_get_cost_and_usage_failure(azure_adapter):
     mock_cost_client = AsyncMock()
-    mock_cost_client.query.usage.side_effect = Exception("API Error")
+    mock_cost_client.query.usage.side_effect = RuntimeError("API Error")
 
     with patch.object(azure_adapter, "_get_cost_client", return_value=mock_cost_client):
         start = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -144,7 +144,7 @@ async def test_azure_adapter_discover_resources_success(azure_adapter):
 @pytest.mark.asyncio
 async def test_azure_adapter_discover_resources_error(azure_adapter):
     with patch.object(
-        azure_adapter, "_get_resource_client", side_effect=Exception("Limit Exceeded")
+        azure_adapter, "_get_resource_client", side_effect=RuntimeError("Limit Exceeded")
     ):
         resources = await azure_adapter.discover_resources("compute")
         assert resources == []

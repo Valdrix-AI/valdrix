@@ -70,7 +70,12 @@ class PricingService:
         """
         try:
             import boto3
+            from botocore.exceptions import BotoCoreError, ClientError
+        except ImportError as e:
+            logger.error("aws_pricing_sync_failed", error=str(e))
+            return
 
+        try:
             # Pricing API is only available in us-east-1
             client = boto3.client("pricing", region_name="us-east-1")
 
@@ -99,7 +104,14 @@ class PricingService:
                 product_count=len(response.get("PriceList", [])),
             )
 
-        except Exception as e:
+        except (
+            BotoCoreError,
+            ClientError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            AttributeError,
+        ) as e:
             logger.error("aws_pricing_sync_failed", error=str(e))
 
     @staticmethod

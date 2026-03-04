@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import date
 from decimal import Decimal
 from uuid import uuid4
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.reporting.domain.aggregator import CostAggregator
 from app.models.cloud import CostRecord
@@ -365,7 +366,7 @@ async def test_get_cached_breakdown_hit(mock_db, tenant_id):
 
 @pytest.mark.asyncio
 async def test_get_cached_breakdown_fallback(mock_db, tenant_id):
-    mock_db.begin_nested.side_effect = Exception("MV fail")
+    mock_db.begin_nested.side_effect = SQLAlchemyError("MV fail")
     fallback_data = {"total_cost": 10.0, "breakdown": []}
     with patch.object(
         CostAggregator, "get_basic_breakdown", return_value=fallback_data
@@ -413,6 +414,25 @@ async def test_refresh_materialized_view_sqlite_skip(mock_db):
 @pytest.mark.asyncio
 async def test_refresh_materialized_view_failure(mock_db):
     mock_db.bind.dialect.name = "postgresql"
-    mock_db.execute.side_effect = Exception("refresh failed")
+    mock_db.execute.side_effect = SQLAlchemyError("refresh failed")
     res = await CostAggregator.refresh_materialized_view(mock_db)
     assert res is False
+
+
+@pytest.mark.asyncio
+async def test_get_cached_breakdown_does_not_swallow_base_exceptions(
+    mock_db, tenant_id
+):
+    mock_db.begin_nested.side_effect = KeyboardInterrupt("stop")
+    with pytest.raises(KeyboardInterrupt, match="stop"):
+        await CostAggregator.get_cached_breakdown(
+            mock_db, tenant_id, date(2026, 1, 1), date(2026, 1, 31)
+        )
+
+
+@pytest.mark.asyncio
+async def test_refresh_materialized_view_does_not_swallow_base_exceptions(mock_db):
+    mock_db.bind.dialect.name = "postgresql"
+    mock_db.execute.side_effect = KeyboardInterrupt("stop")
+    with pytest.raises(KeyboardInterrupt, match="stop"):
+        await CostAggregator.refresh_materialized_view(mock_db)

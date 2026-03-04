@@ -185,3 +185,99 @@ async def test_idle_ai_search_plugin_scan(mock_azure_creds):
     assert z["sku"] == "standard"
     assert z["monthly_cost"] > 0 # Standard SKU has base cost
     assert z["confidence_score"] > 0.9
+
+
+@pytest.mark.asyncio
+async def test_idle_azure_openai_plugin_metric_failure_is_non_fatal(mock_azure_creds):
+    with patch.dict(
+        sys.modules,
+        {
+            "azure.mgmt.cognitiveservices": MagicMock(),
+            "azure.mgmt.search": MagicMock(),
+            "azure.mgmt.monitor": MagicMock(),
+        },
+    ):
+        from app.modules.optimization.adapters.azure.plugins.ai import IdleAzureOpenAIPlugin
+
+        plugin = IdleAzureOpenAIPlugin()
+
+    mock_account = MagicMock()
+    mock_account.id = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.CognitiveServices/accounts/openai-test"
+    mock_account.name = "openai-test"
+    mock_account.kind = "OpenAI"
+    mock_account.location = "eastus"
+
+    mock_deployment = MagicMock()
+    mock_deployment.id = f"{mock_account.id}/deployments/gpt-4o"
+    mock_deployment.name = "gpt-4o"
+    mock_deployment.properties = MagicMock()
+    mock_deployment.properties.model.name = "gpt-4o"
+
+    mock_mgmt_client = MagicMock()
+    mock_mgmt_client.accounts.list.return_value = [mock_account]
+    mock_mgmt_client.deployments.list.return_value = [mock_deployment]
+
+    mock_monitor_client = MagicMock()
+    mock_monitor_client.metrics.list.side_effect = RuntimeError("metrics unavailable")
+
+    with (
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.ai.CognitiveServicesManagementClient",
+            return_value=mock_mgmt_client,
+        ),
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.ai.MonitorManagementClient",
+            return_value=mock_monitor_client,
+        ),
+    ):
+        zombies = await plugin.scan(
+            session="sub-1",
+            region="eastus",
+            credentials=mock_azure_creds,
+        )
+
+    assert zombies == []
+
+
+@pytest.mark.asyncio
+async def test_idle_ai_search_plugin_metric_failure_is_non_fatal(mock_azure_creds):
+    with patch.dict(
+        sys.modules,
+        {
+            "azure.mgmt.cognitiveservices": MagicMock(),
+            "azure.mgmt.search": MagicMock(),
+            "azure.mgmt.monitor": MagicMock(),
+        },
+    ):
+        from app.modules.optimization.adapters.azure.plugins.ai import IdleAISearchPlugin
+
+        plugin = IdleAISearchPlugin()
+
+    mock_service = MagicMock()
+    mock_service.id = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Search/searchServices/search-test"
+    mock_service.name = "search-test"
+    mock_service.sku.name = "standard"
+
+    mock_mgmt_client = MagicMock()
+    mock_mgmt_client.services.list_by_subscription.return_value = [mock_service]
+
+    mock_monitor_client = MagicMock()
+    mock_monitor_client.metrics.list.side_effect = RuntimeError("metrics unavailable")
+
+    with (
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.ai.SearchManagementClient",
+            return_value=mock_mgmt_client,
+        ),
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.ai.MonitorManagementClient",
+            return_value=mock_monitor_client,
+        ),
+    ):
+        zombies = await plugin.scan(
+            session="sub-1",
+            region="eastus",
+            credentials=mock_azure_creds,
+        )
+
+    assert zombies == []

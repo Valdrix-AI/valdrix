@@ -1,4 +1,5 @@
 import pytest
+import smtplib
 from unittest.mock import patch, ANY
 from app.modules.notifications.domain.email_service import EmailService
 
@@ -46,7 +47,7 @@ async def test_send_carbon_alert_no_recipients(email_service):
 
 @pytest.mark.asyncio
 async def test_send_carbon_alert_failure(email_service):
-    with patch("smtplib.SMTP", side_effect=Exception("SMTP Error")):
+    with patch("smtplib.SMTP", side_effect=smtplib.SMTPException("SMTP Error")):
         result = await email_service.send_carbon_alert(["test@example.com"], {})
         assert result is False
 

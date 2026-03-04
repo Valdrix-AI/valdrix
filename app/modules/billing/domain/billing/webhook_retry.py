@@ -34,6 +34,13 @@ from app.modules.governance.domain.jobs.processor import enqueue_job
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+PAYSTACK_STORED_PAYLOAD_PARSE_RECOVERABLE_EXCEPTIONS = (
+    json.JSONDecodeError,
+    UnicodeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 # Webhook configuration
 WEBHOOK_MAX_ATTEMPTS = 5  # More retries for revenue-critical
@@ -273,7 +280,7 @@ async def process_paystack_webhook(
                 return {"status": "error", "reason": "invalid_raw_payload"}
             event = parsed.get("event", payload.get("event_type"))
             data = parsed.get("data", {})
-        except Exception as exc:
+        except PAYSTACK_STORED_PAYLOAD_PARSE_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
                 "paystack_retry_payload_parse_failed",
                 job_id=str(job.id),

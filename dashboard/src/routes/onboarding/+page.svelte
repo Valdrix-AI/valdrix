@@ -1490,7 +1490,9 @@
 					<div class="code-container">
 						<div class="code-header">
 							<span
-								>{selectedTab === 'cloudformation' ? 'valdrics-role.yaml' : 'valdrics-role.tf'}</span
+								>{selectedTab === 'cloudformation'
+									? 'valdrics-role.yaml'
+									: 'valdrics-role.tf'}</span
 							>
 							<div class="code-actions">
 								<button type="button" class="icon-btn" onclick={copyTemplate}

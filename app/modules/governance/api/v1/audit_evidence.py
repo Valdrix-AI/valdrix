@@ -3,7 +3,9 @@ from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import ValidationError
 from sqlalchemy import desc, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.governance.api.v1.audit_schemas import (
@@ -49,6 +51,38 @@ from app.shared.db.session import get_db
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Audit"])
+AUDIT_EVIDENCE_PAYLOAD_ERRORS = (ValidationError, TypeError, ValueError)
+CARBON_FACTOR_FALLBACK_ERRORS = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
+
+
+def _validate_evidence_payload(
+    *,
+    raw: Any,
+    model: Any,
+    warning_event: str,
+    event_id: str,
+    tenant_id: Any,
+) -> Any | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return model.model_validate(raw)
+    except AUDIT_EVIDENCE_PAYLOAD_ERRORS:
+        logger.warning(
+            warning_event,
+            event_id=event_id,
+            tenant_id=str(tenant_id),
+        )
+        return None
 
 @router.post(
     "/performance/load-test/evidence", response_model=LoadTestEvidenceCaptureResponse
@@ -146,17 +180,14 @@ async def list_load_test_evidence(
     items: list[LoadTestEvidenceItem] = []
     for row in rows:
         details = row.details or {}
-        raw = details.get("load_test")
-        if not isinstance(raw, dict):
-            continue
-        try:
-            load_test = LoadTestEvidencePayload.model_validate(raw)
-        except Exception:
-            logger.warning(
-                "load_test_evidence_invalid_payload",
-                event_id=str(row.id),
-                tenant_id=str(tenant_id),
-            )
+        load_test = _validate_evidence_payload(
+            raw=details.get("load_test"),
+            model=LoadTestEvidencePayload,
+            warning_event="load_test_evidence_invalid_payload",
+            event_id=str(row.id),
+            tenant_id=tenant_id,
+        )
+        if load_test is None:
             continue
 
         items.append(
@@ -275,17 +306,14 @@ async def list_ingestion_persistence_evidence(
     items: list[IngestionPersistenceEvidenceItem] = []
     for row in rows:
         details = row.details or {}
-        raw = details.get("benchmark")
-        if not isinstance(raw, dict):
-            continue
-        try:
-            benchmark = IngestionPersistenceEvidencePayload.model_validate(raw)
-        except Exception:
-            logger.warning(
-                "ingestion_persistence_evidence_invalid_payload",
-                event_id=str(row.id),
-                tenant_id=str(tenant_id),
-            )
+        benchmark = _validate_evidence_payload(
+            raw=details.get("benchmark"),
+            model=IngestionPersistenceEvidencePayload,
+            warning_event="ingestion_persistence_evidence_invalid_payload",
+            event_id=str(row.id),
+            tenant_id=tenant_id,
+        )
+        if benchmark is None:
             continue
 
         items.append(
@@ -405,17 +433,14 @@ async def list_ingestion_soak_evidence(
     items: list[IngestionSoakEvidenceItem] = []
     for row in rows:
         details = row.details or {}
-        raw = details.get("ingestion_soak")
-        if not isinstance(raw, dict):
-            continue
-        try:
-            evidence = IngestionSoakEvidencePayload.model_validate(raw)
-        except Exception:
-            logger.warning(
-                "ingestion_soak_evidence_invalid_payload",
-                event_id=str(row.id),
-                tenant_id=str(tenant_id),
-            )
+        evidence = _validate_evidence_payload(
+            raw=details.get("ingestion_soak"),
+            model=IngestionSoakEvidencePayload,
+            warning_event="ingestion_soak_evidence_invalid_payload",
+            event_id=str(row.id),
+            tenant_id=tenant_id,
+        )
+        if evidence is None:
             continue
 
         items.append(
@@ -527,17 +552,14 @@ async def list_identity_idp_smoke_evidence(
     items: list[IdentityIdpSmokeEvidenceItem] = []
     for row in rows:
         details = row.details or {}
-        raw = details.get("identity_smoke")
-        if not isinstance(raw, dict):
-            continue
-        try:
-            evidence = IdentityIdpSmokeEvidencePayload.model_validate(raw)
-        except Exception:
-            logger.warning(
-                "identity_idp_smoke_evidence_invalid_payload",
-                event_id=str(row.id),
-                tenant_id=str(tenant_id),
-            )
+        evidence = _validate_evidence_payload(
+            raw=details.get("identity_smoke"),
+            model=IdentityIdpSmokeEvidencePayload,
+            warning_event="identity_idp_smoke_evidence_invalid_payload",
+            event_id=str(row.id),
+            tenant_id=tenant_id,
+        )
+        if evidence is None:
             continue
 
         items.append(
@@ -652,17 +674,14 @@ async def list_sso_federation_validation_evidence(
     items: list[SsoFederationValidationEvidenceItem] = []
     for row in rows:
         details = row.details or {}
-        raw = details.get("sso_federation_validation")
-        if not isinstance(raw, dict):
-            continue
-        try:
-            evidence = SsoFederationValidationEvidencePayload.model_validate(raw)
-        except Exception:
-            logger.warning(
-                "sso_federation_validation_evidence_invalid_payload",
-                event_id=str(row.id),
-                tenant_id=str(tenant_id),
-            )
+        evidence = _validate_evidence_payload(
+            raw=details.get("sso_federation_validation"),
+            model=SsoFederationValidationEvidencePayload,
+            warning_event="sso_federation_validation_evidence_invalid_payload",
+            event_id=str(row.id),
+            tenant_id=tenant_id,
+        )
+        if evidence is None:
             continue
 
         items.append(
@@ -785,17 +804,14 @@ async def list_job_slo_evidence(
     items: list[JobSLOEvidenceItem] = []
     for row in rows:
         details = row.details or {}
-        raw = details.get("job_slo")
-        if not isinstance(raw, dict):
-            continue
-        try:
-            job_slo = JobSLOEvidencePayload.model_validate(raw)
-        except Exception:
-            logger.warning(
-                "job_slo_evidence_invalid_payload",
-                event_id=str(row.id),
-                tenant_id=str(tenant_id),
-            )
+        job_slo = _validate_evidence_payload(
+            raw=details.get("job_slo"),
+            model=JobSLOEvidencePayload,
+            warning_event="job_slo_evidence_invalid_payload",
+            event_id=str(row.id),
+            tenant_id=tenant_id,
+        )
+        if job_slo is None:
             continue
 
         items.append(
@@ -908,17 +924,14 @@ async def list_tenant_isolation_evidence(
     items: list[TenantIsolationEvidenceItem] = []
     for row in rows:
         details = row.details or {}
-        raw = details.get("tenant_isolation")
-        if not isinstance(raw, dict):
-            continue
-        try:
-            tenant_isolation = TenantIsolationEvidencePayload.model_validate(raw)
-        except Exception:
-            logger.warning(
-                "tenant_isolation_evidence_invalid_payload",
-                event_id=str(row.id),
-                tenant_id=str(tenant_id),
-            )
+        tenant_isolation = _validate_evidence_payload(
+            raw=details.get("tenant_isolation"),
+            model=TenantIsolationEvidencePayload,
+            warning_event="tenant_isolation_evidence_invalid_payload",
+            event_id=str(row.id),
+            tenant_id=tenant_id,
+        )
+        if tenant_isolation is None:
             continue
 
         items.append(
@@ -973,7 +986,7 @@ async def capture_carbon_assurance_evidence(
         factor_payload = await factor_service.get_active_payload()
         active_factor_set_id = str(active_factor_set.id)
         active_factor_set_status = str(active_factor_set.status)
-    except Exception as exc:  # noqa: BLE001
+    except CARBON_FACTOR_FALLBACK_ERRORS as exc:
         # We still capture evidence using static calculator payload if factor-set
         # infrastructure is temporarily unavailable.
         logger.warning(
@@ -1057,17 +1070,14 @@ async def list_carbon_assurance_evidence(
     items: list[CarbonAssuranceEvidenceItem] = []
     for row in rows:
         details = row.details or {}
-        raw = details.get("carbon_assurance")
-        if not isinstance(raw, dict):
-            continue
-        try:
-            carbon_assurance = CarbonAssuranceEvidencePayload.model_validate(raw)
-        except Exception:
-            logger.warning(
-                "carbon_assurance_evidence_invalid_payload",
-                event_id=str(row.id),
-                tenant_id=str(tenant_id),
-            )
+        carbon_assurance = _validate_evidence_payload(
+            raw=details.get("carbon_assurance"),
+            model=CarbonAssuranceEvidencePayload,
+            warning_event="carbon_assurance_evidence_invalid_payload",
+            event_id=str(row.id),
+            tenant_id=tenant_id,
+        )
+        if carbon_assurance is None:
             continue
 
         items.append(
@@ -1083,5 +1093,3 @@ async def list_carbon_assurance_evidence(
         )
 
     return CarbonAssuranceEvidenceListResponse(total=len(items), items=items)
-
-

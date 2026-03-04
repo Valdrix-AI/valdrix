@@ -7,6 +7,7 @@ from typing import Any, TYPE_CHECKING, cast
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.llm.budget_fair_use import (
@@ -17,6 +18,52 @@ from app.shared.llm.budget_fair_use import (
 
 if TYPE_CHECKING:
     from app.shared.llm.budget_manager import BudgetStatus
+
+
+BUDGET_EXECUTION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+    KeyError,
+)
+BUDGET_METRIC_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+BUDGET_ROLLBACK_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+BUDGET_CACHE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+BUDGET_ALERT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
 
 
 def _coerce_decimal(value: Any) -> Decimal | None:
@@ -241,7 +288,7 @@ async def check_and_reserve_budget(
         if concurrency_slot_acquired:
             await manager_cls._release_fair_use_inflight_slot(tenant_id)
         raise
-    except Exception as exc:
+    except BUDGET_EXECUTION_RECOVERABLE_ERRORS as exc:
         if concurrency_slot_acquired:
             await manager_cls._release_fair_use_inflight_slot(tenant_id)
         manager_module.logger.exception(
@@ -339,7 +386,7 @@ async def record_usage_entry(
             manager_module.LLM_SPEND_USD.labels(
                 tenant_tier=tier.value, provider=provider, model=model
             ).inc(float(actual_cost_usd))
-        except Exception as exc:
+        except BUDGET_METRIC_RECOVERABLE_ERRORS as exc:
             manager_module.logger.debug(
                 "llm_spend_metric_inc_failed", error=str(exc), exc_info=True
             )
@@ -358,7 +405,7 @@ async def record_usage_entry(
             operation_id=operation_id,
         )
 
-    except Exception as exc:
+    except BUDGET_EXECUTION_RECOVERABLE_ERRORS as exc:
         manager_module.logger.error(
             "usage_recording_failed",
             tenant_id=str(tenant_id),
@@ -372,7 +419,7 @@ async def record_usage_entry(
                 rollback_result = rollback_fn()
                 if inspect.isawaitable(rollback_result):
                     await rollback_result
-            except Exception as rollback_exc:
+            except BUDGET_ROLLBACK_RECOVERABLE_ERRORS as rollback_exc:
                 manager_module.logger.warning(
                     "usage_recording_rollback_failed",
                     tenant_id=str(tenant_id),
@@ -400,7 +447,7 @@ async def check_budget_state(
                 return manager_module.BudgetStatus.HARD_LIMIT
             if await cache.client.get(f"budget_soft:{tenant_id}"):
                 return manager_module.BudgetStatus.SOFT_LIMIT
-        except Exception as exc:
+        except BUDGET_CACHE_RECOVERABLE_ERRORS as exc:
             manager_module.logger.error(
                 "llm_budget_check_cache_error_fail_closed",
                 error=str(exc),
@@ -536,7 +583,7 @@ async def check_budget_and_alert(
                     "llm_budget_alert_slack_not_configured",
                     tenant_id=str(tenant_id),
                 )
-        except Exception as exc:
+        except BUDGET_ALERT_RECOVERABLE_ERRORS as exc:
             manager_module.logger.warning(
                 "llm_budget_alert_slack_dispatch_failed",
                 tenant_id=str(tenant_id),

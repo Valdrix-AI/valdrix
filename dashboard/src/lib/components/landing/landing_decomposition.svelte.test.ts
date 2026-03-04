@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import LandingHeroCopy from '$lib/components/landing/LandingHeroCopy.svelte';
 import LandingSignalMapCard from '$lib/components/landing/LandingSignalMapCard.svelte';
 import LandingRoiSimulator from '$lib/components/landing/LandingRoiSimulator.svelte';
@@ -15,37 +15,30 @@ describe('Landing component decomposition', () => {
 	it('renders hero copy and keeps CTA tracking callbacks wired', async () => {
 		const onPrimaryCta = vi.fn();
 		const onSecondaryCta = vi.fn();
-		const onSimulatorCta = vi.fn();
-		const onTalkToSalesCta = vi.fn();
 
 		render(LandingHeroCopy, {
 			props: {
 				heroTitle: 'Control every dollar in your cloud and software stack.',
 				heroSubtitle: 'From signal to owner and approved action in one loop.',
-				heroQuantPromise: 'Target 10-18% controllable spend opportunity.',
 				primaryCtaLabel: 'Start Free',
-				secondaryCtaLabel: 'See Plans',
-				secondaryCtaHref: '#plans',
+					secondaryCtaLabel: 'See it in action',
+					secondaryCtaHref: '#signal-map',
 				primaryCtaHref: '/auth/login',
-				talkToSalesHref: '/talk-to-sales',
-				plainLanguageMode: false,
 				onPrimaryCta,
-				onSecondaryCta,
-				onSimulatorCta,
-				onTalkToSalesCta,
-				onTogglePlainLanguage: vi.fn()
+				onSecondaryCta
 			}
 		});
 
 		expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
 		await fireEvent.click(screen.getByRole('link', { name: /start free/i }));
-		await fireEvent.click(screen.getByRole('link', { name: /see plans/i }));
-		await fireEvent.click(screen.getByRole('link', { name: /run the spend scenario simulator/i }));
-		await fireEvent.click(screen.getByRole('link', { name: /talk to sales/i }));
+		await fireEvent.click(screen.getByRole('link', { name: /see it in action/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
-		expect(onSimulatorCta).toHaveBeenCalledTimes(1);
-		expect(onTalkToSalesCta).toHaveBeenCalledTimes(1);
+		expect(screen.getByText(/one control loop/i)).toBeTruthy();
+
+		// Check for GreenOps Global Flip additions
+		expect(screen.getByText(/Cloud, Software, and Carbon/i)).toBeTruthy();
+		expect(screen.getByText(/See waste and intensity early/i)).toBeTruthy();
 	});
 
 	it('renders signal map card and propagates interactions', async () => {
@@ -77,10 +70,12 @@ describe('Landing component decomposition', () => {
 		});
 
 		expect(screen.getByText(/realtime signal map/i)).toBeTruthy();
+		await fireEvent.click(screen.getByRole('button', { name: /explore control details/i }));
 		const firstLaneTab = screen.getByRole('tab', { name: /economic visibility/i });
 		await fireEvent.click(firstLaneTab);
 		expect(onSelectSignalLane).toHaveBeenCalled();
 
+		await fireEvent.click(screen.getByRole('button', { name: /open 20-second walkthrough/i }));
 		const demoButton = screen.getByRole('button', { name: /^assess$/i });
 		await fireEvent.click(demoButton);
 		expect(onSelectDemoStep).toHaveBeenCalled();
@@ -113,6 +108,7 @@ describe('Landing component decomposition', () => {
 				scenarioWasteWithPct: 7,
 				scenarioWindowMonths: 12,
 				formatUsd: (amount: number) => `$${amount}`,
+				currencyCode: 'USD',
 				onTrackScenarioAdjust,
 				onScenarioWasteWithoutChange,
 				onScenarioWasteWithChange,
@@ -152,21 +148,176 @@ describe('Landing component decomposition', () => {
 		expect(onTrackCta).toHaveBeenCalledTimes(1);
 	});
 
-	it('renders trust validation and one-pager collateral CTAs', async () => {
+	it('renders global trust compliance badges and regional resilience signals', async () => {
 		const onTrackCta = vi.fn();
-		render(LandingTrustSection, {
+		const view = render(LandingTrustSection, {
 			props: {
 				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 				onTrackCta
 			}
 		});
 
-		await fireEvent.click(screen.getByRole('link', { name: /book executive briefing/i }));
-		expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
+		// Check for specific global compliance badges (ISO 27001 and DORA)
+		expect(view.getByText(/ISO 27001 readiness alignment/i)).toBeTruthy();
+		expect(view.getByText(/DORA operational resilience/i)).toBeTruthy();
 
-		await fireEvent.click(screen.getByRole('link', { name: /download executive one-pager/i }));
-		expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
+		// Check for the Global FinOps Compliance Workbook CTA
+		const ctaBlock = within(view.container).getByRole('generic', {
+			name: 'Trust, Risk, and Procurement Readiness'
+		});
+		expect(ctaBlock).toBeTruthy();
+		if (ctaBlock) {
+			const ctaView = within(ctaBlock);
+			expect(ctaView.getByText(/Access Control & Compliance Checklist/i)).toBeTruthy();
+			await fireEvent.click(
+				ctaView.getByRole('link', { name: /Access Control & Compliance Checklist/i })
+			);
+			expect(onTrackCta).toHaveBeenCalledWith('download_global_compliance_workbook');
+		}
+	});
+
+	it('renders trust validation and one-pager collateral CTAs', async () => {
+		const onTrackCta = vi.fn();
+		const view = render(LandingTrustSection, {
+			props: {
+				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
+				onTrackCta
+			}
+		});
+
+		const ctaBlock = within(view.container).getByRole('generic', {
+			name: 'Trust, Risk, and Procurement Readiness'
+		});
+		expect(ctaBlock).toBeTruthy();
+		if (ctaBlock) {
+			const ctaView = within(ctaBlock);
+			await fireEvent.click(
+				ctaView.getByRole('link', { name: /request validation briefing/i })
+			);
+			expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
+
+			await fireEvent.click(
+				ctaView.getByRole('link', { name: /download executive due-diligence one-pager/i })
+			);
+			expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
+		}
+	});
+
+	it('rotates customer comments with navigation controls', async () => {
+		const trust = render(LandingTrustSection, {
+			props: {
+				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
+				onTrackCta: vi.fn()
+			}
+		});
+		const trustView = within(trust.container);
+
+		expect(
+			trustView.getByText(/we stopped debating whose queue a cost issue belongs to/i)
+		).toBeTruthy();
+		await fireEvent.click(
+			trustView.getByRole('button', { name: /next design-partner comment/i })
+		);
+		expect(
+			trustView.getByText(
+				/the value is not another dashboard\. it is moving from signal to controlled action/i
+			)
+		).toBeTruthy();
+		await fireEvent.click(
+			trustView.getByRole('button', { name: /show design-partner comment 3/i })
+		);
+		expect(trustView.getByText(/leadership reviews got shorter/i)).toBeTruthy();
+	});
+
+	it('refreshes customer comments periodically from the feed', async () => {
+		vi.useFakeTimers();
+		const fetchMock = vi
+			.spyOn(globalThis, 'fetch')
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						items: [
+							{
+								quote: 'Initial streamed quote for trust section.',
+								attribution: 'First source'
+							}
+						]
+					}),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				)
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						items: [
+							{
+								quote: 'Updated streamed quote after polling refresh.',
+								attribution: 'Second source'
+							}
+						]
+					}),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				)
+			);
+
+		try {
+			const trust = render(LandingTrustSection, {
+				props: {
+					requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
+					onTrackCta: vi.fn()
+				}
+			});
+			const trustView = within(trust.container);
+
+			expect(await trustView.findByText(/initial streamed quote for trust section/i)).toBeTruthy();
+			await vi.advanceTimersByTimeAsync(20_500);
+			expect(
+				await trustView.findByText(/updated streamed quote after polling refresh/i)
+			).toBeTruthy();
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+		} finally {
+			fetchMock.mockRestore();
+			vi.useRealTimers();
+		}
+	});
+
+	it('keeps fallback trust quotes when the customer comments feed is unavailable', async () => {
+		const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'));
+
+		try {
+			const trust = render(LandingTrustSection, {
+				props: {
+					requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
+					onTrackCta: vi.fn()
+				}
+			});
+			const trustView = within(trust.container);
+
+			expect(
+				trustView.getByText(/we stopped debating whose queue a cost issue belongs to/i)
+			).toBeTruthy();
+			await fireEvent.click(
+				trustView.getByRole('button', { name: /next design-partner comment/i })
+			);
+			expect(
+				trustView.getByText(
+					/the value is not another dashboard\. it is moving from signal to controlled action/i
+				)
+			).toBeTruthy();
+			expect(fetchMock).toHaveBeenCalled();
+		} finally {
+			fetchMock.mockRestore();
+		}
 	});
 
 	it('updates ROI controls and CTA callback from calculator component', async () => {
@@ -198,7 +349,11 @@ describe('Landing component decomposition', () => {
 				roiTeamMembers: 2,
 				roiBlendedHourlyUsd: 145,
 				buildRoiCtaHref: '/auth/login?intent=roi_assessment',
-				formatUsd: (amount: number) => `$${amount}`,
+				formatUsd: (amount: number, currency: string = 'USD') => {
+					if (currency === 'EUR') return `€${amount}`;
+					if (currency === 'GBP') return `£${amount}`;
+					return `$${amount}`;
+				},
 				onRoiControlInput,
 				onRoiMonthlySpendChange,
 				onRoiExpectedReductionChange,
@@ -212,10 +367,15 @@ describe('Landing component decomposition', () => {
 		await fireEvent.input(screen.getByLabelText(/cloud \+ software monthly spend/i), {
 			target: { value: '130000' }
 		});
-		await fireEvent.input(screen.getByLabelText(/expected reduction/i), { target: { value: '13' } });
+		await fireEvent.input(screen.getByLabelText(/expected reduction/i), {
+			target: { value: '13' }
+		});
 		await fireEvent.input(screen.getByLabelText(/rollout duration/i), { target: { value: '35' } });
 		await fireEvent.input(screen.getByLabelText(/team members/i), { target: { value: '3' } });
-		await fireEvent.input(screen.getByLabelText(/blended hourly rate/i), { target: { value: '150' } });
+		await fireEvent.input(screen.getByLabelText(/blended hourly rate/i), {
+			target: { value: '150' }
+		});
+
 		await fireEvent.click(screen.getByRole('link', { name: /run this in your environment/i }));
 
 		expect(onRoiMonthlySpendChange).toHaveBeenCalledWith(130000);

@@ -6,12 +6,22 @@ Detects empty GKE clusters and idle Cloud Run services.
 
 import importlib
 from typing import List, Dict, Any
+from google.api_core.exceptions import GoogleAPIError
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
+GCP_GKE_SCAN_RECOVERABLE_EXCEPTIONS = (
+    GoogleAPIError,
+    ImportError,
+    AttributeError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @registry.register("gcp")
@@ -111,7 +121,7 @@ class EmptyGkeClusterPlugin(ZombiePlugin):
                             "explainability_notes": "GKE cluster has no nodes configured, only control plane cost.",
                         }
                     )
-        except Exception as e:
+        except GCP_GKE_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("gcp_gke_scan_error", error=str(e))
 
         return zombies

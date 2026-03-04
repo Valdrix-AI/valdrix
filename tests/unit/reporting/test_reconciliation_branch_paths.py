@@ -234,6 +234,39 @@ async def test_compare_explorer_vs_cur_alert_failure_path() -> None:
 
 
 @pytest.mark.asyncio
+async def test_compare_explorer_vs_cur_does_not_swallow_base_exceptions() -> None:
+    db = MagicMock()
+    rows = [
+        SimpleNamespace(
+            service="Compute",
+            source_adapter="cur_parquet",
+            total_cost=100.0,
+            record_count=5,
+        ),
+        SimpleNamespace(
+            service="Compute",
+            source_adapter="cost_explorer_api",
+            total_cost=110.0,
+            record_count=5,
+        ),
+    ]
+    db.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: rows))
+    service = CostReconciliationService(db)
+
+    with patch(
+        "app.shared.core.notifications.NotificationDispatcher.send_alert",
+        new=AsyncMock(side_effect=KeyboardInterrupt("stop")),
+    ):
+        with pytest.raises(KeyboardInterrupt, match="stop"):
+            await service.compare_explorer_vs_cur(
+                tenant_id=uuid4(),
+                start_date=date(2026, 1, 1),
+                end_date=date(2026, 1, 31),
+                alert_threshold_pct=1.0,
+            )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("provider", "feed_source", "native_source"),
     [

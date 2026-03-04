@@ -163,7 +163,7 @@ async def test_ai_enrichment_failure_handling(zombie_service, db_session):
     ):
         with patch(
             "app.shared.llm.factory.LLMFactory.create",
-            side_effect=Exception("LLM Down"),
+            side_effect=RuntimeError("LLM Down"),
         ):
             from app.shared.core.pricing import PricingTier
 
@@ -182,7 +182,7 @@ async def test_parallel_scan_exception_handling(zombie_service, db_session):
 
     mock_detector = MagicMock()
     mock_detector.provider_name = "aws"
-    mock_detector.scan_all = AsyncMock(side_effect=Exception("Provider Failure"))
+    mock_detector.scan_all = AsyncMock(side_effect=RuntimeError("Provider Failure"))
 
     with patch(
         "app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector",

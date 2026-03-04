@@ -16,6 +16,14 @@ from app.shared.core.logging import audit_log
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Safety"])
+SAFETY_CIRCUIT_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
 
 
 # ============================================================
@@ -77,7 +85,7 @@ async def get_safety_status(
             last_failure_at=last_failure,
             can_execute=can_execute,
         )
-    except Exception as e:
+    except SAFETY_CIRCUIT_RECOVERABLE_EXCEPTIONS as e:
         logger.error("safety_status_failed", error=str(e))
         # Return safe defaults
         return SafetyStatusResponse(
@@ -123,7 +131,7 @@ async def reset_circuit_breaker(
         )
 
         return {"status": "reset", "message": "Circuit breaker reset to closed state"}
-    except Exception as e:
+    except SAFETY_CIRCUIT_RECOVERABLE_EXCEPTIONS as e:
         # Item 9: Provide actionable error message for reset failures
         logger.error(
             "circuit_breaker_reset_failed",

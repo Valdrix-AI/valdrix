@@ -12,12 +12,14 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import time
 from typing import Any, AsyncGenerator, Optional
 
+from httpx import HTTPError
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pricing import ExchangeRate
@@ -32,6 +34,36 @@ _RATES_CACHE: dict[str, tuple[Decimal, float, Optional[str]]] = {
     "USD": (Decimal("1.0"), time.time(), "internal")
 }
 _L1_TTL_SECONDS = 300.0
+
+EXCHANGE_RATE_DB_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+)
+EXCHANGE_RATE_CACHE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+)
+EXCHANGE_RATE_DECIMAL_PARSE_ERRORS: tuple[type[Exception], ...] = (
+    InvalidOperation,
+    TypeError,
+    ValueError,
+)
+EXCHANGE_RATE_LIVE_PROVIDER_ERRORS: tuple[type[Exception], ...] = (
+    HTTPError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    InvalidOperation,
+)
 
 
 class ExchangeRateUnavailableError(RuntimeError):
@@ -102,7 +134,7 @@ class ExchangeRateService:
                 if updated is not None and updated.tzinfo is None:
                     updated = updated.replace(tzinfo=timezone.utc)
                 return Decimal(str(row.rate)), updated, row.provider
-        except Exception as exc:
+        except EXCHANGE_RATE_DB_RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "exchange_rate_db_read_failed",
                 currency=to_currency,
@@ -138,7 +170,7 @@ class ExchangeRateService:
                         )
                     )
                 await session.commit()
-            except Exception as exc:
+            except EXCHANGE_RATE_DB_RECOVERABLE_ERRORS as exc:
                 await session.rollback()
                 logger.warning(
                     "exchange_rate_db_upsert_failed",
@@ -167,11 +199,16 @@ class ExchangeRateService:
 
         try:
             rate = Decimal(str(raw_rate))
-        except Exception:
+        except EXCHANGE_RATE_DECIMAL_PARSE_ERRORS:
             return None, None, None
 
         updated = payload.get("updated_at")
-        updated_ts = float(updated) if isinstance(updated, (float, int, str)) else None
+        updated_ts: float | None = None
+        if isinstance(updated, (float, int, str)):
+            try:
+                updated_ts = float(updated)
+            except EXCHANGE_RATE_DECIMAL_PARSE_ERRORS:
+                updated_ts = None
         provider = payload.get("provider")
         provider_name = str(provider) if isinstance(provider, str) else None
         return rate, updated_ts, provider_name
@@ -197,7 +234,7 @@ class ExchangeRateService:
                 },
                 ttl=timedelta(hours=self.cache_ttl_hours),
             )
-        except Exception as exc:
+        except EXCHANGE_RATE_CACHE_RECOVERABLE_ERRORS as exc:
             logger.debug(
                 "exchange_rate_redis_write_failed",
                 currency=to_currency,
@@ -261,7 +298,7 @@ class ExchangeRateService:
         if to_currency == "NGN":
             try:
                 return await self._fetch_ngn_from_cbn(), "cbn_nfem"
-            except Exception as exc:
+            except EXCHANGE_RATE_LIVE_PROVIDER_ERRORS as exc:
                 raise ValueError(f"cbn_nfem:{exc}") from exc
 
         raise ValueError(f"no live provider configured for {to_currency}")
@@ -341,7 +378,7 @@ class ExchangeRateService:
             return live_rate
         except ExchangeRateUnavailableError:
             raise
-        except Exception as exc:
+        except EXCHANGE_RATE_LIVE_PROVIDER_ERRORS as exc:
             logger.warning(
                 "exchange_rate_live_fetch_failed",
                 currency=currency,
@@ -401,9 +438,9 @@ class ExchangeRateService:
                         continue
                     try:
                         rates[code] = Decimal(str(row.rate))
-                    except Exception:
+                    except EXCHANGE_RATE_DECIMAL_PARSE_ERRORS:
                         continue
-        except Exception as exc:
+        except EXCHANGE_RATE_DB_RECOVERABLE_ERRORS as exc:
             logger.warning("exchange_rate_list_cached_failed", error=str(exc))
 
         for code, payload in _RATES_CACHE.items():

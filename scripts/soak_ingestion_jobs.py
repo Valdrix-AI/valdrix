@@ -236,7 +236,7 @@ async def _collect_job_runs(job_ids: list[str]) -> list[_JobRun]:
             elif raw_ingested is not None:
                 try:
                     ingested = int(raw_ingested)
-                except Exception:
+                except (TypeError, ValueError, OverflowError):
                     ingested = None
 
         runs.append(

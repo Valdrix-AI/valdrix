@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
+from sqlalchemy.exc import SQLAlchemyError
 from app.shared.db.session import (
     get_db,
     set_session_tenant_id,
@@ -162,7 +163,7 @@ async def test_get_db_postgresql_rls_set_failed():
     mock_session = AsyncMock()
     mock_session.connection.return_value = AsyncMock()
     mock_session.info = {}
-    mock_session.execute.side_effect = Exception("DB Error")  # Simulate failure
+    mock_session.execute.side_effect = SQLAlchemyError("DB Error")  # Simulate failure
 
     mock_cm = MagicMock()
     mock_cm.__aenter__.return_value = mock_session

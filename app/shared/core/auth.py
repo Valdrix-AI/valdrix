@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import structlog
 from app.shared.core.config import get_settings
 from sqlalchemy import select
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
 from app.shared.db.session import get_db, set_session_tenant_id
@@ -36,6 +36,33 @@ __all__ = [
 
 security = HTTPBearer(auto_error=False)
 
+AUTH_BACKEND_DETECTION_ERRORS: tuple[type[Exception], ...] = (
+    AttributeError,
+    TypeError,
+    RuntimeError,
+)
+AUTH_SCHEMA_RETRY_ERRORS: tuple[type[Exception], ...] = (
+    DBAPIError,
+    SQLAlchemyError,
+)
+AUTH_PERSONA_PARSE_ERRORS: tuple[type[Exception], ...] = (
+    TypeError,
+    ValueError,
+)
+AUTH_IDENTITY_POLICY_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    DBAPIError,
+    SQLAlchemyError,
+    RuntimeError,
+)
+AUTH_UNEXPECTED_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    DBAPIError,
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+
 
 def _uses_sqlite_session(db: AsyncSession) -> bool:
     """Best-effort backend detection for auth query savepoint strategy."""
@@ -50,7 +77,7 @@ def _uses_sqlite_session(db: AsyncSession) -> bool:
             bind = getattr(db, "bind", None)
         backend = getattr(getattr(bind, "dialect", None), "name", "")
         return str(backend or "").strip().lower() == "sqlite"
-    except Exception:
+    except AUTH_BACKEND_DETECTION_ERRORS:
         return False
 
 
@@ -248,13 +275,13 @@ async def get_current_user(
             else:
                 row = await _fetch_auth_row(include_optional=True)
             has_optional_cols = True
-        except (DBAPIError, Exception) as exc:
+        except AUTH_SCHEMA_RETRY_ERRORS as exc:
             if _looks_like_schema_mismatch(exc):
                 logger.warning(
                     "auth_schema_mismatch_optional_cols_retrying", error=str(exc)
                 )
                 if not use_nested_probe:
-                    with suppress(Exception):
+                    with suppress(*AUTH_SCHEMA_RETRY_ERRORS):
                         await db.rollback()
                 row = await _fetch_auth_row(include_optional=False)
                 has_optional_cols = False
@@ -284,7 +311,7 @@ async def get_current_user(
         persona_value = persona_value or UserPersona.ENGINEERING.value
         try:
             persona = UserPersona(persona_value)
-        except Exception:
+        except AUTH_PERSONA_PARSE_ERRORS:
             logger.warning(
                 "auth_invalid_user_persona",
                 user_id=str(user_uuid),
@@ -347,7 +374,7 @@ async def get_current_user(
                         )
         except HTTPException:
             raise
-        except Exception as exc:
+        except AUTH_IDENTITY_POLICY_RECOVERABLE_ERRORS as exc:
             app_settings = get_settings()
             # Fail closed only in production to avoid silently bypassing tenant SSO enforcement.
             if app_settings.is_production:
@@ -381,7 +408,7 @@ async def get_current_user(
     except HTTPException:
         # Re-raise known HTTP exceptions (like 403 User not found)
         raise
-    except Exception as e:
+    except AUTH_UNEXPECTED_RECOVERABLE_ERRORS as e:
         # Avoid leaking internal DB/schema details to clients, but log enough context for operators.
         logger.exception("auth_failed_unexpectedly", error=str(e))
         raise HTTPException(

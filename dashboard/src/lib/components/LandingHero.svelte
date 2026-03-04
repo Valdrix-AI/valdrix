@@ -13,7 +13,6 @@
 		resolveLandingExperiments,
 		resolveOrCreateLandingVisitorId as resolveOrCreateLandingVisitorIdCore,
 		shouldIncludeExperimentQueryParams,
-		type BuyerPersona,
 		type LandingExperimentAssignments
 	} from '$lib/landing/landingExperiment';
 	import {
@@ -24,7 +23,9 @@
 	} from '$lib/landing/landingFunnel';
 	import {
 		DEFAULT_LANDING_ROI_INPUTS,
-		normalizeLandingRoiInputs
+		normalizeLandingRoiInputs,
+		formatCurrencyAmount,
+		SUPPORTED_CURRENCIES
 	} from '$lib/landing/roiCalculator';
 	import {
 		getReducedMotionPreference,
@@ -44,11 +45,7 @@
 	import LandingRoiPlannerCta from '$lib/components/landing/LandingRoiPlannerCta.svelte';
 	import LandingBenefitsSection from '$lib/components/landing/LandingBenefitsSection.svelte';
 	import LandingPlansSection from '$lib/components/landing/LandingPlansSection.svelte';
-	import LandingPersonaSection from '$lib/components/landing/LandingPersonaSection.svelte';
-	import LandingCapabilitiesSection from '$lib/components/landing/LandingCapabilitiesSection.svelte';
 	import LandingTrustSection from '$lib/components/landing/LandingTrustSection.svelte';
-	import LandingLeadCaptureSection from '$lib/components/landing/LandingLeadCaptureSection.svelte';
-	import LandingExitIntentPrompt from '$lib/components/landing/LandingExitIntentPrompt.svelte';
 	import LandingCookieConsent from '$lib/components/landing/LandingCookieConsent.svelte';
 	import './LandingHero.css';
 
@@ -60,43 +57,16 @@
 		seed: 'default'
 	});
 
-	const USD_WHOLE_FORMATTER = new Intl.NumberFormat('en-US', {
-		style: 'currency',
-		currency: 'USD',
-		maximumFractionDigits: 0
-	});
-
 	const SNAPSHOT_ROTATION_MS = 4400;
 	const DEMO_ROTATION_MS = 3200;
 	const LANDING_SCROLL_MILESTONES = Object.freeze([25, 50, 75, 95]);
 	const LANDING_CONSENT_KEY = 'valdrics.cookie_consent.v1';
+	const GEO_CURRENCY_HINT_ENDPOINT = `${base}/api/geo/currency`;
+	const GEO_CURRENCY_HINT_TIMEOUT_MS = 1200;
 	const DEFAULT_SIGNAL_SNAPSHOT = REALTIME_SIGNAL_SNAPSHOTS[0];
-	const SUBSCRIBE_API_PATH = `${base}/api/marketing/subscribe`;
-	const RESOURCES_HREF = `${base}/resources`;
 	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`;
 	const TALK_TO_SALES_PATH = `${base}/talk-to-sales`;
-	const HERO_PLAIN_COPY: Record<BuyerPersona, { title: string; subtitle: string }> = Object.freeze({
-		cto: {
-			title: 'Stop overspending before it delays your product roadmap.',
-			subtitle:
-				'Spot cost issues early, assign the right owner quickly, and fix them safely without slowing delivery.'
-		},
-		finops: {
-			title: 'Turn spend data into fast owner-led action.',
-			subtitle:
-				'Find where money is leaking, route accountability fast, and close actions before month-end pressure.'
-		},
-		security: {
-			title: 'Reduce cloud waste without increasing change risk.',
-			subtitle:
-				'Every high-impact action passes risk checks and explicit approvals before execution.'
-		},
-		cfo: {
-			title: 'Protect gross margin with early spend decisions.',
-			subtitle:
-				'Give finance and engineering one shared operating view with clear ownership and measurable outcomes.'
-		}
-	});
+	const SUPPORTED_CURRENCY_CODES = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
 
 	if (!DEFAULT_SIGNAL_SNAPSHOT) {
 		throw new Error('Realtime signal map requires at least one snapshot.');
@@ -129,7 +99,6 @@
 	let scenarioWasteWithPct = $state(7);
 	let scenarioWindowMonths = $state(12);
 	let scenarioAdjustCaptured = $state(false);
-	let plainLanguageMode = $state(false);
 	let landingScrollProgressPct = $state(0);
 	let prefersReducedMotion = $state(
 		getReducedMotionPreference(browser && typeof window !== 'undefined' ? window : undefined)
@@ -137,6 +106,7 @@
 	let telemetryEnabled = $state(false);
 	let telemetryInitialized = $state(false);
 	let cookieBannerVisible = $state(false);
+	let roiCurrencyCode = $state('USD');
 
 	let activeSnapshot = $derived(
 		REALTIME_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT
@@ -146,38 +116,28 @@
 	let activeSignalLane = $derived(
 		activeSnapshot.lanes.find((lane) => lane.id === activeLaneId) ?? activeSnapshot.lanes[0]
 	);
-	let heroContext = $derived(
-		HERO_ROLE_CONTEXT[(activeBuyerRole.id as BuyerPersona) ?? 'finops'] ?? HERO_ROLE_CONTEXT.finops
-	);
-	let plainCopy = $derived(
-		HERO_PLAIN_COPY[(activeBuyerRole.id as BuyerPersona) ?? 'finops'] ?? HERO_PLAIN_COPY.finops
-	);
+	let heroContext = $derived(HERO_ROLE_CONTEXT[activeBuyerRole.id] ?? HERO_ROLE_CONTEXT.finops);
 	let heroTitle = $derived(
-		plainLanguageMode
-			? plainCopy.title
-			: experiments.heroVariant === 'from_metrics_to_control'
-				? heroContext.metricsTitle
-				: heroContext.controlTitle
+		experiments.heroVariant === 'from_metrics_to_control'
+			? heroContext.metricsTitle
+			: heroContext.controlTitle
 	);
 	let heroSubtitle = $derived(
-		plainLanguageMode
-			? `${plainCopy.subtitle} Valdrics helps teams catch overspend early, route the right owner, and act safely before waste compounds.`
-			: `${heroContext.subtitle} Valdrics helps teams catch overspend early, route the right owner, and act safely before waste compounds.`
+		`${heroContext.subtitle} Valdrics helps teams catch overspend early, route the right owner, and act safely before waste compounds.`
 	);
-	let heroQuantPromise = $derived(heroContext.quantPromise);
 	let primaryCtaLabel = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'Book Executive Briefing' : 'Start Free'
 	);
-	let secondaryCtaLabel = $derived('See Plans');
-	let secondaryCtaHref = $derived('#plans');
+	let secondaryCtaLabel = $derived('See it in action');
+	let secondaryCtaHref = $derived('#signal-map');
 	let primaryCtaIntent = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'executive_briefing' : heroContext.primaryIntent
 	);
 	let includeExperimentQueryParams = $derived(shouldIncludeExperimentQueryParams($page.url, false));
 	let shouldRotateSnapshots = $derived(
 		!prefersReducedMotion &&
-			signalMapInView &&
 			documentVisible &&
+			signalMapInView &&
 			REALTIME_SIGNAL_SNAPSHOTS.length > 1
 	);
 	let shouldRotateDemoSteps = $derived(
@@ -235,10 +195,16 @@
 			activeLaneId = activeSnapshot.lanes[0].id;
 			return;
 		}
-		if (activeSignalLane) {
-			return;
+
+		// Auto-synchronize focus during rotation
+		if (shouldRotateSnapshots) {
+			const watchLane = activeSnapshot.lanes.find(
+				(lane) => lane.severity === 'watch' || lane.severity === 'critical'
+			);
+			if (watchLane && watchLane.id !== activeLaneId) {
+				activeLaneId = watchLane.id;
+			}
 		}
-		activeLaneId = activeSnapshot.lanes[0]?.id ?? null;
 	});
 
 	function stopSnapshotRotation() {
@@ -281,6 +247,15 @@
 	});
 
 	onMount(() => {
+		const geoCurrencyController = new AbortController();
+		const geoCurrencyTimeout = setTimeout(
+			() => geoCurrencyController.abort(),
+			GEO_CURRENCY_HINT_TIMEOUT_MS
+		);
+		void applyGeoCurrencyHint(geoCurrencyController.signal).finally(() => {
+			clearTimeout(geoCurrencyTimeout);
+		});
+
 		const storage = browser ? window.localStorage : undefined;
 		const stopReducedMotionObservation = observeReducedMotionPreference(window, (value) => {
 			prefersReducedMotion = value;
@@ -377,6 +352,8 @@
 		handleScroll();
 
 		return () => {
+			geoCurrencyController.abort();
+			clearTimeout(geoCurrencyTimeout);
 			stopReducedMotionObservation();
 			document.removeEventListener('visibilitychange', handleVisibility);
 			window.removeEventListener('scroll', handleScroll);
@@ -538,18 +515,6 @@
 		);
 	}
 
-	function selectBuyerRole(index: number) {
-		if (index < 0 || index >= BUYER_ROLE_VIEWS.length) return;
-		buyerRoleIndex = index;
-		markEngaged();
-		emitLandingTelemetrySafe(
-			'buyer_role_select',
-			'buyers',
-			BUYER_ROLE_VIEWS[index]?.id,
-			buildTelemetryContext('engaged')
-		);
-	}
-
 	function selectDemoStep(index: number) {
 		if (index < 0 || index >= MICRO_DEMO_STEPS.length) return;
 		demoStepIndex = index;
@@ -594,22 +559,52 @@
 			return;
 		}
 		scenarioAdjustCaptured = true;
-		emitLandingTelemetrySafe('scenario_adjust', 'simulator', control, buildTelemetryContext('engaged'));
-	}
-
-	function formatUsd(amount: number): string {
-		return USD_WHOLE_FORMATTER.format(amount);
-	}
-
-	function togglePlainLanguageMode(): void {
-		plainLanguageMode = !plainLanguageMode;
-		markEngaged();
 		emitLandingTelemetrySafe(
-			'copy_mode_toggle',
-			'hero',
-			plainLanguageMode ? 'plain_english' : 'expert',
+			'scenario_adjust',
+			'simulator',
+			control,
 			buildTelemetryContext('engaged')
 		);
+	}
+
+	function formatUsd(amount: number, currency: string = roiCurrencyCode): string {
+		return formatCurrencyAmount(amount, currency);
+	}
+
+	async function applyGeoCurrencyHint(signal: AbortSignal): Promise<void> {
+		// Keep pricing deterministic in USD unless a trusted edge country hint maps to a supported currency.
+		roiCurrencyCode = 'USD';
+		if (browser && typeof window !== 'undefined') {
+			const host = window.location.hostname.toLowerCase();
+			if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+				return;
+			}
+		}
+
+		let requestUrl: string;
+		try {
+			requestUrl = new URL(GEO_CURRENCY_HINT_ENDPOINT, $page.url.origin).toString();
+		} catch {
+			return;
+		}
+
+		try {
+			const response = await fetch(requestUrl, {
+				method: 'GET',
+				headers: { accept: 'application/json' },
+				cache: 'no-store',
+				signal
+			});
+			if (!response.ok) return;
+			const payload = (await response.json()) as { currencyCode?: string };
+			const currencyCode = String(payload.currencyCode ?? '')
+				.trim()
+				.toUpperCase();
+			if (!SUPPORTED_CURRENCY_CODES.has(currencyCode)) return;
+			roiCurrencyCode = currencyCode;
+		} catch {
+			// Keep locale/timezone fallback when geo hint is unavailable.
+		}
 	}
 </script>
 
@@ -627,69 +622,74 @@
 	<meta itemprop="url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
 	<meta itemprop="image" content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()} />
 
-		<section id="hero" class="landing-hero" data-landing-section="hero">
-			<div class="container mx-auto px-6 pt-10 pb-16">
-				<div class="landing-hero-grid">
-					<LandingHeroCopy
-						heroTitle={heroTitle}
-						heroSubtitle={heroSubtitle}
-						heroQuantPromise={heroQuantPromise}
-						primaryCtaLabel={primaryCtaLabel}
-						secondaryCtaLabel={secondaryCtaLabel}
-						secondaryCtaHref={secondaryCtaHref}
-						primaryCtaHref={buildPrimaryCtaHref()}
-						talkToSalesHref={buildTalkToSalesHref('hero')}
-						plainLanguageMode={plainLanguageMode}
-						onPrimaryCta={() => trackCta('cta_click', 'hero', experiments.ctaVariant)}
-						onSecondaryCta={() => trackCta('cta_click', 'hero', 'see_plans')}
-						onSimulatorCta={() => trackCta('cta_click', 'hero', 'open_simulator')}
-						onTalkToSalesCta={() => trackCta('cta_click', 'hero', 'talk_to_sales')}
-						onTogglePlainLanguage={togglePlainLanguageMode}
-					/>
-
-					<LandingSignalMapCard
-						activeSnapshot={activeSnapshot}
-						activeSignalLane={activeSignalLane}
-						signalMapInView={signalMapInView}
-						snapshotIndex={snapshotIndex}
-						demoStepIndex={demoStepIndex}
-						onSelectSignalLane={selectSignalLane}
-						onSelectDemoStep={selectDemoStep}
-						onSelectSnapshot={selectSnapshot}
-						onSignalMapElementChange={(element) => {
-							signalMapElement = element;
-						}}
-					/>
-				</div>
-			</div>
-		</section>
+	<section id="hero" class="landing-hero" data-landing-section="hero">
+		<div class="container mx-auto px-6 pt-8 pb-12 sm:pt-10 sm:pb-16">
+			<LandingHeroCopy
+				{heroTitle}
+				{heroSubtitle}
+				{primaryCtaLabel}
+				{secondaryCtaLabel}
+				{secondaryCtaHref}
+				primaryCtaHref={buildPrimaryCtaHref()}
+				onPrimaryCta={() => trackCta('cta_click', 'hero', experiments.ctaVariant)}
+				onSecondaryCta={() => trackCta('cta_click', 'hero', 'see_signal_map')}
+			/>
+		</div>
+	</section>
 
 	{#if experiments.sectionOrderVariant === 'workflow_first'}
 		<LandingWorkflowSection />
 	{:else}
 		<LandingCloudHookSection
-			activeHookState={activeHookState}
-			hookStateIndex={hookStateIndex}
+			{activeHookState}
+			{hookStateIndex}
 			cloudHookStates={CLOUD_HOOK_STATES}
 			onSelectHookState={selectHookState}
 		/>
 	{/if}
 
+	<section
+		id="signal-map"
+		class="container mx-auto px-6 pb-12 md:pb-16 landing-section-lazy"
+		data-landing-section="signal_map"
+	>
+		<div class="landing-section-head">
+			<h2 class="landing-h2">See it in action</h2>
+			<p class="landing-section-sub">
+				One shared signal map for cost, risk, ownership, and controlled execution.
+			</p>
+		</div>
+		<LandingSignalMapCard
+			{activeSnapshot}
+			{activeSignalLane}
+			{signalMapInView}
+			{snapshotIndex}
+			{demoStepIndex}
+			onSelectSignalLane={selectSignalLane}
+			onSelectDemoStep={selectDemoStep}
+			onSelectSnapshot={selectSnapshot}
+			onSignalMapElementChange={(element) => {
+				signalMapElement = element;
+			}}
+		/>
+	</section>
+
 	<LandingRoiSimulator
-		normalizedScenarioWasteWithoutPct={normalizedScenarioWasteWithoutPct}
-		normalizedScenarioWasteWithPct={normalizedScenarioWasteWithPct}
-		normalizedScenarioWindowMonths={normalizedScenarioWindowMonths}
-		scenarioWithoutBarPct={scenarioWithoutBarPct}
-		scenarioWithBarPct={scenarioWithBarPct}
-		scenarioWasteWithoutUsd={scenarioWasteWithoutUsd}
-		scenarioWasteWithUsd={scenarioWasteWithUsd}
-		scenarioWasteRecoveryMonthlyUsd={scenarioWasteRecoveryMonthlyUsd}
-		scenarioWasteRecoveryWindowUsd={scenarioWasteRecoveryWindowUsd}
+		{normalizedScenarioWasteWithoutPct}
+		{normalizedScenarioWasteWithPct}
+		{normalizedScenarioWindowMonths}
+		{scenarioWithoutBarPct}
+		{scenarioWithBarPct}
+		{scenarioWasteWithoutUsd}
+		{scenarioWasteWithUsd}
+		{scenarioWasteRecoveryMonthlyUsd}
+		{scenarioWasteRecoveryWindowUsd}
 		monthlySpendUsd={roiInputs.monthlySpendUsd}
-		scenarioWasteWithoutPct={scenarioWasteWithoutPct}
-		scenarioWasteWithPct={scenarioWasteWithPct}
-		scenarioWindowMonths={scenarioWindowMonths}
-		formatUsd={formatUsd}
+		{scenarioWasteWithoutPct}
+		{scenarioWasteWithPct}
+		{scenarioWindowMonths}
+		{formatUsd}
+		currencyCode={roiCurrencyCode}
 		onTrackScenarioAdjust={trackScenarioAdjust}
 		onScenarioWasteWithoutChange={(value) => {
 			scenarioWasteWithoutPct = value;
@@ -716,27 +716,12 @@
 		onTrackCta={trackCta}
 	/>
 
-	<LandingPersonaSection
-		activeBuyerRole={activeBuyerRole}
-		buyerRoleIndex={buyerRoleIndex}
-		onSelectBuyerRole={selectBuyerRole}
-	/>
-
-	<LandingCapabilitiesSection onTrackCta={trackCta} />
-
 	<LandingTrustSection
 		onTrackCta={(value) => trackCta('cta_click', 'trust', value)}
 		requestValidationBriefingHref={buildSignupHref('executive_briefing', {
 			source: 'trust_validation'
 		})}
 		onePagerHref={ONE_PAGER_HREF}
-	/>
-
-	<LandingLeadCaptureSection
-		subscribeApiPath={SUBSCRIBE_API_PATH}
-		startFreeHref={buildPrimaryCtaHref()}
-		resourcesHref={RESOURCES_HREF}
-		onTrackCta={trackCta}
 	/>
 
 	<div class="landing-mobile-sticky-cta" aria-label="Mobile quick actions">
@@ -748,26 +733,23 @@
 			{primaryCtaLabel}
 		</a>
 		<a
-			href="#plans"
+			href="#signal-map"
 			class="btn btn-secondary"
-			onclick={() => trackCta('cta_click', 'mobile_sticky', 'see_plans')}
+			onclick={() => trackCta('cta_click', 'mobile_sticky', 'see_signal_map')}
 		>
-			Plans
+			See it in action
 		</a>
 	</div>
 
-	{#if landingScrollProgressPct >= 20}
-		<a href="#hero" class="landing-back-to-top" onclick={() => trackCta('cta_click', 'utility', 'back_to_top')}>
+	{#if landingScrollProgressPct >= 8}
+		<a
+			href="#hero"
+			class="landing-back-to-top"
+			onclick={() => trackCta('cta_click', 'utility', 'back_to_top')}
+		>
 			Back to top
 		</a>
 	{/if}
-
-	<LandingExitIntentPrompt
-		startFreeHref={buildPrimaryCtaHref()}
-		resourcesHref={RESOURCES_HREF}
-		subscribeApiPath={SUBSCRIBE_API_PATH}
-		onTrackCta={trackCta}
-	/>
 
 	<LandingCookieConsent
 		visible={cookieBannerVisible}

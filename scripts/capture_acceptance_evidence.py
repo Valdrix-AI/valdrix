@@ -23,6 +23,15 @@ import httpx
 
 from app.shared.core.evidence_capture import redact_secrets, sanitize_bearer_token
 
+EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS = (
+    httpx.HTTPError,
+    json.JSONDecodeError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+
 
 def _ensure_test_env_for_in_process() -> None:
     # Set a minimal, deterministic test environment so in-process evidence capture can run
@@ -271,7 +280,7 @@ async def capture_acceptance_evidence(
                 token_value = (csrf_resp.json() or {}).get("csrf_token")
                 if token_value:
                     client.headers["X-CSRF-Token"] = str(token_value)
-        except Exception:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS:
             # Evidence capture should not fail just because CSRF bootstrap failed.
             pass
 
@@ -299,7 +308,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("acceptance_kpis_json", kpis_path, None, False, _format_exception(exc))
 
         # 2) Acceptance KPIs CSV
@@ -327,7 +336,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("acceptance_kpis_csv", kpis_csv_path, None, False, _format_exception(exc))
 
         # 2b) Leadership KPIs export (JSON + CSV) (best-effort; depends on tier/features)
@@ -356,7 +365,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("leadership_kpis_json", leadership_path, None, False, _format_exception(exc))
 
         leadership_csv_query = urlencode(
@@ -385,7 +394,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("leadership_kpis_csv", leadership_csv_path, None, False, _format_exception(exc))
 
         # 2c) Savings proof export (JSON + CSV) (best-effort; Pro+)
@@ -412,7 +421,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("savings_proof_json", savings_path, None, False, _format_exception(exc))
 
         savings_csv_query = urlencode(
@@ -439,7 +448,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("savings_proof_csv", savings_csv_path, None, False, _format_exception(exc))
 
         # 2d) Quarterly commercial proof report template (JSON + CSV) (best-effort; Pro+)
@@ -472,7 +481,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record(
                 "commercial_quarterly_report_json",
                 quarterly_path,
@@ -510,7 +519,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record(
                 "commercial_quarterly_report_csv",
                 quarterly_csv_path,
@@ -543,7 +552,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record(
                 "integration_acceptance_evidence_json",
                 evidence_path,
@@ -563,7 +572,7 @@ async def capture_acceptance_evidence(
                 record("jobs_slo_json", slo_path, resp.status_code, True)
             else:
                 record("jobs_slo_json", slo_path, resp.status_code, False, resp.text)
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("jobs_slo_json", slo_path, None, False, _format_exception(exc))
 
         # 4b) Audit-grade Job SLO evidence snapshot (best-effort; admin-only)
@@ -572,7 +581,7 @@ async def capture_acceptance_evidence(
         try:
             delta_days = (end_date - start_date).days
             slo_window_hours = max(24, min(24 * 30, int(delta_days) * 24))
-        except Exception:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS:
             slo_window_hours = 24 * 7
 
         slo_capture_url = _build_url(base_url, "/api/v1/audit/jobs/slo/evidence")
@@ -602,7 +611,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record(
                 "job_slo_evidence_capture_json", slo_capture_path, None, False, _format_exception(exc)
             )
@@ -627,7 +636,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("job_slo_evidence_json", slo_evidence_path, None, False, _format_exception(exc))
 
         # 5) Profile snapshot (persona + tier)
@@ -641,7 +650,7 @@ async def capture_acceptance_evidence(
                 record("profile_json", profile_path, resp.status_code, True)
             else:
                 record("profile_json", profile_path, resp.status_code, False, resp.text)
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("profile_json", profile_path, None, False, _format_exception(exc))
 
         # 6) Month-end close package evidence (JSON + CSV) + restatements CSV
@@ -673,7 +682,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("close_package_json", close_json_path, None, False, _format_exception(exc))
 
         close_csv_url = _build_url(
@@ -694,7 +703,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("close_package_csv", close_csv_path, None, False, _format_exception(exc))
 
         restatement_csv_url = _build_url(
@@ -715,7 +724,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("restatements_csv", restatement_csv_path, None, False, _format_exception(exc))
 
         # 7) Realized savings evidence (JSON + CSV) (best-effort; Pro+)
@@ -745,7 +754,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("realized_savings_json", realized_path, None, False, _format_exception(exc))
 
         realized_csv_query = urlencode(
@@ -775,7 +784,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("realized_savings_csv", realized_csv_path, None, False, _format_exception(exc))
 
         # 8) Performance evidence snapshots (best-effort; Pro+ admin)
@@ -802,7 +811,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record(
                 "performance_load_test_evidence_json", perf_path, None, False, _format_exception(exc)
             )
@@ -832,7 +841,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record(
                 "ingestion_persistence_benchmark_evidence_json",
                 ingest_path,
@@ -862,7 +871,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("ingestion_soak_evidence_json", soak_path, None, False, _format_exception(exc))
 
         # 8d) Partitioning validation evidence snapshots (best-effort; Pro+ admin)
@@ -886,7 +895,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("partitioning_evidence_json", partition_path, None, False, _format_exception(exc))
 
         # 9) Tenant isolation verification evidence snapshots (best-effort; Pro+ admin)
@@ -913,7 +922,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record(
                 "tenant_isolation_evidence_json", isolation_path, None, False, _format_exception(exc)
             )
@@ -942,7 +951,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record(
                 "identity_smoke_evidence_json",
                 identity_smoke_path,
@@ -975,7 +984,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record(
                 "sso_federation_validation_evidence_json",
                 sso_validation_path,
@@ -1008,7 +1017,7 @@ async def capture_acceptance_evidence(
                     False,
                     resp.text,
                 )
-        except Exception as exc:
+        except EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
             record("carbon_assurance_evidence_json", carbon_path, None, False, _format_exception(exc))
 
     manifest = {

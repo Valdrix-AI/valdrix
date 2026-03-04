@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
 import structlog
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.enforcement.domain.service import EnforcementService
@@ -20,6 +21,29 @@ from app.shared.core.ops_metrics import (
 logger = structlog.get_logger()
 
 _SYSTEM_ACTOR_ID = UUID("00000000-0000-0000-0000-000000000000")
+
+RECONCILIATION_PARSE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    TypeError,
+    ValueError,
+    InvalidOperation,
+)
+RECONCILIATION_WORKER_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+RECONCILIATION_ALERT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 @dataclass(frozen=True)
@@ -52,14 +76,14 @@ class EnforcementReconciliationSweepResult:
 def _as_decimal(value: Any, default: Decimal) -> Decimal:
     try:
         return Decimal(str(value))
-    except Exception:
+    except RECONCILIATION_PARSE_RECOVERABLE_ERRORS:
         return default
 
 
 def _as_int(value: Any, default: int) -> int:
     try:
         return int(value)
-    except Exception:
+    except RECONCILIATION_PARSE_RECOVERABLE_ERRORS:
         return default
 
 
@@ -196,7 +220,7 @@ class EnforcementReconciliationWorker:
                 total_abs_drift_usd=total_abs_drift,
                 alerts_sent=alerts_sent,
             )
-        except Exception:
+        except RECONCILIATION_WORKER_RECOVERABLE_ERRORS:
             ENFORCEMENT_RECONCILIATION_SWEEP_RUNS_TOTAL.labels(status="failure").inc()
             raise
 
@@ -223,7 +247,7 @@ class EnforcementReconciliationWorker:
                 alert_type="sla_release",
                 severity="warning",
             ).inc()
-        except Exception as exc:  # noqa: BLE001 - best effort alerting
+        except RECONCILIATION_ALERT_RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "enforcement_reconciliation_sla_alert_failed",
                 tenant_id=str(tenant_id),
@@ -264,7 +288,7 @@ class EnforcementReconciliationWorker:
                 alert_type="drift_exception",
                 severity=severity,
             ).inc()
-        except Exception as exc:  # noqa: BLE001 - best effort alerting
+        except RECONCILIATION_ALERT_RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "enforcement_reconciliation_drift_alert_failed",
                 tenant_id=str(tenant_id),

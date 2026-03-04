@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import date, datetime, time, timedelta, timezone
+from decimal import InvalidOperation
 from typing import Any
 from urllib.parse import urljoin
 
@@ -17,7 +18,7 @@ from app.shared.adapters.resource_usage_projection import (
     resource_usage_lookback_window,
 )
 from app.shared.core.credentials import HybridCredentials
-from app.shared.core.currency import convert_to_usd
+from app.shared.core.currency import ExchangeRateUnavailableError, convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
@@ -25,25 +26,12 @@ logger = structlog.get_logger()
 _NATIVE_TIMEOUT_SECONDS = 20.0
 _NATIVE_MAX_RETRIES = 3
 _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
-_LEDGER_HTTP_VENDOR_ALIASES = {
-    "ledger_http",
-    "cmdb_ledger",
-    "cmdb-ledger",
-    "ledger",
-}
+_LEDGER_HTTP_VENDOR_ALIASES = {"ledger_http", "cmdb_ledger", "cmdb-ledger", "ledger"}
 _OPENSTACK_VENDOR_ALIASES = {"openstack", "cloudkitty"}
 _VMWARE_VENDOR_ALIASES = {"vmware", "vcenter", "vsphere"}
-_DISCOVERY_RESOURCE_TYPE_ALIASES = {
-    "all",
-    "hybrid",
-    "infrastructure",
-    "resource",
-    "resources",
-    "system",
-    "systems",
-    "workload",
-    "workloads",
-}
+_DISCOVERY_RESOURCE_TYPE_ALIASES = {"all", "hybrid", "infrastructure", "resource", "resources", "system", "systems", "workload", "workloads"}
+HYBRID_CURRENCY_CONVERSION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (ExchangeRateUnavailableError, httpx.HTTPError, InvalidOperation, RuntimeError, TypeError, ValueError)
+HYBRID_RESOURCE_USAGE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (ExternalAPIError, httpx.HTTPError, InvalidOperation, RuntimeError, TypeError, ValueError, KeyError)
 
 
 async def _hybrid_get_request(
@@ -477,7 +465,7 @@ class HybridAdapter(BaseAdapter):
             if currency_code != "USD":
                 try:
                     cost_usd = float(await convert_to_usd(rate, currency_code))
-                except Exception as exc:  # noqa: BLE001
+                except HYBRID_CURRENCY_CONVERSION_RECOVERABLE_ERRORS as exc:
                     logger.warning(
                         "hybrid_cloudkitty_currency_conversion_failed",
                         currency=currency_code,
@@ -718,7 +706,7 @@ class HybridAdapter(BaseAdapter):
                         cost_usd = float(
                             await convert_to_usd(amount_local, currency_code)
                         )
-                    except Exception as exc:  # noqa: BLE001
+                    except HYBRID_CURRENCY_CONVERSION_RECOVERABLE_ERRORS as exc:
                         logger.warning(
                             "hybrid_ledger_currency_conversion_failed",
                             currency=currency_code,
@@ -819,7 +807,7 @@ class HybridAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except HYBRID_RESOURCE_USAGE_RECOVERABLE_ERRORS as exc:
             self.last_error = str(exc)
             logger.warning(
                 "hybrid_discover_resources_failed",
@@ -853,7 +841,7 @@ class HybridAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except HYBRID_RESOURCE_USAGE_RECOVERABLE_ERRORS as exc:
             self.last_error = str(exc)
             logger.warning(
                 "hybrid_resource_usage_failed",

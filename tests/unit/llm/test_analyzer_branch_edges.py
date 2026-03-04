@@ -12,7 +12,11 @@ from app.schemas.costs import CloudUsageSummary, CostRecord
 from app.shared.core.constants import LLMProvider
 from app.shared.core.exceptions import BudgetExceededError
 from app.shared.core.pricing import PricingTier
-from app.shared.llm.analyzer import FinOpsAnalyzer
+from app.shared.llm.analyzer import (
+    FINOPS_ANALYSIS_SCHEMA_VERSION,
+    FINOPS_RESPONSE_NORMALIZER_VERSION,
+    FinOpsAnalyzer,
+)
 from app.shared.llm.budget_manager import BudgetStatus
 
 
@@ -165,6 +169,30 @@ async def test_load_system_prompt_falls_back_when_system_prompt_blank() -> None:
         prompt = await analyzer._load_system_prompt_async()
 
     assert "FinOps expert" in prompt
+
+
+@pytest.mark.asyncio
+async def test_load_system_prompt_sets_prompt_version_from_registry() -> None:
+    analyzer = FinOpsAnalyzer(MagicMock())
+    loop = SimpleNamespace(
+        run_in_executor=AsyncMock(
+            return_value={
+                "finops_analysis": {
+                    "version": "valdrics.finops.prompt.v1",
+                    "system": "Use strict json output",
+                }
+            }
+        )
+    )
+
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("asyncio.get_running_loop", return_value=loop),
+    ):
+        prompt = await analyzer._load_system_prompt_async()
+
+    assert prompt == "Use strict json output"
+    assert analyzer.prompt_version == "valdrics.finops.prompt.v1"
 
 
 @pytest.mark.asyncio
@@ -580,7 +608,7 @@ async def test_process_results_unexpected_parse_and_non_dict_payload() -> None:
         patch("app.shared.llm.analyzer.get_cache_service", return_value=cache),
         patch(
             "app.shared.llm.analyzer.LLMGuardrails.validate_output",
-            side_effect=Exception("validation-failed"),
+            side_effect=RuntimeError("validation-failed"),
         ),
         patch.object(analyzer, "_strip_markdown", side_effect=RuntimeError("parse-failed")),
         patch(
@@ -605,6 +633,48 @@ async def test_process_results_unexpected_parse_and_non_dict_payload() -> None:
         not_dict = await analyzer._process_analysis_results("{}", None, usage_summary)
 
     assert not_dict["llm_raw"]["error"] == "AI analysis produced non-object payload"
+
+
+@pytest.mark.asyncio
+async def test_process_results_includes_analysis_contract_metadata() -> None:
+    analyzer = FinOpsAnalyzer(MagicMock())
+    analyzer.prompt_version = "valdrics.finops.prompt.v1"
+    usage_summary = MagicMock(records=[], tenant_id=None)
+    cache = SimpleNamespace(set_analysis=AsyncMock())
+    payload = SimpleNamespace(
+        model_dump=lambda: {
+            "insights": ["a"],
+            "recommendations": ["b"],
+            "anomalies": ["c"],
+            "forecast": {},
+        }
+    )
+
+    with (
+        patch("app.shared.llm.analyzer.get_cache_service", return_value=cache),
+        patch("app.shared.llm.analyzer.LLMGuardrails.validate_output", return_value=payload),
+        patch.object(analyzer, "_check_and_alert_anomalies", new=AsyncMock()),
+        patch(
+            "app.shared.llm.analyzer.SymbolicForecaster.forecast",
+            new=AsyncMock(return_value={"symbolic": "ok"}),
+        ),
+    ):
+        result = await analyzer._process_analysis_results(
+            "{}",
+            tenant_id=None,
+            usage_summary=usage_summary,
+            provider="groq",
+            model="llama-3.3-70b-versatile",
+            response_metadata={"token_usage": {"prompt_tokens": 100}},
+        )
+
+    contract = result["analysis_contract"]
+    assert contract["schema_version"] == FINOPS_ANALYSIS_SCHEMA_VERSION
+    assert contract["response_normalizer_version"] == FINOPS_RESPONSE_NORMALIZER_VERSION
+    assert contract["prompt_version"] == "valdrics.finops.prompt.v1"
+    assert contract["provider"] == "groq"
+    assert contract["model"] == "llama-3.3-70b-versatile"
+    assert contract["llm_response_metadata_keys"] == ["token_usage"]
 
 
 @pytest.mark.asyncio

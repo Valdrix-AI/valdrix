@@ -8,6 +8,7 @@ import hashlib
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
@@ -37,11 +38,8 @@ from app.modules.enforcement.api.v1.schemas import (
     TerraformPreflightRequest,
     TerraformPreflightResponse,
 )
-from app.modules.enforcement.domain.service import (
-    EnforcementService,
-    GateInput,
-    gate_result_to_response,
-)
+from app.modules.enforcement.domain.service import EnforcementService, gate_result_to_response
+from app.modules.enforcement.domain.service_models import GateInput
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
 from app.shared.core.pricing import FeatureFlag
 from app.shared.core.config import get_settings
@@ -54,10 +52,9 @@ from app.shared.core.ops_metrics import (
 from app.shared.core.rate_limit import global_rate_limit, rate_limit
 from app.shared.db.session import get_db
 
-
 router = APIRouter(tags=["Enforcement"])
 logger = structlog.get_logger()
-
+ENFORCEMENT_GATE_EVALUATION_RECOVERABLE_EXCEPTIONS = (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError)
 
 def _gate_timeout_seconds() -> float:
     raw = getattr(get_settings(), "ENFORCEMENT_GATE_TIMEOUT_SECONDS", 2.0)
@@ -313,7 +310,7 @@ async def _run_gate_input(
                 **detail,
             },
         )
-    except Exception as exc:
+    except ENFORCEMENT_GATE_EVALUATION_RECOVERABLE_EXCEPTIONS as exc:
         metric_path = "failsafe"
         ENFORCEMENT_GATE_FAILURES_TOTAL.labels(
             source=source.value,

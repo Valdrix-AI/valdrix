@@ -1,6 +1,7 @@
 import asyncio
 from app.shared.db.session import async_session_maker
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from app.models.remediation import RemediationRequest
 
 
@@ -15,7 +16,7 @@ async def check_zombies():
                 print(
                     f"- {z.resource_id} ({z.resource_type}): Estimated ${z.estimated_monthly_savings}/mo waste"
                 )
-        except Exception as e:
+        except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
             print(f"Error checking zombies: {str(e)}")
 
 

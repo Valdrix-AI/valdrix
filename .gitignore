@@ -220,14 +220,32 @@ terraform/*.tfstate.*
 # Local transient diagnostics and test artifacts
 test_*.sqlite
 test_*.sqlite-journal
+test_*.sqlite-shm
+test_*.sqlite-wal
 tmp_*.sqlite
 tmp_test_*.sqlite
+tmp_test_*.sqlite-journal
+tmp_test_*.sqlite-shm
+tmp_test_*.sqlite-wal
 tmp_aiosqlite_*.sqlite
+tmp_aiosqlite_*.sqlite-journal
+tmp_aiosqlite_*.sqlite-shm
+tmp_aiosqlite_*.sqlite-wal
 tmp_sqlite3_*.sqlite
+tmp_sqlite3_*.sqlite-journal
+tmp_sqlite3_*.sqlite-shm
+tmp_sqlite3_*.sqlite-wal
 test_output*.txt
 test_results.txt
 analyzer_error.txt
 health_test_output.txt
+full_test_output.log
+test_results.log
+/artifact.json
+/codealike.json
+/coverage-enterprise-gate.xml
+/inspect_httpx.py
+dashboard/vitest_*.txt
 
 # Performance evidence artifacts (generated locally/CI)
 reports/performance/*.json

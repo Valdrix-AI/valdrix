@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	PUBLIC_FOOTER_BADGES,
+	PUBLIC_CONTACT_CHANNELS,
 	PUBLIC_FOOTER_LINKS,
 	PUBLIC_MOBILE_LINKS,
 	PUBLIC_PRIMARY_LINKS,
@@ -72,5 +73,14 @@ describe('publicNav', () => {
 		expect(joined).not.toContain('capture');
 		expect(joined).not.toContain('telemetry');
 		expect(joined).not.toContain('audit');
+	});
+
+	it('keeps footer contact channels aligned to valdrics.com mailboxes', () => {
+		expect(PUBLIC_CONTACT_CHANNELS.length).toBeGreaterThanOrEqual(6);
+		for (const channel of PUBLIC_CONTACT_CHANNELS) {
+			expect(channel.href.startsWith('mailto:')).toBe(true);
+			expect(channel.email.endsWith('@valdrics.com')).toBe(true);
+			expect(channel.href).toBe(`mailto:${channel.email}`);
+		}
 	});
 });

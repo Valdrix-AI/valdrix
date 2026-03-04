@@ -77,7 +77,7 @@ class TestAnalysisProcessorExpanded:
                 patch("app.modules.governance.domain.scheduler.processors.LLMFactory"),
             ):
                 mock_adapter_instance = MagicMock()
-                mock_adapter_instance.get_daily_costs.side_effect = Exception("Crash")
+                mock_adapter_instance.get_daily_costs.side_effect = RuntimeError("Crash")
                 mock_factory.get_adapter.return_value = mock_adapter_instance
                 await processor.process_tenant(
                     mock_db, mock_tenant, date.today(), date.today()

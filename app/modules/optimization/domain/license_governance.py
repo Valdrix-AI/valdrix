@@ -32,6 +32,21 @@ from app.shared.core.remediation_results import (
 
 logger = structlog.get_logger()
 _LIST_USERS_ACTIVITY_TIMEOUT_SECONDS = 30.0
+LICENSE_GOVERNANCE_EXECUTION_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    ExternalAPIError,
+    httpx.HTTPError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+LICENSE_GOVERNANCE_CONNECTION_RECOVERABLE_EXCEPTIONS = (
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class LicenseGovernanceService(BaseService):
@@ -338,7 +353,7 @@ class LicenseGovernanceService(BaseService):
                                 request_id=str(request.id),
                                 status=result_status or "unknown",
                             )
-                        except Exception as e:
+                        except LICENSE_GOVERNANCE_EXECUTION_RECOVERABLE_EXCEPTIONS as e:
                             stats["executions_failed"] += 1
                             logger.error(
                                 "license_governance_execution_error",
@@ -365,7 +380,7 @@ class LicenseGovernanceService(BaseService):
                     error=str(e),
                 )
                 continue
-            except Exception as e:
+            except LICENSE_GOVERNANCE_CONNECTION_RECOVERABLE_EXCEPTIONS as e:
                 logger.error(
                     "license_governance_connection_unexpected_failed",
                     tenant_id=str(tenant_id),

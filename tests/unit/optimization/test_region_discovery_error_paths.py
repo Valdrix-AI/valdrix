@@ -56,7 +56,7 @@ async def test_get_active_regions_falls_back_to_enabled_if_re2_disabled():
 async def test_get_active_regions_falls_back_on_error():
     mock_connection = MagicMock()
     mock_explorer = AsyncMock()
-    mock_explorer.is_enabled.side_effect = Exception("RE2 Failed")
+    mock_explorer.is_enabled.side_effect = RuntimeError("RE2 Failed")
 
     rd = RegionDiscovery(
         credentials={"AccessKeyId": "ak", "SecretAccessKey": "sk"},
@@ -141,3 +141,17 @@ def test_clear_cache_resets():
     rd.clear_cache()
     assert rd._cached_enabled_regions == []
     assert rd._cached_active_regions == []
+
+
+def test_fallback_regions_uses_static_baseline_when_botocore_lookup_fails():
+    rd = RegionDiscovery()
+    with patch(
+        "app.modules.optimization.adapters.aws.region_discovery.get_session"
+    ) as mock_get_session:
+        mock_get_session.return_value.get_available_regions.side_effect = RuntimeError(
+            "lookup failed"
+        )
+        regions = rd._get_fallback_regions()
+
+    assert "us-east-1" in regions
+    assert "us-west-2" in regions

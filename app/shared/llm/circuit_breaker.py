@@ -17,7 +17,7 @@ Usage:
         with breaker.protect("groq"):
             response = await groq_client.chat(...)
             breaker.record_success("groq")
-    except Exception as e:
+    except RuntimeError as e:
         breaker.record_failure("groq")
         # Fall back to next provider
 """
@@ -28,8 +28,10 @@ from enum import Enum
 from typing import Any, Dict, Optional
 import structlog
 from contextlib import contextmanager
+import sys
 
 logger = structlog.get_logger()
+FATAL_EXCEPTIONS = (SystemExit, KeyboardInterrupt, GeneratorExit)
 
 
 class CircuitState(str, Enum):
@@ -183,9 +185,12 @@ class LLMCircuitBreaker:
 
         try:
             yield
-        except Exception as e:
-            self.record_failure(provider, str(e))
-            raise
+        finally:
+            _, exc, _ = sys.exc_info()
+            if exc is None or isinstance(exc, FATAL_EXCEPTIONS):
+                pass
+            elif isinstance(exc, Exception):
+                self.record_failure(provider, str(exc))
 
     def get_status(self) -> Dict[str, dict[str, Any]]:
         """Get status of all circuits for monitoring."""

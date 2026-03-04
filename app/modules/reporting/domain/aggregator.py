@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Dict, Any, Optional
 from uuid import UUID
 from sqlalchemy import select, func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 __all__ = ["CostAggregator", "LARGE_DATASET_THRESHOLD"]
@@ -19,7 +20,8 @@ MAX_AGGREGATION_ROWS = 1000000  # 1M rows max per query
 MAX_DETAIL_ROWS = 100000  # 100K rows max for detail records
 STATEMENT_TIMEOUT_MS = 5000  # 5 seconds
 LARGE_DATASET_THRESHOLD = 5000  # If >5k records, suggest background job
-
+MATERIALIZED_VIEW_READ_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (SQLAlchemyError, RuntimeError, ValueError, TypeError)
+MATERIALIZED_VIEW_REFRESH_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (SQLAlchemyError, AttributeError, RuntimeError)
 
 class CostAggregator:
     """Centralizes cost aggregation logic for the platform."""
@@ -530,19 +532,11 @@ class CostAggregator:
     async def get_cached_breakdown(
         db: AsyncSession, tenant_id: UUID, start_date: date, end_date: date
     ) -> Dict[str, Any]:
-        """
-        Query the materialized view for instant cached responses.
-        Phase 4.3: Query Caching Layer
-
-        Falls back to get_basic_breakdown if materialized view doesn't exist.
-        """
+        """Query cached view breakdown; fallback to direct aggregation if unavailable."""
         from sqlalchemy import text
 
         try:
-            # Use a savepoint to ensure we can fallback if the view doesn't exist
-            # in an already open transaction.
             async with db.begin_nested():
-                # Query the materialized view directly
                 stmt = text("""
                     SELECT 
                         service,
@@ -567,7 +561,6 @@ class CostAggregator:
                 rows = result.all()
 
             if not rows:
-                # Fallback to direct query if no cached data
                 logger.info("cache_miss_falling_back", tenant_id=str(tenant_id))
                 return await CostAggregator.get_basic_breakdown(
                     db, tenant_id, start_date, end_date
@@ -599,7 +592,7 @@ class CostAggregator:
                 "cached": True,
             }
 
-        except Exception as e:
+        except MATERIALIZED_VIEW_READ_RECOVERABLE_EXCEPTIONS as e:
             # Materialized view may not exist yet
             logger.warning("mv_query_failed_fallback", error=str(e))
             return await CostAggregator.get_basic_breakdown(
@@ -625,6 +618,6 @@ class CostAggregator:
             await db.commit()
             logger.info("materialized_view_refreshed")
             return True
-        except Exception as e:
+        except MATERIALIZED_VIEW_REFRESH_RECOVERABLE_EXCEPTIONS as e:
             logger.error("materialized_view_refresh_failed", error=str(e))
             return False

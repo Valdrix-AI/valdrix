@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.params import Param
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel
 import structlog
 
@@ -39,6 +40,14 @@ from app.shared.core.approval_permissions import (
 router = APIRouter(tags=["Cloud Hygiene (Zombies)"])
 logger = structlog.get_logger()
 DEFAULT_REGION_HINT = "global"
+REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ConnectionError,
+    TypeError,
+)
 
 
 def _coerce_region_hint(value: Any) -> str:
@@ -499,7 +508,7 @@ async def execute_remediation(
             code="remediation_execution_failed",
             status_code=400,
         ) from exc
-    except Exception:
+    except REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS:
         logger.exception("remediation_api_execution_failed", request_id=str(request_id))
         raise ValdricsException(
             message="Failed to execute remediation request.",

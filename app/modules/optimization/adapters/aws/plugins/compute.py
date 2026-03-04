@@ -11,6 +11,13 @@ logger = structlog.get_logger()
 cloudwatch_limiter = RateLimiter(
     rate_per_second=1.0
 )  # Conservative limit for CloudWatch
+AWS_CLOUDTRAIL_LOOKUP_RECOVERABLE_EXCEPTIONS = (
+    ClientError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @registry.register("aws")
@@ -125,7 +132,7 @@ class IdleInstancesPlugin(ZombiePlugin):
                 # We look for the RunInstances event to find the original launcher
                 if event.get("EventName") == "RunInstances":
                     return str(event.get("Username", "Unknown"))
-        except Exception as e:
+        except AWS_CLOUDTRAIL_LOOKUP_RECOVERABLE_EXCEPTIONS as e:
             logger.warning(
                 "cloudtrail_lookup_failed", instance_id=instance_id, error=str(e)
             )

@@ -7,12 +7,25 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.remediation import RemediationAction, RemediationRequest, RemediationStatus
 from app.shared.core.config import get_settings
 from app.shared.core.constants import SYSTEM_USER_ID
 
 logger = structlog.get_logger()
+
+REMEDIATION_HARD_LIMIT_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+    KeyError,
+    LookupError,
+    AttributeError,
+)
 
 
 async def enforce_hard_limit_for_tenant(service: Any, tenant_id: UUID) -> list[UUID]:
@@ -79,7 +92,7 @@ async def enforce_hard_limit_for_tenant(service: Any, tenant_id: UUID) -> list[U
                 bypass_grace_period=settings.AUTOPILOT_BYPASS_GRACE_PERIOD,
             )
             executed_ids.append(req.id)
-        except Exception as exc:
+        except REMEDIATION_HARD_LIMIT_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
                 "hard_limit_enforcement_failed",
                 request_id=str(req.id),

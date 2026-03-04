@@ -19,6 +19,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.shared.core.config import get_settings
 from app.shared.core.pricing import get_tenant_tier, get_tier_limit
@@ -26,6 +27,14 @@ from app.shared.llm.budget_manager import LLMBudgetManager
 from app.shared.llm.guardrails import LLMGuardrails, ZombieAnalysisResult
 
 logger = structlog.get_logger()
+ZOMBIE_USAGE_TRACKING_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+    KeyError,
+)
 
 ZOMBIE_ANALYSIS_PROMPT = """You are a Cloud+ FinOps expert analyzing zombie (unused/underutilized) resources across IaaS and Cloud+ providers.
 
@@ -450,7 +459,7 @@ class ZombieAnalyzer:
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
             )
-        except Exception as e:
+        except ZOMBIE_USAGE_TRACKING_RECOVERABLE_EXCEPTIONS as e:
             logger.warning(
                 "zombie_usage_tracking_failed", tenant_id=str(tenant_id), error=str(e)
             )

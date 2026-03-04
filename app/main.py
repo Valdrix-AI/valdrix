@@ -91,6 +91,12 @@ def get_csrf_config() -> CsrfSettings:
 
 
 logger = structlog.get_logger()
+DOCS_ASSET_SRI_RECOVERABLE_EXCEPTIONS = (
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 def _is_test_mode() -> bool:
@@ -171,7 +177,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if settings.TESTING:
         logger.info("llm_pricing_refresh_skipped_testing")
     else:
-        from app.shared.llm.pricing_data import refresh_llm_pricing
+        from app.shared.llm.pricing_data import (
+            LLM_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS,
+            refresh_llm_pricing,
+        )
 
         last_error: Exception | None = None
         for attempt in range(1, 4):
@@ -180,7 +189,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("llm_pricing_refreshed", attempt=attempt)
                 last_error = None
                 break
-            except Exception as exc:  # noqa: BLE001
+            except LLM_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS as exc:
                 last_error = exc
                 logger.warning(
                     "llm_pricing_refresh_failed_startup",
@@ -356,7 +365,7 @@ def _compute_sri(file_path: str) -> str | None:
     try:
         digest = hashlib.sha384(Path(file_path).read_bytes()).digest()
         return "sha384-" + base64.b64encode(digest).decode("ascii")
-    except Exception as exc:
+    except DOCS_ASSET_SRI_RECOVERABLE_EXCEPTIONS as exc:
         logger.warning("docs_asset_sri_compute_failed", file_path=file_path, error=str(exc))
         return None
 

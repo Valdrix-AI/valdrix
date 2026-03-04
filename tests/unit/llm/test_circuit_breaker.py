@@ -271,6 +271,15 @@ class TestLLMCircuitBreaker:
             with breaker.protect("provider"):
                 pass
 
+    def test_protect_context_manager_does_not_swallow_fatal_errors(self, breaker):
+        with pytest.raises(KeyboardInterrupt):
+            with breaker.protect("provider"):
+                raise KeyboardInterrupt()
+
+        circuit = breaker._get_circuit("provider")
+        # Fatal path should not be recorded as provider failure.
+        assert circuit.failure_count == 0
+
     def test_get_status_empty(self, breaker):
         """Test get_status returns empty dict when no circuits."""
         status = breaker.get_status()

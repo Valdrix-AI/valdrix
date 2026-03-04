@@ -2,6 +2,7 @@ import pytest
 import json
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
+from upstash_redis.errors import UpstashError
 from app.shared.core.cache import CacheService, get_cache_service
 
 
@@ -77,7 +78,7 @@ class TestCacheDeep:
     @pytest.mark.asyncio
     async def test_error_handling_get(self, mock_settings, mock_redis_client):
         service = CacheService()
-        mock_redis_client.get.side_effect = Exception("Redis Down")
+        mock_redis_client.get.side_effect = UpstashError("Redis Down")
 
         assert await service.get_analysis(uuid4()) is None
 
@@ -100,7 +101,7 @@ class TestCacheDeep:
     @pytest.mark.asyncio
     async def test_error_handling_set(self, mock_settings, mock_redis_client):
         service = CacheService()
-        mock_redis_client.set.side_effect = Exception("Redis Down")
+        mock_redis_client.set.side_effect = UpstashError("Redis Down")
 
         assert await service.set_analysis(uuid4(), {}) is False
 

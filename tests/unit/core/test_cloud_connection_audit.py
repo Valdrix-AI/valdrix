@@ -213,7 +213,7 @@ async def test_verify_connection_internal_error(service, mock_db):
 
     with patch(
         "app.shared.core.cloud_connection.CloudConnectionService._build_verification_adapter",
-        side_effect=Exception("API Error"),
+        side_effect=RuntimeError("API Error"),
     ):
         with pytest.raises(AdapterError) as exc:
             await service.verify_connection("aws", conn_id, tenant_id)

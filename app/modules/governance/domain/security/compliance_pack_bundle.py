@@ -10,6 +10,7 @@ import structlog
 from fastapi import HTTPException
 from fastapi.responses import Response
 from sqlalchemy import desc, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.governance.domain.security.audit_log import (
@@ -32,6 +33,17 @@ from app.shared.core.auth import CurrentUser
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+
+COMPLIANCE_PACK_BUNDLE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
 
 
 async def export_compliance_pack_bundle(
@@ -92,7 +104,7 @@ async def export_compliance_pack_bundle(
         )
         # Commit early so the export request is persisted even if bundle generation fails.
         await db.commit()
-    except Exception as exc:
+    except COMPLIANCE_PACK_BUNDLE_RECOVERABLE_ERRORS as exc:
         logger.warning("compliance_pack_audit_log_failed", error=str(exc))
         await db.rollback()
 
@@ -672,7 +684,7 @@ async def export_compliance_pack_bundle(
                         "status": "ok",
                     }
                 )
-            except Exception as exc:
+            except COMPLIANCE_PACK_BUNDLE_RECOVERABLE_ERRORS as exc:
                 focus_export_info.update(
                     {
                         "status": "error",
@@ -756,7 +768,7 @@ async def export_compliance_pack_bundle(
                     )
 
                 savings_proof_info.update({"status": "ok"})
-            except Exception as exc:
+            except COMPLIANCE_PACK_BUNDLE_RECOVERABLE_ERRORS as exc:
                 savings_proof_info.update({"status": "error", "error": str(exc)})
                 error_path = "exports/savings-proof.error.json"
                 zf.writestr(
@@ -884,7 +896,7 @@ async def export_compliance_pack_bundle(
                 realized_savings_info.update(
                     {"status": "ok", "rows_written": len(items)}
                 )
-            except Exception as exc:
+            except COMPLIANCE_PACK_BUNDLE_RECOVERABLE_ERRORS as exc:
                 realized_savings_info.update({"status": "error", "error": str(exc)})
                 error_path = "exports/realized-savings.error.json"
                 zf.writestr(
@@ -930,7 +942,7 @@ async def export_compliance_pack_bundle(
                 )
                 zf.writestr(csv_path, close_csv)
                 close_package_info.update({"status": "ok"})
-            except Exception as exc:
+            except COMPLIANCE_PACK_BUNDLE_RECOVERABLE_ERRORS as exc:
                 close_package_info.update({"status": "error", "error": str(exc)})
                 error_path = "exports/close-package.error.json"
                 zf.writestr(

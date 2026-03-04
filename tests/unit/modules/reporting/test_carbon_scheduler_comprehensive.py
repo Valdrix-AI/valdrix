@@ -5,7 +5,8 @@ Covers scheduling decisions, region ranking, carbon intensity forecast, and work
 
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
+import httpx
 
 from app.modules.reporting.domain.carbon_scheduler import (
     CarbonAwareScheduler,
@@ -604,3 +605,55 @@ class TestFreshnessEnforcement:
         ) as mock_val:
             await scheduler.get_intensity_forecast("us-east-1")
             mock_val.assert_called_once()
+
+
+class TestCarbonForecastApiFallbacks:
+    """Test external forecast API fallback behavior and fatal propagation."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_wattime_forecast_returns_empty_on_http_error(self) -> None:
+        scheduler = CarbonAwareScheduler(wattime_key="token")
+        request = httpx.Request("GET", "https://api2.watttime.org/v2/forecast")
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=httpx.ConnectError("down", request=request))
+
+        with patch("app.shared.core.http.get_http_client", return_value=client):
+            result = await scheduler._fetch_wattime_forecast("us-east-1", hours=3)
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_emap_forecast_returns_empty_on_http_error(self) -> None:
+        scheduler = CarbonAwareScheduler(electricitymaps_key="token")
+        request = httpx.Request(
+            "GET", "https://api.electricitymap.org/v3/carbon-intensity/forecast"
+        )
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=httpx.ConnectError("down", request=request))
+
+        with patch("app.shared.core.http.get_http_client", return_value=client):
+            result = await scheduler._fetch_emap_forecast("us-east-1", hours=3)
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_wattime_forecast_does_not_swallow_base_exceptions(
+        self,
+    ) -> None:
+        scheduler = CarbonAwareScheduler(wattime_key="token")
+        with patch(
+            "app.shared.core.http.get_http_client",
+            side_effect=KeyboardInterrupt("stop"),
+        ):
+            with pytest.raises(KeyboardInterrupt, match="stop"):
+                await scheduler._fetch_wattime_forecast("us-east-1", hours=3)
+
+    @pytest.mark.asyncio
+    async def test_fetch_emap_forecast_does_not_swallow_base_exceptions(self) -> None:
+        scheduler = CarbonAwareScheduler(electricitymaps_key="token")
+        with patch(
+            "app.shared.core.http.get_http_client",
+            side_effect=KeyboardInterrupt("stop"),
+        ):
+            with pytest.raises(KeyboardInterrupt, match="stop"):
+                await scheduler._fetch_emap_forecast("us-east-1", hours=3)

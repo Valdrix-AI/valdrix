@@ -1,6 +1,7 @@
 import asyncio
 import structlog
 from sqlalchemy import update
+from sqlalchemy.exc import SQLAlchemyError
 from app.shared.db.session import async_session_maker
 from app.models.aws_connection import AWSConnection
 
@@ -18,7 +19,7 @@ async def deactivate_all_connections():
                 "emergency_deactivation_complete", connections_affected=result.rowcount
             )
             print(f"Successfully deactivated {result.rowcount} AWS connections.")
-        except Exception as e:
+        except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
             logger.error("emergency_deactivation_failed", error=str(e))
             print(f"Error: {str(e)}")
 

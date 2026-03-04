@@ -20,9 +20,21 @@ from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
+import httpx
 import structlog
 
+from app.shared.core.exceptions import ExternalAPIError
+
 logger = structlog.get_logger()
+CARBON_FORECAST_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ImportError,
+    ExternalAPIError,
+    httpx.HTTPError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    KeyError,
+)
 
 
 class CarbonIntensity(str, Enum):
@@ -416,7 +428,7 @@ class CarbonAwareScheduler:
                 }
                 for d in data.get("data", [])
             ]
-        except Exception as e:
+        except CARBON_FORECAST_RECOVERABLE_EXCEPTIONS as e:
             logger.error("wattime_api_failed", error=str(e), region=region)
             return []
 
@@ -456,6 +468,6 @@ class CarbonAwareScheduler:
                 }
                 for d in data.get("forecast", [])
             ]
-        except Exception as e:
+        except CARBON_FORECAST_RECOVERABLE_EXCEPTIONS as e:
             logger.error("emap_api_failed", error=str(e), region=region)
             return []

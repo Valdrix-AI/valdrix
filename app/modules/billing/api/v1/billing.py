@@ -11,8 +11,10 @@ import ipaddress
 from typing import Annotated, Optional, Dict, Any, List
 from urllib.parse import urlparse, urljoin, urlunparse
 from fastapi import APIRouter, Depends, HTTPException, Request
+from httpx import HTTPError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 import structlog
 
 from app.modules.billing.api.v1.billing_models import (
@@ -37,6 +39,17 @@ from app.shared.core.rate_limit import auth_limit, standard_limit
 from app.shared.core.currency import ExchangeRateUnavailableError
 
 logger = structlog.get_logger()
+BILLING_RUNTIME_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    HTTPError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
 __all__ = [
     "router",
     "BillingUsageResponse",
@@ -225,7 +238,7 @@ async def get_subscription(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except BILLING_RUNTIME_RECOVERABLE_ERRORS as e:
         logger.error("get_subscription_failed", error=str(e))
         raise HTTPException(500, "Failed to fetch subscription") from e
 
@@ -343,7 +356,7 @@ async def create_checkout(
         raise
     except ValueError as e:
         raise HTTPException(400, str(e))
-    except Exception as e:
+    except BILLING_RUNTIME_RECOVERABLE_ERRORS as e:
         logger.error("checkout_failed", error=str(e))
         raise HTTPException(500, "Failed to create checkout session") from e
 
@@ -368,7 +381,7 @@ async def cancel_subscription(
         raise
     except ValueError as e:
         raise HTTPException(400, str(e))
-    except Exception as e:
+    except BILLING_RUNTIME_RECOVERABLE_ERRORS as e:
         logger.error("cancel_failed", error=str(e))
         raise HTTPException(500, "Failed to cancel subscription") from e
 
@@ -394,7 +407,7 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
         raise HTTPException(401, str(e))
     except HTTPException:
         raise
-    except Exception as e:
+    except BILLING_RUNTIME_RECOVERABLE_ERRORS as e:
         logger.error("webhook_failed", error=str(e))
         raise HTTPException(500, "Webhook processing failed") from e
 

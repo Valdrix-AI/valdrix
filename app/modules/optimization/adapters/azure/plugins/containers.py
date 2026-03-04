@@ -5,6 +5,7 @@ Detects idle AKS clusters and unused App Service Plans.
 """
 
 from typing import List, Dict, Any
+from azure.core.exceptions import AzureError
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -12,6 +13,18 @@ from app.modules.optimization.domain.registry import registry
 from azure.identity.aio import ClientSecretCredential, DefaultAzureCredential
 
 logger = structlog.get_logger()
+
+AZURE_CONTAINERS_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    AzureError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    IndexError,
+    AttributeError,
+)
 
 
 @registry.register("azure")
@@ -119,7 +132,7 @@ class IdleAksClusterPlugin(ZombiePlugin):
                             "explainability_notes": "AKS cluster has no agent pool nodes.",
                         }
                     )
-        except Exception as e:
+        except AZURE_CONTAINERS_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_aks_scan_error", error=str(e))
 
         return zombies
@@ -243,7 +256,7 @@ class UnusedAppServicePlansPlugin(ZombiePlugin):
                             "explainability_notes": "App Service Plan has no web apps deployed.",
                         }
                     )
-        except Exception as e:
+        except AZURE_CONTAINERS_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_app_service_plan_scan_error", error=str(e))
 
         return zombies

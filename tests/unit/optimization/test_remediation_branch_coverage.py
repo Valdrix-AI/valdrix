@@ -168,6 +168,39 @@ async def test_enforce_hard_limit_execute_errors_are_captured(
 
 
 @pytest.mark.asyncio
+async def test_enforce_hard_limit_does_not_swallow_base_exceptions(
+    service: RemediationService,
+) -> None:
+    class FatalHardLimitFailure(BaseException):
+        pass
+
+    tenant_id = uuid4()
+    req = MagicMock()
+    req.id = uuid4()
+    req.action = RemediationAction.STOP_INSTANCE
+    req.status = "pending"
+    req.confidence_score = Decimal("0.99")
+    req.estimated_monthly_savings = Decimal("25")
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [req]
+    service.db.execute.return_value = result
+    service.execute = AsyncMock(side_effect=FatalHardLimitFailure("fatal"))  # type: ignore[method-assign]
+
+    with (
+        patch("app.shared.llm.usage_tracker.UsageTracker") as usage_tracker_cls,
+        patch(
+            "app.modules.optimization.domain.remediation.get_settings"
+        ) as get_settings,
+    ):
+        usage_tracker_cls.return_value.check_budget = AsyncMock(
+            return_value=BudgetStatus.HARD_LIMIT
+        )
+        get_settings.return_value.AUTOPILOT_BYPASS_GRACE_PERIOD = False
+        with pytest.raises(FatalHardLimitFailure):
+            await service.enforce_hard_limit(tenant_id)
+
+
+@pytest.mark.asyncio
 async def test_generate_iac_plan_provider_paths_and_bulk(
     service: RemediationService,
 ) -> None:

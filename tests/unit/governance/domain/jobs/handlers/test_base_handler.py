@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.governance.domain.jobs.handlers.base import (
@@ -9,6 +9,10 @@ from app.modules.governance.domain.jobs.handlers.base import (
 from app.models.background_job import BackgroundJob, JobStatus
 from app.shared.core.exceptions import ValdricsException
 import asyncio
+
+
+class _FatalTestSignal(BaseException):
+    """Sentinel fatal error used to assert broad Exception handlers do not swallow BaseException."""
 
 
 # Concrete implementation for testing
@@ -36,6 +40,11 @@ class ErrorHandler(BaseJobHandler):
 class ValdricsErrorHandler(BaseJobHandler):
     async def execute(self, job: BackgroundJob, db: AsyncSession):
         raise ValdricsException("Expected boom", code="test_error", status_code=400)
+
+
+class FatalErrorHandler(BaseJobHandler):
+    async def execute(self, job: BackgroundJob, db: AsyncSession):
+        raise _FatalTestSignal()
 
 
 @pytest.fixture
@@ -119,3 +128,28 @@ async def test_process_unexpected_error(mock_db, job):
 
     assert job.status == JobStatus.DEAD_LETTER
     assert "Unexpected error" in job.error_message
+
+
+@pytest.mark.asyncio
+async def test_process_does_not_swallow_fatal_errors(mock_db, job):
+    handler = FatalErrorHandler()
+
+    with pytest.raises(_FatalTestSignal):
+        await handler.process(job, mock_db)
+
+    # Fatal errors bypass DLQ transition and bubble immediately.
+    assert job.status == JobStatus.RUNNING
+
+
+@pytest.mark.asyncio
+async def test_transition_to_dead_letter_swallows_recoverable_alert_failures(
+    mock_db, job
+):
+    handler = TestHandler()
+    with patch(
+        "app.shared.core.sentry.capture_exception",
+        side_effect=RuntimeError("sentry unavailable"),
+    ):
+        await handler._transition_to_dead_letter(job, "test error", mock_db)
+
+    assert job.status == JobStatus.DEAD_LETTER

@@ -3,9 +3,11 @@ import argparse
 import aioboto3
 import json
 import structlog
+from botocore.exceptions import BotoCoreError, ClientError
 from uuid import UUID
 from typing import Optional
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from app.shared.db.session import async_session_maker
 from app.models.aws_connection import AWSConnection
 
@@ -65,7 +67,15 @@ async def disconnect_aws(connection_id: UUID, dry_run: bool = True):
                     )
                     logger.info("deny_all_policy_attached")
 
-            except Exception as e:
+            except (
+                SQLAlchemyError,
+                BotoCoreError,
+                ClientError,
+                OSError,
+                RuntimeError,
+                TypeError,
+                ValueError,
+            ) as e:
                 logger.error("disconnect_aws_failed", error=str(e))
                 await session.rollback()
         else:

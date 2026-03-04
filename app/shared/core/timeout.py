@@ -5,6 +5,7 @@ Enforces maximum request duration to prevent zombie scans from blocking workers.
 """
 
 import asyncio
+import sys
 import time
 from contextlib import asynccontextmanager
 from functools import wraps
@@ -85,6 +86,7 @@ class TimeoutManager:
     ) -> T:
         """Execute a coroutine with timeout handling."""
         start_time = time.perf_counter()
+        timed_out = False
 
         try:
             result = await asyncio.wait_for(
@@ -102,6 +104,7 @@ class TimeoutManager:
             return result
 
         except asyncio.TimeoutError:
+            timed_out = True
             execution_time = time.perf_counter() - start_time
             logger.warning(
                 "operation_timed_out",
@@ -119,17 +122,18 @@ class TimeoutManager:
                     "execution_time_seconds": round(execution_time, 3),
                 },
             )
-
-        except Exception as e:
-            execution_time = time.perf_counter() - start_time
-            logger.error(
-                "operation_failed",
-                operation_type=self.operation_type,
-                execution_time_seconds=round(execution_time, 3),
-                error=str(e),
-                error_type=type(e).__name__,
-            )
-            raise
+        finally:
+            if not timed_out:
+                exc_type, exc_value, _ = sys.exc_info()
+                if exc_type is not None and exc_value is not None:
+                    execution_time = time.perf_counter() - start_time
+                    logger.error(
+                        "operation_failed",
+                        operation_type=self.operation_type,
+                        execution_time_seconds=round(execution_time, 3),
+                        error=str(exc_value),
+                        error_type=type(exc_value).__name__,
+                    )
 
 
 def timeout_operation(

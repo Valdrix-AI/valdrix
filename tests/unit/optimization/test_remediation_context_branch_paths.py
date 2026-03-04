@@ -124,6 +124,28 @@ async def test_resolve_aws_region_hint_scoped_lookup_and_fallback_paths() -> Non
 
 
 @pytest.mark.asyncio
+async def test_resolve_aws_region_hint_does_not_swallow_base_exceptions() -> None:
+    class FatalRegionLookupFailure(BaseException):
+        pass
+
+    tenant_id = uuid4()
+    connection_id = uuid4()
+    service = _service(region="global")
+    service.get_by_id = AsyncMock(side_effect=FatalRegionLookupFailure("fatal"))
+
+    with patch(
+        "app.modules.optimization.domain.remediation.get_connection_model",
+        return_value=object(),
+    ):
+        with pytest.raises(FatalRegionLookupFailure):
+            await ctx.resolve_aws_region_hint(
+                service,
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+            )
+
+
+@pytest.mark.asyncio
 async def test_resolve_aws_region_hint_falls_back_when_connection_or_scoped_regions_are_global() -> None:
     tenant_id = uuid4()
     connection_id = uuid4()
@@ -226,6 +248,20 @@ async def test_get_remediation_settings_logs_and_caches_none_on_db_error() -> No
     assert resolved is None
     assert service._remediation_settings_cache[tenant_id] is None
     warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_remediation_settings_does_not_swallow_base_exceptions() -> None:
+    class FatalSettingsLookupFailure(BaseException):
+        pass
+
+    tenant_id = uuid4()
+    service = _service()
+    service.db.execute = AsyncMock(side_effect=FatalSettingsLookupFailure("fatal"))
+
+    with patch.object(ctx, "select", side_effect=_fake_select):
+        with pytest.raises(FatalSettingsLookupFailure):
+            await ctx.get_remediation_settings(service, tenant_id)
 
 
 @pytest.mark.asyncio

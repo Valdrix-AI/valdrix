@@ -2,7 +2,10 @@ import pytest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.modules.optimization.adapters.gcp.plugins.compute import IdleVmsPlugin
+from app.modules.optimization.adapters.gcp.plugins.compute import (
+    IdleVmsPlugin,
+    _build_gcp_credentials,
+)
 
 
 @pytest.mark.asyncio
@@ -109,3 +112,13 @@ async def test_gcp_idle_instances_missing_project_id_returns_empty():
     plugin = IdleVmsPlugin()
     zombies = await plugin.scan("", "us-central1", credentials=object())
     assert zombies == []
+
+
+def test_build_gcp_credentials_parse_failure_returns_none():
+    with patch(
+        "app.modules.optimization.adapters.gcp.plugins.compute.service_account.Credentials.from_service_account_info",
+        side_effect=ValueError("invalid payload"),
+    ):
+        parsed = _build_gcp_credentials({"client_email": "x@y"})
+
+    assert parsed is None

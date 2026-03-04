@@ -63,10 +63,10 @@ async def test_generate_recommendations_handles_strategy_error():
         patch(
             "app.modules.optimization.domain.strategies.compute_savings.ComputeSavingsStrategy"
         ) as mock_strategy_cls,
-        patch("app.modules.optimization.domain.service.logger") as mock_logger,
+        patch("app.modules.optimization.domain.strategy_service.logger") as mock_logger,
     ):
         mock_strategy = mock_strategy_cls.return_value
-        mock_strategy.analyze = AsyncMock(side_effect=Exception("boom"))
+        mock_strategy.analyze = AsyncMock(side_effect=RuntimeError("boom"))
 
         service = OptimizationService(db)
         with patch.object(

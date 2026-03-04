@@ -259,3 +259,92 @@ async def test_dispatch_cost_anomaly_alerts_creates_jira_issue_for_high_severity
 
     assert alerted == 1
     assert fake_jira.create_cost_anomaly_issue.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_dispatch_cost_anomaly_alerts_handles_send_alert_runtime_error() -> None:
+    tenant_id = uuid4()
+    anomaly = CostAnomaly(
+        day=date(2026, 1, 29),
+        provider="aws",
+        account_id=uuid4(),
+        account_name="Prod AWS",
+        service="AmazonEC2",
+        actual_cost_usd=Decimal("350.00"),
+        expected_cost_usd=Decimal("100.00"),
+        delta_cost_usd=Decimal("250.00"),
+        percent_change=250.0,
+        kind="spike",
+        probable_cause="spend_spike",
+        confidence=0.9,
+        severity="high",
+    )
+
+    with patch("app.modules.reporting.domain.anomaly_detection.CacheService") as cache_cls:
+        cache = cache_cls.return_value
+        cache.get = AsyncMock(return_value=None)
+        cache.set = AsyncMock(return_value=True)
+
+        with patch(
+            "app.modules.reporting.domain.anomaly_detection.NotificationDispatcher.send_alert",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("dispatcher unavailable"),
+        ):
+            alerted = await dispatch_cost_anomaly_alerts(
+                tenant_id=tenant_id,
+                anomalies=[anomaly],
+                suppression_hours=24,
+                db=None,
+            )
+
+    assert alerted == 0
+    cache.set.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_cost_anomaly_alerts_handles_jira_bootstrap_runtime_error() -> None:
+    tenant_id = uuid4()
+    anomaly = CostAnomaly(
+        day=date(2026, 1, 29),
+        provider="aws",
+        account_id=uuid4(),
+        account_name="Prod AWS",
+        service="AmazonEC2",
+        actual_cost_usd=Decimal("350.00"),
+        expected_cost_usd=Decimal("100.00"),
+        delta_cost_usd=Decimal("250.00"),
+        percent_change=250.0,
+        kind="spike",
+        probable_cause="spend_spike",
+        confidence=0.9,
+        severity="high",
+    )
+
+    with (
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            new=AsyncMock(side_effect=RuntimeError("db unavailable")),
+        ),
+        patch("app.modules.reporting.domain.anomaly_detection.CacheService") as cache_cls,
+        patch(
+            "app.modules.reporting.domain.anomaly_detection.NotificationDispatcher.send_alert",
+            new_callable=AsyncMock,
+        ) as send_alert,
+        patch(
+            "app.modules.reporting.domain.anomaly_detection.NotificationDispatcher._dispatch_workflow_event",
+            new_callable=AsyncMock,
+        ),
+    ):
+        cache = cache_cls.return_value
+        cache.get = AsyncMock(return_value=None)
+        cache.set = AsyncMock(return_value=True)
+
+        alerted = await dispatch_cost_anomaly_alerts(
+            tenant_id=tenant_id,
+            anomalies=[anomaly],
+            suppression_hours=24,
+            db=AsyncMock(),
+        )
+
+    assert alerted == 1
+    assert send_alert.call_count == 1

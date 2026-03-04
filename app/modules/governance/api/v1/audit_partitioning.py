@@ -3,7 +3,9 @@ from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import ValidationError
 from sqlalchemy import desc, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.governance.api.v1.audit_schemas import (
@@ -20,6 +22,14 @@ from app.shared.db.session import get_db
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Audit"])
+PARTITIONING_CATALOG_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    OSError,
+    SQLAlchemyError,
+)
+PARTITIONING_EVIDENCE_PAYLOAD_ERRORS = (ValidationError, TypeError, ValueError)
 
 
 async def _compute_partitioning_evidence(
@@ -70,7 +80,7 @@ async def _compute_partitioning_evidence(
                 .all()
             )
             table_names = {str(row) for row in rows}
-    except Exception:
+    except PARTITIONING_CATALOG_RECOVERABLE_EXCEPTIONS:
         table_names = set()
 
     tables_to_check = ["audit_logs", "cost_records"]
@@ -283,7 +293,7 @@ async def list_partitioning_evidence(
             continue
         try:
             partitioning = PartitioningEvidencePayload.model_validate(raw)
-        except Exception:
+        except PARTITIONING_EVIDENCE_PAYLOAD_ERRORS:
             logger.warning(
                 "partitioning_evidence_invalid_payload",
                 event_id=str(row.id),

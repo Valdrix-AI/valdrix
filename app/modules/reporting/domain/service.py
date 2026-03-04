@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from typing import Dict, Any, List, Awaitable, cast
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.shared.adapters.factory import AdapterFactory
 from app.modules.reporting.domain.persistence import CostPersistenceService
@@ -25,8 +26,31 @@ from app.models.cloud import CloudAccount
 from app.shared.core.service import BaseService
 from app.shared.core.async_utils import maybe_call
 from app.shared.core.connection_state import resolve_connection_profile
+from app.shared.core.exceptions import ValdricsException
 
 logger = structlog.get_logger()
+REPORTING_INGEST_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ValdricsException,
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
+REPORTING_ATTRIBUTION_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ValdricsException,
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
 
 
 class ReportingService(BaseService):
@@ -159,7 +183,7 @@ class ReportingService(BaseService):
                     }
                 )
 
-            except Exception as e:
+            except REPORTING_INGEST_RECOVERABLE_EXCEPTIONS as e:
                 logger.error(
                     "cost_ingestion_failed", connection_id=str(conn.id), error=str(e)
                 )
@@ -179,7 +203,7 @@ class ReportingService(BaseService):
                 tenant_id, start_date=start_of_month, end_date=now
             )
             logger.info("attribution_applied_post_ingestion", tenant_id=str(tenant_id))
-        except Exception as e:
+        except REPORTING_ATTRIBUTION_RECOVERABLE_EXCEPTIONS as e:
             logger.error(
                 "attribution_trigger_failed", tenant_id=str(tenant_id), error=str(e)
             )

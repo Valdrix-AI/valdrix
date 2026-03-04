@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from collections.abc import Generator
 from typing import Any
 import time
+import sys
 from uuid import UUID
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,7 @@ from opentelemetry.trace import Status, StatusCode
 
 logger = structlog.get_logger()
 tracer = get_tracer(__name__)
+HYBRID_COST_PARSE_RECOVERABLE_EXCEPTIONS = (ArithmeticError, TypeError, ValueError)
 
 
 @contextmanager
@@ -44,11 +46,11 @@ def _hybrid_span(name: str, **attributes: Any) -> Generator[None, None, None]:
                 span.set_attribute(f"hybrid.{key}", str(value))
         try:
             yield
-        except Exception as exc:
-            span.record_exception(exc)
-            span.set_status(Status(StatusCode.ERROR, str(exc)))
-            raise
         finally:
+            _, exc, _ = sys.exc_info()
+            if exc is not None:
+                span.record_exception(exc)
+                span.set_status(Status(StatusCode.ERROR, str(exc)))
             duration_ms = max(0.0, (time.perf_counter() - start_ts) * 1000.0)
             span.set_attribute("hybrid.duration_ms", duration_ms)
             if duration_ms >= 2000.0:
@@ -339,7 +341,7 @@ class HybridAnalysisScheduler:
             raw_amount = entry.get("amount", entry.get("cost", 0))
             try:
                 amount = Decimal(str(raw_amount or 0))
-            except Exception:
+            except HYBRID_COST_PARSE_RECOVERABLE_EXCEPTIONS:
                 amount = Decimal("0")
 
             raw_dt = entry.get("date", now)

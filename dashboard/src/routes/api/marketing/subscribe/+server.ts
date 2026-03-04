@@ -59,7 +59,9 @@ function hashEmail(email: string): string {
 function normalizeBody(payload: unknown): SubscriptionBody | null {
 	if (!payload || typeof payload !== 'object') return null;
 	const candidate = payload as Record<string, unknown>;
-	const email = String(candidate.email ?? '').trim().toLowerCase();
+	const email = String(candidate.email ?? '')
+		.trim()
+		.toLowerCase();
 	const company = String(candidate.company ?? '').trim();
 	const role = String(candidate.role ?? '').trim();
 	const referrer = String(candidate.referrer ?? '').trim();

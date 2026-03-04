@@ -88,6 +88,24 @@ async def test_send_with_retry_ratelimited(slack_service):
 
 
 @pytest.mark.asyncio
+async def test_send_with_retry_handles_runtime_error(slack_service):
+    slack_service.client.chat_postMessage = AsyncMock(
+        side_effect=RuntimeError("client unavailable")
+    )
+
+    result = await slack_service.send_alert("Test", "Msg")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_send_with_retry_does_not_swallow_fatal_errors(slack_service):
+    slack_service.client.chat_postMessage = AsyncMock(side_effect=KeyboardInterrupt())
+
+    with pytest.raises(KeyboardInterrupt):
+        await slack_service.send_alert("Test", "Msg")
+
+
+@pytest.mark.asyncio
 async def test_notify_zombies(slack_service):
     slack_service.send_alert = AsyncMock(return_value=True)
 

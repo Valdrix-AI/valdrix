@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from sqlalchemy import select, func, desc, asc
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from app.shared.db.session import get_db, async_session_maker, mark_session_system_context
@@ -33,6 +34,13 @@ router = APIRouter(tags=["Background Jobs"])
 logger = structlog.get_logger()
 _active_sse_connections: Dict[str, int] = {}
 _active_sse_lock = asyncio.Lock()
+SSE_STREAM_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 async def require_internal_job_secret(
@@ -384,7 +392,7 @@ async def stream_job_updates(
                         # Heartbeat to keep connection alive
                         yield {"event": "ping", "data": "heartbeat"}
 
-                except Exception as e:
+                except SSE_STREAM_RECOVERABLE_EXCEPTIONS as e:
                     logger.error("SSE Stream Error", error=str(e))
                     yield {
                         "event": "error",

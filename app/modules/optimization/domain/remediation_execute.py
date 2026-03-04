@@ -8,18 +8,48 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.remediation import RemediationAction, RemediationRequest, RemediationStatus
 from app.modules.governance.domain.security.remediation_policy import PolicyDecision, RemediationPolicyEngine
 from app.modules.optimization.domain.actions.base import ExecutionStatus, RemediationContext
 from app.shared.core.constants import SYSTEM_USER_ID
-from app.shared.core.exceptions import ResourceNotFoundError
+from app.shared.core.exceptions import ExternalAPIError, ResourceNotFoundError
 from app.shared.core.ops_metrics import REMEDIATION_DURATION_SECONDS
 from app.shared.core.pricing import FeatureFlag, PricingTier, is_feature_enabled
 from app.shared.core.security_metrics import REMEDIATION_TOTAL
 from app.shared.core.provider import normalize_provider
 
 logger = structlog.get_logger()
+
+REMEDIATION_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+    KeyError,
+    LookupError,
+    AttributeError,
+)
+REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ValueError,
+    TypeError,
+    AttributeError,
+)
+REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+    KeyError,
+    LookupError,
+    AttributeError,
+)
 
 
 async def execute_remediation_request(
@@ -48,7 +78,7 @@ async def execute_remediation_request(
 
     try:
         tenant_tier = await remediation_module.get_tenant_tier(tenant_id, service.db)
-    except Exception as exc:
+    except REMEDIATION_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS as exc:
         logger.warning(
             "tenant_tier_lookup_failed_in_execute",
             tenant_id=str(tenant_id),
@@ -73,7 +103,7 @@ async def execute_remediation_request(
         try:
             action = RemediationAction(str(action_raw))
             request.action = action
-        except Exception as exc:
+        except REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS as exc:
             raise ValueError(f"Invalid remediation action on request: {action_raw}") from exc
     action_value = action.value
 
@@ -433,7 +463,7 @@ async def execute_remediation_request(
             action=action_value, provider=provider
         ).observe(duration)
 
-    except Exception as exc:
+    except REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS as exc:
         request.status = RemediationStatus.FAILED
         request.execution_error = str(exc)[:500]
 

@@ -1,10 +1,18 @@
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
+from botocore.exceptions import ClientError
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 import structlog
 
 logger = structlog.get_logger()
+AWS_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS = (
+    ClientError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 @registry.register("aws")
 class OverprovisionedEc2Plugin(ZombiePlugin):
@@ -133,7 +141,7 @@ class OverprovisionedEc2Plugin(ZombiePlugin):
                                     "explainability_notes": f"Instance {instance_type} had Max CPU of {max_cpu_observed:.1f}% over the last 7 days (Threshold: {threshold}%)."
                                 })
 
-        except Exception as e:
+        except AWS_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.error("aws_rightsizing_scan_error", error=str(e))
             
         return zombies

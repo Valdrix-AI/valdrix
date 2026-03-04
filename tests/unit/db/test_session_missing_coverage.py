@@ -6,6 +6,7 @@ Targeted tests for app/shared/db/session.py missing coverage line 21
 import os
 import uuid
 from unittest.mock import MagicMock, AsyncMock, patch
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Request
 
@@ -31,7 +32,7 @@ class TestDatabaseSessionMissingCoverage:
         mock_session = AsyncMock(spec=AsyncSession)
         mock_session.bind = MagicMock()
         mock_session.bind.url = "postgresql+asyncpg://test"
-        mock_session.execute = AsyncMock(side_effect=Exception("Database error"))
+        mock_session.execute = AsyncMock(side_effect=SQLAlchemyError("Database error"))
         mock_session.connection = AsyncMock(return_value=AsyncMock())
         mock_session.close = AsyncMock()
 

@@ -92,6 +92,32 @@ async def test_create_request_unauthorized_connection(remediation_service, db_se
 
 
 @pytest.mark.asyncio
+async def test_create_request_does_not_swallow_base_exceptions(
+    remediation_service, db_session
+):
+    class FatalConnectionScopeFailure(BaseException):
+        pass
+
+    tenant_id = uuid4()
+    connection_id = uuid4()
+    remediation_service.get_by_id = AsyncMock(
+        side_effect=FatalConnectionScopeFailure("fatal")
+    )
+
+    with pytest.raises(FatalConnectionScopeFailure):
+        await remediation_service.create_request(
+            tenant_id=tenant_id,
+            user_id=uuid4(),
+            resource_id="v-1",
+            resource_type="type",
+            action=RemediationAction.DELETE_VOLUME,
+            estimated_savings=10.0,
+            provider="aws",
+            connection_id=connection_id,
+        )
+
+
+@pytest.mark.asyncio
 async def test_list_pending_success(remediation_service, db_session):
     tenant_id = uuid4()
     req = RemediationRequest(
@@ -523,6 +549,57 @@ async def test_execute_uses_registered_strategy(remediation_service, db_session)
 
         assert result.status == RemediationStatus.COMPLETED
         mock_get_strategy.assert_called_once_with("aws", RemediationAction.STOP_INSTANCE)
+
+
+@pytest.mark.asyncio
+async def test_execute_does_not_swallow_base_exceptions(
+    remediation_service, db_session
+):
+    class FatalExecutionFailure(BaseException):
+        pass
+
+    request_id = uuid4()
+    tenant_id = uuid4()
+    req = MagicMock(spec=RemediationRequest)
+    req.id = request_id
+    req.tenant_id = tenant_id
+    req.status = RemediationStatus.APPROVED
+    req.resource_id = "i-123"
+    req.resource_type = "instance"
+    req.action = RemediationAction.STOP_INSTANCE
+    req.create_backup = False
+    req.reviewed_by_user_id = uuid4()
+    req.estimated_monthly_savings = Decimal("25.0")
+    req.provider = "aws"
+    req.connection_id = None
+    req.region = "us-east-1"
+    req.action_parameters = {"reason": "test"}
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = req
+    db_session.execute.return_value = mock_res
+
+    with (
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
+        patch(
+            "app.modules.optimization.domain.remediation.AuditLogger.log",
+            return_value=AsyncMock(),
+        ),
+        patch(
+            "app.modules.optimization.domain.remediation.SafetyGuardrailService"
+        ) as mock_safety,
+    ):
+        mock_safety.return_value.check_all_guards = AsyncMock()
+        mock_strategy = MagicMock()
+        mock_strategy.execute = AsyncMock(side_effect=FatalExecutionFailure("fatal"))
+        mock_get_strategy.return_value = mock_strategy
+
+        with pytest.raises(FatalExecutionFailure):
+            await remediation_service.execute(
+                request_id, tenant_id, bypass_grace_period=True
+            )
 
 
 @pytest.mark.asyncio

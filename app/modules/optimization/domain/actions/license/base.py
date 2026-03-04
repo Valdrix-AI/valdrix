@@ -9,6 +9,12 @@ from app.shared.core.exceptions import UnsupportedVendorError
 import structlog
 
 logger = structlog.get_logger()
+LICENSE_RECLAMATION_RECOVERABLE_EXCEPTIONS = (
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 class BaseLicenseAction(BaseRemediationAction):
     @property
     def required_feature(self) -> FeatureFlag:
@@ -87,7 +93,7 @@ class LicenseReclaimSeatAction(BaseLicenseAction):
                 error_message=f"Manual follow-up required: {str(e)}",
                 metadata={"reason": "manual_follow_up_required"},
             )
-        except Exception as e:
+        except LICENSE_RECLAMATION_RECOVERABLE_EXCEPTIONS as e:
             logger.error("license_reclamation_failed", error=str(e))
             return ExecutionResult(
                 status=ExecutionStatus.FAILED,

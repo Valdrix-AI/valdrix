@@ -1,0 +1,14 @@
+ M dashboard/src/lib/components/LandingHero.css
+ M dashboard/src/lib/components/LandingHero.svelte.test.ts
+ M dashboard/src/lib/components/landing/LandingTrustSection.svelte
+ M dashboard/src/lib/components/landing/landing_decomposition.svelte.test.ts
+ M dashboard/src/lib/landing/heroContent.ts
+ M dashboard/src/lib/routeProtection.test.ts
+ M docs/DEPLOYMENT.md
+?? dashboard/src/lib/landing/customerCommentsFeed.ts
+?? dashboard/src/lib/server/
+?? dashboard/src/routes/admin/customer-comments/
+?? dashboard/src/routes/api/admin/
+?? dashboard/src/routes/api/marketing/customer-comments/
+?? docs/ops/cloudflare_go_live_checklist_2026-03-02.md
+?? docs/ops/evidence/all_changes_inventory_followup2_2026-03-02.txt

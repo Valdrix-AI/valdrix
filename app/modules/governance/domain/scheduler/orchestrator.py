@@ -6,6 +6,7 @@ import time
 import os
 import structlog
 import sqlalchemy as sa
+from httpx import HTTPError
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any, Protocol
 from contextlib import AbstractAsyncContextManager
@@ -22,6 +23,31 @@ settings = get_settings()
 # Arbitrary constant for scheduler advisory locks - DEPRECATED in favor of SELECT FOR UPDATE
 # Keeping for reference of lock inheritance
 SCHEDULER_LOCK_BASE_ID = 48293021
+SCHEDULER_LOCK_RECOVERABLE_ERRORS = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+)
+SCHEDULER_DISPATCH_RECOVERABLE_ERRORS = (
+    ImportError,
+    AttributeError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+)
+CARBON_INTENSITY_RECOVERABLE_ERRORS = (
+    HTTPError,
+    ImportError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+)
 
 
 # Metrics are now imported from app.modules.governance.domain.scheduler.metrics
@@ -87,7 +113,7 @@ class SchedulerOrchestrator:
                 logger.info("scheduler_dispatch_skipped_lock_held", job=job_name)
                 return False
             return True
-        except Exception as exc:
+        except SCHEDULER_LOCK_RECOVERABLE_ERRORS as exc:
             if settings.SCHEDULER_LOCK_FAIL_OPEN:
                 logger.warning(
                     "scheduler_dispatch_lock_error_fail_open",
@@ -117,7 +143,7 @@ class SchedulerOrchestrator:
             celery_app.send_task(
                 "scheduler.cohort_analysis", args=[target_cohort.value]
             )
-        except Exception as e:
+        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
             logger.warning(
                 "scheduler_celery_unavailable", error=str(e), cohort=target_cohort.value
             )
@@ -191,7 +217,7 @@ class SchedulerOrchestrator:
             value = float(intensity)
             self._carbon_cache[region_hint] = (value, now)
             return value
-        except Exception as exc:
+        except CARBON_INTENSITY_RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "live_carbon_intensity_fetch_failed",
                 region=region_hint,
@@ -208,7 +234,7 @@ class SchedulerOrchestrator:
             from app.shared.core.celery_app import celery_app
 
             celery_app.send_task("scheduler.remediation_sweep")
-        except Exception as e:
+        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
             logger.warning(
                 "scheduler_celery_unavailable", error=str(e), job="remediation"
             )
@@ -222,7 +248,7 @@ class SchedulerOrchestrator:
             from app.shared.core.celery_app import celery_app
 
             celery_app.send_task("scheduler.billing_sweep")
-        except Exception as e:
+        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
             logger.warning("scheduler_celery_unavailable", error=str(e), job="billing")
 
     async def acceptance_sweep_job(self) -> None:
@@ -234,7 +260,7 @@ class SchedulerOrchestrator:
             from app.shared.core.celery_app import celery_app
 
             celery_app.send_task("scheduler.acceptance_sweep")
-        except Exception as e:
+        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
             logger.warning(
                 "scheduler_celery_unavailable", error=str(e), job="acceptance"
             )
@@ -248,7 +274,7 @@ class SchedulerOrchestrator:
             from app.shared.core.celery_app import celery_app
 
             celery_app.send_task("license.governance_sweep")
-        except Exception as e:
+        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
             logger.warning(
                 "scheduler_celery_unavailable",
                 error=str(e),
@@ -269,7 +295,7 @@ class SchedulerOrchestrator:
             from app.shared.core.celery_app import celery_app
 
             celery_app.send_task("scheduler.enforcement_reconciliation_sweep")
-        except Exception as e:
+        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
             logger.warning(
                 "scheduler_celery_unavailable",
                 error=str(e),
@@ -323,7 +349,7 @@ class SchedulerOrchestrator:
             from app.shared.core.celery_app import celery_app
 
             celery_app.send_task("scheduler.maintenance_sweep")
-        except Exception as e:
+        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
             logger.warning(
                 "scheduler_celery_unavailable", error=str(e), job="maintenance"
             )

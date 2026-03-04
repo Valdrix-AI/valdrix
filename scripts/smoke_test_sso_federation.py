@@ -31,6 +31,15 @@ import httpx
 
 from app.shared.core.evidence_capture import redact_secrets, sanitize_bearer_token
 
+SSO_SMOKE_RECOVERABLE_EXCEPTIONS = (
+    httpx.HTTPError,
+    json.JSONDecodeError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -176,7 +185,7 @@ def main() -> int:
         detail = None
         try:
             discovery_payload = resp.json() if ok else {"error": resp.text}
-        except Exception:  # noqa: BLE001
+        except SSO_SMOKE_RECOVERABLE_EXCEPTIONS:  # noqa: BLE001
             discovery_payload = {"error": resp.text}
         checks.append(
             Check(
@@ -212,7 +221,7 @@ def main() -> int:
             validation_ok = bool(ok2)
             try:
                 validation_payload = resp2.json() if ok2 else {"error": resp2.text}
-            except Exception:  # noqa: BLE001
+            except SSO_SMOKE_RECOVERABLE_EXCEPTIONS:  # noqa: BLE001
                 validation_payload = {"error": resp2.text}
             checks.append(
                 Check(
@@ -324,7 +333,7 @@ def main() -> int:
                     csrf_token = (csrf_resp.json() or {}).get("csrf_token")
                     if csrf_token:
                         publish_headers["X-CSRF-Token"] = str(csrf_token)
-            except Exception:
+            except SSO_SMOKE_RECOVERABLE_EXCEPTIONS:
                 pass
 
             try:

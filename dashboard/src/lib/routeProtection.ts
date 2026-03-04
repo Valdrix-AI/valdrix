@@ -18,6 +18,7 @@ const PUBLIC_SEGMENT_PREFIXES = [
 	'/pricing',
 	'/docs',
 	'/resources',
+	'/.well-known',
 	'/api/marketing',
 	'/_app' // SvelteKit build assets
 ];

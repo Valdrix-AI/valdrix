@@ -15,6 +15,12 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+KEY_CACHE_WARM_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    TypeError,
+    ValueError,
+    InvalidToken,
+)
 
 # ============================================================================
 # Encryption Key Manager (Production Hardening)
@@ -145,7 +151,7 @@ class EncryptionKeyManager:
             seen.add(key)
             try:
                 cls.create_fernet_for_key(key, salt)
-            except Exception as exc:
+            except KEY_CACHE_WARM_RECOVERABLE_EXCEPTIONS as exc:
                 logger.warning(
                     "encryption_key_cache_warm_failed",
                     key_fingerprint=hashlib.sha256(key.encode()).hexdigest()[:12],

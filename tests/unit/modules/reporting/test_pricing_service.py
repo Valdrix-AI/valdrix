@@ -1,5 +1,7 @@
 import pytest
 from unittest.mock import patch
+import sys
+import types
 
 from app.modules.reporting.domain.pricing.service import PricingService
 
@@ -59,3 +61,67 @@ def test_get_hourly_rate_default_region_is_provider_neutral():
         # Without an explicit region, pricing should not implicitly apply AWS us-east-1 multiplier.
         rate = PricingService.get_hourly_rate("aws", "instance")
         assert rate == pytest.approx(1.0)
+
+
+def test_sync_with_aws_handles_recoverable_botocore_errors():
+    class FakeBotoCoreError(Exception):
+        pass
+
+    class FakeClientError(Exception):
+        pass
+
+    class FakeClient:
+        def get_products(self, **kwargs):
+            raise FakeClientError("pricing endpoint unavailable")
+
+    fake_boto3 = types.SimpleNamespace(
+        client=lambda service_name, region_name: FakeClient()
+    )
+    fake_botocore_exceptions = types.SimpleNamespace(
+        BotoCoreError=FakeBotoCoreError,
+        ClientError=FakeClientError,
+    )
+
+    with (
+        patch.dict(
+            sys.modules,
+            {
+                "boto3": fake_boto3,
+                "botocore.exceptions": fake_botocore_exceptions,
+            },
+        ),
+        patch("app.modules.reporting.domain.pricing.service.logger") as logger_mock,
+    ):
+        PricingService.sync_with_aws()
+
+    logger_mock.error.assert_called_once()
+
+
+def test_sync_with_aws_does_not_swallow_base_exceptions():
+    class FakeBotoCoreError(Exception):
+        pass
+
+    class FakeClientError(Exception):
+        pass
+
+    class FatalClient:
+        def get_products(self, **kwargs):
+            raise KeyboardInterrupt("stop")
+
+    fake_boto3 = types.SimpleNamespace(
+        client=lambda service_name, region_name: FatalClient()
+    )
+    fake_botocore_exceptions = types.SimpleNamespace(
+        BotoCoreError=FakeBotoCoreError,
+        ClientError=FakeClientError,
+    )
+
+    with patch.dict(
+        sys.modules,
+        {
+            "boto3": fake_boto3,
+            "botocore.exceptions": fake_botocore_exceptions,
+        },
+    ):
+        with pytest.raises(KeyboardInterrupt, match="stop"):
+            PricingService.sync_with_aws()

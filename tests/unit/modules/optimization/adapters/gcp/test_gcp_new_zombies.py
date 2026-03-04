@@ -52,3 +52,20 @@ async def test_gcp_stopped_vms_plugin():
     assert "us-central1-a" in zombie["zone"]
     # Cost: 50GB * $0.04 = $2.00
     assert zombie["monthly_cost"] == 2.00
+
+
+@pytest.mark.asyncio
+async def test_gcp_stopped_vms_plugin_runtime_error_returns_empty():
+    plugin = StoppedVmsPlugin()
+
+    with patch(
+        "app.modules.optimization.adapters.gcp.plugins.compute.compute_v1.InstancesClient",
+        side_effect=RuntimeError("gcp unavailable"),
+    ):
+        zombies = await plugin.scan(
+            session="proj-1",
+            region="global",
+            credentials=MagicMock(),
+        )
+
+    assert zombies == []

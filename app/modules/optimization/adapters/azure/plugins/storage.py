@@ -6,6 +6,7 @@ Detects unattached disks and old snapshots using Resource Graph (free).
 
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
+from azure.core.exceptions import AzureError
 from azure.mgmt.compute.aio import ComputeManagementClient
 from azure.identity.aio import ClientSecretCredential, DefaultAzureCredential
 import structlog
@@ -14,6 +15,17 @@ from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
+
+AZURE_STORAGE_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    AzureError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
 
 
 @registry.register("azure")
@@ -119,7 +131,7 @@ class UnattachedDisksPlugin(ZombiePlugin):
                             "explainability_notes": f"Disk is unattached. Size: {size_gb} GB, SKU: {disk.sku.name if disk.sku else 'Unknown'}.",
                         }
                     )
-        except Exception as e:
+        except AZURE_STORAGE_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_disk_scan_error", error=str(e))
 
         return zombies
@@ -221,7 +233,7 @@ class OldSnapshotsPlugin(ZombiePlugin):
                             "explainability_notes": f"Snapshot is {age} days old. Review retention policy.",
                         }
                     )
-        except Exception as e:
+        except AZURE_STORAGE_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_snapshot_scan_error", error=str(e))
 
         return zombies

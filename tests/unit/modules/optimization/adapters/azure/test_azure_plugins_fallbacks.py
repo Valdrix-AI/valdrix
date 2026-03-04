@@ -441,3 +441,83 @@ async def test_azure_fallbacks_handle_errors(monkeypatch):
             == []
         )
         assert mock_logger.warning.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_azure_compute_fallback_does_not_swallow_base_exception():
+    class FatalAzureFailure(BaseException):
+        pass
+
+    with patch(
+        "app.modules.optimization.adapters.azure.plugins.compute.ComputeManagementClient",
+        side_effect=FatalAzureFailure("fatal"),
+    ):
+        with pytest.raises(FatalAzureFailure):
+            await IdleVmsPlugin().scan("sub-1", "eastus", credentials=MagicMock())
+
+
+@pytest.mark.asyncio
+async def test_azure_containers_fallback_does_not_swallow_base_exception(monkeypatch):
+    class FatalAzureFailure(BaseException):
+        pass
+
+    def _raise(*_args, **_kwargs):
+        raise FatalAzureFailure("fatal")
+
+    cs_aio = _register_azure_module(
+        monkeypatch,
+        "azure.mgmt.containerservice.aio",
+        ContainerServiceClient=_raise,
+    )
+    cs_mod = _register_azure_module(monkeypatch, "azure.mgmt.containerservice")
+    cs_mod.aio = cs_aio
+
+    azure_mod = sys.modules.get("azure") or _register_azure_module(monkeypatch, "azure")
+    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(
+        monkeypatch, "azure.mgmt"
+    )
+    setattr(mgmt_mod, "containerservice", cs_mod)
+    setattr(azure_mod, "mgmt", mgmt_mod)
+
+    with pytest.raises(FatalAzureFailure):
+        await IdleAksClusterPlugin().scan("sub-1", "eastus", credentials=MagicMock())
+
+
+@pytest.mark.asyncio
+async def test_azure_storage_fallback_does_not_swallow_base_exception():
+    class FatalAzureFailure(BaseException):
+        pass
+
+    with patch(
+        "app.modules.optimization.adapters.azure.plugins.storage.ComputeManagementClient",
+        side_effect=FatalAzureFailure("fatal"),
+    ):
+        with pytest.raises(FatalAzureFailure):
+            await UnattachedDisksPlugin().scan("sub-1", "eastus", credentials=MagicMock())
+
+
+@pytest.mark.asyncio
+async def test_azure_sql_fallback_does_not_swallow_base_exception(monkeypatch):
+    class FatalAzureFailure(BaseException):
+        pass
+
+    def _raise(*_args, **_kwargs):
+        raise FatalAzureFailure("fatal")
+
+    sql_aio = _register_azure_module(
+        monkeypatch,
+        "azure.mgmt.sql.aio",
+        SqlManagementClient=_raise,
+    )
+    sql_mod = _register_azure_module(monkeypatch, "azure.mgmt.sql")
+    sql_mod.aio = sql_aio
+
+    azure_mod = sys.modules.get("azure") or _register_azure_module(monkeypatch, "azure")
+    mgmt_mod = sys.modules.get("azure.mgmt") or _register_azure_module(
+        monkeypatch, "azure.mgmt"
+    )
+    setattr(mgmt_mod, "sql", sql_mod)
+    setattr(azure_mod, "mgmt", mgmt_mod)
+
+    with pytest.raises(FatalAzureFailure):
+        await IdleSqlDatabasesPlugin().scan("sub-1", "eastus", credentials=MagicMock())

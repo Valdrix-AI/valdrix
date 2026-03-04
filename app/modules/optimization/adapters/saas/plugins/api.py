@@ -9,6 +9,13 @@ from app.modules.optimization.domain.registry import registry
 from app.shared.adapters.feed_utils import parse_timestamp
 
 logger = structlog.get_logger()
+GITHUB_SCAN_RECOVERABLE_EXCEPTIONS = (
+    httpx.HTTPError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 def _coerce_token(raw: Any) -> str | None:
@@ -129,6 +136,6 @@ class GitHubUnusedSeatPlugin(ZombiePlugin):
                         }
                     )
                 return zombies
-        except Exception as exc:  # noqa: BLE001
+        except GITHUB_SCAN_RECOVERABLE_EXCEPTIONS as exc:
             logger.error("github_scan_failed", error=str(exc))
             return []

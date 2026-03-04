@@ -15,9 +15,7 @@
 		<article class="glass-panel landing-benefit-card">
 			<p class="landing-proof-k">Economic Visibility</p>
 			<h3 class="landing-h3">See spend shifts before they become monthly surprises</h3>
-			<p class="landing-p">
-				Get one view of cloud and software movement so teams can act early.
-			</p>
+			<p class="landing-p">Get one view of cloud and software movement so teams can act early.</p>
 		</article>
 
 		<article class="glass-panel landing-benefit-card">

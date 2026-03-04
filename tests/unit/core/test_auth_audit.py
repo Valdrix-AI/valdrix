@@ -4,6 +4,7 @@ from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Request
 import jwt
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.shared.core.auth import (
     create_access_token,
@@ -257,7 +258,7 @@ async def test_get_current_user_unexpected_error():
     credentials = MagicMock()
     credentials.credentials = token
     mock_db = AsyncMock()
-    mock_db.execute.side_effect = Exception("DB Exploded")
+    mock_db.execute.side_effect = SQLAlchemyError("DB Exploded")
     # AsyncSession.begin_nested() should be a sync method returning an async context manager.
     mock_db.begin_nested = MagicMock(return_value=_AsyncNullContext())
 

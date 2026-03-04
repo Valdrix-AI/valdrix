@@ -22,7 +22,7 @@ async def run_optimization():
             
             print(f"🏁 Total hardening time: {time.time() - start_total:.2f}s")
             print("✅ Database Performance & Security Hardening applied successfully!")
-        except Exception as e:
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
             # The transaction is handled by the SQL script itself (BEGIN/COMMIT)
             # but we should still log the error properly.
             print(f"❌ Error during hardening: {e}")

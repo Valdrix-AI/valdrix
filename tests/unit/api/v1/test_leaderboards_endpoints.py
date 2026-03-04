@@ -192,6 +192,36 @@ async def test_leaderboard_invalid_cache_falls_through_and_sets_cache() -> None:
 
 
 @pytest.mark.asyncio
+async def test_leaderboard_cache_does_not_swallow_base_exceptions() -> None:
+    cache = _Cache(
+        enabled=True,
+        cached_payload={
+            "period": "Last 30 Days",
+            "entries": [],
+            "total_team_savings": 0,
+        },
+    )
+    db = MagicMock()
+    db.execute = AsyncMock()
+
+    with (
+        patch.object(leaderboards_api, "get_cache_service", return_value=cache),
+        patch.object(
+            leaderboards_api.LeaderboardResponse,
+            "model_validate",
+            side_effect=KeyboardInterrupt("stop"),
+        ),
+    ):
+        with pytest.raises(KeyboardInterrupt, match="stop"):
+            await leaderboards_api.get_leaderboard(
+                request=object(),
+                period="30d",
+                current_user=_user(),
+                db=db,
+            )
+
+
+@pytest.mark.asyncio
 async def test_leaderboard_non_dict_cache_payload_falls_through() -> None:
     row = SimpleNamespace(
         user_email="fallback2@valdrics.io",

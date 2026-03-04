@@ -11,6 +11,7 @@ Provides:
 
 import os
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch
 
 # Set test environment BEFORE any app imports (Crucial for lru_cache behavior)
@@ -41,6 +42,7 @@ from typing import AsyncGenerator, Generator, Optional
 from datetime import datetime, timezone
 from app.models.tenant import UserRole
 from app.shared.core.pricing import PricingTier
+from app.shared.testing.sqlite_artifact_cleanup import cleanup_sqlite_test_artifacts
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -101,6 +103,18 @@ def pytest_configure(config):
     # This prevents circular imports at module load time and 
     # ensures models are registered before any tests run.
     _register_models()
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    del session
+    cleanup_sqlite_test_artifacts(Path.cwd())
+
+
+def pytest_sessionfinish(
+    session: pytest.Session, exitstatus: int | pytest.ExitCode
+) -> None:
+    del session, exitstatus
+    cleanup_sqlite_test_artifacts(Path.cwd())
 
 
 # Mock tiktoken if not installed

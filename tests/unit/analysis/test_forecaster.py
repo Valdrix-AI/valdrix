@@ -314,7 +314,7 @@ class TestSymbolicForecasterForecasting:
         with patch.object(
             SymbolicForecaster,
             "_prepare_dataframe",
-            side_effect=Exception("Data error"),
+            side_effect=ValueError("Data error"),
         ):
             result = await SymbolicForecaster.forecast(history, days=7)
 
@@ -685,7 +685,7 @@ class TestSymbolicForecasterProductionQuality:
                 mock_prophet.return_value = mock_instance
 
                 # Make Prophet operations fail
-                mock_instance.fit.side_effect = Exception("Prophet fit failed")
+                mock_instance.fit.side_effect = RuntimeError("Prophet fit failed")
 
                 result = await SymbolicForecaster.forecast(history, days=7)
 

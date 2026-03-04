@@ -33,6 +33,11 @@ _RETRYABLE_LICENSE_TASK_EXCEPTIONS = (
     httpx.TimeoutException,
     httpx.TransportError,
 )
+_LICENSE_SWEEP_RECOVERABLE_EXCEPTIONS = _RETRYABLE_LICENSE_TASK_EXCEPTIONS + (
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @shared_task(  # type: ignore[untyped-decorator]
@@ -102,7 +107,7 @@ async def _license_governance_sweep_logic() -> None:
                     bucket=bucket_str,
                 )
 
-    except Exception as e:
+    except _LICENSE_SWEEP_RECOVERABLE_EXCEPTIONS as e:
         logger.error("license_governance_sweep_failed", error=str(e))
         raise
 

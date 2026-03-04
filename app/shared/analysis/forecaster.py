@@ -4,12 +4,43 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
 import structlog
+from sqlalchemy.exc import SQLAlchemyError
 from app.shared.analysis.carbon_data import (
     REGION_CARBON_INTENSITY,
     DEFAULT_CARBON_INTENSITY,
 )
 
 logger = structlog.get_logger()
+
+FORECAST_RUNTIME_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    ValueError,
+    TypeError,
+    KeyError,
+    RuntimeError,
+    ArithmeticError,
+    OverflowError,
+    IndexError,
+    AttributeError,
+)
+FORECAST_MARKER_LOAD_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+FORECAST_MAPE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    ValueError,
+    TypeError,
+    KeyError,
+    RuntimeError,
+    ArithmeticError,
+    OverflowError,
+    ZeroDivisionError,
+    IndexError,
+)
 
 # Optional dependency: Prophet (Requires pystan/holidays)
 _prophet_warned = False
@@ -95,7 +126,7 @@ class SymbolicForecaster:
             # Fallback to Holt-Winters logic
             return await SymbolicForecaster._run_holt_winters(df, days)
 
-        except Exception as e:
+        except FORECAST_RUNTIME_RECOVERABLE_ERRORS as e:
             logger.error("forecasting_failed_unexpectedly", error=str(e))
             return {
                 "confidence": "error",
@@ -123,7 +154,7 @@ class SymbolicForecaster:
                 markers = result.scalars().all()
                 if markers:
                     holidays_df = SymbolicForecaster._build_holidays_df(markers)
-            except Exception as e:
+            except FORECAST_MARKER_LOAD_RECOVERABLE_ERRORS as e:
                 logger.warning("failed_to_load_anomaly_markers", error=str(e))
 
         m = Prophet(
@@ -169,7 +200,7 @@ class SymbolicForecaster:
                 mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
             else:
                 mape = 0.0
-        except Exception as e:
+        except FORECAST_MAPE_RECOVERABLE_ERRORS as e:
             logger.debug("mape_calculation_skipped", error=str(e))
             mape = 15.0  # Fallback default
 

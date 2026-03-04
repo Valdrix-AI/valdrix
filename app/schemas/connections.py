@@ -288,7 +288,7 @@ class GCPConnectionCreate(BaseModel):
         if self.service_account_json:
             try:
                 json.loads(self.service_account_json)
-            except Exception as exc:
+            except json.JSONDecodeError as exc:
                 raise ValueError("service_account_json must be valid JSON") from exc
         return self
 

@@ -37,7 +37,7 @@ def _must_env(name: str) -> str:
 def _safe_json(resp: httpx.Response) -> Any:
     try:
         return resp.json()
-    except Exception:
+    except (TypeError, ValueError):
         return {"raw": resp.text}
 
 

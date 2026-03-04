@@ -14,12 +14,12 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any, cast
 from urllib.parse import urlparse
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant_identity_settings import TenantIdentitySettings
@@ -40,6 +40,14 @@ from app.shared.core.approval_permissions import (
     SUPPORTED_APPROVAL_PERMISSIONS,
     normalize_approval_permissions,
 )
+from app.modules.governance.api.v1.settings.identity_diagnostics_ops import (
+    build_identity_diagnostics_payload as _build_identity_diagnostics_payload_impl,
+    build_sso_federation_validation_payload as _build_sso_federation_validation_payload_impl,
+)
+from app.modules.governance.api.v1.settings.identity_settings_ops import (
+    rotate_scim_token_route as _rotate_scim_token_route_impl,
+    update_identity_settings_route as _update_identity_settings_route_impl,
+)
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Identity"])
@@ -54,7 +62,7 @@ SUPPORTED_SCIM_APPROVAL_PERMISSIONS = tuple(sorted(SUPPORTED_APPROVAL_PERMISSION
 def _is_http_url(value: str) -> bool:
     try:
         parsed = urlparse(str(value or "").strip())
-    except Exception:  # noqa: BLE001
+    except (TypeError, ValueError):
         return False
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
@@ -62,7 +70,7 @@ def _is_http_url(value: str) -> bool:
 def _is_https_url(value: str) -> bool:
     try:
         parsed = urlparse(str(value or "").strip())
-    except Exception:  # noqa: BLE001
+    except (TypeError, ValueError):
         return False
     return parsed.scheme == "https" and bool(parsed.netloc)
 
@@ -86,6 +94,30 @@ def _normalize_domains(domains: list[str]) -> list[str]:
 def _generate_scim_token() -> str:
     # URL-safe and long enough to withstand brute force.
     return secrets.token_urlsafe(48)
+
+
+async def _get_or_create_identity_settings(
+    db: AsyncSession, *, tenant_id: UUID
+) -> TenantIdentitySettings:
+    stmt = select(TenantIdentitySettings).where(
+        TenantIdentitySettings.tenant_id == tenant_id
+    )
+    identity = (await db.execute(stmt)).scalar_one_or_none()
+    if identity:
+        return identity
+
+    identity = TenantIdentitySettings(
+        tenant_id=tenant_id,
+        sso_enabled=False,
+        allowed_email_domains=[],
+        sso_federation_enabled=False,
+        sso_federation_mode="domain",
+        scim_enabled=False,
+    )
+    db.add(identity)
+    await db.commit()
+    await db.refresh(identity)
+    return identity
 
 
 class IdentitySettingsResponse(BaseModel):
@@ -320,22 +352,9 @@ async def get_identity_settings(
     """
     Get (or create) identity settings for this tenant.
     """
-    stmt = select(TenantIdentitySettings).where(
-        TenantIdentitySettings.tenant_id == current_user.tenant_id
+    identity = await _get_or_create_identity_settings(
+        db, tenant_id=cast(UUID, current_user.tenant_id)
     )
-    identity = (await db.execute(stmt)).scalar_one_or_none()
-    if not identity:
-        identity = TenantIdentitySettings(
-            tenant_id=current_user.tenant_id,
-            sso_enabled=False,
-            allowed_email_domains=[],
-            sso_federation_enabled=False,
-            sso_federation_mode="domain",
-            scim_enabled=False,
-        )
-        db.add(identity)
-        await db.commit()
-        await db.refresh(identity)
     return IdentitySettingsResponse(
         sso_enabled=bool(identity.sso_enabled),
         allowed_email_domains=list(identity.allowed_email_domains or []),
@@ -371,146 +390,26 @@ async def get_identity_diagnostics(
     - Token rotation hygiene signals
     """
     tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
-
-    stmt = select(TenantIdentitySettings).where(
-        TenantIdentitySettings.tenant_id == current_user.tenant_id
+    identity = await _get_or_create_identity_settings(
+        db, tenant_id=cast(UUID, current_user.tenant_id)
     )
-    identity = (await db.execute(stmt)).scalar_one_or_none()
-    if not identity:
-        identity = TenantIdentitySettings(
-            tenant_id=current_user.tenant_id,
-            sso_enabled=False,
-            allowed_email_domains=[],
-            sso_federation_enabled=False,
-            sso_federation_mode="domain",
-            scim_enabled=False,
-        )
-        db.add(identity)
-        await db.commit()
-        await db.refresh(identity)
-
-    allowed_domains = list(identity.allowed_email_domains or [])
-    enforcement_active = bool(identity.sso_enabled and allowed_domains)
-    federation_enabled = bool(getattr(identity, "sso_federation_enabled", False))
-    federation_mode = (
-        str(getattr(identity, "sso_federation_mode", "domain") or "domain")
-        .strip()
-        .lower()
+    payload = _build_identity_diagnostics_payload_impl(
+        identity=identity,
+        current_user=current_user,
+        tier=tier,
+        is_feature_enabled_fn=is_feature_enabled,
+        scim_feature_flag=FeatureFlag.SCIM,
+        rotation_recommended_days=SCIM_TOKEN_ROTATION_RECOMMENDED_DAYS,
+        supported_federation_modes=SUPPORTED_SSO_FEDERATION_MODES,
+        datetime_cls=datetime,
+        timezone_obj=timezone,
     )
-    if federation_mode not in SUPPORTED_SSO_FEDERATION_MODES:
-        federation_mode = "domain"
-    provider_id = str(getattr(identity, "sso_federation_provider_id", "") or "").strip()
-    email_domain = None
-    if getattr(current_user, "email", None):
-        value = str(current_user.email or "")
-        email_domain = value.split("@")[-1].strip().lower() if "@" in value else None
-
-    sso_issues: list[str] = []
-    if bool(identity.sso_enabled) and not allowed_domains:
-        sso_issues.append(
-            "SSO enforcement is enabled but allowed_email_domains is empty."
-        )
-    federation_ready = bool(
-        federation_enabled
-        and (
-            federation_mode == "domain"
-            or (federation_mode == "provider_id" and bool(provider_id))
-        )
-    )
-    if federation_enabled and federation_mode == "provider_id" and not provider_id:
-        sso_issues.append(
-            "SSO federation is enabled in provider_id mode but provider_id is not configured."
-        )
-    if federation_enabled and not bool(identity.sso_enabled):
-        sso_issues.append(
-            "SSO federation is enabled but SSO allowlist enforcement is disabled."
-        )
-    current_admin_allowed: bool | None = None
-    if enforcement_active:
-        current_admin_allowed = bool(
-            email_domain
-            and email_domain in [str(d).strip().lower() for d in allowed_domains]
-        )
-        if not current_admin_allowed:
-            sso_issues.append(
-                "Current admin email domain is not in the allowlist (risk of lockout)."
-            )
-
-    scim_available = is_feature_enabled(tier, FeatureFlag.SCIM)
-    scim_has_token = bool(getattr(identity, "scim_bearer_token", None))
-    scim_bidx_present = bool(getattr(identity, "scim_token_bidx", None))
-    scim_last_rotated = identity.scim_last_rotated_at
-    token_age_days: int | None = None
-    if scim_last_rotated:
-        token_age_days = max(
-            0,
-            int(
-                (datetime.now(timezone.utc) - scim_last_rotated).total_seconds()
-                // 86400
-            ),
-        )
-    rotation_overdue = bool(
-        token_age_days is not None
-        and token_age_days > SCIM_TOKEN_ROTATION_RECOMMENDED_DAYS
-    )
-
-    scim_issues: list[str] = []
-    if bool(identity.scim_enabled) and not scim_available:
-        scim_issues.append(
-            "SCIM is enabled but not available for this tier (requires Enterprise)."
-        )
-    if bool(identity.scim_enabled) and scim_available and not scim_has_token:
-        scim_issues.append(
-            "SCIM is enabled but no SCIM token exists. Rotate the SCIM token."
-        )
-    if scim_has_token and not scim_bidx_present:
-        scim_issues.append(
-            "SCIM token blind index is missing. Rotate the SCIM token to restore deterministic lookup."
-        )
-    if rotation_overdue:
-        scim_issues.append(
-            "SCIM token rotation is overdue (rotate periodically for hygiene)."
-        )
-
-    recommendations: list[str] = []
-    if sso_issues:
-        recommendations.append(
-            "Review SSO enforcement configuration and domain allowlist."
-        )
-    if scim_issues and scim_available:
-        recommendations.append(
-            "Review SCIM readiness: ensure SCIM is enabled and rotate a valid token."
-        )
-    if scim_issues and not scim_available:
-        recommendations.append("Upgrade to Enterprise to enable SCIM provisioning.")
 
     return IdentityDiagnosticsResponse(
-        tier=tier.value,
-        sso=SsoDiagnostics(
-            enabled=bool(identity.sso_enabled),
-            allowed_email_domains=allowed_domains,
-            enforcement_active=enforcement_active,
-            federation_enabled=federation_enabled,
-            federation_mode=federation_mode,
-            federation_ready=federation_ready,
-            current_admin_domain=email_domain,
-            current_admin_domain_allowed=current_admin_allowed,
-            issues=sso_issues,
-        ),
-        scim=ScimDiagnostics(
-            available=bool(scim_available),
-            enabled=bool(identity.scim_enabled),
-            has_token=scim_has_token,
-            token_blind_index_present=scim_bidx_present,
-            last_rotated_at=scim_last_rotated.isoformat()
-            if scim_last_rotated
-            else None,
-            token_age_days=token_age_days,
-            rotation_recommended_days=SCIM_TOKEN_ROTATION_RECOMMENDED_DAYS,
-            rotation_overdue=rotation_overdue,
-            issues=scim_issues,
-        ),
-        recommendations=recommendations,
+        tier=str(payload["tier"]),
+        sso=SsoDiagnostics.model_validate(payload["sso"]),
+        scim=ScimDiagnostics.model_validate(payload["scim"]),
+        recommendations=list(payload.get("recommendations", [])),
     )
 
 
@@ -530,155 +429,32 @@ async def get_sso_federation_validation(
     """
     tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     settings = get_settings()
-
-    stmt = select(TenantIdentitySettings).where(
-        TenantIdentitySettings.tenant_id == current_user.tenant_id
+    identity = await _get_or_create_identity_settings(
+        db, tenant_id=cast(UUID, current_user.tenant_id)
     )
-    identity = (await db.execute(stmt)).scalar_one_or_none()
-    if not identity:
-        identity = TenantIdentitySettings(
-            tenant_id=current_user.tenant_id,
-            sso_enabled=False,
-            allowed_email_domains=[],
-            sso_federation_enabled=False,
-            sso_federation_mode="domain",
-            scim_enabled=False,
-        )
-        db.add(identity)
-        await db.commit()
-        await db.refresh(identity)
-
-    allowed_domains = list(identity.allowed_email_domains or [])
-    enforcement_active = bool(identity.sso_enabled and allowed_domains)
-    federation_enabled = bool(getattr(identity, "sso_federation_enabled", False))
-    federation_mode = (
-        str(getattr(identity, "sso_federation_mode", "domain") or "domain")
-        .strip()
-        .lower()
+    payload = _build_sso_federation_validation_payload_impl(
+        identity=identity,
+        current_user=current_user,
+        tier=tier,
+        settings=settings,
+        supported_federation_modes=SUPPORTED_SSO_FEDERATION_MODES,
+        is_http_url_fn=_is_http_url,
+        is_https_url_fn=_is_https_url,
     )
-    if federation_mode not in SUPPORTED_SSO_FEDERATION_MODES:
-        federation_mode = "domain"
-    provider_id = str(getattr(identity, "sso_federation_provider_id", "") or "").strip()
-    provider_id_configured = bool(provider_id)
-
-    frontend_url = (
-        str(getattr(settings, "FRONTEND_URL", "") or "").strip()
-        or "http://localhost:5173"
-    )
-    api_url = (
-        str(getattr(settings, "API_URL", "") or "").strip() or "http://localhost:8000"
-    )
-    expected_redirect_url = frontend_url.rstrip("/") + "/auth/callback"
-    discovery_endpoint = api_url.rstrip("/") + "/api/v1/public/sso/discovery"
-
-    checks: list[SsoFederationValidationCheck] = []
-
-    def add(
-        name: str, passed: bool, *, severity: str = "error", detail: str | None = None
-    ) -> None:
-        checks.append(
-            SsoFederationValidationCheck(
-                name=name, passed=passed, severity=severity, detail=detail
-            )
-        )
-
-    add(
-        "config.frontend_url_is_http",
-        _is_http_url(frontend_url),
-        detail="FRONTEND_URL must be a valid http(s) URL.",
-    )
-    add(
-        "config.api_url_is_http",
-        _is_http_url(api_url),
-        detail="API_URL must be a valid http(s) URL.",
-    )
-    if bool(getattr(settings, "is_production", False)):
-        add(
-            "config.frontend_url_is_https_in_production",
-            _is_https_url(frontend_url),
-            detail="FRONTEND_URL should be https in production.",
-        )
-        add(
-            "config.api_url_is_https_in_production",
-            _is_https_url(api_url),
-            detail="API_URL should be https in production.",
-        )
-
-    if bool(identity.sso_enabled) and not allowed_domains:
-        add(
-            "sso.allowlist_non_empty_when_enforcement_enabled",
-            False,
-            detail="SSO enforcement is enabled but allowed_email_domains is empty.",
-        )
-    else:
-        add(
-            "sso.allowlist_non_empty_when_enforcement_enabled",
-            True,
-            severity="info",
-            detail="OK",
-        )
-
-    if federation_enabled:
-        add(
-            "sso.federation_requires_enforcement",
-            bool(identity.sso_enabled),
-            detail="Federated SSO login should not be enabled unless allowlist enforcement is enabled.",
-        )
-        if federation_mode == "provider_id":
-            add(
-                "sso.provider_id_required_in_provider_id_mode",
-                provider_id_configured,
-                detail="sso_federation_provider_id is required when sso_federation_mode=provider_id.",
-            )
-    else:
-        add(
-            "sso.federation_enabled",
-            False,
-            severity="info",
-            detail="Federated SSO login is not enabled.",
-        )
-
-    # Lockout hygiene: if enforcement is active, ensure current admin domain is allowed.
-    if enforcement_active and getattr(current_user, "email", None):
-        email_value = str(current_user.email or "")
-        email_domain = (
-            email_value.split("@")[-1].strip().lower() if "@" in email_value else ""
-        )
-        add(
-            "sso.current_admin_domain_allowed",
-            bool(
-                email_domain
-                and email_domain in [str(d).strip().lower() for d in allowed_domains]
-            ),
-            severity="warning",
-            detail="Current admin email domain should be in allowlist to avoid lockout.",
-        )
-
-    # Always include the computed values the operator must add to Supabase allowlists.
-    add(
-        "supabase.expected_redirect_url_computed",
-        True,
-        severity="info",
-        detail=f"Allow this redirect URL in Supabase SSO provider: {expected_redirect_url}",
-    )
-    add(
-        "valdrics.discovery_endpoint_computed",
-        True,
-        severity="info",
-        detail=f"Login uses tenant-scoped discovery endpoint: {discovery_endpoint}",
-    )
-
-    passed = not any((c.severity == "error" and not c.passed) for c in checks)
+    checks = [
+        SsoFederationValidationCheck.model_validate(item)
+        for item in payload.get("checks", [])
+    ]
     return SsoFederationValidationResponse(
-        tier=tier.value,
-        enforcement_active=enforcement_active,
-        federation_enabled=federation_enabled,
-        federation_mode=federation_mode,
-        provider_id_configured=provider_id_configured,
-        frontend_url=frontend_url,
-        expected_redirect_url=expected_redirect_url,
-        discovery_endpoint=discovery_endpoint,
-        passed=passed,
+        tier=str(payload["tier"]),
+        enforcement_active=bool(payload["enforcement_active"]),
+        federation_enabled=bool(payload["federation_enabled"]),
+        federation_mode=str(payload["federation_mode"]),
+        provider_id_configured=bool(payload["provider_id_configured"]),
+        frontend_url=str(payload["frontend_url"]),
+        expected_redirect_url=str(payload["expected_redirect_url"]),
+        discovery_endpoint=str(payload["discovery_endpoint"]),
+        passed=bool(payload["passed"]),
         checks=checks,
     )
 
@@ -729,215 +505,25 @@ async def update_identity_settings(
     ),
     db: AsyncSession = Depends(get_db),
 ) -> IdentitySettingsResponse:
-    """
-    Update identity settings for this tenant.
-    """
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
-    if payload.scim_enabled and not is_feature_enabled(tier, FeatureFlag.SCIM):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="SCIM requires Enterprise tier. Please contact sales.",
-        )
-    if payload.scim_group_mappings and not is_feature_enabled(tier, FeatureFlag.SCIM):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="SCIM group mappings require Enterprise tier. Please contact sales.",
-        )
-
-    # Guardrail: prevent self-lockout by requiring the current admin's email domain
-    # to be in the allowlist when enabling enforcement.
-    if payload.sso_enabled and payload.allowed_email_domains:
-        email_value = getattr(current_user, "email", "") or ""
-        email_domain = (
-            email_value.split("@")[-1].strip().lower() if "@" in email_value else ""
-        )
-        allowed = [
-            d.strip().lower() for d in payload.allowed_email_domains if str(d).strip()
-        ]
-        if not email_domain or email_domain not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "To enable SSO enforcement, include your current email domain in allowed_email_domains "
-                    "to avoid locking yourself out."
-                ),
-            )
-
-    stmt = select(TenantIdentitySettings).where(
-        TenantIdentitySettings.tenant_id == current_user.tenant_id
+    response = await _update_identity_settings_route_impl(
+        payload=payload,
+        current_user=current_user,
+        db=db,
+        tenant_identity_settings_model=TenantIdentitySettings,
+        sso_domain_mapping_model=SsoDomainMapping,
+        feature_flag=FeatureFlag,
+        pricing_tier=PricingTier,
+        normalize_tier_fn=normalize_tier,
+        is_feature_enabled_fn=is_feature_enabled,
+        generate_scim_token_fn=_generate_scim_token,
+        audit_logger_cls=AuditLogger,
+        audit_event_type=AuditEventType,
+        logger=logger,
+        identity_settings_response_model=IdentitySettingsResponse,
     )
-    identity = (await db.execute(stmt)).scalar_one_or_none()
-    if not identity:
-        identity = TenantIdentitySettings(tenant_id=current_user.tenant_id)
-        db.add(identity)
-
-    identity.sso_enabled = bool(payload.sso_enabled)
-    identity.allowed_email_domains = list(payload.allowed_email_domains or [])
-    identity.sso_federation_enabled = bool(payload.sso_federation_enabled)
-    identity.sso_federation_mode = (
-        str(payload.sso_federation_mode or "domain").strip().lower()
-    )
-    identity.sso_federation_provider_id = payload.sso_federation_provider_id
-
-    # Maintain the public SSO domain routing mappings (used by /api/v1/public/sso/discovery).
-    desired_domains: list[str] = []
-    if bool(identity.sso_enabled) and bool(
-        getattr(identity, "sso_federation_enabled", False)
-    ):
-        desired_domains = [
-            str(value).strip().lower().strip(".")
-            for value in (identity.allowed_email_domains or [])
-            if str(value).strip()
-        ]
-
-    if desired_domains:
-        # Enforce global uniqueness: one domain can map to at most one tenant.
-        conflicts = (
-            (
-                await db.execute(
-                    select(SsoDomainMapping.domain)
-                    .where(SsoDomainMapping.domain.in_(desired_domains))
-                    .where(SsoDomainMapping.tenant_id != current_user.tenant_id)
-                    .where(SsoDomainMapping.is_active.is_(True))
-                )
-            )
-            .scalars()
-            .all()
-        )
-        if conflicts:
-            conflict_list = ", ".join(sorted(set(str(d) for d in conflicts)))
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "One or more allowed_email_domains are already configured for another tenant: "
-                    f"{conflict_list}. Remove the domain(s) or contact support."
-                ),
-            )
-
-    # Replace mappings atomically inside the same transaction.
-    await db.execute(
-        delete(SsoDomainMapping).where(
-            SsoDomainMapping.tenant_id == current_user.tenant_id
-        )
-    )
-    if desired_domains:
-        provider_id = (
-            str(getattr(identity, "sso_federation_provider_id", "") or "").strip()
-            if str(getattr(identity, "sso_federation_mode", "domain") or "domain")
-            .strip()
-            .lower()
-            == "provider_id"
-            else None
-        )
-        for domain in desired_domains:
-            db.add(
-                SsoDomainMapping(
-                    tenant_id=current_user.tenant_id,
-                    domain=domain,
-                    federation_mode=str(
-                        getattr(identity, "sso_federation_mode", "domain") or "domain"
-                    )
-                    .strip()
-                    .lower(),
-                    provider_id=provider_id,
-                    is_active=True,
-                )
-            )
-
-    scim_token_generated = False
-    if payload.scim_enabled and not identity.scim_bearer_token:
-        identity.scim_bearer_token = _generate_scim_token()
-        identity.scim_last_rotated_at = datetime.now(timezone.utc)
-        scim_token_generated = True
-    identity.scim_enabled = bool(payload.scim_enabled)
-    identity.scim_group_mappings = [m.model_dump() for m in payload.scim_group_mappings]
-
-    await db.commit()
-    await db.refresh(identity)
-
-    # Audit identity settings changes (do not log tokens/secrets).
-    try:
-        audit = AuditLogger(
-            db=db,
-            tenant_id=cast(UUID, current_user.tenant_id),
-            correlation_id=str(uuid4()),
-        )
-        await audit.log(
-            event_type=AuditEventType.IDENTITY_SETTINGS_UPDATED,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            resource_type="identity_settings",
-            resource_id=str(current_user.tenant_id),
-            details={
-                "sso_enabled": bool(identity.sso_enabled),
-                "allowed_email_domains_count": len(
-                    identity.allowed_email_domains or []
-                ),
-                "sso_federation_enabled": bool(
-                    getattr(identity, "sso_federation_enabled", False)
-                ),
-                "sso_federation_mode": str(
-                    getattr(identity, "sso_federation_mode", "domain") or "domain"
-                ),
-                "sso_federation_provider_id_configured": bool(
-                    str(
-                        getattr(identity, "sso_federation_provider_id", "") or ""
-                    ).strip()
-                ),
-                "scim_enabled": bool(identity.scim_enabled),
-                "scim_token_generated": bool(scim_token_generated),
-                "scim_last_rotated_at": identity.scim_last_rotated_at.isoformat()
-                if identity.scim_last_rotated_at
-                else None,
-                "scim_group_mappings_count": len(identity.scim_group_mappings or []),
-            },
-            success=True,
-            request_method="PUT",
-            request_path="/api/v1/settings/identity",
-        )
-        await db.commit()
-    except Exception as exc:  # noqa: BLE001 - audit logging should never break settings updates
-        logger.warning(
-            "identity_settings_audit_log_failed",
-            tenant_id=str(current_user.tenant_id),
-            error=str(exc),
-        )
-        await db.rollback()
-        # Rollback expires ORM state; refresh so response serialization stays safe.
-        try:
-            await db.refresh(identity)
-        except Exception:
-            pass
-
-    logger.info(
-        "identity_settings_updated",
-        tenant_id=str(current_user.tenant_id),
-        sso_enabled=identity.sso_enabled,
-        sso_federation_enabled=bool(getattr(identity, "sso_federation_enabled", False)),
-        sso_federation_mode=str(
-            getattr(identity, "sso_federation_mode", "domain") or "domain"
-        ),
-        scim_enabled=identity.scim_enabled,
-        domains=len(identity.allowed_email_domains or []),
-    )
-
-    return IdentitySettingsResponse(
-        sso_enabled=bool(identity.sso_enabled),
-        allowed_email_domains=list(identity.allowed_email_domains or []),
-        sso_federation_enabled=bool(getattr(identity, "sso_federation_enabled", False)),
-        sso_federation_mode=str(
-            getattr(identity, "sso_federation_mode", "domain") or "domain"
-        ),
-        sso_federation_provider_id=getattr(
-            identity, "sso_federation_provider_id", None
-        ),
-        scim_enabled=bool(identity.scim_enabled),
-        has_scim_token=bool(getattr(identity, "scim_bearer_token", None)),
-        scim_last_rotated_at=identity.scim_last_rotated_at.isoformat()
-        if identity.scim_last_rotated_at
-        else None,
-        scim_group_mappings=list(getattr(identity, "scim_group_mappings", None) or []),
-    )
+    if isinstance(response, IdentitySettingsResponse):
+        return response
+    return IdentitySettingsResponse.model_validate(response)
 
 
 @router.post("/identity/rotate-scim-token", response_model=RotateScimTokenResponse)
@@ -945,78 +531,20 @@ async def rotate_scim_token(
     current_user: CurrentUser = Depends(requires_role("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> RotateScimTokenResponse:
-    """
-    Rotate the tenant SCIM bearer token.
-
-    This returns the token ONCE. Store it in your IdP immediately.
-    """
-    tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
-    if not is_feature_enabled(tier, FeatureFlag.SCIM):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="SCIM requires Enterprise tier. Please contact sales.",
-        )
-
-    stmt = select(TenantIdentitySettings).where(
-        TenantIdentitySettings.tenant_id == current_user.tenant_id
+    response = await _rotate_scim_token_route_impl(
+        current_user=current_user,
+        db=db,
+        tenant_identity_settings_model=TenantIdentitySettings,
+        feature_flag=FeatureFlag,
+        pricing_tier=PricingTier,
+        normalize_tier_fn=normalize_tier,
+        is_feature_enabled_fn=is_feature_enabled,
+        generate_scim_token_fn=_generate_scim_token,
+        audit_logger_cls=AuditLogger,
+        audit_event_type=AuditEventType,
+        logger=logger,
+        rotate_scim_token_response_model=RotateScimTokenResponse,
     )
-    identity = (await db.execute(stmt)).scalar_one_or_none()
-    if not identity:
-        identity = TenantIdentitySettings(
-            tenant_id=current_user.tenant_id,
-            sso_enabled=False,
-            allowed_email_domains=[],
-            sso_federation_enabled=False,
-            sso_federation_mode="domain",
-            scim_enabled=True,
-        )
-        db.add(identity)
-
-    identity.scim_enabled = True
-    token = _generate_scim_token()
-    identity.scim_bearer_token = token
-    identity.scim_last_rotated_at = datetime.now(timezone.utc)
-
-    await db.commit()
-    await db.refresh(identity)
-
-    # Audit token rotation without persisting the token value itself.
-    try:
-        audit = AuditLogger(
-            db=db,
-            tenant_id=cast(UUID, current_user.tenant_id),
-            correlation_id=str(uuid4()),
-        )
-        await audit.log(
-            event_type=AuditEventType.SCIM_TOKEN_ROTATED,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            resource_type="identity_settings",
-            resource_id=str(current_user.tenant_id),
-            details={
-                "rotated_at": identity.scim_last_rotated_at.isoformat()
-                if identity.scim_last_rotated_at
-                else None,
-            },
-            success=True,
-            request_method="POST",
-            request_path="/api/v1/settings/identity/rotate-scim-token",
-        )
-        await db.commit()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "scim_token_rotation_audit_log_failed",
-            tenant_id=str(current_user.tenant_id),
-            error=str(exc),
-        )
-        await db.rollback()
-        # Rollback expires ORM state; refresh so response serialization stays safe.
-        try:
-            await db.refresh(identity)
-        except Exception:
-            pass
-
-    logger.info("scim_token_rotated", tenant_id=str(current_user.tenant_id))
-    return RotateScimTokenResponse(
-        scim_token=token, rotated_at=identity.scim_last_rotated_at.isoformat()
-    )
+    if isinstance(response, RotateScimTokenResponse):
+        return response
+    return RotateScimTokenResponse.model_validate(response)

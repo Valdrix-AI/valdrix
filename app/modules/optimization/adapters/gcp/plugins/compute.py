@@ -5,6 +5,8 @@ Detects idle VMs and GPU instances using BigQuery billing export data.
 """
 
 from typing import List, Dict, Any
+from google.api_core.exceptions import GoogleAPIError
+from google.auth.exceptions import GoogleAuthError
 from google.cloud import compute_v1
 from google.oauth2 import service_account
 import structlog
@@ -13,6 +15,25 @@ from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
+
+GCP_CREDENTIAL_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    GoogleAuthError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+)
+GCP_COMPUTE_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    GoogleAPIError,
+    GoogleAuthError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
 
 
 def _build_gcp_credentials(credentials: Any) -> Any | None:
@@ -27,7 +48,7 @@ def _build_gcp_credentials(credentials: Any) -> Any | None:
         return None
     try:
         return service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
-    except Exception as exc:
+    except GCP_CREDENTIAL_PARSE_RECOVERABLE_EXCEPTIONS as exc:
         logger.warning("gcp_credentials_parse_failed", error=str(exc))
         return None
 
@@ -112,7 +133,7 @@ class IdleVmsPlugin(ZombiePlugin):
                                 "explainability_notes": "GPU instance flagged for utilization review. Enable billing export for accurate idle detection.",
                             }
                         )
-        except Exception as e:
+        except GCP_COMPUTE_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("gcp_vm_scan_error", error=str(e))
 
         return zombies
@@ -212,7 +233,7 @@ class StoppedVmsPlugin(ZombiePlugin):
                                 "explainability_notes": f"Instance is {instance.status}. You are paying ~${round(disk_cost, 2)}/mo for attached disks ({', '.join(disk_details)}).",
                             }
                         )
-        except Exception as e:
+        except GCP_COMPUTE_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("gcp_stopped_vm_scan_error", error=str(e))
 
         return zombies

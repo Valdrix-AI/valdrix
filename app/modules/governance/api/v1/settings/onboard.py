@@ -18,6 +18,15 @@ from app.shared.core.provider import normalize_provider
 from app.shared.core.turnstile import require_turnstile_for_onboard
 
 logger = structlog.get_logger()
+ONBOARDING_VERIFICATION_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    ImportError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
 
 
 class OnboardRequest(BaseModel):
@@ -234,7 +243,7 @@ async def onboard(
 
         except HTTPException:
             raise
-        except Exception as e:
+        except ONBOARDING_VERIFICATION_RECOVERABLE_EXCEPTIONS as e:
             logger.error(
                 "onboarding_verification_error", platform=platform, error=str(e)
             )

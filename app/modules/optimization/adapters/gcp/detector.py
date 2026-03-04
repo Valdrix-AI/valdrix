@@ -1,6 +1,9 @@
 from typing import List, Dict, Any, Optional, cast
 import structlog
+from google.api_core.exceptions import GoogleAPIError
+from google.auth.exceptions import GoogleAuthError
 from google.oauth2 import service_account
+from app.shared.core.exceptions import ExternalAPIError
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
@@ -10,6 +13,25 @@ from app.modules.optimization.domain.registry import registry
 import app.modules.optimization.adapters.gcp.plugins  # noqa
 
 logger = structlog.get_logger()
+
+GCP_DETECTOR_CREDENTIAL_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    GoogleAuthError,
+    ValueError,
+    TypeError,
+    KeyError,
+)
+GCP_DETECTOR_PLUGIN_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    GoogleAPIError,
+    GoogleAuthError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
 
 
 class GCPZombieDetector(BaseZombieDetector):
@@ -55,7 +77,7 @@ class GCPZombieDetector(BaseZombieDetector):
                     self._credentials_obj = credentials_cls.from_service_account_info(
                         info
                     )
-                except Exception as exc:
+                except GCP_DETECTOR_CREDENTIAL_PARSE_RECOVERABLE_EXCEPTIONS as exc:
                     self._credentials_error = str(exc)
                     logger.error(
                         "gcp_detector_invalid_service_account_json", error=str(exc)
@@ -74,7 +96,7 @@ class GCPZombieDetector(BaseZombieDetector):
                     )
                     if not self.project_id:
                         self.project_id = info.get("project_id")
-                except Exception as exc:
+                except GCP_DETECTOR_CREDENTIAL_PARSE_RECOVERABLE_EXCEPTIONS as exc:
                     self._credentials_error = str(exc)
                     logger.error(
                         "gcp_detector_invalid_service_account_json", error=str(exc)
@@ -127,7 +149,7 @@ class GCPZombieDetector(BaseZombieDetector):
                 credentials=self._credentials_obj,
                 region=self.region,
             )
-        except Exception as exc:
+        except GCP_DETECTOR_PLUGIN_SCAN_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
                 "gcp_plugin_scan_failed", plugin=plugin.category_key, error=str(exc)
             )

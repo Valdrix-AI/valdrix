@@ -41,6 +41,20 @@ BACKOFF_BASE_SECONDS = 60
 JOB_TIMEOUT_SECONDS = 300  # 5 minutes default timeout
 MAX_JOB_RESULT_BYTES = 256 * 1024
 MAX_JOB_RESULT_PREVIEW_CHARS = 4096
+JOB_RESULT_SERIALIZATION_ERRORS: tuple[type[Exception], ...] = (
+    TypeError,
+    ValueError,
+)
+JOB_RUNTIME_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    sa.exc.SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
 
 
 class JobProcessor:
@@ -63,7 +77,7 @@ class JobProcessor:
 
         try:
             serialized = json.dumps(result, default=str, separators=(",", ":"))
-        except Exception:
+        except JOB_RESULT_SERIALIZATION_ERRORS:
             serialized = json.dumps(str(result))
             result = str(result)
 
@@ -156,7 +170,7 @@ class JobProcessor:
                         results["errors"].append(
                             {"job_id": str(job.id), "error": str(e), "type": "config"}
                         )
-                    except Exception as e:  # noqa: BLE001 - Intentional catch-all for job isolation
+                    except JOB_RUNTIME_RECOVERABLE_ERRORS as e:
                         results["failed"] += 1
                         results["errors"].append(
                             {"job_id": str(job.id), "error": str(e)}
@@ -168,7 +182,7 @@ class JobProcessor:
             except sa.exc.SQLAlchemyError as e:
                 logger.error("job_processor_batch_db_error", error=str(e))
                 results["errors"].append({"batch_error": str(e)})
-            except Exception as e:
+            except JOB_RUNTIME_RECOVERABLE_ERRORS as e:
                 logger.error("job_processor_batch_unexpected_error", error=str(e))
                 results["errors"].append({"batch_error": str(e)})
 
@@ -321,7 +335,7 @@ class JobProcessor:
             job.status = JobStatus.PENDING.value
             job.scheduled_for = datetime.now(timezone.utc) + timedelta(seconds=60)
 
-        except Exception as e:  # noqa: BLE001 - Intentional catch-all for resilience
+        except JOB_RUNTIME_RECOVERABLE_ERRORS as e:
             logger.error(
                 "job_processing_failed",
                 job_id=str(job.id),

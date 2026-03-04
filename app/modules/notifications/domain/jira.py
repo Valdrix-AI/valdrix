@@ -14,6 +14,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
+JIRA_CLIENT_RECOVERABLE_EXCEPTIONS = (
+    httpx.HTTPError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 class JiraService:
@@ -80,7 +87,7 @@ class JiraService:
                 )
                 return False
             return True
-        except Exception as exc:
+        except JIRA_CLIENT_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning("jira_issue_create_exception", error=str(exc))
             return False
 
@@ -108,7 +115,7 @@ class JiraService:
                 response=response.text[:300],
             )
             return False, response.status_code, response.text[:300]
-        except Exception as exc:
+        except JIRA_CLIENT_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning("jira_health_check_exception", error=str(exc))
             return False, None, str(exc)
 

@@ -615,6 +615,57 @@ class TestProcessPaystackWebhook:
         assert result["status"] == "error"
         assert result["reason"] == "missing_signature_material"
 
+    @pytest.mark.asyncio
+    async def test_process_paystack_webhook_invalid_raw_payload_returns_error(
+        self, mock_db
+    ):
+        mock_job = MagicMock(spec=BackgroundJob)
+        mock_job.id = uuid.uuid4()
+        mock_job.payload = {
+            "event_type": "charge.success",
+            "raw_payload": "{invalid-json",
+            "signature": "sig",
+        }
+
+        with patch(
+            "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
+        ) as mock_handler_class:
+            mock_handler = MagicMock()
+            mock_handler_class.return_value = mock_handler
+            mock_handler.verify_signature.return_value = True
+            result = await process_paystack_webhook(mock_job, mock_db)
+
+        assert result["status"] == "error"
+        assert result["reason"] == "invalid_raw_payload"
+
+    @pytest.mark.asyncio
+    async def test_process_paystack_webhook_does_not_swallow_fatal_parse_errors(
+        self, mock_db
+    ):
+        payload_dict = {"event": "charge.success", "data": {"reference": "txn_abc"}}
+        mock_job = MagicMock(spec=BackgroundJob)
+        mock_job.id = uuid.uuid4()
+        mock_job.payload = {
+            "event_type": "charge.success",
+            "raw_payload": json.dumps(payload_dict),
+            "signature": "sig",
+        }
+
+        with (
+            patch(
+                "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
+            ) as mock_handler_class,
+            patch(
+                "app.modules.billing.domain.billing.webhook_retry.json.loads",
+                side_effect=KeyboardInterrupt(),
+            ),
+        ):
+            mock_handler = MagicMock()
+            mock_handler_class.return_value = mock_handler
+            mock_handler.verify_signature.return_value = True
+            with pytest.raises(KeyboardInterrupt):
+                await process_paystack_webhook(mock_job, mock_db)
+
 
 class TestWebhookConfiguration:
     """Test webhook configuration constants."""

@@ -1,5 +1,6 @@
 import boto3
 import sys
+from botocore.exceptions import BotoCoreError
 
 def disable_cloudfront(distribution_id):
     client = boto3.client('cloudfront')
@@ -25,7 +26,7 @@ def disable_cloudfront(distribution_id):
         print(f"Successfully disabled {distribution_id}.")
         return True
         
-    except Exception as e:
+    except (BotoCoreError, OSError, RuntimeError, TypeError, ValueError) as e:
         print(f"Error: {str(e)}")
         return False
 

@@ -3,6 +3,7 @@ import sys
 import os
 from uuid import uuid4
 from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -26,7 +27,7 @@ async def seed_data():
             try:
                 res = await db.execute(select(User).limit(1))
                 print(f"✅ ORM User Query executed! Count: {len(res.scalars().all())}", flush=True)
-            except Exception as e:
+            except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
                 print(f"❌ ORM Failed: {e}", flush=True)
             
             # Try insert Tenant

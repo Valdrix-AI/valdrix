@@ -24,6 +24,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.shared.core.auth import CurrentUser
 from app.shared.core.dependencies import requires_feature
@@ -40,6 +41,13 @@ from app.models.realized_savings import RealizedSavingsEvent
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Savings Proof"])
+REALIZED_SAVINGS_COMPUTE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 def _require_tenant_id(user: CurrentUser) -> UUID:
@@ -189,7 +197,7 @@ async def compute_realized_savings(
                 skipped += 1
             else:
                 computed += 1
-        except Exception as exc:  # noqa: BLE001 - operator endpoint should report partial results
+        except REALIZED_SAVINGS_COMPUTE_RECOVERABLE_EXCEPTIONS as exc:  # noqa: BLE001 - operator endpoint should report partial results
             errors.append(
                 {"request_id": str(getattr(request, "id", "")), "error": str(exc)}
             )

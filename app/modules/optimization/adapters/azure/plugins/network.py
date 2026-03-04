@@ -5,6 +5,7 @@ Detects orphan public IPs, NICs, and NSGs using Azure Resource Graph (free).
 """
 
 from typing import List, Dict, Any
+from azure.core.exceptions import AzureError
 from azure.mgmt.network.aio import NetworkManagementClient
 from azure.identity.aio import ClientSecretCredential, DefaultAzureCredential
 import structlog
@@ -13,6 +14,15 @@ from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
+
+AZURE_NETWORK_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    AzureError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+)
 
 
 @registry.register("azure")
@@ -116,7 +126,7 @@ class OrphanPublicIpsPlugin(ZombiePlugin):
                             "explainability_notes": f"Public IP {ip.ip_address or 'not allocated'} is not associated with any resource.",
                         }
                     )
-        except Exception as e:
+        except AZURE_NETWORK_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_ip_scan_error", error=str(e))
 
         return zombies
@@ -208,7 +218,7 @@ class OrphanNicsPlugin(ZombiePlugin):
                             "explainability_notes": "Network Interface is not attached to any VM. Delete to reduce clutter.",
                         }
                     )
-        except Exception as e:
+        except AZURE_NETWORK_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_nic_scan_error", error=str(e))
 
         return zombies
@@ -302,7 +312,7 @@ class OrphanNsgsPlugin(ZombiePlugin):
                             "explainability_notes": "Network Security Group is not associated with any NIC or subnet.",
                         }
                     )
-        except Exception as e:
+        except AZURE_NETWORK_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("azure_nsg_scan_error", error=str(e))
 
         return zombies

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import structlog
+from azure.core.exceptions import AzureError
 from azure.identity import ClientSecretCredential, DefaultAzureCredential
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 from azure.mgmt.monitor import MonitorManagementClient
@@ -15,6 +16,13 @@ from app.modules.optimization.domain.registry import registry
 from app.modules.reporting.domain.pricing.service import PricingService
 
 logger = structlog.get_logger()
+AZURE_AI_SCAN_RECOVERABLE_EXCEPTIONS = (
+    AzureError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 def _resource_group_from_id(resource_id: str) -> str | None:
@@ -202,13 +210,13 @@ class IdleAzureOpenAIPlugin(ZombiePlugin):
                                     ),
                                 }
                             )
-                    except Exception as exc:
+                    except AZURE_AI_SCAN_RECOVERABLE_EXCEPTIONS as exc:
                         logger.warning(
                             "azure_openai_metric_failed",
                             dep=dep_name,
                             error=str(exc),
                         )
-        except Exception as exc:
+        except AZURE_AI_SCAN_RECOVERABLE_EXCEPTIONS as exc:
             logger.error("azure_openai_scan_error", error=str(exc))
 
         return zombies
@@ -308,13 +316,13 @@ class IdleAISearchPlugin(ZombiePlugin):
                                 ),
                             }
                         )
-                except Exception as exc:
+                except AZURE_AI_SCAN_RECOVERABLE_EXCEPTIONS as exc:
                     logger.warning(
                         "azure_search_metric_failed",
                         service=getattr(service, "name", "unknown"),
                         error=str(exc),
                     )
-        except Exception as exc:
+        except AZURE_AI_SCAN_RECOVERABLE_EXCEPTIONS as exc:
             logger.error("azure_search_scan_error", error=str(exc))
 
         return zombies

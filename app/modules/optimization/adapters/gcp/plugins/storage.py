@@ -6,6 +6,7 @@ Detects unattached disks and old snapshots using Cloud Asset Inventory.
 
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
+from google.api_core.exceptions import GoogleAPIError
 from google.cloud import compute_v1
 from google.auth.credentials import Credentials as GoogleCredentials
 from google.oauth2 import service_account
@@ -15,6 +16,20 @@ from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
+GCP_DISK_SCAN_RECOVERABLE_EXCEPTIONS = (
+    GoogleAPIError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+GCP_SNAPSHOT_SCAN_RECOVERABLE_EXCEPTIONS = (
+    GoogleAPIError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 def _resolve_gcp_credentials(credentials: Any) -> Any:
@@ -125,7 +140,7 @@ class UnattachedDisksPlugin(ZombiePlugin):
                                 "explainability_notes": f"Disk is not attached to any VM. Size: {size_gb} GB.",
                             }
                         )
-        except Exception as e:
+        except GCP_DISK_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("gcp_disk_scan_error", error=str(e))
 
         return zombies
@@ -218,7 +233,7 @@ class OldSnapshotsPlugin(ZombiePlugin):
                             "explainability_notes": f"Snapshot is {age} days old. Review retention policy.",
                         }
                     )
-        except Exception as e:
+        except GCP_SNAPSHOT_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("gcp_snapshot_scan_error", error=str(e))
 
         return zombies

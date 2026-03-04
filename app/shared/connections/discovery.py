@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import dns.asyncresolver
+import dns.exception
 import httpx
 import structlog
 from sqlalchemy import select
@@ -15,19 +16,11 @@ from app.models.license_connection import LicenseConnection
 from app.shared.core.http import get_http_client
 
 logger = structlog.get_logger()
+DNS_RESOLUTION_RECOVERABLE_EXCEPTIONS = (dns.exception.DNSException, OSError, RuntimeError, TypeError, ValueError)
+DNS_RECORD_COERCION_RECOVERABLE_EXCEPTIONS = (AttributeError, RuntimeError, TypeError, ValueError)
 
-_MICROSOFT_LICENSE_VENDORS = {
-    "microsoft_365",
-    "microsoft365",
-    "m365",
-    "microsoft",
-}
-_GOOGLE_LICENSE_VENDORS = {
-    "google_workspace",
-    "googleworkspace",
-    "gsuite",
-    "google",
-}
+_MICROSOFT_LICENSE_VENDORS = {"microsoft_365", "microsoft365", "m365", "microsoft"}
+_GOOGLE_LICENSE_VENDORS = {"google_workspace", "googleworkspace", "gsuite", "google"}
 
 _DISCOVERY_STATUS_VALUES = {"pending", "accepted", "ignored", "connected"}
 
@@ -327,7 +320,7 @@ class DiscoveryWizardService:
             answer = await resolver.resolve(name, record_type, raise_on_no_answer=False)
             if answer is None:
                 return []
-        except Exception as exc:  # noqa: BLE001 - best-effort discovery
+        except DNS_RESOLUTION_RECOVERABLE_EXCEPTIONS as exc:
             warnings.append(f"{record_type} lookup failed for {name}: {exc}")
             return []
 
@@ -345,7 +338,7 @@ class DiscoveryWizardService:
                     values.append(text)
                 else:
                     values.append(str(record).strip().lower())
-            except Exception:  # noqa: BLE001 - ignore malformed record only
+            except DNS_RECORD_COERCION_RECOVERABLE_EXCEPTIONS:
                 continue
         return values
 

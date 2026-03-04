@@ -18,6 +18,13 @@ __all__ = ["UsageTracker", "BudgetStatus", "LLMBudgetManager"]
 
 
 logger = structlog.get_logger()
+TOKEN_COUNTING_RECOVERABLE_EXCEPTIONS = (
+    AttributeError,
+    TypeError,
+    ValueError,
+    LookupError,
+    RuntimeError,
+)
 
 
 def count_tokens(text: str, model: str = "gpt-4") -> int:
@@ -45,7 +52,7 @@ def count_tokens(text: str, model: str = "gpt-4") -> int:
         logger.warning("tiktoken_not_installed_using_fallback")
         # Fallback: ~4 chars per token (rough estimate)
         return len(text) // 4
-    except Exception as e:
+    except TOKEN_COUNTING_RECOVERABLE_EXCEPTIONS as e:
         logger.error("tiktoken_error", error=str(e))
         return len(text) // 4
 

@@ -76,6 +76,7 @@
 		</div>
 	</div>
 	<div class="landing-persona-proof">
-		Outcome: one system that improves weekly operating decisions across technical and financial teams.
+		Outcome: one system that improves weekly operating decisions across technical and financial
+		teams.
 	</div>
 </section>

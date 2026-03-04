@@ -36,7 +36,10 @@ describe('turnstile helper', () => {
 			callback?.('token-123');
 		});
 		(window as Window & { turnstile?: unknown }).turnstile = {
-			render: (_container: string | HTMLElement, options: { callback?: (token: string) => void }) => {
+			render: (
+				_container: string | HTMLElement,
+				options: { callback?: (token: string) => void }
+			) => {
 				callback = options.callback || null;
 				return 'widget-1';
 			},

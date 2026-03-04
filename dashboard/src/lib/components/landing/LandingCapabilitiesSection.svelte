@@ -19,8 +19,8 @@
 	<div class="landing-section-head">
 		<h2 class="landing-h2">One platform for cloud, SaaS, and license spend control</h2>
 		<p class="landing-section-sub">
-			Valdrics combines cloud economics, GreenOps, SaaS/license management, remediation, and executive
-			proof in one layer.
+			Valdrics combines cloud economics, GreenOps, SaaS/license management, remediation, and
+			executive proof in one layer.
 		</p>
 	</div>
 

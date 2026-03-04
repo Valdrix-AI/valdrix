@@ -39,6 +39,14 @@ from app.shared.core.performance_evidence import (
 
 LIVENESS_ENDPOINT = "/health/live"
 DEEP_HEALTH_ENDPOINT = "/health"
+LOAD_TEST_PROBE_RECOVERABLE_EXCEPTIONS = (
+    httpx.HTTPError,
+    json.JSONDecodeError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -332,7 +340,7 @@ async def _collect_runtime_snapshot(
             database_engine = _extract_health_database_engine(payload)
             if database_engine:
                 snapshot["database_engine"] = database_engine
-    except Exception as exc:
+    except LOAD_TEST_PROBE_RECOVERABLE_EXCEPTIONS as exc:
         snapshot["probe_error"] = format_exception_message(exc)
     return snapshot
 
@@ -380,7 +388,7 @@ async def _run_preflight_checks(
                     if ok:
                         passed = True
                         break
-                except Exception as exc:
+                except LOAD_TEST_PROBE_RECOVERABLE_EXCEPTIONS as exc:
                     latency_ms = max(
                         0.0,
                         (datetime.now(timezone.utc) - started).total_seconds() * 1000.0,

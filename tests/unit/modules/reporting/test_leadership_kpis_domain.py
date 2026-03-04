@@ -193,6 +193,40 @@ async def test_compute_adds_note_when_savings_service_raises() -> None:
     assert payload.security_anomaly_signal_decisions == 0
 
 
+@pytest.mark.asyncio
+async def test_compute_does_not_swallow_base_exceptions_from_savings_proof() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    db.execute = AsyncMock(
+        side_effect=[
+            _Result(first_value=(Decimal("10.0"), 1, 1, Decimal("1.2"))),
+            _Result(all_values=[("aws", Decimal("10.0"))]),
+            _Result(all_values=[("AmazonS3", Decimal("10.0"))]),
+            _Result(first_value=(0, 0, 0)),
+        ]
+    )
+
+    with (
+        patch(
+            "app.modules.reporting.domain.leadership_kpis.is_feature_enabled",
+            return_value=True,
+        ),
+        patch(
+            "app.modules.reporting.domain.leadership_kpis.SavingsProofService"
+        ) as proof_service_cls,
+    ):
+        proof_service_cls.return_value.generate = AsyncMock(
+            side_effect=KeyboardInterrupt("stop")
+        )
+        with pytest.raises(KeyboardInterrupt, match="stop"):
+            await LeadershipKpiService(db).compute(
+                tenant_id=tenant_id,
+                tier=PricingTier.PRO,
+                start_date=date(2026, 2, 1),
+                end_date=date(2026, 2, 2),
+            )
+
+
 def test_render_csv_sorts_provider_rows_by_cost_descending() -> None:
     payload = LeadershipKpisResponse(
         start_date="2026-02-01",

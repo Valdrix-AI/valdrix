@@ -251,3 +251,98 @@ class TestCarbonBudgetService:
             sent = await alert_service.send_carbon_alert(tenant_id, budget_status)
             assert sent is True
             mock_email_instance.send_carbon_alert.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_send_carbon_alert_slack_does_not_swallow_base_exceptions(
+        self, alert_service, mock_db, tenant_id
+    ) -> None:
+        budget_status = {
+            "alert_status": "warning",
+            "current_usage_kg": 90.0,
+            "budget_kg": 100.0,
+            "usage_percent": 90.0,
+            "recommendations": ["Reduce idle spend"],
+        }
+
+        notif_settings = MagicMock()
+        notif_settings.alert_on_carbon_budget_warning = True
+        notif_settings.alert_on_carbon_budget_exceeded = True
+        notif_settings.slack_enabled = True
+
+        with (
+            patch.object(
+                alert_service, "should_send_alert", new=AsyncMock(return_value=True)
+            ),
+            patch("app.shared.core.config.get_settings"),
+            patch("app.shared.core.logging.audit_log"),
+            patch(
+                "app.modules.notifications.domain.get_tenant_slack_service",
+                new=AsyncMock(side_effect=KeyboardInterrupt("stop")),
+            ),
+        ):
+            mock_db.execute.side_effect = [
+                MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=notif_settings)
+                ),
+            ]
+            with pytest.raises(KeyboardInterrupt, match="stop"):
+                await alert_service.send_carbon_alert(tenant_id, budget_status)
+
+    @pytest.mark.asyncio
+    async def test_send_carbon_alert_email_does_not_swallow_base_exceptions(
+        self, alert_service, mock_db, tenant_id
+    ) -> None:
+        budget_status = {
+            "alert_status": "exceeded",
+            "current_usage_kg": 120.0,
+            "budget_kg": 100.0,
+            "usage_percent": 120.0,
+            "recommendations": ["Scale down hotspots"],
+        }
+        notif_settings = MagicMock()
+        notif_settings.alert_on_carbon_budget_warning = True
+        notif_settings.alert_on_carbon_budget_exceeded = True
+        notif_settings.slack_enabled = False
+
+        carbon_settings = MagicMock()
+        carbon_settings.email_enabled = True
+        carbon_settings.email_recipients = "ops@example.com"
+
+        with (
+            patch.object(
+                alert_service, "should_send_alert", new=AsyncMock(return_value=True)
+            ),
+            patch("app.shared.core.logging.audit_log"),
+            patch("app.shared.core.config.get_settings") as mock_get_settings,
+            patch(
+                "app.modules.notifications.domain.get_tenant_slack_service",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "app.modules.notifications.domain.email_service.EmailService"
+            ) as email_cls,
+        ):
+            mock_app_settings = MagicMock()
+            mock_app_settings.SMTP_HOST = "smtp.valdrics.io"
+            mock_app_settings.SMTP_PORT = 587
+            mock_app_settings.SMTP_USER = "svc"
+            mock_app_settings.SMTP_PASSWORD = "secret"
+            mock_app_settings.SMTP_FROM = "alerts@example.com"
+            mock_get_settings.return_value = mock_app_settings
+
+            email_instance = email_cls.return_value
+            email_instance.send_carbon_alert = AsyncMock(
+                side_effect=KeyboardInterrupt("stop")
+            )
+
+            mock_db.execute.side_effect = [
+                MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=notif_settings)
+                ),
+                MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=carbon_settings)
+                ),
+            ]
+
+            with pytest.raises(KeyboardInterrupt, match="stop"):
+                await alert_service.send_carbon_alert(tenant_id, budget_status)

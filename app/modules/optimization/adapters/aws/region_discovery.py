@@ -14,11 +14,31 @@ from typing import Dict, List, TYPE_CHECKING
 import structlog
 from botocore.exceptions import ClientError
 from botocore.session import get_session
+from app.shared.core.exceptions import ExternalAPIError
 
 if TYPE_CHECKING:
     from app.models.aws_connection import AWSConnection
 
 logger = structlog.get_logger()
+
+AWS_REGION_DISCOVERY_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+AWS_REGION_FALLBACK_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ClientError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 class RegionDiscovery:
@@ -105,7 +125,7 @@ class RegionDiscovery:
                         )
                         self._cached_active_regions = active_regions
                         return active_regions
-            except Exception as e:
+            except AWS_REGION_DISCOVERY_RECOVERABLE_EXCEPTIONS as e:
                 logger.warning(
                     "resource_explorer_discovery_failed",
                     error=str(e),
@@ -158,7 +178,7 @@ class RegionDiscovery:
             logger.error("region_discovery_failed", error=str(e))
             # Fallback to common regions if discovery fails
             return self._get_fallback_regions()
-        except Exception as e:
+        except AWS_REGION_DISCOVERY_RECOVERABLE_EXCEPTIONS as e:
             logger.error("region_discovery_unexpected_error", error=str(e))
             return self._get_fallback_regions()
 
@@ -168,7 +188,7 @@ class RegionDiscovery:
             regions = get_session().get_available_regions("ec2")
             if regions:
                 return sorted(set(regions))
-        except Exception as exc:
+        except AWS_REGION_FALLBACK_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning("region_fallback_from_botocore_failed", error=str(exc))
 
         # Last-resort static baseline

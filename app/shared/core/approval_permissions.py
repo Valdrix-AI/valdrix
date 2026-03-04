@@ -5,6 +5,7 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.scim_group import ScimGroup, ScimGroupMember
@@ -20,6 +21,12 @@ SUPPORTED_APPROVAL_PERMISSIONS = frozenset(
         APPROVAL_PERMISSION_REMEDIATION_APPROVE_NONPROD,
         APPROVAL_PERMISSION_REMEDIATION_APPROVE_PROD,
     }
+)
+APPROVAL_PERMISSION_RESOLUTION_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    TypeError,
+    ValueError,
+    SQLAlchemyError,
 )
 
 
@@ -138,7 +145,7 @@ async def user_has_approval_permission(
 
     try:
         scim_permissions = await _load_scim_approval_permissions(db, tenant_id, user_id)
-    except Exception as exc:
+    except APPROVAL_PERMISSION_RESOLUTION_RECOVERABLE_EXCEPTIONS as exc:
         logger.exception(
             "approval_permission_resolution_failed",
             tenant_id=str(tenant_id),

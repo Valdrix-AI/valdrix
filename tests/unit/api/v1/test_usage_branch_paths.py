@@ -170,6 +170,24 @@ async def test_get_usage_metrics_cache_invalid_dict_logs_warning_and_rebuilds() 
 
 
 @pytest.mark.asyncio
+async def test_get_usage_metrics_cache_does_not_swallow_base_exceptions() -> None:
+    user = _user()
+    db = MagicMock()
+    cache = _Cache(enabled=True, cached_value={"tenant_id": str(user.tenant_id)})
+
+    with (
+        patch.object(usage_api, "get_cache_service", return_value=cache),
+        patch.object(
+            usage_api.UsageResponse,
+            "model_validate",
+            side_effect=KeyboardInterrupt("stop"),
+        ),
+    ):
+        with pytest.raises(KeyboardInterrupt, match="stop"):
+            await usage_api.get_usage_metrics(user=user, db=db)
+
+
+@pytest.mark.asyncio
 async def test_get_recent_llm_activity_serializes_records() -> None:
     tenant_id = uuid4()
     now = datetime(2026, 2, 26, 12, 0, tzinfo=timezone.utc)

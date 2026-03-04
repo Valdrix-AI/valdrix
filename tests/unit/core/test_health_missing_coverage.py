@@ -192,7 +192,7 @@ class TestHealthServiceMissingCoverage:
     async def test_check_database_exception(self, health_service, mock_db):
         """Test database check handling exception (lines 43-45)."""
         with patch(
-            "app.shared.core.health.db_health_check", side_effect=Exception("DB error")
+            "app.shared.core.health.db_health_check", side_effect=RuntimeError("DB error")
         ):
             success, details = await health_service.check_database()
 
@@ -234,7 +234,7 @@ class TestHealthServiceMissingCoverage:
             patch("app.shared.core.rate_limit.get_redis_client") as mock_get_client,
         ):
             mock_client = MagicMock()
-            mock_client.ping = AsyncMock(side_effect=Exception("Redis error"))
+            mock_client.ping = AsyncMock(side_effect=RuntimeError("Redis error"))
             mock_get_client.return_value = mock_client
 
             success, details = await health_service.check_redis()
@@ -332,7 +332,7 @@ class TestHealthServiceMissingCoverage:
         """Test AWS health check exception (lines 78-79)."""
         with patch("app.shared.core.http.get_http_client") as mock_get_client:
             mock_get_client.return_value.get = AsyncMock(
-                side_effect=Exception("Network fail")
+                side_effect=RuntimeError("Network fail")
             )
 
             success, details = await health_service.check_aws()

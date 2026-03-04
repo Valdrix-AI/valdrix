@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import (
     retry,
@@ -44,6 +45,9 @@ tracer = trace.get_tracer(__name__)
 logger = structlog.get_logger()
 
 # System prompts are now managed in prompts.yaml
+FINOPS_ANALYSIS_SCHEMA_VERSION = "valdrics.finops.analysis.v1"
+FINOPS_PROMPT_FALLBACK_VERSION = "valdrics.finops.prompt.fallback.v1"
+FINOPS_RESPONSE_NORMALIZER_VERSION = "valdrics.finops.response-normalizer.v1"
 
 
 class FinOpsAnalyzer:
@@ -59,6 +63,7 @@ class FinOpsAnalyzer:
         self.db = db
         # Prompts are now loaded lazily or cached at module level to avoid blocking I/O
         self.prompt: Optional[ChatPromptTemplate] = None
+        self.prompt_version: str = FINOPS_PROMPT_FALLBACK_VERSION
 
     async def _get_prompt(self) -> ChatPromptTemplate:
         """Loads and caches the prompt template asynchronously."""
@@ -89,13 +94,21 @@ class FinOpsAnalyzer:
 
                 registry = await loop.run_in_executor(None, _read_file)
                 if isinstance(registry, dict) and "finops_analysis" in registry:
-                    prompt = registry["finops_analysis"].get("system")
+                    prompt_entry = registry["finops_analysis"]
+                    if isinstance(prompt_entry, dict):
+                        prompt_version = prompt_entry.get("version")
+                        if isinstance(prompt_version, str) and prompt_version.strip():
+                            self.prompt_version = prompt_version.strip()
+                        prompt = prompt_entry.get("system")
+                    else:
+                        prompt = None
                     if isinstance(prompt, str) and prompt.strip():
                         return prompt
-        except Exception as e:
+        except (OSError, yaml.YAMLError, ValueError, TypeError, RuntimeError) as e:
             logger.error("failed_to_load_prompts_yaml", error=str(e), path=prompt_path)
 
         # Item 20: Robust Fallback Prompt
+        self.prompt_version = FINOPS_PROMPT_FALLBACK_VERSION
         logger.warning("using_fallback_system_prompt")
         return (
             "You are a FinOps expert. Analyze the provided cloud cost data. "
@@ -260,9 +273,24 @@ class FinOpsAnalyzer:
                 return bound
             except TypeError:
                 continue
-            except Exception:
+            except (AttributeError, ValueError, RuntimeError):
                 return None
         return None
+
+    @staticmethod
+    def _normalize_analysis_payload(llm_result: dict[str, Any]) -> dict[str, Any]:
+        insights = llm_result.get("insights", [])
+        recommendations = llm_result.get("recommendations", [])
+        anomalies = llm_result.get("anomalies", [])
+        forecast = llm_result.get("forecast", {})
+        return {
+            "insights": insights if isinstance(insights, list) else [],
+            "recommendations": recommendations
+            if isinstance(recommendations, list)
+            else [],
+            "anomalies": anomalies if isinstance(anomalies, list) else [],
+            "forecast": forecast if isinstance(forecast, dict) else {},
+        }
 
     async def analyze(
         self,
@@ -398,7 +426,13 @@ class FinOpsAnalyzer:
                     )
             except BudgetExceededError:
                 raise
-            except Exception as e:
+            except (
+                SQLAlchemyError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                OSError,
+            ) as e:
                 logger.error(
                     "budget_check_failed_unexpected",
                     error=str(e),
@@ -419,27 +453,26 @@ class FinOpsAnalyzer:
                     tenant_id=tenant_id,
                 )
                 formatted_data = json.dumps(sanitized_data, default=str)
-            except Exception as e:
+            except (AIAnalysisError, ValueError, TypeError, RuntimeError) as e:
                 logger.error(
                     "data_preparation_failed", error=str(e), operation_id=operation_id
                 )
                 raise AIAnalysisError(f"Failed to prepare data: {str(e)}")
 
             # 4. Invoke LLM
+            # Note: _setup_client_and_usage might still be needed for BYOK keys
+            (
+                effective_provider,
+                final_model,
+                byok_key,
+            ) = await self._setup_client_and_usage(
+                tenant_id,
+                effective_db,
+                provider,
+                effective_model,
+                input_text=formatted_data,
+            )
             try:
-                # Note: _setup_client_and_usage might still be needed for BYOK keys
-                (
-                    effective_provider,
-                    final_model,
-                    byok_key,
-                ) = await self._setup_client_and_usage(
-                    tenant_id,
-                    effective_db,
-                    provider,
-                    effective_model,
-                    input_text=formatted_data,
-                )
-
                 response_content, response_metadata = await self._invoke_llm(
                     formatted_data,
                     effective_provider,
@@ -448,7 +481,12 @@ class FinOpsAnalyzer:
                     max_output_tokens=max_output_tokens,
                     tenant_tier=tenant_tier,
                 )
-            except Exception as e:
+            except (
+                AIAnalysisError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+            ) as e:
                 logger.error(
                     "llm_invocation_failed", error=str(e), operation_id=operation_id
                 )
@@ -475,7 +513,12 @@ class FinOpsAnalyzer:
                         actor_type=actor_type,
                         client_ip=client_ip,
                     )
-                except Exception as e:
+                except (
+                    SQLAlchemyError,
+                    RuntimeError,
+                    ValueError,
+                    TypeError,
+                ) as e:
                     logger.warning(
                         "usage_recording_failed",
                         error=str(e),
@@ -484,7 +527,13 @@ class FinOpsAnalyzer:
 
             # 6. Post-Process
             return await self._process_analysis_results(
-                response_content, tenant_id, usage_summary_to_analyze, db=effective_db
+                response_content,
+                tenant_id,
+                usage_summary_to_analyze,
+                db=effective_db,
+                provider=effective_provider,
+                model=final_model,
+                response_metadata=response_metadata,
             )
 
     async def _check_cache_and_delta(
@@ -759,7 +808,13 @@ class FinOpsAnalyzer:
             span.set_attribute("llm.model", model)
             try:
                 return await _invoke_with_retry()
-            except Exception as primary_error:
+            except (
+                AIAnalysisError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                OSError,
+            ) as primary_error:
                 logger.warning(
                     "llm_primary_failed_trying_fallbacks",
                     provider=provider,
@@ -797,7 +852,13 @@ class FinOpsAnalyzer:
                         return safe_content, metadata if isinstance(
                             metadata, dict
                         ) else {}
-                    except Exception as fallback_error:
+                    except (
+                        AIAnalysisError,
+                        RuntimeError,
+                        ValueError,
+                        TypeError,
+                        OSError,
+                    ) as fallback_error:
                         logger.warning(
                             "llm_fallback_failed",
                             provider=fallback_provider,
@@ -807,7 +868,6 @@ class FinOpsAnalyzer:
 
                 # All fallbacks failed
                 logger.error("llm_all_providers_failed", primary_provider=provider)
-                from app.shared.core.exceptions import AIAnalysisError
 
                 raise AIAnalysisError(
                     f"All LLM providers failed. Primary: {provider}, Error: {str(primary_error)}"
@@ -819,6 +879,9 @@ class FinOpsAnalyzer:
         tenant_id: Optional[UUID],
         usage_summary: Any,
         db: Optional[AsyncSession] = None,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        response_metadata: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Validates output, handles alerts, and caches results."""
         cache = get_cache_service()
@@ -832,7 +895,7 @@ class FinOpsAnalyzer:
             await self._check_and_alert_anomalies(
                 llm_result, tenant_id=tenant_id, db=db
             )
-        except Exception as e:
+        except (ValueError, TypeError, RuntimeError, KeyError) as e:
             logger.warning("llm_validation_failed", error=str(e))
             # Fallback: try raw parsing if validation fails but it's still JSON
             try:
@@ -847,7 +910,7 @@ class FinOpsAnalyzer:
                     "error": "AI analysis format invalid",
                     "raw_content": content,
                 }
-            except Exception as ex:
+            except (ValueError, TypeError, RuntimeError) as ex:
                 logger.error("llm_fallback_failed_unexpectedly", error=str(ex))
                 llm_result = {
                     "error": "AI analysis processing failed",
@@ -865,14 +928,26 @@ class FinOpsAnalyzer:
         symbolic_forecast = await SymbolicForecaster.forecast(
             usage_summary.records, db=effective_db, tenant_id=usage_summary.tenant_id
         )
+        normalized = self._normalize_analysis_payload(llm_result)
+        metadata_keys: list[str] = []
+        if isinstance(response_metadata, dict):
+            metadata_keys = sorted(str(key) for key in response_metadata.keys())
 
         final_result = {
-            "insights": llm_result.get("insights", []),
-            "recommendations": llm_result.get("recommendations", []),
-            "anomalies": llm_result.get("anomalies", []),
-            "forecast": llm_result.get("forecast", {}),
+            "insights": normalized["insights"],
+            "recommendations": normalized["recommendations"],
+            "anomalies": normalized["anomalies"],
+            "forecast": normalized["forecast"],
             "symbolic_forecast": symbolic_forecast,
             "llm_raw": llm_result,  # Keep for debugging
+            "analysis_contract": {
+                "schema_version": FINOPS_ANALYSIS_SCHEMA_VERSION,
+                "prompt_version": self.prompt_version,
+                "response_normalizer_version": FINOPS_RESPONSE_NORMALIZER_VERSION,
+                "provider": provider or "unknown",
+                "model": model or "unknown",
+                "llm_response_metadata_keys": metadata_keys,
+            },
         }
 
         # 4. Cache the combined result (24h TTL)
@@ -915,7 +990,7 @@ class FinOpsAnalyzer:
                 message=f"*Issue:* {top['issue']}\n*Impact:* {top['cost_impact']}\n*Severity:* {top['severity']}",
                 severity="critical" if top["severity"] == "high" else "warning",
             )
-        except Exception as exc:
+        except (KeyError, TypeError, ValueError, RuntimeError) as exc:
             logger.warning(
                 "anomaly_alert_dispatch_failed",
                 tenant_id=str(tenant_id) if tenant_id else None,

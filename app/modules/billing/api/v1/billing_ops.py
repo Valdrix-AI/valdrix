@@ -5,9 +5,32 @@ from typing import Any, Callable, Dict
 
 from fastapi import HTTPException, Request
 from sqlalchemy import func, literal, select, union_all
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.billing.api.v1.billing_models import ConnectionUsageItem
+
+
+BILLING_PLAN_RECOVERABLE_ERRORS = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+BILLING_WEBHOOK_COMPLETION_RECOVERABLE_ERRORS = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    OSError,
+)
+BILLING_WEBHOOK_PROCESS_RECOVERABLE_ERRORS = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    OSError,
+)
 
 
 async def load_public_plans(
@@ -57,7 +80,7 @@ async def load_public_plans(
                 }
                 for p in db_plans
             ]
-    except Exception as exc:
+    except BILLING_PLAN_RECOVERABLE_ERRORS as exc:
         logger.warning("failed_to_fetch_plans_from_db", error=str(exc))
 
     public_plans: list[dict[str, Any]] = []
@@ -270,14 +293,14 @@ async def process_paystack_webhook(
         result = await handler.handle(request, payload, signature)
         try:
             await retry_service.mark_inline_processed(job, result)
-        except Exception as completion_exc:  # noqa: BLE001
+        except BILLING_WEBHOOK_COMPLETION_RECOVERABLE_ERRORS as completion_exc:
             logger.error(
                 "webhook_inline_completion_mark_failed",
                 job_id=str(job.id),
                 error=str(completion_exc),
             )
         return result
-    except Exception as process_error:
+    except BILLING_WEBHOOK_PROCESS_RECOVERABLE_ERRORS as process_error:
         logger.warning(
             "webhook_processing_failed_will_retry",
             job_id=str(job.id),

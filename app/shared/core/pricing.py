@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from app.modules.governance.domain.security.auth import CurrentUser
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 
 import structlog
 
@@ -221,8 +222,7 @@ _TENANT_TIER_CACHE_TTL_SECONDS = 60.0
 _TENANT_TIER_CACHE_MAX_ENTRIES = 4096
 _tenant_tier_runtime_cache: dict[str, tuple[float, "PricingTier"]] = {}
 _tenant_tier_runtime_cache_lock = Lock()
-
-
+TENANT_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS = (RuntimeError, ValueError, TypeError, SQLAlchemyError)
 def _runtime_cache_get(tenant_key: str, *, now: float | None = None) -> "PricingTier | None":
     with _tenant_tier_runtime_cache_lock:
         cached_entry = _tenant_tier_runtime_cache.get(tenant_key)
@@ -234,8 +234,6 @@ def _runtime_cache_get(tenant_key: str, *, now: float | None = None) -> "Pricing
             _tenant_tier_runtime_cache.pop(tenant_key, None)
             return None
         return cached_tier
-
-
 def _runtime_cache_set(tenant_key: str, tier: "PricingTier", *, now: float | None = None) -> None:
     current = time.monotonic() if now is None else now
     with _tenant_tier_runtime_cache_lock:
@@ -760,7 +758,7 @@ async def get_tenant_tier(
                 cache[tenant_key] = PricingTier.FREE
             _runtime_cache_set(tenant_key, PricingTier.FREE)
             return PricingTier.FREE
-    except Exception as e:
+    except TENANT_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS as e:
         logger.error("get_tenant_tier_failed", tenant_id=str(tenant_id), error=str(e))
         if cache is not None:
             cache[tenant_key] = PricingTier.FREE

@@ -8,10 +8,34 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.core.config import get_settings
+from app.shared.core.exceptions import ExternalAPIError
 from app.modules.optimization.domain.plugin import ZombiePlugin
 
 logger = structlog.get_logger()
 settings = get_settings()
+
+ZOMBIE_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+    KeyError,
+    LookupError,
+    AttributeError,
+)
+ZOMBIE_PLUGIN_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+    KeyError,
+    LookupError,
+    AttributeError,
+)
 
 
 class BaseZombieDetector(ABC):
@@ -142,7 +166,7 @@ class BaseZombieDetector(ABC):
             # O4: Propagate cancellation for proper cleanup
             logger.info("zombie_scan_cancelled", provider=self.provider_name)
             raise
-        except Exception as e:
+        except ZOMBIE_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.error(
                 "zombie_scan_failed", provider=self.provider_name, error=str(e)
             )
@@ -182,7 +206,7 @@ class BaseZombieDetector(ABC):
         except asyncio.CancelledError:
             # O4: Propagate cancellation
             raise
-        except Exception as e:
+        except ZOMBIE_PLUGIN_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.error("plugin_scan_failed", plugin=plugin.category_key, error=str(e))
             return plugin.category_key, []
 

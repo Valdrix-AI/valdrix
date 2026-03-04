@@ -214,7 +214,7 @@ async def backtest_strategies(
         if isinstance(cfg, dict) and "backtest_tolerance" in cfg:
             try:
                 tolerance = float(cfg.get("backtest_tolerance") or tolerance)
-            except Exception:
+            except (TypeError, ValueError, OverflowError):
                 tolerance = 0.30
 
         backtest: Dict[str, Any] = {"reason": "no_series"}

@@ -29,6 +29,10 @@ from app.modules.governance.domain.jobs.handlers.enforcement_reconciliation impo
 )
 
 
+class _FatalTestSignal(BaseException):
+    """Sentinel fatal error used to assert broad Exception handlers do not swallow BaseException."""
+
+
 @pytest.fixture
 def mock_db():
     db = MagicMock(spec=AsyncSession)
@@ -84,9 +88,19 @@ async def test_zombie_scan_handler_success(mock_db, sample_job):
     ]
 
     # Mock detector and factory
-    with patch(
-        "app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector"
-    ) as mock_factory:
+    with (
+        patch(
+            "app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector"
+        ) as mock_factory,
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            new=AsyncMock(return_value="growth"),
+        ),
+        patch(
+            "app.shared.core.notifications.NotificationDispatcher.notify_zombies",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
         mock_detector = AsyncMock()
         mock_detector.provider_name = "aws"
         mock_detector.scan_all.return_value = {
@@ -481,6 +495,78 @@ async def test_finops_analysis_handler_propagates_actor_context(mock_db, sample_
     assert (
         mock_analyzer.analyze.call_args.kwargs["client_ip"] == "198.51.100.30"
     )
+
+
+@pytest.mark.asyncio
+async def test_finops_analysis_handler_continues_on_recoverable_provider_failures(
+    mock_db, sample_job
+):
+    handler = FinOpsAnalysisHandler()
+    conn_failed = MagicMock(provider="aws")
+    conn_ok = MagicMock(provider="gcp")
+
+    usage_summary = MagicMock()
+    usage_summary.records = [MagicMock()]
+
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.list_tenant_connections",
+            new=AsyncMock(return_value=[conn_failed, conn_ok]),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
+        ) as mock_factory,
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.fetch_daily_costs_if_supported",
+            new=AsyncMock(return_value=usage_summary),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer"
+        ) as mock_analyzer_cls,
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
+            return_value=MagicMock(),
+        ),
+    ):
+        mock_adapter_ok = MagicMock()
+        mock_factory.get_adapter.side_effect = [
+            RuntimeError("adapter unavailable"),
+            mock_adapter_ok,
+        ]
+        mock_analyzer = AsyncMock()
+        mock_analyzer.analyze.return_value = {"insights": ["ok"]}
+        mock_analyzer_cls.return_value = mock_analyzer
+
+        result = await handler.execute(sample_job, mock_db)
+
+    assert result["status"] == "completed"
+    assert result["analysis_runs"] == 1
+    assert result["providers_analyzed"] == ["gcp"]
+
+
+@pytest.mark.asyncio
+async def test_finops_analysis_handler_does_not_swallow_fatal_provider_failures(
+    mock_db, sample_job
+):
+    handler = FinOpsAnalysisHandler()
+    conn = MagicMock(provider="aws")
+
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.list_tenant_connections",
+            new=AsyncMock(return_value=[conn]),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
+        ) as mock_factory,
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
+            return_value=MagicMock(),
+        ),
+    ):
+        mock_factory.get_adapter.side_effect = _FatalTestSignal()
+        with pytest.raises(_FatalTestSignal):
+            await handler.execute(sample_job, mock_db)
 
 
 @pytest.mark.asyncio

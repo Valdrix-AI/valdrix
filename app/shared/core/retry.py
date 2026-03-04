@@ -25,6 +25,13 @@ from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
 T = TypeVar("T")
+DEADLOCK_RETRY_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+    sqlalchemy.exc.SQLAlchemyError,
+)
 
 
 class RetryConfig(TypedDict):
@@ -242,7 +249,7 @@ async def execute_with_deadlock_retry(
     for attempt in range(max_attempts):
         try:
             return await coro(*args, **kwargs)
-        except Exception as e:
+        except DEADLOCK_RETRY_RECOVERABLE_EXCEPTIONS as e:
             error_msg = str(e).lower()
 
             # Check if this is a deadlock error

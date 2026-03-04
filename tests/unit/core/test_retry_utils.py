@@ -95,7 +95,7 @@ async def test_execute_with_deadlock_retry_retries():
         nonlocal attempts
         attempts += 1
         if attempts < 3:
-            raise Exception("deadlock detected")
+            raise RuntimeError("deadlock detected")
         return "ok"
 
     with (
@@ -112,10 +112,10 @@ async def test_execute_with_deadlock_retry_retries():
 @pytest.mark.asyncio
 async def test_execute_with_deadlock_retry_non_deadlock_raises():
     async def fail():
-        raise Exception("other error")
+        raise RuntimeError("other error")
 
     with patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep:
-        with pytest.raises(Exception, match="other error"):
+        with pytest.raises(RuntimeError, match="other error"):
             await execute_with_deadlock_retry(fail)
 
     mock_sleep.assert_not_called()

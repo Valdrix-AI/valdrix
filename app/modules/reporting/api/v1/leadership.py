@@ -15,7 +15,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,7 @@ from app.modules.reporting.domain.leadership_kpis import (
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Leadership"])
+LEADERSHIP_EVIDENCE_PAYLOAD_ERRORS = (ValidationError, TypeError, ValueError)
 
 
 def _require_tenant_id(user: CurrentUser) -> UUID:
@@ -208,7 +209,7 @@ async def list_leadership_kpi_evidence(
             continue
         try:
             leadership = LeadershipKpisResponse.model_validate(raw)
-        except Exception:
+        except LEADERSHIP_EVIDENCE_PAYLOAD_ERRORS:
             logger.warning(
                 "leadership_kpi_evidence_invalid_payload",
                 event_id=str(row.id),
@@ -405,7 +406,7 @@ async def list_quarterly_commercial_report_evidence(
             continue
         try:
             report = QuarterlyCommercialProofResponse.model_validate(raw)
-        except Exception:
+        except LEADERSHIP_EVIDENCE_PAYLOAD_ERRORS:
             logger.warning(
                 "quarterly_commercial_report_evidence_invalid_payload",
                 event_id=str(row.id),

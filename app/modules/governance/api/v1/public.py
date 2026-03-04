@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant import Tenant
@@ -35,6 +36,22 @@ logger = structlog.get_logger()
 _LANDING_LABEL_SANITIZER = re.compile(r"[^a-z0-9_]+")
 _LANDING_MAX_AGE = timedelta(days=2)
 _LANDING_MAX_FUTURE_SKEW = timedelta(minutes=5)
+PUBLIC_ASSESSMENT_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    TypeError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
+SSO_DISCOVERY_BACKEND_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    TypeError,
+    ValueError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+    SQLAlchemyError,
+)
 
 
 def _normalize_email_domain(email: str) -> str:
@@ -160,7 +177,7 @@ async def run_public_assessment(
                 "message": str(e),
             },
         )
-    except Exception:
+    except PUBLIC_ASSESSMENT_RECOVERABLE_EXCEPTIONS:
         # Don't leak internals for public endpoints
         raise HTTPException(
             status_code=500, detail="An unexpected error occurred during assessment"
@@ -198,7 +215,7 @@ async def discover_sso_federation(
     except TimeoutError:
         logger.warning("sso_discovery_backend_timeout", domain=domain)
         return SsoDiscoveryResponse(available=False, reason="sso_discovery_backend_timeout")
-    except Exception:
+    except SSO_DISCOVERY_BACKEND_RECOVERABLE_EXCEPTIONS:
         logger.exception("sso_discovery_backend_error", domain=domain)
         return SsoDiscoveryResponse(available=False, reason="sso_discovery_backend_error")
     if not rows:

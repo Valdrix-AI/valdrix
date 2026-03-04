@@ -97,7 +97,7 @@ class TestRedisCache:
     @pytest.mark.asyncio
     async def test_health_check_false_on_ping_error(self):
         mock_redis = AsyncMock()
-        mock_redis.ping.side_effect = Exception("down")
+        mock_redis.ping.side_effect = RuntimeError("down")
         cache = RedisCache(redis_url="redis://localhost")
         with patch.object(cache, "_get_client", return_value=mock_redis):
             assert await cache.health_check() is False
@@ -105,7 +105,7 @@ class TestRedisCache:
     @pytest.mark.asyncio
     async def test_get_handles_exception(self):
         mock_redis = AsyncMock()
-        mock_redis.get.side_effect = Exception("boom")
+        mock_redis.get.side_effect = RuntimeError("boom")
         cache = RedisCache(redis_url="redis://localhost")
         with patch.object(cache, "_get_client", return_value=mock_redis):
             assert await cache.get("key") is None
@@ -113,7 +113,7 @@ class TestRedisCache:
     @pytest.mark.asyncio
     async def test_set_handles_exception(self):
         mock_redis = AsyncMock()
-        mock_redis.setex.side_effect = Exception("boom")
+        mock_redis.setex.side_effect = RuntimeError("boom")
         cache = RedisCache(redis_url="redis://localhost")
         with patch.object(cache, "_get_client", return_value=mock_redis):
             await cache.set("key", "value", 10)
@@ -121,7 +121,7 @@ class TestRedisCache:
     @pytest.mark.asyncio
     async def test_delete_handles_exception(self):
         mock_redis = AsyncMock()
-        mock_redis.delete.side_effect = Exception("boom")
+        mock_redis.delete.side_effect = RuntimeError("boom")
         cache = RedisCache(redis_url="redis://localhost")
         with patch.object(cache, "_get_client", return_value=mock_redis):
             await cache.delete("key")
@@ -129,7 +129,7 @@ class TestRedisCache:
     @pytest.mark.asyncio
     async def test_delete_pattern_scan_error_returns_zero(self):
         mock_redis = AsyncMock()
-        mock_redis.scan.side_effect = Exception("scan failed")
+        mock_redis.scan.side_effect = RuntimeError("scan failed")
         cache = RedisCache(redis_url="redis://localhost")
         with patch.object(cache, "_get_client", return_value=mock_redis):
             assert await cache.delete_pattern("val:*") == 0

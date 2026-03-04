@@ -85,7 +85,7 @@ async def test_cohort_analysis_deadlock_retry(mock_db):
         mock_result.scalars.return_value.all.return_value = [mock_tenant]
 
         mock_db.execute.side_effect = [
-            Exception("Deadlock detected"),  # Attempt 1 fail
+            RuntimeError("Deadlock detected"),  # Attempt 1 fail
             mock_result,  # Attempt 2 select success
             MagicMock(rowcount=1),  # Attempt 2 insert 1
             MagicMock(rowcount=1),  # Attempt 2 insert 2

@@ -12,6 +12,7 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pricing import TenantSubscription
@@ -19,6 +20,16 @@ from app.modules.billing.domain.billing.entitlement_policy import sync_tenant_pl
 from app.shared.core.pricing import PricingTier
 
 from . import paystack_shared as shared
+
+
+PAYSTACK_WEBHOOK_AUDIT_RECOVERABLE_EXCEPTIONS = (
+    ImportError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    OSError,
+    SQLAlchemyError,
+)
 
 
 class WebhookHandler:
@@ -177,7 +188,7 @@ class WebhookHandler:
                     "next_payment_date": next_payment_date_str,
                 },
             )
-        except Exception as exc:
+        except PAYSTACK_WEBHOOK_AUDIT_RECOVERABLE_EXCEPTIONS as exc:
             shared.logger.warning(
                 "billing_audit_log_failed",
                 tenant_id=str(sub.tenant_id),
@@ -313,7 +324,7 @@ class WebhookHandler:
                     exchange_rate=fx_rate_raw,
                 )
             elif parsed_fx_rate is not None:
-                sub.last_charge_fx_rate = parsed_fx_rate
+                sub.last_charge_fx_rate = float(parsed_fx_rate)
             fx_provider = metadata.get("fx_provider")
             if isinstance(fx_provider, str) and fx_provider.strip():
                 sub.last_charge_fx_provider = fx_provider.strip().lower()
@@ -357,7 +368,7 @@ class WebhookHandler:
                         or sub.last_charge_fx_provider,
                     },
                 )
-            except Exception as exc:
+            except PAYSTACK_WEBHOOK_AUDIT_RECOVERABLE_EXCEPTIONS as exc:
                 shared.logger.warning(
                     "billing_audit_log_failed",
                     tenant_id=str(tenant_id),
@@ -436,7 +447,7 @@ class WebhookHandler:
                         error_message="invoice.payment_failed",
                     )
                     await self.db.commit()
-                except Exception as exc:
+                except PAYSTACK_WEBHOOK_AUDIT_RECOVERABLE_EXCEPTIONS as exc:
                     shared.logger.warning(
                         "billing_audit_log_failed",
                         tenant_id=str(sub.tenant_id),

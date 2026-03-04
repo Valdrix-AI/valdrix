@@ -1,4 +1,5 @@
 import type { BuyerPersona } from '$lib/landing/landingExperiment';
+import { getPublicCustomerCommentsFeed } from '$lib/landing/customerCommentsFeed';
 
 export const HERO_ROLE_CONTEXT: Record<
 	BuyerPersona,
@@ -57,8 +58,8 @@ export const HERO_PROOF_POINTS = Object.freeze([
 		detail: 'Owners, approvals, and safety checks are built into every action path.'
 	},
 	{
-		title: 'Board-Ready Narrative',
-		detail: 'You can explain spend movement, actions, and outcomes in minutes.'
+		title: 'Global Compliance Proof',
+		detail: 'SOC 2, GDPR, and ISO 27001 readiness alignment out of the box.'
 	}
 ]);
 
@@ -73,15 +74,15 @@ export const HERO_OUTCOME_CHIPS = Object.freeze([
 	},
 	{
 		label: 'Operating model',
-		value: 'Visibility + ownership + action'
+		value: 'Visibility + ownership + GreenOps'
 	}
 ]);
 
 export const ABOVE_FOLD_TRUST_BADGES = Object.freeze([
+	'ISO 27001 readiness alignment',
 	'SOC 2 program alignment',
 	'GDPR data-rights support',
-	'DPA-ready procurement support',
-	'BAA review support',
+	'DORA operational resilience',
 	'SSO + SCIM access controls',
 	'Tenant-isolated workspaces'
 ]);
@@ -195,19 +196,19 @@ export const TRUST_BENCHMARK_OUTCOMES = Object.freeze([
 		title: 'Faster economic decisions',
 		detail:
 			'High-growth teams target a tighter detect-to-decision cycle by unifying ownership and execution context.',
-		benchmark: 'Target benchmark: 15-25% faster decision cycles'
+		benchmark: 'Modeled benchmark range: 15-25% faster decision cycles'
 	},
 	{
 		title: 'Fewer finance escalations',
 		detail:
 			'When ownership and approvals are explicit, month-end surprise escalations can be reduced materially.',
-		benchmark: 'Target benchmark: 30-50% fewer late escalations'
+		benchmark: 'Modeled benchmark range: 30-50% fewer late escalations'
 	},
 	{
 		title: 'Clear accountability',
 		detail:
 			'Teams can move from ambiguous remediation ownership to explicit, role-based accountability across functions.',
-		benchmark: 'Target benchmark: owner assigned on every material anomaly'
+		benchmark: 'Modeled benchmark range: owner assigned on every material anomaly'
 	}
 ]);
 
@@ -242,8 +243,7 @@ export const BUYER_ROLE_VIEWS = Object.freeze([
 		id: 'security' as const,
 		label: 'Security',
 		headline: 'Reduce risk without becoming a delivery bottleneck',
-		detail:
-			'Run risk checks before execution with explicit ownership and a clear change history.',
+		detail: 'Run risk checks before execution with explicit ownership and a clear change history.',
 		signals: ['Control adherence', 'Risk visibility', 'Decision traceability'],
 		thirtyDayOutcomes: [
 			'Risk checks applied before cost-impacting actions.',
@@ -270,43 +270,41 @@ export const CUSTOMER_PROOF_STORIES = Object.freeze([
 	{
 		title: 'Growth B2B SaaS Platform',
 		before: 'Monthly spikes were discovered late and routed through ad-hoc escalation threads.',
-		after: 'Ownership and approvals moved into weekly operating reviews with named decision owners.',
+		after:
+			'Ownership and approvals moved into weekly operating reviews with named decision owners.',
 		impact:
-			'Design-partner pattern: double-digit controllable spend opportunity surfaced before month-end close.'
+			'Prelaunch design-partner signal: double-digit controllable spend opportunity surfaced before month-end close.'
 	},
 	{
 		title: 'Digital Commerce Group',
 		before: 'Finance and engineering escalations clustered around month-end close.',
 		after: 'Spend issues were triaged weekly with clear owners and explicit action deadlines.',
-		impact: 'Design-partner pattern: fewer late-cycle escalations and faster owner handoffs.'
+		impact: 'Prelaunch design-partner signal: fewer late-cycle escalations and faster owner handoffs.'
 	},
 	{
 		title: 'Multi-Region Platform Team',
 		before: 'Cloud and SaaS actions were tracked in disconnected channels and ticket queues.',
 		after: 'Cloud+, SaaS, and license decisions ran in one shared operating loop across teams.',
-		impact: 'Design-partner pattern: unified signal-to-action narrative for leadership reviews.'
+		impact:
+			'Prelaunch design-partner signal: unified signal-to-action narrative for leadership reviews.'
 	}
 ]);
 
-export const CUSTOMER_QUOTES = Object.freeze([
-	{
-		quote:
-			'We stopped debating whose queue a cost issue belongs to. Ownership is now explicit in the workflow.',
-		attribution: 'Design-partner workshop, Head of FinOps'
-	},
-	{
-		quote:
-			'The value is not another dashboard. It is moving from signal to controlled action without drama.',
-		attribution: 'Design-partner workshop, VP Engineering'
-	},
-	{
-		quote:
-			'Leadership reviews got shorter because the economic story is consistent from platform to finance.',
-		attribution: 'Design-partner workshop, CFO'
-	}
-]);
+export const PRELAUNCH_PROOF_NOTE =
+	'Valdrics is prelaunch. Public customer logos and production outcome studies will be published after go-live. Current proof reflects design-partner sessions and modeled benchmark ranges.';
+
+export const CUSTOMER_QUOTES = Object.freeze(
+	getPublicCustomerCommentsFeed().map((record) => ({
+		quote: record.quote,
+		attribution: record.attribution
+	}))
+);
 
 export const COMPLIANCE_FOUNDATION_BADGES = Object.freeze([
+	'ISO 27001 readiness alignment',
+	'DORA operational resilience',
+	'SOC 2 program alignment',
+	'GDPR data-rights support',
 	'Single sign-on (SAML)',
 	'SCIM user provisioning',
 	'Role-based approvals',

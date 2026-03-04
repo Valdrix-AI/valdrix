@@ -15,7 +15,12 @@
 </script>
 
 {#if visible}
-	<div class="landing-cookie-banner" role="dialog" aria-modal="false" aria-labelledby="cookie-consent-title">
+	<div
+		class="landing-cookie-banner"
+		role="dialog"
+		aria-modal="false"
+		aria-labelledby="cookie-consent-title"
+	>
 		<button
 			type="button"
 			class="landing-cookie-banner__close"
@@ -26,8 +31,8 @@
 		</button>
 		<p id="cookie-consent-title" class="landing-proof-k">Cookie preferences</p>
 		<p class="landing-p">
-			Valdrics uses local storage for analytics and experiment telemetry on this public page.
-			You can accept or decline analytics tracking.
+			Valdrics uses local storage for analytics and experiment telemetry on this public page. You
+			can accept or decline analytics tracking.
 		</p>
 		<div class="landing-cookie-banner__actions">
 			<button type="button" class="btn btn-secondary" onclick={onReject}>Decline analytics</button>

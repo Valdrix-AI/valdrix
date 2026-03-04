@@ -127,7 +127,7 @@ class TestPricingDeep:
     @pytest.mark.asyncio
     async def test_get_tenant_tier_db_exception(self, mock_db):
         """Test get_tenant_tier returns FREE on database exception."""
-        mock_db.execute.side_effect = Exception("DB Error")
+        mock_db.execute.side_effect = RuntimeError("DB Error")
         tier = await get_tenant_tier(uuid.uuid4(), mock_db)
         assert tier == PricingTier.FREE
 

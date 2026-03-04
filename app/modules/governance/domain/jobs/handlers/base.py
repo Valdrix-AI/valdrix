@@ -10,11 +10,28 @@ import structlog
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 from datetime import datetime, timezone
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob, JobStatus
 from app.shared.core.exceptions import ValdricsException
 
 logger = structlog.get_logger()
+JOB_HANDLER_UNEXPECTED_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    OSError,
+    ConnectionError,
+    TimeoutError,
+    asyncio.TimeoutError,
+    SQLAlchemyError,
+)
+JOB_HANDLER_SENTRY_ALERT_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    ImportError,
+)
 
 
 class JobTimeoutError(ValdricsException):
@@ -150,7 +167,7 @@ class BaseJobHandler(ABC):
             # Expected errors - may be retryable
             return await self._handle_valdrics_exception(job, e, db)
 
-        except Exception as e:
+        except JOB_HANDLER_UNEXPECTED_RECOVERABLE_EXCEPTIONS as e:
             # Unexpected errors - move to DLQ
             logger.error(
                 "job_unexpected_error",
@@ -223,7 +240,7 @@ class BaseJobHandler(ABC):
                     f"Job {job.id} moved to DLQ after {job.attempts} attempts: {error_message}"
                 )
             )
-        except Exception:
+        except JOB_HANDLER_SENTRY_ALERT_RECOVERABLE_EXCEPTIONS:
             pass
 
     async def _handle_valdrics_exception(

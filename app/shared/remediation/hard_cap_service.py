@@ -5,6 +5,7 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import desc, select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.governance.domain.security.audit_log import (
@@ -15,6 +16,13 @@ from app.modules.governance.domain.security.audit_log import (
 from app.shared.core.connection_queries import CONNECTION_MODEL_PAIRS
 
 logger = structlog.get_logger()
+BUDGET_HARD_CAP_TRANSACTION_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class BudgetHardCapService:
@@ -225,7 +233,7 @@ class BudgetHardCapService:
                 },
             )
             await self.db.commit()
-        except Exception:
+        except BUDGET_HARD_CAP_TRANSACTION_RECOVERABLE_EXCEPTIONS:
             rollback = getattr(self.db, "rollback", None)
             if callable(rollback):
                 await rollback()
@@ -266,7 +274,7 @@ class BudgetHardCapService:
                 },
             )
             await self.db.commit()
-        except Exception:
+        except BUDGET_HARD_CAP_TRANSACTION_RECOVERABLE_EXCEPTIONS:
             rollback = getattr(self.db, "rollback", None)
             if callable(rollback):
                 await rollback()

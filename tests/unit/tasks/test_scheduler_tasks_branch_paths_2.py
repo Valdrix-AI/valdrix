@@ -159,7 +159,13 @@ async def test_cohort_analysis_dormant_branch_skips_optional_jobs_and_zero_enque
 async def test_cohort_analysis_deadlock_final_retry_records_failure() -> None:
     db = AsyncMock()
     _configure_sync_begin(db)
-    db.execute = AsyncMock(side_effect=[Exception("deadlock"), Exception("deadlock"), Exception("deadlock")])
+    db.execute = AsyncMock(
+        side_effect=[
+            RuntimeError("deadlock"),
+            RuntimeError("deadlock"),
+            RuntimeError("deadlock"),
+        ]
+    )
 
     with (
         patch(

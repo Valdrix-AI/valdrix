@@ -5,6 +5,13 @@ import structlog
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+GREENOPS_VERIFY_RECOVERABLE_EXCEPTIONS = (
+    httpx.HTTPError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 async def verify_greenops_api():
@@ -51,7 +58,7 @@ async def verify_greenops_api():
                 print("❌ Auth Failed: 401 Unauthorized. Ensure token is valid.")
             else:
                 print(f"❌ API Failed: {r.status_code} - {r.text}")
-        except Exception as e:
+        except GREENOPS_VERIFY_RECOVERABLE_EXCEPTIONS as e:
             print(f"❌ Connection Failed: {str(e)}")
 
         # 2. Test Green Schedule
@@ -67,7 +74,7 @@ async def verify_greenops_api():
                 )
             else:
                 print(f"❌ API Failed: {r.status_code} - {r.text}")
-        except Exception as e:
+        except GREENOPS_VERIFY_RECOVERABLE_EXCEPTIONS as e:
             print(f"❌ Connection Failed: {str(e)}")
 
     print("\n🏆 GreenOps API Verification Complete.")

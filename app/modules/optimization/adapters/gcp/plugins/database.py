@@ -6,12 +6,22 @@ Detects idle Cloud SQL instances using billing export data.
 
 import importlib
 from typing import List, Dict, Any
+from google.api_core.exceptions import GoogleAPIError
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
+GCP_SQL_SCAN_RECOVERABLE_EXCEPTIONS = (
+    GoogleAPIError,
+    ImportError,
+    AttributeError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @registry.register("gcp")
@@ -103,7 +113,7 @@ class IdleCloudSqlPlugin(ZombiePlugin):
                             "explainability_notes": "Cloud SQL instance flagged for review. Enable billing export for accurate idle detection.",
                         }
                     )
-        except Exception as e:
+        except GCP_SQL_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("gcp_sql_scan_error", error=str(e))
 
         return zombies

@@ -11,6 +11,7 @@ from functools import wraps
 from typing import Any, TypeVar, cast
 
 from prometheus_client import Counter, Histogram, Gauge
+import sys
 import time
 
 # --- Roadmap Compatibility Metrics ---
@@ -419,33 +420,22 @@ def time_operation(operation_name: str) -> Callable[[F], F]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
+            completed = False
             try:
                 result = func(*args, **kwargs)
-                duration = time.time() - start_time
-
-                # Record success metrics
-                if "db" in operation_name.lower():
-                    DB_QUERY_DURATION.labels(operation_type=operation_name).observe(
-                        duration
-                    )
-                elif "api" in operation_name.lower():
-                    # API metrics are handled by middleware
-                    pass
-                elif "cache" in operation_name.lower():
-                    # Cache metrics handled elsewhere
-                    pass
-
+                completed = True
                 return result
-            except Exception:
+            finally:
                 duration = time.time() - start_time
-
-                # Record error metrics
                 if "db" in operation_name.lower():
-                    DB_QUERY_DURATION.labels(
-                        operation_type=f"{operation_name}_error"
-                    ).observe(duration)
-
-                raise
+                    if completed:
+                        DB_QUERY_DURATION.labels(operation_type=operation_name).observe(
+                            duration
+                        )
+                    elif sys.exc_info()[0] is not None:
+                        DB_QUERY_DURATION.labels(
+                            operation_type=f"{operation_name}_error"
+                        ).observe(duration)
 
         return cast(F, wrapper)
 

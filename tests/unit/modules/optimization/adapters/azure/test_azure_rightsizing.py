@@ -87,3 +87,36 @@ async def test_overprovisioned_vm_plugin_scan(mock_azure_creds):
     assert "Standard_D4s_v3" in z["recommendation"]
     assert "Max CPU" in z["explainability_notes"]
     assert z["confidence_score"] > 0.8
+
+
+@pytest.mark.asyncio
+async def test_overprovisioned_vm_plugin_does_not_swallow_base_exceptions(
+    mock_azure_creds,
+):
+    class FatalAzureFailure(BaseException):
+        pass
+
+    with patch.dict(
+        sys.modules,
+        {
+            "azure.mgmt.compute": MagicMock(),
+            "azure.mgmt.monitor": MagicMock(),
+            "azure.core": MagicMock(),
+        },
+    ):
+        from app.modules.optimization.adapters.azure.plugins.rightsizing import (
+            OverprovisionedVmPlugin,
+        )
+
+        plugin = OverprovisionedVmPlugin()
+
+    with patch(
+        "app.modules.optimization.adapters.azure.plugins.rightsizing.ComputeManagementClient",
+        side_effect=FatalAzureFailure("fatal"),
+    ):
+        with pytest.raises(FatalAzureFailure):
+            await plugin.scan(
+                session="sub-id",
+                region="global",
+                credentials=mock_azure_creds,
+            )

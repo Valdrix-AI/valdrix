@@ -7,7 +7,9 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Protocol, Callable
 from uuid import UUID
 
+from httpx import HTTPError
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pricing import TenantSubscription
@@ -16,7 +18,26 @@ from app.shared.core.pricing import PricingTier
 from . import paystack_shared as shared
 from .paystack_client_impl import PaystackClient
 
-
+PAYSTACK_RUNTIME_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    HTTPError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+)
+PAYSTACK_AUDIT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
 class BillingService:
     """Paystack billing operations."""
 
@@ -163,7 +184,7 @@ class BillingService:
 
         try:
             provider_payload = await self.client.fetch_subscription(code_raw.strip())
-        except Exception as exc:
+        except PAYSTACK_RUNTIME_RECOVERABLE_ERRORS as exc:
             shared.logger.warning(
                 "renewal_fetch_subscription_failed",
                 tenant_id=str(subscription.tenant_id),
@@ -348,7 +369,7 @@ class BillingService:
                         "billing_cycle": billing_cycle,
                     },
                 )
-            except Exception as audit_exc:
+            except PAYSTACK_AUDIT_RECOVERABLE_ERRORS as audit_exc:
                 shared.logger.warning(
                     "billing_init_audit_failed",
                     tenant_id=str(tenant_id),
@@ -371,7 +392,7 @@ class BillingService:
 
             return {"url": auth_url, "reference": reference}
 
-        except Exception as exc:
+        except PAYSTACK_RUNTIME_RECOVERABLE_ERRORS as exc:
             shared.logger.error(
                 "paystack_checkout_failed", tenant_id=str(tenant_id), error=str(exc)
             )
@@ -538,7 +559,7 @@ class BillingService:
                             "success": True,
                         },
                     )
-                except Exception as audit_exc:
+                except PAYSTACK_AUDIT_RECOVERABLE_ERRORS as audit_exc:
                     shared.logger.warning(
                         "billing_renewal_audit_failed",
                         tenant_id=str(subscription.tenant_id),
@@ -547,7 +568,7 @@ class BillingService:
 
                 return True
             return False
-        except Exception as exc:
+        except PAYSTACK_RUNTIME_RECOVERABLE_ERRORS as exc:
             shared.logger.error(
                 "renewal_failed", tenant_id=str(subscription.tenant_id), error=str(exc)
             )
@@ -573,6 +594,6 @@ class BillingService:
 
             shared.logger.info("subscription_canceled", tenant_id=str(tenant_id))
 
-        except Exception as exc:
+        except PAYSTACK_RUNTIME_RECOVERABLE_ERRORS as exc:
             shared.logger.error("cancel_failed", tenant_id=str(tenant_id), error=str(exc))
             raise

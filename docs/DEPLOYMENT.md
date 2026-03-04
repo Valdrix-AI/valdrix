@@ -118,6 +118,9 @@ uv run alembic current
 
 The dashboard is now configured for Cloudflare runtime via `@sveltejs/adapter-cloudflare`.
 
+For production hardening and operator run-through (DNS, SSL/TLS, DNSSEC, WAF, bot/rate-limit, notifications, preview access policy), use:
+- `docs/ops/cloudflare_go_live_checklist_2026-03-02.md`
+
 1. In Cloudflare Pages, connect this repository.
 2. Set **Root directory** to `dashboard`.
 3. Set build config:

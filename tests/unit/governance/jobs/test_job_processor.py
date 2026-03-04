@@ -181,7 +181,7 @@ async def test_process_single_job_retry(job_processor, mock_db_session):
         mock_handler = AsyncMock()
         # Side effect must be an exception, not an async mock raising it in a weird way?
         # AsyncMock side_effect can be an exception
-        mock_handler.execute.side_effect = Exception("Processing Error")
+        mock_handler.execute.side_effect = RuntimeError("Processing Error")
 
         mock_factory.return_value.return_value = mock_handler
 
@@ -204,7 +204,7 @@ async def test_process_single_job_dead_letter(job_processor, mock_db_session):
         "app.modules.governance.domain.jobs.processor.get_handler_factory"
     ) as mock_factory:
         mock_handler = AsyncMock()
-        mock_handler.execute.side_effect = Exception("Final Error")
+        mock_handler.execute.side_effect = RuntimeError("Final Error")
         mock_factory.return_value.return_value = mock_handler
 
         await job_processor._process_single_job(job)

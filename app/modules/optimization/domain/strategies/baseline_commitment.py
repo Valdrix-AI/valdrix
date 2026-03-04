@@ -161,7 +161,7 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
                 savings_mid = float(item.get("savings_rate") or 0.0)
                 savings_low = float(item.get("savings_rate_low", savings_mid))
                 savings_high = float(item.get("savings_rate_high", savings_mid))
-            except Exception:
+            except (TypeError, ValueError, OverflowError):
                 continue
 
             offers.append(

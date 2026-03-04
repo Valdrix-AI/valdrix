@@ -18,6 +18,7 @@
 		onRoiTeamMembersChange,
 		onRoiBlendedHourlyChange,
 		onRoiCta,
+		currencyCode = 'USD',
 		sectionId = 'roi',
 		heading = 'See your 12-month control ROI before you commit',
 		subtitle = 'Adjust spend and rollout assumptions to estimate savings velocity, payback timing, and net economic impact.',
@@ -32,7 +33,7 @@
 		roiTeamMembers: number;
 		roiBlendedHourlyUsd: number;
 		buildRoiCtaHref: string;
-		formatUsd: (amount: number) => string;
+		formatUsd: (amount: number, currency?: string) => string;
 		onRoiControlInput: () => void;
 		onRoiMonthlySpendChange: (value: number) => void;
 		onRoiExpectedReductionChange: (value: number) => void;
@@ -40,6 +41,7 @@
 		onRoiTeamMembersChange: (value: number) => void;
 		onRoiBlendedHourlyChange: (value: number) => void;
 		onRoiCta: () => void;
+		currencyCode?: string;
 		sectionId?: string;
 		heading?: string;
 		subtitle?: string;
@@ -71,6 +73,12 @@
 		onRoiBlendedHourlyChange(Number((event.currentTarget as HTMLInputElement).value));
 		onRoiControlInput();
 	}
+
+	let activeCurrency = $derived(
+		String(currencyCode || 'USD')
+			.trim()
+			.toUpperCase() || 'USD'
+	);
 </script>
 
 <section
@@ -79,16 +87,20 @@
 	data-landing-section={sectionId}
 >
 	<div class="landing-section-head">
-		<h2 class="landing-h2">{heading}</h2>
-		<p class="landing-section-sub">{subtitle}</p>
+		<div>
+			<h2 class="landing-h2">{heading}</h2>
+			<p class="landing-section-sub">{subtitle}</p>
+		</div>
 	</div>
 
 	<div class="landing-roi-grid">
 		<div class="glass-panel landing-roi-controls">
 			<div class="landing-roi-control">
-				<label for="roi-monthly-spend" class="landing-roi-label">Cloud + software monthly spend</label>
+				<label for="roi-monthly-spend" class="landing-roi-label"
+					>Cloud + software monthly spend</label
+				>
 				<div class="landing-roi-meta">
-					<span>{formatUsd(roiInputs.monthlySpendUsd)}</span>
+					<span>{formatUsd(roiInputs.monthlySpendUsd, activeCurrency)}</span>
 				</div>
 				<input
 					id="roi-monthly-spend"
@@ -168,20 +180,20 @@
 			<div class="landing-roi-metrics">
 				<div class="landing-roi-metric">
 					<p>Monthly savings potential</p>
-					<strong>{formatUsd(roiResult.monthlySavingsUsd)}</strong>
+					<strong>{formatUsd(roiResult.monthlySavingsUsd, activeCurrency)}</strong>
 				</div>
 				<div class="landing-roi-metric">
 					<p>Annual gross savings</p>
-					<strong>{formatUsd(roiResult.annualGrossSavingsUsd)}</strong>
+					<strong>{formatUsd(roiResult.annualGrossSavingsUsd, activeCurrency)}</strong>
 				</div>
 				<div class="landing-roi-metric">
 					<p>Implementation + platform cost</p>
-					<strong>{formatUsd(roiResult.implementationCostUsd)}</strong>
+					<strong>{formatUsd(roiResult.implementationCostUsd, activeCurrency)}</strong>
 				</div>
 				<div class="landing-roi-metric">
 					<p>Annual net economic value</p>
 					<strong class={roiResult.annualNetSavingsUsd >= 0 ? 'is-positive' : 'is-negative'}>
-						{formatUsd(roiResult.annualNetSavingsUsd)}
+						{formatUsd(roiResult.annualNetSavingsUsd, activeCurrency)}
 					</strong>
 				</div>
 				<div class="landing-roi-metric">

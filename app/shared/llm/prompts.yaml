@@ -1,6 +1,7 @@
 # Valdrics AI System Prompts Registry
 
 finops_analysis:
+  version: "valdrics.finops.prompt.v1"
   system: |
     You are a FinOps cost analysis expert specializing in cloud infrastructure optimization.
     TASK:

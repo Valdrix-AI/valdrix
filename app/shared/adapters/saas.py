@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import datetime
+from decimal import InvalidOperation
 from typing import Any
 from urllib.parse import urljoin
 
@@ -14,7 +15,7 @@ from app.shared.adapters.resource_usage_projection import (
     project_cost_rows_to_resource_usage,
     resource_usage_lookback_window,
 )
-from app.shared.core.currency import convert_to_usd
+from app.shared.core.currency import ExchangeRateUnavailableError, convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
 from app.shared.core.credentials import SaaSCredentials
 
@@ -41,6 +42,24 @@ _DISCOVERY_RESOURCE_TYPE_ALIASES = {
     "user",
     "users",
 }
+
+SAAS_CURRENCY_CONVERSION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    ExchangeRateUnavailableError,
+    httpx.HTTPError,
+    InvalidOperation,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+SAAS_RESOURCE_USAGE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    httpx.HTTPError,
+    InvalidOperation,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    KeyError,
+)
 
 
 async def _saas_get_request(
@@ -355,7 +374,7 @@ class SaaSAdapter(BaseAdapter):
                         cost_usd = float(
                             await convert_to_usd(amount_local, currency_code)
                         )
-                    except Exception as exc:  # noqa: BLE001
+                    except SAAS_CURRENCY_CONVERSION_RECOVERABLE_ERRORS as exc:
                         logger.warning(
                             "saas_currency_conversion_failed",
                             vendor="stripe",
@@ -446,7 +465,7 @@ class SaaSAdapter(BaseAdapter):
                         cost_usd = float(
                             await convert_to_usd(amount_local, currency_code)
                         )
-                    except Exception as exc:  # noqa: BLE001
+                    except SAAS_CURRENCY_CONVERSION_RECOVERABLE_ERRORS as exc:
                         logger.warning(
                             "saas_currency_conversion_failed",
                             vendor="salesforce",
@@ -522,7 +541,7 @@ class SaaSAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except SAAS_RESOURCE_USAGE_RECOVERABLE_ERRORS as exc:
             self.last_error = str(exc)
             logger.warning(
                 "saas_discover_resources_failed",
@@ -556,7 +575,7 @@ class SaaSAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except SAAS_RESOURCE_USAGE_RECOVERABLE_ERRORS as exc:
             self.last_error = str(exc)
             logger.warning(
                 "saas_resource_usage_failed",

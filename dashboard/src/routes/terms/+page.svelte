@@ -19,8 +19,8 @@
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">1. Service Scope</h2>
 		<p class="text-sm text-ink-300">
-			Valdrics provides software for cloud and software spend governance, analysis, approval routing,
-			and operational reporting. Features may vary by subscription plan.
+			Valdrics provides software for cloud and software spend governance, analysis, approval
+			routing, and operational reporting. Features may vary by subscription plan.
 		</p>
 	</section>
 
@@ -30,8 +30,8 @@
 			<li>You are responsible for authorized user access and credential security.</li>
 			<li>You must maintain accurate account and billing information.</li>
 			<li>
-				You are responsible for reviewing and approving remediation actions before enabling automated
-				execution modes.
+				You are responsible for reviewing and approving remediation actions before enabling
+				automated execution modes.
 			</li>
 		</ul>
 	</section>
@@ -39,17 +39,17 @@
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">3. Acceptable Use</h2>
 		<p class="text-sm text-ink-300">
-			You may not use the service for unlawful activity, security abuse, unauthorized system access, or
-			activity that materially disrupts platform operations.
+			You may not use the service for unlawful activity, security abuse, unauthorized system access,
+			or activity that materially disrupts platform operations.
 		</p>
 	</section>
 
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">4. Billing and Subscription</h2>
 		<p class="text-sm text-ink-300">
-			Fees, plan limits, and billing cycles are defined in your selected subscription. Unless otherwise
-			agreed in writing, subscription fees are non-refundable and renew according to the active billing
-			cycle.
+			Fees, plan limits, and billing cycles are defined in your selected subscription. Unless
+			otherwise agreed in writing, subscription fees are non-refundable and renew according to the
+			active billing cycle.
 		</p>
 	</section>
 
@@ -57,8 +57,8 @@
 		<h2 class="text-xl font-semibold">5. Confidentiality and Data Processing</h2>
 		<p class="text-sm text-ink-300">
 			Each party will protect the other party’s confidential information and use it only for service
-			delivery and support obligations. Data processing terms, including DPA provisions where required,
-			are governed by the applicable customer agreement.
+			delivery and support obligations. Data processing terms, including DPA provisions where
+			required, are governed by the applicable customer agreement.
 		</p>
 	</section>
 
@@ -73,26 +73,27 @@
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">7. Warranties and Disclaimers</h2>
 		<p class="text-sm text-ink-300">
-			To the maximum extent permitted by law, the service is provided on an “as is” and “as available”
-			basis, except as expressly stated in a signed agreement.
+			To the maximum extent permitted by law, the service is provided on an “as is” and “as
+			available” basis, except as expressly stated in a signed agreement.
 		</p>
 	</section>
 
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">8. Limitation of Liability</h2>
 		<p class="text-sm text-ink-300">
-			To the maximum extent permitted by law, each party’s aggregate liability arising from or related to
-			the service is limited to the fees paid or payable for the service in the 12 months preceding the
-			event giving rise to the claim, excluding liability that cannot be limited by law.
+			To the maximum extent permitted by law, each party’s aggregate liability arising from or
+			related to the service is limited to the fees paid or payable for the service in the 12 months
+			preceding the event giving rise to the claim, excluding liability that cannot be limited by
+			law.
 		</p>
 	</section>
 
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">9. Termination</h2>
 		<p class="text-sm text-ink-300">
-			Either party may terminate for material breach if the breach is not cured within a reasonable cure
-			period. Upon termination, access ends and data handling follows the applicable retention and
-			export policy.
+			Either party may terminate for material breach if the breach is not cured within a reasonable
+			cure period. Upon termination, access ends and data handling follows the applicable retention
+			and export policy.
 		</p>
 	</section>
 
@@ -100,14 +101,20 @@
 		<h2 class="text-xl font-semibold">10. Governing Law and Disputes</h2>
 		<p class="text-sm text-ink-300">
 			Governing law and dispute venue are defined in the executed customer order form or master
-			agreement. If no such agreement exists, contact legal support for default terms prior to purchase.
+			agreement. If no such agreement exists, contact legal support for default terms prior to
+			purchase.
 		</p>
 	</section>
 
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">11. Contact</h2>
 		<p class="text-sm text-ink-300">
-			For legal questions, contact <a class="underline" href="mailto:legal@valdrics.ai">legal@valdrics.ai</a>.
+			For legal or commercial terms questions, contact <a
+				class="underline"
+				href="mailto:hello@valdrics.com">hello@valdrics.com</a
+			>. For billing questions, contact <a class="underline" href="mailto:billing@valdrics.com"
+				>billing@valdrics.com</a
+			>.
 		</p>
 	</section>
 </article>

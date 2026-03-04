@@ -20,11 +20,13 @@ from uuid import UUID
 import structlog
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cloud import CloudAccount, CostRecord
 from app.models.enforcement import EnforcementDecision
 from app.modules.reporting.domain.savings_proof import SavingsProofService
+from app.shared.core.exceptions import ExternalAPIError
 from app.shared.core.pricing import (
     FeatureFlag,
     PricingTier,
@@ -33,6 +35,14 @@ from app.shared.core.pricing import (
 )
 
 logger = structlog.get_logger()
+LEADERSHIP_SAVINGS_PROOF_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 def _as_float(value: Decimal | float | int | None) -> float:
@@ -240,7 +250,7 @@ class LeadershipKpiService:
                 applied_recs = int(proof.applied_recommendations)
                 pending_rems = int(proof.pending_remediations)
                 completed_rems = int(proof.completed_remediations)
-            except Exception as exc:  # noqa: BLE001 - leadership export should degrade gracefully
+            except LEADERSHIP_SAVINGS_PROOF_RECOVERABLE_EXCEPTIONS as exc:  # noqa: BLE001 - leadership export should degrade gracefully
                 notes.append(f"Savings proof unavailable: {exc}")
         else:
             notes.append("Savings proof is not enabled for this tier.")

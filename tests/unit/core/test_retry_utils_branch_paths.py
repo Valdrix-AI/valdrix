@@ -38,13 +38,13 @@ async def test_execute_with_deadlock_retry_logs_on_final_exhaustion() -> None:
     async def always_deadlock() -> str:
         nonlocal attempts
         attempts += 1
-        raise Exception("serialization failure on row lock")
+        raise RuntimeError("serialization failure on row lock")
 
     with (
         patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep,
         patch("app.shared.core.retry.random.uniform", return_value=0.0),
     ):
-        with pytest.raises(Exception, match="serialization failure"):
+        with pytest.raises(RuntimeError, match="serialization failure"):
             await execute_with_deadlock_retry(always_deadlock)
 
     assert attempts == 5
@@ -105,4 +105,3 @@ def test_set_retry_config_falls_back_to_exception_for_non_tuple_exceptions() -> 
     from app.shared.core.retry import RETRY_CONFIGS
 
     assert RETRY_CONFIGS["custom_default_exception"]["exceptions"] == (Exception,)
-

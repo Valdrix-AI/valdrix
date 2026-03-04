@@ -165,7 +165,7 @@ class TestJobProcessor:
 
         mock_handler = MagicMock()
         mock_handler.return_value.execute = AsyncMock(
-            side_effect=Exception("Simulated failure")
+            side_effect=RuntimeError("Simulated failure")
         )
         mock_factory.return_value = mock_handler
 
@@ -206,7 +206,7 @@ class TestJobProcessor:
 
         mock_handler = MagicMock()
         mock_handler.return_value.execute = AsyncMock(
-            side_effect=Exception("Final failure")
+            side_effect=RuntimeError("Final failure")
         )
         mock_factory.return_value = mock_handler
 

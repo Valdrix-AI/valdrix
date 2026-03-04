@@ -6,6 +6,7 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.cloud import CloudAccount
 from app.models.remediation_settings import RemediationSettings
@@ -13,6 +14,29 @@ from app.modules.governance.domain.security.remediation_policy import PolicyConf
 from app.shared.core.provider import normalize_provider
 
 logger = structlog.get_logger()
+
+REMEDIATION_REGION_RESOLUTION_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+    KeyError,
+    LookupError,
+    AttributeError,
+)
+REMEDIATION_SETTINGS_LOOKUP_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+    KeyError,
+    LookupError,
+    AttributeError,
+)
 
 
 async def resolve_aws_region_hint(
@@ -47,7 +71,7 @@ async def resolve_aws_region_hint(
                     scoped_region = remediation_module.resolve_connection_region(scoped)
                     if scoped_region != "global":
                         return scoped_region
-            except Exception as exc:
+            except REMEDIATION_REGION_RESOLUTION_RECOVERABLE_EXCEPTIONS as exc:
                 logger.warning(
                     "remediation_aws_region_resolution_failed",
                     tenant_id=str(tenant_id),
@@ -81,7 +105,7 @@ async def get_remediation_settings(
         resolved = settings if isinstance(settings, RemediationSettings) else None
         service._remediation_settings_cache[tenant_id] = resolved
         return resolved
-    except Exception as exc:
+    except REMEDIATION_SETTINGS_LOOKUP_RECOVERABLE_EXCEPTIONS as exc:
         logger.warning(
             "remediation_settings_lookup_failed",
             tenant_id=str(tenant_id),

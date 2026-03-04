@@ -55,12 +55,18 @@ class TestTokenCounting:
     def test_count_tokens_fallback_on_error(self):
         """Test token counting fallback when tiktoken fails."""
         with patch("tiktoken.get_encoding") as mock_get_encoding:
-            mock_get_encoding.side_effect = Exception("Encoding error")
+            mock_get_encoding.side_effect = RuntimeError("Encoding error")
 
             result = count_tokens("Hello world", "gpt-4")
 
             # Fallback: len(text) // 4 = 11 // 4 = 2
             assert result == 2
+
+    def test_count_tokens_does_not_swallow_fatal_errors(self):
+        """Fatal non-Exception failures should propagate."""
+        with patch("tiktoken.get_encoding", side_effect=KeyboardInterrupt()):
+            with pytest.raises(KeyboardInterrupt):
+                count_tokens("Hello world", "gpt-4")
 
     def test_count_tokens_unknown_model(self):
         """Test token counting with unknown model (should use default encoding)."""

@@ -1,7 +1,7 @@
 import boto3
 import sys
 import time
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 def delete_cloudfront(distribution_id):
     client = boto3.client('cloudfront')
@@ -47,7 +47,7 @@ def delete_cloudfront(distribution_id):
             else:
                 print(f"ClientError: {e}")
                 return False
-        except Exception as e:
+        except (BotoCoreError, OSError, RuntimeError, TypeError, ValueError) as e:
             print(f"Error: {e}")
             return False
             

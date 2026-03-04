@@ -26,6 +26,25 @@ from app.shared.core.config import get_settings
 logger = structlog.get_logger()
 settings = get_settings()
 
+REDIS_CLIENT_INIT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    ImportError,
+    ModuleNotFoundError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
+REDIS_OPERATION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
+
 
 def _safe_json_loads(raw_payload: Any, *, key: str) -> Any | None:
     """Decode cached JSON defensively to avoid malformed payload crashes."""
@@ -154,7 +173,7 @@ class RedisCache(CacheBackend):
                 )
                 self._connected = True
                 logger.info("redis_connected", url=self.redis_url.split("@")[-1])
-            except Exception as e:
+            except REDIS_CLIENT_INIT_RECOVERABLE_ERRORS as e:
                 logger.error("redis_connection_failed", error=str(e))
                 self._connected = False
                 return None
@@ -166,7 +185,7 @@ class RedisCache(CacheBackend):
             return None
         try:
             return cast(Optional[str], await client.get(key))
-        except Exception as e:
+        except REDIS_OPERATION_RECOVERABLE_ERRORS as e:
             logger.warning("redis_get_failed", key=key, error=str(e))
             return None
 
@@ -176,7 +195,7 @@ class RedisCache(CacheBackend):
             return
         try:
             await client.setex(key, ttl_seconds, value)
-        except Exception as e:
+        except REDIS_OPERATION_RECOVERABLE_ERRORS as e:
             logger.warning("redis_set_failed", key=key, error=str(e))
 
     async def delete(self, key: str) -> None:
@@ -185,7 +204,7 @@ class RedisCache(CacheBackend):
             return
         try:
             await client.delete(key)
-        except Exception as e:
+        except REDIS_OPERATION_RECOVERABLE_ERRORS as e:
             logger.warning("redis_delete_failed", key=key, error=str(e))
 
     async def delete_pattern(self, pattern: str) -> int:
@@ -203,7 +222,7 @@ class RedisCache(CacheBackend):
                 if cursor == 0:
                     break
             return deleted
-        except Exception as e:
+        except REDIS_OPERATION_RECOVERABLE_ERRORS as e:
             logger.warning("redis_delete_pattern_failed", pattern=pattern, error=str(e))
             return 0
 
@@ -214,7 +233,7 @@ class RedisCache(CacheBackend):
         try:
             await client.ping()
             return True
-        except Exception:
+        except REDIS_OPERATION_RECOVERABLE_ERRORS:
             return False
 
 

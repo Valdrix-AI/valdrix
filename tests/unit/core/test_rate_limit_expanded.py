@@ -97,7 +97,7 @@ async def test_check_remediation_rate_limit_redis_error_fallback():
     """Test fallback to memory when Redis fails."""
     tenant_id = uuid4()
     mock_redis = AsyncMock()
-    mock_redis.incr.side_effect = Exception("Redis connection lost")
+    mock_redis.incr.side_effect = RuntimeError("Redis connection lost")
 
     with patch("app.shared.core.rate_limit.get_redis_client", return_value=mock_redis):
         # Should NOT raise, but fallback to memory

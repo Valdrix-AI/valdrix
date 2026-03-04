@@ -212,6 +212,47 @@ async def test_backtest_strategies_handles_invalid_tolerance_and_no_series_path(
 
 
 @pytest.mark.asyncio
+async def test_backtest_strategies_does_not_swallow_fatal_tolerance_coercion_errors() -> None:
+    class _FatalTolerance:
+        def __float__(self) -> float:
+            raise KeyboardInterrupt()
+
+    tenant_id = uuid4()
+    db = MagicMock()
+    strategy = SimpleNamespace(
+        id=uuid4(),
+        name="Fatal Tolerance Strategy",
+        provider="aws",
+        type=SimpleNamespace(value="savings_plan"),
+        config={"backtest_tolerance": _FatalTolerance()},
+    )
+    db.execute = AsyncMock(return_value=_scalars_result([strategy]))
+    user = _user()
+
+    impl = MagicMock()
+    usage_data = {"hourly_cost_series": []}
+
+    with (
+        patch.object(strategies_api, "set_session_tenant_id", new=AsyncMock()),
+        patch.object(strategies_api, "OptimizationService") as service_cls,
+    ):
+        service = MagicMock()
+        service._get_strategy_impl = MagicMock(return_value=impl)
+        service._aggregate_usage = AsyncMock(return_value=usage_data)
+        service_cls.return_value = service
+
+        with pytest.raises(KeyboardInterrupt):
+            await strategies_api.backtest_strategies(
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+                provider="aws",
+                strategy_type="savings_plan",
+                days=14,
+            )
+
+
+@pytest.mark.asyncio
 async def test_backtest_strategies_calls_backtest_with_default_tolerance_when_cfg_missing() -> None:
     tenant_id = uuid4()
     db = MagicMock()

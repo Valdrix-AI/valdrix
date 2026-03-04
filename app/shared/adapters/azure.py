@@ -13,7 +13,7 @@ from azure.mgmt.costmanagement.models import (
 )
 from azure.mgmt.resource.resources.aio import ResourceManagementClient
 from azure.mgmt.compute.aio import ComputeManagementClient
-from azure.core.exceptions import ServiceRequestError, ServiceResponseError
+from azure.core.exceptions import AzureError, ServiceRequestError, ServiceResponseError
 import tenacity
 
 from app.shared.adapters.base import BaseAdapter
@@ -22,7 +22,7 @@ from app.shared.adapters.resource_usage_projection import (
     resource_usage_lookback_window,
 )
 from app.shared.core.credentials import AzureCredentials
-from app.shared.core.exceptions import ConfigurationError
+from app.shared.core.exceptions import AdapterError, ConfigurationError
 from app.schemas.costs import CloudUsageSummary
 
 logger = structlog.get_logger()
@@ -33,6 +33,21 @@ azure_retry = tenacity.retry(
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=10),
     stop=tenacity.stop_after_attempt(3),
     before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+)
+
+AZURE_OPERATION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    ConfigurationError,
+    AzureError,
+    ServiceRequestError,
+    ServiceResponseError,
+    RuntimeError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
+AZURE_USAGE_LOOKUP_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    AdapterError,
+    *AZURE_OPERATION_RECOVERABLE_ERRORS,
 )
 
 
@@ -93,7 +108,7 @@ class AzureAdapter(BaseAdapter):
             async for _ in client.resource_groups.list():
                 break
             return True
-        except Exception as e:
+        except AZURE_OPERATION_RECOVERABLE_ERRORS as e:
             self._set_last_error_from_exception(
                 e, prefix="Azure credential verification failed"
             )
@@ -127,9 +142,7 @@ class AzureAdapter(BaseAdapter):
             if response and response.rows:
                 return [self._parse_row(row, cost_type) for row in response.rows]
             return []
-        except Exception as e:
-            from app.shared.core.exceptions import AdapterError
-
+        except AZURE_OPERATION_RECOVERABLE_ERRORS as e:
             logger.error("azure_cost_fetch_failed", error=str(e))
             raise AdapterError(f"Azure cost fetch failed: {str(e)}") from e
 
@@ -342,7 +355,7 @@ class AzureAdapter(BaseAdapter):
                         }
                     )
                 return resources
-            except Exception as e:
+            except AZURE_OPERATION_RECOVERABLE_ERRORS as e:
                 self._set_last_error_from_exception(
                     e, prefix="Azure resource discovery failed"
                 )
@@ -364,7 +377,7 @@ class AzureAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except AZURE_USAGE_LOOKUP_RECOVERABLE_ERRORS as exc:
             self._set_last_error_from_exception(
                 exc, prefix="Azure resource usage lookup failed"
             )

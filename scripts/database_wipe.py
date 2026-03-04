@@ -107,7 +107,7 @@ async def wipe_database() -> None:
         )
 
         print("✅ Database wipe complete. Public schema is now empty.")
-    except Exception as exc:  # noqa: BLE001
+    except (asyncpg.PostgresError, OSError, RuntimeError, TypeError, ValueError) as exc:
         print(f"❌ Error during wipe: {exc}", file=sys.stderr)
         raise
     finally:

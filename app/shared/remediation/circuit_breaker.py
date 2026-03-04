@@ -12,6 +12,14 @@ from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 settings = get_settings()
+REDIS_CLIENT_RESOLUTION_RECOVERABLE_EXCEPTIONS = (
+    ImportError,
+    AttributeError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class CircuitState(str, Enum):
@@ -251,7 +259,7 @@ def _resolve_distributed_redis_client() -> Any | None:
         from app.shared.core.rate_limit import get_redis_client
 
         return get_redis_client()
-    except Exception as exc:  # noqa: BLE001
+    except REDIS_CLIENT_RESOLUTION_RECOVERABLE_EXCEPTIONS as exc:
         logger.warning(
             "remediation_circuit_breaker_distributed_client_unavailable",
             error=str(exc),

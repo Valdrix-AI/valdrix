@@ -1,9 +1,10 @@
 import asyncio
-from typing import Any, AsyncGenerator, Coroutine, Generator, cast
+from typing import Any, AsyncGenerator, ContextManager, Coroutine, Sequence, cast
 import structlog
 from celery import shared_task
 from app.shared.db.session import async_session_maker, mark_session_system_context
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.orchestrator import SchedulerOrchestrator
 from app.shared.core.currency import get_exchange_rate
@@ -23,10 +24,8 @@ from app.modules.governance.domain.scheduler.metrics import (
 import time
 import uuid
 from contextlib import asynccontextmanager
-from contextlib import contextmanager
 import inspect
 from uuid import UUID
-from opentelemetry.trace import Status, StatusCode
 from app.shared.core.connection_state import (
     is_connection_active,
     resolve_connection_region,
@@ -35,94 +34,73 @@ from app.shared.core.connection_queries import list_active_connections_all_tenan
 from app.shared.core.provider import normalize_provider, resolve_provider_from_connection
 from app.shared.core.config import get_settings
 from app.shared.core.tracing import get_tracer
+from app.tasks.scheduler_sweep_ops import (
+    acceptance_sweep_logic as _acceptance_sweep_logic_impl,
+    billing_sweep_logic as _billing_sweep_logic_impl,
+    enforcement_reconciliation_sweep_logic as _enforcement_reconciliation_sweep_logic_impl,
+    maintenance_sweep_logic as _maintenance_sweep_logic_impl,
+)
+from app.tasks.scheduler_runtime_ops import (
+    cap_scope_items as _cap_scope_items_impl,
+    coerce_positive_limit as _coerce_positive_limit_impl,
+    open_db_session as _open_db_session_impl,
+    scheduler_span as _scheduler_span_impl,
+    system_sweep_connection_limit as _system_sweep_connection_limit_impl,
+    system_sweep_tenant_limit as _system_sweep_tenant_limit_impl,
+)
 
 logger = structlog.get_logger()
 tracer = get_tracer(__name__)
-
-
-def _coerce_positive_limit(value: Any, *, default: int) -> int:
-    try:
-        normalized = int(value)
-    except (TypeError, ValueError):
-        normalized = default
-    return max(1, normalized)
-
+SCHEDULER_RECOVERABLE_ERRORS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    OSError,
+    AttributeError,
+    asyncio.TimeoutError,
+    SQLAlchemyError,
+)
+_coerce_positive_limit = _coerce_positive_limit_impl
 
 def _system_sweep_tenant_limit() -> int:
-    settings = get_settings()
-    return _coerce_positive_limit(
-        getattr(settings, "SCHEDULER_SYSTEM_SWEEP_MAX_TENANTS", 5000),
-        default=5000,
+    return _system_sweep_tenant_limit_impl(
+        get_settings_fn=get_settings,
+        coerce_positive_limit_fn=_coerce_positive_limit,
     )
-
 
 def _system_sweep_connection_limit() -> int:
-    settings = get_settings()
-    return _coerce_positive_limit(
-        getattr(settings, "SCHEDULER_SYSTEM_SWEEP_MAX_CONNECTIONS", 5000),
-        default=5000,
+    return _system_sweep_connection_limit_impl(
+        get_settings_fn=get_settings,
+        coerce_positive_limit_fn=_coerce_positive_limit,
     )
 
-
-def _cap_scope_items(items: list[Any], *, scope: str, limit: int) -> list[Any]:
-    if len(items) <= limit:
-        return items
-    logger.warning(
-        "scheduler_scope_capped",
+def _cap_scope_items(items: Sequence[Any], *, scope: str, limit: int) -> list[Any]:
+    return _cap_scope_items_impl(
+        items,
         scope=scope,
-        total_items=len(items),
-        capped_items=limit,
         limit=limit,
+        logger=logger,
     )
-    return items[:limit]
 
-
-@contextmanager
-def _scheduler_span(name: str, **attributes: object) -> Generator[None, None, None]:
-    with tracer.start_as_current_span(name) as span:
-        for key, value in attributes.items():
-            if value is None:
-                continue
-            if isinstance(value, (str, bool, int, float)):
-                span.set_attribute(f"scheduler.{key}", value)
-            else:
-                span.set_attribute(f"scheduler.{key}", str(value))
-        try:
-            yield
-        except Exception as exc:
-            span.record_exception(exc)
-            span.set_status(Status(StatusCode.ERROR, str(exc)))
-            raise
-
+def _scheduler_span(name: str, **attributes: object) -> ContextManager[None]:
+    return _scheduler_span_impl(
+        name,
+        tracer=tracer,
+        **attributes,
+    )
 
 @asynccontextmanager
 async def _open_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Open a DB session using the production async session context manager."""
-    session_cm = async_session_maker()
-    if not hasattr(session_cm, "__aenter__") or not hasattr(session_cm, "__aexit__"):
-        raise TypeError(
-            "async_session_maker() must return an async context manager for AsyncSession"
-        )
-
-    try:
-        async with asyncio.timeout(10.0):
-            async with session_cm as session:
-                await mark_session_system_context(session)
-                yield session
-    except asyncio.TimeoutError as exc:
-        logger.error("db_session_acquisition_failed", error=str(exc), type="TimeoutError")
-        raise
-
+    async with _open_db_session_impl(
+        async_session_maker_fn=async_session_maker,
+        mark_session_system_context_fn=mark_session_system_context,
+        logger=logger,
+        asyncio_module=asyncio,
+    ) as session:
+        yield session
 
 # Helper to run async code in sync Celery task
 def run_async(task_or_coro: Any, *args: Any, **kwargs: Any) -> Any:
-    """
-    Run an async callable/coroutine from sync code.
-
-    Supported call patterns:
-    - run_async(coroutine)
-    - run_async(callable, *args, **kwargs)
-    """
     if asyncio.iscoroutine(task_or_coro) or inspect.isawaitable(task_or_coro):
         return asyncio.run(cast(Coroutine[Any, Any, Any], task_or_coro))
 
@@ -139,19 +117,12 @@ def run_async(task_or_coro: Any, *args: Any, **kwargs: Any) -> Any:
     retry_backoff=True,
 )  # type: ignore[untyped-decorator]
 def run_cohort_analysis(cohort_value: str) -> None:
-    """
-    Celery task to enqueue jobs for a tenant cohort.
-    Wraps async logic in synchronous execution.
-    """
-    # Accept either the enum member, the enum name (str) or the enum value
     if isinstance(cohort_value, TenantCohort):
         cohort = cohort_value
     else:
         try:
-            # Try lookup by member name first (e.g. "HIGH_VALUE")
             cohort = TenantCohort[cohort_value]
-        except Exception:
-            # Fallback to value-based construction (for numeric or other values)
+        except KeyError:
             cohort = TenantCohort(cohort_value)
 
     run_async(_cohort_analysis_logic, cohort)
@@ -183,7 +154,6 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                     ) and not hasattr(begin_ctx, "__aenter__"):
                         begin_ctx = await begin_ctx
                     async with begin_ctx:
-                        # 1. Fetch tenants with row-level lock (SKIP LOCKED prevents deadlocks)
                         with _scheduler_span(
                             "scheduler.cohort_analysis.load_tenants",
                             cohort=target_cohort.value,
@@ -214,7 +184,6 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                             )
                             return
 
-                        # 2. Generate deterministic dedup keys
                         now = datetime.now(timezone.utc)
                         bucket = now.replace(minute=0, second=0, microsecond=0)
                         if target_cohort == TenantCohort.HIGH_VALUE:
@@ -227,7 +196,6 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                         bucket_str = bucket.isoformat()
                         jobs_to_insert = []
 
-                        # 3. Generate Job Payloads (No DB I/O in this loop)
                         with _scheduler_span(
                             "scheduler.cohort_analysis.build_jobs",
                             cohort=target_cohort.value,
@@ -261,7 +229,6 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                                         "deduplication_key": dedup_key,
                                     })
 
-                        # 4. Atomic Bulk Insert
                         jobs_enqueued = 0
                         if jobs_to_insert:
                             with _scheduler_span(
@@ -269,7 +236,6 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                                 cohort=target_cohort.value,
                                 job_count=len(jobs_to_insert),
                             ):
-                                # Process in chunks of 500 to avoid too large statements
                                 for i in range(0, len(jobs_to_insert), 500):
                                     chunk = jobs_to_insert[i:i+500]
                                     stmt = (
@@ -281,14 +247,10 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                                     )
                                     result_proxy = await db.execute(stmt)
 
-                                    # Increment metrics for successful inserts
                                     if hasattr(result_proxy, "rowcount"):
                                         count = result_proxy.rowcount
                                         jobs_enqueued += count
-                                        # Note: Metric labels are constant for the batch
-                                        # We'll increment the total after the loop for precision
 
-                        # 5. Record Metrics
                         if jobs_enqueued > 0:
                             BACKGROUND_JOBS_ENQUEUED.labels(
                                 job_type="cohort_scan",
@@ -303,9 +265,9 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                         )
 
                 SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
-                break  # Success exit
+                break
 
-            except Exception as e:
+            except SCHEDULER_RECOVERABLE_ERRORS as e:
                 retry_count += 1
                 if "deadlock" in str(e).lower() or "concurrent" in str(e).lower():
                     SCHEDULER_DEADLOCK_DETECTED.labels(cohort=target_cohort.value).inc()
@@ -408,9 +370,6 @@ async def _remediation_sweep_logic() -> None:
                                 continue
                             connection_region = resolve_connection_region(conn)
 
-                            # Unified green window logic (H-2: Deduplicated scheduling logic)
-                            # Carbon cache is now leveraged correctly within this task run.
-                            # Apply carbon-aware delay whenever a concrete region is known.
                             is_green = True
                             if connection_region != "global":
                                 is_green = await orchestrator.is_low_carbon_window(
@@ -439,7 +398,6 @@ async def _remediation_sweep_logic() -> None:
                                 "deduplication_key": dedup_key,
                             })
 
-                        # Atomic Bulk Insert
                         jobs_enqueued = 0
                         if jobs_to_insert:
                             with _scheduler_span(
@@ -468,7 +426,7 @@ async def _remediation_sweep_logic() -> None:
 
                 SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
                 break
-            except Exception as e:
+            except SCHEDULER_RECOVERABLE_ERRORS as e:
                 retry_count += 1
                 logger.error(
                     "auto_remediation_sweep_failed", error=str(e), attempt=retry_count
@@ -493,93 +451,21 @@ def run_billing_sweep() -> None:
 
 
 async def _billing_sweep_logic() -> None:
-    from app.modules.billing.domain.billing.paystack_billing import (
-        TenantSubscription,
-        SubscriptionStatus,
+    await _billing_sweep_logic_impl(
+        open_db_session_fn=_open_db_session,
+        scheduler_span_fn=_scheduler_span,
+        logger=logger,
+        scheduler_job_runs=SCHEDULER_JOB_RUNS,
+        scheduler_job_duration=SCHEDULER_JOB_DURATION,
+        background_jobs_enqueued=BACKGROUND_JOBS_ENQUEUED,
+        sa=sa,
+        insert=insert,
+        background_job_model=BackgroundJob,
+        job_status=JobStatus,
+        job_type=JobType,
+        time_module=time,
+        asyncio_module=asyncio,
     )
-
-    job_name = "daily_billing_sweep"
-    start_time = time.time()
-    max_retries = 3
-    retry_count = 0
-
-    with _scheduler_span("scheduler.billing_sweep", job_name=job_name):
-        while retry_count < max_retries:
-            try:
-                async with _open_db_session() as db:
-                    begin_ctx = db.begin()
-                    if (
-                        asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)
-                    ) and not hasattr(begin_ctx, "__aenter__"):
-                        begin_ctx = await begin_ctx
-                    async with begin_ctx:
-                        query = (
-                            sa.select(TenantSubscription)
-                            .where(
-                                TenantSubscription.status
-                                == SubscriptionStatus.ACTIVE.value,
-                                TenantSubscription.next_payment_date
-                                <= datetime.now(timezone.utc),
-                                TenantSubscription.paystack_auth_code.isnot(None),
-                            )
-                            .with_for_update(skip_locked=True)
-                        )
-
-                        result = await db.execute(query)
-                        due_subscriptions = result.scalars().all()
-
-                        now = datetime.now(timezone.utc)
-                        bucket_str = now.strftime("%Y-%m-%d")
-                        jobs_enqueued = 0
-
-                        for sub in due_subscriptions:
-                            dedup_key = (
-                                f"{sub.tenant_id}:{JobType.RECURRING_BILLING.value}:{bucket_str}"
-                            )
-                            stmt = (
-                                insert(BackgroundJob)
-                                .values(
-                                    job_type=JobType.RECURRING_BILLING.value,
-                                    tenant_id=sub.tenant_id,
-                                    payload={"subscription_id": str(sub.id)},
-                                    status=JobStatus.PENDING,
-                                    scheduled_for=now,
-                                    created_at=now,
-                                    deduplication_key=dedup_key,
-                                )
-                                .on_conflict_do_nothing(
-                                    index_elements=["deduplication_key"]
-                                )
-                            )
-
-                            result_proxy = await db.execute(stmt)
-                            if (
-                                hasattr(result_proxy, "rowcount")
-                                and result_proxy.rowcount > 0
-                            ):
-                                jobs_enqueued += 1
-                                BACKGROUND_JOBS_ENQUEUED.labels(
-                                    job_type=JobType.RECURRING_BILLING.value,
-                                    cohort="BILLING",
-                                ).inc()
-
-                        logger.info(
-                            "billing_sweep_completed",
-                            due_count=len(due_subscriptions),
-                            jobs_enqueued=jobs_enqueued,
-                        )
-                SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
-                break
-            except Exception as e:
-                retry_count += 1
-                logger.error("billing_sweep_failed", error=str(e), attempt=retry_count)
-                if retry_count == max_retries:
-                    SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
-                else:
-                    await asyncio.sleep(2 ** (retry_count - 1))
-
-        duration = time.time() - start_time
-        SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 
 @shared_task(
@@ -589,117 +475,29 @@ async def _billing_sweep_logic() -> None:
     retry_backoff=True,
 )  # type: ignore[untyped-decorator]
 def run_acceptance_sweep() -> None:
-    """
-    Enqueue daily acceptance-suite evidence capture jobs (per tenant).
-
-    This is designed to be non-invasive (no Slack/Jira spam) while still
-    producing audit-grade evidence snapshots for production sign-off.
-    """
     run_async(_acceptance_sweep_logic)
 
 
 async def _acceptance_sweep_logic() -> None:
-    job_name = "daily_acceptance_sweep"
-    start_time = time.time()
-    max_retries = 3
-    retry_count = 0
-
-    with _scheduler_span("scheduler.acceptance_sweep", job_name=job_name):
-        while retry_count < max_retries:
-            try:
-                async with _open_db_session() as db:
-                    begin_ctx = db.begin()
-                    if (
-                        asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)
-                    ) and not hasattr(begin_ctx, "__aenter__"):
-                        begin_ctx = await begin_ctx
-                    async with begin_ctx:
-                        result = await db.execute(
-                            sa.select(Tenant).with_for_update(skip_locked=True)
-                        )
-                        tenant_limit = _system_sweep_tenant_limit()
-                        tenants = _cap_scope_items(
-                            result.scalars().all(),
-                            scope="acceptance_tenants",
-                            limit=tenant_limit,
-                        )
-                        if not tenants:
-                            logger.info("acceptance_sweep_no_tenants")
-                            return
-
-                        now = datetime.now(timezone.utc)
-                        bucket_str = now.strftime("%Y-%m-%d")
-                        jobs_enqueued = 0
-                        capture_close_package = (
-                            now.day == 1
-                        )  # month-end close evidence capture
-                        capture_quarterly_report = now.day == 1 and now.month in {
-                            1,
-                            4,
-                            7,
-                            10,
-                        }
-
-                        for tenant in tenants:
-                            dedup_key = (
-                                f"{tenant.id}:{JobType.ACCEPTANCE_SUITE_CAPTURE.value}:{bucket_str}"
-                            )
-                            payload: dict[str, Any] | None = None
-                            if capture_close_package or capture_quarterly_report:
-                                payload = {}
-                                if capture_close_package:
-                                    payload["capture_close_package"] = True
-                                if capture_quarterly_report:
-                                    payload["capture_quarterly_report"] = True
-                            stmt = (
-                                insert(BackgroundJob)
-                                .values(
-                                    job_type=JobType.ACCEPTANCE_SUITE_CAPTURE.value,
-                                    tenant_id=tenant.id,
-                                    status=JobStatus.PENDING,
-                                    scheduled_for=now,
-                                    created_at=now,
-                                    payload=payload,
-                                    deduplication_key=dedup_key,
-                                    priority=0,
-                                )
-                                .on_conflict_do_nothing(
-                                    index_elements=["deduplication_key"]
-                                )
-                            )
-
-                            result_proxy = await db.execute(stmt)
-                            if (
-                                hasattr(result_proxy, "rowcount")
-                                and result_proxy.rowcount > 0
-                            ):
-                                jobs_enqueued += 1
-                                BACKGROUND_JOBS_ENQUEUED.labels(
-                                    job_type=JobType.ACCEPTANCE_SUITE_CAPTURE.value,
-                                    cohort="ACCEPTANCE",
-                                ).inc()
-
-                        logger.info(
-                            "acceptance_sweep_enqueued",
-                            tenants=len(tenants),
-                            jobs_enqueued=jobs_enqueued,
-                            bucket=bucket_str,
-                        )
-
-                SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
-                break
-            except Exception as e:  # noqa: BLE001
-                retry_count += 1
-                logger.error(
-                    "acceptance_sweep_failed", error=str(e), attempt=retry_count
-                )
-                if retry_count == max_retries:
-                    SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
-                else:
-                    await asyncio.sleep(2 ** (retry_count - 1))
-
-        duration = time.time() - start_time
-        SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
+    await _acceptance_sweep_logic_impl(
+        open_db_session_fn=_open_db_session,
+        scheduler_span_fn=_scheduler_span,
+        logger=logger,
+        scheduler_job_runs=SCHEDULER_JOB_RUNS,
+        scheduler_job_duration=SCHEDULER_JOB_DURATION,
+        background_jobs_enqueued=BACKGROUND_JOBS_ENQUEUED,
+        sa=sa,
+        insert=insert,
+        tenant_model=Tenant,
+        background_job_model=BackgroundJob,
+        job_status=JobStatus,
+        job_type=JobType,
+        system_sweep_tenant_limit_fn=_system_sweep_tenant_limit,
+        cap_scope_items_fn=_cap_scope_items,
+        datetime_module=datetime,
+        timezone_obj=timezone,
+        asyncio_module=asyncio,
+    )
 
 
 @shared_task(
@@ -713,137 +511,18 @@ def run_maintenance_sweep() -> None:
 
 
 async def _maintenance_sweep_logic() -> None:
-    with _scheduler_span("scheduler.maintenance_sweep", job_name="maintenance_sweep"):
-        async with _open_db_session() as db:
-            # 0. Finalize cost records
-            try:
-                persistence = CostPersistenceService(db)
-                result = await persistence.finalize_batch(days_ago=2)
-                logger.info(
-                    "maintenance_cost_finalization_success",
-                    records=result.get("records_finalized", 0),
-                )
-            except Exception as e:
-                logger.warning("maintenance_cost_finalization_failed", error=str(e))
-
-            # 0a. Auto-activate the latest staged carbon factor set (guardrailed).
-            # This keeps carbon assurance methodology current without manual API calls.
-            try:
-                from app.modules.reporting.domain.carbon_factors import CarbonFactorService
-
-                factor_refresh_result = await CarbonFactorService(db).auto_activate_latest()
-                commit_result = db.commit()
-                if inspect.isawaitable(commit_result):
-                    await commit_result
-                logger.info(
-                    "maintenance_carbon_factor_refresh_success",
-                    status=factor_refresh_result.get("status"),
-                    active_factor_set_id=factor_refresh_result.get("active_factor_set_id"),
-                    candidate_factor_set_id=factor_refresh_result.get(
-                        "candidate_factor_set_id"
-                    ),
-                )
-            except Exception as e:  # noqa: BLE001
-                rollback_result = db.rollback()
-                if inspect.isawaitable(rollback_result):
-                    await rollback_result
-                logger.warning("maintenance_carbon_factor_refresh_failed", error=str(e))
-
-            # 0b. Compute realized savings evidence (best-effort, bounded).
-            # This keeps Savings Proof procurement outputs finance-grade without requiring a manual operator run.
-            try:
-                from app.models.realized_savings import RealizedSavingsEvent
-                from app.models.remediation import RemediationRequest, RemediationStatus
-                from app.modules.reporting.domain.realized_savings import (
-                    RealizedSavingsService,
-                )
-
-                now = datetime.now(timezone.utc)
-                executed_before = now - timedelta(
-                    days=8
-                )  # default 7d baseline + 1d gap + 7d measurement (as-of yesterday)
-                executed_after = now - timedelta(days=90)
-                recompute_cutoff = now - timedelta(hours=24)
-                providers = ["saas", "license", "platform", "hybrid"]
-
-                stmt = (
-                    sa.select(RemediationRequest)
-                    .outerjoin(
-                        RealizedSavingsEvent,
-                        sa.and_(
-                            RealizedSavingsEvent.tenant_id == RemediationRequest.tenant_id,
-                            RealizedSavingsEvent.remediation_request_id
-                            == RemediationRequest.id,
-                        ),
-                    )
-                    .where(
-                        RemediationRequest.status == RemediationStatus.COMPLETED.value,
-                        RemediationRequest.executed_at.is_not(None),
-                        RemediationRequest.executed_at <= executed_before,
-                        RemediationRequest.executed_at >= executed_after,
-                        RemediationRequest.connection_id.is_not(None),
-                        RemediationRequest.provider.in_(providers),
-                        sa.or_(
-                            RealizedSavingsEvent.id.is_(None),
-                            RealizedSavingsEvent.computed_at < recompute_cutoff,
-                        ),
-                    )
-                    .order_by(RemediationRequest.executed_at.desc())
-                    .limit(200)
-                )
-                remediation_requests = list((await db.execute(stmt)).scalars().all())
-                if remediation_requests:
-                    service = RealizedSavingsService(db)
-                    computed = 0
-                    for req in remediation_requests:
-                        event = await service.compute_for_request(
-                            tenant_id=req.tenant_id,
-                            request=req,
-                            require_final=True,
-                        )
-                        if event is not None:
-                            computed += 1
-                    await db.commit()
-                    logger.info(
-                        "maintenance_realized_savings_compute_success",
-                        scanned=len(remediation_requests),
-                        computed=computed,
-                    )
-                else:
-                    logger.info(
-                        "maintenance_realized_savings_compute_skipped",
-                        reason="no_eligible_remediations",
-                    )
-            except Exception as e:  # noqa: BLE001
-                logger.warning("maintenance_realized_savings_compute_failed", error=str(e))
-
-            # 1. Refresh View
-            aggregator = CostAggregator()
-            await aggregator.refresh_materialized_view(db)
-
-            # 2. Partition Maintenance (Automated Rollover)
-            try:
-                from app.shared.core.maintenance import PartitionMaintenanceService
-
-                maintenance = PartitionMaintenanceService(db)
-
-                # Pre-create partitions for the next 3 months to ensure zero downtime
-                partitions_created = await maintenance.create_future_partitions(
-                    months_ahead=3
-                )
-
-                # Archive old data (older than 13 months)
-                archived_count = await maintenance.archive_old_partitions(months_old=13)
-
-                await db.commit()
-                logger.info(
-                    "maintenance_partitioning_success",
-                    created=partitions_created,
-                    archived=archived_count,
-                )
-            except Exception as e:
-                await db.rollback()
-                logger.error("maintenance_partitioning_failed", error=str(e))
+    await _maintenance_sweep_logic_impl(
+        open_db_session_fn=_open_db_session,
+        scheduler_span_fn=_scheduler_span,
+        logger=logger,
+        cost_persistence_service_cls=CostPersistenceService,
+        cost_aggregator_cls=CostAggregator,
+        sa=sa,
+        inspect_module=inspect,
+        datetime_cls=datetime,
+        timezone_obj=timezone,
+        timedelta_cls=timedelta,
+    )
 
 
 @shared_task(
@@ -853,10 +532,6 @@ async def _maintenance_sweep_logic() -> None:
     retry_backoff=True,
 )  # type: ignore[untyped-decorator]
 def run_currency_sync() -> None:
-    """
-    Celery task to refresh currency exchange rates.
-    """
-    # Fetch common currencies to trigger refresh and Redis sync
     for curr in ["NGN", "EUR", "GBP"]:
         run_async(get_exchange_rate, curr)
     logger.info("currency_sync_completed")
@@ -873,115 +548,42 @@ def run_enforcement_reconciliation_sweep() -> None:
 
 
 async def _enforcement_reconciliation_sweep_logic() -> None:
-    settings = get_settings()
-    if not bool(getattr(settings, "ENFORCEMENT_RECONCILIATION_SWEEP_ENABLED", True)):
-        logger.info("enforcement_reconciliation_sweep_disabled")
-        return
-
-    job_name = "hourly_enforcement_reconciliation_sweep"
-    start_time = time.time()
-    max_retries = 3
-    retry_count = 0
-
-    with _scheduler_span(
-        "scheduler.enforcement_reconciliation_sweep", job_name=job_name
-    ):
-        while retry_count < max_retries:
-            try:
-                async with _open_db_session() as db:
-                    begin_ctx = db.begin()
-                    if (
-                        asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)
-                    ) and not hasattr(begin_ctx, "__aenter__"):
-                        begin_ctx = await begin_ctx
-                    async with begin_ctx:
-                        result = await db.execute(
-                            sa.select(Tenant.id).with_for_update(skip_locked=True)
-                        )
-                        tenant_limit = _system_sweep_tenant_limit()
-                        tenant_ids = _cap_scope_items(
-                            result.scalars().all(),
-                            scope="enforcement_reconciliation_tenants",
-                            limit=tenant_limit,
-                        )
-                        now = datetime.now(timezone.utc)
-                        bucket_str = now.replace(minute=0, second=0, microsecond=0).isoformat()
-                        jobs_enqueued = 0
-
-                        for tenant_id in tenant_ids:
-                            dedup_key = (
-                                f"{tenant_id}:{JobType.ENFORCEMENT_RECONCILIATION.value}:{bucket_str}"
-                            )
-                            stmt = (
-                                insert(BackgroundJob)
-                                .values(
-                                    job_type=JobType.ENFORCEMENT_RECONCILIATION.value,
-                                    tenant_id=tenant_id,
-                                    status=JobStatus.PENDING,
-                                    scheduled_for=now,
-                                    created_at=now,
-                                    payload={"trigger": "scheduled"},
-                                    deduplication_key=dedup_key,
-                                    priority=1,
-                                )
-                                .on_conflict_do_nothing(index_elements=["deduplication_key"])
-                            )
-                            result_proxy = await db.execute(stmt)
-                            if (
-                                hasattr(result_proxy, "rowcount")
-                                and result_proxy.rowcount > 0
-                            ):
-                                jobs_enqueued += 1
-                                BACKGROUND_JOBS_ENQUEUED.labels(
-                                    job_type=JobType.ENFORCEMENT_RECONCILIATION.value,
-                                    cohort="ENFORCEMENT",
-                                ).inc()
-
-                        logger.info(
-                            "enforcement_reconciliation_sweep_enqueued",
-                            tenants=len(tenant_ids),
-                            jobs_enqueued=jobs_enqueued,
-                            bucket=bucket_str,
-                        )
-
-                SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
-                break
-            except Exception as e:
-                retry_count += 1
-                logger.error(
-                    "enforcement_reconciliation_sweep_failed",
-                    error=str(e),
-                    attempt=retry_count,
-                )
-                if retry_count == max_retries:
-                    SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
-                else:
-                    await asyncio.sleep(2 ** (retry_count - 1))
-
-        duration = time.time() - start_time
-        SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
+    await _enforcement_reconciliation_sweep_logic_impl(
+        get_settings_fn=get_settings,
+        open_db_session_fn=_open_db_session,
+        scheduler_span_fn=_scheduler_span,
+        logger=logger,
+        scheduler_job_runs=SCHEDULER_JOB_RUNS,
+        scheduler_job_duration=SCHEDULER_JOB_DURATION,
+        background_jobs_enqueued=BACKGROUND_JOBS_ENQUEUED,
+        sa=sa,
+        insert=insert,
+        tenant_model=Tenant,
+        background_job_model=BackgroundJob,
+        job_status=JobStatus,
+        job_type=JobType,
+        system_sweep_tenant_limit_fn=_system_sweep_tenant_limit,
+        cap_scope_items_fn=_cap_scope_items,
+        datetime_cls=datetime,
+        timezone_obj=timezone,
+        time_module=time,
+        asyncio_module=asyncio,
+    )
 
 
 @shared_task(name="scheduler.daily_scan")  # type: ignore[untyped-decorator]
 def daily_finops_scan() -> None:
-    """
-    Central orchestration task that triggers analysis for all tenant cohorts.
-    Runs daily (usually at 00:00 UTC).
-    """
     logger.info("daily_finops_scan_started")
     start_time = time.time()
     successful_dispatches = 0
     failed_dispatches = 0
 
-    # Iterate through all defined cohorts
     for cohort in TenantCohort:
         try:
-            # Trigger analysis for this cohort
-            # We use .delay() to enqueue the job asynchronously in Celery
             run_cohort_analysis.delay(cohort.value)
             successful_dispatches += 1
             logger.info("cohort_analysis_dispatched", cohort=cohort.value)
-        except Exception as e:
+        except SCHEDULER_RECOVERABLE_ERRORS as e:
             failed_dispatches += 1
             logger.error(
                 "daily_finops_scan_partial_failure", cohort=cohort.value, error=str(e)

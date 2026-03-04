@@ -2,6 +2,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import MagicMock, patch, AsyncMock
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 from fastapi import Request
 from app.main import app
 from app.shared.core.pricing import PricingTier
@@ -86,7 +87,7 @@ async def test_get_public_plans_fallback(mock_db):
 
 @pytest.mark.asyncio
 async def test_get_public_plans_db_error(mock_db):
-    mock_db.execute.side_effect = Exception("DB Fail")
+    mock_db.execute.side_effect = SQLAlchemyError("DB Fail")
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/api/v1/billing/plans")
     assert response.status_code == 200
@@ -107,7 +108,7 @@ async def test_get_subscription_trial(mock_db):
 
 @pytest.mark.asyncio
 async def test_get_subscription_error(mock_db):
-    mock_db.execute.side_effect = Exception("General Fail")
+    mock_db.execute.side_effect = RuntimeError("General Fail")
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/api/v1/billing/subscription")
     assert response.status_code == 500
@@ -203,7 +204,7 @@ async def test_create_checkout_error(mock_db):
             "app.modules.billing.domain.billing.paystack_billing.BillingService"
         ) as mock_service_cls:
             mock_service = mock_service_cls.return_value
-            mock_service.create_checkout_session.side_effect = Exception(
+            mock_service.create_checkout_session.side_effect = RuntimeError(
                 "Checkout Fail"
             )
             async with AsyncClient(transport=transport, base_url="https://test") as ac:
@@ -413,7 +414,7 @@ async def test_handle_webhook_processing_error(mock_db):
     ):
         mock_handler = mock_handler_cls.return_value
         mock_handler.verify_signature.return_value = True
-        mock_handler.handle.side_effect = Exception("Process Error")
+        mock_handler.handle.side_effect = RuntimeError("Process Error")
         mock_retry = mock_retry_cls.return_value
         mock_job = MagicMock()
         mock_job.id = uuid4()

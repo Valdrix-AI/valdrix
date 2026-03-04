@@ -1,10 +1,7 @@
-"""
-Attribution Engine for rule-based cost allocation.
-BE-FIN-ATTR-1: Implements the missing allocation engine identified in the Principal Engineer Review.
-"""
+"""Attribution engine for rule-based cost allocation (BE-FIN-ATTR-1)."""
 
 from typing import Any, Dict, List, Optional
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone, date
 import uuid
 import structlog
@@ -17,6 +14,7 @@ from app.models.cloud import CostRecord
 
 logger = structlog.get_logger()
 VALID_RULE_TYPES = {"DIRECT", "PERCENTAGE", "FIXED"}
+ATTRIBUTION_DECIMAL_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (InvalidOperation, TypeError, ValueError)
 
 
 class AttributionEngine:
@@ -65,7 +63,7 @@ class AttributionEngine:
                 percentage_raw = split.get("percentage")
                 try:
                     percentage = Decimal(str(percentage_raw))
-                except Exception:
+                except ATTRIBUTION_DECIMAL_PARSE_RECOVERABLE_EXCEPTIONS:
                     errors.append(
                         "Each PERCENTAGE split requires numeric 'percentage'."
                     )
@@ -85,7 +83,7 @@ class AttributionEngine:
                 amount_raw = split.get("amount")
                 try:
                     amount = Decimal(str(amount_raw))
-                except Exception:
+                except ATTRIBUTION_DECIMAL_PARSE_RECOVERABLE_EXCEPTIONS:
                     errors.append("Each FIXED split requires numeric 'amount'.")
                     continue
                 if amount < 0:

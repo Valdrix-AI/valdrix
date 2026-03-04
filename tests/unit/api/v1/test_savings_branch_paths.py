@@ -283,6 +283,32 @@ async def test_compute_realized_savings_handles_computed_skipped_and_errors() ->
 
 
 @pytest.mark.asyncio
+async def test_compute_realized_savings_does_not_swallow_base_exceptions() -> None:
+    remediations = [SimpleNamespace(id=uuid4())]
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars_result(remediations))
+    db.commit = AsyncMock()
+
+    with patch.object(savings_api, "RealizedSavingsService") as service_cls:
+        service = MagicMock()
+        service.compute_for_request = AsyncMock(side_effect=KeyboardInterrupt("stop"))
+        service_cls.return_value = service
+
+        with pytest.raises(KeyboardInterrupt, match="stop"):
+            await savings_api.compute_realized_savings(
+                start_date=date(2026, 2, 1),
+                end_date=date(2026, 2, 28),
+                baseline_days=7,
+                measurement_days=7,
+                gap_days=1,
+                monthly_multiplier_days=30,
+                require_final=True,
+                current_user=_user(),
+                db=db,
+            )
+
+
+@pytest.mark.asyncio
 async def test_list_realized_savings_events_rejects_invalid_window() -> None:
     with pytest.raises(HTTPException) as exc:
         await savings_api.list_realized_savings_events(

@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.core.pricing import PricingTier
 
+FAIR_USE_CACHE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (RuntimeError, OSError, TimeoutError, TypeError, ValueError, AttributeError)
+FAIR_USE_PARSE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError)
+
 
 def fair_use_inflight_key(tenant_id: UUID) -> str:
     return f"llm:fair_use:inflight:{tenant_id}"
@@ -486,7 +489,7 @@ async def enforce_global_abuse_guard(
                 )
         except manager_module.LLMFairUseExceededError:
             raise
-        except Exception as exc:
+        except FAIR_USE_CACHE_RECOVERABLE_ERRORS as exc:
             manager_module.logger.warning(
                 "llm_global_abuse_cache_get_failed",
                 error=str(exc),
@@ -510,11 +513,11 @@ async def enforce_global_abuse_guard(
         row = (0, 0)
     try:
         global_requests_last_minute = int((row[0] if row else 0) or 0)
-    except Exception:
+    except FAIR_USE_PARSE_RECOVERABLE_ERRORS:
         global_requests_last_minute = 0
     try:
         active_tenants_last_minute = int((row[1] if row else 0) or 0)
-    except Exception:
+    except FAIR_USE_PARSE_RECOVERABLE_ERRORS:
         active_tenants_last_minute = 0
 
     manager_module.LLM_FAIR_USE_OBSERVED.labels(
@@ -568,7 +571,7 @@ async def enforce_global_abuse_guard(
                 set_fn = getattr(cache.client, "set", None)
                 if callable(set_fn):
                     await set_fn(block_key, "1", ex=block_seconds)
-            except Exception as exc:
+            except FAIR_USE_CACHE_RECOVERABLE_ERRORS as exc:
                 manager_module.logger.warning(
                     "llm_global_abuse_cache_set_failed",
                     error=str(exc),
@@ -617,7 +620,7 @@ async def acquire_fair_use_inflight_slot(
                     await decr(key)
                     return False, max(current - 1, 0)
                 return True, current
-        except Exception as exc:
+        except FAIR_USE_CACHE_RECOVERABLE_ERRORS as exc:
             manager_module.logger.warning(
                 "llm_fair_use_redis_acquire_failed",
                 tenant_id=str(tenant_id),
@@ -658,7 +661,7 @@ async def release_fair_use_inflight_slot(manager_cls: Any, tenant_id: UUID) -> N
                     if callable(set_fn):
                         await set_fn(key, "0", ex=60)
                 return
-        except Exception as exc:
+        except FAIR_USE_CACHE_RECOVERABLE_ERRORS as exc:
             manager_module.logger.warning(
                 "llm_fair_use_redis_release_failed",
                 tenant_id=str(tenant_id),
@@ -679,11 +682,7 @@ async def enforce_fair_use_guards(
     db: AsyncSession,
     tier: PricingTier,
 ) -> bool:
-    """
-    Optional fair-use guardrails for future near-unlimited tiers.
-
-    Returns True when a concurrency slot is acquired and must be released.
-    """
+    """Enforce tier-gated fair-use limits and return whether a slot was acquired."""
     import app.shared.llm.budget_manager as manager_module
 
     settings = manager_module.get_settings()

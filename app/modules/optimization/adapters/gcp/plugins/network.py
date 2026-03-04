@@ -5,6 +5,7 @@ Detects orphan external IPs using Compute API (free).
 """
 
 from typing import List, Dict, Any
+from google.api_core.exceptions import GoogleAPIError
 from google.cloud import compute_v1
 from google.auth.credentials import Credentials as GoogleCredentials
 from google.oauth2 import service_account
@@ -14,6 +15,13 @@ from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 
 logger = structlog.get_logger()
+GCP_IP_SCAN_RECOVERABLE_EXCEPTIONS = (
+    GoogleAPIError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 def _resolve_gcp_credentials(credentials: Any) -> Any:
@@ -119,7 +127,7 @@ class OrphanExternalIpsPlugin(ZombiePlugin):
                                 "explainability_notes": f"Static IP {address.address} is reserved but not attached to any resource.",
                             }
                         )
-        except Exception as e:
+        except GCP_IP_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("gcp_ip_scan_error", error=str(e))
 
         return zombies

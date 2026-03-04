@@ -109,13 +109,7 @@
 				</div>
 				<div class="landing-lead-honey" aria-hidden="true">
 					<label for="lead-honey">Leave this field empty</label>
-					<input
-						id="lead-honey"
-						type="text"
-						tabindex="-1"
-						autocomplete="off"
-						bind:value={honey}
-					/>
+					<input id="lead-honey" type="text" tabindex="-1" autocomplete="off" bind:value={honey} />
 				</div>
 				<button class="btn btn-primary" type="submit" disabled={submitting}>
 					{submitting ? 'Submitting...' : 'Send Me Weekly Insights'}

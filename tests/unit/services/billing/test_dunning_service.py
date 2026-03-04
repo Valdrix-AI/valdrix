@@ -279,7 +279,7 @@ async def test_retry_payment_exception_path(mock_db, mock_subscription):
         "app.modules.billing.domain.billing.dunning_service.BillingService"
     ) as mock_billing_cls:
         mock_billing = MagicMock()
-        mock_billing.charge_renewal = AsyncMock(side_effect=Exception("boom"))
+        mock_billing.charge_renewal = AsyncMock(side_effect=RuntimeError("boom"))
         mock_billing_cls.return_value = mock_billing
 
         with patch.object(

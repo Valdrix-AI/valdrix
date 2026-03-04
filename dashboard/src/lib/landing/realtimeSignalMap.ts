@@ -20,6 +20,8 @@ export interface SignalLaneSnapshot extends SignalLaneDefinition {
 	metric: string;
 	detail: string;
 	severity: SignalLaneSeverity;
+	wasteUsd?: number;
+	actionLabel?: string;
 }
 
 interface SignalSnapshotInput {
@@ -35,6 +37,8 @@ interface SignalSnapshotInput {
 			metric: string;
 			detail: string;
 			severity: SignalLaneSeverity;
+			wasteUsd?: number;
+			actionLabel?: string;
 		}
 	>;
 	sources: readonly string[];
@@ -100,16 +104,18 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 		decisionSummary: 'Teams can prioritize cost and risk from one shared view.',
 		lanes: {
 			economic_visibility: {
-				status: 'Stable',
-				metric: 'Attribution + anomaly telemetry current',
-				detail: 'Cost and usage signals are aligned across connected environments.',
-				severity: 'healthy'
+				status: 'Watch',
+				metric: 'Attribution telemetry lag detected',
+				detail: 'Cost signals from secondary regions are experiencing collection delays.',
+				severity: 'watch',
+				wasteUsd: 12400,
+				actionLabel: 'Sync Telemetry'
 			},
 			deterministic_enforcement: {
-				status: 'Watch',
+				status: 'Stable',
 				metric: 'Coverage expansion in progress',
 				detail: 'More high-impact actions are being moved into pre-change checks and approvals.',
-				severity: 'watch'
+				severity: 'healthy'
 			},
 			financial_governance: {
 				status: 'Stable',
@@ -146,16 +152,18 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 				severity: 'healthy'
 			},
 			deterministic_enforcement: {
-				status: 'Stable',
+				status: 'Watch',
 				metric: 'Approval routing active',
 				detail: 'Approval sign-offs include finance, product, and engineering owners.',
-				severity: 'healthy'
+				severity: 'watch',
+				wasteUsd: 8200,
+				actionLabel: 'Route Approvals'
 			},
 			financial_governance: {
-				status: 'Watch',
+				status: 'Stable',
 				metric: 'Pricing updates intentionally paused',
 				detail: 'Commercial changes stay paused until more live operating data is collected.',
-				severity: 'watch'
+				severity: 'healthy'
 			},
 			operational_resilience: {
 				status: 'Stable',
@@ -186,19 +194,93 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 				severity: 'healthy'
 			},
 			financial_governance: {
-				status: 'Stable',
+				status: 'Watch',
 				metric: 'Free-tier margin watch bounded',
 				detail: 'Free-tier compute usage remains bounded against starter-tier economics.',
+				severity: 'watch',
+				wasteUsd: 15800,
+				actionLabel: 'Adjust Limits'
+			},
+			operational_resilience: {
+				status: 'Stable',
+				metric: 'Operational follow-through required',
+				detail: 'Remaining items are operational cadence tasks, not core product capability gaps.',
+				severity: 'healthy'
+			}
+		},
+		sources: ['Finance telemetry snapshot', 'Control gap register', 'Post-release sanity checks']
+	},
+	{
+		id: 'snp-2026-03-01-d',
+		label: 'Snapshot D',
+		capturedAt: '2026-03-01T09:00:00Z',
+		headline: 'Resilience guardrails maintain execution continuity.',
+		decisionSummary: 'Teams can recover faster with automated safety-checks.',
+		lanes: {
+			economic_visibility: {
+				status: 'Stable',
+				metric: 'Real-time billing feed active',
+				detail: 'Cloud provider billing streams are processing with sub-hour latency.',
+				severity: 'healthy'
+			},
+			deterministic_enforcement: {
+				status: 'Stable',
+				metric: 'Guardrail policy at 94%',
+				detail: 'Policy coverage remains high across development and production clusters.',
+				severity: 'healthy'
+			},
+			financial_governance: {
+				status: 'Stable',
+				metric: 'Forecast variance < 2%',
+				detail: 'Predicted spend remains highly accuracy against realized consumption.',
 				severity: 'healthy'
 			},
 			operational_resilience: {
 				status: 'Watch',
-				metric: 'Operational follow-through required',
-				detail: 'Remaining items are operational cadence tasks, not core product capability gaps.',
-				severity: 'watch'
+				metric: 'Recovery context update needed',
+				detail: 'New workload signatures require recovery playbook synchronization.',
+				severity: 'watch',
+				wasteUsd: 9400,
+				actionLabel: 'Sync Playbook'
 			}
 		},
-		sources: ['Finance telemetry snapshot', 'Control gap register', 'Post-release sanity checks']
+		sources: ['Resilience audit logs', 'Recovery playbook telemetry']
+	},
+	{
+		id: 'snp-2026-03-02-e',
+		label: 'Snapshot E (Global)',
+		capturedAt: '2026-03-02T11:00:00Z',
+		headline: 'Global region spillover detected.',
+		decisionSummary: 'Cross-region data transfer spikes are triaged for compliance and cost.',
+		lanes: {
+			economic_visibility: {
+				status: 'Watch',
+				metric: 'US-East spillover to EU-West',
+				detail: 'Unexpected cross-region traffic increase impacting latency and egress cost.',
+				severity: 'watch',
+				wasteUsd: 21500,
+				actionLabel: 'Check Sovereignty'
+			},
+			deterministic_enforcement: {
+				status: 'Stable',
+				metric: 'Regional guardrails active',
+				detail: 'Governance policies enforcing data locality and regional spend limits.',
+				severity: 'healthy'
+			},
+			financial_governance: {
+				status: 'Stable',
+				metric: 'Multi-currency settlement OK',
+				detail: 'Fiscal controls tracking spend across GBP, EUR, and USD baselines.',
+				severity: 'healthy'
+			},
+			operational_resilience: {
+				status: 'Stable',
+				metric: 'Multi-cloud failover ready',
+				detail: 'Unified control plane verified across AWS and Azure production nodes.',
+				severity: 'healthy'
+			}
+		},
+		sources: ['Global egress telemetry', 'Data sovereignty checks']
 	}
 ] as const;
 

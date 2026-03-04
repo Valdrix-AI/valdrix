@@ -4,6 +4,7 @@ import asyncio
 import sys
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.shared.db.session import async_session_maker
 from scripts.safety_guardrails import (
@@ -54,7 +55,7 @@ async def force_wipe() -> None:
             await session.execute(text("GRANT ALL ON SCHEMA public TO public"))
             await session.commit()
             print("✅ Database wiped (schema-level)")
-        except Exception as exc:  # noqa: BLE001
+        except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as exc:
             print(f"❌ Error: {exc}", file=sys.stderr)
             await session.rollback()
             raise

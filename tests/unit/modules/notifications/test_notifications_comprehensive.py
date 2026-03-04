@@ -4,6 +4,7 @@ Covers actual service methods: send_carbon_alert, send_alert, etc.
 """
 
 import pytest
+import smtplib
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 
@@ -62,7 +63,7 @@ class TestEmailService:
         with patch(
             "app.modules.notifications.domain.email_service.smtplib.SMTP"
         ) as mock_smtp:
-            mock_smtp.side_effect = Exception("SMTP connection failed")
+            mock_smtp.side_effect = smtplib.SMTPException("SMTP connection failed")
 
             result = await email_service.send_carbon_alert(
                 recipients=["user@example.com"], budget_status={}

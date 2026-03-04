@@ -2,6 +2,7 @@ import structlog
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from uuid import UUID
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import TYPE_CHECKING, Optional, Dict, Any
 import asyncio
@@ -28,6 +29,17 @@ from app.shared.core.provider import (
 )
 
 logger = structlog.get_logger()
+
+PROCESSOR_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
 
 
 class AnalysisProcessor:
@@ -180,7 +192,7 @@ class AnalysisProcessor:
                                     provider=provider,
                                     connection_id=getattr(conn, "id", None),
                                 )
-                            except Exception as savings_exc:
+                            except PROCESSOR_RECOVERABLE_ERRORS as savings_exc:
                                 logger.error(
                                     "savings_autopilot_failed",
                                     tenant_id=str(tenant.id),
@@ -223,7 +235,7 @@ class AnalysisProcessor:
                                     db=db,
                                 )
                                 zombie_result = await detector.scan_all()
-                            except Exception as zombie_exc:
+                            except PROCESSOR_RECOVERABLE_ERRORS as zombie_exc:
                                 logger.warning(
                                     "tenant_zombie_scan_skipped",
                                     tenant_id=str(tenant.id),
@@ -283,7 +295,7 @@ class AnalysisProcessor:
                         tenant_id=str(tenant.id),
                         connection_id=str(conn.id),
                     )
-                except Exception as e:
+                except PROCESSOR_RECOVERABLE_ERRORS as e:
                     logger.error(
                         "tenant_connection_failed",
                         tenant_id=str(tenant.id),
@@ -291,7 +303,7 @@ class AnalysisProcessor:
                         error=str(e),
                     )
 
-        except Exception as e:
+        except PROCESSOR_RECOVERABLE_ERRORS as e:
             logger.error(
                 "tenant_processing_failed", tenant_id=str(tenant.id), error=str(e)
             )
@@ -435,7 +447,7 @@ class SavingsProcessor:
                         tenant_id=str(tenant_id),
                         request_id=str(request.id),
                     )
-                except Exception as e:
+                except PROCESSOR_RECOVERABLE_ERRORS as e:
                     logger.error(
                         "autonomous_savings_execution_failed",
                         resource=rec.resource,

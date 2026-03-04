@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 import hashlib
 import structlog
 from redis.asyncio import Redis, from_url
+from redis.exceptions import RedisError
 
 from app.shared.core.config import get_settings
 
@@ -33,6 +34,14 @@ logger = structlog.get_logger()
 
 _limiter: Limiter | None = None
 _redis_client: Redis | None = None
+TOKEN_HASH_FALLBACK_RECOVERABLE_EXCEPTIONS = (RuntimeError, TypeError, ValueError)
+ANALYSIS_TIER_RESOLUTION_RECOVERABLE_EXCEPTIONS = (
+    AttributeError,
+    TypeError,
+    ValueError,
+    RuntimeError,
+)
+REMEDIATION_REDIS_RATE_LIMIT_RECOVERABLE_EXCEPTIONS = (RedisError, OSError, RuntimeError)
 
 
 def context_aware_key(request: Request) -> str:
@@ -54,7 +63,7 @@ def context_aware_key(request: Request) -> str:
         try:
             token_hash = hashlib.sha256(token.encode()).hexdigest()[:16]
             return f"token:{token_hash}"
-        except Exception:
+        except TOKEN_HASH_FALLBACK_RECOVERABLE_EXCEPTIONS:
             pass
 
     return get_remote_address(request)
@@ -218,7 +227,7 @@ def get_analysis_limit(request: Optional[Request] = None) -> str:
             tier = "starter"
         if not tier:
             tier = "starter"
-    except (AttributeError, Exception):
+    except ANALYSIS_TIER_RESOLUTION_RECOVERABLE_EXCEPTIONS:
         tier = "starter"
 
     # Mapping of tier to rate limit (per hour to prevent burst costs)
@@ -325,7 +334,7 @@ async def check_remediation_rate_limit(
                 )
                 return False
             return True
-        except Exception as e:
+        except REMEDIATION_REDIS_RATE_LIMIT_RECOVERABLE_EXCEPTIONS as e:
             logger.error("remediation_rate_limit_redis_error", error=str(e))
             # Fall through to memory fallback if NOT in production
             if is_prod:

@@ -10,6 +10,22 @@ from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
 
 
+class _FatalTestSignal(BaseException):
+    """Sentinel fatal error used to assert broad Exception handlers do not swallow BaseException."""
+
+
+def _exception_group_contains(
+    error: BaseException, exc_type: type[BaseException]
+) -> bool:
+    if isinstance(error, exc_type):
+        return True
+    if isinstance(error, BaseExceptionGroup):
+        return any(
+            _exception_group_contains(nested, exc_type) for nested in error.exceptions
+        )
+    return False
+
+
 @pytest.mark.asyncio
 async def test_get_csrf_token(async_client: AsyncClient):
     """GET /csrf should return a token and set a cookie."""
@@ -175,6 +191,38 @@ async def test_sso_discovery_backend_error(async_client: AsyncClient):
     payload = res.json()
     assert payload["available"] is False
     assert payload["reason"] == "sso_discovery_backend_error"
+
+
+@pytest.mark.asyncio
+async def test_run_public_assessment_does_not_swallow_fatal_exceptions(
+    async_client: AsyncClient,
+):
+    with patch(
+        "app.modules.governance.api.v1.public.assessment_service.run_assessment",
+        side_effect=_FatalTestSignal(),
+    ):
+        with pytest.raises(BaseExceptionGroup) as exc_info:
+            await async_client.post(
+                "/api/v1/public/assessment", json={"aws_account_id": "123456789012"}
+            )
+    assert _exception_group_contains(exc_info.value, _FatalTestSignal)
+
+
+@pytest.mark.asyncio
+async def test_sso_discovery_does_not_swallow_fatal_backend_exceptions(
+    async_client: AsyncClient,
+):
+    with patch(
+        "sqlalchemy.ext.asyncio.session.AsyncSession.execute",
+        new_callable=AsyncMock,
+        side_effect=_FatalTestSignal(),
+    ):
+        with pytest.raises(BaseExceptionGroup) as exc_info:
+            await async_client.post(
+                "/api/v1/public/sso/discovery",
+                json={"email": "user@example.com"},
+            )
+    assert _exception_group_contains(exc_info.value, _FatalTestSignal)
 
 
 @pytest.mark.asyncio

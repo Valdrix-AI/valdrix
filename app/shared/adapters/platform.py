@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import date, datetime, time, timezone
+from decimal import InvalidOperation
 from typing import Any
 from urllib.parse import urljoin
 
@@ -17,7 +18,7 @@ from app.shared.adapters.resource_usage_projection import (
     resource_usage_lookback_window,
 )
 from app.shared.core.credentials import PlatformCredentials
-from app.shared.core.currency import convert_to_usd
+from app.shared.core.currency import ExchangeRateUnavailableError, convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
@@ -25,23 +26,12 @@ logger = structlog.get_logger()
 _NATIVE_TIMEOUT_SECONDS = 20.0
 _NATIVE_MAX_RETRIES = 3
 _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
-_LEDGER_HTTP_VENDOR_ALIASES = {
-    "ledger_http",
-    "cmdb_ledger",
-    "cmdb-ledger",
-    "ledger",
-}
+_LEDGER_HTTP_VENDOR_ALIASES = {"ledger_http", "cmdb_ledger", "cmdb-ledger", "ledger"}
 _DATADOG_VENDOR = "datadog"
 _NEWRELIC_VENDOR_ALIASES = {"newrelic", "new_relic", "new-relic"}
-_DISCOVERY_RESOURCE_TYPE_ALIASES = {
-    "all",
-    "platform",
-    "service",
-    "services",
-    "shared_service",
-    "shared_services",
-    "tooling",
-}
+_DISCOVERY_RESOURCE_TYPE_ALIASES = {"all", "platform", "service", "services", "shared_service", "shared_services", "tooling"}
+PLATFORM_CURRENCY_CONVERSION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (ExchangeRateUnavailableError, httpx.HTTPError, InvalidOperation, RuntimeError, TypeError, ValueError)
+PLATFORM_RESOURCE_USAGE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (ExternalAPIError, httpx.HTTPError, InvalidOperation, RuntimeError, TypeError, ValueError, KeyError)
 
 
 async def _platform_get_request(
@@ -74,14 +64,7 @@ async def _platform_post_request(
 
 
 class PlatformAdapter(BaseAdapter):
-    """
-    Cloud+ adapter for internal platform/shared-services spend.
-
-    v1 is feed-based (manual/csv) to support quick onboarding of:
-    - Kubernetes/platform team shared services
-    - shared tooling/platform bills
-    - internal chargeback ledgers
-    """
+    """Cloud+ adapter for internal platform/shared-services spend."""
 
     def __init__(self, credentials: PlatformCredentials):
         self.credentials = credentials
@@ -776,7 +759,7 @@ class PlatformAdapter(BaseAdapter):
                         cost_usd = float(
                             await convert_to_usd(amount_local, currency_code)
                         )
-                    except Exception as exc:  # noqa: BLE001
+                    except PLATFORM_CURRENCY_CONVERSION_RECOVERABLE_ERRORS as exc:
                         logger.warning(
                             "platform_ledger_currency_conversion_failed",
                             currency=currency_code,
@@ -908,7 +891,7 @@ class PlatformAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except PLATFORM_RESOURCE_USAGE_RECOVERABLE_ERRORS as exc:
             self.last_error = str(exc)
             logger.warning(
                 "platform_discover_resources_failed",
@@ -942,7 +925,7 @@ class PlatformAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except PLATFORM_RESOURCE_USAGE_RECOVERABLE_ERRORS as exc:
             self.last_error = str(exc)
             logger.warning(
                 "platform_resource_usage_failed",

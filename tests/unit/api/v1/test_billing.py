@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
 from fastapi import HTTPException
+from sqlalchemy.exc import SQLAlchemyError
 from app.modules.billing.api.v1.billing import (
     get_public_plans,
     create_checkout,
@@ -62,7 +63,7 @@ async def test_get_public_plans_db_success(mock_db: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 async def test_get_public_plans_fallback_on_error(mock_db: AsyncMock) -> None:
-    mock_db.execute.side_effect = Exception("DB Fail")
+    mock_db.execute.side_effect = SQLAlchemyError("DB Fail")
     plans = await get_public_plans(MagicMock(), mock_db)
     assert len(plans) > 0
 
@@ -161,6 +162,43 @@ async def test_handle_webhook_success(
 
         traceback.print_exc()
         raise
+    assert response == {"status": "success"}
+    mock_retry.mark_inline_processed.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@patch("app.modules.billing.domain.billing.paystack_billing.WebhookHandler")
+@patch("app.modules.billing.domain.billing.webhook_retry.WebhookRetryService")
+@patch("app.modules.billing.api.v1.billing.settings")
+async def test_handle_webhook_success_when_inline_completion_mark_fails(
+    mock_settings: MagicMock,
+    mock_retry_class: MagicMock,
+    mock_handler_class: MagicMock,
+    mock_db: AsyncMock,
+) -> None:
+    mock_settings.ENVIRONMENT = "development"
+    request = AsyncMock()
+    request.headers = MagicMock()
+    request.headers.get.side_effect = lambda k, default=None: {
+        "x-paystack-signature": "valid-sig",
+        "content-type": "application/json",
+    }.get(k, default)
+    request.client.host = "127.0.0.1"
+    request.body.return_value = (
+        b'{"event": "charge.success", "data": {"reference": "ref-123"}}'
+    )
+
+    mock_handler = mock_handler_class.return_value
+    mock_handler.verify_signature.return_value = True
+    mock_handler.handle = AsyncMock(return_value={"status": "success"})
+
+    mock_retry = mock_retry_class.return_value
+    mock_retry.store_webhook = AsyncMock(return_value=MagicMock())
+    mock_retry.mark_inline_processed = AsyncMock(
+        side_effect=RuntimeError("mark failed")
+    )
+
+    response = await handle_webhook(request, mock_db)
     assert response == {"status": "success"}
     mock_retry.mark_inline_processed.assert_awaited_once()
 

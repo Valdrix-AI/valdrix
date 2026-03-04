@@ -1,5 +1,6 @@
 import asyncio
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from app.shared.db.session import async_session_maker
 from datetime import date
 from dateutil.relativedelta import relativedelta
@@ -23,7 +24,7 @@ async def create_partitions():
         try:
             await session.execute(sql)
             await session.commit()
-        except Exception as e:
+        except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
             print(f"Failed to create {p_name}: {e}")
             await session.rollback()
             

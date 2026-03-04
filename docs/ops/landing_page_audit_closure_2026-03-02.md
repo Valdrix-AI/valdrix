@@ -35,6 +35,7 @@ Source report:
   - `dashboard/src/routes/talk-to-sales/+page.svelte`
   - `dashboard/src/lib/landing/publicNav.ts`
   - `dashboard/src/routes/+layout.svelte`
+  - go-live mail routing aligned to `enterprise@valdrics.com` (fallback `sales@valdrics.com`)
   - test:
     - `dashboard/src/routes/talk-to-sales/talk-to-sales-page.svelte.test.ts`
 
@@ -130,10 +131,24 @@ Source report:
 14. High jargon for non-technical audiences (`Low-Med`)
 - Status: `CLOSED`
 - Evidence:
-  - plain-English mode toggle:
+  - simplified problem-first copy and reduced internal language across hero, plans, and trust sections:
     - `dashboard/src/lib/components/landing/LandingHeroCopy.svelte`
-    - `dashboard/src/lib/components/LandingHero.svelte`
-  - copy simplification pass across sections completed on 2026-03-02
+    - `dashboard/src/lib/components/landing/LandingPlansSection.svelte`
+    - `dashboard/src/lib/components/landing/LandingTrustSection.svelte`
+
+16. Legacy contact channels not aligned with live domain (`Medium`)
+- Status: `CLOSED`
+- Evidence:
+  - sales/support/security/billing/hello mail links moved to `@valdrics.com` across public pages:
+    - `dashboard/src/routes/talk-to-sales/+page.svelte`
+    - `dashboard/src/routes/privacy/+page.svelte`
+    - `dashboard/src/routes/terms/+page.svelte`
+    - `dashboard/src/routes/pricing/+page.svelte`
+    - `dashboard/src/routes/billing/+page.svelte`
+  - tests:
+    - `dashboard/src/routes/talk-to-sales/talk-to-sales-page.svelte.test.ts`
+    - `dashboard/src/routes/privacy/privacy-page.svelte.test.ts`
+    - `dashboard/src/routes/terms/terms-page.svelte.test.ts`
 
 15. Very long page without progress indicator (`Low`)
 - Status: `CLOSED`
@@ -152,6 +167,9 @@ Source report:
 4. `uv run python3 scripts/verify_landing_component_budget.py` -> passed (`hero_lines=790 max=800 components=14`).
 5. `cd dashboard && npx playwright test e2e/a11y.spec.ts -g "\/ has no critical\/serious axe violations"` -> passed (`1 passed`).
 6. `cd dashboard && npx playwright test e2e/performance.spec.ts` -> passed (`2 passed`).
+7. `cd dashboard && pnpm exec vitest run src/routes/talk-to-sales/talk-to-sales-page.svelte.test.ts src/routes/privacy/privacy-page.svelte.test.ts src/routes/terms/terms-page.svelte.test.ts src/routes/pricing/pricing.load.test.ts src/lib/components/LandingHero.svelte.test.ts src/lib/components/landing/landing_decomposition.svelte.test.ts src/routes/layout-public-menu.svelte.test.ts` -> passed (`7 files`, `27 tests`).
+8. `cd dashboard && pnpm run check` -> passed (`0 errors`, `0 warnings`).
+9. `cd dashboard && pnpm exec playwright test e2e/landing-layout-audit.spec.ts --reporter=line` -> passed (`4 passed`).
 
 ## Residual Risk / Dependency
 

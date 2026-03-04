@@ -15,6 +15,21 @@ from app.shared.core.connection_queries import list_tenant_connections
 from app.shared.core.connection_state import resolve_connection_profile
 
 logger = structlog.get_logger()
+COST_INGESTION_CONNECTION_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
+ATTRIBUTION_TRIGGER_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    ImportError,
+    OSError,
+)
 
 
 def _require_tenant_id(job: BackgroundJob) -> UUID:
@@ -209,7 +224,7 @@ class CostIngestionHandler(BaseJobHandler):
                 )
                 total_records_ingested += int(save_result.get("records_saved", 0) or 0)
 
-            except Exception as e:
+            except COST_INGESTION_CONNECTION_RECOVERABLE_EXCEPTIONS as e:
                 logger.error(
                     "cost_ingestion_connection_failed",
                     connection_id=str(conn.id),
@@ -253,7 +268,7 @@ class CostIngestionHandler(BaseJobHandler):
                 commit=False,
             )
             logger.info("attribution_applied_post_ingestion", tenant_id=str(tenant_id))
-        except Exception as e:
+        except ATTRIBUTION_TRIGGER_RECOVERABLE_EXCEPTIONS as e:
             logger.error(
                 "attribution_trigger_failed", tenant_id=str(tenant_id), error=str(e)
             )

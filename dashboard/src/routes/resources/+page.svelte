@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { PUBLIC_EXTENDED_CONTACT_CHANNELS } from '$lib/landing/publicNav';
 
 	type ResourceEntry = {
 		category: string;
@@ -94,10 +95,31 @@
 			>
 				Start Free
 			</a>
-			<a href={`${base}/talk-to-sales?entry=resources&source=resource_hub`} class="btn btn-secondary w-fit">
+			<a
+				href={`${base}/talk-to-sales?entry=resources&source=resource_hub`}
+				class="btn btn-secondary w-fit"
+			>
 				Talk to Sales
 			</a>
 			<a href={`${base}/insights`} class="btn btn-secondary w-fit">Open Insights</a>
+		</div>
+	</div>
+
+	<div class="glass-panel space-y-3" aria-label="Contact directory">
+		<h2 class="text-xl font-semibold">Contact Directory</h2>
+		<p class="text-ink-300">
+			Use the right channel for commercial, technical, security, or compliance requests.
+		</p>
+		<div class="grid gap-2 md:grid-cols-2">
+			{#each PUBLIC_EXTENDED_CONTACT_CHANNELS as channel (channel.email)}
+				<a
+					href={channel.href}
+					class="badge badge-default w-fit text-ink-200 hover:text-ink-100 transition-colors"
+					aria-label={`${channel.label} contact ${channel.email}`}
+				>
+					{channel.label}: {channel.email}
+				</a>
+			{/each}
 		</div>
 	</div>
 </section>

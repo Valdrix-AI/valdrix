@@ -8,7 +8,7 @@ Supports both daily and hourly granularity.
 from typing import Any, AsyncIterable
 from datetime import date, datetime, timedelta, timezone
 import uuid
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from sqlalchemy import case, delete, func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -204,7 +204,7 @@ class CostPersistenceService:
             if usage_amount is not None:
                 try:
                     usage_amount_dec = Decimal(str(usage_amount))
-                except Exception:
+                except (InvalidOperation, TypeError, ValueError):
                     usage_amount_dec = None
 
             batch.append(

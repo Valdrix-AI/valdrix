@@ -18,6 +18,13 @@ from app.shared.adapters.aws_utils import (
 from app.shared.adapters.aws_pagination import iter_aws_paginator_pages
 
 logger = structlog.get_logger()
+AWS_RESOURCE_EXPLORER_RECOVERABLE_EXCEPTIONS = (
+    ClientError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class AWSResourceExplorerAdapter:
@@ -114,7 +121,7 @@ class AWSResourceExplorerAdapter:
                         "resource_explorer_search_failed", error=str(e), code=error_code
                     )
                 return []
-            except Exception as e:
+            except AWS_RESOURCE_EXPLORER_RECOVERABLE_EXCEPTIONS as e:
                 logger.error("resource_explorer_unexpected_error", error=str(e))
                 return []
 
@@ -124,5 +131,5 @@ class AWSResourceExplorerAdapter:
             try:
                 response = await client.list_views()
                 return len(response.get("Views", [])) > 0
-            except Exception:
+            except AWS_RESOURCE_EXPLORER_RECOVERABLE_EXCEPTIONS:
                 return False

@@ -4,33 +4,46 @@ export interface PublicNavLink {
 	external?: boolean;
 }
 
+export interface PublicContactChannel {
+	label: string;
+	email: string;
+	href: string;
+}
+
 export const PUBLIC_PRIMARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#benefits', label: 'Outcomes' },
-	{ href: '/#workflow', label: 'How It Works' },
-	{ href: '/#personas', label: "Who It's For" },
 	{ href: '/#trust', label: 'Proof' },
+	{ href: '/#workflow', label: 'How It Works' },
+	{ href: '/#signal-map', label: 'See It In Action' },
 	{ href: '/resources', label: 'Resources' },
 	{ href: '/pricing', label: 'Pricing' }
 ]);
 
-export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
-	{ href: '/talk-to-sales', label: 'Talk to Sales' },
+export const PUBLIC_RESOURCES_DROPDOWN_LINKS: readonly PublicNavLink[] = Object.freeze([
+	{ href: '/resources', label: 'Resource Hub' },
+	{ href: '/docs', label: 'Docs' },
 	{ href: '/blog', label: 'Blog' },
 	{ href: '/insights', label: 'Insights' },
-	{ href: '/docs', label: 'Docs' }
+	{ href: '/#trust', label: 'Proof' }
+]);
+
+export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
+	{ href: '/docs', label: 'Docs' },
+	{ href: '/insights', label: 'Insights' },
+	{ href: '/talk-to-sales', label: 'Talk to Sales' }
 ]);
 
 export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#benefits', label: 'Outcomes' },
-	{ href: '/#workflow', label: 'How It Works' },
-	{ href: '/#personas', label: "Who It's For" },
 	{ href: '/#trust', label: 'Proof' },
+	{ href: '/#workflow', label: 'How It Works' },
+	{ href: '/#signal-map', label: 'See It In Action' },
+	{ href: '/pricing', label: 'Pricing' },
 	{ href: '/resources', label: 'Resources' },
-	{ href: '/blog', label: 'Blog' },
-	{ href: '/insights', label: 'Insights' },
 	{ href: '/talk-to-sales', label: 'Talk to Sales' },
 	{ href: '/docs', label: 'Docs' },
-	{ href: '/pricing', label: 'Pricing' }
+	{ href: '/blog', label: 'Blog' },
+	{ href: '/insights', label: 'Insights' }
 ]);
 
 export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
@@ -68,3 +81,21 @@ export const PUBLIC_FOOTER_SUBTITLE =
 
 export const PUBLIC_FOOTER_CAPTION =
 	'Built for finance, engineering, and operations teams that want less waste and faster decisions.';
+
+export const PUBLIC_CONTACT_CHANNELS: readonly PublicContactChannel[] = Object.freeze([
+	{ label: 'Sales', email: 'sales@valdrics.com', href: 'mailto:sales@valdrics.com' },
+	{ label: 'Support', email: 'support@valdrics.com', href: 'mailto:support@valdrics.com' },
+	{ label: 'Security', email: 'security@valdrics.com', href: 'mailto:security@valdrics.com' }
+]);
+
+export const PUBLIC_EXTENDED_CONTACT_CHANNELS: readonly PublicContactChannel[] = Object.freeze([
+	{ label: 'Enterprise', email: 'enterprise@valdrics.com', href: 'mailto:enterprise@valdrics.com' },
+	{ label: 'Sales', email: 'sales@valdrics.com', href: 'mailto:sales@valdrics.com' },
+	{ label: 'Support', email: 'support@valdrics.com', href: 'mailto:support@valdrics.com' },
+	{ label: 'Security', email: 'security@valdrics.com', href: 'mailto:security@valdrics.com' },
+	{ label: 'Billing', email: 'billing@valdrics.com', href: 'mailto:billing@valdrics.com' },
+	{ label: 'Privacy', email: 'privacy@valdrics.com', href: 'mailto:privacy@valdrics.com' },
+	{ label: 'General', email: 'hello@valdrics.com', href: 'mailto:hello@valdrics.com' },
+	{ label: 'Abuse', email: 'abuse@valdrics.com', href: 'mailto:abuse@valdrics.com' },
+	{ label: 'Postmaster', email: 'postmaster@valdrics.com', href: 'mailto:postmaster@valdrics.com' }
+]);

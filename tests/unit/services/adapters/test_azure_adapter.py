@@ -57,7 +57,7 @@ async def test_azure_verify_connection_success(adapter):
 @pytest.mark.asyncio
 async def test_azure_verify_connection_failure(adapter):
     with patch.object(
-        AzureAdapter, "_get_resource_client", side_effect=Exception("Auth error")
+        AzureAdapter, "_get_resource_client", side_effect=RuntimeError("Auth error")
     ):
         result = await adapter.verify_connection()
         assert result is False
@@ -110,7 +110,7 @@ async def test_azure_get_cost_and_usage_success(adapter):
 @pytest.mark.asyncio
 async def test_azure_get_cost_and_usage_error(adapter):
     with patch.object(
-        AzureAdapter, "_get_cost_client", side_effect=Exception("API Error")
+        AzureAdapter, "_get_cost_client", side_effect=RuntimeError("API Error")
     ):
         with pytest.raises(AdapterError):
             await adapter.get_cost_and_usage(datetime.now(), datetime.now())

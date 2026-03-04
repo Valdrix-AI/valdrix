@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional, cast
 import structlog
 from azure.identity.aio import ClientSecretCredential
+from app.shared.core.exceptions import ExternalAPIError
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
@@ -9,6 +10,28 @@ from app.modules.optimization.domain.registry import registry
 import app.modules.optimization.adapters.azure.plugins  # noqa
 
 logger = structlog.get_logger()
+
+AZURE_DETECTOR_CREDENTIAL_INIT_RECOVERABLE_EXCEPTIONS: tuple[
+    type[Exception], ...
+] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
+AZURE_DETECTOR_PLUGIN_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+)
 
 
 class AzureZombieDetector(BaseZombieDetector):
@@ -63,7 +86,7 @@ class AzureZombieDetector(BaseZombieDetector):
                     client_id=client_id,
                     client_secret=client_secret,
                 )
-            except Exception as exc:
+            except AZURE_DETECTOR_CREDENTIAL_INIT_RECOVERABLE_EXCEPTIONS as exc:
                 self._credential_error = str(exc)
                 logger.error("azure_detector_credential_init_failed", error=str(exc))
                 return None
@@ -134,7 +157,7 @@ class AzureZombieDetector(BaseZombieDetector):
                 credentials=cast(Any, self._credential),
                 region=self.region,
             )
-        except Exception as exc:
+        except AZURE_DETECTOR_PLUGIN_SCAN_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
                 "azure_plugin_scan_failed", plugin=plugin.category_key, error=str(exc)
             )

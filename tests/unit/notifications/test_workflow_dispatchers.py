@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.modules.notifications.domain.workflows import (
@@ -78,6 +79,30 @@ async def test_gitlab_dispatch_success() -> None:
     assert ok is True
     call_data = client.post.await_args.kwargs["data"]
     assert call_data["variables[VALDRICS_EVENT_TYPE]"] == "remediation.completed"
+
+
+@pytest.mark.asyncio
+async def test_github_dispatch_handles_httpx_error() -> None:
+    dispatcher = GitHubActionsDispatcher(
+        owner="valdrics-ai",
+        repo="valdrics",
+        workflow_id="remediation.yml",
+        ref="main",
+        token="ghp_token",
+        timeout_seconds=5.0,
+    )
+
+    client = AsyncMock()
+    client.post = AsyncMock(side_effect=httpx.ConnectError("network down"))
+    with patch(
+        "app.shared.core.http.get_http_client",
+        return_value=client,
+    ):
+        ok = await dispatcher.dispatch(
+            "policy.block",
+            {"tenant_id": "t1", "request_id": "r1"},
+        )
+    assert ok is False
 
 
 @pytest.mark.asyncio

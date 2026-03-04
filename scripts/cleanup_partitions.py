@@ -1,5 +1,6 @@
 import asyncio
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 from app.shared.core.config import get_settings
 
@@ -42,7 +43,7 @@ async def cleanup_old_partitions():
             
             print("✅ 2025 partitions dropped successfully.")
 
-    except Exception as e:
+    except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
         print(f"❌ ERROR: {e}")
     finally:
         await engine.dispose()

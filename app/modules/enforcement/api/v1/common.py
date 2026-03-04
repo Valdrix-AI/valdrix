@@ -16,6 +16,13 @@ from app.shared.core.pricing import (
 )
 from app.models.tenant import Tenant
 
+RESOLVE_EFFECTIVE_TIER_RECOVERABLE_EXCEPTIONS = (
+    AttributeError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+
 
 def tenant_or_403(user: CurrentUser) -> UUID:
     if user.tenant_id is None:
@@ -42,7 +49,7 @@ async def resolve_effective_tier(
         tenant_plan = scalar_one_or_none()
         if inspect.isawaitable(tenant_plan):
             tenant_plan = await tenant_plan
-    except Exception:
+    except RESOLVE_EFFECTIVE_TIER_RECOVERABLE_EXCEPTIONS:
         return declared_tier
 
     if tenant_plan is None:

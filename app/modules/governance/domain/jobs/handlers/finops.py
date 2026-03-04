@@ -20,6 +20,15 @@ from app.shared.core.provider import resolve_provider_from_connection
 from app.shared.llm.analyzer import FinOpsAnalyzer
 from app.shared.llm.factory import LLMFactory
 
+FINOPS_PROVIDER_ANALYSIS_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
+
 
 def _as_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
@@ -144,7 +153,7 @@ class FinOpsAnalysisHandler(BaseJobHandler):
                 if isinstance(llm_result, dict):
                     analyses.append(llm_result)
                 analyzed_providers.add(provider)
-            except Exception:
+            except FINOPS_PROVIDER_ANALYSIS_RECOVERABLE_EXCEPTIONS:
                 # Keep processing remaining providers even if one fails.
                 continue
 

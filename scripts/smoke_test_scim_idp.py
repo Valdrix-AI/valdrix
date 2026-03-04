@@ -30,6 +30,15 @@ import httpx
 
 from app.shared.core.evidence_capture import sanitize_bearer_token
 
+SCIM_SMOKE_RECOVERABLE_EXCEPTIONS = (
+    httpx.HTTPError,
+    json.JSONDecodeError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -133,7 +142,7 @@ def _extract_scim_error_detail(payload: Any) -> str:
 def _safe_json(resp: httpx.Response) -> Any:
     try:
         return resp.json()
-    except Exception:
+    except json.JSONDecodeError:
         return None
 
 
@@ -247,7 +256,7 @@ def main() -> int:
                 ok=ok,
                 detail=detail,
             )
-        except Exception as exc:
+        except SCIM_SMOKE_RECOVERABLE_EXCEPTIONS as exc:
             _check(
                 checks,
                 name="scim.service_provider_config",
@@ -266,7 +275,7 @@ def main() -> int:
             _check(
                 checks, name="scim.schemas", resp=resp, started=t0, ok=ok, detail=detail
             )
-        except Exception as exc:
+        except SCIM_SMOKE_RECOVERABLE_EXCEPTIONS as exc:
             _check(
                 checks,
                 name="scim.schemas",
@@ -290,7 +299,7 @@ def main() -> int:
                 ok=ok,
                 detail=detail,
             )
-        except Exception as exc:
+        except SCIM_SMOKE_RECOVERABLE_EXCEPTIONS as exc:
             _check(
                 checks,
                 name="scim.resource_types",
@@ -325,7 +334,7 @@ def main() -> int:
                     ok=ok,
                     detail=detail,
                 )
-            except Exception as exc:
+            except SCIM_SMOKE_RECOVERABLE_EXCEPTIONS as exc:
                 _check(
                     checks,
                     name="scim.user_create",
@@ -359,7 +368,7 @@ def main() -> int:
                     ok=ok,
                     detail=detail,
                 )
-            except Exception as exc:
+            except SCIM_SMOKE_RECOVERABLE_EXCEPTIONS as exc:
                 _check(
                     checks,
                     name="scim.group_create",
@@ -387,7 +396,7 @@ def main() -> int:
                         ok=ok,
                         detail=detail,
                     )
-                except Exception as exc:
+                except SCIM_SMOKE_RECOVERABLE_EXCEPTIONS as exc:
                     _check(
                         checks,
                         name="scim.group_add_member",
@@ -425,7 +434,7 @@ def main() -> int:
                             ok=ok,
                             detail=detail,
                         )
-                    except Exception as exc:
+                    except SCIM_SMOKE_RECOVERABLE_EXCEPTIONS as exc:
                         _check(
                             checks,
                             name="scim.group_delete",
@@ -450,7 +459,7 @@ def main() -> int:
                             ok=ok,
                             detail=detail,
                         )
-                    except Exception as exc:
+                    except SCIM_SMOKE_RECOVERABLE_EXCEPTIONS as exc:
                         _check(
                             checks,
                             name="scim.user_delete",

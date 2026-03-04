@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import structlog
 from sqlalchemy import select
@@ -20,10 +20,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.background_job import BackgroundJob
 from app.models.tenant import Tenant, UserPersona, UserRole
+from app.modules.governance.domain.jobs.handlers.acceptance_runtime_ops import (
+    ACCEPTANCE_CAPTURE_RECOVERABLE_ERRORS,
+    ACCEPTANCE_INTEGRATION_RECOVERABLE_ERRORS,
+    ACCEPTANCE_PARSE_RECOVERABLE_ERRORS,
+    _coerce_positive_int,
+    _evaluate_tenancy_passive_check,
+    _integration_event_type,
+    _iso_date,
+    _require_tenant_id,
+    _tenant_tier,
+)
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
 from app.modules.governance.domain.security.audit_log import (
     AuditEventType,
-    AuditLog,
     AuditLogger,
 )
 from app.modules.notifications.domain import (
@@ -36,114 +46,10 @@ from app.shared.core.auth import CurrentUser
 from app.shared.core.config import get_settings
 from app.shared.core.pricing import (
     FeatureFlag,
-    PricingTier,
     is_feature_enabled,
-    normalize_tier,
 )
 
 logger = structlog.get_logger()
-
-
-def _require_tenant_id(job: BackgroundJob) -> UUID:
-    if job.tenant_id is None:
-        raise ValueError("tenant_id required for acceptance_suite_capture")
-    return UUID(str(job.tenant_id))
-
-
-def _iso_date(value: object) -> date:
-    if isinstance(value, date):
-        return value
-    if isinstance(value, str):
-        return date.fromisoformat(value)
-    raise ValueError("Expected ISO date string")
-
-
-def _tenant_tier(plan: str | None) -> PricingTier:
-    if not plan:
-        return PricingTier.FREE
-    return normalize_tier(plan)
-
-
-def _coerce_positive_int(value: object, *, default: int) -> int:
-    try:
-        parsed = int(str(value).strip())
-    except (TypeError, ValueError):
-        return default
-    return max(1, parsed)
-
-
-async def _evaluate_tenancy_passive_check(
-    db: AsyncSession,
-    *,
-    tenant_id: UUID,
-    max_age_hours: int,
-    now_utc: datetime,
-) -> dict[str, Any]:
-    latest = await db.scalar(
-        select(AuditLog)
-        .where(
-            AuditLog.tenant_id == tenant_id,
-            AuditLog.event_type
-            == AuditEventType.TENANCY_ISOLATION_VERIFICATION_CAPTURED.value,
-        )
-        .order_by(AuditLog.event_timestamp.desc())
-        .limit(1)
-    )
-
-    if latest is None:
-        return {
-            "success": False,
-            "status_code": 503,
-            "message": "Tenant isolation verification evidence is missing.",
-            "details": {
-                "max_age_hours": max_age_hours,
-                "reason": "evidence_missing",
-            },
-        }
-
-    observed = latest.event_timestamp
-    if observed.tzinfo is None:
-        observed_utc = observed.replace(tzinfo=timezone.utc)
-    else:
-        observed_utc = observed.astimezone(timezone.utc)
-    age_hours = (now_utc - observed_utc).total_seconds() / 3600.0
-
-    if not bool(getattr(latest, "success", False)):
-        return {
-            "success": False,
-            "status_code": 503,
-            "message": "Latest tenant isolation verification did not pass.",
-            "details": {
-                "max_age_hours": max_age_hours,
-                "age_hours": round(age_hours, 4),
-                "reason": "latest_verification_failed",
-                "evidence_correlation_id": getattr(latest, "correlation_id", None),
-            },
-        }
-
-    if age_hours > float(max_age_hours):
-        return {
-            "success": False,
-            "status_code": 504,
-            "message": "Tenant isolation verification evidence is stale.",
-            "details": {
-                "max_age_hours": max_age_hours,
-                "age_hours": round(age_hours, 4),
-                "reason": "evidence_stale",
-                "evidence_correlation_id": getattr(latest, "correlation_id", None),
-            },
-        }
-
-    return {
-        "success": True,
-        "status_code": 200,
-        "message": "Tenant isolation passive check OK.",
-        "details": {
-            "max_age_hours": max_age_hours,
-            "age_hours": round(age_hours, 4),
-            "evidence_correlation_id": getattr(latest, "correlation_id", None),
-        },
-    }
 
 
 class AcceptanceSuiteCaptureHandler(BaseJobHandler):
@@ -223,7 +129,7 @@ class AcceptanceSuiteCaptureHandler(BaseJobHandler):
                 current_user=system_user,
                 db=db,
             )
-        except Exception as exc:  # noqa: BLE001 - evidence capture must be resilient
+        except ACCEPTANCE_CAPTURE_RECOVERABLE_ERRORS as exc:
             kpi_success = False
             kpi_error = str(exc)
             logger.warning(
@@ -281,7 +187,7 @@ class AcceptanceSuiteCaptureHandler(BaseJobHandler):
                     include_preliminary=False,
                     top_services_limit=10,
                 )
-            except Exception as exc:  # noqa: BLE001 - evidence capture must be resilient
+            except ACCEPTANCE_CAPTURE_RECOVERABLE_ERRORS as exc:
                 leadership_success = False
                 leadership_error = str(exc)
                 logger.warning(
@@ -356,7 +262,7 @@ class AcceptanceSuiteCaptureHandler(BaseJobHandler):
                         as_of=end_date,
                         provider=None,
                     )
-                except Exception as exc:  # noqa: BLE001
+                except ACCEPTANCE_CAPTURE_RECOVERABLE_ERRORS as exc:
                     quarterly_success = False
                     quarterly_error = str(exc)
                     logger.warning(
@@ -424,7 +330,7 @@ class AcceptanceSuiteCaptureHandler(BaseJobHandler):
                 max_restatements_raw = payload.get("close_max_restatement_entries", 25)
                 try:
                     max_restatements = int(max_restatements_raw)
-                except Exception:
+                except ACCEPTANCE_PARSE_RECOVERABLE_ERRORS:
                     max_restatements = 25
                 if max_restatements < 0:
                     max_restatements = 0
@@ -449,7 +355,7 @@ class AcceptanceSuiteCaptureHandler(BaseJobHandler):
                     package.pop("csv", None)
                     close_capture_payload = package
                     close_capture_success = True
-                except Exception as exc:  # noqa: BLE001
+                except ACCEPTANCE_CAPTURE_RECOVERABLE_ERRORS as exc:
                     close_capture_error = str(exc)
                     logger.warning(
                         "acceptance_close_package_capture_failed",
@@ -532,7 +438,7 @@ class AcceptanceSuiteCaptureHandler(BaseJobHandler):
         else:
             try:
                 ok = await slack.health_check()
-            except Exception as exc:  # noqa: BLE001
+            except ACCEPTANCE_INTEGRATION_RECOVERABLE_ERRORS as exc:
                 ok = False
                 logger.warning(
                     "slack_passive_health_check_exception",
@@ -724,18 +630,3 @@ class AcceptanceSuiteCaptureHandler(BaseJobHandler):
                 "results": integration_results,
             },
         }
-
-
-def _integration_event_type(channel: str) -> AuditEventType:
-    normalized = channel.strip().lower()
-    if normalized == "slack":
-        return AuditEventType.INTEGRATION_TEST_SLACK
-    if normalized == "jira":
-        return AuditEventType.INTEGRATION_TEST_JIRA
-    if normalized == "teams":
-        return AuditEventType.INTEGRATION_TEST_TEAMS
-    if normalized == "workflow":
-        return AuditEventType.INTEGRATION_TEST_WORKFLOW
-    if normalized == "tenancy":
-        return AuditEventType.INTEGRATION_TEST_TENANCY
-    return AuditEventType.INTEGRATION_TEST_SUITE

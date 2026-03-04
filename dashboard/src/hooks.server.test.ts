@@ -71,11 +71,12 @@ describe('hooks.server handle', () => {
 		mocks.isPublicPath.mockReturnValue(true);
 
 		const event = createEvent('https://example.com/');
-		const resolve = vi.fn(async () =>
-			new Response('<html></html>', {
-				status: 200,
-				headers: { 'content-type': 'text/html' }
-			})
+		const resolve = vi.fn(
+			async () =>
+				new Response('<html></html>', {
+					status: 200,
+					headers: { 'content-type': 'text/html' }
+				})
 		);
 
 		const response = await handle({

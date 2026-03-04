@@ -24,7 +24,8 @@ declare global {
 	}
 }
 
-const TURNSTILE_SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+const TURNSTILE_SCRIPT_SRC =
+	'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 const TURNSTILE_TOKEN_TTL_MS = 2 * 60 * 1000;
 
 let scriptLoadPromise: Promise<void> | null = null;
@@ -104,7 +105,9 @@ export async function getTurnstileToken(action: string): Promise<string | null> 
 	if (!browser) return null;
 	if (!isTurnstileConfigured()) return null;
 
-	const normalizedAction = String(action || '').trim().toLowerCase();
+	const normalizedAction = String(action || '')
+		.trim()
+		.toLowerCase();
 	if (!normalizedAction) {
 		throw new Error('turnstile_action_required');
 	}

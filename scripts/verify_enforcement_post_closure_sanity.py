@@ -66,7 +66,7 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
             "test_evaluate_gate_computed_context_snapshot_metadata_stable_across_runs",
         ),
         EvidenceToken(
-            "app/modules/enforcement/domain/service.py",
+            "app/modules/enforcement/domain/service_models.py",
             "computed_context_lineage_sha256",
         ),
         EvidenceToken(
@@ -84,7 +84,7 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
             "test_enforcement_export_parity_and_archive_endpoints",
         ),
         EvidenceToken(
-            "app/modules/enforcement/domain/service.py",
+            "app/modules/enforcement/domain/export_bundle_ops.py",
             "policy_lineage_sha256",
         ),
         EvidenceToken(

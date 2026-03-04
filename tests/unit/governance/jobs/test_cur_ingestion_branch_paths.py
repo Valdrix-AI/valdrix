@@ -9,6 +9,10 @@ import pytest
 from app.modules.governance.domain.jobs.cur_ingestion import CURIngestionJob
 
 
+class _FatalTestSignal(BaseException):
+    """Sentinel fatal error used to assert broad Exception handlers do not swallow BaseException."""
+
+
 def _scalars_result(rows: list[object]) -> MagicMock:
     result = MagicMock()
     scalars = MagicMock()
@@ -166,3 +170,36 @@ async def test_find_latest_cur_key_logs_and_reraises_unexpected_error() -> None:
             await job._find_latest_cur_key(conn, "cur-bucket")
 
     logger_mock.error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_execute_does_not_swallow_fatal_connection_ingest_exceptions() -> None:
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars_result([_conn(id="fatal-conn")]))
+    job = CURIngestionJob(db=db)
+
+    with patch.object(
+        job,
+        "ingest_for_connection",
+        new=AsyncMock(side_effect=_FatalTestSignal()),
+    ):
+        with pytest.raises(_FatalTestSignal):
+            await job._execute(tenant_id="tenant-1")
+
+
+@pytest.mark.asyncio
+async def test_find_latest_cur_key_does_not_swallow_fatal_errors() -> None:
+    job = CURIngestionJob()
+    conn = _conn()
+    mock_s3 = MagicMock()
+    mock_s3.list_objects_v2.side_effect = _FatalTestSignal()
+
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.cur_ingestion.resolve_aws_region_hint",
+            return_value="us-east-1",
+        ),
+        patch("boto3.client", return_value=mock_s3),
+    ):
+        with pytest.raises(_FatalTestSignal):
+            await job._find_latest_cur_key(conn, "cur-bucket")

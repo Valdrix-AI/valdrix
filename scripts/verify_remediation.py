@@ -30,7 +30,7 @@ async def verify_precision():
         assert isinstance(result['total_forecasted_cost'], Decimal), "Error: result is not Decimal"
         print("✅ SUCCESS: Precision verified.")
         
-    except Exception as e:
+    except (AssertionError, ImportError, OSError, RuntimeError, TypeError, ValueError) as e:
         print(f"❌ FAILED: {str(e)}")
         sys.exit(1)
 

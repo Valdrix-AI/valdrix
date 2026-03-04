@@ -16,6 +16,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import app.modules.enforcement.domain.service as enforcement_service_module
+import app.modules.enforcement.domain.service_runtime_ops as enforcement_service_runtime_ops_module
 from app.models.enforcement import (
     EnforcementApprovalStatus,
     EnforcementCreditGrant,
@@ -3778,7 +3779,7 @@ async def test_build_export_bundle_rejects_when_decision_count_exceeds_max_rows(
 
     counter = _FakeCounter()
     monkeypatch.setattr(
-        enforcement_service_module,
+        enforcement_service_runtime_ops_module,
         "ENFORCEMENT_EXPORT_EVENTS_TOTAL",
         counter,
     )
@@ -3808,7 +3809,7 @@ async def test_build_export_bundle_empty_window_returns_empty_lineage_and_succes
     service = EnforcementService(db)
     counter = _FakeCounter()
     monkeypatch.setattr(
-        enforcement_service_module,
+        enforcement_service_runtime_ops_module,
         "ENFORCEMENT_EXPORT_EVENTS_TOTAL",
         counter,
     )

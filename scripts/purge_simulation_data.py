@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.shared.core.config import get_settings
 
@@ -75,7 +76,7 @@ async def purge_simulation_data_batched():
             await session.commit()
             print("✅ Simulation data purged successfully.")
             
-        except Exception as e:
+        except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
             print(f"❌ PURGE ERROR: {e}")
             await session.rollback()
             sys.exit(1)

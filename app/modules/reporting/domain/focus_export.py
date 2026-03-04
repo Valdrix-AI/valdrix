@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, AsyncIterator
 from uuid import UUID
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.aws_connection import AWSConnection
@@ -21,6 +22,25 @@ from app.models.platform_connection import PlatformConnection
 from app.models.saas_connection import SaaSConnection
 
 logger = structlog.get_logger()
+FOCUS_EXPORT_STREAM_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+    NotImplementedError,
+)
+FOCUS_EXPORT_COST_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    InvalidOperation,
+    TypeError,
+    ValueError,
+)
+FOCUS_EXPORT_TAG_SERIALIZATION_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    TypeError,
+    ValueError,
+)
 
 # FOCUS 1.3 core export: subset that is both high-value and fully derivable from our normalized ledger
 # without pretending to include SKU/unit-price fields we do not store yet.
@@ -166,7 +186,7 @@ def _format_cost(value: Any) -> str:
         return format(value, "f")
     try:
         return format(Decimal(str(value)), "f")
-    except Exception:
+    except FOCUS_EXPORT_COST_PARSE_RECOVERABLE_EXCEPTIONS:
         return "0"
 
 
@@ -182,7 +202,7 @@ def _tags_json(value: Any) -> str:
     # Stable JSON for diffs and deterministic exports.
     try:
         return json.dumps(value, separators=(",", ":"), sort_keys=True)
-    except Exception:
+    except FOCUS_EXPORT_TAG_SERIALIZATION_RECOVERABLE_EXCEPTIONS:
         return ""
 
 
@@ -231,7 +251,7 @@ class FocusV13ExportService:
                 cost_record, account = row
                 yield self._row_to_focus(cost_record, account, contexts)
             return
-        except Exception:
+        except FOCUS_EXPORT_STREAM_RECOVERABLE_EXCEPTIONS:
             logger.debug("focus_export_stream_fallback_to_execute")
 
         sync_result = await self.db.execute(stmt)

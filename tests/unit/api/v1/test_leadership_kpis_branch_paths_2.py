@@ -320,6 +320,35 @@ async def test_list_leadership_evidence_direct_skips_non_dict_and_invalid_schema
 
 
 @pytest.mark.asyncio
+async def test_list_leadership_evidence_does_not_swallow_base_exceptions() -> None:
+    tenant_id = uuid4()
+    user = _user(tenant_id=tenant_id)
+    valid_row = SimpleNamespace(
+        id=uuid4(),
+        correlation_id="run-1",
+        event_timestamp=datetime(2026, 2, 1, 9, 0, tzinfo=timezone.utc),
+        actor_id=None,
+        actor_email=None,
+        success=True,
+        details={"leadership_kpis": {"start_date": "2026-01-01"}},
+    )
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars_result([valid_row]))
+
+    with patch.object(
+        leadership_api.LeadershipKpisResponse,
+        "model_validate",
+        side_effect=KeyboardInterrupt("stop"),
+    ):
+        with pytest.raises(KeyboardInterrupt, match="stop"):
+            await leadership_api.list_leadership_kpi_evidence(
+                limit=25,
+                current_user=user,
+                db=db,
+            )
+
+
+@pytest.mark.asyncio
 async def test_get_quarterly_report_direct_csv_branch() -> None:
     report = _quarterly_payload()
 
@@ -507,3 +536,32 @@ async def test_list_quarterly_evidence_direct_skips_non_dict_and_invalid_schema(
     assert response.items[0].event_id == str(valid_row.id)
     assert response.items[0].actor_id is None
     logger_mock.warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_list_quarterly_evidence_does_not_swallow_base_exceptions() -> None:
+    tenant_id = uuid4()
+    user = _user(tenant_id=tenant_id)
+    row = SimpleNamespace(
+        id=uuid4(),
+        correlation_id="run-q1",
+        event_timestamp=datetime(2026, 2, 5, 9, 0, tzinfo=timezone.utc),
+        actor_id=None,
+        actor_email="ops@example.com",
+        success=True,
+        details={"quarterly_report": {"year": 2026}},
+    )
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars_result([row]))
+
+    with patch.object(
+        leadership_api.QuarterlyCommercialProofResponse,
+        "model_validate",
+        side_effect=KeyboardInterrupt("stop"),
+    ):
+        with pytest.raises(KeyboardInterrupt, match="stop"):
+            await leadership_api.list_quarterly_commercial_report_evidence(
+                limit=25,
+                current_user=user,
+                db=db,
+            )

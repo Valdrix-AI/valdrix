@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 from app.shared.core.config import get_settings
 
@@ -38,7 +39,7 @@ async def truncate_cost_data():
             """))
             print(f"Final DB Size: {res.scalar()}")
 
-    except Exception as e:
+    except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
         print(f"❌ CRITICAL ERROR: {e}")
         sys.exit(1)
     finally:

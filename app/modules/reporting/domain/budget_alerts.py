@@ -11,11 +11,30 @@ cloud teams with measurable targets and automated notifications.
 from typing import List, Dict, Any
 from datetime import date, datetime, timezone
 from uuid import UUID
+import smtplib
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = structlog.get_logger()
+CARBON_SLACK_ALERT_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ImportError,
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+CARBON_EMAIL_ALERT_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ImportError,
+    smtplib.SMTPException,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 class CarbonBudgetService:
@@ -248,7 +267,7 @@ class CarbonBudgetService:
                         tenant_id=str(tenant_id),
                     )
 
-            except Exception as e:
+            except CARBON_SLACK_ALERT_RECOVERABLE_EXCEPTIONS as e:
                 logger.error("carbon_slack_alert_failed", error=str(e))
 
         # Send email notification if enabled
@@ -307,7 +326,7 @@ class CarbonBudgetService:
                             "email_alert_skipped", reason="SMTP not configured"
                         )
 
-                except Exception as e:
+                except CARBON_EMAIL_ALERT_RECOVERABLE_EXCEPTIONS as e:
                     logger.error("carbon_email_alert_failed", error=str(e))
 
         # Mark alert as sent to prevent spam

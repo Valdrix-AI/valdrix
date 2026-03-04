@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from datetime import datetime, timezone
+from google.api_core.exceptions import GoogleAPIError
 from google.cloud import compute_v1
 from google.cloud import monitoring_v3
 from google.auth.credentials import Credentials as GoogleCredentials
@@ -12,6 +13,13 @@ from app.modules.optimization.domain.registry import registry
 import structlog
 
 logger = structlog.get_logger()
+GCP_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS = (
+    GoogleAPIError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 def _resolve_gcp_credentials(credentials: Any) -> Any:
@@ -185,7 +193,7 @@ class OverprovisionedComputePlugin(ZombiePlugin):
                             "explainability_notes": f"Instance {machine_type_name} had Max CPU of {max_cpu_percent:.1f}% over the last 7 days."
                         })
 
-        except Exception as e:
+        except GCP_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.error("gcp_rightsizing_scan_error", error=str(e))
 
         return zombies

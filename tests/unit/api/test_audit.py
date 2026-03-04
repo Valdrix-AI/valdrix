@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from fastapi import HTTPException
+from sqlalchemy.exc import SQLAlchemyError
 from uuid import uuid4
 from datetime import datetime, timezone
 from app.modules.governance.api.v1.audit import (
@@ -65,7 +66,7 @@ async def test_get_audit_logs_success(mock_db, admin_user):
 
 @pytest.mark.asyncio
 async def test_get_audit_logs_error(mock_db, admin_user):
-    mock_db.execute.side_effect = Exception("DB error")
+    mock_db.execute.side_effect = SQLAlchemyError("DB error")
     with pytest.raises(HTTPException) as exc:
         await get_audit_logs(admin_user, mock_db)
     assert exc.value.status_code == 500
@@ -121,7 +122,7 @@ async def test_get_audit_log_detail_not_found(mock_db, admin_user):
 
 @pytest.mark.asyncio
 async def test_get_audit_log_detail_error(mock_db, admin_user):
-    mock_db.execute.side_effect = Exception("DB error")
+    mock_db.execute.side_effect = SQLAlchemyError("DB error")
     with pytest.raises(HTTPException) as exc:
         await get_audit_log_detail(uuid4(), admin_user, mock_db)
     assert exc.value.status_code == 500
@@ -163,7 +164,7 @@ async def test_export_audit_logs_success(mock_db, admin_user):
 
 @pytest.mark.asyncio
 async def test_export_audit_logs_error(mock_db, admin_user):
-    mock_db.execute.side_effect = Exception("DB error")
+    mock_db.execute.side_effect = SQLAlchemyError("DB error")
     with pytest.raises(HTTPException) as exc:
         await export_audit_logs(admin_user, mock_db)
     assert exc.value.status_code == 500
@@ -197,7 +198,7 @@ async def test_request_data_erasure_success(mock_db, owner_user):
 
 @pytest.mark.asyncio
 async def test_request_data_erasure_error(mock_db, owner_user):
-    mock_db.execute.side_effect = Exception("DB error")
+    mock_db.execute.side_effect = SQLAlchemyError("DB error")
     with pytest.raises(HTTPException) as exc:
         await request_data_erasure(
             owner_user, mock_db, confirmation="DELETE ALL MY DATA"

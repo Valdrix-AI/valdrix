@@ -9,7 +9,7 @@ for compute resources (e.g., EC2 BoxUsage) correlates with low utilization.
 """
 
 from typing import List, Dict, Any
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import structlog
 
 logger = structlog.get_logger()
@@ -42,7 +42,7 @@ class CURUsageAnalyzer:
             return Decimal("0")
         try:
             return Decimal(str(value))
-        except Exception:
+        except (InvalidOperation, TypeError, ValueError):
             return Decimal("0")
 
     @staticmethod
@@ -52,7 +52,7 @@ class CURUsageAnalyzer:
             return 0
         try:
             return int(float(value))
-        except Exception:
+        except (TypeError, ValueError, OverflowError):
             return 0
 
     def find_low_usage_instances(self, days: int = 14) -> List[Dict[str, Any]]:

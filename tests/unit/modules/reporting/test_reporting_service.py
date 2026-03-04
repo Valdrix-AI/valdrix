@@ -438,7 +438,7 @@ class TestCostIngestionWithConnections:
             "app.modules.reporting.domain.service.AdapterFactory"
         ) as mock_factory:
             # Simulate adapter failure
-            mock_factory.get_adapter.side_effect = Exception("Connection failed")
+            mock_factory.get_adapter.side_effect = RuntimeError("Connection failed")
 
             result = await service.ingest_costs_for_tenant(tenant_id)
 
@@ -707,7 +707,7 @@ class TestAttributionTriggering:
 
             # Attribution fails
             mock_attribution_instance = AsyncMock()
-            mock_attribution_instance.apply_rules_to_tenant.side_effect = Exception(
+            mock_attribution_instance.apply_rules_to_tenant.side_effect = RuntimeError(
                 "Attribution error"
             )
             mock_attribution.return_value = mock_attribution_instance

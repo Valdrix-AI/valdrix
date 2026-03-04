@@ -4,8 +4,18 @@ from typing import Any
 import structlog
 
 from app.shared.adapters.base import BaseAdapter
+from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
+ARM_ANALYSIS_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    ConnectionError,
+    TimeoutError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 class ArmMigrationAnalyzer(ABC):
@@ -37,7 +47,7 @@ class ArmMigrationAnalyzer(ABC):
             instances = await self.adapter.discover_resources(
                 "compute", region=self.region
             )
-        except Exception as exc:
+        except ARM_ANALYSIS_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
                 "arm_analysis_failed",
                 error=str(exc),

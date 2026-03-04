@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
+from upstash_redis.errors import UpstashError
 from app.shared.core.cache import CacheService
 
 
@@ -9,8 +10,8 @@ async def test_cache_service_graceful_failure():
     """Verify that CacheService doesn't crash if Redis operations fail."""
     # Mock the Redis client to throw an exception on get
     mock_redis = AsyncMock()
-    mock_redis.get.side_effect = Exception("Redis Connection Refused")
-    mock_redis.set.side_effect = Exception("Redis Write Error")
+    mock_redis.get.side_effect = UpstashError("Redis Connection Refused")
+    mock_redis.set.side_effect = UpstashError("Redis Write Error")
 
     with patch("app.shared.core.cache._get_async_client", return_value=mock_redis):
         service = CacheService()

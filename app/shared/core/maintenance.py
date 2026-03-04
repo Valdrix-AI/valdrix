@@ -2,9 +2,15 @@ import structlog
 from datetime import date
 from dateutil.relativedelta import relativedelta  # type: ignore[import-untyped]
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
+PARTITION_MAINTENANCE_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    SQLAlchemyError,
+)
 
 class PartitionMaintenanceService:
     """
@@ -69,7 +75,7 @@ class PartitionMaintenanceService:
                         
                         created_count += 1
                         logger.info("partition_created", table=table, partition=partition_name)
-                    except Exception as e:
+                    except PARTITION_MAINTENANCE_RECOVERABLE_EXCEPTIONS as e:
                         logger.error("partition_creation_failed", table=table, partition=partition_name, error=str(e))
                         
         return created_count
@@ -83,6 +89,6 @@ class PartitionMaintenanceService:
         try:
             await self.db.execute(text("SELECT archive_old_cost_partitions();"))
             return 1 # Simplified return
-        except Exception as e:
+        except PARTITION_MAINTENANCE_RECOVERABLE_EXCEPTIONS as e:
             logger.warning("archival_function_call_failed", error=str(e))
             return 0

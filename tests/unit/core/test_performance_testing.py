@@ -130,7 +130,7 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
     class ExplodingClient(DummyClient):
         async def get(self, url, **kwargs):
             tester2._running = False
-            raise Exception("network down")
+            raise RuntimeError("network down")
 
     monkeypatch.setattr(
         "app.shared.core.http.get_http_client",
@@ -232,7 +232,7 @@ async def test_simulate_user_records_exception_metrics(monkeypatch):
 
         async def get(self, url, **kwargs):
             tester._running = False
-            raise Exception("network down")
+            raise RuntimeError("network down")
 
     monkeypatch.setattr(
         "app.shared.core.http.get_http_client",

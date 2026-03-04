@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
+from botocore.exceptions import ClientError
 import structlog
 
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -8,6 +9,13 @@ from app.modules.optimization.domain.registry import registry
 from app.modules.reporting.domain.pricing.service import PricingService
 
 logger = structlog.get_logger()
+AWS_OPENSEARCH_SCAN_RECOVERABLE_EXCEPTIONS = (
+    ClientError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @registry.register("aws")
@@ -195,7 +203,7 @@ class IdleOpenSearchPlugin(ZombiePlugin):
                                 ),
                             }
                         )
-        except Exception as exc:
+        except AWS_OPENSEARCH_SCAN_RECOVERABLE_EXCEPTIONS as exc:
             logger.error("aws_opensearch_scan_error", error=str(exc))
 
         return zombies

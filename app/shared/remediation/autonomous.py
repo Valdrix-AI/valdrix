@@ -6,6 +6,7 @@ from uuid import UUID
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.remediation import RemediationAction, RemediationRequest, RemediationStatus
@@ -15,6 +16,13 @@ from app.shared.core.constants import SYSTEM_USER_ID
 from app.shared.core.provider import normalize_provider
 
 logger = structlog.get_logger()
+AUTONOMOUS_SWEEP_SCAN_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class AutonomousRemediationEngine:
@@ -304,7 +312,7 @@ class AutonomousRemediationEngine:
                     "auto_executed": 0,
                     "error": "no_connections_found",
                 }
-        except Exception as exc:
+        except AUTONOMOUS_SWEEP_SCAN_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
                 "autonomous_sweep_scan_failed",
                 tenant_id=str(self.tenant_id),

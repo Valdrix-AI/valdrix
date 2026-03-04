@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.remediation import (
     RemediationAction,
@@ -16,6 +17,19 @@ from app.shared.core.exceptions import ResourceNotFoundError
 from app.shared.core.provider import normalize_provider
 
 logger = structlog.get_logger()
+
+REMEDIATION_CONNECTION_SCOPE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ResourceNotFoundError,
+    SQLAlchemyError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ValueError,
+    TypeError,
+    KeyError,
+    LookupError,
+    AttributeError,
+)
 
 
 async def preview_policy_for_request(
@@ -153,7 +167,7 @@ async def create_remediation_request(
             scoped_connection = await service.get_by_id(
                 connection_model, connection_id, tenant_id
             )
-        except Exception as exc:
+        except REMEDIATION_CONNECTION_SCOPE_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning(
                 "remediation_connection_scope_failed",
                 tenant_id=str(tenant_id),

@@ -312,7 +312,7 @@ async def test_usage_tracking_exception(zombie_analyzer):
         ),
         patch(
             "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
-            new=AsyncMock(side_effect=Exception("DB Error")),
+            new=AsyncMock(side_effect=RuntimeError("DB Error")),
         ),
         patch("app.shared.llm.factory.LLMFactory", new_callable=MagicMock),
         patch("app.shared.llm.zombie_analyzer.get_settings"),
@@ -330,6 +330,27 @@ async def test_usage_tracking_exception(zombie_analyzer):
         await zombie_analyzer.analyze(
             {"ec2": [{"id": "i-1"}]}, tenant_id=tenant_id, db=mock_db
         )
+
+
+@pytest.mark.asyncio
+async def test_usage_tracking_fatal_exception_propagates() -> None:
+    analyzer = ZombieAnalyzer(MagicMock())
+    response = MagicMock()
+    response.response_metadata = {"token_usage": {"prompt_tokens": 1, "completion_tokens": 2}}
+
+    with patch(
+        "app.shared.llm.zombie_analyzer.LLMBudgetManager.record_usage",
+        new=AsyncMock(side_effect=KeyboardInterrupt()),
+    ):
+        with pytest.raises(KeyboardInterrupt):
+            await analyzer._record_usage(
+                db=AsyncMock(),
+                tenant_id=uuid4(),
+                provider="groq",
+                model="llama-3.3-70b-versatile",
+                response=response,
+                is_byok=False,
+            )
 
 
 @pytest.mark.asyncio

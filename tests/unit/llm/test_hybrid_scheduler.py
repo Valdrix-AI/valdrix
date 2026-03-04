@@ -187,6 +187,29 @@ def test_hybrid_span_records_exception_and_re_raises() -> None:
     assert duration_calls[-1].args[1] == pytest.approx(10.0)
 
 
+def test_hybrid_span_does_not_swallow_fatal_exceptions() -> None:
+    span = MagicMock()
+    span_cm = MagicMock()
+    span_cm.__enter__.return_value = span
+    span_cm.__exit__.return_value = None
+    tracer = MagicMock()
+    tracer.start_as_current_span.return_value = span_cm
+
+    with (
+        patch.object(hybrid_scheduler_module, "tracer", tracer),
+        patch.object(
+            hybrid_scheduler_module.time,
+            "perf_counter",
+            side_effect=[10.0, 10.02],
+        ),
+    ):
+        with pytest.raises(KeyboardInterrupt):
+            with hybrid_scheduler_module._hybrid_span("hybrid.test.fatal"):
+                raise KeyboardInterrupt()
+
+    span.record_exception.assert_called_once()
+
+
 def test_hybrid_span_logs_latency_spike() -> None:
     span = MagicMock()
     span_cm = MagicMock()

@@ -73,6 +73,38 @@ async def test_create_issue_failure_status_and_exception() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_issue_does_not_swallow_fatal_exceptions() -> None:
+    service = JiraService(
+        base_url="https://example.atlassian.net",
+        email="jira@example.com",
+        api_token="token",
+        project_key="FINOPS",
+    )
+
+    client = AsyncMock()
+    client.post = AsyncMock(side_effect=KeyboardInterrupt())
+    with patch("app.shared.core.http.get_http_client", return_value=client):
+        with pytest.raises(KeyboardInterrupt):
+            await service.create_issue("s", "d")
+
+
+@pytest.mark.asyncio
+async def test_health_check_does_not_swallow_fatal_exceptions() -> None:
+    service = JiraService(
+        base_url="https://example.atlassian.net",
+        email="jira@example.com",
+        api_token="token",
+        project_key="FINOPS",
+    )
+    client = AsyncMock()
+    client.get = AsyncMock(side_effect=KeyboardInterrupt())
+
+    with patch("app.shared.core.http.get_http_client", return_value=client):
+        with pytest.raises(KeyboardInterrupt):
+            await service.health_check()
+
+
+@pytest.mark.asyncio
 async def test_create_policy_issue_delegates_to_create_issue() -> None:
     service = JiraService(
         base_url="https://example.atlassian.net",

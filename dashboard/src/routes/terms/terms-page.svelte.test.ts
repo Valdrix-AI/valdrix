@@ -11,7 +11,9 @@ describe('terms page', () => {
 		expect(screen.getByRole('heading', { name: /billing and subscription/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /limitation of liability/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /governing law and disputes/i })).toBeTruthy();
-		const legalMailLink = screen.getByRole('link', { name: /legal@valdrics.ai/i });
-		expect(legalMailLink.getAttribute('href')).toBe('mailto:legal@valdrics.ai');
+		const legalMailLink = screen.getByRole('link', { name: /hello@valdrics.com/i });
+		expect(legalMailLink.getAttribute('href')).toBe('mailto:hello@valdrics.com');
+		const billingMailLink = screen.getByRole('link', { name: /billing@valdrics.com/i });
+		expect(billingMailLink.getAttribute('href')).toBe('mailto:billing@valdrics.com');
 	});
 });

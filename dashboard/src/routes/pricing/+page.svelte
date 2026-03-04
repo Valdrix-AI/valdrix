@@ -194,16 +194,21 @@
 	<!-- Enterprise Section -->
 	<div class="enterprise-section">
 		<div class="enterprise-content">
-			<h2>Enterprise</h2>
-			<p>For organizations with complex requirements and high cloud spend.</p>
+			<h2>Enterprise Governance</h2>
+			<p>
+				Optional advanced path for organizations that require formal controls, procurement workflows,
+				and expanded governance support.
+			</p>
 			<ul>
-				<li>Designed for high cloud spend</li>
-				<li>SSO (SAML/OIDC)</li>
-				<li>Dedicated support & SLA</li>
-				<li>Custom integrations</li>
+				<li>Advanced security and identity controls (SSO/SCIM)</li>
+				<li>Procurement and due-diligence support lane</li>
+				<li>Priority support and commercial governance alignment</li>
+				<li>Custom integrations for complex operating environments</li>
 			</ul>
 		</div>
-		<a href="mailto:enterprise@valdrics.io" class="enterprise-cta">Contact Sales</a>
+		<a href="mailto:enterprise@valdrics.com?cc=sales@valdrics.com" class="enterprise-cta"
+			>Contact Sales</a
+		>
 	</div>
 
 	<!-- Payment Note -->

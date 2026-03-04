@@ -31,6 +31,28 @@ if TYPE_CHECKING:
     pass
 
 logger = structlog.get_logger()
+AWS_VERIFICATION_RECOVERABLE_EXCEPTIONS = (
+    AdapterError,
+    ClientError,
+    ConnectTimeoutError,
+    ReadTimeoutError,
+    EndpointConnectionError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
+AWS_DISCOVERY_RECOVERABLE_EXCEPTIONS = (
+    AdapterError,
+    ClientError,
+    ConnectTimeoutError,
+    ReadTimeoutError,
+    EndpointConnectionError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 _RESOURCE_USAGE_SERVICE_ALIASES: Dict[str, str] = {
     "ec2": "instance",
@@ -155,7 +177,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
 
             await self.get_credentials()
             return True
-        except Exception as e:
+        except AWS_VERIFICATION_RECOVERABLE_EXCEPTIONS as e:
             self._set_last_error_from_exception(
                 e, prefix="AWS STS role verification failed"
             )
@@ -304,7 +326,7 @@ class MultiTenantAWSAdapter(BaseAdapter):
                 return await target_plugin.scan(
                     self.session, target_region, creds, config=BOTO_CONFIG
                 )
-            except Exception as e:
+            except AWS_DISCOVERY_RECOVERABLE_EXCEPTIONS as e:
                 self._set_last_error_from_exception(
                     e, prefix="AWS resource discovery failed"
                 )

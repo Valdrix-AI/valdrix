@@ -1,11 +1,21 @@
 from typing import List, Dict, Any, cast
 import structlog
 from kubernetes_asyncio import client, config as k8s_config
+from kubernetes_asyncio.client.exceptions import ApiException
+from kubernetes_asyncio.config.config_exception import ConfigException
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 from app.modules.reporting.domain.pricing.service import PricingService
 
 logger = structlog.get_logger()
+KUBERNETES_PVC_SCAN_RECOVERABLE_EXCEPTIONS = (
+    ApiException,
+    ConfigException,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @registry.register("kubernetes")
@@ -129,7 +139,7 @@ class OrphanedPVCPlugin(ZombiePlugin):
                             }
                         )
 
-        except Exception as e:
+        except KUBERNETES_PVC_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.error("k8s_pvc_scan_failed", error=str(e))
 
         return zombies

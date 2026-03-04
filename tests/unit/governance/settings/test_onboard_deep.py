@@ -7,6 +7,22 @@ from app.shared.core.auth import CurrentUser, get_current_user_from_jwt, UserRol
 from app.models.tenant import User
 
 
+class _FatalTestSignal(BaseException):
+    """Sentinel fatal error used to assert broad Exception handlers do not swallow BaseException."""
+
+
+def _exception_group_contains(
+    error: BaseException, exc_type: type[BaseException]
+) -> bool:
+    if isinstance(error, exc_type):
+        return True
+    if isinstance(error, BaseExceptionGroup):
+        return any(
+            _exception_group_contains(nested, exc_type) for nested in error.exceptions
+        )
+    return False
+
+
 @pytest.fixture
 def mock_user():
     user_id = uuid.uuid4()
@@ -229,7 +245,7 @@ async def test_onboard_exception_handler(async_client: AsyncClient, app, mock_us
 
     with patch(
         "app.shared.adapters.factory.AdapterFactory.get_adapter",
-        side_effect=Exception("Unexpected crash"),
+        side_effect=RuntimeError("Unexpected crash"),
     ):
         payload = {
             "tenant_name": "CrashTenant",
@@ -238,5 +254,26 @@ async def test_onboard_exception_handler(async_client: AsyncClient, app, mock_us
         response = await async_client.post("/api/v1/settings/onboard", json=payload)
         assert response.status_code == 400
         assert "Unexpected crash" in str(response.json())
+
+    app.dependency_overrides.pop(get_current_user_from_jwt, None)
+
+
+@pytest.mark.asyncio
+async def test_onboard_does_not_swallow_fatal_verification_errors(
+    async_client: AsyncClient, app, mock_user
+):
+    app.dependency_overrides[get_current_user_from_jwt] = lambda: mock_user
+
+    with patch(
+        "app.shared.adapters.factory.AdapterFactory.get_adapter",
+        side_effect=_FatalTestSignal(),
+    ):
+        payload = {
+            "tenant_name": "FatalTenant",
+            "cloud_config": {"platform": "aws", "role_arn": "arn:aws:iam::..."},
+        }
+        with pytest.raises(BaseExceptionGroup) as exc_info:
+            await async_client.post("/api/v1/settings/onboard", json=payload)
+    assert _exception_group_contains(exc_info.value, _FatalTestSignal)
 
     app.dependency_overrides.pop(get_current_user_from_jwt, None)

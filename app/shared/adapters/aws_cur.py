@@ -15,6 +15,7 @@ import aioboto3
 import pandas as pd
 import pyarrow.parquet as pq
 import structlog
+from botocore.exceptions import BotoCoreError, ClientError
 from app.shared.adapters.base import BaseAdapter
 from app.shared.adapters.aws_pagination import iter_aws_paginator_pages
 from app.shared.adapters.aws_utils import resolve_aws_region_hint
@@ -82,7 +83,7 @@ class AWSCURAdapter(BaseAdapter):
             ) as s3:
                 await s3.head_bucket(Bucket=self.bucket_name)
             return True
-        except Exception as e:
+        except (BotoCoreError, ClientError, RuntimeError, ValueError, TypeError) as e:
             self._set_last_error_from_exception(
                 e, prefix="AWS CUR bucket verification failed"
             )
@@ -106,8 +107,6 @@ class AWSCURAdapter(BaseAdapter):
         ) as s3:
             try:
                 # 1. Check if bucket exists
-                from botocore.exceptions import ClientError
-
                 bucket_exists = True
                 try:
                     await s3.head_bucket(Bucket=self.bucket_name)
@@ -159,7 +158,14 @@ class AWSCURAdapter(BaseAdapter):
                     Bucket=self.bucket_name, Policy=json.dumps(policy)
                 )
 
-            except Exception as e:
+            except (
+                BotoCoreError,
+                ClientError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                KeyError,
+            ) as e:
                 logger.error("s3_setup_failed", error=str(e))
                 return {"status": "error", "message": f"S3 setup failed: {str(e)}"}
 
@@ -193,7 +199,14 @@ class AWSCURAdapter(BaseAdapter):
                     "bucket_name": self.bucket_name,
                     "report_name": report_name,
                 }
-            except Exception as e:
+            except (
+                BotoCoreError,
+                ClientError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                KeyError,
+            ) as e:
                 logger.error("cur_setup_failed", error=str(e))
                 return {"status": "error", "message": f"CUR setup failed: {str(e)}"}
 
@@ -219,27 +232,22 @@ class AWSCURAdapter(BaseAdapter):
         Fetch daily costs from CUR files in S3 for a specific date range.
         Consolidates logic from previous CUR and S3 adapters.
         """
-        try:
-            # 1. Discover relevant Parquet files
-            report_files = await self._list_cur_files_in_range(start_date, end_date)
-            
-            if not report_files:
-                logger.warning(
-                    "no_cur_files_found_in_range",
-                    bucket=self.bucket_name,
-                    start=start_date.isoformat(),
-                    end=end_date.isoformat(),
-                )
-                return self._empty_summary()
+        # 1. Discover relevant Parquet files
+        report_files = await self._list_cur_files_in_range(start_date, end_date)
 
-            # 2. Process and aggregate
-            return await self._process_files_in_range(
-                report_files, start_date, end_date
+        if not report_files:
+            logger.warning(
+                "no_cur_files_found_in_range",
+                bucket=self.bucket_name,
+                start=start_date.isoformat(),
+                end=end_date.isoformat(),
             )
+            return self._empty_summary()
 
-        except Exception as e:
-            logger.error("cur_daily_costs_failed", error=str(e))
-            raise
+        # 2. Process and aggregate
+        return await self._process_files_in_range(
+            report_files, start_date, end_date
+        )
 
     async def discover_resources(
         self, resource_type: str, region: str | None = None
@@ -255,7 +263,15 @@ class AWSCURAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except (
+            BotoCoreError,
+            ClientError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+        ) as exc:
             self._set_last_error_from_exception(
                 exc, prefix="AWS CUR resource discovery failed"
             )
@@ -357,7 +373,15 @@ class AWSCURAdapter(BaseAdapter):
                             if r_key.endswith(".parquet") and r_key not in seen:
                                 files.append(r_key)
                                 seen.add(r_key)
-                    except Exception as e:
+                    except (
+                        BotoCoreError,
+                        ClientError,
+                        RuntimeError,
+                        json.JSONDecodeError,
+                        ValueError,
+                        TypeError,
+                        KeyError,
+                    ) as e:
                         logger.warning("manifest_parse_failed", key=latest_manifest, error=str(e))
                         # Fallback to direct listing
                         for pk in parquet_keys:
@@ -526,7 +550,14 @@ class AWSCURAdapter(BaseAdapter):
                         if tk not in by_tag:
                             by_tag[tk] = {}
                         by_tag[tk][tv] = by_tag[tk].get(tv, Decimal("0")) + record.amount
-                except Exception:
+                except (
+                    ConfigurationError,
+                    InvalidOperation,
+                    ValueError,
+                    TypeError,
+                    KeyError,
+                    AttributeError,
+                ):
                     continue
 
         if dropped_records > 0:
@@ -567,11 +598,11 @@ class AWSCURAdapter(BaseAdapter):
                     processed_batch = True
                     try:
                         yield batch.to_pandas()
-                    except Exception as e:
+                    except (ValueError, TypeError, RuntimeError, AttributeError) as e:
                         logger.warning("cur_batch_to_pandas_failed", error=str(e))
                         continue
                 return
-            except Exception as e:
+            except (ValueError, TypeError, RuntimeError, AttributeError) as e:
                 logger.warning("cur_iter_batches_failed_fallback", error=str(e))
                 if processed_batch:
                     return
@@ -580,7 +611,7 @@ class AWSCURAdapter(BaseAdapter):
             try:
                 table = parquet_file.read_row_group(i)
                 yield table.to_pandas()
-            except Exception as e:
+            except (ValueError, TypeError, RuntimeError, AttributeError) as e:
                 logger.warning("cur_row_group_read_failed", error=str(e), row_group=i)
                 continue
 
@@ -699,7 +730,15 @@ class AWSCURAdapter(BaseAdapter):
                 end_date=end_date,
                 granularity="DAILY",
             )
-        except Exception as exc:  # noqa: BLE001
+        except (
+            BotoCoreError,
+            ClientError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+        ) as exc:
             self._set_last_error_from_exception(
                 exc, prefix="AWS CUR resource usage lookup failed"
             )

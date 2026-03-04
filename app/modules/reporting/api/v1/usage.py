@@ -16,7 +16,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, func, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 import structlog
 
 from app.shared.db.session import get_db
@@ -29,6 +29,7 @@ from app.models.background_job import BackgroundJob, JobType, JobStatus
 logger = structlog.get_logger()
 router = APIRouter(tags=["Usage Metering"])
 USAGE_METRICS_CACHE_TTL = timedelta(seconds=20)
+USAGE_CACHE_PAYLOAD_ERRORS = (ValidationError, TypeError, ValueError)
 
 
 def _require_tenant_id(user: CurrentUser) -> UUID:
@@ -117,7 +118,7 @@ async def get_usage_metrics(
         if isinstance(cached_payload, dict):
             try:
                 return UsageResponse.model_validate(cached_payload)
-            except Exception as exc:
+            except USAGE_CACHE_PAYLOAD_ERRORS as exc:
                 logger.warning("usage_metrics_cache_decode_failed", error=str(exc))
 
     # LLM Usage Aggregates

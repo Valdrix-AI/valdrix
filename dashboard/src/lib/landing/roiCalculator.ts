@@ -5,6 +5,7 @@ export interface LandingRoiInputs {
 	teamMembers: number;
 	blendedHourlyUsd: number;
 	platformAnnualCostUsd: number;
+	currencyCode: string;
 }
 
 export interface LandingRoiResult {
@@ -22,8 +23,124 @@ export const DEFAULT_LANDING_ROI_INPUTS: LandingRoiInputs = Object.freeze({
 	rolloutDays: 30,
 	teamMembers: 2,
 	blendedHourlyUsd: 145,
-	platformAnnualCostUsd: 9600
+	platformAnnualCostUsd: 9600,
+	currencyCode: 'USD'
 });
+
+export const SUPPORTED_CURRENCIES = Object.freeze([
+	{ code: 'USD', label: 'USD ($)', symbol: '$' },
+	{ code: 'EUR', label: 'EUR (€)', symbol: '€' },
+	{ code: 'GBP', label: 'GBP (£)', symbol: '£' },
+	{ code: 'NGN', label: 'NGN (₦)', symbol: '₦' }
+]);
+
+const EURO_REGION_CODES = new Set([
+	'AT',
+	'BE',
+	'CY',
+	'DE',
+	'EE',
+	'ES',
+	'FI',
+	'FR',
+	'GR',
+	'HR',
+	'IE',
+	'IT',
+	'LT',
+	'LU',
+	'LV',
+	'MT',
+	'NL',
+	'PT',
+	'SI',
+	'SK'
+]);
+
+function dedupeStrings(values: readonly string[]): string[] {
+	return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function regionFromLocale(locale: string): string | null {
+	const normalized = locale.trim();
+	if (!normalized) return null;
+	const parts = normalized.split('-');
+	if (parts.length < 2) return null;
+	const region = parts[parts.length - 1];
+	if (!region) return null;
+	return region.toUpperCase();
+}
+
+function currencyFromRegion(region: string | null): string | null {
+	if (!region) return null;
+	if (region === 'NG') return 'NGN';
+	if (region === 'GB') return 'GBP';
+	if (EURO_REGION_CODES.has(region)) return 'EUR';
+	return null;
+}
+
+export function detectCurrencyFromCountryCode(countryCode: string | null | undefined): string | null {
+	if (!countryCode) return null;
+	const normalizedCountryCode = countryCode.trim().toUpperCase();
+	if (!normalizedCountryCode || normalizedCountryCode === 'XX') return null;
+	return currencyFromRegion(normalizedCountryCode);
+}
+
+function currencyFromTimeZone(timeZone: string): string | null {
+	const normalized = timeZone.trim();
+	if (!normalized) return null;
+	if (normalized === 'Europe/London') return 'GBP';
+	if (normalized === 'Africa/Lagos') return 'NGN';
+	if (normalized.startsWith('Europe/')) return 'EUR';
+	return null;
+}
+
+export function detectLocalCurrency(hints?: {
+	locales?: readonly string[];
+	timeZone?: string | null;
+}): string {
+	const supportedCurrencyCodes = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
+	const defaultCurrency = 'USD';
+
+	const resolvedTimeZone =
+		hints?.timeZone ??
+		(typeof Intl !== 'undefined' && typeof Intl.DateTimeFormat === 'function'
+			? Intl.DateTimeFormat().resolvedOptions().timeZone
+			: '');
+	const timeZoneCurrency = currencyFromTimeZone(String(resolvedTimeZone || ''));
+	if (timeZoneCurrency && supportedCurrencyCodes.has(timeZoneCurrency)) {
+		return timeZoneCurrency;
+	}
+
+	const localeCandidates: string[] = [];
+	if (hints?.locales?.length) {
+		localeCandidates.push(...hints.locales);
+	}
+	if (typeof navigator !== 'undefined') {
+		if (Array.isArray(navigator.languages) && navigator.languages.length > 0) {
+			localeCandidates.push(...navigator.languages);
+		}
+		if (typeof navigator.language === 'string' && navigator.language) {
+			localeCandidates.push(navigator.language);
+		}
+	}
+	if (typeof Intl !== 'undefined' && typeof Intl.NumberFormat === 'function') {
+		try {
+			localeCandidates.push(new Intl.NumberFormat().resolvedOptions().locale);
+		} catch {
+			// Continue with other hints.
+		}
+	}
+
+	for (const locale of dedupeStrings(localeCandidates)) {
+		const regionCurrency = detectCurrencyFromCountryCode(regionFromLocale(locale));
+		if (regionCurrency && supportedCurrencyCodes.has(regionCurrency)) {
+			return regionCurrency;
+		}
+	}
+
+	return defaultCurrency;
+}
 
 function clamp(value: number, min: number, max: number): number {
 	if (!Number.isFinite(value)) return min;
@@ -33,6 +150,28 @@ function clamp(value: number, min: number, max: number): number {
 function roundCurrency(value: number): number {
 	if (!Number.isFinite(value)) return 0;
 	return Math.round(value * 100) / 100;
+}
+
+/**
+ * Deterministically formats currency values based on supported FX Engine locales.
+ * Defaults to USD. Fallbacks properly if an unknown currency is passed.
+ *
+ * Supported currencies reflect the backend ExchangeRateService targets.
+ */
+export function formatCurrencyAmount(amount: number, currencyCode: string = 'USD'): string {
+	const safeAmount = Number.isFinite(amount) ? amount : 0;
+
+	try {
+		return new Intl.NumberFormat('en-US', {
+			style: 'currency',
+			currency: currencyCode,
+			maximumFractionDigits: 0,
+			minimumFractionDigits: 0
+		}).format(safeAmount);
+	} catch (e) {
+		// Fallback for unsupported currency codes, deterministic
+		return `${currencyCode} ${safeAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+	}
 }
 
 export function normalizeLandingRoiInputs(
@@ -68,7 +207,8 @@ export function normalizeLandingRoiInputs(
 			Number(inputs?.platformAnnualCostUsd ?? DEFAULT_LANDING_ROI_INPUTS.platformAnnualCostUsd),
 			0,
 			100000
-		)
+		),
+		currencyCode: inputs?.currencyCode || DEFAULT_LANDING_ROI_INPUTS.currencyCode
 	};
 }
 

@@ -146,6 +146,31 @@ async def test_azure_detector_aexit_closes_resources():
 
 
 @pytest.mark.asyncio
+async def test_azure_detector_does_not_swallow_base_exceptions():
+    class FatalPluginFailure(BaseException):
+        pass
+
+    creds = {
+        "tenant_id": "tenant",
+        "client_id": "client",
+        "client_secret": "secret",
+        "subscription_id": "sub",
+    }
+    plugin = MagicMock()
+    plugin.category_key = "test"
+    plugin.scan = AsyncMock(side_effect=FatalPluginFailure("fatal"))
+
+    with patch(
+        "app.modules.optimization.adapters.azure.detector.ClientSecretCredential",
+        return_value=MagicMock(),
+    ):
+        detector = AzureZombieDetector(region="eastus", credentials=creds)
+
+    with pytest.raises(FatalPluginFailure):
+        await detector._execute_plugin_scan(plugin)
+
+
+@pytest.mark.asyncio
 async def test_gcp_detector_invalid_service_account_json_blocks_scan():
     plugin = MagicMock()
     plugin.category_key = "test"
@@ -253,6 +278,20 @@ async def test_gcp_detector_handles_invalid_result_type():
     plugin = MagicMock()
     plugin.category_key = "test"
     plugin.scan = AsyncMock(return_value={"bad": "type"})
+
+    detector = GCPZombieDetector(
+        region="us-central1-a", credentials={"project_id": "proj"}
+    )
+    results = await detector._execute_plugin_scan(plugin)
+
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_gcp_detector_plugin_scan_runtime_error_returns_empty():
+    plugin = MagicMock()
+    plugin.category_key = "test"
+    plugin.scan = AsyncMock(side_effect=RuntimeError("scan failed"))
 
     detector = GCPZombieDetector(
         region="us-central1-a", credentials={"project_id": "proj"}

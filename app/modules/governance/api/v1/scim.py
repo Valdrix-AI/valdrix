@@ -21,14 +21,21 @@ from uuid import UUID, uuid4
 import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tenant import Tenant, User, UserPersona, UserRole
-from app.models.scim_group import ScimGroup, ScimGroupMember
+from app.models.tenant import Tenant, User
+from app.models.scim_group import ScimGroup
 from app.models.tenant_identity_settings import TenantIdentitySettings
 from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLogger
+from app.modules.governance.api.v1.scim_group_route_ops import (
+    create_group_route as _create_group_route_impl,
+    delete_group_route as _delete_group_route_impl,
+    list_groups_route as _list_groups_route_impl,
+    patch_group_route as _patch_group_route_impl,
+    put_group_route as _put_group_route_impl,
+)
 from app.shared.core.pricing import FeatureFlag, is_feature_enabled, normalize_tier
 from app.shared.core.security import generate_secret_blind_index
 from app.shared.db import session as db_session
@@ -59,6 +66,29 @@ from app.modules.governance.api.v1.scim_utils import (
     parse_member_filter_from_path as _parse_member_filter_from_path,
     parse_user_filter as _parse_user_filter,
     parse_uuid as _parse_uuid,
+)
+from app.modules.governance.api.v1.scim_membership_ops import (
+    apply_group_patch_operations as _apply_group_patch_operations_impl,
+    apply_scim_group_mappings as _apply_scim_group_mappings_impl,
+    load_group_member_refs_map as _load_group_member_refs_map_impl,
+    load_group_member_user_ids as _load_group_member_user_ids_impl,
+    load_scim_group_mappings as _load_scim_group_mappings_impl,
+    load_user_group_names_from_memberships as _load_user_group_names_from_memberships_impl,
+    load_user_group_refs_map as _load_user_group_refs_map_impl,
+    recompute_entitlements_for_users as _recompute_entitlements_for_users_impl,
+    resolve_entitlements_from_groups as _resolve_entitlements_from_groups_impl,
+    resolve_groups_from_refs as _resolve_groups_from_refs_impl,
+    resolve_member_user_ids as _resolve_member_user_ids_impl,
+    set_group_memberships as _set_group_memberships_impl,
+    set_user_group_memberships as _set_user_group_memberships_impl,
+)
+from app.modules.governance.api.v1.scim_user_route_ops import (
+    create_user_route as _create_user_route_impl,
+    delete_user_route as _delete_user_route_impl,
+    get_user_route as _get_user_route_impl,
+    list_users_route as _list_users_route_impl,
+    patch_user_route as _patch_user_route_impl,
+    put_user_route as _put_user_route_impl,
 )
 
 logger = structlog.get_logger()
@@ -198,60 +228,8 @@ def _scim_group_resource(
     return payload
 
 
-async def _load_user_group_refs_map(
-    db: AsyncSession,
-    *,
-    tenant_id: UUID,
-    user_ids: list[UUID],
-) -> dict[UUID, list[dict[str, Any]]]:
-    if not user_ids:
-        return {}
-
-    rows = (
-        await db.execute(
-            select(ScimGroupMember.user_id, ScimGroup.id, ScimGroup.display_name)
-            .join(ScimGroup, ScimGroupMember.group_id == ScimGroup.id)
-            .where(
-                ScimGroupMember.tenant_id == tenant_id,
-                ScimGroup.tenant_id == tenant_id,
-                ScimGroupMember.user_id.in_(user_ids),
-            )
-        )
-    ).all()
-    mapping: dict[UUID, list[dict[str, Any]]] = {uid: [] for uid in user_ids}
-    for user_id, group_id, display_name in rows:
-        mapping.setdefault(user_id, []).append(
-            {"value": str(group_id), "display": str(display_name or "")}
-        )
-    return mapping
-
-
-async def _load_group_member_refs_map(
-    db: AsyncSession,
-    *,
-    tenant_id: UUID,
-    group_ids: list[UUID],
-) -> dict[UUID, list[dict[str, Any]]]:
-    if not group_ids:
-        return {}
-
-    rows = (
-        await db.execute(
-            select(ScimGroupMember.group_id, User.id, User.email)
-            .join(User, ScimGroupMember.user_id == User.id)
-            .where(
-                ScimGroupMember.tenant_id == tenant_id,
-                User.tenant_id == tenant_id,
-                ScimGroupMember.group_id.in_(group_ids),
-            )
-        )
-    ).all()
-    mapping: dict[UUID, list[dict[str, Any]]] = {gid: [] for gid in group_ids}
-    for group_id, user_id, email in rows:
-        mapping.setdefault(group_id, []).append(
-            {"value": str(user_id), "display": str(email or "")}
-        )
-    return mapping
+_load_user_group_refs_map = _load_user_group_refs_map_impl
+_load_group_member_refs_map = _load_group_member_refs_map_impl
 
 
 async def _get_or_create_scim_group(
@@ -316,51 +294,13 @@ async def _resolve_groups_from_refs(
     tenant_id: UUID,
     groups: list[ScimGroupRef],
 ) -> tuple[set[UUID], set[str]]:
-    group_ids: set[UUID] = set()
-    group_names_norm: set[str] = set()
-
-    group: ScimGroup | None = None
-    for ref in groups:
-        display = str(ref.display or "").strip()
-        raw_value = str(ref.value or "").strip()
-
-        if not display and not raw_value:
-            continue
-
-        if display:
-            group = await _get_or_create_scim_group(
-                db, tenant_id=tenant_id, display_name=display
-            )
-        else:
-            parsed = _parse_uuid(raw_value)
-            if parsed is not None:
-                group = (
-                    await db.execute(
-                        select(ScimGroup).where(
-                            ScimGroup.tenant_id == tenant_id,
-                            ScimGroup.id == parsed,
-                        )
-                    )
-                ).scalar_one_or_none()
-                if group is None:
-                    # No group push yet; treat the value as a stable "name" so mappings can still match it.
-                    group = await _get_or_create_scim_group(
-                        db, tenant_id=tenant_id, display_name=raw_value
-                    )
-            else:
-                group = await _get_or_create_scim_group(
-                    db, tenant_id=tenant_id, display_name=raw_value
-                )
-
-        group_ids.add(group.id)
-        group_names_norm.add(
-            str(
-                getattr(group, "display_name_norm", "")
-                or _normalize_scim_group(group.display_name)
-            )
-        )
-
-    return group_ids, group_names_norm
+    return await _resolve_groups_from_refs_impl(
+        db,
+        tenant_id=tenant_id,
+        groups=groups,
+        get_or_create_scim_group_fn=_get_or_create_scim_group,
+        parse_uuid_fn=_parse_uuid,
+    )
 
 
 async def _resolve_member_user_ids(
@@ -369,189 +309,32 @@ async def _resolve_member_user_ids(
     tenant_id: UUID,
     members: list[ScimMemberRef],
 ) -> set[UUID]:
-    candidate_ids: set[UUID] = set()
-    for ref in members:
-        parsed = _parse_uuid(ref.value)
-        if parsed is not None:
-            candidate_ids.add(parsed)
-
-    if not candidate_ids:
-        return set()
-
-    rows = (
-        await db.execute(
-            select(User.id).where(
-                User.tenant_id == tenant_id,
-                User.id.in_(list(candidate_ids)),
-            )
-        )
-    ).all()
-    return {row[0] for row in rows if row and row[0]}
-
-
-async def _load_group_member_user_ids(
-    db: AsyncSession,
-    *,
-    tenant_id: UUID,
-    group_id: UUID,
-) -> set[UUID]:
-    rows = (
-        await db.execute(
-            select(ScimGroupMember.user_id).where(
-                ScimGroupMember.tenant_id == tenant_id,
-                ScimGroupMember.group_id == group_id,
-            )
-        )
-    ).all()
-    return {row[0] for row in rows if row and row[0]}
-
-
-async def _set_user_group_memberships(
-    db: AsyncSession,
-    *,
-    tenant_id: UUID,
-    user_id: UUID,
-    group_ids: set[UUID],
-) -> None:
-    existing_rows = (
-        await db.execute(
-            select(ScimGroupMember.group_id).where(
-                ScimGroupMember.tenant_id == tenant_id,
-                ScimGroupMember.user_id == user_id,
-            )
-        )
-    ).all()
-    existing = {row[0] for row in existing_rows if row and row[0]}
-
-    to_remove = existing - group_ids
-    to_add = group_ids - existing
-
-    if to_remove:
-        await db.execute(
-            delete(ScimGroupMember).where(
-                ScimGroupMember.tenant_id == tenant_id,
-                ScimGroupMember.user_id == user_id,
-                ScimGroupMember.group_id.in_(list(to_remove)),
-            )
-        )
-
-    for gid in sorted(to_add, key=lambda x: str(x)):
-        db.add(
-            ScimGroupMember(
-                id=uuid4(),
-                tenant_id=tenant_id,
-                group_id=gid,
-                user_id=user_id,
-            )
-        )
-
-
-async def _set_group_memberships(
-    db: AsyncSession,
-    *,
-    tenant_id: UUID,
-    group_id: UUID,
-    member_user_ids: set[UUID],
-) -> set[UUID]:
-    existing_rows = (
-        await db.execute(
-            select(ScimGroupMember.user_id).where(
-                ScimGroupMember.tenant_id == tenant_id,
-                ScimGroupMember.group_id == group_id,
-            )
-        )
-    ).all()
-    existing = {row[0] for row in existing_rows if row and row[0]}
-
-    to_remove = existing - member_user_ids
-    to_add = member_user_ids - existing
-
-    if to_remove:
-        await db.execute(
-            delete(ScimGroupMember).where(
-                ScimGroupMember.tenant_id == tenant_id,
-                ScimGroupMember.group_id == group_id,
-                ScimGroupMember.user_id.in_(list(to_remove)),
-            )
-        )
-
-    for uid in sorted(to_add, key=lambda x: str(x)):
-        db.add(
-            ScimGroupMember(
-                id=uuid4(),
-                tenant_id=tenant_id,
-                group_id=group_id,
-                user_id=uid,
-            )
-        )
-
-    return existing | member_user_ids
-
-
-async def _load_scim_group_mappings(
-    db: AsyncSession, tenant_id: UUID
-) -> list[dict[str, Any]]:
-    result = await db.execute(
-        select(TenantIdentitySettings.scim_group_mappings).where(
-            TenantIdentitySettings.tenant_id == tenant_id
-        )
+    return await _resolve_member_user_ids_impl(
+        db,
+        tenant_id=tenant_id,
+        members=members,
+        parse_uuid_fn=_parse_uuid,
     )
-    raw = result.scalar_one_or_none()
-    if not raw:
-        return []
-    if isinstance(raw, list):
-        return [m for m in raw if isinstance(m, dict)]
-    return []
+
+
+_load_group_member_user_ids = _load_group_member_user_ids_impl
+_set_user_group_memberships = _set_user_group_memberships_impl
+_set_group_memberships = _set_group_memberships_impl
+_load_scim_group_mappings = _load_scim_group_mappings_impl
 
 
 def _resolve_entitlements_from_groups(
     group_names: set[str],
     mappings: list[dict[str, Any]],
 ) -> tuple[str | None, str | None]:
-    desired_role: str | None = None
-    desired_persona: str | None = None
-
-    for mapping in mappings:
-        group = _normalize_scim_group(mapping.get("group", ""))
-        if not group or group not in group_names:
-            continue
-
-        role = _normalize_scim_group(mapping.get("role", ""))
-        if role == UserRole.ADMIN.value:
-            desired_role = UserRole.ADMIN.value
-        elif desired_role is None and role == UserRole.MEMBER.value:
-            desired_role = UserRole.MEMBER.value
-
-        persona = _normalize_scim_group(mapping.get("persona", ""))
-        if desired_persona is None and persona in {
-            UserPersona.ENGINEERING.value,
-            UserPersona.FINANCE.value,
-            UserPersona.PLATFORM.value,
-            UserPersona.LEADERSHIP.value,
-        }:
-            desired_persona = persona
-
-    return desired_role, desired_persona
+    return _resolve_entitlements_from_groups_impl(
+        group_names,
+        mappings,
+        normalize_scim_group_fn=_normalize_scim_group,
+    )
 
 
-async def _load_user_group_names_from_memberships(
-    db: AsyncSession,
-    *,
-    tenant_id: UUID,
-    user_id: UUID,
-) -> set[str]:
-    rows = (
-        await db.execute(
-            select(ScimGroup.display_name_norm)
-            .join(ScimGroupMember, ScimGroupMember.group_id == ScimGroup.id)
-            .where(
-                ScimGroupMember.tenant_id == tenant_id,
-                ScimGroup.tenant_id == tenant_id,
-                ScimGroupMember.user_id == user_id,
-            )
-        )
-    ).all()
-    return {str(row[0] or "") for row in rows if row and row[0]}
+_load_user_group_names_from_memberships = _load_user_group_names_from_memberships_impl
 
 
 async def _recompute_entitlements_for_users(
@@ -560,33 +343,15 @@ async def _recompute_entitlements_for_users(
     tenant_id: UUID,
     user_ids: set[UUID],
 ) -> None:
-    if not user_ids:
-        return
-
-    mappings = await _load_scim_group_mappings(db, tenant_id)
-
-    for uid in sorted(user_ids, key=lambda x: str(x)):
-        user = (
-            await db.execute(
-                select(User).where(User.tenant_id == tenant_id, User.id == uid)
-            )
-        ).scalar_one_or_none()
-        if not user:
-            continue
-        current_role = _normalize_scim_group(getattr(user, "role", ""))
-        if current_role == UserRole.OWNER.value:
-            continue
-
-        group_names = await _load_user_group_names_from_memberships(
-            db, tenant_id=tenant_id, user_id=uid
-        )
-        desired_role, desired_persona = _resolve_entitlements_from_groups(
-            group_names, mappings
-        )
-
-        user.role = desired_role or UserRole.MEMBER.value
-        if desired_persona:
-            user.persona = desired_persona
+    await _recompute_entitlements_for_users_impl(
+        db,
+        tenant_id=tenant_id,
+        user_ids=user_ids,
+        load_scim_group_mappings_fn=_load_scim_group_mappings,
+        load_user_group_names_from_memberships_fn=_load_user_group_names_from_memberships,
+        resolve_entitlements_from_groups_fn=_resolve_entitlements_from_groups,
+        normalize_scim_group_fn=_normalize_scim_group,
+    )
 
 
 async def _apply_scim_group_mappings(
@@ -597,45 +362,24 @@ async def _apply_scim_group_mappings(
     groups: list[ScimGroupRef] | None,
     for_create: bool,
 ) -> None:
-    """
-    Apply SCIM group entitlements (role/persona) based on tenant-configured mappings.
-
-    - If groups is omitted (None), we do not change entitlements on update.
-    - If groups is present (even empty), it is authoritative: missing mappings demote to member.
-    - Owners are never demoted by SCIM (guardrail).
-    """
-    current_role = _normalize_scim_group(getattr(user, "role", ""))
-    if current_role == UserRole.OWNER.value:
-        return
-
-    if groups is None:
-        if for_create:
-            user.role = UserRole.MEMBER.value
-            user.persona = (
-                getattr(user, "persona", None) or UserPersona.ENGINEERING.value
-            )
-        return
-
-    group_ids, group_names = await _resolve_groups_from_refs(
-        db, tenant_id=tenant_id, groups=groups
-    )
-    await _set_user_group_memberships(
-        db, tenant_id=tenant_id, user_id=user.id, group_ids=group_ids
+    await _apply_scim_group_mappings_impl(
+        db,
+        tenant_id=tenant_id,
+        user=user,
+        groups=groups,
+        for_create=for_create,
+        resolve_groups_from_refs_fn=_resolve_groups_from_refs,
+        set_user_group_memberships_fn=_set_user_group_memberships,
+        load_scim_group_mappings_fn=_load_scim_group_mappings,
+        resolve_entitlements_from_groups_fn=_resolve_entitlements_from_groups,
+        normalize_scim_group_fn=_normalize_scim_group,
     )
 
-    mappings = await _load_scim_group_mappings(db, tenant_id)
-    desired_role, desired_persona = _resolve_entitlements_from_groups(
-        group_names, mappings
-    )
 
-    # Role is security-sensitive: when groups is present, treat as authoritative.
-    user.role = desired_role or UserRole.MEMBER.value
-
-    # Persona is UX-only: only set when mapping provides an explicit persona.
-    if desired_persona:
-        user.persona = desired_persona
-    elif for_create and not getattr(user, "persona", None):
-        user.persona = UserPersona.ENGINEERING.value
+def _make_scim_error(
+    status_code: int, detail: str, scim_type: str | None = None
+) -> ScimError:
+    return ScimError(status_code, detail, scim_type=scim_type)
 
 
 @router.get("/ServiceProviderConfig")
@@ -688,47 +432,17 @@ async def list_users(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> ScimListResponse:
-    if startIndex < 1:
-        raise ScimError(400, "startIndex must be >= 1", scim_type="invalidValue")
-    if count < 0 or count > 200:
-        raise ScimError(
-            400, "count must be between 0 and 200", scim_type="invalidValue"
-        )
-
-    stmt = select(User).where(User.tenant_id == ctx.tenant_id)
-    email_filter = _parse_user_filter(filter or "")
-    if filter and email_filter is None:
-        raise ScimError(400, "Unsupported filter expression", scim_type="invalidFilter")
-    if email_filter:
-        stmt = stmt.where(User.email == email_filter)
-
-    result = await db.execute(stmt)
-    users = list(result.scalars().all())
-    total = len(users)
-    start = startIndex - 1
-    end = start + count if count else start
-    page = users[start:end]
-
-    base_url = str(request.base_url).rstrip("/")
-    group_map = await _load_user_group_refs_map(
-        db,
+    return await _list_users_route_impl(
+        request=request,
+        start_index=startIndex,
+        count=count,
+        filter_expr=filter,
         tenant_id=ctx.tenant_id,
-        user_ids=[item.id for item in page],
-    )
-    resources = [
-        _scim_user_resource(
-            item,
-            base_url=base_url,
-            tenant_id=ctx.tenant_id,
-            groups=group_map.get(item.id, []),
-        )
-        for item in page
-    ]
-    return ScimListResponse(
-        totalResults=total,
-        startIndex=startIndex,
-        itemsPerPage=len(page),
-        Resources=resources,
+        db=db,
+        parse_user_filter_fn=_parse_user_filter,
+        load_user_group_refs_map_fn=_load_user_group_refs_map,
+        scim_user_resource_fn=_scim_user_resource,
+        scim_error_factory=_make_scim_error,
     )
 
 
@@ -739,69 +453,17 @@ async def create_user(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> JSONResponse:
-    user = User(
-        id=uuid4(),
+    return await _create_user_route_impl(
+        request=request,
+        body=body,
         tenant_id=ctx.tenant_id,
-        email=str(body.userName),
-        role=UserRole.MEMBER.value,
-        is_active=bool(body.active),
-    )
-    db.add(user)
-    # Ensure FK-safe inserts for group membership rows.
-    try:
-        await db.flush()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise ScimError(409, "User already exists", scim_type="uniqueness") from exc
-    # Apply tenant-configured entitlements and membership (if groups provided).
-    await _apply_scim_group_mappings(
-        db,
-        tenant_id=ctx.tenant_id,
-        user=user,
-        groups=body.groups,
-        for_create=True,
-    )
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise ScimError(409, "User already exists", scim_type="uniqueness") from exc
-
-    audit = AuditLogger(db, ctx.tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_USER_CREATED,
-        actor_id=None,
-        resource_type="user",
-        resource_id=str(user.id),
-        details={
-            "email": str(user.email),
-            "active": bool(user.is_active),
-            "role": str(getattr(user, "role", "")),
-            "persona": str(getattr(user, "persona", ""))
-            if getattr(user, "persona", None)
-            else None,
-            "groups_provided": body.groups is not None,
-            "groups_count": len(body.groups or []),
-        },
-        request_method="SCIM",
-        request_path="/scim/v2/Users",
-    )
-    await db.commit()
-
-    base_url = str(request.base_url).rstrip("/")
-    group_map = await _load_user_group_refs_map(
-        db,
-        tenant_id=ctx.tenant_id,
-        user_ids=[user.id],
-    )
-    return JSONResponse(
-        status_code=201,
-        content=_scim_user_resource(
-            user,
-            base_url=base_url,
-            tenant_id=ctx.tenant_id,
-            groups=group_map.get(user.id, []),
-        ),
+        db=db,
+        apply_scim_group_mappings_fn=_apply_scim_group_mappings,
+        load_user_group_refs_map_fn=_load_user_group_refs_map,
+        scim_user_resource_fn=_scim_user_resource,
+        scim_error_factory=_make_scim_error,
+        audit_logger_cls=AuditLogger,
+        audit_event_type=AuditEventType,
     )
 
 
@@ -812,31 +474,14 @@ async def get_user(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> JSONResponse:
-    try:
-        parsed_id = UUID(user_id)
-    except ValueError as exc:
-        raise ScimError(404, "Resource not found") from exc
-    user = (
-        await db.execute(
-            select(User).where(User.tenant_id == ctx.tenant_id, User.id == parsed_id)
-        )
-    ).scalar_one_or_none()
-    if not user:
-        raise ScimError(404, "Resource not found")
-    base_url = str(request.base_url).rstrip("/")
-    group_map = await _load_user_group_refs_map(
-        db,
+    return await _get_user_route_impl(
+        request=request,
+        user_id=user_id,
         tenant_id=ctx.tenant_id,
-        user_ids=[user.id],
-    )
-    return JSONResponse(
-        status_code=200,
-        content=_scim_user_resource(
-            user,
-            base_url=base_url,
-            tenant_id=ctx.tenant_id,
-            groups=group_map.get(user.id, []),
-        ),
+        db=db,
+        load_user_group_refs_map_fn=_load_user_group_refs_map,
+        scim_user_resource_fn=_scim_user_resource,
+        scim_error_factory=_make_scim_error,
     )
 
 
@@ -848,69 +493,18 @@ async def put_user(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> JSONResponse:
-    try:
-        parsed_id = UUID(user_id)
-    except ValueError as exc:
-        raise ScimError(404, "Resource not found") from exc
-
-    user = (
-        await db.execute(
-            select(User).where(User.tenant_id == ctx.tenant_id, User.id == parsed_id)
-        )
-    ).scalar_one_or_none()
-    if not user:
-        raise ScimError(404, "Resource not found")
-
-    user.email = str(body.userName)
-    user.is_active = bool(body.active)
-    await _apply_scim_group_mappings(
-        db,
+    return await _put_user_route_impl(
+        request=request,
+        user_id=user_id,
+        body=body,
         tenant_id=ctx.tenant_id,
-        user=user,
-        groups=body.groups,
-        for_create=False,
-    )
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise ScimError(409, "User already exists", scim_type="uniqueness") from exc
-
-    audit = AuditLogger(db, ctx.tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_USER_UPDATED,
-        actor_id=None,
-        resource_type="user",
-        resource_id=str(user.id),
-        details={
-            "email": str(user.email),
-            "active": bool(user.is_active),
-            "role": str(getattr(user, "role", "")),
-            "persona": str(getattr(user, "persona", ""))
-            if getattr(user, "persona", None)
-            else None,
-            "groups_provided": body.groups is not None,
-            "groups_count": len(body.groups or []),
-        },
-        request_method="SCIM",
-        request_path=f"/scim/v2/Users/{user.id}",
-    )
-    await db.commit()
-
-    base_url = str(request.base_url).rstrip("/")
-    group_map = await _load_user_group_refs_map(
-        db,
-        tenant_id=ctx.tenant_id,
-        user_ids=[user.id],
-    )
-    return JSONResponse(
-        status_code=200,
-        content=_scim_user_resource(
-            user,
-            base_url=base_url,
-            tenant_id=ctx.tenant_id,
-            groups=group_map.get(user.id, []),
-        ),
+        db=db,
+        apply_scim_group_mappings_fn=_apply_scim_group_mappings,
+        load_user_group_refs_map_fn=_load_user_group_refs_map,
+        scim_user_resource_fn=_scim_user_resource,
+        scim_error_factory=_make_scim_error,
+        audit_logger_cls=AuditLogger,
+        audit_event_type=AuditEventType,
     )
 
 
@@ -956,99 +550,20 @@ async def patch_user(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> JSONResponse:
-    try:
-        parsed_id = UUID(user_id)
-    except ValueError as exc:
-        raise ScimError(404, "Resource not found") from exc
-
-    user = (
-        await db.execute(
-            select(User).where(User.tenant_id == ctx.tenant_id, User.id == parsed_id)
-        )
-    ).scalar_one_or_none()
-    if not user:
-        raise ScimError(404, "Resource not found")
-
-    for operation in body.Operations:
-        path_norm = (operation.path or "").strip().lower()
-        if path_norm == "groups":
-            op = operation.op.lower().strip()
-            existing_dicts = (
-                await _load_user_group_refs_map(
-                    db,
-                    tenant_id=ctx.tenant_id,
-                    user_ids=[user.id],
-                )
-            ).get(user.id, [])
-            existing_refs = [
-                ScimGroupRef.model_validate(item)
-                for item in existing_dicts
-                if isinstance(item, dict)
-            ]
-
-            if op == "remove":
-                refs: list[ScimGroupRef] = []
-            elif op in {"replace", "add"}:
-                if not isinstance(operation.value, list):
-                    raise ScimError(
-                        400,
-                        "groups patch value must be a list",
-                        scim_type="invalidValue",
-                    )
-                new_refs = [
-                    ScimGroupRef.model_validate(item)
-                    for item in operation.value
-                    if isinstance(item, dict)
-                ]
-                refs = (existing_refs + new_refs) if op == "add" else new_refs
-            else:
-                raise ScimError(
-                    400, "Unsupported patch op for groups", scim_type="invalidValue"
-                )
-
-            await _apply_scim_group_mappings(
-                db,
-                tenant_id=ctx.tenant_id,
-                user=user,
-                groups=refs,
-                for_create=False,
-            )
-            continue
-
-        _apply_patch_operation(user, operation)
-
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise ScimError(409, "User already exists", scim_type="uniqueness") from exc
-
-    audit = AuditLogger(db, ctx.tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_USER_UPDATED,
-        actor_id=None,
-        resource_type="user",
-        resource_id=str(user.id),
-        details={"email": str(user.email), "active": bool(user.is_active)},
-        request_method="SCIM",
-        request_path=f"/scim/v2/Users/{user.id}",
-    )
-    await db.commit()
-
-    base_url = str(request.base_url).rstrip("/")
-    group_map = await _load_user_group_refs_map(
-        db,
+    return await _patch_user_route_impl(
+        request=request,
+        user_id=user_id,
+        body=body,
         tenant_id=ctx.tenant_id,
-        user_ids=[user.id],
-    )
-    return JSONResponse(
-        status_code=200,
-        content=_scim_user_resource(
-            user,
-            base_url=base_url,
-            tenant_id=ctx.tenant_id,
-            groups=group_map.get(user.id, []),
-        ),
+        db=db,
+        apply_patch_operation_fn=_apply_patch_operation,
+        apply_scim_group_mappings_fn=_apply_scim_group_mappings,
+        load_user_group_refs_map_fn=_load_user_group_refs_map,
+        scim_user_resource_fn=_scim_user_resource,
+        scim_group_ref_model=ScimGroupRef,
+        scim_error_factory=_make_scim_error,
+        audit_logger_cls=AuditLogger,
+        audit_event_type=AuditEventType,
     )
 
 
@@ -1058,34 +573,14 @@ async def delete_user(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> JSONResponse:
-    try:
-        parsed_id = UUID(user_id)
-    except ValueError as exc:
-        raise ScimError(404, "Resource not found") from exc
-    user = (
-        await db.execute(
-            select(User).where(User.tenant_id == ctx.tenant_id, User.id == parsed_id)
-        )
-    ).scalar_one_or_none()
-    if not user:
-        raise ScimError(404, "Resource not found")
-
-    user.is_active = False
-    await db.commit()
-
-    audit = AuditLogger(db, ctx.tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_USER_DEPROVISIONED,
-        actor_id=None,
-        resource_type="user",
-        resource_id=str(user.id),
-        details={"email": str(user.email), "active": bool(user.is_active)},
-        request_method="SCIM",
-        request_path=f"/scim/v2/Users/{user.id}",
+    return await _delete_user_route_impl(
+        user_id=user_id,
+        tenant_id=ctx.tenant_id,
+        db=db,
+        scim_error_factory=_make_scim_error,
+        audit_logger_cls=AuditLogger,
+        audit_event_type=AuditEventType,
     )
-    await db.commit()
-
-    return JSONResponse(status_code=204, content={})
 
 
 @router.get("/Groups")
@@ -1097,58 +592,19 @@ async def list_groups(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> ScimListResponse:
-    if startIndex < 1:
-        raise ScimError(400, "startIndex must be >= 1", scim_type="invalidValue")
-    if count < 0 or count > 200:
-        raise ScimError(
-            400, "count must be between 0 and 200", scim_type="invalidValue"
-        )
-
-    stmt = (
-        select(ScimGroup)
-        .where(ScimGroup.tenant_id == ctx.tenant_id)
-        .order_by(ScimGroup.display_name_norm.asc())
-    )
-    parsed_filter = _parse_group_filter(filter or "")
-    if filter and parsed_filter is None:
-        raise ScimError(400, "Unsupported filter expression", scim_type="invalidFilter")
-    if parsed_filter:
-        attr, value = parsed_filter
-        if attr.lower() == "displayname":
-            stmt = stmt.where(
-                ScimGroup.display_name_norm == _normalize_scim_group(value)
-            )
-        elif attr.lower() == "externalid":
-            stmt = stmt.where(
-                ScimGroup.external_id_norm == (_normalize_scim_group(value) or None)
-            )
-
-    result = await db.execute(stmt)
-    groups = list(result.scalars().all())
-    total = len(groups)
-    start = startIndex - 1
-    end = start + count if count else start
-    page = groups[start:end]
-
     base_url = str(request.base_url).rstrip("/")
-    member_map = await _load_group_member_refs_map(
-        db,
+    return await _list_groups_route_impl(
+        db=db,
         tenant_id=ctx.tenant_id,
-        group_ids=[item.id for item in page],
-    )
-    resources = [
-        _scim_group_resource(
-            item,
-            base_url=base_url,
-            members=member_map.get(item.id, []),
-        )
-        for item in page
-    ]
-    return ScimListResponse(
-        totalResults=total,
-        startIndex=startIndex,
-        itemsPerPage=len(page),
-        Resources=resources,
+        start_index=startIndex,
+        count=count,
+        filter_expr=filter,
+        base_url=base_url,
+        parse_group_filter_fn=_parse_group_filter,
+        normalize_scim_group_fn=_normalize_scim_group,
+        load_group_member_refs_map_fn=_load_group_member_refs_map,
+        scim_group_resource_fn=_scim_group_resource,
+        scim_error_factory=_make_scim_error,
     )
 
 
@@ -1159,82 +615,20 @@ async def create_group(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> JSONResponse:
-    display = str(body.displayName or "").strip()
-    if not display:
-        raise ScimError(400, "displayName is required", scim_type="invalidValue")
-    external_id = str(body.externalId).strip() if body.externalId else None
-    external_norm = _normalize_scim_group(external_id or "") or None
-
-    group = ScimGroup(
-        id=uuid4(),
-        tenant_id=ctx.tenant_id,
-        display_name=display,
-        display_name_norm=_normalize_scim_group(display),
-        external_id=external_id,
-        external_id_norm=external_norm,
-    )
-    db.add(group)
-    try:
-        await db.flush()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise ScimError(409, "Group already exists", scim_type="uniqueness") from exc
-
-    member_user_ids: set[UUID] = set()
-    missing_member_count = 0
-    if body.members is not None:
-        candidate_ids = {
-            _parse_uuid(ref.value)
-            for ref in body.members
-            if _parse_uuid(ref.value) is not None
-        }
-        member_user_ids = await _resolve_member_user_ids(
-            db, tenant_id=ctx.tenant_id, members=body.members
-        )
-        missing_member_count = len(candidate_ids) - len(member_user_ids)
-        impacted = await _set_group_memberships(
-            db,
-            tenant_id=ctx.tenant_id,
-            group_id=group.id,
-            member_user_ids=member_user_ids,
-        )
-        await _recompute_entitlements_for_users(
-            db, tenant_id=ctx.tenant_id, user_ids=impacted
-        )
-
-    await db.commit()
-
-    audit = AuditLogger(db, ctx.tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_GROUP_CREATED,
-        actor_id=None,
-        resource_type="scim_group",
-        resource_id=str(group.id),
-        details={
-            "display_name": display,
-            "external_id_provided": bool(external_id),
-            "members_provided": body.members is not None,
-            "members_count": len(member_user_ids),
-            "members_missing_count": missing_member_count,
-        },
-        request_method="SCIM",
-        request_path="/scim/v2/Groups",
-    )
-    await db.commit()
-
     base_url = str(request.base_url).rstrip("/")
-    member_map = await _load_group_member_refs_map(
-        db,
+    return await _create_group_route_impl(
+        db=db,
         tenant_id=ctx.tenant_id,
-        group_ids=[group.id],
-    )
-    return JSONResponse(
-        status_code=201,
-        content=_scim_group_resource(
-            group,
-            base_url=base_url,
-            members=member_map.get(group.id, []),
-        ),
+        body=body,
+        base_url=base_url,
+        parse_uuid_fn=_parse_uuid,
+        normalize_scim_group_fn=_normalize_scim_group,
+        resolve_member_user_ids_fn=_resolve_member_user_ids,
+        set_group_memberships_fn=_set_group_memberships,
+        recompute_entitlements_for_users_fn=_recompute_entitlements_for_users,
+        load_group_member_refs_map_fn=_load_group_member_refs_map,
+        scim_group_resource_fn=_scim_group_resource,
+        scim_error_factory=_make_scim_error,
     )
 
 
@@ -1284,94 +678,21 @@ async def put_group(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> JSONResponse:
-    try:
-        parsed_id = UUID(group_id)
-    except ValueError as exc:
-        raise ScimError(404, "Resource not found") from exc
-
-    group = (
-        await db.execute(
-            select(ScimGroup).where(
-                ScimGroup.tenant_id == ctx.tenant_id, ScimGroup.id == parsed_id
-            )
-        )
-    ).scalar_one_or_none()
-    if not group:
-        raise ScimError(404, "Resource not found")
-
-    display = str(body.displayName or "").strip()
-    if not display:
-        raise ScimError(400, "displayName is required", scim_type="invalidValue")
-
-    group.display_name = display
-    group.display_name_norm = _normalize_scim_group(display)
-
-    external_id = str(body.externalId).strip() if body.externalId else None
-    group.external_id = external_id
-    group.external_id_norm = _normalize_scim_group(external_id or "") or None
-
-    member_user_ids: set[UUID] = set()
-    missing_member_count = 0
-    impacted: set[UUID] = set()
-    with db.no_autoflush:
-        if body.members is not None:
-            candidate_ids = {
-                _parse_uuid(ref.value)
-                for ref in body.members
-                if _parse_uuid(ref.value) is not None
-            }
-            member_user_ids = await _resolve_member_user_ids(
-                db, tenant_id=ctx.tenant_id, members=body.members
-            )
-            missing_member_count = len(candidate_ids) - len(member_user_ids)
-            impacted = await _set_group_memberships(
-                db,
-                tenant_id=ctx.tenant_id,
-                group_id=group.id,
-                member_user_ids=member_user_ids,
-            )
-            await _recompute_entitlements_for_users(
-                db, tenant_id=ctx.tenant_id, user_ids=impacted
-            )
-
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise ScimError(409, "Group already exists", scim_type="uniqueness") from exc
-
-    audit = AuditLogger(db, ctx.tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_GROUP_UPDATED,
-        actor_id=None,
-        resource_type="scim_group",
-        resource_id=str(group.id),
-        details={
-            "display_name": display,
-            "external_id_provided": bool(external_id),
-            "members_provided": body.members is not None,
-            "members_count": len(member_user_ids),
-            "members_missing_count": missing_member_count,
-            "members_impacted_count": len(impacted),
-        },
-        request_method="SCIM",
-        request_path=f"/scim/v2/Groups/{group.id}",
-    )
-    await db.commit()
-
     base_url = str(request.base_url).rstrip("/")
-    member_map = await _load_group_member_refs_map(
-        db,
+    return await _put_group_route_impl(
+        db=db,
         tenant_id=ctx.tenant_id,
-        group_ids=[group.id],
-    )
-    return JSONResponse(
-        status_code=200,
-        content=_scim_group_resource(
-            group,
-            base_url=base_url,
-            members=member_map.get(group.id, []),
-        ),
+        group_id=group_id,
+        body=body,
+        base_url=base_url,
+        parse_uuid_fn=_parse_uuid,
+        normalize_scim_group_fn=_normalize_scim_group,
+        resolve_member_user_ids_fn=_resolve_member_user_ids,
+        set_group_memberships_fn=_set_group_memberships,
+        recompute_entitlements_for_users_fn=_recompute_entitlements_for_users,
+        load_group_member_refs_map_fn=_load_group_member_refs_map,
+        scim_group_resource_fn=_scim_group_resource,
+        scim_error_factory=_make_scim_error,
     )
 
 
@@ -1383,246 +704,24 @@ async def patch_group(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> JSONResponse:
-    try:
-        parsed_id = UUID(group_id)
-    except ValueError as exc:
-        raise ScimError(404, "Resource not found") from exc
-
-    group = (
-        await db.execute(
-            select(ScimGroup).where(
-                ScimGroup.tenant_id == ctx.tenant_id, ScimGroup.id == parsed_id
-            )
-        )
-    ).scalar_one_or_none()
-    if not group:
-        raise ScimError(404, "Resource not found")
-
-    member_action = False
-    impacted_user_ids: set[UUID] = set()
-
-    with db.no_autoflush:
-        for operation in body.Operations:
-            op = operation.op.lower().strip()
-            path = (operation.path or "").strip()
-            value = operation.value
-
-            if op not in {"add", "replace", "remove"}:
-                raise ScimError(400, "Unsupported patch op", scim_type="invalidValue")
-
-            if not path:
-                if op in {"add", "replace"} and isinstance(value, dict):
-                    if "displayName" in value:
-                        name_val = str(value.get("displayName") or "").strip()
-                        if not name_val:
-                            raise ScimError(
-                                400, "displayName is required", scim_type="invalidValue"
-                            )
-                        group.display_name = name_val
-                        group.display_name_norm = _normalize_scim_group(name_val)
-                    if "externalId" in value:
-                        ext_val = str(value.get("externalId") or "").strip() or None
-                        group.external_id = ext_val
-                        group.external_id_norm = (
-                            _normalize_scim_group(ext_val or "") or None
-                        )
-                    if "members" in value:
-                        member_action = True
-                        member_refs = value.get("members")
-                        if not isinstance(member_refs, list):
-                            raise ScimError(
-                                400, "members must be a list", scim_type="invalidValue"
-                            )
-                        parsed_refs = [
-                            ScimMemberRef.model_validate(item)
-                            for item in member_refs
-                            if isinstance(item, dict)
-                        ]
-                        member_user_ids = await _resolve_member_user_ids(
-                            db, tenant_id=ctx.tenant_id, members=parsed_refs
-                        )
-                        impacted_user_ids |= await _set_group_memberships(
-                            db,
-                            tenant_id=ctx.tenant_id,
-                            group_id=group.id,
-                            member_user_ids=member_user_ids,
-                        )
-                    continue
-                raise ScimError(400, "Patch path is required", scim_type="invalidPath")
-
-            path_norm = path.lower()
-            if path_norm == "displayname":
-                if op == "remove":
-                    raise ScimError(
-                        400, "displayName cannot be removed", scim_type="invalidValue"
-                    )
-                if not isinstance(value, str):
-                    raise ScimError(
-                        400, "displayName must be string", scim_type="invalidValue"
-                    )
-                name_val = value.strip()
-                if not name_val:
-                    raise ScimError(
-                        400, "displayName is required", scim_type="invalidValue"
-                    )
-                group.display_name = name_val
-                group.display_name_norm = _normalize_scim_group(name_val)
-                continue
-
-            if path_norm == "externalid":
-                if op == "remove":
-                    group.external_id = None
-                    group.external_id_norm = None
-                    continue
-                if not isinstance(value, str):
-                    raise ScimError(
-                        400, "externalId must be string", scim_type="invalidValue"
-                    )
-                ext_val = value.strip() or None
-                group.external_id = ext_val
-                group.external_id_norm = _normalize_scim_group(ext_val or "") or None
-                continue
-
-            if path_norm == "members" or path_norm.startswith("members["):
-                member_action = True
-
-                existing = await _load_group_member_user_ids(
-                    db, tenant_id=ctx.tenant_id, group_id=group.id
-                )
-
-                remove_from_path = (
-                    _parse_member_filter_from_path(path)
-                    if path_norm.startswith("members[")
-                    else None
-                )
-
-                if op == "replace":
-                    if not isinstance(value, list):
-                        raise ScimError(
-                            400,
-                            "members patch value must be a list",
-                            scim_type="invalidValue",
-                        )
-                    parsed_refs = [
-                        ScimMemberRef.model_validate(item)
-                        for item in value
-                        if isinstance(item, dict)
-                    ]
-                    member_user_ids = await _resolve_member_user_ids(
-                        db, tenant_id=ctx.tenant_id, members=parsed_refs
-                    )
-                    impacted_user_ids |= await _set_group_memberships(
-                        db,
-                        tenant_id=ctx.tenant_id,
-                        group_id=group.id,
-                        member_user_ids=member_user_ids,
-                    )
-                    continue
-
-                if op == "add":
-                    if isinstance(value, dict):
-                        value_list = [value]
-                    elif isinstance(value, list):
-                        value_list = value
-                    else:
-                        raise ScimError(
-                            400,
-                            "members add value must be list or object",
-                            scim_type="invalidValue",
-                        )
-                    parsed_refs = [
-                        ScimMemberRef.model_validate(item)
-                        for item in value_list
-                        if isinstance(item, dict)
-                    ]
-                    to_add = await _resolve_member_user_ids(
-                        db, tenant_id=ctx.tenant_id, members=parsed_refs
-                    )
-                    impacted_user_ids |= await _set_group_memberships(
-                        db,
-                        tenant_id=ctx.tenant_id,
-                        group_id=group.id,
-                        member_user_ids=(existing | to_add),
-                    )
-                    continue
-
-                if op == "remove":
-                    if remove_from_path is not None:
-                        to_remove = {remove_from_path}
-                    elif isinstance(value, dict):
-                        to_remove = await _resolve_member_user_ids(
-                            db,
-                            tenant_id=ctx.tenant_id,
-                            members=[ScimMemberRef.model_validate(value)],
-                        )
-                    elif isinstance(value, list):
-                        parsed_refs = [
-                            ScimMemberRef.model_validate(item)
-                            for item in value
-                            if isinstance(item, dict)
-                        ]
-                        to_remove = await _resolve_member_user_ids(
-                            db, tenant_id=ctx.tenant_id, members=parsed_refs
-                        )
-                    elif value is None:
-                        to_remove = set()
-                    else:
-                        raise ScimError(
-                            400,
-                            "members remove value must be list or object",
-                            scim_type="invalidValue",
-                        )
-
-                    impacted_user_ids |= await _set_group_memberships(
-                        db,
-                        tenant_id=ctx.tenant_id,
-                        group_id=group.id,
-                        member_user_ids=(existing - to_remove),
-                    )
-                    continue
-
-            raise ScimError(400, "Unsupported patch path", scim_type="invalidPath")
-
-    if member_action:
-        await _recompute_entitlements_for_users(
-            db, tenant_id=ctx.tenant_id, user_ids=impacted_user_ids
-        )
-
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise ScimError(409, "Group already exists", scim_type="uniqueness") from exc
-
-    audit = AuditLogger(db, ctx.tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_GROUP_UPDATED,
-        actor_id=None,
-        resource_type="scim_group",
-        resource_id=str(group.id),
-        details={
-            "display_name": str(group.display_name),
-            "external_id_provided": bool(getattr(group, "external_id", None)),
-            "members_impacted_count": len(impacted_user_ids),
-        },
-        request_method="SCIM",
-        request_path=f"/scim/v2/Groups/{group.id}",
-    )
-    await db.commit()
-
     base_url = str(request.base_url).rstrip("/")
-    member_map = await _load_group_member_refs_map(
-        db,
+    return await _patch_group_route_impl(
+        db=db,
         tenant_id=ctx.tenant_id,
-        group_ids=[group.id],
-    )
-    return JSONResponse(
-        status_code=200,
-        content=_scim_group_resource(
-            group,
-            base_url=base_url,
-            members=member_map.get(group.id, []),
-        ),
+        group_id=group_id,
+        body=body,
+        base_url=base_url,
+        parse_uuid_fn=_parse_uuid,
+        apply_group_patch_operations_fn=_apply_group_patch_operations_impl,
+        normalize_scim_group_fn=_normalize_scim_group,
+        parse_member_filter_from_path_fn=_parse_member_filter_from_path,
+        resolve_member_user_ids_fn=_resolve_member_user_ids,
+        set_group_memberships_fn=_set_group_memberships,
+        load_group_member_user_ids_fn=_load_group_member_user_ids,
+        recompute_entitlements_for_users_fn=_recompute_entitlements_for_users,
+        load_group_member_refs_map_fn=_load_group_member_refs_map,
+        scim_group_resource_fn=_scim_group_resource,
+        scim_error_factory=_make_scim_error,
     )
 
 
@@ -1632,48 +731,12 @@ async def delete_group(
     ctx: ScimContext = Depends(get_scim_context),
     db: AsyncSession = Depends(get_scim_db),
 ) -> JSONResponse:
-    try:
-        parsed_id = UUID(group_id)
-    except ValueError as exc:
-        raise ScimError(404, "Resource not found") from exc
-
-    group = (
-        await db.execute(
-            select(ScimGroup).where(
-                ScimGroup.tenant_id == ctx.tenant_id, ScimGroup.id == parsed_id
-            )
-        )
-    ).scalar_one_or_none()
-    if not group:
-        raise ScimError(404, "Resource not found")
-
-    impacted_user_ids = await _load_group_member_user_ids(
-        db, tenant_id=ctx.tenant_id, group_id=group.id
+    return await _delete_group_route_impl(
+        db=db,
+        tenant_id=ctx.tenant_id,
+        group_id=group_id,
+        parse_uuid_fn=_parse_uuid,
+        load_group_member_user_ids_fn=_load_group_member_user_ids,
+        recompute_entitlements_for_users_fn=_recompute_entitlements_for_users,
+        scim_error_factory=_make_scim_error,
     )
-    await db.execute(
-        delete(ScimGroup).where(
-            ScimGroup.tenant_id == ctx.tenant_id,
-            ScimGroup.id == group.id,
-        )
-    )
-    await _recompute_entitlements_for_users(
-        db, tenant_id=ctx.tenant_id, user_ids=impacted_user_ids
-    )
-    await db.commit()
-
-    audit = AuditLogger(db, ctx.tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_GROUP_DELETED,
-        actor_id=None,
-        resource_type="scim_group",
-        resource_id=str(group.id),
-        details={
-            "display_name": str(getattr(group, "display_name", "") or ""),
-            "members_impacted_count": len(impacted_user_ids),
-        },
-        request_method="SCIM",
-        request_path=f"/scim/v2/Groups/{group.id}",
-    )
-    await db.commit()
-
-    return JSONResponse(status_code=204, content={})

@@ -74,7 +74,12 @@
 </script>
 
 {#if open}
-	<div class="landing-exit-prompt" role="dialog" aria-modal="true" aria-labelledby="exit-prompt-title">
+	<div
+		class="landing-exit-prompt"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="exit-prompt-title"
+	>
 		<button
 			type="button"
 			class="landing-exit-backdrop"
@@ -88,7 +93,8 @@
 			<p class="landing-proof-k">Before you go</p>
 			<h2 id="exit-prompt-title" class="landing-h3">Want a weekly spend-control brief instead?</h2>
 			<p class="landing-p">
-				Get concise cloud and software optimization insights, then start free when your team is ready.
+				Get concise cloud and software optimization insights, then start free when your team is
+				ready.
 			</p>
 			<form class="landing-exit-form" onsubmit={submit}>
 				<label class="landing-roi-label" for="exit-email">Work email</label>

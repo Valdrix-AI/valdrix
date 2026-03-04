@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from datetime import datetime, timezone
+from google.api_core.exceptions import GoogleAPIError
 from google.cloud import aiplatform_v1
 from google.cloud import monitoring_v3
 from google.oauth2 import service_account
@@ -11,6 +12,13 @@ from app.modules.optimization.domain.registry import registry
 import structlog
 
 logger = structlog.get_logger()
+GCP_VECTOR_SCAN_RECOVERABLE_EXCEPTIONS = (
+    GoogleAPIError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 @registry.register("gcp")
 class IdleVectorSearchPlugin(ZombiePlugin):
@@ -142,7 +150,7 @@ class IdleVectorSearchPlugin(ZombiePlugin):
                         "explainability_notes": f"Vector Index Endpoint '{ie.display_name}' had 0 queries in the last 7 days."
                     })
 
-        except Exception as e:
+        except GCP_VECTOR_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.error("gcp_vector_scan_error", error=str(e))
 
         return zombies

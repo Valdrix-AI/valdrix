@@ -11,6 +11,8 @@ import psutil  # noqa: F401 - retained for tests that monkeypatch psutil symbols
 import structlog
 from typing import Any, Dict, List
 from datetime import datetime, timezone, timedelta
+from httpx import HTTPError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.core.config import get_settings
@@ -26,6 +28,18 @@ from app.shared.core.async_utils import maybe_await
 
 logger = structlog.get_logger()
 settings = get_settings()
+HEALTH_RECOVERABLE_ERRORS = (
+    SQLAlchemyError,
+    HTTPError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+    asyncio.TimeoutError,
+)
 
 
 class HealthService:
@@ -74,7 +88,7 @@ class HealthService:
             await maybe_await(client.ping())
             return True, {"latency_ms": 0}  # Could measure actual latency
 
-        except Exception as e:
+        except HEALTH_RECOVERABLE_ERRORS as e:
             return False, {"error": str(e)}
 
     async def check_aws(self) -> tuple[bool, Dict[str, Any]]:
@@ -94,7 +108,7 @@ class HealthService:
                 # Server errors (5xx) mean unreachable
                 return False, {"error": f"STS returned {response.status_code}"}
 
-        except Exception as e:
+        except HEALTH_RECOVERABLE_ERRORS as e:
             return False, {"error": str(e)}
 
     async def comprehensive_health_check(self) -> Dict[str, Any]:
@@ -166,7 +180,7 @@ class HealthService:
             db_health = await db_health_check()
             return db_health
 
-        except Exception as e:
+        except HEALTH_RECOVERABLE_ERRORS as e:
             logger.error("database_health_check_failed", error=str(e))
             return {"status": "down", "error": str(e), "component": "database"}
 
@@ -196,7 +210,7 @@ class HealthService:
             else:
                 return {"status": "unhealthy", "message": "Cache set/get failed"}
 
-        except Exception as e:
+        except HEALTH_RECOVERABLE_ERRORS as e:
             logger.error("cache_health_check_failed", error=str(e))
             return {"status": "unhealthy", "error": str(e), "component": "cache"}
 
@@ -213,7 +227,7 @@ class HealthService:
                 "status": "healthy" if response.status_code < 500 else "unhealthy",
                 "response_code": response.status_code,
             }
-        except Exception as e:
+        except HEALTH_RECOVERABLE_ERRORS as e:
             services_status["aws_sts"] = {"status": "unhealthy", "error": str(e)}
 
         # Check other external services as needed
@@ -260,7 +274,7 @@ class HealthService:
                 "all_closed": True,
             }
 
-        except Exception as e:
+        except HEALTH_RECOVERABLE_ERRORS as e:
             logger.error("circuit_breaker_health_check_failed", error=str(e))
             return {"status": "unknown", "error": str(e)}
 
@@ -306,7 +320,7 @@ class HealthService:
                 "warnings": warnings,
             }
 
-        except Exception as e:
+        except HEALTH_RECOVERABLE_ERRORS as e:
             logger.error("system_resources_health_check_failed", error=str(e))
             return {"status": "unknown", "error": str(e)}
 
@@ -372,7 +386,7 @@ class HealthService:
                 },
             }
 
-        except Exception as e:
+        except HEALTH_RECOVERABLE_ERRORS as e:
             logger.error("background_jobs_health_check_failed", error=str(e))
             return {"status": "unknown", "error": str(e)}
 
@@ -399,7 +413,7 @@ class HealthService:
         try:
             result = await coro
             return result
-        except Exception as e:
+        except HEALTH_RECOVERABLE_ERRORS as e:
             logger.error("health_check_error", error=str(e))
             return {"status": "error", "error": str(e)}
 

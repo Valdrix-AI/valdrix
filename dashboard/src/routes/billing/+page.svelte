@@ -348,8 +348,9 @@
 								<span class="text-success-400">✓</span> Custom SLAs & Support
 							</li>
 						</ul>
-						<a href="mailto:enterprise@valdrics.io" class="btn btn-secondary w-full text-center"
-							>Contact Sales</a
+						<a
+							href="mailto:enterprise@valdrics.com?cc=sales@valdrics.com"
+							class="btn btn-secondary w-full text-center">Contact Sales</a
 						>
 					</div>
 				</div>

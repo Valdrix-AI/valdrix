@@ -15,10 +15,12 @@ from uuid import UUID
 from datetime import date
 from decimal import Decimal
 from sqlalchemy import select, func, and_
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.cloud import CostRecord, CloudAccount
 from app.models.cost_audit import CostAuditLog
 from app.models.invoice import ProviderInvoice
+from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
 
@@ -33,6 +35,15 @@ SUPPORTED_RECON_PROVIDERS = {
     "platform",
     "hybrid",
 }
+INVOICE_EXCHANGE_RATE_IMPORT_EXCEPTIONS: tuple[type[Exception], ...] = (ImportError,)
+RECON_ALERT_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ExternalAPIError,
+    SQLAlchemyError,
+    AttributeError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+)
 
 
 class CostReconciliationService:
@@ -771,7 +782,7 @@ class CostReconciliationService:
         # DB-backed exchange rates (pricing.exchange_rates) are preferred for finance-grade close.
         try:
             from app.models.pricing import ExchangeRate
-        except Exception:
+        except INVOICE_EXCHANGE_RATE_IMPORT_EXCEPTIONS:
             raise ValueError(
                 "Exchange rate model unavailable; use USD currency for invoice totals."
             )
@@ -1046,7 +1057,7 @@ class CostReconciliationService:
                     db=self.db,
                 )
                 alert_triggered = True
-            except Exception as exc:  # pragma: no cover - alerting should never break reconciliation response
+            except RECON_ALERT_RECOVERABLE_EXCEPTIONS as exc:  # pragma: no cover - alerting should never break reconciliation response
                 alert_error = str(exc)
                 logger.warning(
                     "cost_reconciliation_alert_failed",

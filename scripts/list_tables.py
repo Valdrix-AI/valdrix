@@ -1,5 +1,6 @@
 import asyncio
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from app.shared.db.session import async_session_maker
 
 
@@ -15,7 +16,7 @@ async def list_tables():
             print("Existing tables in 'public' schema:")
             for t in tables:
                 print(f" - {t[0]}")
-    except Exception as e:
+    except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
         print(f"Error: {e}")
 
 

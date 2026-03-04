@@ -6,6 +6,10 @@ from app.modules.optimization.domain.base import BaseZombieDetector
 from app.modules.optimization.domain.zombie_plugin import ZombiePlugin
 
 
+class FatalPluginFailure(BaseException):
+    pass
+
+
 class MockDetector(BaseZombieDetector):
     @property
     def provider_name(self) -> str:
@@ -16,18 +20,27 @@ class MockDetector(BaseZombieDetector):
 
     async def _execute_plugin_scan(self, plugin: ZombiePlugin) -> List[Dict[str, Any]]:
         # Simulate work or error
+        if hasattr(plugin, "should_fatal") and plugin.should_fatal:
+            raise FatalPluginFailure("Fatal mock failure")
         if hasattr(plugin, "should_fail") and plugin.should_fail:
-            raise Exception("Mock failure")
+            raise RuntimeError("Mock failure")
         if hasattr(plugin, "should_timeout") and plugin.should_timeout:
             await asyncio.sleep(1)  # Sleep longer than quick timeout
         return [{"id": "zombie-1"}]
 
 
 class MockPlugin(ZombiePlugin):
-    def __init__(self, key: str, should_fail=False, should_timeout=False):
+    def __init__(
+        self,
+        key: str,
+        should_fail: bool = False,
+        should_timeout: bool = False,
+        should_fatal: bool = False,
+    ):
         self._key = key
         self.should_fail = should_fail
         self.should_timeout = should_timeout
+        self.should_fatal = should_fatal
 
     @property
     def category_key(self) -> str:
@@ -78,3 +91,12 @@ async def test_base_detector_aggregation():
     assert len(results["p2"]) == 1
     # Check total waste calculation if implemented in Mock (Mock returns items without cost, so total 0)
     assert results["total_monthly_waste"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_base_detector_does_not_swallow_base_exceptions():
+    detector = MockDetector()
+    detector.plugins = [MockPlugin("fatal_plugin", should_fatal=True)]
+
+    with pytest.raises(FatalPluginFailure):
+        await detector.scan_all()

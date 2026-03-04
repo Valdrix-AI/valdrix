@@ -10,6 +10,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 import json
+from upstash_redis.errors import UpstashError
 
 from app.shared.cache import CacheService, get_cache_service
 
@@ -130,7 +131,7 @@ class TestCacheServiceEnabled:
         tenant_id = uuid4()
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=Exception("Connection failed"))
+        mock_client.get = AsyncMock(side_effect=UpstashError("Connection failed"))
 
         service = CacheService()
         service.client = mock_client

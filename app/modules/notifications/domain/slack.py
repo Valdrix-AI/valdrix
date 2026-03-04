@@ -16,6 +16,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
+SLACK_CLIENT_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    TypeError,
+    AttributeError,
+    OSError,
+    ValueError,
+)
 
 
 class SlackService:
@@ -69,7 +76,7 @@ class SlackService:
                     continue
                 logger.error("slack_api_error", method=method, error_code=error_code)
                 return False
-            except Exception as e:
+            except SLACK_CLIENT_RECOVERABLE_EXCEPTIONS as e:
                 logger.error("slack_method_failed", method=method, error=str(e))
                 return False
         return False

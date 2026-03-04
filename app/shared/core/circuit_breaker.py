@@ -11,12 +11,49 @@ from enum import Enum
 from collections.abc import Awaitable, Callable
 from typing import Any, Optional, TypeVar
 from dataclasses import dataclass
+from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 import structlog
 
 from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
 T = TypeVar("T")
+
+CIRCUIT_BREAKER_CONFIG_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
+CIRCUIT_BREAKER_REDIS_CLIENT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RedisError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    ImportError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
+CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RedisError,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
+CIRCUIT_BREAKER_DECODE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    UnicodeDecodeError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
 
 
 class CircuitState(Enum):
@@ -103,7 +140,7 @@ class CircuitBreaker:
                 or "valdrics:circuit"
             )
             return enabled, prefix
-        except Exception:
+        except CIRCUIT_BREAKER_CONFIG_RECOVERABLE_ERRORS:
             return False, "valdrics:circuit"
 
     async def _get_redis_client(self) -> Any | None:
@@ -114,7 +151,7 @@ class CircuitBreaker:
             from app.shared.core.rate_limit import get_redis_client
 
             return get_redis_client()
-        except Exception as exc:
+        except CIRCUIT_BREAKER_REDIS_CLIENT_RECOVERABLE_ERRORS as exc:
             logger.debug(
                 "circuit_breaker_distributed_redis_unavailable",
                 name=self.config.name,
@@ -133,7 +170,7 @@ class CircuitBreaker:
         if isinstance(value, bytes):
             try:
                 return value.decode("utf-8")
-            except Exception:
+            except CIRCUIT_BREAKER_DECODE_RECOVERABLE_ERRORS:
                 return value.decode(errors="ignore")
         return str(value)
 
@@ -157,7 +194,7 @@ class CircuitBreaker:
             last_failure_text = self._as_text(last_failure_raw)
             if last_failure_text:
                 self.metrics.last_failure_time = float(last_failure_text)
-        except Exception as exc:
+        except CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "circuit_breaker_distributed_sync_failed",
                 name=self.config.name,
@@ -185,7 +222,7 @@ class CircuitBreaker:
             elif new_state == CircuitState.HALF_OPEN:
                 pipeline.delete(probe_key)
             await pipeline.execute()
-        except Exception as exc:
+        except CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "circuit_breaker_distributed_persist_failed",
                 name=self.config.name,
@@ -202,7 +239,7 @@ class CircuitBreaker:
         try:
             acquired = await redis.set(probe_key, "1", ex=ttl_seconds, nx=True)
             return bool(acquired)
-        except Exception as exc:
+        except CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "circuit_breaker_distributed_probe_acquire_failed",
                 name=self.config.name,
@@ -217,7 +254,7 @@ class CircuitBreaker:
         probe_key = self._distributed_key("half_open_probe")
         try:
             await redis.delete(probe_key)
-        except Exception as exc:
+        except CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "circuit_breaker_distributed_probe_release_failed",
                 name=self.config.name,
@@ -435,7 +472,15 @@ DATABASE_BREAKER = get_circuit_breaker(
         failure_threshold=3,
         success_threshold=1,
         timeout=15.0,
-        expected_exception=(Exception,),  # Broad exception catching for DB issues
+        expected_exception=(
+            SQLAlchemyError,
+            ExternalAPIError,
+            asyncio.TimeoutError,
+            ConnectionError,
+            RuntimeError,
+            OSError,
+            TimeoutError,
+        ),
     ),
 )
 

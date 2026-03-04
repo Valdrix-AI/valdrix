@@ -11,7 +11,7 @@ This module enforces execution-time policy decisions for remediation requests:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 import re
 from typing import Any
@@ -186,7 +186,7 @@ class RemediationPolicyEngine:
 
         try:
             confidence = Decimal(str(confidence_raw))
-        except Exception:
+        except (InvalidOperation, TypeError, ValueError):
             return [
                 PolicyRuleHit(
                     rule_id="invalid-confidence-score",

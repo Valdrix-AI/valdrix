@@ -2,11 +2,31 @@ import aioboto3
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 from app.models.aws_connection import AWSConnection
 from app.models.discovered_account import DiscoveredAccount
 from app.shared.adapters.aws_utils import DEFAULT_BOTO_CONFIG, resolve_aws_region_hint
 
 logger = structlog.get_logger()
+ORG_DISCOVERY_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    BotoCoreError,
+    ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class OrganizationsDiscoveryService:
@@ -94,7 +114,7 @@ class OrganizationsDiscoveryService:
                 logger.info("aws_org_sync_complete", discovered_count=count)
                 return count
 
-        except Exception as e:
+        except ORG_DISCOVERY_RECOVERABLE_EXCEPTIONS as e:
             logger.error(
                 "aws_org_sync_failed", error=str(e), connection_id=str(connection.id)
             )

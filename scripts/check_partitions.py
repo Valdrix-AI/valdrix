@@ -1,5 +1,6 @@
 import asyncio
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from app.shared.db.session import async_session_maker
 
 
@@ -37,7 +38,7 @@ async def check():
                     print(f"Found {len(partitions)} partitions:")
                     for p in partitions:
                         print(f" - {p.child_table}")
-    except Exception as e:
+    except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
         print(f"Error: {e}")
 
 

@@ -8,6 +8,12 @@ from app.shared.core.retry import tenacity_retry
 from app.shared.core.pricing import FeatureFlag, is_feature_enabled
 
 logger = structlog.get_logger()
+REMEDIATION_ACTION_EXECUTION_RECOVERABLE_EXCEPTIONS = (
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class ExecutionStatus(str, Enum):
@@ -119,7 +125,7 @@ class BaseRemediationAction(ABC):
             logger.info("remediation_action_completed", resource_id=resource_id, action=action_name, status=result.status.value)
             return result
             
-        except Exception as e:
+        except REMEDIATION_ACTION_EXECUTION_RECOVERABLE_EXCEPTIONS as e:
             logger.error("remediation_action_failed", resource_id=resource_id, action=action_name, error=str(e))
             return ExecutionResult(
                 status=ExecutionStatus.FAILED,

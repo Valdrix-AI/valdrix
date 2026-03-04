@@ -3,17 +3,42 @@ from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.db.session import async_session_maker, mark_session_system_context
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from app.shared.core.config import get_settings
 
 
 from app.models.security import OIDCKey
+from app.shared.core.exceptions import ValdricsException
+import httpx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives.asymmetric import rsa
 import base64
 import structlog
 
 logger = structlog.get_logger()
+
+OIDC_JWKS_KEY_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ValueError,
+    TypeError,
+    AttributeError,
+    UnsupportedAlgorithm,
+)
+OIDC_STS_RESPONSE_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    ValueError,
+    TypeError,
+)
+OIDC_GCP_VERIFY_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    httpx.HTTPError,
+    SQLAlchemyError,
+    ValdricsException,
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+)
 
 
 class OIDCService:
@@ -74,8 +99,6 @@ class OIDCService:
         key_record = result.scalars().first()
 
         if not key_record:
-            from app.shared.core.exceptions import ValdricsException
-
             raise ValdricsException("No active OIDC key found for signing")
 
         payload = {
@@ -141,7 +164,7 @@ class OIDCService:
                         "alg": "RS256",
                     }
                 )
-            except Exception:
+            except OIDC_JWKS_KEY_PARSE_RECOVERABLE_EXCEPTIONS:
                 continue
         return jwks
 
@@ -192,7 +215,7 @@ class OIDCService:
                         or body.get("error")
                         or "STS exchange failed"
                     )
-                except Exception:
+                except OIDC_STS_RESPONSE_PARSE_RECOVERABLE_EXCEPTIONS:
                     error_msg = "STS exchange failed"
                 return False, error_msg
 
@@ -206,7 +229,7 @@ class OIDCService:
                 tenant_id=tenant_id,
             )
             return True, None
-        except Exception as exc:
+        except OIDC_GCP_VERIFY_RECOVERABLE_EXCEPTIONS as exc:
             logger.error(
                 "oidc_verify_gcp_access_error",
                 project_id=project_id,

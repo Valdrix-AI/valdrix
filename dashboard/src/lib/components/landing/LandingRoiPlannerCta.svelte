@@ -8,13 +8,17 @@
 	} = $props();
 </script>
 
-<section id="roi" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="roi">
+<section
+	id="roi"
+	class="container mx-auto px-6 pb-16 landing-section-lazy"
+	data-landing-section="roi"
+>
 	<div class="glass-panel landing-validation-cta">
 		<p class="landing-proof-k">Advanced ROI Planning</p>
 		<h2 class="landing-h2">Need the full 12-month ROI planner?</h2>
 		<p class="landing-p">
-			Start free for deeper team-specific scenarios. Preview the model snapshot below before you open
-			the full planner. Includes rollout effort and implementation cost assumptions.
+			Start free for deeper team-specific scenarios. Preview the model snapshot below before you
+			open the full planner. Includes rollout effort and implementation cost assumptions.
 		</p>
 
 		<div class="landing-roi-snapshot" aria-label="Example ROI model snapshot">
@@ -45,6 +49,6 @@
 			</div>
 		</div>
 
-		<a href={href} class="btn btn-primary w-fit" onclick={onTrackCta}>Open Full ROI Planner</a>
+		<a {href} class="btn btn-primary w-fit" onclick={onTrackCta}>Open Full ROI Planner</a>
 	</div>
 </section>

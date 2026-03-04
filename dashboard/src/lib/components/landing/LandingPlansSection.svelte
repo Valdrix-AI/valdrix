@@ -19,7 +19,11 @@
 	} = $props();
 </script>
 
-<section id="plans" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="plans">
+<section
+	id="plans"
+	class="container mx-auto px-6 pb-16 landing-section-lazy"
+	data-landing-section="plans"
+>
 	<div class="landing-section-head">
 		<h2 class="landing-h2">Choose a plan and launch in one sprint</h2>
 		<p class="landing-section-sub">
@@ -81,35 +85,44 @@
 			</article>
 		{/each}
 	</div>
-	<div class="landing-onboard-flow glass-panel">
-		<p class="landing-proof-k">Fast onboarding flow</p>
-		<ol class="landing-onboard-steps">
-			<li>Connect cloud and software sources.</li>
-			<li>Assign owners and approval responsibilities.</li>
-			<li>Run your first owner-led remediation cycle.</li>
-		</ol>
-		<a
-			href={`${base}/pricing`}
-			class="landing-cta-link"
-			onclick={() => onTrackCta('cta_click', 'plans', 'view_full_pricing')}
-		>
-			View full pricing and feature details
-		</a>
-	</div>
-
-	<div class="landing-implementation-card glass-panel">
-		<p class="landing-proof-k">Implementation and TCO clarity</p>
-		<h3 class="landing-h3">Know total rollout effort before procurement review</h3>
+	<section class="landing-rollout-section glass-panel" aria-labelledby="rollout-tco-title">
+		<p class="landing-proof-k">Rollout and TCO clarity</p>
+		<h3 id="rollout-tco-title" class="landing-h3">
+			Know onboarding path and total effort before procurement review
+		</h3>
 		<p class="landing-p">
-			Finance and engineering teams can model software cost plus rollout effort up front so approvals
-			are based on full cost visibility, not subscription price alone.
+			Finance and engineering teams can model software cost plus rollout effort up front so
+			approvals are based on full cost visibility, not subscription price alone.
 		</p>
-		<ul class="landing-plan-features">
-			{#each IMPLEMENTATION_COST_FACTS as detail (detail)}
-				<li>{detail}</li>
-			{/each}
-		</ul>
-		<div class="landing-free-tier-cta">
+
+		<div class="landing-rollout-grid">
+			<article class="landing-rollout-block">
+				<p class="landing-proof-k">Fast onboarding flow</p>
+				<ol class="landing-onboard-steps">
+					<li>Connect cloud and software sources.</li>
+					<li>Assign owners and approval responsibilities.</li>
+					<li>Run your first owner-led remediation cycle.</li>
+				</ol>
+			</article>
+
+			<article class="landing-rollout-block">
+				<p class="landing-proof-k">Implementation and TCO clarity</p>
+				<ul class="landing-plan-features">
+					{#each IMPLEMENTATION_COST_FACTS as detail (detail)}
+						<li>{detail}</li>
+					{/each}
+				</ul>
+			</article>
+		</div>
+
+		<div class="landing-rollout-actions">
+			<a
+				href={`${base}/pricing`}
+				class="landing-cta-link"
+				onclick={() => onTrackCta('cta_click', 'plans', 'view_full_pricing')}
+			>
+				View full pricing and feature details
+			</a>
 			<a
 				href={talkToSalesHref}
 				class="btn btn-secondary"
@@ -118,5 +131,5 @@
 				Talk to Sales
 			</a>
 		</div>
-	</div>
+	</section>
 </section>

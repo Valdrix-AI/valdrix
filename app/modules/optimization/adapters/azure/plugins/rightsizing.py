@@ -12,6 +12,27 @@ import structlog
 
 logger = structlog.get_logger()
 
+AZURE_RIGHTSIZING_VM_STATE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    IndexError,
+    AttributeError,
+)
+AZURE_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    KeyError,
+    IndexError,
+    AttributeError,
+)
+
 @registry.register("azure")
 class OverprovisionedVmPlugin(ZombiePlugin):
     """
@@ -102,7 +123,7 @@ class OverprovisionedVmPlugin(ZombiePlugin):
                     
                     if not is_running:
                         continue
-                except Exception:
+                except AZURE_RIGHTSIZING_VM_STATE_RECOVERABLE_EXCEPTIONS:
                     continue
 
                 if vm.hardware_profile and vm.hardware_profile.vm_size:
@@ -172,7 +193,7 @@ class OverprovisionedVmPlugin(ZombiePlugin):
                         "explainability_notes": f"VM {vm.name} had Max CPU of {max_cpu_observed:.1f}% over the last 7 days."
                     })
 
-        except Exception as e:
+        except AZURE_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.error("azure_rightsizing_scan_error", error=str(e))
 
         return zombies

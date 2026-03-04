@@ -14,6 +14,7 @@ from typing import Any, Protocol
 from urllib.parse import quote, urlparse
 from uuid import UUID
 
+import httpx
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,12 @@ from app.models.notification_settings import NotificationSettings
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+WORKFLOW_DISPATCH_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    TypeError,
+    ValueError,
+    httpx.HTTPError,
+)
 
 
 class WorkflowDispatcher(Protocol):
@@ -126,7 +133,7 @@ class GitHubActionsDispatcher:
                 response=response.text[:300],
             )
             return False
-        except Exception as exc:
+        except WORKFLOW_DISPATCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning(
                 "workflow_dispatch_exception", provider=self.provider, error=str(exc)
             )
@@ -167,7 +174,7 @@ class GitLabCIDispatcher:
                 response=response.text[:300],
             )
             return False
-        except Exception as exc:
+        except WORKFLOW_DISPATCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning(
                 "workflow_dispatch_exception", provider=self.provider, error=str(exc)
             )
@@ -191,7 +198,7 @@ class GenericCIWebhookDispatcher:
                 require_https=settings.WEBHOOK_REQUIRE_HTTPS,
                 block_private_ips=settings.WEBHOOK_BLOCK_PRIVATE_IPS,
             )
-        except Exception as exc:
+        except ValueError as exc:
             logger.warning(
                 "workflow_webhook_url_invalid",
                 provider=self.provider,
@@ -218,7 +225,7 @@ class GenericCIWebhookDispatcher:
                 response=response.text[:300],
             )
             return False
-        except Exception as exc:
+        except WORKFLOW_DISPATCH_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning(
                 "workflow_dispatch_exception", provider=self.provider, error=str(exc)
             )

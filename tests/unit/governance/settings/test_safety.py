@@ -7,6 +7,22 @@ from app.shared.core.auth import CurrentUser, get_current_user
 from types import SimpleNamespace
 
 
+class _FatalTestSignal(BaseException):
+    """Sentinel fatal error used to assert broad Exception handlers do not swallow BaseException."""
+
+
+def _exception_group_contains(
+    error: BaseException, exc_type: type[BaseException]
+) -> bool:
+    if isinstance(error, exc_type):
+        return True
+    if isinstance(error, BaseExceptionGroup):
+        return any(
+            _exception_group_contains(nested, exc_type) for nested in error.exceptions
+        )
+    return False
+
+
 @pytest.mark.asyncio
 async def test_get_safety_status(
     async_client: AsyncClient, mock_user_id, mock_tenant_id, app
@@ -151,3 +167,52 @@ async def test_reset_circuit_breaker_requires_admin(
         assert response.status_code in {401, 403}
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_safety_status_does_not_swallow_fatal_exceptions(
+    async_client: AsyncClient, mock_user_id, mock_tenant_id, app
+):
+    user_id = uuid.UUID(str(mock_user_id))
+    tenant_id = uuid.UUID(str(mock_tenant_id))
+    mock_user = CurrentUser(
+        id=user_id, tenant_id=tenant_id, email="fatal@valdrics.io", role=UserRole.ADMIN
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    with patch(
+        "app.shared.remediation.circuit_breaker.get_circuit_breaker",
+        side_effect=_FatalTestSignal(),
+    ):
+        try:
+            with pytest.raises(BaseExceptionGroup) as exc_info:
+                await async_client.get("/api/v1/settings/safety")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+    assert _exception_group_contains(exc_info.value, _FatalTestSignal)
+
+
+@pytest.mark.asyncio
+async def test_reset_circuit_breaker_does_not_swallow_fatal_exceptions(
+    async_client: AsyncClient, mock_user_id, mock_tenant_id, app
+):
+    user_id = uuid.UUID(str(mock_user_id))
+    tenant_id = uuid.UUID(str(mock_tenant_id))
+    mock_user = CurrentUser(
+        id=user_id, tenant_id=tenant_id, email="fatal@valdrics.io", role=UserRole.ADMIN
+    )
+
+    mock_cb = AsyncMock()
+    mock_cb.reset.side_effect = _FatalTestSignal()
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    with patch(
+        "app.shared.remediation.circuit_breaker.get_circuit_breaker",
+        return_value=mock_cb,
+    ):
+        try:
+            with pytest.raises(BaseExceptionGroup) as exc_info:
+                await async_client.post("/api/v1/settings/safety/reset")
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
+    assert _exception_group_contains(exc_info.value, _FatalTestSignal)

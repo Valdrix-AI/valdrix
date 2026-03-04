@@ -502,6 +502,34 @@ async def test_handle_subscription_create_edge_branches(mock_db: MagicMock) -> N
 
 
 @pytest.mark.asyncio
+async def test_handle_subscription_create_continues_when_audit_log_fails(
+    mock_db: MagicMock,
+) -> None:
+    handler = WebhookHandler(mock_db)
+    sub = MagicMock()
+    sub.tenant_id = uuid4()
+    sub.id = uuid4()
+    mock_db.execute.return_value = _scalar_result(sub)
+
+    with patch(
+        "app.modules.governance.domain.security.audit_log.AuditLogger.log",
+        new=AsyncMock(side_effect=RuntimeError("audit unavailable")),
+    ):
+        await handler._handle_subscription_create(
+            {
+                "customer": {"customer_code": "CUS"},
+                "subscription_code": "SUB",
+                "email_token": "TOK",
+                "next_payment_date": "2024-01-01T00:00:00Z",
+            }
+        )
+
+    assert sub.paystack_subscription_code == "SUB"
+    assert sub.status == billing_mod.SubscriptionStatus.ACTIVE.value
+    mock_db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_handle_charge_success_with_unusable_metadata_returns(
     mock_db: MagicMock,
 ) -> None:

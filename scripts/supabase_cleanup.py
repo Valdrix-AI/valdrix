@@ -1,7 +1,16 @@
 import asyncio
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from app.shared.core.config import get_settings
+
+SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 async def monitor_usage(session):
     print("\n--- DB Storage Usage (Top Tables/Partitions) ---")
@@ -49,7 +58,7 @@ async def run_cleanup():
             else:
                 print("\nNo significant bloat detected in cost_records partitions.")
 
-        except Exception as e:
+        except SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS as e:
             print(f"❌ ERROR: {e}")
     
     # Run VACUUM FULL outside transaction to reclaim disk space
@@ -61,7 +70,7 @@ async def run_cleanup():
                     print(f"  VACUUM FULL {part}...")
                     await conn.execute(text(f"VACUUM FULL {part};"))
                 print("✅ Aggressive reclamation (VACUUM FULL) completed.")
-        except Exception as vacuum_e:
+        except SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS as vacuum_e:
             print(f"⚠️ Vacuum failed: {vacuum_e}")
     
     async with async_session() as session:

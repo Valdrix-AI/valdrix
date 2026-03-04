@@ -24,9 +24,15 @@ def tenant_id():
 
 
 def test_count_tokens_fallback(monkeypatch):
-    with patch("tiktoken.get_encoding", side_effect=Exception("failed")):
+    with patch("tiktoken.get_encoding", side_effect=RuntimeError("failed")):
         assert count_tokens("abcd") == 1
         assert count_tokens("12345678") == 2
+
+
+def test_count_tokens_fatal_error_propagates():
+    with patch("tiktoken.get_encoding", side_effect=KeyboardInterrupt()):
+        with pytest.raises(KeyboardInterrupt):
+            count_tokens("abcd")
 
 
 def test_count_tokens_tiktoken():

@@ -71,6 +71,15 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     auth_coverage_cmd = next(
         cmd for cmd in commands if "scripts/verify_api_auth_coverage.py" in cmd
     )
+    env_hygiene_cmd = next(
+        cmd for cmd in commands if "scripts/verify_env_hygiene.py" in cmd
+    )
+    adapter_coverage_cmd = next(
+        cmd for cmd in commands if "scripts/verify_adapter_test_coverage.py" in cmd
+    )
+    audit_report_cmd = next(
+        cmd for cmd in commands if "scripts/verify_audit_report_resolved.py" in cmd
+    )
     alembic_head_cmd = next(
         cmd for cmd in commands if "scripts/verify_alembic_head_integrity.py" in cmd
     )
@@ -117,6 +126,25 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         "python3",
         "scripts/verify_api_auth_coverage.py",
     ]
+    assert env_hygiene_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_env_hygiene.py",
+    ]
+    assert adapter_coverage_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_adapter_test_coverage.py",
+    ]
+    assert audit_report_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_audit_report_resolved.py",
+    ]
+    assert "--allow-missing-report" in audit_report_cmd
     assert alembic_head_cmd[:4] == [
         "uv",
         "run",

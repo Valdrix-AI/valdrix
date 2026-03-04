@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import Request, HTTPException
+from sqlalchemy.exc import SQLAlchemyError
 from app.shared.core.auth import (
     get_current_user,
     decode_jwt,
@@ -236,7 +237,7 @@ async def test_get_current_user_db_error(mock_settings):
     mock_credentials.credentials = token
     mock_request = MagicMock(spec=Request)
     mock_db = AsyncMock()
-    mock_db.execute.side_effect = Exception("DB Fail")
+    mock_db.execute.side_effect = SQLAlchemyError("DB Fail")
     # AsyncSession.begin_nested() is sync and returns an async context manager.
     # Keep test double shape aligned to avoid un-awaited AsyncMock coroutine warnings.
     mock_db.begin_nested = MagicMock(return_value=_AsyncNullContext())

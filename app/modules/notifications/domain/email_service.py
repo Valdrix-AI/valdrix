@@ -14,6 +14,13 @@ from typing import List, Dict, Any
 import structlog
 
 logger = structlog.get_logger()
+EMAIL_DELIVERY_RECOVERABLE_EXCEPTIONS = (
+    smtplib.SMTPException,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 def escape_html(text: str) -> str:
@@ -105,7 +112,7 @@ class EmailService:
             )
             return True
 
-        except Exception as e:
+        except EMAIL_DELIVERY_RECOVERABLE_EXCEPTIONS as e:
             logger.error("carbon_email_failed", error=str(e))
             return False
 
@@ -235,7 +242,7 @@ class EmailService:
             logger.info("dunning_email_sent", to_email=to_email, attempt=attempt)
             return True
 
-        except Exception as e:
+        except EMAIL_DELIVERY_RECOVERABLE_EXCEPTIONS as e:
             logger.error("dunning_email_failed", error=str(e))
             return False
 
@@ -288,7 +295,7 @@ class EmailService:
             logger.info("payment_recovered_email_sent", to_email=to_email)
             return True
 
-        except Exception as e:
+        except EMAIL_DELIVERY_RECOVERABLE_EXCEPTIONS as e:
             logger.error("payment_recovered_email_failed", error=str(e))
             return False
 
@@ -346,6 +353,6 @@ class EmailService:
             logger.info("account_downgraded_email_sent", to_email=to_email)
             return True
 
-        except Exception as e:
+        except EMAIL_DELIVERY_RECOVERABLE_EXCEPTIONS as e:
             logger.error("account_downgraded_email_failed", error=str(e))
             return False

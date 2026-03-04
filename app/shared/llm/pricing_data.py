@@ -1,8 +1,18 @@
 from typing import Any, Optional
 import structlog
 import math
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = structlog.get_logger()
+LLM_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+    OSError,
+    ImportError,
+)
 
 
 class ProviderCost(dict[str, float | int]):
@@ -152,7 +162,7 @@ async def refresh_llm_pricing(db_session: Any = None) -> None:
             if model == "default" or "default" not in LLM_PRICING[provider]:
                 LLM_PRICING[provider]["default"] = LLM_PRICING[provider][model]
 
-    except Exception as e:
+    except LLM_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS as e:
         # Fail open but emit audit log for observability
         logger.error(
             "llm_pricing_refresh_failed", error=str(e), error_type=type(e).__name__

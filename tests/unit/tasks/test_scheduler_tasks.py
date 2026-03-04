@@ -622,7 +622,7 @@ class TestMaintenanceSweep:
             # Mock persistence failure
             mock_persistence = MagicMock()
             mock_persistence.finalize_batch = AsyncMock(
-                side_effect=Exception("Persistence failed")
+                side_effect=RuntimeError("Persistence failed")
             )
             mock_persistence_cls.return_value = mock_persistence
 
@@ -702,8 +702,8 @@ class TestSchedulerTasksErrorHandling:
             mock_result.scalars.return_value.all.return_value = []
             mock_session.execute = AsyncMock(
                 side_effect=[
-                    Exception("deadlock detected"),
-                    Exception("concurrent update"),
+                    RuntimeError("deadlock detected"),
+                    RuntimeError("concurrent update"),
                     mock_result,
                 ]
             )
@@ -729,7 +729,7 @@ class TestSchedulerTasksErrorHandling:
 
             # Always fail
             mock_session.__aenter__ = AsyncMock(
-                side_effect=Exception("Persistent error")
+                side_effect=RuntimeError("Persistent error")
             )
             mock_session.__aexit__ = AsyncMock(return_value=None)
 
@@ -948,7 +948,7 @@ class TestSchedulerTasksProductionQuality:
 
             # Cause all retries to fail
             mock_session.__aenter__ = AsyncMock(
-                side_effect=Exception("Persistent failure")
+                side_effect=RuntimeError("Persistent failure")
             )
             mock_session.__aexit__ = AsyncMock(return_value=None)
 

@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
+import httpx
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,13 @@ from app.models.notification_settings import NotificationSettings
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+TEAMS_DELIVERY_RECOVERABLE_EXCEPTIONS = (
+    httpx.HTTPError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    OSError,
+)
 
 
 def _is_private_or_link_local(host: str) -> bool:
@@ -114,7 +122,7 @@ class TeamsService:
                 block_private_ips=block_private_ips,
             )
             return True, 200, None
-        except Exception as exc:  # noqa: BLE001 - best-effort diagnostics
+        except ValueError as exc:
             return False, 400, str(exc)
 
     async def send_alert(
@@ -147,7 +155,7 @@ class TeamsService:
                 require_https=require_https,
                 block_private_ips=block_private_ips,
             )
-        except Exception as exc:
+        except ValueError as exc:
             logger.warning("teams_webhook_url_invalid", error=str(exc))
             return False
 
@@ -218,7 +226,7 @@ class TeamsService:
                 response=resp.text[:300],
             )
             return False
-        except Exception as exc:
+        except TEAMS_DELIVERY_RECOVERABLE_EXCEPTIONS as exc:
             logger.warning("teams_send_exception", error=str(exc))
             return False
 

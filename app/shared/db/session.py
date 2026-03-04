@@ -12,6 +12,7 @@ import structlog
 from fastapi import Request
 from sqlalchemy import event, text
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -48,6 +49,10 @@ class _DBRuntime:
 
 _db_runtime: _DBRuntime | None = None
 _db_runtime_lock = Lock()
+DB_RUNTIME_DISPOSE_ERRORS = (AttributeError, TypeError, RuntimeError)
+SESSION_INTROSPECTION_ERRORS = (AttributeError, TypeError, RuntimeError)
+DB_OPERATION_RECOVERABLE_ERRORS = (SQLAlchemyError, RuntimeError, TypeError, ValueError, OSError)
+RLS_METRIC_RECOVERABLE_ERRORS = (TypeError, ValueError, RuntimeError)
 
 
 def _as_bool(value: Any) -> bool:
@@ -248,7 +253,7 @@ def reset_db_runtime() -> None:
     try:
         # Use sync disposal so reset can be called from non-async test fixtures.
         runtime.engine.sync_engine.dispose()
-    except Exception as exc:
+    except DB_RUNTIME_DISPOSE_ERRORS as exc:
         logger.debug("db_runtime_dispose_skipped", error=str(exc), exc_info=True)
 
 
@@ -330,18 +335,7 @@ def _backend_from_url(url: str) -> Optional[str]:
 
 
 def _resolve_session_backend(session: AsyncSession) -> tuple[str, str]:
-    """
-    Resolve effective DB backend for a session with explicit source metadata.
-    Returns `(backend, source)` where backend is one of:
-    - `postgresql`, `sqlite`, `mysql`
-    - `unknown` (unresolved)
-
-    Resolution order:
-    1) `session.bind.dialect.name`
-    2) `session.bind.url`
-    3) `session.get_bind()` dialect/url
-    4) module-level configured URL fallback (`effective_url`)
-    """
+    """Resolve effective DB backend and attribution source for a session."""
     try:
         bind = getattr(session, "bind", None)
         if bind is not None:
@@ -354,7 +348,7 @@ def _resolve_session_backend(session: AsyncSession) -> tuple[str, str]:
                 backend = _backend_from_url(str(bind_url))
                 if backend is not None:
                     return backend, "session.bind.url"
-    except Exception as e:
+    except SESSION_INTROSPECTION_ERRORS as e:
         logger.debug("session_bind_introspection_failed", error=str(e), exc_info=True)
 
     try:
@@ -375,7 +369,7 @@ def _resolve_session_backend(session: AsyncSession) -> tuple[str, str]:
                 backend = _backend_from_url(str(runtime_url))
                 if backend is not None:
                     return backend, "session.get_bind().url"
-    except Exception as e:
+    except SESSION_INTROSPECTION_ERRORS as e:
         logger.debug("session_runtime_bind_resolution_failed", error=str(e), exc_info=True)
 
     fallback_url, _, _ = _resolve_effective_url(get_settings())
@@ -429,7 +423,7 @@ async def _get_db_impl(
                         # Non-Postgres backend (e.g. sqlite in tests).
                         rls_context_set = True
 
-                except Exception as e:
+                except DB_OPERATION_RECOVERABLE_ERRORS as e:
                     logger.warning("rls_context_set_failed", error=str(e))
         else:
             # For system tasks or background jobs not triggered by a request,
@@ -474,7 +468,7 @@ async def mark_session_system_context(session: AsyncSession) -> None:
         conn = await session.connection()
         conn.info["rls_context_set"] = None
         conn.info["rls_system_context"] = True
-    except Exception as exc:
+    except DB_OPERATION_RECOVERABLE_ERRORS as exc:
         logger.debug("mark_session_system_context_connection_unavailable", error=str(exc))
 
 
@@ -523,7 +517,7 @@ async def clear_session_tenant_context(session: AsyncSession) -> None:
             await session.execute(
                 text("SELECT set_config('app.current_tenant_id', '', true)")
             )
-        except Exception as e:
+        except DB_OPERATION_RECOVERABLE_ERRORS as e:
             logger.warning("failed_to_clear_rls_config_in_session", error=str(e))
     elif backend == "unknown":
         logger.error(
@@ -572,7 +566,7 @@ async def set_session_tenant_id(session: AsyncSession, tenant_id: Optional[UUID]
                 {"tid": str(tenant_id)},
             )
             RLS_ENFORCEMENT_LATENCY.observe(time.perf_counter() - rls_start)
-        except Exception as e:
+        except DB_OPERATION_RECOVERABLE_ERRORS as e:
             session.info["rls_context_set"] = False
             session.info["rls_system_context"] = False
             conn.info["rls_context_set"] = False
@@ -637,7 +631,7 @@ def check_rls_policy(
                     RLS_CONTEXT_MISSING.labels(
                         statement_type=statement.split()[0].upper()
                     ).inc()
-            except Exception as e:
+            except RLS_METRIC_RECOVERABLE_ERRORS as e:
                 logger.debug("rls_metric_increment_failed", error=str(e))
 
             logger.critical(
@@ -673,7 +667,7 @@ def check_rls_policy(
                 RLS_CONTEXT_MISSING.labels(
                     statement_type=statement.split()[0].upper()
                 ).inc()
-        except Exception as e:
+        except RLS_METRIC_RECOVERABLE_ERRORS as e:
             logger.debug("rls_metric_increment_failed", error=str(e))
 
         logger.critical(
@@ -715,7 +709,7 @@ async def health_check() -> Dict[str, Any]:
                 db_engine.dialect.name if hasattr(db_engine, "dialect") else "unknown"
             ),
         }
-    except Exception as e:
+    except DB_OPERATION_RECOVERABLE_ERRORS as e:
         logger.error("database_health_check_failed", error=str(e))
         return {
             "status": "down",

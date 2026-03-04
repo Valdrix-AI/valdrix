@@ -58,14 +58,7 @@ export const GET: RequestHandler = ({ url }) => {
 		const priority =
 			typeof entry.priority === 'number' ? `<priority>${entry.priority.toFixed(1)}</priority>` : '';
 
-		return [
-			'<url>',
-			`<loc>${escapeXml(loc)}</loc>`,
-			lastmod,
-			changefreq,
-			priority,
-			'</url>'
-		]
+		return ['<url>', `<loc>${escapeXml(loc)}</loc>`, lastmod, changefreq, priority, '</url>']
 			.filter(Boolean)
 			.join('');
 	}).join('');

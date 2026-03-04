@@ -1,9 +1,18 @@
 import aioboto3
 from typing import List, Dict, Any
+from botocore.exceptions import BotoCoreError, ClientError
 import structlog
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+IAM_AUDIT_RECOVERABLE_EXCEPTIONS = (
+    BotoCoreError,
+    ClientError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 class IAMAuditor:
@@ -109,7 +118,7 @@ class IAMAuditor:
                 "zero_trust_aligned": score > 90,
             }
 
-        except Exception as e:
+        except IAM_AUDIT_RECOVERABLE_EXCEPTIONS as e:
             logger.error("iam_audit_failed", error=str(e))
             return {"error": str(e), "status": "failed"}
 

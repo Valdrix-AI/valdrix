@@ -2,6 +2,7 @@ from functools import lru_cache
 from threading import Lock
 from typing import Optional
 import base64
+import binascii
 import ipaddress
 import os
 import structlog
@@ -14,8 +15,6 @@ ENV_PRODUCTION = "production"
 ENV_STAGING = "staging"
 ENV_DEVELOPMENT = "development"
 ENV_LOCAL = "local"
-
-
 @lru_cache
 def get_settings() -> "Settings":
     """Returns a singleton instance of the application settings."""
@@ -23,10 +22,8 @@ def get_settings() -> "Settings":
     # Require explicit configuration via environment / .env for all non-test runs.
     return Settings()
 
-
 _settings_reload_lock = Lock()
-
-
+SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS = (ImportError, AttributeError, RuntimeError, TypeError, ValueError)
 def reload_settings_from_environment() -> "Settings":
     """
     Atomically rebuild and replace cached settings from environment values.
@@ -42,7 +39,7 @@ def reload_settings_from_environment() -> "Settings":
             from app.shared.core.security import EncryptionKeyManager
 
             EncryptionKeyManager.clear_key_caches(warm=True)
-        except Exception as cache_exc:  # pragma: no cover - defensive path
+        except SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS as cache_exc:  # pragma: no cover - defensive path
             logger.warning("settings_reload_cache_refresh_failed", error=str(cache_exc))
         logger.info("settings_reload_completed")
         return refreshed
@@ -172,7 +169,7 @@ class Settings(BaseSettings):
             decoded_salt = base64.b64decode(self.KDF_SALT)
             if len(decoded_salt) != 32:
                 raise ValueError("KDF_SALT must decode to exactly 32 bytes.")
-        except Exception as exc:
+        except (binascii.Error, TypeError, ValueError) as exc:
             raise ValueError("KDF_SALT must be valid base64.") from exc
 
         if self.ENCRYPTION_KEY_CACHE_TTL_SECONDS < 60:

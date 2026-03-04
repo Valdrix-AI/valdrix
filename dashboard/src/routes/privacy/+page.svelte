@@ -22,8 +22,8 @@
 			<li>Account identity data such as name, work email, and role.</li>
 			<li>Tenant metadata such as workspace identifiers, plan, and ownership mappings.</li>
 			<li>
-				Usage, telemetry, and governance events required to provide anomaly detection, approvals, and
-				audit trails.
+				Usage, telemetry, and governance events required to provide anomaly detection, approvals,
+				and audit trails.
 			</li>
 			<li>
 				Optional marketing lead information submitted through public forms (for example, newsletter
@@ -64,8 +64,8 @@
 		<h2 class="text-xl font-semibold">5. Sharing and Sub-processors</h2>
 		<p class="text-sm text-ink-300">
 			We use vetted infrastructure and service providers to operate the platform. Sub-processors are
-			bound by contractual confidentiality and security obligations. We do not sell customer personal
-			data.
+			bound by contractual confidentiality and security obligations. We do not sell customer
+			personal data.
 		</p>
 	</section>
 
@@ -82,25 +82,34 @@
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">7. Data Subject Rights</h2>
 		<p class="text-sm text-ink-300">
-			Subject to applicable law, you may request access, correction, deletion, restriction, portability,
-			or objection to processing. Enterprise customers may also request Data Processing Addendum (DPA)
-			documentation and support for rights requests through designated workspace administrators.
+			Subject to applicable law, you may request access, correction, deletion, restriction,
+			portability, or objection to processing. Enterprise customers may also request Data Processing
+			Addendum (DPA) documentation and support for rights requests through designated workspace
+			administrators.
 		</p>
 	</section>
 
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">8. Cookies and Local Storage</h2>
 		<p class="text-sm text-ink-300">
-			Our public landing experience uses optional analytics and experiment telemetry in local storage.
-			Visitors can accept or decline analytics tracking through the cookie preferences prompt.
+			Our public landing experience uses optional analytics and experiment telemetry in local
+			storage. Visitors can accept or decline analytics tracking through the cookie preferences
+			prompt.
 		</p>
 	</section>
 
 	<section class="space-y-3">
 		<h2 class="text-xl font-semibold">9. Contact</h2>
 		<p class="text-sm text-ink-300">
-			For privacy, DPA, or deletion requests, contact <a class="underline" href="mailto:privacy@valdrics.ai"
-				>privacy@valdrics.ai</a
+			For privacy, DPA, or deletion requests, contact <a
+				class="underline"
+				href="mailto:privacy@valdrics.com">privacy@valdrics.com</a
+			>. General support requests can go to <a
+				class="underline"
+				href="mailto:support@valdrics.com">support@valdrics.com</a
+			>. For security-related disclosure or incident coordination, contact <a
+				class="underline"
+				href="mailto:security@valdrics.com">security@valdrics.com</a
 			>.
 		</p>
 	</section>
