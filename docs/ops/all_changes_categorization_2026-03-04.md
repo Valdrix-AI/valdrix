@@ -421,3 +421,75 @@ Generated from live working tree using `git status --porcelain`.
 | `??` | `docs/ops/all_changes_categorization_2026-03-04.md` |
 | `??` | `docs/ops/email_auth_dns_baseline_2026-03-04.md` |
 | `??` | `docs/ops/evidence/exception_governance_baseline.json` |
+
+## Release Candidate Execution Snapshot (2026-03-05)
+
+### Scope
+- Executed after report-driven closure and gate wiring updates.
+- Primary objective: run release gate end-to-end and capture closure state.
+
+### What was remediated during RC run
+- Fixed stale feature enforceability evidence mapping drift after reporting route decomposition by regenerating:
+  - `docs/ops/feature_enforceability_matrix_2026-02-27.json`
+
+### Verification results
+- `uv run python3 scripts/verify_audit_report_resolved.py --report-path /home/daretechie/.gemini/antigravity/brain/dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved`
+  - result: `passed=27/27`
+- `uv run python3 scripts/verify_feature_enforceability_matrix.py --matrix-path docs/ops/feature_enforceability_matrix_2026-02-27.json`
+  - result: `passed`
+- Targeted TDD pack:
+  - `tests/unit/ops/test_verify_audit_report_resolved.py`
+  - `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
+  - `tests/unit/ops/test_verify_python_module_size_budget.py`
+  - `tests/unit/ops/test_db_diagnostics.py`
+  - `tests/unit/supply_chain/test_feature_enforceability_matrix.py`
+  - result: `41 passed`
+- `uv run python3 scripts/run_enterprise_tdd_gate.py --dry-run`
+  - result: command chain validated successfully.
+
+### Full gate status
+- A full non-dry run of `scripts/run_enterprise_tdd_gate.py` progressed through all pre-pytest controls and evidence checks (including post-closure sanity and enforceability checks), then entered the large pytest tranche.
+- In this environment, the pytest tranche did not complete within watchdog windows and was terminated.
+- RC evidence therefore includes:
+  - full control-plane/evidence checks passed,
+  - full command chain validated (`--dry-run`),
+  - targeted regression packs passed,
+  - plus a documented long-running pytest tranche behavior requiring dedicated stabilization pass.
+
+## M01-M03 Closure Snapshot (2026-03-05)
+
+### Scope
+- Closed the remaining Medium findings explicitly identified as deferred in the resolved audit report:
+  - `M-01` optimization module structural bloat.
+  - `M-03` oversized compliance pack bundle module.
+  - Re-validated `M-02` adapter coverage with direct gate evidence.
+
+### Implemented remediation
+- `M-01` (optimization structural debt):
+  - Removed legacy compatibility-wrapper modules in `app/modules/optimization/domain/` and provider wrapper subpackages.
+  - Updated imports/callsites/tests to direct production modules (`adapters.*`, `domain.remediation`, `domain.plugin`, `domain.ports`).
+  - Result: optimization Python module file count reduced from `117` to `102`.
+- `M-03` (oversized compliance pack bundle):
+  - Refactored `compliance_pack_bundle.py` by extracting zip export and manifest responsibilities into:
+    - `app/modules/governance/domain/security/compliance_pack_bundle_exports.py`
+  - Added focused unit tests for helper behaviors:
+    - `tests/unit/governance/test_compliance_pack_bundle_exports.py`
+  - Result: `compliance_pack_bundle.py` reduced to `593` lines (within default `600` budget).
+- Governance tightening:
+  - Removed special-size override for `compliance_pack_bundle.py` in `scripts/verify_python_module_size_budget.py`.
+  - Strengthened `M-01` audit verifier control in `scripts/verify_audit_report_resolved.py`:
+    - enforce optimization file-count budget (`<=105`),
+    - enforce removal of legacy optimization wrapper files.
+  - Tightened `M-03` audit verifier control to default `600`-line budget.
+
+### Verification evidence
+- `DEBUG=false UV_CACHE_DIR=/tmp/uv-cache uv run python3 scripts/verify_python_module_size_budget.py` -> passed.
+- `DEBUG=false UV_CACHE_DIR=/tmp/uv-cache uv run python3 scripts/verify_adapter_test_coverage.py` -> passed.
+- `DEBUG=false UV_CACHE_DIR=/tmp/uv-cache uv run python3 scripts/verify_audit_report_resolved.py --report-path /home/daretechie/.gemini/antigravity/brain/dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved` -> `passed=27/27`.
+- `DEBUG=false UV_CACHE_DIR=/tmp/uv-cache uv run python3 scripts/run_enterprise_tdd_gate.py --dry-run` -> command chain + post-closure sanity checks validated.
+- Targeted regression pack:
+  - `64 passed` across modified optimization/audit guard/test surfaces.
+  - Additional due-diligence unit subset: `10 passed, 2 deselected`.
+
+### Operational notes
+- In this environment, some broader API/integration-heavy suites remain long-running when executed as large combined invocations; decomposition-level controls, unit regressions, and report closure gates are all green for `M01-M03`.

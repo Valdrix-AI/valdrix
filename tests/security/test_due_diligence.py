@@ -229,7 +229,7 @@ async def test_grace_period_remediation():
 
     Verifies that remediation service implements grace periods.
     """
-    from app.modules.optimization.domain.remediation_service import RemediationService
+    from app.modules.optimization.domain.remediation import RemediationService
     from app.models.remediation import RemediationStatus
 
     # Mock database session

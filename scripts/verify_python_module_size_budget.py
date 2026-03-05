@@ -21,7 +21,6 @@ MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {
     "app/modules/governance/api/v1/settings/notifications.py": 870,
     "app/modules/governance/domain/jobs/handlers/acceptance.py": 741,
     "app/modules/governance/api/v1/audit_evidence.py": 1125,
-    "app/modules/governance/domain/security/compliance_pack_bundle.py": 1000,
     "app/modules/reporting/api/v1/costs.py": 797,
     "app/modules/reporting/domain/aggregator.py": 630,
     "app/modules/reporting/domain/attribution_engine.py": 748,

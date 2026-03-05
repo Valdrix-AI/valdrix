@@ -38,6 +38,8 @@ describe('pricing page public messaging', () => {
 				data: {
 					user: null,
 					session: null,
+					subscription: { tier: 'free', status: 'active' },
+					profile: null,
 					plans: DEFAULT_PRICING_PLANS
 				}
 			}
@@ -55,6 +57,9 @@ describe('pricing page public messaging', () => {
 		const enterpriseCta = screen.getByRole('link', { name: /contact sales/i });
 		expect(enterpriseCta.getAttribute('href') || '').toContain('mailto:enterprise@valdrics.com');
 		expect(enterpriseCta.getAttribute('href') || '').toContain('cc=sales@valdrics.com');
+		expect(screen.getByRole('link', { name: /view enterprise overview/i }).getAttribute('href')).toBe(
+			'/enterprise'
+		);
 
 		const heroSubtitle = screen.getByText(/permanent free tier/i).closest('.hero-subtitle');
 		expect(heroSubtitle?.textContent?.toLowerCase()).toContain('start with a');

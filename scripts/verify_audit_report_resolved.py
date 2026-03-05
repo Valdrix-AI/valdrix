@@ -13,6 +13,10 @@ from typing import Callable
 from scripts.verify_adapter_test_coverage import find_uncovered_adapters
 from scripts.verify_exception_governance import collect_exception_sites
 from scripts.verify_python_module_size_budget import DEFAULT_MAX_LINES
+from scripts.verify_test_to_production_ratio import (
+    DEFAULT_MAX_TEST_TO_PRODUCTION_RATIO,
+    validate_ratio,
+)
 
 DEFAULT_REPORT_PATH = Path(
     "/home/daretechie/.gemini/antigravity/brain/"
@@ -74,6 +78,25 @@ PERSONAL_EMAIL_DOMAINS: frozenset[str] = frozenset(
         "proton.me",
         "protonmail.com",
     }
+)
+
+OPTIMIZATION_MAX_SOURCE_FILES = 105
+OPTIMIZATION_WRAPPER_FILES: tuple[str, ...] = (
+    "app/modules/optimization/domain/base.py",
+    "app/modules/optimization/domain/detector.py",
+    "app/modules/optimization/domain/remediation_service.py",
+    "app/modules/optimization/domain/zombie_plugin.py",
+    "app/modules/optimization/domain/aws_provider/__init__.py",
+    "app/modules/optimization/domain/aws_provider/detector.py",
+    "app/modules/optimization/domain/aws_provider/plugins.py",
+    "app/modules/optimization/domain/aws_provider/plugins/__init__.py",
+    "app/modules/optimization/domain/aws_provider/plugins/compute.py",
+    "app/modules/optimization/domain/azure_provider/__init__.py",
+    "app/modules/optimization/domain/azure_provider/detector.py",
+    "app/modules/optimization/domain/azure_provider/plugins.py",
+    "app/modules/optimization/domain/gcp_provider/__init__.py",
+    "app/modules/optimization/domain/gcp_provider/detector.py",
+    "app/modules/optimization/domain/gcp_provider/plugins.py",
 )
 
 
@@ -272,15 +295,34 @@ def _check_h06(repo_root: Path) -> tuple[str, ...]:
 
 def _check_h07(repo_root: Path) -> tuple[str, ...]:
     gate_path = repo_root / "scripts/run_enterprise_tdd_gate.py"
+    ratio_script_path = repo_root / "scripts/verify_test_to_production_ratio.py"
+    errors: list[str] = []
     if not gate_path.exists():
         return ("missing enterprise gate runner script",)
+    if not ratio_script_path.exists():
+        return ("missing test-to-production ratio verifier script",)
     gate_text = _read_text(gate_path)
     required_tokens = (
         "--cov-report=xml:coverage-enterprise-gate.xml",
         "verify_coverage_subset_from_xml",
+        "scripts/verify_test_to_production_ratio.py",
     )
     missing = [token for token in required_tokens if token not in gate_text]
-    return tuple(f"missing coverage-governance token: {token}" for token in missing)
+    errors.extend(f"missing coverage-governance token: {token}" for token in missing)
+
+    metrics, ratio_errors = validate_ratio(
+        production_roots=(repo_root / "app", repo_root / "scripts"),
+        tests_root=repo_root / "tests",
+        max_ratio=DEFAULT_MAX_TEST_TO_PRODUCTION_RATIO,
+    )
+    errors.extend(ratio_errors)
+    if not ratio_errors and metrics.production_lines > 0:
+        if metrics.ratio >= 1.47:
+            errors.append(
+                "test-to-production ratio must improve versus report baseline 1.47:1; "
+                f"current={metrics.ratio:.2f}:1"
+            )
+    return tuple(errors)
 
 
 def _check_h08(repo_root: Path) -> tuple[str, ...]:
@@ -294,13 +336,25 @@ def _check_h08(repo_root: Path) -> tuple[str, ...]:
 
 
 def _check_m01(repo_root: Path) -> tuple[str, ...]:
+    errors: list[str] = []
     gate_path = repo_root / "scripts/verify_python_module_size_budget.py"
     if not gate_path.exists():
         return ("missing module-size governance script",)
     text = _read_text(gate_path)
     if "DEFAULT_MAX_LINES = 600" not in text:
-        return ("default module-size budget must remain 600 lines.",)
-    return ()
+        errors.append("default module-size budget must remain 600 lines.")
+
+    optimization_root = repo_root / "app/modules/optimization"
+    source_files = tuple(sorted(optimization_root.rglob("*.py")))
+    if len(source_files) > OPTIMIZATION_MAX_SOURCE_FILES:
+        errors.append(
+            "optimization module must stay within the structural budget: "
+            f"{len(source_files)} files (budget={OPTIMIZATION_MAX_SOURCE_FILES})"
+        )
+    for wrapper_path in OPTIMIZATION_WRAPPER_FILES:
+        if (repo_root / wrapper_path).exists():
+            errors.append(f"legacy optimization wrapper must be removed: {wrapper_path}")
+    return tuple(errors)
 
 
 def _check_m02(repo_root: Path) -> tuple[str, ...]:
@@ -318,8 +372,8 @@ def _check_m03(repo_root: Path) -> tuple[str, ...]:
     if not target.exists():
         return (f"missing file: {target.as_posix()}",)
     lines = _line_count(target)
-    if lines > 1000:
-        return (f"{target.as_posix()} is {lines} lines (budget=1000)",)
+    if lines > DEFAULT_MAX_LINES:
+        return (f"{target.as_posix()} is {lines} lines (budget={DEFAULT_MAX_LINES})",)
     return ()
 
 
@@ -438,7 +492,7 @@ FINDING_DEFINITIONS: tuple[FindingDefinition, ...] = (
     FindingDefinition("H-04", "Oversized API controller modules", _check_h04),
     FindingDefinition("H-05", "Missing DB pool controls", _check_h05),
     FindingDefinition("H-06", "Migration rollback CI guard", _check_h06),
-    FindingDefinition("H-07", "Coverage governance signal", _check_h07),
+    FindingDefinition("H-07", "Coverage and test-ratio governance signal", _check_h07),
     FindingDefinition("H-08", "Oversized scheduler tasks module", _check_h08),
     FindingDefinition("M-01", "Optimization scope guardrail", _check_m01),
     FindingDefinition("M-02", "Adapter test coverage unknown", _check_m02),

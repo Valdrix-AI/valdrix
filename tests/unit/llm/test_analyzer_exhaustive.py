@@ -18,7 +18,7 @@ def mock_llm_factory():
     def _create_mock_llm(content='{"insights": ["test"]}', should_fail=False):
         async def _ainvoke(input, config=None, **kwargs):
             if should_fail:
-                raise Exception("LLM Failed")
+                raise RuntimeError("LLM Failed")
             return MagicMock(
                 content=content,
                 response_metadata={
@@ -179,7 +179,7 @@ async def test_analyze_budget_error_unexpected(mock_llm, usage_summary, mock_db)
     ):
         mock_sanitize.return_value = {}
         mock_delta.return_value = (None, True)
-        mock_reserve.side_effect = Exception("DB Error")
+        mock_reserve.side_effect = RuntimeError("DB Error")
 
         with pytest.raises(AIAnalysisError) as exc:
             await analyzer.analyze(usage_summary, tenant_id=uuid4())
@@ -325,7 +325,7 @@ async def test_process_results_fallback(mock_llm, mock_db, mock_forecaster):
         class MockGuardrailsFail:
             @classmethod
             def validate_output(cls, output, schema):
-                raise Exception("Validation Fail")
+                raise ValueError("Validation Fail")
 
         mock_cache = MagicMock()
         mock_cache.set_analysis = AsyncMock()
@@ -538,7 +538,7 @@ async def test_analyze_data_prep_failure(mock_llm, usage_summary, mock_db):
     with (
         patch(
             "app.shared.llm.analyzer.LLMGuardrails.sanitize_input",
-            side_effect=Exception("Sanitize fail"),
+            side_effect=RuntimeError("Sanitize fail"),
         ),
         patch(
             "app.shared.llm.analyzer.LLMBudgetManager.check_and_reserve",
@@ -582,9 +582,9 @@ async def test_analyze_usage_recording_failure(
         patch.object(analyzer, "_invoke_llm", return_value=("{}", {})),
         patch.object(analyzer, "_process_analysis_results", return_value={}),
         patch.object(analyzer, "_check_cache_and_delta", return_value=(None, False)),
-    ):
+        ):
         mock_reserve.return_value = Decimal("0.01")
-        mock_record.side_effect = Exception("Record fail")
+        mock_record.side_effect = RuntimeError("Record fail")
         mock_sanitize.return_value = {}
         mock_forecast.return_value = {}
         # Should NOT raise error, just log warning
@@ -723,9 +723,9 @@ async def test_invoke_llm_fallback_policy_excludes_openai_for_free_tier(mock_llm
     analyzer = FinOpsAnalyzer(mock_llm)
     prompt = MagicMock()
     primary_chain = MagicMock()
-    primary_chain.ainvoke = AsyncMock(side_effect=Exception("primary failed"))
+    primary_chain.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
     fallback_chain = MagicMock()
-    fallback_chain.ainvoke = AsyncMock(side_effect=Exception("fallback failed"))
+    fallback_chain.ainvoke = AsyncMock(side_effect=RuntimeError("fallback failed"))
     prompt.__or__.side_effect = [primary_chain, fallback_chain]
 
     with (
@@ -753,9 +753,9 @@ async def test_invoke_llm_fallback_policy_allows_openai_for_pro_tier(mock_llm):
     analyzer = FinOpsAnalyzer(mock_llm)
     prompt = MagicMock()
     primary_chain = MagicMock()
-    primary_chain.ainvoke = AsyncMock(side_effect=Exception("primary failed"))
+    primary_chain.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
     fallback_google_chain = MagicMock()
-    fallback_google_chain.ainvoke = AsyncMock(side_effect=Exception("google failed"))
+    fallback_google_chain.ainvoke = AsyncMock(side_effect=RuntimeError("google failed"))
     fallback_openai_chain = MagicMock()
     fallback_openai_chain.ainvoke = AsyncMock(
         return_value=MagicMock(content='{"ok": true}', response_metadata={})

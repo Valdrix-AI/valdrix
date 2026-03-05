@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-02-27T20:55:58.017320+00:00",
+  "captured_at": "2026-03-04T21:49:45.818698+00:00",
   "features": {
     "ai_analysis_detailed": {
       "evidence": [
@@ -100,6 +100,7 @@
     },
     "cost_tracking": {
       "evidence": [
+        "app/modules/reporting/api/v1/leaderboards.py",
         "app/modules/reporting/api/v1/leadership.py"
       ],
       "status": "runtime_gated"
@@ -170,7 +171,7 @@
     },
     "ingestion_backfill": {
       "evidence": [
-        "app/modules/reporting/api/v1/costs.py"
+        "app/modules/reporting/api/v1/costs_core_routes.py"
       ],
       "status": "runtime_gated"
     },
@@ -258,6 +259,7 @@
     },
     "sso": {
       "evidence": [
+        "app/modules/governance/api/v1/public.py",
         "app/modules/governance/api/v1/settings/identity.py"
       ],
       "status": "runtime_gated"

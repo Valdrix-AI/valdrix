@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import Page from './+page.svelte';
-import { incrementLandingWeeklyStage } from '$lib/landing/landingFunnel';
+import { incrementLandingCtaValue, incrementLandingWeeklyStage } from '$lib/landing/landingFunnel';
 
 vi.mock('$app/environment', () => ({
 	browser: true
@@ -31,6 +31,9 @@ describe('landing intelligence page', () => {
 			window.localStorage,
 			new Date('2026-02-23T10:15:00.000Z')
 		);
+		incrementLandingCtaValue('start_free', window.localStorage);
+		incrementLandingCtaValue('enterprise_review', window.localStorage);
+		incrementLandingCtaValue('start_free', window.localStorage);
 
 		render(Page);
 
@@ -43,5 +46,8 @@ describe('landing intelligence page', () => {
 		expect(screen.getByText('2026-02-23')).toBeTruthy();
 		expect(screen.getByText(/ctaRate/i)).toBeTruthy();
 		expect(screen.getByText(/signupIntentRate/i)).toBeTruthy();
+		expect(screen.getByRole('heading', { level: 2, name: /cta intent breakdown/i })).toBeTruthy();
+		expect(screen.getByText(/start free/i)).toBeTruthy();
+		expect(screen.getByText(/enterprise review/i)).toBeTruthy();
 	});
 });

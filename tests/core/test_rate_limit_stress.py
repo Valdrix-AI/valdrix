@@ -2,7 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime, timezone
-from app.modules.optimization.domain.aws_provider.plugins.compute import (
+from app.modules.optimization.adapters.aws.plugins.compute import (
     IdleInstancesPlugin,
 )
 

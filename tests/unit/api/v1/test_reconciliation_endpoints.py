@@ -22,7 +22,7 @@ async def test_close_package_endpoint_json(async_client, app) -> None:
     app.dependency_overrides[get_current_user] = lambda: user
     try:
         with patch(
-            "app.modules.reporting.api.v1.costs.CostReconciliationService.generate_close_package",
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.generate_close_package",
             new=AsyncMock(
                 return_value={
                     "close_status": "ready",
@@ -56,7 +56,7 @@ async def test_close_package_endpoint_csv(async_client, app) -> None:
     app.dependency_overrides[get_current_user] = lambda: user
     try:
         with patch(
-            "app.modules.reporting.api.v1.costs.CostReconciliationService.generate_close_package",
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.generate_close_package",
             new=AsyncMock(
                 return_value={
                     "close_status": "ready",
@@ -96,7 +96,7 @@ async def test_close_package_endpoint_returns_conflict(async_client, app) -> Non
     app.dependency_overrides[get_current_user] = lambda: user
     try:
         with patch(
-            "app.modules.reporting.api.v1.costs.CostReconciliationService.generate_close_package",
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.generate_close_package",
             new=AsyncMock(
                 side_effect=ValueError(
                     "Cannot generate final close package while preliminary records exist in the selected period."
@@ -126,7 +126,7 @@ async def test_restatement_history_endpoint_json_and_csv(async_client, app) -> N
     app.dependency_overrides[get_current_user] = lambda: user
     try:
         with patch(
-            "app.modules.reporting.api.v1.costs.CostReconciliationService.get_restatement_history",
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.get_restatement_history",
             new=AsyncMock(
                 side_effect=[
                     {
@@ -183,7 +183,7 @@ async def test_restatement_runs_endpoint_json_and_csv(async_client, app) -> None
     app.dependency_overrides[get_current_user] = lambda: user
     try:
         with patch(
-            "app.modules.reporting.api.v1.costs.CostReconciliationService.get_restatement_runs",
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.get_restatement_runs",
             new=AsyncMock(
                 side_effect=[
                     {
@@ -321,7 +321,7 @@ async def test_list_provider_invoices_returns_transformed_payload(async_client, 
     )
     try:
         with patch(
-            "app.modules.reporting.api.v1.costs.CostReconciliationService.list_invoices",
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.list_invoices",
             new=AsyncMock(return_value=[invoice]),
         ) as mock_list:
             response = await async_client.get(
@@ -365,11 +365,11 @@ async def test_upsert_provider_invoice_success(async_client, app) -> None:
     try:
         with (
             patch(
-                "app.modules.reporting.api.v1.costs.CostReconciliationService.upsert_invoice",
+                "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.upsert_invoice",
                 new=AsyncMock(return_value=invoice),
             ),
             patch(
-                "app.modules.reporting.api.v1.costs.AuditLogger.log",
+                "app.modules.reporting.api.v1.costs_reconciliation_routes.AuditLogger.log",
                 new=AsyncMock(return_value=None),
             ),
         ):
@@ -435,7 +435,7 @@ async def test_upsert_provider_invoice_maps_service_validation_error(
     app.dependency_overrides[get_current_user] = lambda: user
     try:
         with patch(
-            "app.modules.reporting.api.v1.costs.CostReconciliationService.upsert_invoice",
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.upsert_invoice",
             new=AsyncMock(side_effect=ValueError("invalid invoice payload")),
         ):
             response = await async_client.post(
@@ -471,13 +471,13 @@ async def test_update_provider_invoice_status_success_and_not_found(
     try:
         with (
             patch(
-                "app.modules.reporting.api.v1.costs.CostReconciliationService.update_invoice_status",
+                "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.update_invoice_status",
                 new=AsyncMock(
                     side_effect=[SimpleNamespace(status="posted"), None]
                 ),
             ),
             patch(
-                "app.modules.reporting.api.v1.costs.AuditLogger.log",
+                "app.modules.reporting.api.v1.costs_reconciliation_routes.AuditLogger.log",
                 new=AsyncMock(return_value=None),
             ),
         ):
@@ -513,11 +513,11 @@ async def test_delete_provider_invoice_success_and_not_found(async_client, app) 
     try:
         with (
             patch(
-                "app.modules.reporting.api.v1.costs.CostReconciliationService.delete_invoice",
+                "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.delete_invoice",
                 new=AsyncMock(side_effect=[True, False]),
             ),
             patch(
-                "app.modules.reporting.api.v1.costs.AuditLogger.log",
+                "app.modules.reporting.api.v1.costs_reconciliation_routes.AuditLogger.log",
                 new=AsyncMock(return_value=None),
             ),
         ):
@@ -570,7 +570,7 @@ async def test_export_focus_endpoint_validations_and_stream(async_client, app) -
             yield {"BilledCost": "12.5", "BillingAccountId": "acct-1"}
 
         with patch(
-            "app.modules.reporting.api.v1.costs.FocusV13ExportService.export_rows",
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.FocusV13ExportService.export_rows",
             new=_rows,
         ):
             ok = await async_client.get(

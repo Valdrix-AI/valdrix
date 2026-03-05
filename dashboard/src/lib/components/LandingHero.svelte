@@ -17,6 +17,7 @@
 	} from '$lib/landing/landingExperiment';
 	import {
 		captureLandingAttribution as captureLandingAttributionCore,
+		incrementLandingCtaValue as incrementLandingCtaValueCore,
 		incrementLandingFunnelStage as incrementLandingFunnelStageCore,
 		type FunnelStage,
 		type LandingAttribution
@@ -47,6 +48,7 @@
 	import LandingPlansSection from '$lib/components/landing/LandingPlansSection.svelte';
 	import LandingTrustSection from '$lib/components/landing/LandingTrustSection.svelte';
 	import LandingCookieConsent from '$lib/components/landing/LandingCookieConsent.svelte';
+	import CloudLogo from '$lib/components/CloudLogo.svelte';
 	import './LandingHero.css';
 
 	const DEFAULT_EXPERIMENT_ASSIGNMENTS: LandingExperimentAssignments = Object.freeze({
@@ -66,10 +68,17 @@
 	const DEFAULT_SIGNAL_SNAPSHOT = REALTIME_SIGNAL_SNAPSHOTS[0];
 	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`;
 	const TALK_TO_SALES_PATH = `${base}/talk-to-sales`;
+	const ENTERPRISE_PATH = `${base}/enterprise`;
 	const SUPPORTED_CURRENCY_CODES = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
+	type LandingMotionProfile = 'subtle' | 'cinematic';
 
 	if (!DEFAULT_SIGNAL_SNAPSHOT) {
 		throw new Error('Realtime signal map requires at least one snapshot.');
+	}
+
+	function resolveLandingMotionProfile(url: URL): LandingMotionProfile {
+		const value = url.searchParams.get('motion')?.trim().toLowerCase();
+		return value === 'cinematic' ? 'cinematic' : 'subtle';
 	}
 
 	let signalMapElement: HTMLDivElement | null = null;
@@ -128,8 +137,11 @@
 	let primaryCtaLabel = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'Book Executive Briefing' : 'Start Free'
 	);
-	let secondaryCtaLabel = $derived('See it in action');
-	let secondaryCtaHref = $derived('#signal-map');
+	let secondaryCtaLabel = $derived('See Enterprise Path');
+	let secondaryCtaHref = $derived(
+		buildEnterpriseReviewHref('hero_secondary')
+	);
+	let motionProfile = $derived(resolveLandingMotionProfile($page.url));
 	let primaryCtaIntent = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'executive_briefing' : heroContext.primaryIntent
 	);
@@ -491,6 +503,16 @@
 		return `${TALK_TO_SALES_PATH}?${params.toString()}`;
 	}
 
+	function buildEnterpriseReviewHref(source: string): string {
+		const params = new URLSearchParams({
+			entry: 'landing',
+			source,
+			persona: activeBuyerRole.id
+		});
+		appendUtmParams(params);
+		return `${ENTERPRISE_PATH}?${params.toString()}`;
+	}
+
 	function selectSnapshot(index: number) {
 		if (index < 0 || index >= REALTIME_SIGNAL_SNAPSHOTS.length) return;
 		snapshotIndex = index;
@@ -534,12 +556,15 @@
 	}
 
 	function trackCta(action: string, section: string, value: string): void {
+		incrementLandingCtaValueCore(value, getTelemetryStorage());
 		incrementLandingFunnelStageCore('cta', getTelemetryStorage());
 		emitLandingTelemetrySafe(action, section, value, buildTelemetryContext('cta'));
 
 		const isSignupIntent =
 			value === 'start_free' ||
 			value === 'book_briefing' ||
+			value === 'enterprise_review' ||
+			value === 'request_validation_briefing' ||
 			value.includes('start_plan') ||
 			value.includes('start_roi_assessment');
 		if (isSignupIntent) {
@@ -608,7 +633,11 @@
 	}
 </script>
 
-<div class="landing" itemscope itemtype="https://schema.org/SoftwareApplication">
+<div
+	class={`landing landing-motion-${motionProfile}`}
+	itemscope
+	itemtype="https://schema.org/SoftwareApplication"
+>
 	<div class="landing-scroll-progress" aria-hidden="true">
 		<span style={`width:${landingScrollProgressPct}%;`}></span>
 	</div>
@@ -623,6 +652,18 @@
 	<meta itemprop="image" content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()} />
 
 	<section id="hero" class="landing-hero" data-landing-section="hero">
+		<div class="landing-hero-signal-field" aria-hidden="true">
+			<div class="landing-hero-signal-core">
+				<CloudLogo provider="valdrics" size={136} />
+			</div>
+			<span class="landing-hero-signal-ring landing-hero-signal-ring-a"></span>
+			<span class="landing-hero-signal-ring landing-hero-signal-ring-b"></span>
+			<span class="landing-hero-signal-ring landing-hero-signal-ring-c"></span>
+			<span class="landing-hero-signal-node landing-hero-signal-node-a"></span>
+			<span class="landing-hero-signal-node landing-hero-signal-node-b"></span>
+			<span class="landing-hero-signal-node landing-hero-signal-node-c"></span>
+			<span class="landing-hero-signal-node landing-hero-signal-node-d"></span>
+		</div>
 		<div class="container mx-auto px-6 pt-8 pb-12 sm:pt-10 sm:pb-16">
 			<LandingHeroCopy
 				{heroTitle}
@@ -630,9 +671,11 @@
 				{primaryCtaLabel}
 				{secondaryCtaLabel}
 				{secondaryCtaHref}
+				demoCtaHref="#signal-map"
 				primaryCtaHref={buildPrimaryCtaHref()}
 				onPrimaryCta={() => trackCta('cta_click', 'hero', experiments.ctaVariant)}
-				onSecondaryCta={() => trackCta('cta_click', 'hero', 'see_signal_map')}
+				onSecondaryCta={() => trackCta('cta_click', 'hero', 'enterprise_review')}
+				onDemoCta={() => trackCta('cta_click', 'hero', 'see_signal_map')}
 			/>
 		</div>
 	</section>
@@ -718,9 +761,7 @@
 
 	<LandingTrustSection
 		onTrackCta={(value) => trackCta('cta_click', 'trust', value)}
-		requestValidationBriefingHref={buildSignupHref('executive_briefing', {
-			source: 'trust_validation'
-		})}
+		requestValidationBriefingHref={buildTalkToSalesHref('trust_validation')}
 		onePagerHref={ONE_PAGER_HREF}
 	/>
 

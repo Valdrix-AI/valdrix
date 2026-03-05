@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
 	buildLandingWeeklyTrendChecks,
 	captureLandingAttribution,
+	incrementLandingCtaValue,
 	incrementLandingFunnelStage,
 	incrementLandingWeeklyStage,
 	readLandingAttribution,
+	readLandingCtaValueReport,
 	readLandingFunnelReport,
 	readLandingWeeklyFunnelReport
 } from './landingFunnel';
@@ -115,5 +117,28 @@ describe('landingFunnel', () => {
 		expect(weekly[0]?.weekStart).toBe('2026-02-23');
 		expect(weekly[0]?.counts.view).toBe(1);
 		expect(weekly[0]?.counts.cta).toBe(1);
+	});
+
+	it('aggregates CTA value telemetry with normalized enterprise labels', () => {
+		const storage = new MemoryStorage();
+		incrementLandingCtaValue('start_free', storage);
+		incrementLandingCtaValue('enterprise_review', storage);
+		incrementLandingCtaValue('start_free', storage);
+		incrementLandingCtaValue('request_validation_briefing', storage);
+		incrementLandingCtaValue('request validation briefing', storage);
+
+		const report = readLandingCtaValueReport(storage, 5);
+		const startFree = report.find((entry) => entry.value === 'start_free');
+		expect(startFree).toMatchObject({
+			value: 'start_free',
+			label: 'Start Free',
+			count: 2
+		});
+		const enterpriseReview = report.find((entry) => entry.value === 'enterprise_review');
+		expect(enterpriseReview?.label).toBe('Enterprise Review');
+		const validationBriefing = report.find(
+			(entry) => entry.value === 'request_validation_briefing'
+		);
+		expect(validationBriefing?.count).toBe(2);
 	});
 });

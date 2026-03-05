@@ -62,7 +62,11 @@ async def test_zombie_service_field_masking_starter():
                 mock_result_empty,
             ]
 
-            results = await service.scan_for_tenant(tenant_id)
+            with patch(
+                "app.shared.core.notifications.NotificationDispatcher.notify_zombies",
+                new_callable=AsyncMock,
+            ):
+                results = await service.scan_for_tenant(tenant_id)
 
             # Verify results are masked
             idle_instances = results["idle_instances"]
@@ -109,7 +113,11 @@ async def test_zombie_service_no_masking_pro():
             return_value=mock_detector,
         ):
             service = ZombieService(db)
-            results = await service.scan_for_tenant(tenant_id)
+            with patch(
+                "app.shared.core.notifications.NotificationDispatcher.notify_zombies",
+                new_callable=AsyncMock,
+            ):
+                results = await service.scan_for_tenant(tenant_id)
 
             item = results["idle_instances"][0]
             assert item["owner"] == "real-owner"
@@ -119,7 +127,7 @@ async def test_zombie_service_no_masking_pro():
 @pytest.mark.asyncio
 async def test_remediation_service_iac_gating_starter():
     """Verify that Starter tier users cannot generate IaC plans."""
-    from app.modules.optimization.domain.remediation_service import RemediationService
+    from app.modules.optimization.domain.remediation import RemediationService
 
     db = AsyncMock()
     tenant_id = uuid4()
@@ -140,7 +148,7 @@ async def test_remediation_service_iac_gating_starter():
 @pytest.mark.asyncio
 async def test_remediation_service_iac_allowed_pro():
     """Verify that Pro tier users can generate IaC plans."""
-    from app.modules.optimization.domain.remediation_service import RemediationService
+    from app.modules.optimization.domain.remediation import RemediationService
 
     db = AsyncMock()
     tenant_id = uuid4()

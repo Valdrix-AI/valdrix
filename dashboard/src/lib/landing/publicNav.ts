@@ -21,6 +21,7 @@ export const PUBLIC_PRIMARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 
 export const PUBLIC_RESOURCES_DROPDOWN_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/resources', label: 'Resource Hub' },
+	{ href: '/enterprise', label: 'Enterprise' },
 	{ href: '/docs', label: 'Docs' },
 	{ href: '/blog', label: 'Blog' },
 	{ href: '/insights', label: 'Insights' },
@@ -35,21 +36,18 @@ export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 
 export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#benefits', label: 'Outcomes' },
-	{ href: '/#trust', label: 'Proof' },
 	{ href: '/#workflow', label: 'How It Works' },
 	{ href: '/#signal-map', label: 'See It In Action' },
+	{ href: '/#trust', label: 'Proof' },
 	{ href: '/pricing', label: 'Pricing' },
-	{ href: '/resources', label: 'Resources' },
-	{ href: '/talk-to-sales', label: 'Talk to Sales' },
-	{ href: '/docs', label: 'Docs' },
-	{ href: '/blog', label: 'Blog' },
-	{ href: '/insights', label: 'Insights' }
+	{ href: '/resources', label: 'Resources' }
 ]);
 
 export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/docs', label: 'Documentation' },
 	{ href: '/docs/api', label: 'API Reference' },
 	{ href: '/resources', label: 'Resources' },
+	{ href: '/enterprise', label: 'Enterprise' },
 	{ href: '/blog', label: 'Blog' },
 	{ href: '/insights', label: 'Insights' },
 	{ href: '/talk-to-sales', label: 'Talk to Sales' },
@@ -57,7 +55,6 @@ export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#trust', label: 'Trust' },
 	{ href: '/privacy', label: 'Privacy' },
 	{ href: '/terms', label: 'Terms' },
-	{ href: 'https://github.com/Valdrics-AI/valdrics', label: 'GitHub', external: true },
 	{ href: '/status', label: 'Status' }
 ]);
 

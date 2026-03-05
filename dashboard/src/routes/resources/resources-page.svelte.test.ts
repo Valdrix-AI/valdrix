@@ -11,6 +11,9 @@ describe('resources page contact directory', () => {
 		render(Page);
 
 		expect(screen.getByRole('heading', { name: /contact directory/i })).toBeTruthy();
+		expect(screen.getByRole('link', { name: /open enterprise page/i }).getAttribute('href')).toBe(
+			'/enterprise'
+		);
 		expect(screen.getByRole('link', { name: /enterprise@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /sales@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /support@valdrics\.com/i })).toBeTruthy();

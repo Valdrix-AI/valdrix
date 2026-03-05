@@ -10,7 +10,9 @@ Tests:
 
 from datetime import datetime, timezone
 
-from app.modules.optimization.domain.detector import ZombieDetector
+from app.modules.optimization.adapters.aws.detector import (
+    AWSZombieDetector as ZombieDetector,
+)
 
 
 class TestZombieDetectorInitialization:

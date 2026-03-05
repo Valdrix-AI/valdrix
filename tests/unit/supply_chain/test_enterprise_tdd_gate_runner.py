@@ -80,6 +80,9 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     audit_report_cmd = next(
         cmd for cmd in commands if "scripts/verify_audit_report_resolved.py" in cmd
     )
+    ratio_cmd = next(
+        cmd for cmd in commands if "scripts/verify_test_to_production_ratio.py" in cmd
+    )
     alembic_head_cmd = next(
         cmd for cmd in commands if "scripts/verify_alembic_head_integrity.py" in cmd
     )
@@ -145,6 +148,12 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         "scripts/verify_audit_report_resolved.py",
     ]
     assert "--allow-missing-report" in audit_report_cmd
+    assert ratio_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_test_to_production_ratio.py",
+    ]
     assert alembic_head_cmd[:4] == [
         "uv",
         "run",

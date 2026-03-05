@@ -84,6 +84,7 @@ ENTERPRISE_GATE_TEST_TARGETS: tuple[str, ...] = (
     "tests/unit/ops/test_verify_adapter_test_coverage.py",
     "tests/unit/ops/test_verify_repo_root_hygiene.py",
     "tests/unit/ops/test_verify_python_module_size_budget.py",
+    "tests/unit/ops/test_verify_test_to_production_ratio.py",
     "tests/unit/ops/test_db_diagnostics.py",
     "tests/unit/ops/test_verify_audit_report_resolved.py",
     "tests/unit/shared/adapters/test_license_vendor_types.py",
@@ -415,6 +416,12 @@ def build_gate_commands() -> list[list[str]]:
             "python3",
             "scripts/verify_audit_report_resolved.py",
             "--allow-missing-report",
+        ],
+        [
+            "uv",
+            "run",
+            "python3",
+            "scripts/verify_test_to_production_ratio.py",
         ],
         [
             "uv",
@@ -827,32 +834,39 @@ def run_gate(*, dry_run: bool) -> int:
     coverage_data_path = repo_root / ".coverage.enterprise-gate"
     if not dry_run:
         coverage_data_path.unlink(missing_ok=True)
+        # Remove stale artifacts so root-hygiene prechecks stay deterministic.
+        coverage_xml_path.unlink(missing_ok=True)
     command_env = os.environ.copy()
     command_env["COVERAGE_FILE"] = str(coverage_data_path)
     # Enforce deterministic release-gate behavior regardless of ambient shell values.
     # Some local profiles export non-boolean DEBUG values (for example "release"),
     # which can break pydantic settings parsing in pytest bootstrap.
     command_env["DEBUG"] = "false"
-    for cmd in commands:
-        rendered = _format_command(cmd)
-        print(f"[enterprise-gate] {rendered}")
-        if dry_run:
-            continue
-        try:
-            subprocess.run(cmd, check=True, env=command_env)
-        except subprocess.CalledProcessError:
-            coverage_args = _parse_coverage_report_args(cmd)
-            if coverage_args is None:
-                raise
-            include_patterns, fail_under = coverage_args
-            label = ",".join(include_patterns)
-            verify_coverage_subset_from_xml(
-                xml_path=coverage_xml_path,
-                include_patterns=include_patterns,
-                fail_under=fail_under,
-                label=label,
-                repo_root=repo_root,
-            )
+    try:
+        for cmd in commands:
+            rendered = _format_command(cmd)
+            print(f"[enterprise-gate] {rendered}")
+            if dry_run:
+                continue
+            try:
+                subprocess.run(cmd, check=True, env=command_env)
+            except subprocess.CalledProcessError:
+                coverage_args = _parse_coverage_report_args(cmd)
+                if coverage_args is None:
+                    raise
+                include_patterns, fail_under = coverage_args
+                label = ",".join(include_patterns)
+                verify_coverage_subset_from_xml(
+                    xml_path=coverage_xml_path,
+                    include_patterns=include_patterns,
+                    fail_under=fail_under,
+                    label=label,
+                    repo_root=repo_root,
+                )
+    finally:
+        if not dry_run:
+            coverage_data_path.unlink(missing_ok=True)
+            coverage_xml_path.unlink(missing_ok=True)
     return 0
 
 

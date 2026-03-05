@@ -178,17 +178,17 @@
 	data-landing-section="proof"
 >
 	<div class="landing-section-head">
-		<h2 class="landing-h2">Trust, Risk, and Procurement Readiness</h2>
+		<h2 class="landing-h2">Proof and Trust</h2>
 		<p class="landing-section-sub">
-			Prelaunch validation package for security, compliance, governance, and commercial diligence.
+			Outcome patterns, security baseline, and an optional enterprise diligence lane.
 		</p>
 	</div>
 
-	<div class="landing-validation-cta glass-panel" aria-label="Trust, Risk, and Procurement Readiness">
-		<p class="landing-proof-k">Enterprise Validation Program</p>
+	<div class="landing-validation-cta glass-panel" aria-label="Proof and Trust">
+		<p class="landing-proof-k">Optional Enterprise Diligence</p>
 		<p class="landing-p">
-			Run a structured validation sprint covering identity controls, approval governance, evidence
-			exports, and rollout risk controls before procurement sign-off.
+			Need formal security and procurement review? Use the enterprise lane for governance artifacts,
+			validation briefing, and rollout planning support.
 		</p>
 		<div class="landing-lead-actions">
 			<a
@@ -196,18 +196,20 @@
 				class="btn btn-primary w-fit pulse-glow"
 				onclick={() => onTrackCta('request_validation_briefing')}
 			>
-				Request Validation Briefing
+				Talk to Sales for Validation
 			</a>
 			<a
 				href={onePagerHref}
 				class="btn btn-secondary w-fit"
 				onclick={() => onTrackCta('download_executive_one_pager')}
 			>
-				Download Executive Due-Diligence One-Pager
+				Download Executive One-Pager
 			</a>
 		</div>
 		<p class="landing-more-resources">
-			More resources:
+			Enterprise resources:
+			<a href={`${base}/enterprise`}>Enterprise Governance Overview</a>
+			•
 			<a
 				href={globalComplianceWorkbookHref}
 				onclick={() => onTrackCta('download_global_compliance_workbook')}
@@ -215,6 +217,7 @@
 				Access Control & Compliance Checklist
 			</a>
 		</p>
+		<p class="landing-trust-note">Validation briefing is ungated. No login required.</p>
 		<p class="landing-trust-note">
 			Valdrics is prelaunch. Public customer logos and production outcome studies will be published
 			post go-live. Current proof reflects design-partner sessions and benchmark ranges.

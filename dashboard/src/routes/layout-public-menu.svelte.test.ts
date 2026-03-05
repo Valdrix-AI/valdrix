@@ -117,7 +117,7 @@ describe('public layout mobile menu', () => {
 		await fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
 		await waitFor(() => {
 			const active = document.activeElement as HTMLElement | null;
-			expect(active?.textContent?.trim()).toMatch(/insights/i);
+			expect(active?.textContent?.trim()).toMatch(/resources/i);
 		});
 
 		await fireEvent.keyDown(window, { key: 'Tab' });
@@ -190,6 +190,7 @@ describe('public layout mobile menu', () => {
 		}
 		await fireEvent.click(resourcesTrigger);
 		expect(await screen.findByRole('menu', { name: /^resources$/i })).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: /enterprise/i })).toBeTruthy();
 		expect(screen.getByRole('menuitem', { name: /docs/i })).toBeTruthy();
 		expect(screen.getByRole('menuitem', { name: /blog/i })).toBeTruthy();
 

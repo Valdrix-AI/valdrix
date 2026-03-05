@@ -4,7 +4,7 @@ from uuid import uuid4, UUID
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.modules.optimization.domain.remediation_service import RemediationService
+from app.modules.optimization.domain.remediation import RemediationService
 from app.models.remediation import (
     RemediationRequest,
     RemediationStatus,

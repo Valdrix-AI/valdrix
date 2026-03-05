@@ -1,7 +1,7 @@
 import pytest
 import datetime
 from unittest.mock import MagicMock, AsyncMock, patch
-from app.modules.optimization.domain.aws_provider.plugins.compute import (
+from app.modules.optimization.adapters.aws.plugins.compute import (
     IdleInstancesPlugin,
 )
 
@@ -114,7 +114,7 @@ async def test_gpu_instance_detection_with_attribution():
 @pytest.mark.asyncio
 async def test_iac_plan_generation():
     """Verifies that the remediation service generates a valid TF plan."""
-    from app.modules.optimization.domain.remediation_service import RemediationService
+    from app.modules.optimization.domain.remediation import RemediationService
     from app.models.remediation import RemediationRequest, RemediationAction
     from decimal import Decimal
 

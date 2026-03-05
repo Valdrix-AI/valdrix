@@ -7,7 +7,7 @@ from app.models.remediation import (
     RemediationStatus,
     RemediationAction,
 )
-from app.modules.optimization.domain.remediation_service import RemediationService
+from app.modules.optimization.domain.remediation import RemediationService
 from app.shared.llm.budget_manager import BudgetStatus
 
 

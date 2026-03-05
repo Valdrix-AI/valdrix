@@ -3,8 +3,10 @@
 	import { onMount } from 'svelte';
 	import {
 		buildLandingWeeklyTrendChecks,
+		readLandingCtaValueReport,
 		readLandingFunnelReport,
 		readLandingWeeklyFunnelReport,
+		type LandingCtaValueSummary,
 		type LandingFunnelSummary,
 		type LandingWeeklyFunnelSummary,
 		type LandingWeeklyTrendCheck
@@ -32,6 +34,7 @@
 	let allTimeSummary = $state<LandingFunnelSummary>(EMPTY_SUMMARY);
 	let weeklySummaries = $state<LandingWeeklyFunnelSummary[]>(EMPTY_WEEKLY);
 	let trendChecks = $state<LandingWeeklyTrendCheck[]>(EMPTY_TRENDS);
+	let ctaValueSummary = $state<LandingCtaValueSummary[]>([]);
 	let capturedAt = $state<string>('');
 
 	function formatPercent(rate: number): string {
@@ -49,6 +52,7 @@
 		weeklySummaries = weekly;
 		allTimeSummary = readLandingFunnelReport(window.localStorage);
 		trendChecks = buildLandingWeeklyTrendChecks(weekly);
+		ctaValueSummary = readLandingCtaValueReport(window.localStorage, 10);
 		capturedAt = new Date().toISOString();
 	}
 
@@ -113,6 +117,24 @@
 			</article>
 		{/each}
 	</div>
+
+	<section class="card">
+		<h2 class="text-lg font-semibold">CTA intent breakdown</h2>
+		{#if ctaValueSummary.length === 0}
+			<p class="text-sm text-ink-400 mt-3">
+				No CTA value telemetry has been recorded in this browser context yet.
+			</p>
+		{:else}
+			<ul class="mt-4 space-y-2">
+				{#each ctaValueSummary as entry (entry.value)}
+					<li class="flex items-center justify-between gap-3 border-b border-ink-800/70 pb-2">
+						<span class="text-sm text-ink-300">{entry.label}</span>
+						<span class="text-sm font-semibold text-ink-100">{entry.count}</span>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
 
 	<section class="card overflow-x-auto">
 		<h2 class="text-lg font-semibold">Weekly funnel detail</h2>

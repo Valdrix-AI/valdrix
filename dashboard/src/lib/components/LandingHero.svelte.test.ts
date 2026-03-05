@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import LandingHero from './LandingHero.svelte';
 
@@ -28,6 +28,8 @@ describe('LandingHero', () => {
 		window.localStorage.setItem('valdrics.cookie_consent.v1', 'accepted');
 
 		render(LandingHero);
+		const landingRoot = document.querySelector('.landing');
+		expect(landingRoot?.className).toContain('landing-motion-subtle');
 
 		const mainHeading = screen.getByRole('heading', { level: 1 });
 		expect(mainHeading).toBeTruthy();
@@ -47,16 +49,21 @@ describe('LandingHero', () => {
 			await fireEvent.click(primaryCta);
 		}
 
-		const secondaryCandidates = screen.getAllByRole('link', { name: /See it in action/i });
-		const secondaryCta = secondaryCandidates.find((element) =>
-			(element.getAttribute('class') || '').includes('btn-secondary')
-		);
+		const heroSection = document.querySelector('#hero');
+		expect(heroSection).toBeTruthy();
+		const heroView = within(heroSection as HTMLElement);
+		const secondaryCta = heroView.getByRole('link', { name: /see enterprise path/i });
 		expect(secondaryCta).toBeTruthy();
 		const secondaryHref = secondaryCta?.getAttribute('href') || '';
-		expect(secondaryHref.startsWith('#signal-map')).toBe(true);
+		expect(secondaryHref).toContain('/enterprise?');
+		expect(secondaryHref).toContain('source=hero_secondary');
 		if (secondaryCta) {
 			await fireEvent.click(secondaryCta);
 		}
+		const demoLink = heroView.getByRole('link', { name: /see live signal map/i });
+		expect(demoLink.getAttribute('href')).toBe('#signal-map');
+		expect(heroView.getByText(/evidence snapshot · february 28, 2026/i)).toBeTruthy();
+		expect(heroView.getByText(/285 validation packs passed/i)).toBeTruthy();
 
 		expect(
 			screen.getByRole('heading', { name: /visibility alone does not control cloud spend/i })
@@ -69,7 +76,7 @@ describe('LandingHero', () => {
 			screen.getByRole('heading', { name: /choose a plan and launch in one sprint/i })
 		).toBeTruthy();
 		expect(
-			screen.getByRole('heading', { name: /trust, risk, and procurement readiness/i })
+			screen.getByRole('heading', { name: /proof and trust/i })
 		).toBeTruthy();
 
 		expect(
@@ -123,14 +130,17 @@ describe('LandingHero', () => {
 		expect(freePlanCta.getAttribute('href') || '').toContain('plan=free');
 		await fireEvent.click(freePlanCta);
 
-		const validationBriefingLink = screen.getByRole('link', {
-			name: /request validation briefing/i
+		const trustSection = document.querySelector('#trust');
+		expect(trustSection).toBeTruthy();
+		const trustView = within(trustSection as HTMLElement);
+		const validationBriefingLink = trustView.getByRole('link', {
+			name: /talk to sales for validation/i
 		});
-		expect(validationBriefingLink.getAttribute('href') || '').toContain(
-			'intent=executive_briefing'
-		);
+		const validationHref = validationBriefingLink.getAttribute('href') || '';
+		expect(validationHref).toContain('/talk-to-sales?');
+		expect(validationHref).toContain('source=trust_validation');
 		const onePagerLink = screen.getByRole('link', {
-			name: /download executive due-diligence one-pager/i
+			name: /download executive one-pager/i
 		});
 		expect(onePagerLink.getAttribute('href')).toBe('/resources/valdrics-enterprise-one-pager.md');
 

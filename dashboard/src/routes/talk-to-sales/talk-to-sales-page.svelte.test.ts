@@ -28,6 +28,11 @@ describe('talk-to-sales page', () => {
 		const resourcesLink = screen.getByRole('link', { name: /open sales resources/i });
 		expect(resourcesLink.getAttribute('href')).toBe('/resources');
 
+		const enterpriseOverviewLink = screen.getByRole('link', {
+			name: /explore enterprise overview/i
+		});
+		expect(enterpriseOverviewLink.getAttribute('href')).toBe('/enterprise');
+
 		const startFreeLink = screen.getByRole('link', { name: /start free instead/i });
 		expect(startFreeLink.getAttribute('href')).toContain('/auth/login?intent=talk_to_sales');
 	});

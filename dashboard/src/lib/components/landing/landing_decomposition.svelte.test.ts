@@ -35,6 +35,8 @@ describe('Landing component decomposition', () => {
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
 		expect(screen.getByText(/one control loop/i)).toBeTruthy();
+		expect(screen.getByText(/evidence snapshot · february 28, 2026/i)).toBeTruthy();
+		expect(screen.getByText(/285 validation packs passed/i)).toBeTruthy();
 
 		// Check for GreenOps Global Flip additions
 		expect(screen.getByText(/Cloud, Software, and Carbon/i)).toBeTruthy();
@@ -165,7 +167,7 @@ describe('Landing component decomposition', () => {
 
 		// Check for the Global FinOps Compliance Workbook CTA
 		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Trust, Risk, and Procurement Readiness'
+			name: 'Proof and Trust'
 		});
 		expect(ctaBlock).toBeTruthy();
 		if (ctaBlock) {
@@ -190,18 +192,18 @@ describe('Landing component decomposition', () => {
 		});
 
 		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Trust, Risk, and Procurement Readiness'
+			name: 'Proof and Trust'
 		});
 		expect(ctaBlock).toBeTruthy();
 		if (ctaBlock) {
 			const ctaView = within(ctaBlock);
 			await fireEvent.click(
-				ctaView.getByRole('link', { name: /request validation briefing/i })
+				ctaView.getByRole('link', { name: /talk to sales for validation/i })
 			);
 			expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
 
 			await fireEvent.click(
-				ctaView.getByRole('link', { name: /download executive due-diligence one-pager/i })
+				ctaView.getByRole('link', { name: /download executive one-pager/i })
 			);
 			expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
 		}

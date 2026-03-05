@@ -3,7 +3,7 @@ import { GET } from './+server';
 
 describe('global compliance workbook download route', () => {
 	it('returns markdown attachment with cache headers', async () => {
-		const response = await GET();
+		const response = await GET({} as Parameters<typeof GET>[0]);
 		expect(response.status).toBe(200);
 		expect(response.headers.get('Content-Type')).toContain('text/markdown');
 		expect(response.headers.get('Content-Disposition')).toContain(

@@ -43,7 +43,7 @@ describe('Landing Component Data Hardening', () => {
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/pricing')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#trust')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/resources')).toBe(true);
-		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(false);
 		expect(PUBLIC_SIGNAL_STRIP.length).toBeGreaterThanOrEqual(3);
 	});
 });

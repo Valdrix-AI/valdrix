@@ -5,6 +5,7 @@ import {
 	PUBLIC_FOOTER_LINKS,
 	PUBLIC_MOBILE_LINKS,
 	PUBLIC_PRIMARY_LINKS,
+	PUBLIC_RESOURCES_DROPDOWN_LINKS,
 	PUBLIC_SECONDARY_LINKS,
 	PUBLIC_SIGNAL_STRIP
 } from './publicNav';
@@ -58,13 +59,15 @@ describe('publicNav', () => {
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/pricing')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/pricing')).toBe(true);
 		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/docs')).toBe(true);
-		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/docs')).toBe(true);
 		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/insights')).toBe(true);
-		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/insights')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/insights')).toBe(true);
 		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
-		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/resources')).toBe(true);
+		expect(PUBLIC_RESOURCES_DROPDOWN_LINKS.some((link) => link.href === '/enterprise')).toBe(
+			true
+		);
+		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/enterprise')).toBe(true);
 	});
 
 	it('keeps only customer-facing strip and badge language', () => {
@@ -76,7 +79,7 @@ describe('publicNav', () => {
 	});
 
 	it('keeps footer contact channels aligned to valdrics.com mailboxes', () => {
-		expect(PUBLIC_CONTACT_CHANNELS.length).toBeGreaterThanOrEqual(6);
+		expect(PUBLIC_CONTACT_CHANNELS.length).toBeGreaterThanOrEqual(3);
 		for (const channel of PUBLIC_CONTACT_CHANNELS) {
 			expect(channel.href.startsWith('mailto:')).toBe(true);
 			expect(channel.email.endsWith('@valdrics.com')).toBe(true);

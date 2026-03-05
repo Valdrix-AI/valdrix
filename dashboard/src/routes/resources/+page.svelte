@@ -12,6 +12,14 @@
 
 	const resources: readonly ResourceEntry[] = [
 		{
+			category: 'Enterprise',
+			title: 'Enterprise Governance Overview',
+			summary:
+				'Review Valdrics enterprise control architecture, procurement-ready diligence path, and rollout model in one destination.',
+			href: `${base}/enterprise`,
+			ctaLabel: 'Open Enterprise Page'
+		},
+		{
 			category: 'Playbook',
 			title: 'Cloud Waste Review Checklist',
 			summary:

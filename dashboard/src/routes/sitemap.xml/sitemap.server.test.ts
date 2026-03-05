@@ -34,6 +34,7 @@ describe('sitemap.xml route', () => {
 		expect(xml).toContain('https://example.com/blog');
 		expect(xml).toContain('https://example.com/insights');
 		expect(xml).toContain('https://example.com/resources');
+		expect(xml).toContain('https://example.com/enterprise');
 		expect(xml).toContain('https://example.com/talk-to-sales');
 		expect(xml).toContain('https://example.com/status');
 		expect(xml).not.toContain('<lastmod>');

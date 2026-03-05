@@ -206,9 +206,14 @@
 				<li>Custom integrations for complex operating environments</li>
 			</ul>
 		</div>
-		<a href="mailto:enterprise@valdrics.com?cc=sales@valdrics.com" class="enterprise-cta"
-			>Contact Sales</a
-		>
+		<div class="enterprise-cta-group">
+			<a href="mailto:enterprise@valdrics.com?cc=sales@valdrics.com" class="enterprise-cta"
+				>Contact Sales</a
+			>
+			<a href={`${base}/enterprise`} class="enterprise-cta enterprise-cta-secondary">
+				View Enterprise Overview
+			</a>
+		</div>
 	</div>
 
 	<!-- Payment Note -->
@@ -566,6 +571,21 @@
 
 	.enterprise-cta:hover {
 		background: var(--color-surface-300);
+	}
+
+	.enterprise-cta-group {
+		display: grid;
+		gap: 0.6rem;
+	}
+
+	.enterprise-cta-secondary {
+		border: 1px solid rgba(var(--color-accent-500-rgb), 0.44);
+		background: rgba(var(--color-accent-500-rgb), 0.12);
+		color: var(--color-accent-400);
+	}
+
+	.enterprise-cta-secondary:hover {
+		background: rgba(var(--color-accent-500-rgb), 0.2);
 	}
 
 	/* Payment Note */

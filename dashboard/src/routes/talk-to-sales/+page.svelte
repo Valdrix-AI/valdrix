@@ -53,6 +53,7 @@
 		<h2 class="text-xl font-semibold">Choose your preferred path</h2>
 		<div class="flex flex-wrap gap-3">
 			<a href={salesMailHref} class="btn btn-primary">Email Sales</a>
+			<a href={`${base}/enterprise`} class="btn btn-secondary">Explore Enterprise Overview</a>
 			<a href={`${base}/resources`} class="btn btn-secondary">Open Sales Resources</a>
 			<a
 				href={`${base}/auth/login?intent=talk_to_sales&entry=talk_to_sales`}

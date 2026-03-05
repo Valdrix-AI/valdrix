@@ -1,9 +1,10 @@
 from .service import ZombieService, OptimizationService
-from .detector import ZombieDetector
 from .factory import ZombieDetectorFactory
 from .remediation import RemediationService
 from .registry import registry as plugins
-from . import aws_provider
+from app.modules.optimization.adapters.aws.detector import (
+    AWSZombieDetector as ZombieDetector,
+)
 
 __all__ = [
     "ZombieService",
@@ -12,5 +13,4 @@ __all__ = [
     "ZombieDetectorFactory",
     "RemediationService",
     "plugins",
-    "aws_provider",
 ]

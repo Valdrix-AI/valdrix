@@ -162,7 +162,6 @@ async def db_session(async_engine) -> AsyncGenerator["AsyncSession", None]:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
     from app.shared.db.base import Base
 
-    # Create all tables
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -208,7 +207,11 @@ def client(app) -> Generator["TestClient", None, None]:
 
 
 @pytest_asyncio.fixture
-async def async_client(app, db, async_engine) -> AsyncGenerator["AsyncClient", None]:
+async def async_client(
+    app,
+    db,
+    async_engine,
+) -> AsyncGenerator["AsyncClient", None]:
     """Async test client for FastAPI. Overrides get_db to share test session."""
     from httpx import AsyncClient, ASGITransport
     from app.shared.db.session import get_db, get_system_db

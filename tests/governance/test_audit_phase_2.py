@@ -15,7 +15,7 @@ async def test_zombie_detector_factory_pass_through() -> None:
     mock_connection = AWSConnectionMock()
 
     with patch(
-        "app.modules.optimization.domain.aws_provider.detector.AWSZombieDetector.__init__",
+        "app.modules.optimization.adapters.aws.detector.AWSZombieDetector.__init__",
         return_value=None,
     ) as mock_init:
         # We don't actually want to init it, just check if it's called with connection
@@ -63,7 +63,7 @@ def test_rate_limiter_hash_usage() -> None:
 @pytest.mark.asyncio
 async def test_aws_detector_boto_config_injection() -> None:
     """Verify that AWSZombieDetector injects botocore.Config with timeouts."""
-    from app.modules.optimization.domain.aws_provider.detector import AWSZombieDetector
+    from app.modules.optimization.adapters.aws.detector import AWSZombieDetector
     from botocore.config import Config
 
     detector = AWSZombieDetector(region="us-east-1")

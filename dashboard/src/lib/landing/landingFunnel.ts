@@ -51,6 +51,12 @@ export interface LandingWeeklyTrendCheck {
 	direction: 'up' | 'down' | 'flat';
 }
 
+export interface LandingCtaValueSummary {
+	value: string;
+	label: string;
+	count: number;
+}
+
 export interface LandingFunnelTelemetryContext {
 	visitorId?: string;
 	persona?: string;
@@ -68,6 +74,7 @@ export interface LandingFunnelTelemetryContext {
 const ATTRIBUTION_STORAGE_KEY = 'valdrics.landing.attribution.v1';
 const FUNNEL_STORAGE_KEY = 'valdrics.landing.funnel.v1';
 const WEEKLY_FUNNEL_STORAGE_KEY = 'valdrics.landing.weekly_funnel.v1';
+const CTA_VALUE_STORAGE_KEY = 'valdrics.landing.cta_values.v1';
 
 const EMPTY_COUNTS: LandingFunnelCounts = Object.freeze({
 	view: 0,
@@ -76,12 +83,34 @@ const EMPTY_COUNTS: LandingFunnelCounts = Object.freeze({
 	signup_intent: 0
 });
 
+const CTA_VALUE_LABELS: Record<string, string> = Object.freeze({
+	start_free: 'Start Free',
+	enterprise_review: 'Enterprise Review',
+	request_validation_briefing: 'Request Validation Briefing',
+	book_briefing: 'Book Executive Briefing',
+	see_signal_map: 'See Live Signal Map',
+	start_roi_assessment: 'Open Full ROI Planner',
+	start_plan_free: 'Start on Free Tier',
+	start_plan_starter: 'Start with Starter',
+	start_plan_growth: 'Start with Growth',
+	start_plan_pro: 'Start with Pro',
+	talk_to_sales: 'Talk to Sales'
+});
+
 function normalizeToken(input: string | null | undefined): string | undefined {
 	const trimmed = (input || '').trim();
 	if (!trimmed) {
 		return undefined;
 	}
 	return trimmed.slice(0, 120);
+}
+
+function normalizeCtaValue(value: string): string | undefined {
+	return normalizeToken(value)?.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+}
+
+function ctaValueLabel(value: string): string {
+	return CTA_VALUE_LABELS[value] || value.replace(/_/g, ' ');
 }
 
 function readJson<T>(storage: StorageLike | undefined, key: string): T | null {
@@ -252,6 +281,37 @@ export function readLandingWeeklyFunnelReport(
 			...summarizeFunnel(counts)
 		};
 	});
+}
+
+export function incrementLandingCtaValue(value: string, storage?: StorageLike): void {
+	const normalizedValue = normalizeCtaValue(value);
+	if (!normalizedValue) return;
+	const current = readJson<Record<string, number>>(storage, CTA_VALUE_STORAGE_KEY) || {};
+	const next = Math.max(0, Math.floor(Number(current[normalizedValue]) || 0)) + 1;
+	writeJson(storage, CTA_VALUE_STORAGE_KEY, {
+		...current,
+		[normalizedValue]: next
+	});
+}
+
+export function readLandingCtaValueReport(
+	storage?: StorageLike,
+	limit = 8
+): LandingCtaValueSummary[] {
+	const safeLimit = Math.min(20, Math.max(1, Math.floor(limit)));
+	const current = readJson<Record<string, number>>(storage, CTA_VALUE_STORAGE_KEY) || {};
+	return Object.entries(current)
+		.map(([value, count]) => ({
+			value,
+			label: ctaValueLabel(value),
+			count: Math.max(0, Math.floor(Number(count) || 0))
+		}))
+		.filter((entry) => entry.count > 0)
+		.sort((left, right) => {
+			if (right.count === left.count) return left.label.localeCompare(right.label);
+			return right.count - left.count;
+		})
+		.slice(0, safeLimit);
 }
 
 export function buildLandingWeeklyTrendChecks(

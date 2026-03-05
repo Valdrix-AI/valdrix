@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from uuid import UUID, uuid4
 
 import pytest
@@ -29,8 +30,36 @@ def _clear_user_override(async_client) -> None:
     async_client.app.dependency_overrides.pop(get_current_user, None)
 
 
+REQUEST_TIMEOUT_SECONDS = 20.0
+
+
+async def _await_response(label: str, awaitable) -> object:
+    try:
+        return await asyncio.wait_for(awaitable, timeout=REQUEST_TIMEOUT_SECONDS)
+    except TimeoutError as exc:
+        pytest.fail(
+            f"Timed out waiting for {label} after {REQUEST_TIMEOUT_SECONDS} seconds"
+        )
+        raise AssertionError("unreachable") from exc
+
+
+async def _post(async_client, path: str, **kwargs):
+    return await _await_response(
+        f"POST {path}",
+        async_client.post(path, **kwargs),
+    )
+
+
+async def _get(async_client, path: str, **kwargs):
+    return await _await_response(
+        f"GET {path}",
+        async_client.get(path, **kwargs),
+    )
+
+
 async def _create_approved_decision_via_api(async_client) -> UUID:
-    policy = await async_client.post(
+    policy = await _post(
+        async_client,
         "/api/v1/enforcement/policies",
         json={
             "terraform_mode": "soft",
@@ -43,12 +72,14 @@ async def _create_approved_decision_via_api(async_client) -> UUID:
         },
     )
     assert policy.status_code == 200
-    budget = await async_client.post(
+    budget = await _post(
+        async_client,
         "/api/v1/enforcement/budgets",
         json={"scope_key": "default", "monthly_limit_usd": "1000", "active": True},
     )
     assert budget.status_code == 200
-    gate = await async_client.post(
+    gate = await _post(
+        async_client,
         "/api/v1/enforcement/gate/terraform",
         json={
             "project_id": "default",
@@ -67,7 +98,8 @@ async def _create_approved_decision_via_api(async_client) -> UUID:
     approval_id = gate_payload["approval_request_id"]
     assert approval_id is not None
 
-    approve = await async_client.post(
+    approve = await _post(
+        async_client,
         f"/api/v1/enforcement/approvals/{approval_id}/approve",
         json={"notes": "approve for actions api tests"},
     )
@@ -89,7 +121,8 @@ async def test_actions_api_lifecycle_create_lease_complete(async_client, db) -> 
 
     try:
         decision_id = await _create_approved_decision_via_api(async_client)
-        create = await async_client.post(
+        create = await _post(
+            async_client,
             "/api/v1/enforcement/actions/requests",
             json={
                 "decision_id": str(decision_id),
@@ -104,7 +137,8 @@ async def test_actions_api_lifecycle_create_lease_complete(async_client, db) -> 
         assert create_payload["status"] == "queued"
         action_id = create_payload["action_id"]
 
-        lease = await async_client.post(
+        lease = await _post(
+            async_client,
             "/api/v1/enforcement/actions/lease",
             json={"action_type": "terraform.apply.execute"},
         )
@@ -115,7 +149,8 @@ async def test_actions_api_lifecycle_create_lease_complete(async_client, db) -> 
         assert lease_payload["status"] == "running"
         assert lease_payload["attempt_count"] == 1
 
-        complete = await async_client.post(
+        complete = await _post(
+            async_client,
             f"/api/v1/enforcement/actions/requests/{action_id}/complete",
             json={"result_payload": {"provider_request_id": "tf-run-123"}},
         )
@@ -124,13 +159,15 @@ async def test_actions_api_lifecycle_create_lease_complete(async_client, db) -> 
         assert complete_payload["status"] == "succeeded"
         assert complete_payload["result_payload"]["provider_request_id"] == "tf-run-123"
 
-        get_action = await async_client.get(
+        get_action = await _get(
+            async_client,
             f"/api/v1/enforcement/actions/requests/{action_id}"
         )
         assert get_action.status_code == 200
         assert get_action.json()["status"] == "succeeded"
 
-        listed = await async_client.get(
+        listed = await _get(
+            async_client,
             "/api/v1/enforcement/actions/requests?status=succeeded&limit=50"
         )
         assert listed.status_code == 200
@@ -152,7 +189,8 @@ async def test_actions_api_create_is_idempotent(async_client, db) -> None:
 
     try:
         decision_id = await _create_approved_decision_via_api(async_client)
-        first = await async_client.post(
+        first = await _post(
+            async_client,
             "/api/v1/enforcement/actions/requests",
             json={
                 "decision_id": str(decision_id),
@@ -163,7 +201,8 @@ async def test_actions_api_create_is_idempotent(async_client, db) -> None:
             },
         )
         assert first.status_code == 200
-        second = await async_client.post(
+        second = await _post(
+            async_client,
             "/api/v1/enforcement/actions/requests",
             json={
                 "decision_id": str(decision_id),
@@ -191,7 +230,8 @@ async def test_actions_api_rejects_denied_decision(async_client, db) -> None:
     _override_user(async_client, admin_user)
 
     try:
-        policy = await async_client.post(
+        policy = await _post(
+            async_client,
             "/api/v1/enforcement/policies",
             json={
                 "terraform_mode": "hard",
@@ -204,12 +244,14 @@ async def test_actions_api_rejects_denied_decision(async_client, db) -> None:
             },
         )
         assert policy.status_code == 200
-        budget = await async_client.post(
+        budget = await _post(
+            async_client,
             "/api/v1/enforcement/budgets",
             json={"scope_key": "default", "monthly_limit_usd": "10", "active": True},
         )
         assert budget.status_code == 200
-        gate = await async_client.post(
+        gate = await _post(
+            async_client,
             "/api/v1/enforcement/gate/terraform",
             json={
                 "project_id": "default",
@@ -226,7 +268,8 @@ async def test_actions_api_rejects_denied_decision(async_client, db) -> None:
         gate_payload = gate.json()
         assert gate_payload["decision"] == "DENY"
 
-        create = await async_client.post(
+        create = await _post(
+            async_client,
             "/api/v1/enforcement/actions/requests",
             json={
                 "decision_id": gate_payload["decision_id"],
@@ -254,7 +297,8 @@ async def test_actions_api_lease_returns_none_when_no_action_available(async_cli
     _override_user(async_client, admin_user)
 
     try:
-        lease = await async_client.post(
+        lease = await _post(
+            async_client,
             "/api/v1/enforcement/actions/lease",
             json={"action_type": "terraform.apply.execute"},
         )
@@ -277,7 +321,8 @@ async def test_actions_api_fail_and_cancel_endpoints(async_client, db) -> None:
 
     try:
         decision_id = await _create_approved_decision_via_api(async_client)
-        create = await async_client.post(
+        create = await _post(
+            async_client,
             "/api/v1/enforcement/actions/requests",
             json={
                 "decision_id": str(decision_id),
@@ -290,14 +335,16 @@ async def test_actions_api_fail_and_cancel_endpoints(async_client, db) -> None:
         assert create.status_code == 200
         action_id = create.json()["action_id"]
 
-        lease = await async_client.post(
+        lease = await _post(
+            async_client,
             "/api/v1/enforcement/actions/lease",
             json={"action_type": "terraform.apply.execute"},
         )
         assert lease.status_code == 200
         assert lease.json()["action_id"] == action_id
 
-        fail = await async_client.post(
+        fail = await _post(
+            async_client,
             f"/api/v1/enforcement/actions/requests/{action_id}/fail",
             json={
                 "error_code": "provider_timeout",
@@ -309,7 +356,8 @@ async def test_actions_api_fail_and_cancel_endpoints(async_client, db) -> None:
         assert fail.json()["status"] == "queued"
         assert fail.json()["last_error_code"] == "provider_timeout"
 
-        cancel = await async_client.post(
+        cancel = await _post(
+            async_client,
             f"/api/v1/enforcement/actions/requests/{action_id}/cancel",
             json={"reason": "manual operator intervention"},
         )

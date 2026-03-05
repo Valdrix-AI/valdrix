@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
-from app.modules.optimization.domain.remediation_service import RemediationService
+from app.modules.optimization.domain.remediation import RemediationService
 from app.models.remediation import (
     RemediationRequest,
     RemediationStatus,
@@ -54,7 +54,7 @@ async def test_execute_fails_if_backup_fails(remediation_service, mock_db):
     with (
         patch(
             "app.modules.optimization.domain.actions.aws.volumes.AWSDeleteVolumeAction.create_backup",
-            side_effect=Exception("BACKUP_FAILED: AWS Backup Error"),
+            side_effect=RuntimeError("BACKUP_FAILED: AWS Backup Error"),
         ),
         patch(
             "app.modules.optimization.domain.remediation.get_tenant_tier", return_value=PricingTier.PRO

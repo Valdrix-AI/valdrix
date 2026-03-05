@@ -5,18 +5,22 @@
 		primaryCtaLabel,
 		secondaryCtaLabel,
 		secondaryCtaHref,
+		demoCtaHref = '#signal-map',
 		primaryCtaHref,
 		onPrimaryCta,
-		onSecondaryCta
+		onSecondaryCta,
+		onDemoCta = () => {}
 	}: {
 		heroTitle: string;
 		heroSubtitle: string;
 		primaryCtaLabel: string;
 		secondaryCtaLabel: string;
 		secondaryCtaHref: string;
+		demoCtaHref?: string;
 		primaryCtaHref: string;
 		onPrimaryCta: () => void;
 		onSecondaryCta: () => void;
+		onDemoCta?: () => void;
 	} = $props();
 </script>
 
@@ -64,7 +68,26 @@
 		Start free. Upgrade only when ready.
 	</p>
 
-	<div class="landing-hero-mini-visual glass-panel fade-in-up" style="animation-delay: 340ms;">
+	<p class="landing-cta-note fade-in-up" style="animation-delay: 320ms;">
+		Start free for immediate rollout.
+		Want a live proof walkthrough first?
+		<a href={demoCtaHref} class="landing-cta-link" onclick={onDemoCta}>See live signal map</a>
+	</p>
+
+	<div class="landing-hero-proof-card glass-panel fade-in-up" style="animation-delay: 340ms;">
+		<p class="landing-proof-k">Evidence Snapshot · February 28, 2026 (UTC)</p>
+		<p class="landing-p">
+			<strong>285 validation packs passed</strong> with <strong>0 failed</strong> across Cloud+, SaaS,
+			ITAM/license, and connection reporting control paths.
+		</p>
+		<p class="landing-hero-proof-meta">
+			Method note: targeted backend packs plus optimization governance packs in a controlled
+			validation run. Capture window: February 28, 2026 (UTC).
+		</p>
+		<a href="/docs/technical-validation" class="landing-cta-link">View technical validation brief</a>
+	</div>
+
+	<div class="landing-hero-mini-visual glass-panel fade-in-up" style="animation-delay: 360ms;">
 		<p class="landing-proof-k">One Control Loop</p>
 		<div class="landing-hero-flow" role="list" aria-label="Valdrics control loop overview">
 			<div class="landing-hero-flow-step" role="listitem">
