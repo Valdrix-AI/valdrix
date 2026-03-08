@@ -1,6 +1,6 @@
 import pytest
 from httpx import AsyncClient
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from unittest.mock import AsyncMock
@@ -279,6 +279,73 @@ async def test_sso_discovery_provider_id_missing(async_client: AsyncClient, db: 
     payload = res.json()
     assert payload["available"] is False
     assert payload["reason"] == "sso_provider_id_not_configured"
+
+
+@pytest.mark.asyncio
+async def test_marketing_subscribe_accepts_valid_payload(async_client: AsyncClient) -> None:
+    with patch(
+        "app.modules.governance.api.v1.public_marketing.get_settings",
+        return_value=SimpleNamespace(
+            MARKETING_SUBSCRIBE_WEBHOOK_URL="",
+            WEBHOOK_ALLOWED_DOMAINS=[],
+            WEBHOOK_REQUIRE_HTTPS=True,
+            WEBHOOK_BLOCK_PRIVATE_IPS=True,
+            TRUST_PROXY_HEADERS=False,
+            TRUSTED_PROXY_HOPS=1,
+            TRUSTED_PROXY_CIDRS=[],
+        ),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/marketing/subscribe",
+            json={
+                "email": "buyer@example.com",
+                "company": "Example Inc",
+                "role": "FinOps",
+                "referrer": "landing-page",
+            },
+        )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["accepted"] is True
+    assert len(payload["emailHash"]) == 64
+
+
+@pytest.mark.asyncio
+async def test_marketing_subscribe_delivery_failure_returns_503(async_client: AsyncClient) -> None:
+    mock_response = MagicMock()
+    mock_response.raise_for_status.side_effect = RuntimeError("webhook failed")
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+
+    with (
+        patch(
+            "app.modules.governance.api.v1.public_marketing.get_settings",
+            return_value=SimpleNamespace(
+                MARKETING_SUBSCRIBE_WEBHOOK_URL="https://hooks.example.com/subscribe",
+                WEBHOOK_ALLOWED_DOMAINS=["example.com"],
+                WEBHOOK_REQUIRE_HTTPS=True,
+                WEBHOOK_BLOCK_PRIVATE_IPS=True,
+                TRUST_PROXY_HEADERS=False,
+                TRUSTED_PROXY_HOPS=1,
+                TRUSTED_PROXY_CIDRS=[],
+            ),
+        ),
+        patch(
+            "app.modules.governance.api.v1.public_marketing.get_http_client",
+            return_value=mock_client,
+        ),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/marketing/subscribe",
+            json={"email": "buyer@example.com"},
+        )
+
+    assert response.status_code == 503
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"] == "delivery_failed"
 
 
 @pytest.mark.asyncio

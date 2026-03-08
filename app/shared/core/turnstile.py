@@ -6,11 +6,10 @@ from typing import Any
 import httpx
 import structlog
 from fastapi import HTTPException, Request
-from slowapi.util import get_remote_address
-
 from app.shared.core.config import ENV_PRODUCTION, ENV_STAGING, get_settings
 from app.shared.core.http import get_http_client
 from app.shared.core.ops_metrics import TURNSTILE_VERIFICATION_EVENTS_TOTAL
+from app.shared.core.proxy_headers import resolve_client_ip
 
 logger = structlog.get_logger()
 
@@ -137,7 +136,7 @@ async def _enforce_turnstile_for_surface(request: Request, surface: str) -> None
             outcome="token_missing",
         )
 
-    remote_ip = str(get_remote_address(request) or "").strip()
+    remote_ip = resolve_client_ip(request, settings_obj=settings)
     try:
         verify_payload = await _verify_turnstile_with_cloudflare(
             token=token,

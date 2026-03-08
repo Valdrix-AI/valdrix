@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { fly } from 'svelte/transition';
 	import type { Snippet } from 'svelte';
 	import { uiState } from '$lib/stores/ui.svelte';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
@@ -199,14 +198,7 @@
 		</div>
 	</header>
 
-	<div
-		class="p-6"
-		in:fly={{
-			y: 8,
-			duration: prefersReducedMotion ? 0 : 400,
-			delay: prefersReducedMotion ? 0 : 200
-		}}
-	>
+	<div class="p-6" class:authenticated-shell-enter={!prefersReducedMotion}>
 		<ErrorBoundary>
 			{@render children()}
 		</ErrorBoundary>
@@ -214,3 +206,20 @@
 </main>
 
 <CommandPalette bind:isOpen={uiState.isCommandPaletteOpen} />
+
+<style>
+	.authenticated-shell-enter {
+		animation: authenticatedShellEnter 400ms var(--ease-out) 200ms both;
+	}
+
+	@keyframes authenticatedShellEnter {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+</style>

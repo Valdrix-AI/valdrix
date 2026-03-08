@@ -1,7 +1,13 @@
 <script lang="ts">
+	import { base } from '$app/paths';
+	import { ABOVE_FOLD_TRUST_RAIL } from '$lib/landing/heroContent';
+
+	const heroTrustRail = ABOVE_FOLD_TRUST_RAIL;
+
 	let {
 		heroTitle,
 		heroSubtitle,
+		quantPromise = '',
 		primaryCtaLabel,
 		secondaryCtaLabel,
 		secondaryCtaHref,
@@ -13,6 +19,7 @@
 	}: {
 		heroTitle: string;
 		heroSubtitle: string;
+		quantPromise?: string;
 		primaryCtaLabel: string;
 		secondaryCtaLabel: string;
 		secondaryCtaHref: string;
@@ -26,10 +33,10 @@
 
 <div class="landing-copy">
 	<div class="landing-kicker fade-in-up" style="animation-delay: 0ms;">
-		<span class="badge badge-accent">Cloud, Software, and Carbon Spend Control</span>
+		<span class="badge badge-accent">Decision operating layer for spend control</span>
 		<span class="landing-sep" aria-hidden="true">•</span>
 		<span class="landing-kicker-text"
-			>See waste and intensity early. Act faster. Protect margin.</span
+			>Route the right owner. Apply checks. Record the outcome.</span
 		>
 	</div>
 
@@ -48,60 +55,57 @@
 		</p>
 	</div>
 
-	<div class="landing-cta fade-in-up" style="animation-delay: 280ms;">
+	<div class="landing-cta fade-in-up" style="animation-delay: 270ms;">
 		<a
 			href={primaryCtaHref}
-			class="btn btn-primary text-base px-8 py-3 pulse-glow"
+			class="btn btn-primary landing-cta-primary text-base px-8 py-3 pulse-glow"
 			onclick={onPrimaryCta}
 		>
 			{primaryCtaLabel}
 		</a>
 		<a
 			href={secondaryCtaHref}
-			class="btn btn-secondary text-base px-8 py-3"
+			class="btn btn-secondary landing-cta-secondary text-base px-8 py-3"
 			onclick={onSecondaryCta}
 		>
 			{secondaryCtaLabel}
 		</a>
 	</div>
-	<p class="landing-cta-free-note fade-in-up" style="animation-delay: 300ms;">
-		Start free. Upgrade only when ready.
-	</p>
 
-	<p class="landing-cta-note fade-in-up" style="animation-delay: 320ms;">
-		Start free for immediate rollout.
-		Want a live proof walkthrough first?
-		<a href={demoCtaHref} class="landing-cta-link" onclick={onDemoCta}>See live signal map</a>
-	</p>
-
-	<div class="landing-hero-proof-card glass-panel fade-in-up" style="animation-delay: 340ms;">
-		<p class="landing-proof-k">Evidence Snapshot · February 28, 2026 (UTC)</p>
-		<p class="landing-p">
-			<strong>285 validation packs passed</strong> with <strong>0 failed</strong> across Cloud+, SaaS,
-			ITAM/license, and connection reporting control paths.
-		</p>
-		<p class="landing-hero-proof-meta">
-			Method note: targeted backend packs plus optimization governance packs in a controlled
-			validation run. Capture window: February 28, 2026 (UTC).
-		</p>
-		<a href="/docs/technical-validation" class="landing-cta-link">View technical validation brief</a>
-	</div>
-
-	<div class="landing-hero-mini-visual glass-panel fade-in-up" style="animation-delay: 360ms;">
-		<p class="landing-proof-k">One Control Loop</p>
-		<div class="landing-hero-flow" role="list" aria-label="Valdrics control loop overview">
-			<div class="landing-hero-flow-step" role="listitem">
-				<p class="landing-hero-flow-step-k">Detect</p>
-				<p class="landing-hero-flow-step-v">Live spend movement</p>
-			</div>
-			<div class="landing-hero-flow-step" role="listitem">
-				<p class="landing-hero-flow-step-k">Assign</p>
-				<p class="landing-hero-flow-step-v">Owner + approval path</p>
-			</div>
-			<div class="landing-hero-flow-step" role="listitem">
-				<p class="landing-hero-flow-step-k">Act</p>
-				<p class="landing-hero-flow-step-v">Safe, measurable remediation</p>
-			</div>
+	<div class="landing-hero-credibility fade-in-up" style="animation-delay: 300ms;">
+		<p class="landing-hero-credibility-k">What you can verify now</p>
+		<div class="landing-hero-proof-rail" role="list" aria-label="Prelaunch proof in hero">
+			{#each heroTrustRail as item (item.title)}
+				<article class="landing-hero-proof-rail-item" role="listitem">
+					<p class="landing-hero-proof-rail-title">{item.title}</p>
+					<p class="landing-hero-proof-rail-detail">{item.detail}</p>
+				</article>
+			{/each}
 		</div>
+		<p class="landing-hero-credibility-note">
+			Verify now:
+			<a href={`${base}/docs/technical-validation`} class="landing-cta-link">
+				Technical validation
+			</a>
+			<span aria-hidden="true">•</span>
+			<a href={`${base}/resources/global-finops-compliance-workbook.md`} class="landing-cta-link">
+				Access checklist
+			</a>
+			<span aria-hidden="true">•</span>
+			<a href={demoCtaHref} class="landing-cta-link" onclick={onDemoCta}>Live signal map</a>
+		</p>
 	</div>
+
+	{#if quantPromise}
+		<div class="landing-quant-promise fade-in-up" style="animation-delay: 330ms;">
+			<p class="landing-quant-k">Modeled first-quarter range</p>
+			<p class="landing-quant-v">{quantPromise}</p>
+			<p class="landing-quant-meta">
+				Based on targeted validation packs and rollout assumptions.
+				<a href={`${base}/docs/technical-validation`} class="landing-cta-link">
+					Review methodology
+				</a>
+			</p>
+		</div>
+	{/if}
 </div>

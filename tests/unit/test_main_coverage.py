@@ -49,6 +49,24 @@ async def test_lifespan_flow(mock_lifespan_deps):
     mock_lifespan_deps["dispose"].assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_lifespan_skips_scheduler_when_disabled(mock_lifespan_deps):
+    from app.main import lifespan, app
+
+    with patch("app.main.reload_settings_from_environment") as mock_reload:
+        from app.main import settings as live_settings
+
+        mock_reload.return_value = live_settings
+        live_settings.TESTING = False
+        live_settings.REDIS_URL = "redis://localhost:6379/0"
+        live_settings.ENABLE_SCHEDULER = False
+
+        async with lifespan(app):
+            pass
+
+    mock_lifespan_deps["scheduler"].start.assert_not_called()
+
+
 def test_root_endpoint(client):
     response = client.get("/")
     assert response.status_code == 200
@@ -106,18 +124,47 @@ def test_generic_exception_handler(client):
 
 
 def test_docs_endpoints(client):
-    # Swagger
-    with patch("app.main.render_swagger_ui_html") as mock_swagger:
-        mock_swagger.return_value = MagicMock()
-        mock_swagger.return_value.body = b"<html></html>"
-        mock_swagger.return_value.status_code = 200
-        response = client.get("/docs")
-        assert response.status_code == 200
+    from app.main import settings as live_settings
 
-    # Redoc
-    with patch("app.main.render_redoc_ui_html") as mock_redoc:
-        mock_redoc.return_value = MagicMock()
-        mock_redoc.return_value.body = b"<html></html>"
-        mock_redoc.return_value.status_code = 200
-        response = client.get("/redoc")
-        assert response.status_code == 200
+    original_environment = live_settings.ENVIRONMENT
+    original_docs_public = live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY
+    live_settings.ENVIRONMENT = "development"
+    live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY = False
+    # Swagger
+    try:
+        with patch("app.main.render_swagger_ui_html") as mock_swagger:
+            mock_swagger.return_value = MagicMock()
+            mock_swagger.return_value.body = b"<html></html>"
+            mock_swagger.return_value.status_code = 200
+            response = client.get("/docs")
+            assert response.status_code == 200
+
+        # Redoc
+        with patch("app.main.render_redoc_ui_html") as mock_redoc:
+            mock_redoc.return_value = MagicMock()
+            mock_redoc.return_value.body = b"<html></html>"
+            mock_redoc.return_value.status_code = 200
+            response = client.get("/redoc")
+            assert response.status_code == 200
+    finally:
+        live_settings.ENVIRONMENT = original_environment
+        live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY = original_docs_public
+
+
+def test_docs_endpoints_blocked_in_strict_env(client):
+    from app.main import settings as live_settings
+
+    original_environment = live_settings.ENVIRONMENT
+    original_docs_public = live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY
+    original_testing = live_settings.TESTING
+    live_settings.ENVIRONMENT = "production"
+    live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY = False
+    live_settings.TESTING = False
+    try:
+        assert client.get("/docs").status_code == 404
+        assert client.get("/redoc").status_code == 404
+        assert client.get("/openapi.json").status_code == 404
+    finally:
+        live_settings.ENVIRONMENT = original_environment
+        live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY = original_docs_public
+        live_settings.TESTING = original_testing

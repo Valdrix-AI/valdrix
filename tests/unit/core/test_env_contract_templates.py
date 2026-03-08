@@ -87,10 +87,12 @@ def test_koyeb_manifest_declares_required_env_entries() -> None:
 
     required = {
         "ENVIRONMENT",
+        "ENABLE_SCHEDULER",
         "WEB_CONCURRENCY",
         "DATABASE_URL",
         "REDIS_URL",
         "SUPABASE_JWT_SECRET",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
         "ENCRYPTION_KEY",
         "KDF_SALT",
         "CSRF_SECRET_KEY",
@@ -98,6 +100,9 @@ def test_koyeb_manifest_declares_required_env_entries() -> None:
         "PAYSTACK_SECRET_KEY",
         "PAYSTACK_PUBLIC_KEY",
         "SENTRY_DSN",
+        "TRUST_PROXY_HEADERS",
+        "TRUSTED_PROXY_CIDRS",
+        "APP_RUNTIME_DATA_DIR",
     }
 
     missing = required - keys

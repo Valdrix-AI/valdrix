@@ -9,10 +9,12 @@ This document defines the operational database surface for Valdrics backend serv
 - Primary runtime engine: PostgreSQL (`postgresql+asyncpg`).
 - Migration authority: Alembic (`migrations/versions`).
 - Single-head policy is enforced by `scripts/verify_alembic_head_integrity.py`.
-- Forward/rollback smoke is enforced in CI by:
+- One-step forward/rollback smoke is enforced in CI by:
   1. `alembic upgrade head`
   2. `alembic downgrade -1`
   3. `alembic upgrade head`
+- This smoke test does not imply arbitrary historical downgrades are safe.
+- For irreversible or destructive migrations, backup/restore is the primary rollback path.
 
 ## Domain schema map
 
@@ -85,3 +87,6 @@ DB_SSL_MODE=disable DATABASE_URL='postgresql+asyncpg://postgres:postgres@127.0.0
 DB_SSL_MODE=disable DATABASE_URL='postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/valdrics_ci' uv run alembic upgrade head
 ```
 
+Treat the downgrade command above as a targeted reversibility smoke test for the
+latest step only, not as a universal rollback promise for every migration in the
+history.

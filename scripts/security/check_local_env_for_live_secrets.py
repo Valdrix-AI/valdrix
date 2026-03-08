@@ -12,8 +12,8 @@ from pathlib import Path
 
 
 PATTERNS: dict[str, re.Pattern[str]] = {
-    "PAYSTACK_SECRET_KEY": re.compile(r"^sk_live_[A-Za-z0-9]+$"),
-    "PAYSTACK_PUBLIC_KEY": re.compile(r"^pk_live_[A-Za-z0-9]+$"),
+    "PAYSTACK_SECRET_KEY": re.compile(r"^sk_live_[A-Za-z0-9_]+$"),
+    "PAYSTACK_PUBLIC_KEY": re.compile(r"^pk_live_[A-Za-z0-9_]+$"),
     "SLACK_BOT_TOKEN": re.compile(r"^xox[baprs]-[A-Za-z0-9-]+$"),
     "GROQ_API_KEY": re.compile(r"^gsk_[A-Za-z0-9]+$"),
     "OPENAI_API_KEY": re.compile(r"^sk-[A-Za-z0-9]+$"),

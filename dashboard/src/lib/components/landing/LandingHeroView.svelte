@@ -12,8 +12,7 @@
 	import LandingRoiSimulator from '$lib/components/landing/LandingRoiSimulator.svelte';
 	import LandingCloudHookSection from '$lib/components/landing/LandingCloudHookSection.svelte';
 	import LandingWorkflowSection from '$lib/components/landing/LandingWorkflowSection.svelte';
-	import LandingRoiPlannerCta from '$lib/components/landing/LandingRoiPlannerCta.svelte';
-	import LandingBenefitsSection from '$lib/components/landing/LandingBenefitsSection.svelte';
+	import LandingCapabilitiesSection from '$lib/components/landing/LandingCapabilitiesSection.svelte';
 	import LandingPlansSection from '$lib/components/landing/LandingPlansSection.svelte';
 	import LandingTrustSection from '$lib/components/landing/LandingTrustSection.svelte';
 	import LandingCookieConsent from '$lib/components/landing/LandingCookieConsent.svelte';
@@ -27,6 +26,7 @@
 		imageUrl,
 		heroTitle,
 		heroSubtitle,
+		quantPromise,
 		primaryCtaLabel,
 		secondaryCtaLabel,
 		secondaryCtaHref,
@@ -83,6 +83,7 @@
 		imageUrl: string;
 		heroTitle: string;
 		heroSubtitle: string;
+		quantPromise: string;
 		primaryCtaLabel: string;
 		secondaryCtaLabel: string;
 		secondaryCtaHref: string;
@@ -166,10 +167,11 @@
 			<span class="landing-hero-signal-node landing-hero-signal-node-c"></span>
 			<span class="landing-hero-signal-node landing-hero-signal-node-d"></span>
 		</div>
-		<div class="container mx-auto px-6 pt-8 pb-12 sm:pt-10 sm:pb-16">
+		<div class="container mx-auto px-6 pt-8 pb-14 sm:pt-10 sm:pb-16 lg:pt-12 lg:pb-20">
 			<LandingHeroCopy
 				{heroTitle}
 				{heroSubtitle}
+				{quantPromise}
 				{primaryCtaLabel}
 				{secondaryCtaLabel}
 				{secondaryCtaHref}
@@ -182,82 +184,83 @@
 		</div>
 	</section>
 
-	{#if sectionOrderVariant === 'workflow_first'}
-		<LandingWorkflowSection />
-	{:else}
-		<LandingCloudHookSection
-			{activeHookState}
-			{hookStateIndex}
-			cloudHookStates={CLOUD_HOOK_STATES}
-			onSelectHookState={onSelectHookState}
-		/>
-	{/if}
-
-	<section
-		id="signal-map"
-		class="container mx-auto px-6 pb-12 md:pb-16 landing-section-lazy"
-		data-landing-section="signal_map"
-	>
-		<div class="landing-section-head">
-			<h2 class="landing-h2">See it in action</h2>
-			<p class="landing-section-sub">
-				One shared signal map for cost, risk, ownership, and controlled execution.
-			</p>
+	<div class="landing-story-band">
+		<div id="product">
+			{#if sectionOrderVariant === 'workflow_first'}
+				<LandingWorkflowSection />
+			{:else}
+				<LandingCloudHookSection
+					{activeHookState}
+					{hookStateIndex}
+					cloudHookStates={CLOUD_HOOK_STATES}
+					onSelectHookState={onSelectHookState}
+				/>
+			{/if}
 		</div>
-		<LandingSignalMapCard
-			{activeSnapshot}
-			{activeSignalLane}
-			{signalMapInView}
-			{snapshotIndex}
-			{demoStepIndex}
-			onSelectSignalLane={onSelectSignalLane}
-			onSelectDemoStep={onSelectDemoStep}
-			onSelectSnapshot={onSelectSnapshot}
-			onSignalMapElementChange={onSignalMapElementChange}
+
+		<LandingCapabilitiesSection />
+
+		<section
+			id="signal-map"
+			class="container mx-auto px-6 pb-12 md:pb-16 landing-section-lazy"
+			data-landing-section="signal_map"
+		>
+			<div class="landing-section-head">
+				<h2 class="landing-h2">See the decision loop in action</h2>
+				<p class="landing-section-sub">
+					One live path from signal, to owner, to approval, to recorded outcome.
+				</p>
+			</div>
+			<LandingSignalMapCard
+				{activeSnapshot}
+				{activeSignalLane}
+				{signalMapInView}
+				{snapshotIndex}
+				{demoStepIndex}
+				onSelectSignalLane={onSelectSignalLane}
+				onSelectDemoStep={onSelectDemoStep}
+				onSelectSnapshot={onSelectSnapshot}
+				onSignalMapElementChange={onSignalMapElementChange}
+			/>
+		</section>
+
+		<LandingRoiSimulator
+			{normalizedScenarioWasteWithoutPct}
+			{normalizedScenarioWasteWithPct}
+			{normalizedScenarioWindowMonths}
+			{scenarioWithoutBarPct}
+			{scenarioWithBarPct}
+			{scenarioWasteWithoutUsd}
+			{scenarioWasteWithUsd}
+			{scenarioWasteRecoveryMonthlyUsd}
+			{scenarioWasteRecoveryWindowUsd}
+			{monthlySpendUsd}
+			{scenarioWasteWithoutPct}
+			{scenarioWasteWithPct}
+			{scenarioWindowMonths}
+			{formatUsd}
+			{currencyCode}
+			plannerHref={roiPlannerHref}
+			onTrackScenarioAdjust={onTrackScenarioAdjust}
+			onScenarioWasteWithoutChange={onScenarioWasteWithoutChange}
+			onScenarioWasteWithChange={onScenarioWasteWithChange}
+			onScenarioWindowChange={onScenarioWindowChange}
+			onTrackPlannerCta={() => onTrackCta('cta_click', 'simulator', 'start_roi_assessment')}
 		/>
-	</section>
 
-	<LandingRoiSimulator
-		{normalizedScenarioWasteWithoutPct}
-		{normalizedScenarioWasteWithPct}
-		{normalizedScenarioWindowMonths}
-		{scenarioWithoutBarPct}
-		{scenarioWithBarPct}
-		{scenarioWasteWithoutUsd}
-		{scenarioWasteWithUsd}
-		{scenarioWasteRecoveryMonthlyUsd}
-		{scenarioWasteRecoveryWindowUsd}
-		{monthlySpendUsd}
-		{scenarioWasteWithoutPct}
-		{scenarioWasteWithPct}
-		{scenarioWindowMonths}
-		{formatUsd}
-		{currencyCode}
-		onTrackScenarioAdjust={onTrackScenarioAdjust}
-		onScenarioWasteWithoutChange={onScenarioWasteWithoutChange}
-		onScenarioWasteWithChange={onScenarioWasteWithChange}
-		onScenarioWindowChange={onScenarioWindowChange}
-	/>
+		<LandingPlansSection
+			buildFreeTierCtaHref={() => freeTierCtaHref}
+			{buildPlanCtaHref}
+			talkToSalesHref={plansTalkToSalesHref}
+			onTrackCta={onTrackCta}
+		/>
 
-	<LandingRoiPlannerCta
-		href={roiPlannerHref}
-		onTrackCta={() => onTrackCta('cta_click', 'roi', 'start_roi_assessment')}
-	/>
-
-	<LandingBenefitsSection />
-
-	<LandingPlansSection
-		buildFreeTierCtaHref={() => freeTierCtaHref}
-		{buildPlanCtaHref}
-		talkToSalesHref={plansTalkToSalesHref}
-		onTrackCta={onTrackCta}
-	/>
-
-	<LandingTrustSection
-		onTrackCta={(value) => onTrackCta('cta_click', 'trust', value)}
-		{requestValidationBriefingHref}
-		{onePagerHref}
-	/>
+		<LandingTrustSection
+			onTrackCta={(value) => onTrackCta('cta_click', 'trust', value)}
+			{requestValidationBriefingHref}
+			{onePagerHref}
+		/>
+	</div>
 
 	<div class="landing-mobile-sticky-cta" aria-label="Mobile quick actions">
 		<a
@@ -272,7 +275,7 @@
 			class="btn btn-secondary"
 			onclick={() => onTrackCta('cta_click', 'mobile_sticky', 'see_signal_map')}
 		>
-			See it in action
+			See decision loop
 		</a>
 	</div>
 

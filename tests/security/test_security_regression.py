@@ -188,6 +188,8 @@ async def test_security_headers_regression(ac: AsyncClient):
     assert "default-src 'self'" in csp
     assert "frame-ancestors 'none'" in csp
     assert "base-uri 'self'" in csp
+    assert "'unsafe-inline'" not in csp
+    assert "style-src-attr 'none'" in csp
 
     assert headers.get("referrer-policy") == "strict-origin-when-cross-origin"
     assert "permissions-policy" in headers

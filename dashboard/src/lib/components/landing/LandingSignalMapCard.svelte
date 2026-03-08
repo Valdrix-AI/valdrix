@@ -1,23 +1,14 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import { onDestroy } from 'svelte';
 	import {
 		REALTIME_SIGNAL_SNAPSHOTS,
 		laneSeverityClass,
-		SIGNAL_MAP_VIEWBOX,
 		type SignalLaneId,
 		type SignalLaneSnapshot,
 		type SignalSnapshot
 	} from '$lib/landing/realtimeSignalMap';
 	import { MICRO_DEMO_STEPS, SIGNAL_VALUE_CARDS } from '$lib/landing/heroContent';
-	import {
-		LABEL_TRANSLATE,
-		LANDING_GRID_X,
-		LANDING_GRID_Y,
-		SIGNAL_CENTER,
-		resolveHotspotPoint,
-		resolveLaneAnchor,
-		resolveSvgProjection
-	} from './signalMapLayout';
 
 	let {
 		activeSnapshot,
@@ -42,56 +33,35 @@
 	} = $props();
 
 	let signalMapElement: HTMLDivElement | null = $state(null);
-	let signalMapWidth = $state(0);
-	let signalMapHeight = $state(0);
 	let activeDemoStep = $derived(MICRO_DEMO_STEPS[demoStepIndex] ?? MICRO_DEMO_STEPS[0]);
-	let svgProjection = $derived(
-		resolveSvgProjection(
-			signalMapWidth,
-			signalMapHeight,
-			SIGNAL_MAP_VIEWBOX.width,
-			SIGNAL_MAP_VIEWBOX.height
-		)
-	);
 	let controlDetailsOpen = $state(false);
 	let walkthroughOpen = $state(false);
+	let activeLaneIndex = $derived(
+		Math.max(
+			0,
+			activeSnapshot.lanes.findIndex((lane) => lane.id === activeSignalLane?.id)
+		)
+	);
+	let chainProgressPct = $derived(
+		activeSnapshot.lanes.length > 1
+			? Number(((activeLaneIndex / (activeSnapshot.lanes.length - 1)) * 100).toFixed(2))
+			: 0
+	);
+	let capturedAtLabel = $derived(
+		new Intl.DateTimeFormat('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric',
+			timeZone: 'UTC'
+		}).format(new Date(activeSnapshot.capturedAt))
+	);
+	let sourcePreview = $derived(activeSnapshot.sources.slice(0, 2).join(' • '));
+	let sourceCountLabel = $derived(
+		`${activeSnapshot.sources.length} source input${activeSnapshot.sources.length === 1 ? '' : 's'}`
+	);
 
 	$effect(() => {
 		onSignalMapElementChange(signalMapElement);
-	});
-
-	$effect(() => {
-		if (!signalMapElement) {
-			signalMapWidth = 0;
-			signalMapHeight = 0;
-			return;
-		}
-
-		const refreshDimensions = () => {
-			if (!signalMapElement) return;
-			const rect = signalMapElement.getBoundingClientRect();
-			signalMapWidth = rect.width;
-			signalMapHeight = rect.height;
-		};
-
-		refreshDimensions();
-
-		if (typeof ResizeObserver !== 'undefined') {
-			const resizeObserver = new ResizeObserver(() => {
-				refreshDimensions();
-			});
-			resizeObserver.observe(signalMapElement);
-			return () => {
-				resizeObserver.disconnect();
-			};
-		}
-
-		if (typeof window !== 'undefined') {
-			window.addEventListener('resize', refreshDimensions);
-			return () => {
-				window.removeEventListener('resize', refreshDimensions);
-			};
-		}
 	});
 
 	onDestroy(() => {
@@ -110,7 +80,7 @@
 		<div class="landing-preview-header">
 			<div class="landing-preview-title">
 				<span class="landing-live-dot" aria-hidden="true"></span>
-				Realtime Signal Map
+				Live Decision Loop
 			</div>
 			<span class="landing-preview-pill">{activeSnapshot.label}</span>
 		</div>
@@ -119,108 +89,109 @@
 		<p class="signal-state-sub">{activeSnapshot.decisionSummary}</p>
 
 		<div class="signal-map" class:is-paused={!signalMapInView} bind:this={signalMapElement}>
-			<svg class="signal-svg" viewBox="0 0 640 420" role="img" aria-labelledby="signal-map-summary">
-				<defs>
-					<linearGradient id="sigLine" x1="0" y1="0" x2="1" y2="1">
-						<stop offset="0" stop-color="var(--color-accent-400)" stop-opacity="0.95" />
-						<stop offset="1" stop-color="var(--color-success-400)" stop-opacity="0.72" />
-					</linearGradient>
-					<radialGradient id="sigGlow" cx="50%" cy="50%" r="60%">
-						<stop offset="0" stop-color="var(--color-accent-400)" stop-opacity="0.32" />
-						<stop offset="1" stop-color="var(--color-accent-400)" stop-opacity="0" />
-					</radialGradient>
-				</defs>
-
-				<rect x="0" y="0" width="640" height="420" fill="rgba(0,0,0,0)" />
-				<g class="sig-grid">
-					{#each LANDING_GRID_X as xIndex (xIndex)}
-						<line x1={xIndex * 54} y1="0" x2={xIndex * 54} y2="420" />
-					{/each}
-					{#each LANDING_GRID_Y as yIndex (yIndex)}
-						<line x1="0" y1={yIndex * 52} x2="640" y2={yIndex * 52} />
-					{/each}
-				</g>
-
-				<circle cx="320" cy="210" r="160" fill="url(#sigGlow)" />
-
-				{#each activeSnapshot.lanes as lane (lane.id)}
-					{@const flowEndpoint = resolveLaneAnchor(lane)}
-					<line
-						class={`sig-link ${laneSeverityClass(lane.severity)}`}
-						x1={SIGNAL_CENTER.x}
-						y1={SIGNAL_CENTER.y}
-						x2={flowEndpoint.x}
-						y2={flowEndpoint.y}
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-dasharray="6 10"
-					/>
-				{/each}
-
-				<circle class="sig-node sig-node--center" cx="320" cy="210" r="12" />
-				{#each activeSnapshot.lanes as lane (lane.id)}
-					{@const laneAnchor = resolveLaneAnchor(lane)}
-					<circle
-						class={`sig-node ${laneSeverityClass(lane.severity)} ${activeSignalLane?.id === lane.id ? 'is-focused' : ''}`}
-						cx={laneAnchor.x}
-						cy={laneAnchor.y}
-						r="8"
-					/>
-				{/each}
-			</svg>
-
-			<div class="signal-label signal-label--center" aria-hidden="true">
-				<p class="signal-label-k">Valdrics</p>
-				<p class="signal-label-v">Economic Control Plane</p>
-			</div>
-			{#each activeSnapshot.lanes as lane (lane.id)}
-				{@const laneAnchor = resolveLaneAnchor(lane)}
-				{@const labelPoint = resolveHotspotPoint(laneAnchor, svgProjection)}
-				{#if labelPoint}
-					<div
-						class={`signal-label ${lane.labelClass}`}
-						aria-hidden="true"
-						style={`left:${labelPoint.leftPx}px; top:${labelPoint.topPx}px; ${LABEL_TRANSLATE[lane.id]}`}
-					>
-						<p class="signal-label-k">{lane.title}</p>
-						<p class="signal-label-v">{lane.status} · {lane.metric}</p>
-						{#if lane.wasteUsd}
-							<div class="impact-badge" class:is-watch={lane.severity === 'watch'}>
-								${lane.wasteUsd.toLocaleString()} waste
-							</div>
-						{/if}
+			<div
+				class="approval-chain-shell"
+				style={`--approval-progress:${chainProgressPct}%;`}
+				aria-describedby="signal-map-summary"
+			>
+				<div class="approval-chain-atmosphere" aria-hidden="true">
+					<div class="approval-chain-orbit">
+						<div class="approval-chain-orbit-ring approval-chain-orbit-ring--outer"></div>
+						<div class="approval-chain-orbit-ring approval-chain-orbit-ring--inner"></div>
+						<div class="approval-chain-orbit-core">
+							<span>Valdrics</span>
+							<strong>Control core</strong>
+						</div>
 					</div>
-				{/if}
-			{/each}
-			{#each activeSnapshot.lanes as lane (lane.id)}
-				{@const laneAnchor = resolveLaneAnchor(lane)}
-				{@const lanePoint = resolveHotspotPoint(laneAnchor, svgProjection)}
-				{#if lanePoint}
-					<button
-						type="button"
-						class="signal-hotspot"
-						class:is-active={activeSignalLane?.id === lane.id}
-						style={`left:${lanePoint.leftPx}px; top:${lanePoint.topPx}px;`}
-						onclick={() => {
-							controlDetailsOpen = true;
-							onSelectSignalLane(lane.id);
-						}}
-						aria-label={`Open ${lane.title} lane detail`}
-					></button>
-				{/if}
-			{/each}
+					<div class="approval-chain-spoke approval-chain-spoke--nw"></div>
+					<div class="approval-chain-spoke approval-chain-spoke--ne"></div>
+					<div class="approval-chain-spoke approval-chain-spoke--se"></div>
+					<div class="approval-chain-spoke approval-chain-spoke--sw"></div>
+					{#each activeSnapshot.lanes as lane, index (lane.id)}
+						<div
+							class={`approval-chain-orbit-node ${laneSeverityClass(lane.severity)} ${activeSignalLane?.id === lane.id ? 'is-active' : ''}`}
+							style={`--approval-node:${activeSnapshot.lanes.length > 1 ? (index / (activeSnapshot.lanes.length - 1)) * 100 : 0}%;`}
+						></div>
+					{/each}
+				</div>
 
-			<div id="signal-map-summary" class="sr-only">
-				Signal map summary for {activeSnapshot.label}: {activeSnapshot.headline}
-				{activeSnapshot.decisionSummary} This view highlights clarity, control, and confidence signals
-				for owner-led execution.
+				<div class="approval-chain-record-row">
+					<article class="approval-chain-record-card" aria-label="Active decision record">
+						<p class="approval-chain-record-k">Decision record</p>
+						<p class="approval-chain-record-v">{activeSnapshot.traceId}</p>
+						<p class="approval-chain-record-m">{activeSnapshot.decisionSummary}</p>
+						<p class="approval-chain-record-note">Inputs: {sourcePreview}</p>
+					</article>
+
+					<div class="approval-chain-meta-grid" aria-hidden="true">
+						<div class="approval-chain-meta-cell">
+							<span>Captured</span>
+							<strong>{capturedAtLabel}</strong>
+						</div>
+						<div class="approval-chain-meta-cell">
+							<span>Current gate</span>
+							<strong>{activeSignalLane?.title ?? activeSnapshot.lanes[0]?.title}</strong>
+						</div>
+						<div class="approval-chain-meta-cell">
+							<span>Linked proof</span>
+							<strong>{sourceCountLabel}</strong>
+						</div>
+					</div>
+				</div>
+
+				<div class="approval-chain-rail" aria-hidden="true">
+					<div class="approval-chain-rail-line"></div>
+					<div class="approval-chain-rail-progress"></div>
+					<div class="approval-chain-packet"></div>
+					{#each activeSnapshot.lanes as lane, index (lane.id)}
+						<div
+							class={`approval-chain-rail-stop ${laneSeverityClass(lane.severity)} ${activeSignalLane?.id === lane.id ? 'is-active' : ''}`}
+							style={`--approval-stop:${activeSnapshot.lanes.length > 1 ? (index / (activeSnapshot.lanes.length - 1)) * 100 : 0}%;`}
+						></div>
+					{/each}
+				</div>
+
+				<div class="approval-chain-stage-grid">
+					{#each activeSnapshot.lanes as lane, index (lane.id)}
+						<button
+							type="button"
+							class={`approval-chain-stage ${laneSeverityClass(lane.severity)} ${activeSignalLane?.id === lane.id ? 'is-active' : ''}`}
+							onclick={() => {
+								controlDetailsOpen = true;
+								onSelectSignalLane(lane.id);
+							}}
+							aria-label={`Inspect ${lane.title} step`}
+						>
+							<div class="approval-chain-stage-meta">
+								<span class="approval-chain-stage-index">
+									{String(index + 1).padStart(2, '0')}
+								</span>
+								<span class="approval-chain-stage-status">{lane.status}</span>
+							</div>
+							<p class="approval-chain-stage-title">{lane.title}</p>
+							<p class="approval-chain-stage-metric">{lane.metric}</p>
+							<p class="approval-chain-stage-subtitle">{lane.subtitle}</p>
+							{#if lane.wasteUsd}
+								<div class="impact-badge" class:is-watch={lane.severity === 'watch'}>
+									${lane.wasteUsd.toLocaleString()} waste
+								</div>
+							{/if}
+						</button>
+					{/each}
+				</div>
+
+				<div id="signal-map-summary" class="sr-only">
+					Approval chain summary for {activeSnapshot.label}: {activeSnapshot.headline}
+					{activeSnapshot.decisionSummary} This view shows one decision record moving through scoped
+					signals, checks, approvals, and recorded outcomes.
+				</div>
 			</div>
 		</div>
 
 		<div class="signal-summary-row">
 			{#if activeSignalLane}
 				<p class="signal-summary-text">
-					Focus lane: <strong>{activeSignalLane.title}</strong> ({activeSignalLane.status})
+					Active step: <strong>{activeSignalLane.title}</strong> ({activeSignalLane.status})
 				</p>
 			{/if}
 			<button
@@ -236,13 +207,13 @@
 					}
 				}}
 			>
-				{controlDetailsOpen ? 'Hide control details' : 'Explore control details'}
+				{controlDetailsOpen ? 'Hide approval chain' : 'Open approval chain'}
 			</button>
 		</div>
 
 		{#if controlDetailsOpen}
 			<div id="signal-control-details">
-				<div class="signal-lane-controls" role="tablist" aria-label="Realtime signal lane details">
+				<div class="signal-lane-controls" role="tablist" aria-label="Approval chain step details">
 					{#each activeSnapshot.lanes as lane (lane.id)}
 						<button
 							type="button"
@@ -274,7 +245,7 @@
 							<p class="signal-lane-detail-m">Current metric: {activeSignalLane.metric}</p>
 							{#if activeSignalLane.actionLabel}
 								<a
-									href="/auth/login?intent=demo_action"
+									href={`${base}/auth/login?intent=demo_action`}
 									class="demo-action-btn"
 									role="button"
 									style="text-decoration: none;"
@@ -297,7 +268,7 @@
 				</div>
 
 				<div class="signal-walkthrough-row">
-					<p class="signal-walkthrough-text">Need a quick product walkthrough?</p>
+					<p class="signal-walkthrough-text">Want the approval-chain walkthrough?</p>
 					<button
 						type="button"
 						class="signal-details-toggle signal-details-toggle--secondary"
@@ -307,7 +278,9 @@
 							walkthroughOpen = !walkthroughOpen;
 						}}
 					>
-						{walkthroughOpen ? 'Hide walkthrough' : 'Open 20-second walkthrough'}
+						{walkthroughOpen
+							? 'Hide approval chain walkthrough'
+							: 'Open approval chain walkthrough'}
 					</button>
 				</div>
 
@@ -331,7 +304,7 @@
 						class="landing-demo-strip"
 						aria-label="Guided product moment"
 					>
-						<p class="landing-demo-k">20-second guided control walkthrough</p>
+						<p class="landing-demo-k">20-second approval chain walkthrough</p>
 						<div class="landing-demo-visual" aria-hidden="true">
 							{#each MICRO_DEMO_STEPS as step, index (step.id)}
 								<div class="landing-demo-visual-step">

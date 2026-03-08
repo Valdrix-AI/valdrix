@@ -27,16 +27,18 @@ export const PLAN_COMPARE_CARDS = Object.freeze([
 		name: 'Starter',
 		price: 'From $49/mo',
 		kicker: 'For focused cloud teams',
-		detail: 'Move from static dashboards to owner-routed spend control in one workspace.',
-		features: ['Single-cloud start', 'Budgets + anomaly routing', 'Owner action workflows']
+		detail: 'Best for a single-provider start when one team needs owner-routed spend control.',
+		priceNote: 'Monthly starting price. Best fit for a single-provider operating scope.',
+		features: ['Single cloud provider (AWS)', 'Budgets + owner-routed alerts', 'Baseline owner action workflows']
 	},
 	{
 		id: 'growth',
 		name: 'Growth',
 		price: 'From $149/mo',
 		kicker: 'For cross-functional FinOps',
-		detail: 'Unify cloud, SaaS, and operational ownership with guided execution loops.',
-		features: ['Multi-cloud + Cloud+ signals', 'Approval workflows', 'AI-assisted prioritization']
+		detail: 'Best for multi-cloud teams that need approval routing, GreenOps visibility, and guided execution.',
+		priceNote: 'Monthly starting price. Built for broader provider coverage and team governance.',
+		features: ['AWS + Azure + GCP coverage', 'Approval workflows + GreenOps', 'Non-production auto-remediation']
 	},
 	{
 		id: 'pro',
@@ -44,17 +46,24 @@ export const PLAN_COMPARE_CARDS = Object.freeze([
 		price: 'From $299/mo',
 		kicker: 'For enterprise teams',
 		detail:
-			'Scale shared execution across engineering, finance, and leadership with API-first operations.',
-		features: ['Automated remediation tracks', 'Expanded API access', 'Priority support']
+			'Best for teams that want broader automation, API-first operations, and expanded commercial support.',
+		priceNote: 'Monthly starting price. Adds deeper automation, API access, and priority support.',
+		features: ['Automated remediation tracks', 'Priority support + full API access', 'Expanded governance support']
 	}
 ]);
 
+export const PLANS_PRICING_EXPLANATION =
+	'Starting prices shown here are monthly entry points. Plan fit changes with provider coverage, workflow automation depth, and support needs.';
+
 export const FREE_TIER_HIGHLIGHTS = Object.freeze([
-	'Permanent free tier with usage limits',
+	'One owner-routed savings workflow on the free tier',
 	'Cloud and software signal map access',
-	'Owner routing and baseline action workflows',
-	'BYOK available with tier limits'
+	'Baseline owner routing and approval workflow',
+	'BYOK supported in the current lineup; daily AI limits still apply by tier'
 ]);
+
+export const FREE_TIER_LIMIT_NOTE =
+	'Free is best for proving one workflow. Upgrade when you need multi-cloud coverage, more automation, or expanded governance support.';
 
 export const IMPLEMENTATION_COST_FACTS = Object.freeze([
 	'Typical rollout: 3-10 business days for first production workflow.',
@@ -65,28 +74,52 @@ export const IMPLEMENTATION_COST_FACTS = Object.freeze([
 
 export const CROSS_SURFACE_COVERAGE = Object.freeze([
 	{
-		title: 'Cloud Infrastructure',
+		title: 'Catch waste before close',
 		detail:
-			'AWS, Azure, and GCP spend signals are attributed to accountable teams before they become month-end surprises.'
+			'Spot cloud and software cost movement earlier and route it before month-end pressure turns it into escalation.'
 	},
 	{
-		title: 'GreenOps and Carbon',
+		title: 'Give every issue an owner',
 		detail:
-			'Carbon intensity, budget thresholds, and cleaner-runtime opportunities are tracked alongside cost decisions.'
+			'Every material anomaly lands with a named owner, a decision path, and a deadline instead of another thread.'
 	},
 	{
-		title: 'SaaS Spend',
+		title: 'Review one shared control loop',
 		detail:
-			'Vendor usage and expansion pressure are surfaced with ownership context so renewals become controlled decisions.'
+			'Cloud, SaaS, license, and carbon decisions stay in one operating narrative leadership can review quickly.'
+	}
+]);
+
+export const DECISION_LEDGER_SUMMARY = Object.freeze([
+	{ label: 'Scope', value: 'Cloud + software + carbon' },
+	{ label: 'Control loop', value: 'Owner, approval, proof' },
+	{ label: 'Review rhythm', value: 'Weekly finance + engineering' }
+]);
+
+export const DECISION_LEDGER_STEPS = Object.freeze([
+	{
+		step: '01',
+		kicker: 'Signal scoped',
+		title: 'The issue lands with owner and context',
+		detail:
+			'Valdrics ties spend movement to the affected workload, team, and decision path instead of leaving another chart for someone to interpret.',
+		meta: 'Workload tagged. Owner queue opened.'
 	},
 	{
-		title: 'ITAM and License',
-		detail: 'Entitlement and license posture are reviewed in the same workflow as cloud spend.'
+		step: '02',
+		kicker: 'Guardrails applied',
+		title: 'Approval happens with the right checks',
+		detail:
+			'Risk checks, role boundaries, and approval routes stay attached before action moves forward, so teams do not trade speed for control.',
+		meta: 'Pre-change checks passed. Approval path visible.'
 	},
 	{
-		title: 'Platform Tooling',
+		step: '03',
+		kicker: 'Outcome recorded',
+		title: 'Leadership gets a reviewable decision trail',
 		detail:
-			'Observability and platform service costs are tied to operating owners and financial outcomes.'
+			'Every finished action keeps its rationale, owner, and savings proof so finance, engineering, and security can review one clean record.',
+		meta: 'Decision saved. Export-ready record available.'
 	}
 ]);
 

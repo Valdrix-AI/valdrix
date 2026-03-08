@@ -28,6 +28,8 @@ class TestSecurityHeadersAndErrors:
         csp = headers["content-security-policy"]
         assert "default-src 'self'" in csp
         assert "frame-ancestors 'none'" in csp
+        assert "'unsafe-inline'" not in csp
+        assert "style-src-attr 'none'" in csp
 
     @pytest.mark.asyncio
     async def test_error_responses_sanitized(self, ac: AsyncClient):
@@ -211,5 +213,4 @@ class TestAuthorizationAndAuthentication:
         ac.app.dependency_overrides.pop(get_current_user, None)
         ac.app.dependency_overrides.pop(require_tenant_access, None)
         ac.app.dependency_overrides.pop(dep, None)
-
 

@@ -7,8 +7,8 @@ from unittest.mock import patch
 from pydantic import ValidationError
 from app.shared.core.config import Settings
 
-FAKE_PAYSTACK_SECRET_KEY = "sk_live_TEST_KEY_NOT_REAL_1234567890"
-FAKE_PAYSTACK_PUBLIC_KEY = "pk_live_TEST_KEY_NOT_REAL_1234567890"
+FAKE_PAYSTACK_SECRET_KEY = "example_paystack_secret_TEST_KEY_NOT_REAL_1234567890"
+FAKE_PAYSTACK_PUBLIC_KEY = "example_paystack_public_TEST_KEY_NOT_REAL_1234567890"
 FAKE_SUPABASE_SECRET = "x" * 32
 FAKE_CSRF_SECRET = "c" * 32
 FAKE_ENCRYPTION_KEY = "k" * 32
@@ -64,6 +64,31 @@ class TestSettingsValidation:
                 )
             assert "DB_SSL_MODE must be secure in production" in str(exc.value)
 
+    def test_settings_rejects_public_api_documentation_in_strict_env(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    ENVIRONMENT="production",
+                    DATABASE_URL="postgresql+asyncpg://test",
+                    REDIS_URL="redis://localhost:6379",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DEBUG=False,
+                    TESTING=False,
+                    GROQ_API_KEY="g" * 32,
+                    DB_SSL_MODE="require",
+                    ADMIN_API_KEY="a" * 32,
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                    EXPOSE_API_DOCUMENTATION_PUBLICLY=True,
+                    _env_file=None,
+                )
+
+            assert "EXPOSE_API_DOCUMENTATION_PUBLICLY" in str(exc.value)
+
     def test_settings_production_ssl_require_without_ca(self):
         """Test production SSL requirement without CA certificate."""
         with patch.dict("os.environ", {}, clear=True):
@@ -105,6 +130,7 @@ class TestSettingsValidation:
                 GROQ_API_KEY="g" * 32,
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                 _env_file=None,
             )
 
@@ -146,6 +172,7 @@ class TestSettingsValidation:
                     GROQ_API_KEY="g" * 32,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     _env_file=None,
                 )
 
@@ -187,6 +214,7 @@ class TestSettingsValidation:
                     ADMIN_API_KEY="a" * 32,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     REMEDIATION_KILL_SWITCH_SCOPE="global",
                     REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE=False,
                     _env_file=None,
@@ -220,6 +248,7 @@ class TestSettingsValidation:
                     DB_SSL_MODE="require",
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     _env_file=None,
                 )
 
@@ -254,6 +283,7 @@ class TestSettingsValidation:
                     DB_SSL_MODE="require",
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     _env_file=None,
                 )
 
@@ -284,6 +314,7 @@ class TestSettingsValidation:
                     TESTING=False,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     _env_file=None,  # Ignore .env
                 )
 
@@ -336,6 +367,7 @@ class TestSettingsValidation:
                 GROQ_API_KEY="g" * 32,
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                 DEBUG=False,
                 TESTING=False,
                 _env_file=None,
@@ -386,6 +418,7 @@ class TestSettingsValidation:
                     GROQ_API_KEY="g" * 32,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     SAAS_STRICT_INTEGRATIONS=True,
                     SLACK_CHANNEL_ID="C0123456789",
                     _env_file=None,
@@ -413,6 +446,7 @@ class TestSettingsValidation:
                 GROQ_API_KEY="g" * 32,
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                 SAAS_STRICT_INTEGRATIONS=True,
                 SLACK_BOT_TOKEN="xoxb-shared-token",
                 _env_file=None,
@@ -437,6 +471,7 @@ class TestSettingsValidation:
                     GROQ_API_KEY="g" * 32,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     DB_USE_NULL_POOL=True,
                     DB_EXTERNAL_POOLER=False,
                     _env_file=None,
@@ -463,6 +498,7 @@ class TestSettingsValidation:
                     GROQ_API_KEY="g" * 32,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     _env_file=None,
                 )
         assert "WEB_CONCURRENCY > 1 requires CIRCUIT_BREAKER_DISTRIBUTED_STATE" in str(
@@ -487,6 +523,7 @@ class TestSettingsValidation:
                 GROQ_API_KEY="g" * 32,
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                 _env_file=None,
             )
         assert settings.CIRCUIT_BREAKER_DISTRIBUTED_STATE is True
@@ -509,6 +546,7 @@ class TestSettingsValidation:
                     GROQ_API_KEY="g" * 32,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     _env_file=None,
                 )
             assert "REDIS_URL is required for distributed rate limiting" in str(
@@ -532,6 +570,7 @@ class TestSettingsValidation:
                 GROQ_API_KEY="g" * 32,
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                 ALLOW_IN_MEMORY_RATE_LIMITS=True,
                 _env_file=None,
             )

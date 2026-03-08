@@ -33,4 +33,4 @@ def test_db_module_enables_multi_az_rds() -> None:
     text = (REPO_ROOT / "terraform/modules/db/main.tf").read_text(encoding="utf-8")
 
     assert "multi_az                     = true" in text
-    assert 'deletion_protection          = var.environment == "production"' in text
+    assert 'contains(["prod", "production"], lower(var.environment))' in text

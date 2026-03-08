@@ -1,189 +1,83 @@
 # Disaster Recovery Runbook
 
-## Overview
-This runbook documents recovery procedures for Valdrics infrastructure.
+This runbook reflects the deployment and infrastructure definitions currently
+present in the repository.
 
-**RTO (Recovery Time Objective):** 4 hours  
-**RPO (Recovery Point Objective):** 24 hours (Supabase daily backups)
+## Supported Profiles
 
----
+- Helm + Terraform on AWS/EKS with AWS RDS and ElastiCache
+- Cloudflare Pages + Koyeb for the dashboard/API/worker PaaS profile
 
-## 1. Supabase Database Failure
+## Recovery Posture
+
+- Current checked-in IaC supports in-region high availability for AWS RDS and ElastiCache.
+- Cross-region recovery is a manual restore and redeploy exercise unless additional regional infrastructure is provisioned outside this repository.
+- `.github/workflows/disaster-recovery-drill.yml` runs a repository-managed rebuild-and-verify exercise so the documented recovery path is rehearsed on versioned artifacts.
+
+## 1. AWS RDS Database Failure
 
 ### Detection
-- `/health` endpoint returns 500
-- Job queue processing stops
-- Users cannot login
+
+- `/health` returns `503`
+- application logs show database connectivity failures
+- worker or scheduler throughput drops unexpectedly
 
 ### Recovery Steps
 
-1. **Check Supabase Status**
-   ```bash
-   # Check https://status.supabase.com
-   curl https://your-project.supabase.co/rest/v1/ -H "apikey: $SUPABASE_ANON_KEY"
-   ```
+1. Confirm the failing profile is using AWS RDS.
+2. Check RDS instance status and Multi-AZ failover state.
+3. If failover is in progress, wait for promotion to complete and re-run health checks.
+4. If corruption or unrecoverable failure is suspected, restore from the latest AWS RDS backup/restore point.
+5. Validate application startup, migrations state, and tenant-isolated query paths after recovery.
 
-2. **If Supabase Region Outage**
-   - Supabase handles failover automatically
-   - Wait for status page update
-   - ETA: 15-60 minutes
+Repository evidence:
 
-3. **If Data Corruption**
-   - Contact Supabase support immediately
-   - Request point-in-time recovery (PITR)
-   - Supabase retains 7 days of backups
+- `terraform/modules/db/main.tf` configures AWS RDS with `multi_az = true`
+- `terraform/modules/db/main.tf` configures `backup_retention_period = 30`
 
-4. **Post-Recovery**
-   - Verify job queue resumed: `GET /jobs/status`
-   - Run manual job processing: `POST /jobs/process`
-   - Check tenant subscriptions are intact
-
----
-
-## 2. Koyeb Backend Failure
+## 2. Kubernetes / Helm Service Failure
 
 ### Detection
-- All API endpoints return 502/503
-- Health checks fail
+
+- API pods fail readiness or liveness
+- worker pods stop consuming tasks
+- internal metrics disappear from cluster scraping
 
 ### Recovery Steps
 
-1. **Check Koyeb Status**
-   ```bash
-   # Koyeb dashboard: https://app.koyeb.com
-   koyeb service list
-   ```
+1. Check pod status, events, and rollout health.
+2. Roll back the Helm release if the failure correlates with a recent deployment.
+3. Validate `/health/live`, `/health`, and `/_internal/metrics` from inside the cluster.
+4. Confirm Redis and database connectivity before reopening traffic.
 
-2. **Restart Service**
-   ```bash
-   koyeb service redeploy valdrics-api
-   ```
-
-3. **If Persistent Failure**
-   - Check logs: `koyeb logs valdrics-api`
-   - Verify DATABASE_URL is correct
-   - Redeploy from latest commit
-
-4. **Failover to Backup Region** (if configured)
-   ```bash
-   # Promote backup instance
-   koyeb service scale valdrics-api-backup --instances 1
-   # Update DNS/load balancer
-   ```
-
----
-
-## 3. Vercel Frontend Failure
+## 3. Cloudflare Pages or Koyeb Failure
 
 ### Detection
-- Dashboard returns 500
-- Static assets not loading
+
+- dashboard pages fail to render
+- backend health checks fail on the PaaS profile
+- edge proxy requests stop reaching the API
 
 ### Recovery Steps
 
-1. **Check Vercel Status**
-   - https://www.vercel-status.com
+1. Identify whether the issue is isolated to Cloudflare Pages, Koyeb, or both.
+2. Roll back the affected Cloudflare deployment if the dashboard release regressed.
+3. Redeploy the previous immutable backend release or prior successful Koyeb deployment for both `koyeb.yaml` and `koyeb-worker.yaml` if the API or worker regressed.
+4. Confirm the Koyeb runtime secrets include `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, and the audited `TRUSTED_PROXY_CIDRS` allowlist before reopening traffic.
+5. Re-validate health checks, authentication flows, queue consumption, and dashboard-to-API connectivity.
 
-2. **Redeploy**
-   ```bash
-   vercel deploy --prod
-   ```
+## 4. Secret Exposure or Rotation Event
 
-3. **Rollback**
-   ```bash
-   vercel rollback
-   ```
+If recovery is triggered by secret compromise rather than infrastructure loss:
 
----
+1. Follow `docs/runbooks/secret_rotation_emergency.md`.
+2. Recycle affected runtime instances after rotation.
+3. Validate that old credentials are rejected and new ones are in effect.
 
-## 4. Paystack Webhook Failures
+## Post-Recovery Validation
 
-### Detection
-- `GET /jobs/status` shows dead letter webhooks
-- Subscriptions not activating
-
-### Recovery Steps
-
-1. **Check Dead Letter Queue**
-   ```bash
-   curl -X GET https://api.valdrics.ai/jobs/list?status=dead_letter
-   ```
-
-2. **Reprocess Failed Webhooks**
-   ```sql
-   -- In Supabase SQL Editor
-   UPDATE background_jobs 
-   SET status = 'pending', attempts = 0 
-   WHERE status = 'dead_letter' 
-     AND job_type = 'webhook_retry';
-   ```
-
-3. **Trigger Processing**
-   ```bash
-   curl -X POST https://api.valdrics.ai/jobs/process
-   ```
-
----
-
-## 5. LLM Provider Outage
-
-### Detection
-- Analysis endpoints timeout
-- Logs show provider errors
-
-### Recovery Steps
-
-The system automatically falls back through providers:
-1. Groq → Gemini → OpenAI
-
-**Manual Override:**
-```bash
-# Set preferred provider temporarily
-export LLM_PROVIDER=google  # or openai
-# Restart service
-koyeb service redeploy valdrics-api
-```
-
----
-
-## 6. AWS Rate Limiting
-
-### Detection
-- Cost data returns stale/empty
-- Logs show "ThrottlingException"
-
-### Recovery Steps
-
-1. The RateLimiter handles this automatically
-2. Wait 5-10 minutes for backoff
-3. If persistent, check tenant's IAM role permissions
-
----
-
-## Contact Escalation
-
-| Issue | Primary Contact | Backup |
-|-------|----------------|--------|
-| Supabase | support@supabase.io | - |
-| Koyeb | support@koyeb.com | - |
-| Vercel | - | - |
-| Paystack | support@paystack.com | - |
-
----
-
-## Backup Verification Schedule
-
-| Backup Type | Frequency | Last Verified |
-|-------------|-----------|---------------|
-| Supabase auto | Daily | Check monthly |
-| Tenant export | Weekly | - |
-| Config backup | On change | - |
-
----
-
-## Post-Incident
-
-After any incident:
-1. Update this runbook if needed
-2. Create post-mortem (5 Whys)
-3. Add monitoring/alerting for the failure mode
+1. `/health/live` returns `200`.
+2. `/health` returns dependency details without new critical failures.
+3. Background processing resumes only when intended.
+4. Internal metrics are available to cluster scrapers and remain blocked from public ingress.
+5. Tenant-scoped export and erasure controls still behave correctly.

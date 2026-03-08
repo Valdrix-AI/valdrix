@@ -25,6 +25,13 @@ resource "aws_secretsmanager_secret" "runtime" {
   kms_key_id              = aws_kms_key.runtime_secrets.arn
   recovery_window_in_days = 30
 
+  lifecycle {
+    precondition {
+      condition     = !contains(["prod", "production"], lower(var.environment)) || var.enable_secret_rotation
+      error_message = "enable_secret_rotation must be true for prod/production environments."
+    }
+  }
+
   tags = {
     Name        = "valdrics-runtime-secret-${var.environment}"
     Environment = var.environment

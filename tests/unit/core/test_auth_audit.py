@@ -20,6 +20,7 @@ from app.shared.core.pricing import PricingTier
 
 TEST_JWT_SECRET = "audit_test_secret_minimum_32_bytes_hs256"
 WRONG_TEST_JWT_SECRET = "wrong_audit_secret_minimum_32_bytes"
+TEST_JWT_ISSUER = "supabase"
 
 
 class _AsyncNullContext:
@@ -35,6 +36,7 @@ class _AsyncNullContext:
 def mock_settings():
     with patch("app.shared.core.auth.get_settings") as mock:
         mock.return_value.SUPABASE_JWT_SECRET = TEST_JWT_SECRET
+        mock.return_value.SUPABASE_JWT_ISSUER = TEST_JWT_ISSUER
         mock.return_value.JWT_SIGNING_KID = None
         yield mock
 
@@ -77,6 +79,7 @@ def test_decode_jwt_valid():
         {
             "sub": "123",
             "aud": "authenticated",
+            "iss": TEST_JWT_ISSUER,
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
         },
         TEST_JWT_SECRET,
@@ -91,6 +94,7 @@ def test_decode_jwt_expired():
         {
             "sub": "123",
             "aud": "authenticated",
+            "iss": TEST_JWT_ISSUER,
             "exp": datetime.now(timezone.utc) - timedelta(hours=1),
         },
         TEST_JWT_SECRET,
@@ -104,8 +108,25 @@ def test_decode_jwt_expired():
 
 def test_decode_jwt_invalid_signature():
     token = jwt.encode(
-        {"sub": "123", "aud": "authenticated"},
+        {"sub": "123", "aud": "authenticated", "iss": TEST_JWT_ISSUER},
         WRONG_TEST_JWT_SECRET,
+        algorithm="HS256",
+    )
+    with pytest.raises(HTTPException) as exc:
+        decode_jwt(token)
+    assert exc.value.status_code == 401
+    assert "Invalid token" in exc.value.detail
+
+
+def test_decode_jwt_rejects_wrong_issuer():
+    token = jwt.encode(
+        {
+            "sub": "123",
+            "aud": "authenticated",
+            "iss": "wrong-issuer",
+            "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+        },
+        TEST_JWT_SECRET,
         algorithm="HS256",
     )
     with pytest.raises(HTTPException) as exc:
@@ -118,7 +139,12 @@ def test_decode_jwt_invalid_signature():
 async def test_get_current_user_from_jwt_success():
     user_id = str(uuid4())
     token = jwt.encode(
-        {"sub": user_id, "email": "test@example.com", "aud": "authenticated"},
+        {
+            "sub": user_id,
+            "email": "test@example.com",
+            "aud": "authenticated",
+            "iss": TEST_JWT_ISSUER,
+        },
         TEST_JWT_SECRET,
         algorithm="HS256",
     )
@@ -140,7 +166,11 @@ async def test_get_current_user_from_jwt_no_creds():
 @pytest.mark.asyncio
 async def test_get_current_user_from_jwt_invalid_payload():
     token = jwt.encode(
-        {"email": "test@example.com", "aud": "authenticated"},  # Missing sub
+        {
+            "email": "test@example.com",
+            "aud": "authenticated",
+            "iss": TEST_JWT_ISSUER,
+        },  # Missing sub
         TEST_JWT_SECRET,
         algorithm="HS256",
     )
@@ -158,7 +188,12 @@ async def test_get_current_user_success():
     tenant_id = uuid4()
 
     token = jwt.encode(
-        {"sub": str(user_id), "email": "test@example.com", "aud": "authenticated"},
+        {
+            "sub": str(user_id),
+            "email": "test@example.com",
+            "aud": "authenticated",
+            "iss": TEST_JWT_ISSUER,
+        },
         TEST_JWT_SECRET,
         algorithm="HS256",
     )
@@ -202,7 +237,12 @@ async def test_get_current_user_success():
 @pytest.mark.asyncio
 async def test_get_current_user_not_found():
     token = jwt.encode(
-        {"sub": str(uuid4()), "email": "test@example.com", "aud": "authenticated"},
+        {
+            "sub": str(uuid4()),
+            "email": "test@example.com",
+            "aud": "authenticated",
+            "iss": TEST_JWT_ISSUER,
+        },
         TEST_JWT_SECRET,
         algorithm="HS256",
     )
@@ -237,7 +277,11 @@ async def test_get_current_user_no_creds():
 @pytest.mark.asyncio
 async def test_get_current_user_invalid_payload():
     token = jwt.encode(
-        {"email": "test@example.com", "aud": "authenticated"},  # Missing sub
+        {
+            "email": "test@example.com",
+            "aud": "authenticated",
+            "iss": TEST_JWT_ISSUER,
+        },  # Missing sub
         TEST_JWT_SECRET,
         algorithm="HS256",
     )
@@ -251,7 +295,12 @@ async def test_get_current_user_invalid_payload():
 @pytest.mark.asyncio
 async def test_get_current_user_unexpected_error():
     token = jwt.encode(
-        {"sub": str(uuid4()), "email": "test@example.com", "aud": "authenticated"},
+        {
+            "sub": str(uuid4()),
+            "email": "test@example.com",
+            "aud": "authenticated",
+            "iss": TEST_JWT_ISSUER,
+        },
         TEST_JWT_SECRET,
         algorithm="HS256",
     )

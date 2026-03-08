@@ -28,19 +28,19 @@
 
 <section
 	id="cloud-hook"
-	class="container mx-auto px-6 pb-16 landing-section-lazy"
+	class="container mx-auto px-6 pt-8 pb-16 md:pt-10 landing-section-lazy"
 	data-landing-section="cloud_hook"
 >
 	<div class="landing-hook glass-panel">
-		<p class="landing-proof-k">The Cloud Cost Trap</p>
-		<h2 class="landing-h2">Visibility alone does not control cloud spend.</h2>
+		<p class="landing-proof-k">The alert gap</p>
+		<h2 class="landing-h2">Most tools stop at the alert.</h2>
 		<p class="landing-section-sub">
-			Most teams find waste post-invoice. Valdrics links each spend signal to an owner, safety
-			checks, and approved action in one loop.
+			Valdrics continues from spend signal to owner, safety check, approval, and measurable
+			action in one loop.
 		</p>
 
 		<div class="landing-hook-highlight">
-			<p class="landing-hook-highlight-k">Aha Moment</p>
+			<p class="landing-hook-highlight-k">What changes</p>
 			<p class="landing-hook-highlight-v">
 				{activeHookState.ahaMoment}
 			</p>

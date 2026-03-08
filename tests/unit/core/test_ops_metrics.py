@@ -90,6 +90,53 @@ def test_llm_fair_use_metrics_existence_and_behavior():
     assert observed_val == 3.0
 
 
+def test_record_runtime_carbon_emissions_updates_counter_and_last_run_gauge():
+    ops_metrics.record_runtime_carbon_emissions(1.25)
+
+    total = REGISTRY.get_sample_value("valdrics_ops_runtime_carbon_emissions_kg_total")
+    last_run = REGISTRY.get_sample_value(
+        "valdrics_ops_runtime_carbon_emissions_last_run_kg"
+    )
+
+    assert total is not None and total >= 1.25
+    assert last_run == 1.25
+
+
+def test_record_runtime_carbon_emissions_ignores_empty_or_invalid_values() -> None:
+    with (
+        patch("app.shared.core.ops_metrics.structlog.get_logger") as mock_logger,
+        patch("app.shared.core.ops_metrics.RUNTIME_CARBON_EMISSIONS_TOTAL") as mock_total,
+        patch("app.shared.core.ops_metrics.RUNTIME_CARBON_EMISSIONS_LAST_RUN") as mock_last,
+    ):
+        ops_metrics.record_runtime_carbon_emissions(None)
+        ops_metrics.record_runtime_carbon_emissions(-1)
+
+    mock_total.inc.assert_not_called()
+    mock_last.set.assert_not_called()
+    mock_logger.return_value.warning.assert_called_once()
+
+
+def test_record_cost_retention_purge_updates_counter_and_last_run_gauge() -> None:
+    ops_metrics.record_cost_retention_purge("growth", 3)
+
+    total = REGISTRY.get_sample_value(
+        "valdrics_ops_cost_record_retention_purged_total",
+        labels={"tenant_tier": "growth"},
+    )
+    last_run = REGISTRY.get_sample_value(
+        "valdrics_ops_cost_record_retention_last_run_deleted",
+        labels={"tenant_tier": "growth"},
+    )
+
+    assert total == 3.0
+    assert last_run == 3.0
+
+
+def test_record_cost_retention_purge_rejects_negative_values() -> None:
+    with pytest.raises(ValueError, match="deleted_count must be >= 0"):
+        ops_metrics.record_cost_retention_purge("free", -1)
+
+
 def test_time_operation_records_db_duration():
     """Decorator should record DB duration for db operations."""
     with patch("app.shared.core.ops_metrics.DB_QUERY_DURATION") as mock_hist:

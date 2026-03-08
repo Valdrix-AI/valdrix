@@ -7,8 +7,6 @@ import io
 import json
 import zipfile
 import structlog
-from fastapi import HTTPException
-from fastapi.responses import Response
 from sqlalchemy import desc, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +30,11 @@ from app.modules.governance.domain.security.compliance_pack_bundle_exports impor
     run_savings_proof_export,
     write_core_artifacts,
 )
+from app.modules.governance.domain.security.compliance_pack_contracts import (
+    CompliancePackActor,
+    CompliancePackBundleResult,
+    CompliancePackValidationError,
+)
 from app.modules.governance.domain.security.compliance_pack_bundle_state import (
     build_doc_payloads,
     collect_payload_evidence_map,
@@ -42,7 +45,6 @@ from app.modules.governance.domain.security.compliance_pack_bundle_state import 
 from app.modules.governance.domain.security.compliance_pack_support import (
     load_reference_documents,
 )
-from app.shared.core.auth import CurrentUser
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
@@ -61,7 +63,7 @@ COMPLIANCE_PACK_BUNDLE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
 
 async def export_compliance_pack_bundle(
     *,
-    user: CurrentUser,
+    actor: CompliancePackActor,
     db: AsyncSession,
     start_date: Optional[datetime],
     end_date: Optional[datetime],
@@ -88,23 +90,23 @@ async def export_compliance_pack_bundle(
     close_enforce_finalized: bool,
     close_max_restatements: int,
     sanitize_csv_cell: Callable[[Any], str],
-) -> Response:
+) -> CompliancePackBundleResult:
     exported_at = datetime.now(timezone.utc)
     run_id = str(uuid4())
     app_settings = get_settings()
 
     if start_date and end_date and start_date > end_date:
-        raise HTTPException(status_code=400, detail="start_date must be <= end_date")
+        raise CompliancePackValidationError("start_date must be <= end_date")
 
     # Record the export request (SOC2 evidence: export access is auditable).
     try:
         audit_logger = AuditLogger(
-            db, cast(UUID, user.tenant_id), correlation_id=run_id
+            db, cast(UUID, actor.tenant_id), correlation_id=run_id
         )
         await audit_logger.log(
             event_type=AuditEventType.EXPORT_REQUESTED,
-            actor_id=user.id,
-            actor_email=user.email,
+            actor_id=actor.id,
+            actor_email=actor.email,
             request_method="GET",
             request_path="/api/v1/audit/compliance-pack",
             details={
@@ -123,7 +125,7 @@ async def export_compliance_pack_bundle(
 
     # --- Snapshot tenant-scoped settings (secrets/tokens redacted) ---
     notif_snapshot, remediation_snapshot, identity_snapshot = (
-        await collect_settings_snapshots(db=db, tenant_id=cast(UUID, user.tenant_id))
+        await collect_settings_snapshots(db=db, tenant_id=cast(UUID, actor.tenant_id))
     )
 
     # --- Integration acceptance evidence (audit-grade) ---
@@ -136,7 +138,7 @@ async def export_compliance_pack_bundle(
     ]
     integration_evidence = await collect_integration_evidence(
         db=db,
-        tenant_id=cast(UUID, user.tenant_id),
+        tenant_id=cast(UUID, actor.tenant_id),
         event_types=accepted_event_types,
         limit=int(evidence_limit),
     )
@@ -212,7 +214,7 @@ async def export_compliance_pack_bundle(
     )
     payload_evidence = await collect_payload_evidence_map(
         db=db,
-        tenant_id=cast(UUID, user.tenant_id),
+        tenant_id=cast(UUID, actor.tenant_id),
         evidence_limit=int(evidence_limit),
         payload_specs=payload_specs,
         collect_payload_evidence=collect_payload_evidence,
@@ -226,7 +228,7 @@ async def export_compliance_pack_bundle(
     # --- Audit logs CSV export ---
     audit_query = (
         select(AuditLog)
-        .where(AuditLog.tenant_id == user.tenant_id)
+        .where(AuditLog.tenant_id == actor.tenant_id)
         .order_by(desc(AuditLog.event_timestamp))
     )
     if start_date:
@@ -322,7 +324,7 @@ async def export_compliance_pack_bundle(
     manifest = build_manifest(
         exported_at=exported_at,
         run_id=run_id,
-        user=user,
+        actor=actor,
         app_environment=app_settings.ENVIRONMENT,
         app_version=app_settings.VERSION,
         start_date=start_date,
@@ -397,7 +399,7 @@ async def export_compliance_pack_bundle(
         await run_focus_export(
             zf=zf,
             db=db,
-            user=user,
+            actor=actor,
             include_focus_export=include_focus_export,
             included_files=included_files,
             focus_export_info=focus_export_info,
@@ -412,7 +414,7 @@ async def export_compliance_pack_bundle(
         await run_savings_proof_export(
             zf=zf,
             db=db,
-            user=user,
+            actor=actor,
             include_savings_proof=include_savings_proof,
             included_files=included_files,
             savings_proof_info=savings_proof_info,
@@ -424,7 +426,7 @@ async def export_compliance_pack_bundle(
         await run_realized_savings_export(
             zf=zf,
             db=db,
-            user=user,
+            actor=actor,
             include_realized_savings=include_realized_savings,
             included_files=included_files,
             realized_savings_info=realized_savings_info,
@@ -437,7 +439,7 @@ async def export_compliance_pack_bundle(
         await run_close_package_export(
             zf=zf,
             db=db,
-            user=user,
+            actor=actor,
             include_close_package=include_close_package,
             included_files=included_files,
             close_package_info=close_package_info,
@@ -460,10 +462,6 @@ async def export_compliance_pack_bundle(
     bundle.seek(0)
 
     filename = (
-        f"compliance-pack-{user.tenant_id}-{exported_at.strftime('%Y%m%dT%H%M%SZ')}.zip"
+        f"compliance-pack-{actor.tenant_id}-{exported_at.strftime('%Y%m%dT%H%M%SZ')}.zip"
     )
-    return Response(
-        content=bundle.getvalue(),
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    return CompliancePackBundleResult(body=bundle.getvalue(), filename=filename)

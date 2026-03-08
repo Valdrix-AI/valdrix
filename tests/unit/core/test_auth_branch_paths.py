@@ -36,9 +36,15 @@ class _AsyncNullContext:
         return None
 
 
-def _settings(*, secret: str | None = TEST_SECRET, kid: str | None = None, is_production: bool = False):
+def _settings(
+    *,
+    secret: str | None = TEST_SECRET,
+    kid: str | None = None,
+    is_production: bool = False,
+):
     return SimpleNamespace(
         SUPABASE_JWT_SECRET=secret,
+        SUPABASE_JWT_ISSUER="supabase",
         JWT_SIGNING_KID=kid,
         is_production=is_production,
     )

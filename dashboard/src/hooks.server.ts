@@ -114,13 +114,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 			} = await event.locals.supabase.auth.getUser();
 
 			if (error || !user) {
-				// validation failed
+				serverLogger.warn('supabase_session_validation_failed', {
+					url: event.url.toString(),
+					hasError: !!error,
+					error: error?.message ?? null
+				});
 				return { session: null, user: null };
 			}
 
 			return { session, user };
-		} catch {
-			// Public edge hardening: avoid request crashes on auth provider resolution faults.
+		} catch (error) {
+			serverLogger.error('supabase_session_resolution_failed', {
+				url: event.url.toString(),
+				error: error instanceof Error ? error.message : String(error)
+			});
 			return { session: null, user: null };
 		}
 	};

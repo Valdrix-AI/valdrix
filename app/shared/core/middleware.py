@@ -5,7 +5,24 @@ from fastapi import Request
 import uuid
 import structlog
 from app.shared.core.config import get_settings
+from app.shared.core.proxy_headers import apply_trusted_proxy_headers
 from app.shared.core.tracing import set_correlation_id
+
+REQUEST_ID_ALLOWED_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.:"
+)
+REQUEST_ID_MIN_LENGTH = 8
+REQUEST_ID_MAX_LENGTH = 128
+
+
+def _normalize_request_id(value: str | None) -> str:
+    candidate = str(value or "").strip()
+    if (
+        REQUEST_ID_MIN_LENGTH <= len(candidate) <= REQUEST_ID_MAX_LENGTH
+        and all(char in REQUEST_ID_ALLOWED_CHARS for char in candidate)
+    ):
+        return candidate
+    return str(uuid.uuid4())
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -45,8 +62,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "default-src 'self'; "
             "img-src 'self' data: https:; "
             "script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; "  # Allow inline styles for Svelte/shadcn
+            "style-src 'self'; "
+            "style-src-elem 'self'; "
+            "style-src-attr 'none'; "
+            "font-src 'self' data:; "
             f"connect-src {connect_src}; "
+            "object-src 'none'; "
             "frame-ancestors 'none'; "
             "form-action 'self'; "
             "base-uri 'self';"
@@ -65,6 +86,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class TrustedProxyHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        apply_trusted_proxy_headers(request, settings_obj=get_settings())
+        return await call_next(request)
+
+
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """
     Injects a unique X-Request-ID into the logs and response.
@@ -76,7 +105,13 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        raw_request_id = request.headers.get("X-Request-ID")
+        request_id = _normalize_request_id(raw_request_id)
+        if raw_request_id and raw_request_id != request_id:
+            structlog.get_logger().warning(
+                "request_id_replaced_invalid_client_value",
+                supplied_request_id=raw_request_id,
+            )
 
         # Set unified tracing context
         set_correlation_id(request_id)

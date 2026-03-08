@@ -11,6 +11,9 @@ from app.tasks.scheduler_sweep_runtime import (
     open_transaction_session,
     run_sweep_with_retries,
 )
+from app.tasks.scheduler_maintenance_ops import (
+    maintenance_sweep_logic as run_maintenance_sweep_logic,
+)
 
 SCHEDULER_SWEEP_RECOVERABLE_ERRORS = (
     SQLAlchemyError,
@@ -22,7 +25,6 @@ SCHEDULER_SWEEP_RECOVERABLE_ERRORS = (
     TypeError,
     ValueError,
 )
-
 
 async def billing_sweep_logic(
     *,
@@ -247,153 +249,19 @@ async def maintenance_sweep_logic(
     timezone_obj: Any,
     timedelta_cls: Any,
 ) -> None:
-    with scheduler_span_fn("scheduler.maintenance_sweep", job_name="maintenance_sweep"):
-        async with open_db_session_fn() as db:
-            try:
-                persistence = cost_persistence_service_cls(db)
-                result = await persistence.finalize_batch(days_ago=2)
-                logger.info(
-                    "maintenance_cost_finalization_success",
-                    records=result.get("records_finalized", 0),
-                )
-            except SCHEDULER_SWEEP_RECOVERABLE_ERRORS as e:
-                logger.warning("maintenance_cost_finalization_failed", error=str(e))
-
-            try:
-                from app.modules.reporting.domain.carbon_factors import CarbonFactorService
-
-                factor_refresh_result = await CarbonFactorService(db).auto_activate_latest()
-                commit_result = db.commit()
-                if inspect_module.isawaitable(commit_result):
-                    await commit_result
-                logger.info(
-                    "maintenance_carbon_factor_refresh_success",
-                    status=factor_refresh_result.get("status"),
-                    active_factor_set_id=factor_refresh_result.get("active_factor_set_id"),
-                    candidate_factor_set_id=factor_refresh_result.get(
-                        "candidate_factor_set_id"
-                    ),
-                )
-            except SCHEDULER_SWEEP_RECOVERABLE_ERRORS as e:
-                rollback_result = db.rollback()
-                if inspect_module.isawaitable(rollback_result):
-                    await rollback_result
-                logger.warning("maintenance_carbon_factor_refresh_failed", error=str(e))
-
-            try:
-                from app.models.realized_savings import RealizedSavingsEvent
-                from app.models.remediation import RemediationRequest, RemediationStatus
-                from app.modules.reporting.domain.realized_savings import (
-                    RealizedSavingsService,
-                )
-
-                now = datetime_cls.now(timezone_obj.utc)
-                executed_before = now - timedelta_cls(days=8)
-                executed_after = now - timedelta_cls(days=90)
-                recompute_cutoff = now - timedelta_cls(hours=24)
-                providers = ["saas", "license", "platform", "hybrid"]
-
-                stmt = (
-                    sa.select(RemediationRequest)
-                    .outerjoin(
-                        RealizedSavingsEvent,
-                        sa.and_(
-                            RealizedSavingsEvent.tenant_id == RemediationRequest.tenant_id,
-                            RealizedSavingsEvent.remediation_request_id
-                            == RemediationRequest.id,
-                        ),
-                    )
-                    .where(
-                        RemediationRequest.status == RemediationStatus.COMPLETED.value,
-                        RemediationRequest.executed_at.is_not(None),
-                        RemediationRequest.executed_at <= executed_before,
-                        RemediationRequest.executed_at >= executed_after,
-                        RemediationRequest.connection_id.is_not(None),
-                        RemediationRequest.provider.in_(providers),
-                        sa.or_(
-                            RealizedSavingsEvent.id.is_(None),
-                            RealizedSavingsEvent.computed_at < recompute_cutoff,
-                        ),
-                    )
-                    .order_by(RemediationRequest.executed_at.desc())
-                    .limit(200)
-                )
-                remediation_requests = list((await db.execute(stmt)).scalars().all())
-                if remediation_requests:
-                    service = RealizedSavingsService(db)
-                    computed = 0
-                    for req in remediation_requests:
-                        event = await service.compute_for_request(
-                            tenant_id=req.tenant_id,
-                            request=req,
-                            require_final=True,
-                        )
-                        if event is not None:
-                            computed += 1
-                    await db.commit()
-                    logger.info(
-                        "maintenance_realized_savings_compute_success",
-                        scanned=len(remediation_requests),
-                        computed=computed,
-                    )
-                else:
-                    logger.info(
-                        "maintenance_realized_savings_compute_skipped",
-                        reason="no_eligible_remediations",
-                    )
-            except SCHEDULER_SWEEP_RECOVERABLE_ERRORS as e:
-                logger.warning("maintenance_realized_savings_compute_failed", error=str(e))
-
-            aggregator = cost_aggregator_cls()
-            await aggregator.refresh_materialized_view(db)
-
-            try:
-                from app.shared.core.maintenance import PartitionMaintenanceService
-
-                maintenance = PartitionMaintenanceService(db)
-                partitions_created = await maintenance.create_future_partitions(
-                    months_ahead=3
-                )
-                archived_count = await maintenance.archive_old_partitions(months_old=13)
-
-                await db.commit()
-                logger.info(
-                    "maintenance_partitioning_success",
-                    created=partitions_created,
-                    archived=archived_count,
-                )
-            except SCHEDULER_SWEEP_RECOVERABLE_ERRORS as e:
-                await db.rollback()
-                logger.error("maintenance_partitioning_failed", error=str(e))
-
-            try:
-                from app.models.background_job import BackgroundJob, JobStatus
-                from app.shared.core.config import get_settings
-                from app.tasks.scheduler_background_job_retention_ops import (
-                    purge_terminal_background_jobs,
-                )
-
-                purge_summary = await purge_terminal_background_jobs(
-                    db=db,
-                    sa=sa,
-                    logger=logger,
-                    background_job_model=BackgroundJob,
-                    job_status=JobStatus,
-                    datetime_cls=datetime_cls,
-                    timezone_obj=timezone_obj,
-                    timedelta_cls=timedelta_cls,
-                    get_settings_fn=get_settings,
-                )
-                if purge_summary["total_deleted"] > 0:
-                    retention_commit_result = db.commit()
-                    if inspect_module.isawaitable(retention_commit_result):
-                        await retention_commit_result
-                logger.info("maintenance_background_jobs_retention_success", **purge_summary)
-            except SCHEDULER_SWEEP_RECOVERABLE_ERRORS as e:
-                retention_rollback_result = db.rollback()
-                if inspect_module.isawaitable(retention_rollback_result):
-                    await retention_rollback_result
-                logger.warning("maintenance_background_jobs_retention_failed", error=str(e))
+    await run_maintenance_sweep_logic(
+        open_db_session_fn=open_db_session_fn,
+        scheduler_span_fn=scheduler_span_fn,
+        logger=logger,
+        cost_persistence_service_cls=cost_persistence_service_cls,
+        cost_aggregator_cls=cost_aggregator_cls,
+        sa=sa,
+        inspect_module=inspect_module,
+        datetime_cls=datetime_cls,
+        timezone_obj=timezone_obj,
+        timedelta_cls=timedelta_cls,
+        recoverable_errors=SCHEDULER_SWEEP_RECOVERABLE_ERRORS,
+    )
 
 
 async def enforcement_reconciliation_sweep_logic(

@@ -58,3 +58,14 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Resolve the Kubernetes Secret name that backs runtime configuration.
+*/}}
+{{- define "valdrics.runtimeSecretName" -}}
+{{- if .Values.externalSecrets.enabled -}}
+{{- .Values.externalSecrets.target.name -}}
+{{- else -}}
+{{- .Values.existingSecrets.name -}}
+{{- end -}}
+{{- end }}

@@ -71,11 +71,20 @@ def test_audit_log_schema():
 
 def test_setup_logging_no_crash():
     """Verify logging setup runs for both Debug and Prod modes."""
-    with patch("app.shared.core.logging.get_settings") as mock_settings:
+    with (
+        patch("app.shared.core.logging.get_settings") as mock_settings,
+        patch("app.shared.core.logging.configure_otlp_log_export") as mock_otlp,
+    ):
         # 1. Debug (Console)
         mock_settings.return_value.DEBUG = True
+        mock_settings.return_value.TESTING = False
+        mock_settings.return_value.OTEL_EXPORTER_OTLP_ENDPOINT = ""
         setup_logging()
 
         # 2. Prod (JSON)
         mock_settings.return_value.DEBUG = False
+        mock_settings.return_value.OTEL_EXPORTER_OTLP_ENDPOINT = (
+            "http://otel-collector:4317"
+        )
         setup_logging()
+        assert mock_otlp.called

@@ -43,6 +43,58 @@ on:
         description: "Fail if throughput is below this (requests/sec)"
         required: false
         default: ""
+      start_local_api:
+        description: "Launch the local API inside the workflow before running the gate"
+        required: false
+        type: boolean
+        default: false
+      bootstrap_tenant:
+        description: "Create a local authenticated tenant when running authenticated profiles"
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      url:
+        required: false
+        type: string
+        default: "http://127.0.0.1:8000"
+      profile:
+        required: false
+        type: string
+        default: "dashboard"
+      duration:
+        required: false
+        type: string
+        default: "30"
+      users:
+        required: false
+        type: string
+        default: "10"
+      ramp:
+        required: false
+        type: string
+        default: "5"
+      p95_target:
+        required: false
+        type: string
+        default: "2.0"
+      max_error_rate:
+        required: false
+        type: string
+        default: "1.0"
+      min_throughput:
+        required: false
+        type: string
+        default: ""
+      start_local_api:
+        required: false
+        type: boolean
+        default: false
+      bootstrap_tenant:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -50,12 +102,56 @@ permissions:
 env:
   PYTHON_VERSION: "3.12"
   UV_VERSION: "0.9.21"
+  ENVIRONMENT: "staging"
+  TESTING: "false"
+  DEBUG: "false"
+  DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"
+  DB_SSL_MODE: "require"
+  CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"
+  ENCRYPTION_KEY: "ci-encryption-key-32-chars-min-00000000"
+  KDF_SALT: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+  SUPABASE_JWT_SECRET: "ci-supabase-jwt-secret-32-chars-0000"
+  ADMIN_API_KEY: "ci-admin-api-key-32-chars-min-0000000"
+  GROQ_API_KEY: "testing"
+  PAYSTACK_SECRET_KEY: "example_paystack_secret_ci_validation_only"
+  PAYSTACK_PUBLIC_KEY: "example_paystack_public_ci_validation_only"
+  REDIS_URL: "redis://localhost:6379/0"
+  SENTRY_DSN: "https://example@sentry.io/1"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4317"
+  OTEL_LOGS_EXPORT_ENABLED: "true"
+  APP_RUNTIME_DATA_DIR: "/tmp/valdrics"
+  ENABLE_SCHEDULER: "true"
+  TRUST_PROXY_HEADERS: "true"
+  TRUSTED_PROXY_CIDRS: '["127.0.0.1/32"]'
 
 jobs:
   gate:
     name: Run Load-Test Gate
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16.8-alpine
+        env:
+          POSTGRES_DB: valdrics
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-dev-change-me
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d valdrics"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7.2.5-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
@@ -74,11 +170,69 @@ jobs:
       - name: Install Dependencies
         run: uv sync --locked --dev
 
+      - name: Export Strict-Environment Forecast Break-Glass Metadata
+        run: |
+          set -euo pipefail
+          echo "FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=true" >> "$GITHUB_ENV"
+          echo "FORECASTER_BREAK_GLASS_REASON=CI staging validation without Prophet wheel" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          from datetime import datetime, timedelta, timezone
+          import os
+          expires_at = (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat().replace("+00:00", "Z")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
+              handle.write(f"FORECASTER_BREAK_GLASS_EXPIRES_AT={expires_at}\n")
+          PY
+
+      - name: Apply Database Migrations
+        if: ${{ inputs.start_local_api }}
+        run: uv run alembic upgrade head
+
+      - name: Launch Local API
+        if: ${{ inputs.start_local_api }}
+        run: |
+          set -euo pipefail
+          uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/valdrics-perf.log 2>&1 &
+          echo $! > /tmp/valdrics-perf.pid
+
+      - name: Launch Local Worker
+        if: ${{ inputs.start_local_api }}
+        run: |
+          set -euo pipefail
+          uv run celery -A app.shared.core.celery_app:celery_app worker -l info > /tmp/valdrics-perf-worker.log 2>&1 &
+          echo $! > /tmp/valdrics-perf-worker.pid
+
+      - name: Wait for Local API
+        if: ${{ inputs.start_local_api }}
+        run: |
+          python - <<'PY'
+          import time
+          import urllib.request
+
+          url = "http://127.0.0.1:8000/health/live"
+          deadline = time.time() + 60
+          while time.time() < deadline:
+              try:
+                  with urllib.request.urlopen(url, timeout=2) as response:
+                      if response.status == 200:
+                          raise SystemExit(0)
+              except Exception:
+                  time.sleep(1)
+          raise SystemExit("performance gate API failed to become ready within 60 seconds")
+          PY
+
+      - name: Bootstrap Local Tenant Token
+        if: ${{ inputs.bootstrap_tenant }}
+        run: |
+          set -euo pipefail
+          TOKEN="$(uv run python scripts/bootstrap_performance_tenant.py --url http://127.0.0.1:8000 --tenant-name "Performance Validation Tenant" --email "performance.owner@valdrics.local")"
+          echo "VALDRICS_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
+
+      - name: Export Provided Performance Token
+        if: ${{ !inputs.bootstrap_tenant && secrets.VALDRICS_TOKEN != '' }}
+        run: |
+          echo "VALDRICS_TOKEN=${{ secrets.VALDRICS_TOKEN }}" >> "$GITHUB_ENV"
+
       - name: Run Load Test (Enforced Thresholds)
-        env:
-          # Optional: provide a tenant-scoped bearer token for authenticated routes.
-          # If absent, the runner will still test unauthenticated endpoints (health).
-          VALDRICS_TOKEN: ${{ secrets.VALDRICS_TOKEN }}
         run: |
           set -euo pipefail
           OUT="reports/performance/perf_gate_${{ github.run_id }}.json"
@@ -93,8 +247,39 @@ jobs:
           uv run python scripts/load_test_api.py "${ARGS[@]}"
 
       - name: Upload Performance Evidence Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: perf-gate-evidence
           path: reports/performance/perf_gate_${{ github.run_id }}.json
           retention-days: 14
+
+      - name: Upload Local API Log
+        if: ${{ always() && inputs.start_local_api }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-gate-api-log
+          path: /tmp/valdrics-perf.log
+          retention-days: 14
+
+      - name: Upload Local Worker Log
+        if: ${{ always() && inputs.start_local_api }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-gate-worker-log
+          path: /tmp/valdrics-perf-worker.log
+          retention-days: 14
+
+      - name: Stop Local API
+        if: ${{ always() && inputs.start_local_api }}
+        run: |
+          if [ -f /tmp/valdrics-perf.pid ]; then
+            kill "$(cat /tmp/valdrics-perf.pid)" || true
+          fi
+
+      - name: Stop Local Worker
+        if: ${{ always() && inputs.start_local_api }}
+        run: |
+          if [ -f /tmp/valdrics-perf-worker.pid ]; then
+            kill "$(cat /tmp/valdrics-perf-worker.pid)" || true
+          fi

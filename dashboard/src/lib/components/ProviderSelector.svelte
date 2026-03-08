@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { ChevronDown, Check, Globe } from '@lucide/svelte';
 	import CloudLogo from './CloudLogo.svelte';
-	import { fly } from 'svelte/transition';
 	import { onMount } from 'svelte';
 
 	let { selectedProvider = '', onSelect } = $props<{
@@ -74,8 +73,8 @@
 
 	{#if isOpen}
 		<div
-			transition:fly={{ y: 8, duration: prefersReducedMotion ? 0 : 200 }}
 			class="absolute right-0 mt-2 w-48 py-1.5 z-[100] rounded-xl bg-ink-900/95 backdrop-blur-xl border border-ink-700 shadow-2xl overflow-hidden ring-1 ring-white/5"
+			class:provider-menu-enter={!prefersReducedMotion}
 			role="listbox"
 		>
 			{#each providers as p (p.id)}
@@ -107,7 +106,7 @@
 					</div>
 
 					{#if selectedProvider === p.id}
-						<div transition:fly={{ x: 4, duration: prefersReducedMotion ? 0 : 150 }}>
+						<div class:provider-check-enter={!prefersReducedMotion}>
 							<Check size={14} class="text-accent-400" />
 						</div>
 					{/if}
@@ -121,5 +120,35 @@
 	/* Premium backdrop shadow */
 	.shadow-2xl {
 		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+	}
+
+	.provider-menu-enter {
+		animation: providerMenuEnter 200ms var(--ease-out) both;
+	}
+
+	.provider-check-enter {
+		animation: providerCheckEnter 150ms var(--ease-out) both;
+	}
+
+	@keyframes providerMenuEnter {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@keyframes providerCheckEnter {
+		from {
+			opacity: 0;
+			transform: translateX(4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(0);
+		}
 	}
 </style>

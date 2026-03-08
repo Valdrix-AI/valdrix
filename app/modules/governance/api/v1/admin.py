@@ -10,6 +10,7 @@ import secrets
 import structlog
 from uuid import UUID
 from app.shared.core.rate_limit import auth_limit
+from app.shared.core.proxy_headers import resolve_client_ip
 from pydantic import BaseModel, Field
 
 from app.models.landing_telemetry_rollup import LandingTelemetryDailyRollup
@@ -43,8 +44,7 @@ async def validate_admin_key(
         # Item 11: Audit failed admin access attempts
         from app.shared.core.logging import audit_log
 
-        client_host = request.client.host if request.client else "unknown"
-        forwarded_for = request.headers.get("x-forwarded-for")
+        client_host = resolve_client_ip(request, settings_obj=settings)
         audit_log(
             "admin_auth_failed",
             "admin_portal",
@@ -52,13 +52,10 @@ async def validate_admin_key(
             {
                 "path": request.url.path,
                 "client_ip": client_host,
-                "x_forwarded_for": forwarded_for,
             },
         )
 
-        logger.warning(
-            "admin_auth_failed", client_ip=client_host, x_forwarded_for=forwarded_for
-        )
+        logger.warning("admin_auth_failed", client_ip=client_host)
         raise HTTPException(status_code=403, detail="Forbidden")
 
     return True

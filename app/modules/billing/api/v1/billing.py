@@ -7,7 +7,6 @@ Provides:
 - POST /billing/webhook - Handle Paystack webhooks
 """
 
-import ipaddress
 from typing import Annotated, Optional, Dict, Any, List
 from urllib.parse import urlparse, urljoin, urlunparse
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -35,6 +34,7 @@ from app.modules.billing.api.v1.billing_ops import (
 from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.db.session import get_db
 from app.shared.core.config import get_settings
+from app.shared.core.proxy_headers import resolve_client_ip
 from app.shared.core.rate_limit import auth_limit, standard_limit
 from app.shared.core.currency import ExchangeRateUnavailableError
 
@@ -61,26 +61,6 @@ __all__ = [
 
 router = APIRouter(tags=["Billing"])
 settings = get_settings()
-
-
-def _trusted_proxy_networks() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
-    raw = getattr(settings, "TRUSTED_PROXY_CIDRS", [])
-    if isinstance(raw, str):
-        cidr_values = [part.strip() for part in raw.split(",") if part.strip()]
-    elif isinstance(raw, (list, tuple, set)):
-        cidr_values = [str(part).strip() for part in raw if str(part).strip()]
-    else:
-        cidr_values = []
-
-    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
-    for cidr in cidr_values:
-        try:
-            networks.append(ipaddress.ip_network(cidr, strict=False))
-        except ValueError:
-            logger.warning("billing_invalid_trusted_proxy_cidr_ignored", cidr=cidr)
-    return networks
-
-
 def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
     """
     Validate and normalize user-provided checkout callback URLs.
@@ -131,66 +111,7 @@ def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
 
 
 def _extract_client_ip(request: Request) -> str:
-    """
-    Resolve request source IP with defensive XFF parsing.
-
-    We resolve the address using a bounded trusted-proxy hop count and
-    fall back to `request.client.host`.
-    """
-    fallback = request.client.host if request.client and request.client.host else "unknown"
-    trust_proxy_headers_raw = getattr(settings, "TRUST_PROXY_HEADERS", False)
-    if isinstance(trust_proxy_headers_raw, bool):
-        trust_proxy_headers = trust_proxy_headers_raw
-    elif isinstance(trust_proxy_headers_raw, str):
-        trust_proxy_headers = trust_proxy_headers_raw.strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
-    else:
-        trust_proxy_headers = False
-    if not trust_proxy_headers:
-        return fallback
-
-    proxy_networks = _trusted_proxy_networks()
-    if not proxy_networks:
-        return fallback
-    try:
-        remote_peer_ip = ipaddress.ip_address(fallback)
-    except ValueError:
-        return fallback
-    if not any(remote_peer_ip in network for network in proxy_networks):
-        return fallback
-
-    xff = request.headers.get("x-forwarded-for", "")
-    if not xff:
-        return fallback
-
-    candidates = [part.strip() for part in xff.split(",") if part.strip()]
-    valid_ips: list[str] = []
-    for raw in candidates:
-        try:
-            valid_ips.append(str(ipaddress.ip_address(raw)))
-        except ValueError:
-            continue
-    if not valid_ips:
-        return fallback
-
-    try:
-        trusted_hops = int(getattr(settings, "TRUSTED_PROXY_HOPS", 1))
-    except (TypeError, ValueError):
-        trusted_hops = 1
-    trusted_hops = min(max(trusted_hops, 1), 5)
-
-    # RFC 7239 style forwarding chains are left-to-right oldest->newest.
-    # Choose the address immediately before trusted proxy hops.
-    idx = len(valid_ips) - trusted_hops
-    if idx < 0:
-        return fallback
-    if idx >= len(valid_ips):
-        return valid_ips[-1]
-    return valid_ips[idx]
+    return resolve_client_ip(request, settings_obj=settings)
 
 
 @router.get("/plans")

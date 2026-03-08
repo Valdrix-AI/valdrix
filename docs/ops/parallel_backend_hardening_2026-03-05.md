@@ -2899,3 +2899,165 @@ Additional run attempted:
   - HTTP fallthrough, malformed payload, unsupported vendor, and manual-feed validation branches remain explicitly covered.
 - Operational misconfiguration:
   - Audit and size-budget gates remain green; preferred-threshold warning is still limited to `app/tasks/scheduler_sweep_ops.py` at 495 lines.
+
+---
+
+## Update - Reporting Service Test Decomposition (2026-03-07, Wave 17)
+
+### Scope Executed
+- Continued long-file hardening by decomposing:
+  - `tests/unit/modules/reporting/test_reporting_service.py` (**1017 lines**).
+- Reorganized the suite around the actual service responsibilities:
+  - connection inventory,
+  - ingestion execution/failure handling,
+  - post-ingest registry, attribution, aggregation, and response shape checks.
+
+### Files Changed (This Update)
+- Deleted:
+  - `tests/unit/modules/reporting/test_reporting_service.py`
+- Added:
+  - `tests/unit/modules/reporting/conftest.py`
+  - `tests/unit/modules/reporting/test_reporting_service_connections.py`
+  - `tests/unit/modules/reporting/test_reporting_service_ingestion.py`
+  - `tests/unit/modules/reporting/test_reporting_service_post_ingest.py`
+- Updated:
+  - `docs/ops/parallel_backend_hardening_2026-03-05.md`
+
+### Before/After Line Counts (Key Targets)
+- `tests/unit/modules/reporting/test_reporting_service.py`: **1017 -> removed**
+- Replacement files:
+  - `tests/unit/modules/reporting/conftest.py`: **163**
+  - `tests/unit/modules/reporting/test_reporting_service_connections.py`: **103**
+  - `tests/unit/modules/reporting/test_reporting_service_ingestion.py`: **206**
+  - `tests/unit/modules/reporting/test_reporting_service_post_ingest.py`: **289**
+
+### Decomposition Details
+- Moved repeated connection-fixture construction and query/stream/persistence setup into a local pytest `conftest`, eliminating the duplicate per-test scaffolding that dominated the monolith.
+- Split `_get_all_connections` and no-active-connection behavior away from ingestion-path tests so connection inventory branches are reviewed independently.
+- Isolated post-ingest side-effect coverage so registry sync, attribution dispatch, aggregation accounting, day-window propagation, and response-shape assertions stay focused and deterministic.
+- Kept assertion behavior unchanged; only test organization and shared setup were refactored.
+
+### Validation Commands and Results (This Update)
+- Lint:
+  - `uv run ruff check tests/unit/modules/reporting/conftest.py tests/unit/modules/reporting/test_reporting_service_connections.py tests/unit/modules/reporting/test_reporting_service_ingestion.py tests/unit/modules/reporting/test_reporting_service_post_ingest.py`
+  - Result: **pass**
+- Collection integrity:
+  - `PYTEST_ADDOPTS='--no-cov' .venv/bin/pytest --collect-only -q tests/unit/modules/reporting/test_reporting_service_connections.py tests/unit/modules/reporting/test_reporting_service_ingestion.py tests/unit/modules/reporting/test_reporting_service_post_ingest.py`
+  - Result: **18 tests collected**
+- Runtime:
+  - `PYTEST_ADDOPTS='--no-cov' .venv/bin/pytest -q tests/unit/modules/reporting/test_reporting_service_connections.py tests/unit/modules/reporting/test_reporting_service_ingestion.py tests/unit/modules/reporting/test_reporting_service_post_ingest.py`
+  - Result: **18 passed**
+- Audit gate:
+  - `DEBUG=false .venv/bin/python scripts/verify_audit_report_resolved.py`
+  - Result: **pass (27/27)**
+- Size-budget gate:
+  - `DEBUG=false .venv/bin/python scripts/verify_python_module_size_budget.py --emit-cluster-signals`
+  - Result: **pass**
+
+### Remaining >500-Line Python Files In Scope
+- `app/**`: **0**
+- `scripts/**`: **0**
+- `tests/**`: **50** (down from 51)
+- Current largest remaining files:
+  - `tests/unit/governance/settings/test_notifications.py` (**1232**)
+  - `tests/unit/api/v1/test_costs_acceptance_payload_branches.py` (**1106**)
+  - `tests/unit/enforcement/test_enforcement_actions_service.py` (**1067**)
+  - `tests/unit/llm/test_analyzer.py` (**1025**)
+  - `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py` (**955**)
+
+### Post-Closure Sanity Check Notes
+- Concurrency:
+  - Shared fixtures are stateless factories; no mutable module-level caches or intervals were introduced.
+- Observability:
+  - Ingestion failure paths, attribution failure tolerance, and response-structure assertions remain explicitly covered.
+- Deterministic replay:
+  - Collection/runtime counts stayed stable at 18 tests before and after the split.
+- Snapshot stability:
+  - No snapshot assertions were introduced.
+- Export integrity:
+  - Not in scope for this wave.
+- Failure modes:
+  - Empty-connection skip, adapter failure, invalid tenant config, empty stream, null cost, and attribution-error branches remain covered.
+- Operational misconfiguration:
+  - Audit and size-budget gates remain green; the only preferred-threshold cluster warning is still `app/tasks/scheduler_sweep_ops.py` at 495 lines.
+
+---
+
+## Update - Costs Acceptance Payload Test Decomposition (2026-03-07, Wave 18)
+
+### Scope Executed
+- Continued long-file hardening by decomposing:
+  - `tests/unit/api/v1/test_costs_acceptance_payload_branches.py` (**1106 lines**).
+- Reorganized the suite around actual responsibility boundaries:
+  - acceptance payload computation,
+  - acceptance/evidence and endpoint delegate paths,
+  - alert and notification branches.
+
+### Files Changed (This Update)
+- Deleted:
+  - `tests/unit/api/v1/test_costs_acceptance_payload_branches.py`
+- Added:
+  - `tests/unit/api/v1/costs_acceptance_test_helpers.py`
+  - `tests/unit/api/v1/test_costs_acceptance_payload_core.py`
+  - `tests/unit/api/v1/test_costs_acceptance_payload_endpoints.py`
+  - `tests/unit/api/v1/test_costs_acceptance_payload_alerts.py`
+- Updated:
+  - `docs/ops/parallel_backend_hardening_2026-03-05.md`
+
+### Before/After Line Counts (Key Targets)
+- `tests/unit/api/v1/test_costs_acceptance_payload_branches.py`: **1106 -> removed**
+- Replacement files:
+  - `tests/unit/api/v1/costs_acceptance_test_helpers.py`: **206**
+  - `tests/unit/api/v1/test_costs_acceptance_payload_core.py`: **323**
+  - `tests/unit/api/v1/test_costs_acceptance_payload_endpoints.py`: **397**
+  - `tests/unit/api/v1/test_costs_acceptance_payload_alerts.py`: **192**
+
+### Decomposition Details
+- Moved repeated fake DB/execute-result shims plus reusable user/payload/model builders into a dedicated helper module.
+- Isolated compute-path coverage so ledger normalization, canonical mapping, invalid-window validation, and feature-availability branches are reviewed independently from HTTP endpoint behavior.
+- Split acceptance evidence/unit-economics/direct endpoint delegate paths away from alert-dispatch tests, which keeps failure-mode reasoning local and reduces review overhead.
+- Preserved original branch intent; this was a structural split with shared helper extraction, not a behavior rewrite.
+
+### Validation Commands and Results (This Update)
+- Lint:
+  - `uv run ruff check tests/unit/api/v1/costs_acceptance_test_helpers.py tests/unit/api/v1/test_costs_acceptance_payload_core.py tests/unit/api/v1/test_costs_acceptance_payload_endpoints.py tests/unit/api/v1/test_costs_acceptance_payload_alerts.py`
+  - Result: **pass**
+- Collection integrity:
+  - `PYTEST_ADDOPTS='--no-cov' .venv/bin/pytest --collect-only -q tests/unit/api/v1/test_costs_acceptance_payload_core.py tests/unit/api/v1/test_costs_acceptance_payload_endpoints.py tests/unit/api/v1/test_costs_acceptance_payload_alerts.py`
+  - Result: **16 tests collected**
+- Runtime:
+  - `PYTEST_ADDOPTS='--no-cov' .venv/bin/pytest -q tests/unit/api/v1/test_costs_acceptance_payload_core.py tests/unit/api/v1/test_costs_acceptance_payload_endpoints.py tests/unit/api/v1/test_costs_acceptance_payload_alerts.py`
+  - Result: **16 passed**
+- Audit gate:
+  - `DEBUG=false .venv/bin/python scripts/verify_audit_report_resolved.py`
+  - Result: **pass (27/27)**
+- Size-budget gate:
+  - `DEBUG=false .venv/bin/python scripts/verify_python_module_size_budget.py --emit-cluster-signals`
+  - Result: **pass**
+
+### Remaining >500-Line Python Files In Scope
+- `app/**`: **0**
+- `scripts/**`: **0**
+- `tests/**`: **49** (down from 50)
+- Current largest remaining files:
+  - `tests/unit/governance/settings/test_notifications.py` (**1232**)
+  - `tests/unit/enforcement/test_enforcement_actions_service.py` (**1067**)
+  - `tests/unit/llm/test_analyzer.py` (**1025**)
+  - `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py` (**955**)
+  - `tests/unit/governance/test_scim_direct_endpoint_branches.py` (**927**)
+
+### Post-Closure Sanity Check Notes
+- Concurrency:
+  - Helper shims remain per-test objects; no shared mutable state or scheduling behavior was introduced.
+- Observability:
+  - Alert-dispatch success/failure, evidence capture/listing, and wrapper delegate branches remain explicitly covered.
+- Deterministic replay:
+  - Collection/runtime counts stayed stable at 16 tests after the split.
+- Snapshot stability:
+  - No snapshot assertions were introduced.
+- Export integrity:
+  - CSV acceptance export coverage remains present in the endpoint split.
+- Failure modes:
+  - Invalid windows, feature-disabled behavior, ledger-query failure, alert suppression, and notification failure branches remain covered.
+- Operational misconfiguration:
+  - Audit and size-budget gates remain green; preferred-threshold warning is still limited to `app/tasks/scheduler_sweep_ops.py` at 495 lines.

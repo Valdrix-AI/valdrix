@@ -140,9 +140,9 @@
 
 .landing-demo-detail {
 	margin: 0.65rem 0 0 0;
-	font-size: 0.9rem;
+	font-size: 0.95rem;
 	line-height: 1.5;
-	color: var(--color-ink-300);
+	color: var(--color-ink-200);
 }
 
 .signal-snapshot-controls {
@@ -198,10 +198,10 @@
 
 .landing-section-sub {
 	margin: 0.55rem auto 0 auto;
-	color: var(--color-ink-400);
-	font-size: 1rem;
+	color: var(--color-ink-300);
+	font-size: 1.06rem;
 	line-height: 1.55;
-	max-width: 44rem;
+	max-width: 46rem;
 }
 
 .landing-h3 {
@@ -212,23 +212,26 @@
 
 .landing-p {
 	margin: 0;
-	color: var(--color-ink-300);
-	font-size: 0.98rem;
+	color: var(--color-ink-200);
+	font-size: 1.02rem;
 	line-height: 1.55;
 }
 
 .landing-hook {
-	padding: 1.25rem;
+	padding: 1.35rem;
 	text-align: center;
 }
 
 .landing-hook-highlight {
 	margin-top: 1rem;
-	border: 1px solid rgb(6 182 212 / 0.22);
-	background: linear-gradient(120deg, rgb(6 182 212 / 0.14), rgb(16 185 129 / 0.08));
+	border: 1px solid rgb(255 255 255 / 0.1);
+	background: linear-gradient(120deg, rgb(8 14 21 / 0.92), rgb(14 22 32 / 0.82));
 	border-radius: var(--radius-lg);
-	padding: 0.85rem 1rem;
+	padding: 0.75rem 0.9rem;
 	text-align: center;
+	max-width: 52rem;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 .landing-hook-highlight-k {
@@ -237,14 +240,14 @@
 	letter-spacing: 0.11em;
 	text-transform: uppercase;
 	font-weight: 800;
-	color: var(--color-accent-300);
+	color: var(--color-ink-400);
 }
 
 .landing-hook-highlight-v {
 	margin: 0.25rem 0 0 0;
-	font-size: 1.02rem;
-	font-weight: 700;
-	color: var(--color-ink-100);
+	font-size: 0.97rem;
+	font-weight: 600;
+	color: var(--color-ink-200);
 }
 
 .landing-hook-switch {
@@ -375,4 +378,3 @@
 	font-weight: 700;
 	color: var(--color-ink-100);
 }
-

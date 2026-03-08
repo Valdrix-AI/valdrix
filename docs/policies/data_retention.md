@@ -1,24 +1,47 @@
-# Data Retention & Purge Policy
+# Data Retention Policy
 
-**Scope:** All Valdrics Tenant Data
+This policy describes retention controls that are currently evidenced by the
+repository. Where retention is not automatically enforced by code, the policy
+states that explicitly instead of implying automation.
 
-## 1. Purpose
-To ensure compliance with GDPR and other data protection regulations by defining how long data is stored and how it is purged.
+## Repository-Backed Retention Controls
 
-## 2. Retention Periods
-| Data Category | Retention Period | Reason |
-|---------------|------------------|--------|
-| Authentication Logs | 90 Days | Security Auditing |
-| Cost/Billing Data | 7 Years | Financial Compliance |
-| Zombie Scan Results| 1 Year | Trend Analysis |
-| LLM Analysis | 30 Days | Privacy Minimization |
-| Remediation Logs | 7 Years | Operational Accountability|
-| Tenant Metadata | Period of Service + 30 Days | Operational |
+| Data Class | Retention Posture | Enforcement Source |
+|---|---|---|
+| Background job terminal-state records | Automated retention purge | Scheduler maintenance sweep and background-job retention settings |
+| Tenant cost records | Automated plan-aware retention purge | Scheduler maintenance sweep and `CostPersistenceService.cleanup_expired_records_by_plan` |
+| Tenant-scoped operational data | Removed on approved tenant erasure request | `DELETE /api/v1/audit/data-erasure-request` and `docs/runbooks/tenant_data_lifecycle.md` |
+| AWS RDS backups (Terraform profile) | 30-day backup retention | `terraform/modules/db/main.tf` |
+| Export/audit artifacts generated for operators | Retained according to artifact storage policy outside app runtime | Manual/operator managed |
 
-## 3. Purging Mechanism
-1. **Automated Cleanup**: A background job runs daily to delete records older than their retention period.
-2. **Account Deletion**: When a tenant deletes their account, all associated data is hard-deleted within 30 days.
-3. **Backup Purge**: Backups are rotated every 30 days. Data purged from the primary DB will be gone from all backups after 30 days.
+## Automated Controls
 
-## 4. Compliance
-Tenants can request a "Data Purge Report" to verify that their data has been removed according to this policy.
+The application currently enforces automated retention for:
+
+- background-job terminal states through background job retention controls
+- tenant cost records, using the tenant plan's configured `retention_days`
+
+Cost-record purge evidence is written as structured `system.maintenance` audit
+events with `resource_type=cost_records_retention`, so operators can export a
+deterministic purge report through the audit log surface.
+
+## Tenant Erasure Requests
+
+Tenant-scoped deletion requests are handled through:
+
+- `DELETE /api/v1/audit/data-erasure-request?confirmation=DELETE ALL MY DATA`
+- `docs/runbooks/tenant_data_lifecycle.md`
+
+This path is the supported customer-data deletion control documented in the
+repository today.
+
+## Policy Limits
+
+- Data classes not covered by an automated purge job remain governed by tenant
+  erasure workflows, infrastructure backup retention, or documented manual
+  operator procedures.
+
+## Review
+
+Update this policy whenever a new retention job, export artifact lifecycle, or
+backup policy is added to the codebase or infrastructure definitions.

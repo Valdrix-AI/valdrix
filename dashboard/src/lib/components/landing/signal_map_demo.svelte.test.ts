@@ -41,7 +41,7 @@ describe('Signal Map Conversion Enhancements', () => {
 		});
 
 		// Trigger details
-		const toggle = screen.getByRole('button', { name: /explore control details/i });
+		const toggle = screen.getByRole('button', { name: /^open approval chain$/i });
 		await fireEvent.click(toggle);
 
 		// The impact-badge uses toLocaleString() on wasteUsd.
@@ -73,7 +73,7 @@ describe('Signal Map Conversion Enhancements', () => {
 			}
 		});
 
-		const toggle = screen.getByRole('button', { name: /explore control details/i });
+		const toggle = screen.getByRole('button', { name: /^open approval chain$/i });
 		await fireEvent.click(toggle);
 
 		// Action is rendered as <a role="button"> — so queryByRole('button') finds it.
@@ -88,4 +88,3 @@ describe('Signal Map Conversion Enhancements', () => {
 		});
 	});
 });
-

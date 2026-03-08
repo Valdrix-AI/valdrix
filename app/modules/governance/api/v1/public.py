@@ -18,6 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.landing_telemetry_rollup import LandingTelemetryDailyRollup
 from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
+from app.modules.governance.api.v1.public_marketing import (
+    router as marketing_router,
+)
 from app.shared.core.pricing import FeatureFlag, is_feature_enabled, normalize_tier
 from app.shared.lead_gen.assessment import FreeAssessmentService
 from app.shared.core.rate_limit import auth_limit, rate_limit
@@ -32,6 +35,7 @@ from app.shared.core.ops_metrics import (
 from app.shared.db.session import get_system_db
 
 router = APIRouter()
+router.include_router(marketing_router)
 assessment_service = FreeAssessmentService()
 logger = structlog.get_logger()
 _LANDING_LABEL_SANITIZER = re.compile(r"[^a-z0-9_]+")

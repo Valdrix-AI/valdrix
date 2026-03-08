@@ -7,7 +7,6 @@ Configurable via environment variables.
 
 from typing import Any, Callable, Optional, cast
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import FastAPI, Request
 import hashlib
@@ -16,6 +15,7 @@ from redis.asyncio import Redis, from_url
 from redis.exceptions import RedisError
 
 from app.shared.core.config import get_settings
+from app.shared.core.proxy_headers import resolve_client_ip
 
 __all__ = [
     "get_limiter",
@@ -66,7 +66,7 @@ def context_aware_key(request: Request) -> str:
         except TOKEN_HASH_FALLBACK_RECOVERABLE_EXCEPTIONS:
             pass
 
-    return get_remote_address(request)
+    return resolve_client_ip(request, settings_obj=get_settings())
 
 
 def get_limiter() -> Limiter:

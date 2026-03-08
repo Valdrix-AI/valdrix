@@ -9,6 +9,9 @@ from uuid import uuid4
 
 import pytest
 
+from app.modules.governance.domain.security.compliance_pack_contracts import (
+    CompliancePackActor,
+)
 from app.modules.governance.domain.security.compliance_pack_bundle_exports import (
     build_manifest,
     run_focus_export,
@@ -17,11 +20,16 @@ from app.modules.governance.domain.security.compliance_pack_bundle_exports impor
 
 
 def test_build_manifest_tracks_counts_and_window() -> None:
-    user = SimpleNamespace(tenant_id=uuid4(), id=uuid4(), email="ops@test.local")
+    actor = CompliancePackActor(
+        tenant_id=uuid4(),
+        id=uuid4(),
+        email="ops@test.local",
+        tier="enterprise",
+    )
     manifest = build_manifest(
         exported_at=datetime(2026, 3, 5, 0, 0, tzinfo=timezone.utc),
         run_id="run-1",
-        user=user,  # type: ignore[arg-type]
+        actor=actor,
         app_environment="test",
         app_version="1.2.3",
         start_date=datetime(2026, 2, 1, 0, 0, tzinfo=timezone.utc),
@@ -87,7 +95,12 @@ async def test_run_focus_export_skips_when_disabled() -> None:
         await run_focus_export(
             zf=zf,
             db=SimpleNamespace(),  # type: ignore[arg-type]
-            user=SimpleNamespace(tenant_id=uuid4()),  # type: ignore[arg-type]
+            actor=CompliancePackActor(
+                tenant_id=uuid4(),
+                id=uuid4(),
+                email="ops@test.local",
+                tier="enterprise",
+            ),
             include_focus_export=False,
             included_files=[],
             focus_export_info=info,

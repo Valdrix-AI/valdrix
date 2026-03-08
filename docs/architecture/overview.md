@@ -1,383 +1,63 @@
-# Valdrics Enterprise Architecture
-> **Elite SaaS Standard: Domain-Driven Modular Monolith**
+# Valdrics Architecture Overview
 
-## 🏛️ Architectural Philosophy
+Valdrics is implemented as a modular Python web platform with a SvelteKit
+dashboard, a FastAPI API, shared infrastructure services, and deployment
+profiles for both Kubernetes and PaaS environments.
 
-Valdrics is engineered as a **Modular Monolith** following **Domain-Driven Design (DDD)** and **Hexagonal (Ports & Adapters)** principles. This ensures the platform remains scalable, testable, and maintainable as it evolves from a single-cloud utility to a multi-cloud enterprise platform.
+## Architectural Shape
 
-### Key Pillars
-1.  **Modular Isolation**: Every business capability (Governance, Optimization, Reporting) is isolated into its own module.
-2.  **Shared Kernel**: Common infrastructure logic is extracted to a centralized `shared` package.
-3.  **Clean Boundaries**: Business logic (Domain) is strictly decoupled from infrastructure implementation (Adapters).
+- Backend: modular monolith organized under `app/modules/`
+- Shared kernel: common auth, config, logging, DB, rate-limit, tracing, metrics, and runtime services under `app/shared/`
+- Frontend: SvelteKit dashboard under `dashboard/`
+- Infrastructure: Helm chart under `helm/valdrics/` and Terraform modules under `terraform/`
 
----
+## Module Boundary Model
 
-## 🏗️ System Overview
-
-```mermaid
-graph TB
-    subgraph Frontend
-        SvelteKit[SvelteKit Dashboard]
-    end
-
-    subgraph "Backend (FastAPI)"
-        subgraph "Shared Kernel"
-            Core[app.shared.core]
-            DB[app.shared.db]
-        end
-
-        subgraph "Business Modules"
-            Optimization[app.modules.optimization]
-            Governance[app.modules.governance]
-            Reporting[app.modules.reporting]
-            Notifications[app.modules.notifications]
-        end
-    end
-
-    subgraph External
-        AWS[AWS APIs]
-        Azure[Azure APIs]
-        LLM[LLM Providers]
-        Supabase[(PostgreSQL)]
-    end
-
-    SvelteKit --> Governance
-    SvelteKit --> Optimization
-    SvelteKit --> Reporting
-    
-    Optimization --> Shared
-    Governance --> Shared
-    Reporting --> Shared
-    
-    Optimization --> AWS
-    Optimization --> Azure
-    Optimization --> LLM
-    Governance --> Supabase
-```
-
----
-
-## 📂 Module Structure
-
-Each module in `app/modules/` follows a standardized internal layout to enforce decoupling:
+Each module generally follows:
 
 | Component | Responsibility |
-| :--- | :--- |
-| **`domain/`** | The "Core Brain". Contains pure Python logic, entities, and Port interfaces. **Zero external dependencies (like Boto3).** |
-| **`adapters/`** | The "Infrastructure Layer". Implements Port interfaces to interact with AWS, Azure, GCP, or external APIs. |
-| **`api/`** | The "Interface Layer". FastAPI routers, response schemas, and DTO mapping. |
-
----
-
-## 🚀 Key Modules
-
-### 1. Optimization (The Value Engine)
-The core intelligence layer that detects zombie resources and calculates potential savings. 
-- **Domain:** Rules-engine for identifying "Zombies" across compute, storage, and networking.
-- **Adapters:** Cloud-specific scanners for AWS, Azure, and Google Cloud.
-
-### 2. Governance (Operations & IAM)
-Manages the "Safety" of the platform.
-- **Onboarding:** Automated multi-tenant cloud connection setup.
-- **Audit:** SOC2-compliant logging of all system and user actions.
-- **Jobs:** Async background task orchestration via Celery/APScheduler.
-
-### 3. Reporting (FinOps & GreenOps)
-Aggregates raw statistics into actionable business intelligence.
-- **Costs:** Spend attribution and ROI tracking.
-- **Carbon:** GreenOps calculator using region-specific carbon intensity markers.
-
----
-
-## 🔐 Security & Multi-Tenancy
-
-- **Identity Isolation**: Valdrics utilizes **Supabase Auth** with strict **Row Level Security (RLS)** in the database.
-- **Cloud Security**: No persistent AWS keys stored. Valdrics uses **AWS STS (AssumeRole)** to generate ephemeral, single-use credentials for every scan operation.
-- **Data Protection**: Sensitive cloud configuration data is encrypted at rest using **AES-256**.
-
----
-
-## 💰 Low-Incremental-API-Cost Architecture
-
-Valdrics is designed to minimize incremental cloud API costs billed to the customer's account while preserving scan coverage.
-
-### Data Sources (Customer Cost Profile)
-
-| Data Type | Source | Customer Cost |
-|---|---|---|
-| **Cost Data** | AWS CUR 2.0 (S3 Parquet) | S3 request/storage/query cost (typically low, workload-dependent) |
-| **Resource Discovery** | AWS describe/list APIs + Resource Explorer 2 (when enabled) | Generally no additional per-request API charge |
-| **Idle Detection** | CUR usage analysis first, CloudWatch metrics fallback | CloudWatch metric request charges may apply when fallback is used |
-
-### Key Design Principles
-
-1.  **CUR-First**: Cost data is ingested from Cost & Usage Reports (S3), not Cost Explorer (`ce:*` is intentionally excluded).
-2.  **Scan Efficiently**: Resource discovery prefers aggregated/index-based paths where available and limits brute-force polling.
-3.  **Fallback-Aware**: Idle detection uses CUR first, but may call CloudWatch when CUR coverage is unavailable for a signal.
-4.  **Policy Guardrail**: Reintroducing Cost Explorer requires explicit architectural approval due customer-side request charges.
-
-### CloudFormation Templates
-
-*   [valdrics-role.yaml](../cloudformation/valdrics-role.yaml) - IAM role for read-only access (NO Cost Explorer permissions).
-*   [valdrics-cur-setup.yaml](../cloudformation/valdrics-cur-setup.yaml) - Automated S3 bucket and CUR report creation.
-
----
-
-## ☸️ Kubernetes Deployment
-
-Valdrics is production-ready with Kubernetes manifests in `k8s/`:
-
-| Manifest | Purpose |
 |---|---|
-| `deployment.yaml` | API + Worker deployments with security hardening |
-| `service.yaml` | ClusterIP and headless services |
-| `configmap.yaml` | Application configuration |
-| `hpa.yaml` | Horizontal Pod Autoscaler (3→20 replicas) |
-| `ingress.yaml` | TLS, rate limiting, security headers |
+| `domain/` | Business logic and orchestration |
+| `adapters/` | External providers, SDKs, and infrastructure integrations |
+| `api/` | FastAPI routes, request/response models, and transport concerns |
 
-### Security Features
-- **Non-root containers** with read-only filesystem
-- **Resource limits** preventing noisy neighbor issues
-- **Pod anti-affinity** for high availability
-- **Topology spread** across availability zones
+The `domain -> adapters -> api` split is a boundary target, not a hard purity
+guarantee today. Some domain packages still contain pragmatic cross-layer
+imports, so this document should be read as the intended shape of the system,
+not a claim that every module has perfect isolation.
 
-### Quick Deploy
-```bash
-kubectl apply -f k8s/
-```
+## Runtime Dependencies
 
----
+- Database/auth context: PostgreSQL plus application auth/token validation
+- Cache/distributed coordination: Redis
+- Observability: structured logging, Prometheus metrics, OpenTelemetry tracing
+- Workers: Celery-based background execution with scheduler controls
 
-## 🧪 Load Testing
+## Supported Deployment Profiles
 
-Valdrics includes comprehensive load testing tools in `loadtest/`:
+### Helm Chart
 
-| Tool | File | Use Case |
-|---|---|---|
-| **k6** | `k6-test.js` | CI/CD automated performance testing |
-| **Locust** | `locustfile.py` | Exploratory testing with Web UI |
+The primary repository-managed Kubernetes deployment surface is the Helm chart
+in `helm/valdrics/`. It defines:
 
-### Performance Targets
+- multi-replica API deployment
+- worker deployment
+- ingress and internal metrics protections
+- production defaults for security context and anti-affinity
 
-| Metric | Target | Critical |
-|---|---|---|
-| p95 Latency | < 500ms | < 1500ms |
-| Error Rate | < 1% | < 5% |
-| Throughput | > 100 RPS | > 50 RPS |
+### PaaS Profile
 
-### Run Tests
-```bash
-# k6 (recommended for CI)
-k6 run loadtest/k6-test.js
+The repository also includes a Cloudflare Pages + Koyeb deployment profile for
+teams operating the dashboard/API on managed platforms.
 
-# Locust (Web UI at localhost:8089)
-locust -f loadtest/locustfile.py --host=http://localhost:8000
-```
+## Security and Tenancy
 
----
+- tenant-aware DB session controls are implemented in `app/shared/db/session.py`
+- auth and request security controls live in `app/shared/core/auth.py` and related middleware
+- internal metrics are exposed on `/_internal/metrics` and blocked from public ingress in the Helm profile
 
-## 📋 Compliance & SBOM
+## Operational References
 
-Valdrics generates Software Bill of Materials (SBOM) for supply chain security.
-
-### Automated Generation
-- **GitHub Action**: `.github/workflows/sbom.yml`
-- **Format**: CycloneDX JSON
-- **Tools**: Syft (container), CycloneDX (Python)
-- **Vulnerability Scanning**: Grype with high severity blocking
-
-### SBOM Output
-Generated SBOMs are stored in `sbom/` and include:
-- Python dependency inventory
-- Container image components
-- License compliance report
-
-### Compliance Standards
-- SOC 2 Type II audit logging
-- GDPR-ready data isolation (RLS)
-- Executive Order 14028 SBOM requirements
-# Valdrics Architecture
-
-This document provides a visual overview of the Valdrics system architecture.
-
-## System Overview
-
-```mermaid
-graph TB
-    subgraph "Client Layer"
-        UI[SvelteKit Dashboard]
-        SLACK[Slack Integration]
-    end
-
-    subgraph "API Gateway"
-        API[FastAPI + Uvicorn]
-        AUTH[Supabase Auth + RLS]
-    end
-
-    subgraph "Core Services"
-        SCAN[Scan Orchestrator]
-        ZOMBIE[Zombie Detection Engine]
-        LLM[Multi-LLM Analyzer]
-        REMED[Remediation Engine]
-        ACTIVE[ActiveOps Autopilot]
-    end
-
-    subgraph "Detection Plugins"
-        EC2[EC2 Plugin]
-        EBS[EBS Plugin]
-        RDS[RDS Plugin]
-        S3[S3 Plugin]
-        MORE[+8 More Plugins]
-    end
-
-    subgraph "Cloud Adapters"
-        AWS[AWS Adapter<br/>CUR + Resource Explorer]
-        GCP[GCP Adapter<br/>BigQuery Export]
-        AZURE[Azure Adapter<br/>Cost Export]
-    end
-
-    subgraph "Data Layer"
-        PG[(PostgreSQL<br/>Neon)]
-        REDIS[(Redis<br/>Cache)]
-    end
-
-    subgraph "Observability"
-        OTEL[OpenTelemetry]
-        PROM[Prometheus]
-        GRAF[Grafana]
-    end
-
-    UI --> API
-    SLACK --> API
-    API --> AUTH
-    AUTH --> SCAN
-    SCAN --> ZOMBIE
-    ZOMBIE --> EC2 & EBS & RDS & S3 & MORE
-    EC2 & EBS & RDS & S3 --> AWS
-    ZOMBIE --> LLM
-    LLM --> REMED
-    REMED --> ACTIVE
-    ACTIVE --> AWS & GCP & AZURE
-    API --> PG
-    API --> REDIS
-    API --> OTEL
-    OTEL --> PROM
-    PROM --> GRAF
-```
-
-## Data Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Dashboard
-    participant API
-    participant ScanEngine
-    participant Plugins
-    participant Cloud
-    participant LLM
-    participant Slack
-
-    User->>Dashboard: Connect AWS Account
-    Dashboard->>API: POST /connections
-    API->>Cloud: Validate IAM Role
-
-    Note over API,Cloud: Daily Scan Trigger
-
-    API->>ScanEngine: Start Scan
-    ScanEngine->>Plugins: Run Detection
-    Plugins->>Cloud: Fetch CUR/Billing Data
-    Cloud-->>Plugins: Cost Records
-    Plugins-->>ScanEngine: Zombie Candidates
-
-    ScanEngine->>LLM: Analyze Context
-    LLM-->>ScanEngine: Recommendations
-
-    ScanEngine->>API: Save Results
-    API->>Slack: Send Alert
-    Slack-->>User: Notification
-
-    User->>Dashboard: Review & Approve
-    Dashboard->>API: POST /remediate
-    API->>Cloud: Execute Action
-```
-
-## AWS Cost-Sensitive Architecture
-
-```mermaid
-flowchart LR
-    subgraph "Traditional (Higher Incremental Cost)"
-        CE[Cost Explorer API<br/>Per-request billing]
-        CW[Heavy CloudWatch polling<br/>Metric request billing]
-        BRUTE[Brute-force regional polling]
-    end
-
-    subgraph "Valdrics (Cost-Sensitive)"
-        CUR[AWS CUR Export<br/>Primary cost source]
-        RE[Resource Explorer + Describe/List<br/>Discovery path]
-        CWF[Selective CloudWatch fallback<br/>Only when needed]
-    end
-
-    CE -.->|"avoided by policy"| X((❌))
-    CW -.->|"unbounded polling risk"| X
-    BRUTE -.->|"higher scan overhead"| X
-
-    CUR -->|"baseline ingestion path"| Y((✅))
-    RE -->|"efficient discovery"| Y
-    CWF -->|"targeted fallback"| Y
-```
-
-## Multi-Tenant Security
-
-```mermaid
-flowchart TB
-    subgraph "Request Flow"
-        REQ[Incoming Request]
-        JWT[JWT Validation]
-        RLS[Row-Level Security]
-        DATA[Tenant Data Only]
-    end
-
-    subgraph "Security Layers"
-        STS[AWS STS<br/>Ephemeral Credentials]
-        FERNET[Fernet Encryption<br/>Secrets at Rest]
-        CSRF[CSRF Protection]
-        RATE[Rate Limiting]
-    end
-
-    REQ --> JWT
-    JWT --> RLS
-    RLS --> DATA
-    DATA --> STS
-    STS --> FERNET
-    JWT --> CSRF
-    CSRF --> RATE
-```
-
-## Deployment Options
-
-```mermaid
-graph LR
-    subgraph "Development"
-        DEV[docker-compose up]
-    end
-
-    subgraph "Production"
-        HELM[Helm Chart]
-        K8S[Kubernetes]
-        HPA[Auto-scaling]
-    end
-
-    subgraph "Monitoring"
-        PROM2[Prometheus]
-        GRAF2[Grafana]
-        ALERT[Alertmanager]
-    end
-
-    DEV --> HELM
-    HELM --> K8S
-    K8S --> HPA
-    K8S --> PROM2
-    PROM2 --> GRAF2
-    PROM2 --> ALERT
-```
+- deployment guidance: `docs/DEPLOYMENT.md`
+- rollback guidance: `docs/ROLLBACK_PLAN.md`
+- disaster recovery: `docs/runbooks/disaster_recovery.md`

@@ -3,6 +3,7 @@ import structlog
 import logging
 from typing import Any, cast
 from app.shared.core.config import get_settings
+from app.shared.core.log_exporter import configure_otlp_log_export, mirror_event_to_otel
 
 
 def pii_redactor(
@@ -100,6 +101,7 @@ def add_otel_trace_id(
 
 def setup_logging() -> None:
     settings = get_settings()
+    configure_otlp_log_export(settings)
 
     # 1. Configure the common processors (Middleware Pipeline for Logs)
     base_processors = [
@@ -109,6 +111,7 @@ def setup_logging() -> None:
         structlog.processors.StackInfoRenderer(),
         add_otel_trace_id,  # Observability: Add Trace IDs
         pii_redactor,  # Security: Redact PII before rendering
+        mirror_event_to_otel,  # Centralized collector export
     ]
 
     # 2. Choose the renderer based on environment
@@ -136,6 +139,8 @@ def setup_logging() -> None:
         # filename="debug.log",
         level=min_level,
     )
+    logging.getLogger("uvicorn.access").propagate = True
+    logging.getLogger("uvicorn.error").propagate = True
 
 
 def audit_log(

@@ -9,6 +9,7 @@ from sqlalchemy import (
     JSON,
     ForeignKey,
     Uuid as PG_UUID,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -151,6 +152,43 @@ class LLMProviderPricing(Base):
     free_tier_tokens: Mapped[int] = mapped_column(Numeric(20, 0), default=0)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_updated: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class CloudResourcePricing(Base):
+    """
+    Persisted cloud pricing catalog used by optimization and reporting logic.
+    """
+
+    __tablename__ = "cloud_resource_pricing"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "resource_type",
+            "resource_size",
+            "region",
+            name="uq_cloud_resource_pricing_catalog_key",
+        ),
+        {"extend_existing": True},
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
+    provider: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    resource_size: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    region: Mapped[str] = mapped_column(String(64), index=True, nullable=False, default="global")
+    hourly_rate_usd: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="default_catalog")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    pricing_metadata: Mapped[Dict[str, Any]] = mapped_column(
+        "metadata",
+        JSON().with_variant(JSONB, "postgresql"),
+        default=dict,
+    )
     last_updated: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

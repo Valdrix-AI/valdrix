@@ -207,26 +207,45 @@ def test_config_billing_validator_branch_paths() -> None:
 
     s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
-    s.PAYSTACK_SECRET_KEY = "sk_test_bad"
-    s.PAYSTACK_PUBLIC_KEY = "pk_live_x"
+    s.PAYSTACK_SECRET_KEY = "example_paystack_secret_invalid_format"
+    s.PAYSTACK_PUBLIC_KEY = "example_paystack_public_invalid_format"
     with pytest.raises(ValueError, match="PAYSTACK_SECRET_KEY must be a live key"):
         s._validate_billing_config()
 
     s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
-    s.PAYSTACK_SECRET_KEY = "sk_live_good"
+    s.ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION = True
+    s.PAYSTACK_SECRET_KEY = "example_paystack_secret_branch_path"
     s.PAYSTACK_PUBLIC_KEY = None
     with pytest.raises(ValueError, match="PAYSTACK_PUBLIC_KEY is required"):
         s._validate_billing_config()
 
     s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
-    s.PAYSTACK_SECRET_KEY = "sk_live_good"
-    s.PAYSTACK_PUBLIC_KEY = "pk_live_good"
+    s.ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION = True
+    s.PAYSTACK_SECRET_KEY = "example_paystack_secret_branch_path"
+    s.PAYSTACK_PUBLIC_KEY = "example_paystack_public_branch_path"
     s.PAYSTACK_DEFAULT_CHECKOUT_CURRENCY = "USD"
     s.PAYSTACK_ENABLE_USD_CHECKOUT = False
     with pytest.raises(ValueError, match="cannot be USD"):
         s._validate_billing_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.PAYSTACK_SECRET_KEY = "example_paystack_secret_branch_path"
+    s.PAYSTACK_PUBLIC_KEY = "example_paystack_public_branch_path"
+    with pytest.raises(
+        ValueError,
+        match="PAYSTACK_SECRET_KEY must be a live key",
+    ):
+        s._validate_billing_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION = True
+    s.PAYSTACK_SECRET_KEY = "example_paystack_secret_branch_path"
+    s.PAYSTACK_PUBLIC_KEY = "example_paystack_public_branch_path"
+    s._validate_billing_config()
 
     s = _settings()
     s.PAYSTACK_WEBHOOK_ALLOWED_IPS = []

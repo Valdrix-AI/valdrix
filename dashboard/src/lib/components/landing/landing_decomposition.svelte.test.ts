@@ -10,6 +10,11 @@ import { REALTIME_SIGNAL_SNAPSHOTS } from '$lib/landing/realtimeSignalMap';
 import { calculateLandingRoi, normalizeLandingRoiInputs } from '$lib/landing/roiCalculator';
 import './landing_decomposition.lead_exit.svelte.test';
 
+vi.mock('$app/paths', () => ({
+	assets: '',
+	base: ''
+}));
+
 describe('Landing component decomposition', () => {
 	it('renders hero copy and keeps CTA tracking callbacks wired', async () => {
 		const onPrimaryCta = vi.fn();
@@ -19,9 +24,10 @@ describe('Landing component decomposition', () => {
 			props: {
 				heroTitle: 'Control every dollar in your cloud and software stack.',
 				heroSubtitle: 'From signal to owner and approved action in one loop.',
+				quantPromise: 'Target 10-18% controllable spend recovery opportunity in the first 90 days.',
 				primaryCtaLabel: 'Start Free',
-					secondaryCtaLabel: 'See it in action',
-					secondaryCtaHref: '#signal-map',
+				secondaryCtaLabel: 'See it in action',
+				secondaryCtaHref: '#signal-map',
 				primaryCtaHref: '/auth/login',
 				onPrimaryCta,
 				onSecondaryCta
@@ -33,13 +39,26 @@ describe('Landing component decomposition', () => {
 		await fireEvent.click(screen.getByRole('link', { name: /see it in action/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
-		expect(screen.getByText(/one control loop/i)).toBeTruthy();
-		expect(screen.getByText(/evidence snapshot · february 28, 2026/i)).toBeTruthy();
-		expect(screen.getByText(/285 validation packs passed/i)).toBeTruthy();
+		expect(screen.getByText(/what you can verify now/i)).toBeTruthy();
+		expect(screen.getByText(/safe access model/i)).toBeTruthy();
+		expect(screen.getByText(/first production workflow typically goes live in 3-10 business days/i)).toBeTruthy();
+		expect(
+			screen.getByRole('link', { name: /technical validation/i }).getAttribute('href')
+		).toBe('/docs/technical-validation');
+		expect(
+			screen.getByRole('link', { name: /access checklist/i }).getAttribute('href')
+		).toBe('/resources/global-finops-compliance-workbook.md');
+		expect(screen.getByRole('link', { name: /review methodology/i }).getAttribute('href')).toBe(
+			'/docs/technical-validation'
+		);
+		expect(screen.getByRole('link', { name: /live signal map/i }).getAttribute('href')).toBe(
+			'#signal-map'
+		);
+		expect(screen.queryByText(/evidence snapshot · february 28, 2026/i)).toBeNull();
 
 		// Check for GreenOps Global Flip additions
-		expect(screen.getByText(/Cloud, Software, and Carbon/i)).toBeTruthy();
-		expect(screen.getByText(/See waste and intensity early/i)).toBeTruthy();
+		expect(screen.getByText(/Decision operating layer for spend control/i)).toBeTruthy();
+		expect(screen.getByText(/Route the right owner\. Apply checks\. Record the outcome\./i)).toBeTruthy();
 	});
 
 	it('renders signal map card and propagates interactions', async () => {
@@ -70,14 +89,14 @@ describe('Landing component decomposition', () => {
 			}
 		});
 
-		expect(screen.getByText(/realtime signal map/i)).toBeTruthy();
-		await fireEvent.click(screen.getByRole('button', { name: /explore control details/i }));
-		const firstLaneTab = screen.getByRole('tab', { name: /economic visibility/i });
+		expect(screen.getByText(/live decision loop/i)).toBeTruthy();
+		await fireEvent.click(screen.getByRole('button', { name: /^open approval chain$/i }));
+		const firstLaneTab = screen.getByRole('tab', { name: /signal scoped/i });
 		await fireEvent.click(firstLaneTab);
 		expect(onSelectSignalLane).toHaveBeenCalled();
 
-		await fireEvent.click(screen.getByRole('button', { name: /open 20-second walkthrough/i }));
-		const demoButton = screen.getByRole('button', { name: /^assess$/i });
+		await fireEvent.click(screen.getByRole('button', { name: /open approval chain walkthrough/i }));
+		const demoButton = screen.getByRole('button', { name: /^routed$/i });
 		await fireEvent.click(demoButton);
 		expect(onSelectDemoStep).toHaveBeenCalled();
 
@@ -92,8 +111,9 @@ describe('Landing component decomposition', () => {
 		const onScenarioWasteWithoutChange = vi.fn();
 		const onScenarioWasteWithChange = vi.fn();
 		const onScenarioWindowChange = vi.fn();
+		const onTrackPlannerCta = vi.fn();
 
-		render(LandingRoiSimulator, {
+		const view = render(LandingRoiSimulator, {
 			props: {
 				normalizedScenarioWasteWithoutPct: 18,
 				normalizedScenarioWasteWithPct: 7,
@@ -110,20 +130,23 @@ describe('Landing component decomposition', () => {
 				scenarioWindowMonths: 12,
 				formatUsd: (amount: number) => `$${amount}`,
 				currencyCode: 'USD',
+				plannerHref: '/auth/login?intent=roi_assessment',
 				onTrackScenarioAdjust,
 				onScenarioWasteWithoutChange,
 				onScenarioWasteWithChange,
-				onScenarioWindowChange
+				onScenarioWindowChange,
+				onTrackPlannerCta
 			}
 		});
+		const simulatorView = within(view.container);
 
-		await fireEvent.input(screen.getByLabelText(/reactive waste rate/i), {
+		await fireEvent.input(simulatorView.getByLabelText(/reactive waste rate/i), {
 			target: { value: '19' }
 		});
-		await fireEvent.input(screen.getByLabelText(/managed waste rate/i), {
+		await fireEvent.input(simulatorView.getByLabelText(/managed waste rate/i), {
 			target: { value: '8' }
 		});
-		await fireEvent.input(screen.getByLabelText(/decision window \(months\)/i), {
+		await fireEvent.input(simulatorView.getByLabelText(/decision window \(months\)/i), {
 			target: { value: '11' }
 		});
 
@@ -131,21 +154,30 @@ describe('Landing component decomposition', () => {
 		expect(onScenarioWasteWithChange).toHaveBeenCalledWith(8);
 		expect(onScenarioWindowChange).toHaveBeenCalledWith(11);
 		expect(onTrackScenarioAdjust).toHaveBeenCalledTimes(3);
+		expect(simulatorView.getByRole('link', { name: /review methodology/i }).getAttribute('href')).toBe(
+			'/docs/technical-validation'
+		);
+		expect(simulatorView.getByRole('link', { name: /open assumptions csv/i }).getAttribute('href')).toBe(
+			'/resources/valdrics-roi-assumptions.csv'
+		);
+		await fireEvent.click(simulatorView.getByRole('link', { name: /open full roi planner/i }));
+		expect(onTrackPlannerCta).toHaveBeenCalledTimes(1);
 	});
 
 	it('renders static ROI snapshot preview and tracks planner CTA', async () => {
 		const onTrackCta = vi.fn();
-		render(LandingRoiPlannerCta, {
+		const view = render(LandingRoiPlannerCta, {
 			props: {
 				href: '/auth/login?intent=roi_assessment',
 				onTrackCta
 			}
 		});
 
-		expect(screen.getByText(/example 12-month model snapshot/i)).toBeTruthy();
-		expect(screen.getByText(/projected annual spend/i)).toBeTruthy();
-		expect(screen.getAllByText(/controllable waste opportunity/i).length).toBeGreaterThan(0);
-		await fireEvent.click(screen.getByRole('link', { name: /open full roi planner/i }));
+		const ctaView = within(view.container);
+		expect(ctaView.getByText(/example 12-month model snapshot/i)).toBeTruthy();
+		expect(ctaView.getByText(/projected annual spend/i)).toBeTruthy();
+		expect(ctaView.getAllByText(/controllable waste opportunity/i).length).toBeGreaterThan(0);
+		await fireEvent.click(ctaView.getByRole('link', { name: /open full roi planner/i }));
 		expect(onTrackCta).toHaveBeenCalledTimes(1);
 	});
 
@@ -161,17 +193,18 @@ describe('Landing component decomposition', () => {
 		});
 
 		// Check for specific global compliance badges (ISO 27001 and DORA)
-		expect(view.getByText(/ISO 27001 readiness alignment/i)).toBeTruthy();
-		expect(view.getByText(/DORA operational resilience/i)).toBeTruthy();
+		expect(view.getAllByText(/ISO 27001 readiness alignment/i).length).toBeGreaterThan(0);
+		expect(view.getAllByText(/DORA operational resilience/i).length).toBeGreaterThan(0);
 
 		// Check for the Global FinOps Compliance Workbook CTA
 		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Proof and Trust'
+			name: 'Security and Readiness'
 		});
 		expect(ctaBlock).toBeTruthy();
 		if (ctaBlock) {
 			const ctaView = within(ctaBlock);
 			expect(ctaView.getByText(/Access Control & Compliance Checklist/i)).toBeTruthy();
+			expect(ctaView.getByText(/need formal review/i)).toBeTruthy();
 			await fireEvent.click(
 				ctaView.getByRole('link', { name: /Access Control & Compliance Checklist/i })
 			);
@@ -191,14 +224,12 @@ describe('Landing component decomposition', () => {
 		});
 
 		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Proof and Trust'
+			name: 'Security and Readiness'
 		});
 		expect(ctaBlock).toBeTruthy();
 		if (ctaBlock) {
 			const ctaView = within(ctaBlock);
-			await fireEvent.click(
-				ctaView.getByRole('link', { name: /talk to sales for validation/i })
-			);
+			await fireEvent.click(ctaView.getByRole('link', { name: /^talk to sales$/i }));
 			expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
 
 			await fireEvent.click(
@@ -222,17 +253,14 @@ describe('Landing component decomposition', () => {
 		expect(
 			trustView.getByText(/we stopped debating whose queue a cost issue belongs to/i)
 		).toBeTruthy();
-		await fireEvent.click(
-			trustView.getByRole('button', { name: /next design-partner comment/i })
-		);
+		await fireEvent.click(trustView.getByRole('button', { name: /next comment/i }));
 		expect(
 			trustView.getByText(
 				/the value is not another dashboard\. it is moving from signal to controlled action/i
 			)
 		).toBeTruthy();
-		await fireEvent.click(
-			trustView.getByRole('button', { name: /show design-partner comment 3/i })
-		);
+		expect(trustView.queryByText(/current proof reflects design-partner feedback/i)).toBeNull();
+		await fireEvent.click(trustView.getByRole('button', { name: /show comment 3/i }));
 		expect(trustView.getByText(/leadership reviews got shorter/i)).toBeTruthy();
 	});
 
@@ -307,9 +335,7 @@ describe('Landing component decomposition', () => {
 			expect(
 				trustView.getByText(/we stopped debating whose queue a cost issue belongs to/i)
 			).toBeTruthy();
-			await fireEvent.click(
-				trustView.getByRole('button', { name: /next design-partner comment/i })
-			);
+			await fireEvent.click(trustView.getByRole('button', { name: /next comment/i }));
 			expect(
 				trustView.getByText(
 					/the value is not another dashboard\. it is moving from signal to controlled action/i

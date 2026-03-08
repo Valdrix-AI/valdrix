@@ -249,7 +249,7 @@ The dashboard will guide you through deploying our read-only IAM role via CloudF
 |-------|------------|
 | **Backend** | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy (async) |
 | **Frontend** | SvelteKit (Svelte 5 Runes), TailwindCSS v4, Shadcn-Svelte |
-| **Database** | PostgreSQL (Neon), Supabase Auth |
+| **Database** | PostgreSQL (managed or self-hosted), Supabase-compatible auth flows |
 | **LLM** | LangChain, OpenAI, Anthropic, Google Genai, Groq |
 | **Infra** | Docker, Kubernetes (Helm), GitHub Actions, Prometheus |
 | **Observability** | OpenTelemetry, Grafana Dashboards, Prometheus Metrics |
@@ -308,7 +308,7 @@ We're in **active development**. Here's where we are:
 ### 🔨 In Progress
 - [ ] FinOps-as-Code (GitHub Action to preview cost changes on PRs)
 - [ ] Real-time WebSocket updates
-- [ ] Deployment to Koyeb
+- [ ] Production deployment profile hardening and capacity validation
 
 ### 🔮 Coming Soon
 - [ ] ClickHouse migration (for 100M+ scaling)

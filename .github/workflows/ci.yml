@@ -77,8 +77,9 @@ jobs:
           ADMIN_API_KEY: "ci-admin-api-key-32-chars-min-0000000"
           LLM_PROVIDER: "groq"
           GROQ_API_KEY: "testing"
-          PAYSTACK_SECRET_KEY: "sk_live_ci_testing"
-          PAYSTACK_PUBLIC_KEY: "pk_live_ci_testing"
+          PAYSTACK_SECRET_KEY: "example_paystack_secret_ci_validation_only"
+          PAYSTACK_PUBLIC_KEY: "example_paystack_public_ci_validation_only"
+          ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION: "true"
           REDIS_URL: "redis://localhost:6379/0"
           SAAS_STRICT_INTEGRATIONS: "true"
           SLACK_CHANNEL_ID: ""
@@ -125,11 +126,17 @@ PY
       - name: Enforce Python Complexity Budget (McCabe)
         run: uv run ruff check app --select C901 --config lint.mccabe.max-complexity=30
 
-      - name: Report Python Module Size Signals (Advisory)
-        run: uv run python3 scripts/verify_python_module_size_budget.py --enforcement-mode advisory --emit-cluster-signals
+      - name: Enforce Python Module Size Budget
+        run: uv run python3 scripts/verify_python_module_size_budget.py --emit-preferred-signals --emit-cluster-signals
+
+      - name: Enforce Python Preferred Module Size Baseline
+        run: uv run python3 scripts/verify_python_module_preferred_budget_baseline.py
 
       - name: Enforce Exception Governance Baseline
         run: uv run python3 scripts/verify_exception_governance.py
+
+      - name: Enforce Documentation Runtime Contracts
+        run: uv run python3 scripts/verify_documentation_runtime_contracts.py
 
       - name: Verify Frontend API Contracts
         run: uv run python scripts/check_frontend_api_contracts.py
@@ -304,6 +311,52 @@ PY
         working-directory: ./dashboard
         run: pnpm run check:bundle
 
+  performance-health-gate:
+    name: Performance Gate - Health
+    needs: [test]
+    uses: ./.github/workflows/performance-gate.yml
+    with:
+      url: "http://127.0.0.1:8000"
+      profile: "health_deep"
+      duration: "15"
+      users: "5"
+      ramp: "2"
+      p95_target: "1.0"
+      max_error_rate: "0.0"
+      start_local_api: true
+
+  performance-dashboard-gate:
+    name: Performance Gate - Dashboard
+    needs: [test, dashboard-quality]
+    uses: ./.github/workflows/performance-gate.yml
+    with:
+      url: "http://127.0.0.1:8000"
+      profile: "dashboard"
+      duration: "12"
+      users: "4"
+      ramp: "2"
+      p95_target: "2.0"
+      max_error_rate: "0.0"
+      min_throughput: "1.0"
+      start_local_api: true
+      bootstrap_tenant: true
+
+  performance-ops-gate:
+    name: Performance Gate - Ops
+    needs: [test]
+    uses: ./.github/workflows/performance-gate.yml
+    with:
+      url: "http://127.0.0.1:8000"
+      profile: "ops"
+      duration: "12"
+      users: "4"
+      ramp: "2"
+      p95_target: "2.0"
+      max_error_rate: "0.0"
+      min_throughput: "1.0"
+      start_local_api: true
+      bootstrap_tenant: true
+
   # JOB 2: CARBON EMISSIONS (GreenOps 2.0)
   emissions:
     name: Carbon Footprint Report
@@ -385,15 +438,14 @@ PY
           format: table
           exit-code: "1"
           ignore-unfixed: true
-          severity: CRITICAL
+          severity: CRITICAL,HIGH
 
       - name: Terraform Security Scan (tfsec)
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           working_directory: ./terraform
           soft_fail: false
-          # Enforce hard-fail for critical findings while high/medium backlog is remediated.
-          additional_args: --minimum-severity CRITICAL
+          additional_args: --minimum-severity HIGH
 
       - name: Terraform Lint (tflint)
         uses: terraform-linters/setup-tflint@v4

@@ -6,8 +6,8 @@ This document provides step-by-step procedures for handling common operational s
 **Symptom**: `/health` returns 503, logs show `asyncpg.exceptions`.
 
 1. **Verify Connection String**: Check `DATABASE_URL` in environment variables.
-2. **Check Neon/Supabase Status**: Verify if the upstream provider is having an outage.
-3. **Connection Pooling**: If `Too many connections` is seen, verify if Supavisor is active or increase `DB_MAX_OVERFLOW`.
+2. **Check Database Provider Status**: Verify if the managed PostgreSQL or AWS RDS backend is having an outage.
+3. **Connection Pooling**: If `Too many connections` is seen, review `WEB_CONCURRENCY`, `DB_POOL_SIZE`, and `DB_MAX_OVERFLOW` against the active database connection budget.
 4. **Restart Service**: Restart the backend service to clear stale connection pools.
 
 ## 2. Slow API Responses
@@ -22,8 +22,9 @@ This document provides step-by-step procedures for handling common operational s
 **Symptom**: Alerts are not appearing in Slack, logs show `Slack API error`.
 
 1. **Rate Limiting**: If `ratelimited` is seen, the `AsyncWebClient` will auto-retry. Check if volume is excessively high.
-2. **Token Validity**: Verify `SLACK_BOT_TOKEN`.
-3. **Channel ID**: Ensure the bot is a member of the channel specified in `SLACK_CHANNEL_ID`.
+2. **Shared Bot Validity**: Verify the platform-managed `SLACK_BOT_TOKEN`.
+3. **Tenant Routing**: Confirm the affected tenant has a Slack channel configured in **Settings -> Notifications**. In strict SaaS mode, env channel routing is blocked and `SLACK_CHANNEL_ID` must remain unset.
+4. **Workspace Membership**: Ensure the shared bot is invited to the tenant-selected Slack channel.
 
 ## 4. Security Incident: Key Compromise
 **Symptom**: Suspected leak of `ENCRYPTION_KEY`.

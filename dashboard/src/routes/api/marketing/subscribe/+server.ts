@@ -1,15 +1,12 @@
 import { createHash } from 'node:crypto';
-import { env } from '$env/dynamic/private';
 import { json } from '@sveltejs/kit';
+import { resolveBackendOrigin } from '$lib/server/backend-origin';
 import { serverLogger } from '$lib/logging/server';
 import type { RequestHandler } from './$types';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254;
 const MAX_TEXT_LENGTH = 120;
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 8;
-
 type SubscriptionBody = {
 	email: string;
 	company?: string;
@@ -17,41 +14,6 @@ type SubscriptionBody = {
 	referrer?: string;
 	honey?: string;
 };
-
-const requestTimestampsByClient = new Map<string, number[]>();
-
-function pruneOldTimestamps(nowMs: number, timestamps: number[]): number[] {
-	return timestamps.filter((value) => nowMs - value < RATE_LIMIT_WINDOW_MS);
-}
-
-function resolveClientKey(request: Request, getClientAddress?: () => string): string {
-	const forwardedFor = request.headers.get('x-forwarded-for')?.trim();
-	if (forwardedFor) {
-		const firstHop = forwardedFor.split(',')[0]?.trim();
-		if (firstHop) return firstHop;
-	}
-	if (typeof getClientAddress === 'function') {
-		try {
-			const candidate = getClientAddress().trim();
-			if (candidate) return candidate;
-		} catch {
-			// ignore adapter-specific address lookup failures
-		}
-	}
-	return 'unknown';
-}
-
-function canAcceptRequest(clientKey: string, nowMs: number): boolean {
-	const prior = requestTimestampsByClient.get(clientKey) ?? [];
-	const fresh = pruneOldTimestamps(nowMs, prior);
-	if (fresh.length >= RATE_LIMIT_MAX_REQUESTS) {
-		requestTimestampsByClient.set(clientKey, fresh);
-		return false;
-	}
-	fresh.push(nowMs);
-	requestTimestampsByClient.set(clientKey, fresh);
-	return true;
-}
 
 function hashEmail(email: string): string {
 	return createHash('sha256').update(email).digest('hex');
@@ -81,48 +43,11 @@ function normalizeBody(payload: unknown): SubscriptionBody | null {
 	};
 }
 
-async function notifyWebhook(payload: SubscriptionBody): Promise<void> {
-	const webhookUrl = String(
-		env.MARKETING_SUBSCRIBE_WEBHOOK_URL || process.env.MARKETING_SUBSCRIBE_WEBHOOK_URL || ''
-	).trim();
-	if (!webhookUrl) {
-		return;
-	}
-
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), 2500);
-	try {
-		const response = await fetch(webhookUrl, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({
-				email: payload.email,
-				company: payload.company ?? null,
-				role: payload.role ?? null,
-				referrer: payload.referrer ?? null,
-				timestamp: new Date().toISOString()
-			}),
-			signal: controller.signal
-		});
-		if (!response.ok) {
-			throw new Error(`webhook_rejected_${response.status}`);
-		}
-	} finally {
-		clearTimeout(timeout);
-	}
-}
-
 export function _resetMarketingSubscribeRateLimitForTests(): void {
-	requestTimestampsByClient.clear();
+	// No-op: rate limiting is enforced on the backend public API.
 }
 
-export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-	const nowMs = Date.now();
-	const clientKey = resolveClientKey(request, getClientAddress);
-	if (!canAcceptRequest(clientKey, nowMs)) {
-		return json({ ok: false, error: 'rate_limited' }, { status: 429 });
-	}
-
+export const POST: RequestHandler = async ({ request, fetch }) => {
 	let payload: unknown;
 	try {
 		payload = await request.json();
@@ -141,22 +66,24 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	}
 
 	try {
-		await notifyWebhook(body);
+		const response = await fetch(`${resolveBackendOrigin()}/api/v1/public/marketing/subscribe`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(body)
+		});
+		const responsePayload = await response.json().catch(() => ({ ok: false, error: 'delivery_failed' }));
+		if (!response.ok) {
+			if (response.status === 422) {
+				return json({ ok: false, error: 'invalid_payload' }, { status: 400 });
+			}
+			return json(responsePayload, { status: response.status });
+		}
+		return json(responsePayload, { status: response.status });
 	} catch (error) {
-		serverLogger.error('marketing_subscribe_webhook_failed', {
+		serverLogger.error('marketing_subscribe_proxy_failed', {
 			emailHash: hashEmail(body.email),
-			clientKey,
 			error: error instanceof Error ? error.message : 'unknown'
 		});
 		return json({ ok: false, error: 'delivery_failed' }, { status: 503 });
 	}
-
-	return json(
-		{
-			ok: true,
-			accepted: true,
-			emailHash: hashEmail(body.email)
-		},
-		{ status: 202 }
-	);
 };

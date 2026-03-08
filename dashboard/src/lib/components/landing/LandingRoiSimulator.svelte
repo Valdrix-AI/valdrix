@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { base } from '$app/paths';
+
 	let {
 		normalizedScenarioWasteWithoutPct,
 		normalizedScenarioWasteWithPct,
@@ -18,6 +20,8 @@
 		onScenarioWasteWithoutChange,
 		onScenarioWasteWithChange,
 		onScenarioWindowChange,
+		onTrackPlannerCta,
+		plannerHref,
 		currencyCode
 	}: {
 		normalizedScenarioWasteWithoutPct: number;
@@ -38,6 +42,8 @@
 		onScenarioWasteWithoutChange: (value: number) => void;
 		onScenarioWasteWithChange: (value: number) => void;
 		onScenarioWindowChange: (value: number) => void;
+		onTrackPlannerCta: () => void;
+		plannerHref: string;
 		currencyCode: string;
 	} = $props();
 
@@ -166,9 +172,23 @@
 				</div>
 			</div>
 			<p class="landing-roi-note">
-				This simulator is directional and designed to accelerate finance + engineering decision
-				alignment.
+				This simulator is directional and based on modeled waste-rate, decision-window, and rollout
+				assumptions for finance + engineering planning alignment.
+				<a href={`${base}/docs/technical-validation`} class="landing-cta-link">Review methodology</a>
+				<a href={`${base}/resources/valdrics-roi-assumptions.csv`} class="landing-cta-link">
+					Open assumptions CSV
+				</a>
 			</p>
+			<div class="landing-roi-cta">
+				<p class="landing-proof-k">Need the full model?</p>
+				<p class="landing-roi-note">
+					Open the 12-month planner for rollout effort, implementation cost, and payback
+					assumptions using your own numbers.
+				</p>
+				<a href={plannerHref} class="btn btn-primary w-fit" onclick={onTrackPlannerCta}>
+					Open Full ROI Planner
+				</a>
+			</div>
 		</div>
 	</div>
 </section>

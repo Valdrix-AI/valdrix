@@ -5,6 +5,11 @@ const mocks = vi.hoisted(() => ({
 	isPublicPath: vi.fn(),
 	canUseE2EAuthBypass: vi.fn(),
 	shouldUseSecureCookies: vi.fn(),
+	serverLogger: {
+		error: vi.fn(),
+		warn: vi.fn(),
+		info: vi.fn()
+	},
 	publicEnv: {
 		PUBLIC_SUPABASE_URL: 'https://supabase.example.co',
 		PUBLIC_SUPABASE_ANON_KEY: 'anon-key'
@@ -38,6 +43,10 @@ vi.mock('$lib/serverSecurity', () => ({
 	shouldUseSecureCookies: (...args: unknown[]) => mocks.shouldUseSecureCookies(...args)
 }));
 
+vi.mock('$lib/logging/server', () => ({
+	serverLogger: mocks.serverLogger
+}));
+
 import { handle } from './hooks.server';
 
 function createEvent(url: string): Parameters<typeof handle>[0]['event'] {
@@ -61,6 +70,9 @@ describe('hooks.server handle', () => {
 		mocks.createServerClient.mockReset();
 		mocks.canUseE2EAuthBypass.mockReset();
 		mocks.shouldUseSecureCookies.mockReset();
+		mocks.serverLogger.error.mockReset();
+		mocks.serverLogger.warn.mockReset();
+		mocks.serverLogger.info.mockReset();
 		mocks.canUseE2EAuthBypass.mockReturnValue(false);
 		mocks.shouldUseSecureCookies.mockReturnValue(true);
 	});
@@ -128,5 +140,36 @@ describe('hooks.server handle', () => {
 		expect(response.status).toBe(303);
 		expect(response.headers.get('location')).toBe('/auth/login');
 		expect(resolve).not.toHaveBeenCalled();
+	});
+
+	it('logs provider resolution faults and fails closed to null session', async () => {
+		mocks.isPublicPath.mockReturnValue(true);
+		mocks.createServerClient.mockReturnValue({
+			auth: {
+				getSession: vi.fn().mockRejectedValue(new Error('dns failure')),
+				getUser: vi.fn()
+			}
+		});
+
+		const event = createEvent('https://example.com/');
+		const resolve = vi.fn(
+			async () =>
+				new Response('<html></html>', {
+					status: 200,
+					headers: { 'content-type': 'text/html' }
+				})
+		);
+
+		await handle({
+			event,
+			resolve
+		} as Parameters<typeof handle>[0]);
+
+		const sessionResult = await event.locals.safeGetSession();
+		expect(sessionResult).toEqual({ session: null, user: null });
+		expect(mocks.serverLogger.error).toHaveBeenCalledWith(
+			'supabase_session_resolution_failed',
+			expect.objectContaining({ error: 'dns failure' })
+		);
 	});
 });

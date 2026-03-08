@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.tenant import User, UserPersona, UserRole
 from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLogger
 from app.shared.core.auth import CurrentUser, get_current_user, get_current_user_with_db_context
+from app.shared.core.config import get_settings
+from app.shared.core.proxy_headers import resolve_client_ip
 from app.shared.core.pricing import PricingTier
 from app.shared.db.session import get_db
 
@@ -39,15 +41,8 @@ class ProfileUpdateRequest(BaseModel):
 
 
 def _client_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for") or request.headers.get(
-        "x-real-ip"
-    )
-    if forwarded:
-        candidate = forwarded.split(",")[0].strip()
-        return candidate or None
-    if request.client:
-        return request.client.host
-    return None
+    value = resolve_client_ip(request, settings_obj=get_settings()).strip()
+    return value or None
 
 
 @router.get("/profile", response_model=ProfileResponse)

@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { POST, _resetMarketingSubscribeRateLimitForTests } from './+server';
 
+vi.mock('$lib/server/backend-origin', () => ({
+	resolveBackendOrigin: () => 'https://api.example.com'
+}));
+
 const ORIGINAL_WEBHOOK_URL = process.env.MARKETING_SUBSCRIBE_WEBHOOK_URL;
 
 function buildRequest(body: unknown): Request {
@@ -23,14 +27,19 @@ afterEach(() => {
 
 describe('marketing subscribe route', () => {
 	it('accepts valid subscription payloads', async () => {
-		delete process.env.MARKETING_SUBSCRIBE_WEBHOOK_URL;
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(JSON.stringify({ ok: true, accepted: true, emailHash: 'a'.repeat(64) }), {
+				status: 202,
+				headers: { 'content-type': 'application/json' }
+			})
+		);
 		const response = await POST({
 			request: buildRequest({
 				email: 'buyer@example.com',
 				company: 'Example Inc',
 				role: 'FinOps'
 			}),
-			getClientAddress: () => '127.0.0.1'
+			fetch: fetchMock
 		} as Parameters<typeof POST>[0]);
 
 		expect(response.status).toBe(202);
@@ -38,6 +47,7 @@ describe('marketing subscribe route', () => {
 		expect(payload.ok).toBe(true);
 		expect(payload.accepted).toBe(true);
 		expect(String(payload.emailHash)).toHaveLength(64);
+		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 
 	it('rejects invalid payloads', async () => {
@@ -53,47 +63,39 @@ describe('marketing subscribe route', () => {
 	});
 
 	it('silently accepts honeypot submissions', async () => {
+		const fetchMock = vi.fn();
 		const response = await POST({
 			request: buildRequest({ email: 'bot@example.com', honey: 'filled' }),
-			getClientAddress: () => '127.0.0.3'
+			fetch: fetchMock
 		} as Parameters<typeof POST>[0]);
 
 		expect(response.status).toBe(202);
 		const payload = await response.json();
 		expect(payload.ok).toBe(true);
 		expect(payload.accepted).toBe(true);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it('rate limits burst requests from the same client', async () => {
-		const event = {
-			request: buildRequest({ email: 'ops@example.com' }),
-			getClientAddress: () => '127.0.0.4'
-		} as Parameters<typeof POST>[0];
-
-		for (let attempt = 0; attempt < 8; attempt += 1) {
-			const response = await POST({
-				...event,
-				request: buildRequest({ email: `ops+${attempt}@example.com` })
-			});
-			expect(response.status).toBe(202);
-		}
-
-		const blocked = await POST({
-			...event,
-			request: buildRequest({ email: 'ops+blocked@example.com' })
-		});
-		expect(blocked.status).toBe(429);
-	});
-
-	it('returns delivery failure when webhook rejects payload', async () => {
-		process.env.MARKETING_SUBSCRIBE_WEBHOOK_URL = 'https://hooks.example.com/subscribe';
-		vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-			new Response('fail', { status: 500, statusText: 'Internal Server Error' })
+	it('surfaces backend rate limiting responses', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(JSON.stringify({ ok: false, error: 'rate_limited' }), {
+				status: 429,
+				headers: { 'content-type': 'application/json' }
+			})
 		);
+		const blocked = await POST({
+			request: buildRequest({ email: 'ops+blocked@example.com' }),
+			fetch: fetchMock
+		} as Parameters<typeof POST>[0]);
+		expect(blocked.status).toBe(429);
+		const payload = await blocked.json();
+		expect(payload.error).toBe('rate_limited');
+	});
 
+	it('returns delivery failure when backend subscribe proxy fails', async () => {
 		const response = await POST({
 			request: buildRequest({ email: 'cfo@example.com' }),
-			getClientAddress: () => '127.0.0.5'
+			fetch: vi.fn().mockRejectedValue(new Error('upstream unavailable'))
 		} as Parameters<typeof POST>[0]);
 
 		expect(response.status).toBe(503);

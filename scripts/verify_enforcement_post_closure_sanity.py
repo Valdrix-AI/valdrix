@@ -38,7 +38,7 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
             "Release Hold Criteria (BSAFE-016)",
         ),
         EvidenceToken(
-            "tests/unit/enforcement/test_enforcement_api.py",
+            "tests/unit/enforcement/enforcement_api_cases_part04.py",
             "test_gate_lock_failures_route_to_failsafe_with_lock_reason_codes",
         ),
         EvidenceToken(
@@ -48,11 +48,11 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
     ),
     "deterministic_replay": (
         EvidenceToken(
-            "tests/unit/enforcement/test_enforcement_service.py",
+            "tests/unit/enforcement/enforcement_service_cases_part03.py",
             "test_consume_approval_token_rejects_replay",
         ),
         EvidenceToken(
-            "tests/unit/enforcement/test_enforcement_service.py",
+            "tests/unit/enforcement/enforcement_service_cases_part06.py",
             "test_reconcile_reservation_idempotent_replay_with_same_key",
         ),
         EvidenceToken(
@@ -62,7 +62,7 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
     ),
     "snapshot_stability": (
         EvidenceToken(
-            "tests/unit/enforcement/test_enforcement_service.py",
+            "tests/unit/enforcement/enforcement_service_cases_part02.py",
             "test_evaluate_gate_computed_context_snapshot_metadata_stable_across_runs",
         ),
         EvidenceToken(
@@ -70,17 +70,17 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
             "computed_context_lineage_sha256",
         ),
         EvidenceToken(
-            "tests/unit/enforcement/test_enforcement_service.py",
+            "tests/unit/enforcement/enforcement_service_cases_part08.py",
             "computed_context_month_start",
         ),
         EvidenceToken(
-            "tests/unit/enforcement/test_enforcement_service.py",
+            "tests/unit/enforcement/enforcement_service_cases_part08.py",
             "computed_context_data_source_mode",
         ),
     ),
     "export_integrity": (
         EvidenceToken(
-            "tests/unit/enforcement/test_enforcement_api.py",
+            "tests/unit/enforcement/enforcement_api_cases_part05.py",
             "test_enforcement_export_parity_and_archive_endpoints",
         ),
         EvidenceToken(
@@ -88,7 +88,7 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
             "policy_lineage_sha256",
         ),
         EvidenceToken(
-            "tests/unit/enforcement/test_enforcement_service.py",
+            "tests/unit/enforcement/enforcement_service_cases_part08.py",
             "test_build_export_bundle_reconciles_counts_and_is_deterministic",
         ),
     ),
@@ -102,7 +102,7 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
             "FI-005",
         ),
         EvidenceToken(
-            "tests/unit/enforcement/test_enforcement_api.py",
+            "tests/unit/enforcement/enforcement_api_cases_part03.py",
             "test_gate_failsafe_timeout_and_error_modes",
         ),
     ),

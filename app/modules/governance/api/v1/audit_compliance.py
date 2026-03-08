@@ -1,12 +1,17 @@
 from datetime import date, datetime
 from typing import Annotated, Any, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.governance.api.v1.audit_common import _sanitize_csv_cell
 from app.modules.governance.domain.security.compliance_pack_bundle import (
     export_compliance_pack_bundle,
+)
+from app.modules.governance.domain.security.compliance_pack_contracts import (
+    CompliancePackActor,
+    CompliancePackValidationError,
 )
 from app.shared.core.auth import CurrentUser
 from app.shared.core.dependencies import requires_feature
@@ -123,32 +128,49 @@ async def export_compliance_pack(
         description="Maximum number of restatement entries included in the close package details (0 includes none).",
     ),
 ) -> Any:
-    return await export_compliance_pack_bundle(
-        user=user,
-        db=db,
-        start_date=start_date,
-        end_date=end_date,
-        evidence_limit=evidence_limit,
-        include_focus_export=include_focus_export,
-        focus_provider=focus_provider,
-        focus_include_preliminary=focus_include_preliminary,
-        focus_max_rows=focus_max_rows,
-        focus_start_date=focus_start_date,
-        focus_end_date=focus_end_date,
-        include_savings_proof=include_savings_proof,
-        savings_provider=savings_provider,
-        savings_start_date=savings_start_date,
-        savings_end_date=savings_end_date,
-        include_realized_savings=include_realized_savings,
-        realized_provider=realized_provider,
-        realized_start_date=realized_start_date,
-        realized_end_date=realized_end_date,
-        realized_limit=realized_limit,
-        include_close_package=include_close_package,
-        close_provider=close_provider,
-        close_start_date=close_start_date,
-        close_end_date=close_end_date,
-        close_enforce_finalized=close_enforce_finalized,
-        close_max_restatements=close_max_restatements,
-        sanitize_csv_cell=_sanitize_csv_cell,
+    if user.tenant_id is None:
+        raise HTTPException(status_code=400, detail="Authenticated user must have a tenant")
+    actor = CompliancePackActor(
+        id=user.id,
+        email=user.email,
+        tenant_id=user.tenant_id,
+        tier=str(getattr(user, "tier", "") or ""),
+    )
+    try:
+        bundle = await export_compliance_pack_bundle(
+            actor=actor,
+            db=db,
+            start_date=start_date,
+            end_date=end_date,
+            evidence_limit=evidence_limit,
+            include_focus_export=include_focus_export,
+            focus_provider=focus_provider,
+            focus_include_preliminary=focus_include_preliminary,
+            focus_max_rows=focus_max_rows,
+            focus_start_date=focus_start_date,
+            focus_end_date=focus_end_date,
+            include_savings_proof=include_savings_proof,
+            savings_provider=savings_provider,
+            savings_start_date=savings_start_date,
+            savings_end_date=savings_end_date,
+            include_realized_savings=include_realized_savings,
+            realized_provider=realized_provider,
+            realized_start_date=realized_start_date,
+            realized_end_date=realized_end_date,
+            realized_limit=realized_limit,
+            include_close_package=include_close_package,
+            close_provider=close_provider,
+            close_start_date=close_start_date,
+            close_end_date=close_end_date,
+            close_enforce_finalized=close_enforce_finalized,
+            close_max_restatements=close_max_restatements,
+            sanitize_csv_cell=_sanitize_csv_cell,
+        )
+    except CompliancePackValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return Response(
+        content=bundle.body,
+        media_type=bundle.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{bundle.filename}"'},
     )

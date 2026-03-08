@@ -39,16 +39,26 @@ definition:
   env:
     - name: ENVIRONMENT
       value: production
+    - name: ENABLE_SCHEDULER
+      value: "true"
     - name: WEB_CONCURRENCY
       value: "2"
     - name: LOG_LEVEL
       value: INFO
     - name: LLM_PROVIDER
       value: groq
+    - name: EXPOSE_API_DOCUMENTATION_PUBLICLY
+      value: "false"
+    - name: OTEL_LOGS_EXPORT_ENABLED
+      value: "true"
     - name: SAAS_STRICT_INTEGRATIONS
+      value: "true"
+    - name: TRUST_PROXY_HEADERS
       value: "true"
     - name: CORS_ORIGINS
       value: "[\"https://dashboard.valdrics.ai\"]"
+    - name: APP_RUNTIME_DATA_DIR
+      value: /tmp/valdrics
     # Prophet fallback is break-glass only. Provision these secrets only for an
     # audited short-lived exception; otherwise the runtime should fail closed.
     - name: FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK
@@ -64,6 +74,8 @@ definition:
       secret: valdrics-redis-url
     - name: SUPABASE_JWT_SECRET
       secret: valdrics-jwt-secret
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      secret: valdrics-otlp-endpoint
     - name: ENCRYPTION_KEY
       secret: valdrics-encryption-key
     - name: KDF_SALT
@@ -80,3 +92,5 @@ definition:
       secret: valdrics-paystack-public
     - name: SENTRY_DSN
       secret: valdrics-sentry-dsn
+    - name: TRUSTED_PROXY_CIDRS
+      secret: valdrics-trusted-proxy-cidrs

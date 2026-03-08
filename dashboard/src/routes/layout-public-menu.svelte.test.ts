@@ -190,7 +190,8 @@ describe('public layout mobile menu', () => {
 		}
 		await fireEvent.click(resourcesTrigger);
 		expect(await screen.findByRole('menu', { name: /^resources$/i })).toBeTruthy();
-		expect(screen.getByRole('menuitem', { name: /enterprise/i })).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: /resource hub/i })).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: /proof/i })).toBeTruthy();
 		expect(screen.getByRole('menuitem', { name: /docs/i })).toBeTruthy();
 		expect(screen.getByRole('menuitem', { name: /blog/i })).toBeTruthy();
 

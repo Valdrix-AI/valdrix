@@ -27,6 +27,7 @@ def create_test_token(user_id: UUID, email: str):
         "sub": str(user_id),
         "email": email,
         "aud": "authenticated",  # Match Supabase default aud
+        "iss": str(getattr(settings, "SUPABASE_JWT_ISSUER", "supabase") or "supabase"),
         "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
     }
     return jwt.encode(payload, settings.SUPABASE_JWT_SECRET, algorithm="HS256")

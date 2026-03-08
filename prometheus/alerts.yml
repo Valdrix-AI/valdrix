@@ -4,7 +4,7 @@ groups:
     rules:
       # High latency alert
       - alert: HighLatency
-        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_highr_seconds_bucket[5m])) by (le)) > 0.5
         for: 5m
         labels:
           severity: warning
@@ -36,27 +36,27 @@ groups:
     rules:
       # LLM budget exceeded
       - alert: LLMBudgetExceeded
-        expr: sum(valdrics_llm_cost_usd) > 50
+        expr: sum(increase(valdrics_ops_llm_spend_usd_total[24h])) > 50
         for: 1m
         labels:
           severity: warning
         annotations:
           summary: "LLM budget threshold exceeded"
-          description: "Total LLM cost is ${{ $value | printf \"%.2f\" }} (threshold: $50)"
+          description: "24-hour LLM spend is ${{ $value | printf \"%.2f\" }} (threshold: $50)"
 
       # Many zombies detected (opportunity alert)
       - alert: HighZombieCount
-        expr: sum(valdrics_zombies_detected_total) > 100
+        expr: sum(increase(valdrics_ops_zombies_detected_total[24h])) > 100
         for: 10m
         labels:
           severity: info
         annotations:
           summary: "High number of zombie resources detected"
-          description: "{{ $value }} zombie resources found - potential savings opportunity"
+          description: "{{ $value }} zombie resources detected in the last 24 hours"
 
       # Scan failure
       - alert: ScanFailure
-        expr: increase(valdrics_scan_errors_total[1h]) > 5
+        expr: sum(increase(valdrics_ops_scan_failure_total[1h])) > 5
         for: 5m
         labels:
           severity: warning
@@ -90,7 +90,7 @@ groups:
     rules:
       # Carbon emissions spike
       - alert: HighCarbonEmissions
-        expr: sum(increase(valdrics_carbon_emissions_kg[24h])) > 10
+        expr: sum(increase(valdrics_ops_runtime_carbon_emissions_kg_total[24h])) > 10
         for: 1h
         labels:
           severity: info

@@ -18,7 +18,9 @@ def test_helm_values_default_to_ha_api_and_internal_metrics() -> None:
 
     assert int(values["replicaCount"]) >= 2
     assert values["env"]["WEB_CONCURRENCY"] == "2"
+    assert values["env"]["ENABLE_SCHEDULER"] == "true"
     assert values["podAnnotations"]["prometheus.io/path"] == "/_internal/metrics"
+    assert values["externalSecrets"]["enabled"] is True
     assert values["worker"]["podAnnotations"] == {}
     server_snippet = values["ingress"]["annotations"][
         "nginx.ingress.kubernetes.io/server-snippet"
@@ -35,12 +37,21 @@ def test_worker_template_is_conditionally_rendered_and_does_not_embed_beat() -> 
     assert "{{- if .Values.worker.enabled }}" in text
     assert ".Values.worker.podAnnotations" in text
     assert ".Values.podAnnotations" not in text
+    assert 'include "valdrics.runtimeSecretName" .' in text
     assert 'app.shared.core.celery_app:celery_app' in text
     assert '"-B"' not in text
     assert "startupProbe:" in text
     assert "livenessProbe:" in text
     assert "readinessProbe:" in text
     assert "inspect ping" in text
+
+
+def test_api_template_uses_runtime_secret_helper() -> None:
+    text = (REPO_ROOT / "helm/valdrics/templates/deployment.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'include "valdrics.runtimeSecretName" .' in text
 
 
 def test_runtime_healthchecks_use_liveness_only() -> None:
@@ -113,11 +124,13 @@ def test_backend_dockerfile_healthcheck_uses_curl_liveness_probe() -> None:
 
 def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults() -> None:
     koyeb = _load_yaml(REPO_ROOT / "koyeb.yaml")
+    koyeb_worker = _load_yaml(REPO_ROOT / "koyeb-worker.yaml")
     prometheus_text = (REPO_ROOT / "prometheus/prometheus.yml").read_text(
         encoding="utf-8"
     )
 
     assert isinstance(koyeb, dict)
+    assert isinstance(koyeb_worker, dict)
 
     env_values = {
         item["name"]: item.get("value")
@@ -126,8 +139,17 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
     }
     assert int(koyeb["definition"]["scaling"]["min"]) >= 2
     assert env_values["WEB_CONCURRENCY"] == "2"
+    assert env_values["ENABLE_SCHEDULER"] == "true"
+    assert env_values["TRUST_PROXY_HEADERS"] == "true"
+    assert env_values["APP_RUNTIME_DATA_DIR"] == "/tmp/valdrics"
     assert "metrics_path: /_internal/metrics" in prometheus_text
     assert env_values["FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK"] is None
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT" in {
+        item["name"] for item in koyeb["definition"]["env"] if "name" in item
+    }
+    assert "TRUSTED_PROXY_CIDRS" in {
+        item["name"] for item in koyeb["definition"]["env"] if "name" in item
+    }
     break_glass_reason = next(
         item
         for item in koyeb["definition"]["env"]
@@ -142,6 +164,19 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
     assert (
         break_glass_expiry["secret"] == "valdrics-forecaster-break-glass-expires-at"
     )
+    assert koyeb_worker["type"] == "WORKER"
+    worker_env_names = {
+        item["name"] for item in koyeb_worker["definition"]["env"] if "name" in item
+    }
+    assert "OTEL_EXPORTER_OTLP_ENDPOINT" in worker_env_names
+    assert "SENTRY_DSN" in worker_env_names
+    assert "REDIS_URL" in worker_env_names
+    assert koyeb_worker["definition"]["command"][0:4] == [
+        "uv",
+        "run",
+        "celery",
+        "-A",
+    ]
 
 
 def test_deployment_docs_match_runtime_contracts() -> None:
@@ -156,6 +191,7 @@ def test_deployment_docs_match_runtime_contracts() -> None:
     assert "--from-literal=OPENAI_API_KEY=" in root_doc
     assert "/health/live" in ops_doc
     assert "configured max break-glass window" in ops_doc
+    assert "koyeb-worker.yaml" in ops_doc
 
 
 def test_frontend_ci_node_version_matches_dashboard_container() -> None:

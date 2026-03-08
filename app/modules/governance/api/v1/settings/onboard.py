@@ -13,6 +13,7 @@ from app.shared.core.auth import get_current_user_from_jwt, CurrentUser
 from app.models.tenant import Tenant, User, UserRole
 from app.shared.core.pricing import PricingTier
 from app.shared.core.config import get_settings
+from app.shared.core.proxy_headers import resolve_request_scheme
 from app.shared.core.rate_limit import auth_limit
 from app.shared.core.provider import normalize_provider
 from app.shared.core.turnstile import require_turnstile_for_onboard
@@ -72,15 +73,7 @@ async def onboard(
     if onboard_req.cloud_config:
         settings = get_settings()
         if settings.ENVIRONMENT in ["production", "staging"]:
-            forwarded_proto = request.headers.get(
-                "x-forwarded-proto", request.url.scheme
-            )
-            forwarded_proto = (
-                forwarded_proto.split(",")[0].strip().lower()
-                if forwarded_proto
-                else request.url.scheme
-            )
-            if forwarded_proto != "https":
+            if resolve_request_scheme(request, settings_obj=settings) != "https":
                 raise HTTPException(
                     status_code=400,
                     detail="HTTPS is required when submitting cloud credentials.",

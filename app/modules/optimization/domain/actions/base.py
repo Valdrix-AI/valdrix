@@ -3,19 +3,16 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 from uuid import UUID
 from enum import Enum
-from botocore.exceptions import ClientError
 import structlog
+from app.modules.optimization.adapters.common.remediation_clients import (
+    remediation_action_recoverable_exceptions,
+)
 from app.shared.core.retry import tenacity_retry
 from app.shared.core.pricing import FeatureFlag, is_feature_enabled
 
 logger = structlog.get_logger()
 REMEDIATION_ACTION_EXECUTION_RECOVERABLE_EXCEPTIONS = (
-    ClientError,
-    OSError,
-    RuntimeError,
-    TypeError,
-    ValueError,
-    LookupError,
+    remediation_action_recoverable_exceptions()
 )
 
 

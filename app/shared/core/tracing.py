@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
+STRICT_TRACING_ENVIRONMENTS = frozenset({"production", "staging"})
 
 
 def setup_tracing(app: FastAPI | None = None) -> None:
@@ -35,13 +36,17 @@ def setup_tracing(app: FastAPI | None = None) -> None:
     provider = TracerProvider(resource=resource)
     trace.set_tracer_provider(provider)
 
-    # 3. Add Exporter (OTLP if endpoint provided, otherwise Console)
+    # 3. Add Exporter
     otlp_endpoint = settings.OTEL_EXPORTER_OTLP_ENDPOINT
     if otlp_endpoint:
         insecure = settings.OTEL_EXPORTER_OTLP_INSECURE
         logger.info("setup_tracing_otlp", endpoint=otlp_endpoint, insecure=insecure)
         otlp_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=insecure)
         provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+    elif str(getattr(settings, "ENVIRONMENT", "") or "").strip().lower() in STRICT_TRACING_ENVIRONMENTS:
+        raise RuntimeError(
+            "OTEL_EXPORTER_OTLP_ENDPOINT must be configured in staging/production."
+        )
     else:
         logger.info("setup_tracing_console")
         provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))

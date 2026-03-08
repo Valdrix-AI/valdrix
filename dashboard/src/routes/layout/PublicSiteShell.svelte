@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { base } from '$app/paths';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
 	import {
 		PUBLIC_CONTACT_CHANNELS,
@@ -9,8 +10,7 @@
 		PUBLIC_FOOTER_SUBTITLE,
 		PUBLIC_MOBILE_LINKS,
 		PUBLIC_PRIMARY_LINKS,
-		PUBLIC_RESOURCES_DROPDOWN_LINKS,
-		PUBLIC_SIGNAL_STRIP
+		PUBLIC_RESOURCES_DROPDOWN_LINKS
 	} from '$lib/landing/publicNav';
 	import './layoutPublicNav.css';
 
@@ -47,20 +47,27 @@
 	}: Props = $props();
 </script>
 
-<header class="border-b border-ink-800 bg-ink-900/50 backdrop-blur sticky top-0 z-50">
+<div class="public-site-shell">
+	<header class="public-site-header">
 	<nav class="container public-top-nav mx-auto flex items-center justify-between gap-4 px-6 py-4">
-		<a href={toAppPath('/')} class="flex items-center gap-2">
-			<CloudLogo provider="valdrics" size={32} />
-			<span class="text-xl font-bold text-gradient hidden sm:inline">Valdrics</span>
+		<a href={toAppPath('/')} class="public-brand flex items-center gap-2" aria-label="Valdrics home">
+			<CloudLogo provider="valdrics" size={40} emphasizeMark={true} />
+			<img
+				src={`${base}/valdrics_wordmark.svg`}
+				alt=""
+				class="public-brand-wordmark hidden sm:block"
+				width="155"
+				height="45"
+			/>
 		</a>
 
-		<div class="public-nav-primary items-center gap-5 text-sm text-ink-300">
+		<div class="public-nav-primary items-center gap-5 text-sm">
 			{#each PUBLIC_PRIMARY_LINKS as link (link.href)}
 				{#if link.href === '/resources'}
 					<div class="public-nav-dropdown">
 						<button
 							type="button"
-							class="public-nav-dropdown-trigger"
+							class="public-nav-dropdown-trigger public-nav-link"
 							bind:this={publicResourcesButton}
 							aria-haspopup="menu"
 							aria-expanded={publicResourcesMenuOpen}
@@ -105,7 +112,7 @@
 						{/if}
 					</div>
 				{:else}
-					<a href={toAppPath(link.href)} class="hover:text-ink-100">{link.label}</a>
+					<a href={toAppPath(link.href)} class="public-nav-link">{link.label}</a>
 				{/if}
 			{/each}
 		</div>
@@ -209,73 +216,69 @@
 			</div>
 		</div>
 	{/if}
-	<div class="border-t border-ink-800/60 bg-ink-900/65">
-		<div class="container mx-auto flex flex-wrap items-center gap-x-3 gap-y-1 px-6 py-2 text-xs text-ink-400">
-			{#each PUBLIC_SIGNAL_STRIP as message, index (message)}
-				<span>{message}</span>
-				{#if index < PUBLIC_SIGNAL_STRIP.length - 1}
-					<span aria-hidden="true">•</span>
-				{/if}
-			{/each}
-		</div>
-	</div>
-</header>
+	</header>
 
-<main id="main" tabindex="-1" class="page-enter">
-	{@render children()}
-</main>
+	<main id="main" tabindex="-1" class="page-enter public-site-main">
+		{@render children()}
+	</main>
 
-<footer class="border-t border-ink-800 bg-ink-900/40">
-	<div class="container mx-auto px-6 py-10">
-		<div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-			<div class="space-y-2">
-				<p class="text-sm font-semibold text-ink-100">Valdrics</p>
-				<p class="max-w-xl text-sm text-ink-400">{PUBLIC_FOOTER_SUBTITLE}</p>
+	<footer class="public-site-footer">
+		<div class="container mx-auto px-6 py-10">
+			<div class="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+				<div class="space-y-2">
+					<p class="public-footer-brand text-sm font-semibold">Valdrics</p>
+					<p class="public-footer-subtitle max-w-xl">{PUBLIC_FOOTER_SUBTITLE}</p>
+				</div>
+
+				<nav class="public-footer-nav grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4" aria-label="Footer">
+					{#each PUBLIC_FOOTER_LINKS as link (link.href)}
+						{#if link.external}
+							<a
+								href={link.href}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="public-footer-link"
+							>
+								{link.label}
+							</a>
+						{:else}
+							<a href={toAppPath(link.href)} class="public-footer-link"
+								>{link.label}</a
+							>
+						{/if}
+					{/each}
+				</nav>
 			</div>
 
-			<nav class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-4" aria-label="Footer">
-				{#each PUBLIC_FOOTER_LINKS as link (link.href)}
-					{#if link.external}
-						<a
-							href={link.href}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="text-ink-300 hover:text-ink-100"
-						>
-							{link.label}
-						</a>
-					{:else}
-						<a href={toAppPath(link.href)} class="text-ink-300 hover:text-ink-100">{link.label}</a>
-					{/if}
-				{/each}
-			</nav>
-		</div>
-
-		<div class="mt-6 flex flex-wrap items-center gap-2" aria-label="Technology badges">
-			{#each PUBLIC_FOOTER_BADGES as badge (badge)}
-				<span class={`badge ${badge === 'Policy-Governed Actions' ? 'badge-success' : 'badge-default'}`}>
-					{badge}
-				</span>
-			{/each}
-		</div>
-
-		<p class="mt-4 text-sm text-ink-500">{PUBLIC_FOOTER_CAPTION}</p>
-
-		<div class="mt-5 space-y-2" aria-label="Public contact channels">
-			<p class="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">Contact Channels</p>
-			<div class="flex flex-wrap gap-2">
-				{#each PUBLIC_CONTACT_CHANNELS as channel (channel.email)}
-					<a
-						href={channel.href}
-						class="badge badge-default text-ink-200 hover:text-ink-100 transition-colors"
-						aria-label={`${channel.label} contact ${channel.email}`}
+			<div class="mt-6 flex flex-wrap items-center gap-2" aria-label="Technology badges">
+				{#each PUBLIC_FOOTER_BADGES as badge (badge)}
+					<span
+						class={`badge ${badge === 'Policy-Governed Actions' ? 'badge-success' : 'badge-default'}`}
 					>
-						{channel.label}: {channel.email}
-					</a>
+						{badge}
+					</span>
 				{/each}
 			</div>
-		</div>
 
-		<p class="mt-6 text-sm text-ink-500">© {currentYear} Valdrics. All rights reserved.</p>
-	</div>
-</footer>
+			<p class="public-footer-caption mt-4">{PUBLIC_FOOTER_CAPTION}</p>
+
+			<div class="mt-5 space-y-2" aria-label="Public contact channels">
+				<p class="public-footer-contact-label">
+					Contact Channels
+				</p>
+				<div class="flex flex-wrap gap-2">
+					{#each PUBLIC_CONTACT_CHANNELS as channel (channel.email)}
+						<a
+							href={channel.href}
+							class="badge badge-default public-footer-contact"
+							aria-label={`${channel.label} contact ${channel.email}`}
+						>
+							{channel.label}: {channel.email}
+						</a>
+					{/each}
+				</div>
+			</div>
+			<p class="public-footer-copyright mt-6">© {currentYear} Valdrics. All rights reserved.</p>
+		</div>
+	</footer>
+</div>

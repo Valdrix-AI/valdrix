@@ -32,7 +32,7 @@ def test_context_aware_key_falls_back_to_ip_when_hashing_fails() -> None:
     request = _request(auth_header="Bearer abc")
     with (
         patch("app.shared.core.rate_limit.hashlib.sha256", side_effect=RuntimeError("boom")),
-        patch("app.shared.core.rate_limit.get_remote_address", return_value="10.0.0.7"),
+        patch("app.shared.core.rate_limit.resolve_client_ip", return_value="10.0.0.7"),
     ):
         assert rl.context_aware_key(request) == "10.0.0.7"
 

@@ -1,18 +1,37 @@
-"""
-Enhanced Operational & Performance Metrics for Valdrics
-
-Provides comprehensive Prometheus metrics for tracking system health, scale,
-financial guards, and operational resilience.
-Used for investor-grade "Customer Health" dashboards.
-"""
+"""Operational and performance Prometheus metrics for Valdrics."""
 
 from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar, cast
 
 from prometheus_client import Counter, Histogram, Gauge
+import structlog
 import sys
 import time
+from app.shared.core import ops_metrics_runtime as _ops_metrics_runtime
+
+COST_RECORD_RETENTION_LAST_RUN = _ops_metrics_runtime.COST_RECORD_RETENTION_LAST_RUN
+COST_RECORD_RETENTION_PURGED_TOTAL = _ops_metrics_runtime.COST_RECORD_RETENTION_PURGED_TOTAL
+RUNTIME_CARBON_EMISSIONS_LAST_RUN = _ops_metrics_runtime.RUNTIME_CARBON_EMISSIONS_LAST_RUN
+RUNTIME_CARBON_EMISSIONS_TOTAL = _ops_metrics_runtime.RUNTIME_CARBON_EMISSIONS_TOTAL
+
+
+def _sync_runtime_metric_exports() -> None:
+    _ops_metrics_runtime.structlog = structlog
+    _ops_metrics_runtime.COST_RECORD_RETENTION_LAST_RUN = COST_RECORD_RETENTION_LAST_RUN
+    _ops_metrics_runtime.COST_RECORD_RETENTION_PURGED_TOTAL = COST_RECORD_RETENTION_PURGED_TOTAL
+    _ops_metrics_runtime.RUNTIME_CARBON_EMISSIONS_LAST_RUN = RUNTIME_CARBON_EMISSIONS_LAST_RUN
+    _ops_metrics_runtime.RUNTIME_CARBON_EMISSIONS_TOTAL = RUNTIME_CARBON_EMISSIONS_TOTAL
+
+
+def record_runtime_carbon_emissions(emissions_kg: float | None) -> None:
+    _sync_runtime_metric_exports()
+    _ops_metrics_runtime.record_runtime_carbon_emissions(emissions_kg)
+
+
+def record_cost_retention_purge(tenant_tier: str, deleted_count: int) -> None:
+    _sync_runtime_metric_exports()
+    _ops_metrics_runtime.record_cost_retention_purge(tenant_tier, deleted_count)
 
 # --- Roadmap Compatibility Metrics ---
 STUCK_JOB_COUNT = Gauge(
@@ -407,7 +426,6 @@ POTENTIAL_SAVINGS = Gauge(
     "Estimated monthly savings from identified zombies",
     ["provider", "account_id"],
 )
-
 
 # Utility functions for metrics
 F = TypeVar("F", bound=Callable[..., Any])

@@ -10,6 +10,8 @@ from scripts.verify_exception_governance import (
     verify_against_baseline,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
 
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -101,3 +103,16 @@ def test_main_write_baseline_and_verify_roundtrip(tmp_path: Path) -> None:
     )
     assert verify_exit == 0
 
+
+def test_repo_baseline_matches_current_exception_sites() -> None:
+    exit_code = main(
+        [
+            "--root",
+            str(REPO_ROOT / "app"),
+            "--root",
+            str(REPO_ROOT / "scripts"),
+            "--baseline-path",
+            str(REPO_ROOT / "docs/ops/evidence/exception_governance_baseline.json"),
+        ]
+    )
+    assert exit_code == 0

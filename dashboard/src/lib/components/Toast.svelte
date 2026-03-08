@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { fade, fly } from 'svelte/transition';
-	import { backOut } from 'svelte/easing';
 	import { uiState, type Toast } from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
 
@@ -56,8 +54,7 @@
 	class="flex items-center gap-3 px-4 py-3 rounded-xl border backdrop-blur-md shadow-2xl {getColors(
 		toast.type
 	)}"
-	in:fly={{ y: 20, duration: prefersReducedMotion ? 0 : 400, easing: backOut }}
-	out:fade={{ duration: prefersReducedMotion ? 0 : 200 }}
+	class:toast-enter={!prefersReducedMotion}
 	role={getAriaRole(toast.type)}
 	aria-live={getAriaRole(toast.type) === 'alert' ? 'assertive' : 'polite'}
 >
@@ -84,3 +81,20 @@
 		</svg>
 	</button>
 </div>
+
+<style>
+	.toast-enter {
+		animation: toastEnter 400ms var(--ease-out) both;
+	}
+
+	@keyframes toastEnter {
+		from {
+			opacity: 0;
+			transform: translateY(20px) scale(0.98);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0) scale(1);
+		}
+	}
+</style>

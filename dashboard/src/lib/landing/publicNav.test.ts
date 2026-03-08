@@ -50,24 +50,35 @@ describe('publicNav', () => {
 		}
 	});
 
-	it('keeps outcome, proof, docs, and pricing routes surfaced consistently', () => {
-		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#benefits')).toBe(true);
-		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#trust')).toBe(true);
-		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#trust')).toBe(true);
+	it('keeps landing jump links aligned to active default-page sections', () => {
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#product')).toBe(true);
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#signal-map')).toBe(true);
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#simulator')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#product')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#signal-map')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#simulator')).toBe(true);
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#workflow')).toBe(false);
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#benefits')).toBe(false);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#workflow')).toBe(false);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#benefits')).toBe(false);
+	});
+
+	it('keeps proof, enterprise, docs, and pricing routes surfaced consistently', () => {
+		expect(PUBLIC_RESOURCES_DROPDOWN_LINKS.some((link) => link.href === '/#trust')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/#trust')).toBe(true);
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/pricing')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/pricing')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/pricing')).toBe(true);
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/enterprise')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/enterprise')).toBe(true);
+		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/enterprise')).toBe(true);
 		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/docs')).toBe(true);
 		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/insights')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/insights')).toBe(true);
 		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/resources')).toBe(true);
-		expect(PUBLIC_RESOURCES_DROPDOWN_LINKS.some((link) => link.href === '/enterprise')).toBe(
-			true
-		);
-		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/enterprise')).toBe(true);
+		expect(PUBLIC_RESOURCES_DROPDOWN_LINKS.some((link) => link.href === '/docs')).toBe(true);
 	});
 
 	it('keeps only customer-facing strip and badge language', () => {

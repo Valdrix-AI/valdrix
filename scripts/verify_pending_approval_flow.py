@@ -26,6 +26,8 @@ import httpx
 
 from app.shared.core.evidence_capture import sanitize_bearer_token
 
+REQUEST_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
+
 
 def _must_env(name: str) -> str:
     value = os.getenv(name, "").strip()
@@ -88,6 +90,10 @@ def _find_escalation_candidate(
     )
 
 
+def _build_client() -> httpx.Client:
+    return httpx.Client(follow_redirects=True, timeout=REQUEST_TIMEOUT)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Verify pending_approval remediation flow against live API."
@@ -118,8 +124,8 @@ def main() -> None:
     if args.execute_after_approve and not args.approve:
         raise SystemExit("--execute-after-approve requires --approve")
 
-    with httpx.Client(follow_redirects=True) as client:
-        csrf_resp = client.get(f"{args.base_url}/api/v1/public/csrf", timeout=30)
+    with _build_client() as client:
+        csrf_resp = client.get(f"{args.base_url}/api/v1/public/csrf")
         if csrf_resp.status_code >= 400:
             _fail(csrf_resp, "Fetching CSRF token failed")
         csrf_payload = _safe_json(csrf_resp)

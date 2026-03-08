@@ -41,7 +41,7 @@ def test_context_aware_key():
     req2 = mock_request(headers={"Authorization": "Bearer some-token-value"})
     # Patch WHERE IT IS IMPORTED
     with patch(
-        "app.shared.core.rate_limit.get_remote_address", return_value="127.0.0.1"
+        "app.shared.core.rate_limit.resolve_client_ip", return_value="127.0.0.1"
     ):
         key = context_aware_key(req2)
         assert key.startswith("token:")
@@ -50,7 +50,7 @@ def test_context_aware_key():
     # 3. IP Fallback
     req3 = mock_request(headers={})
     with patch(
-        "app.shared.core.rate_limit.get_remote_address", return_value="10.0.0.1"
+        "app.shared.core.rate_limit.resolve_client_ip", return_value="10.0.0.1"
     ):
         assert context_aware_key(req3) == "10.0.0.1"
 

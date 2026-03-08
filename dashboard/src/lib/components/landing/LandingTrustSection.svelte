@@ -3,11 +3,8 @@
 	import { onDestroy, onMount } from 'svelte';
 	import {
 		COMPLIANCE_FOUNDATION_BADGES,
-		CUSTOMER_PROOF_STORIES,
 		CUSTOMER_QUOTES,
-		EXECUTIVE_CONFIDENCE_POINTS,
-		TRUST_BENCHMARK_OUTCOMES,
-		TRUST_ECOSYSTEM_BADGES
+		EXECUTIVE_CONFIDENCE_POINTS
 	} from '$lib/landing/heroContent';
 	import {
 		getReducedMotionPreference,
@@ -124,7 +121,7 @@
 		onTrackCta,
 		requestValidationBriefingHref,
 		onePagerHref,
-		globalComplianceWorkbookHref = '/resources/global-finops-compliance-workbook.md'
+		globalComplianceWorkbookHref = `${base}/resources/global-finops-compliance-workbook.md`
 	}: {
 		onTrackCta: (
 			value:
@@ -178,17 +175,17 @@
 	data-landing-section="proof"
 >
 	<div class="landing-section-head">
-		<h2 class="landing-h2">Proof and Trust</h2>
+		<h2 class="landing-h2">Security and Readiness</h2>
 		<p class="landing-section-sub">
-			Outcome patterns, security baseline, and an optional enterprise diligence lane.
+			Security essentials and a clear enterprise handoff when review is required.
 		</p>
 	</div>
 
-	<div class="landing-validation-cta glass-panel" aria-label="Proof and Trust">
-		<p class="landing-proof-k">Optional Enterprise Diligence</p>
+	<div class="landing-validation-cta glass-panel" aria-label="Security and Readiness">
+		<p class="landing-proof-k">Need formal review?</p>
 		<p class="landing-p">
-			Need formal security and procurement review? Use the enterprise lane for governance artifacts,
-			validation briefing, and rollout planning support.
+			Start free when self-serve is enough. Use the enterprise path when procurement, security
+			review, or rollout planning is part of the buying process.
 		</p>
 		<div class="landing-lead-actions">
 			<a
@@ -196,7 +193,7 @@
 				class="btn btn-primary w-fit pulse-glow"
 				onclick={() => onTrackCta('request_validation_briefing')}
 			>
-				Talk to Sales for Validation
+				Talk to Sales
 			</a>
 			<a
 				href={onePagerHref}
@@ -207,7 +204,7 @@
 			</a>
 		</div>
 		<p class="landing-more-resources">
-			Enterprise resources:
+			Also see:
 			<a href={`${base}/enterprise`}>Enterprise Governance Overview</a>
 			•
 			<a
@@ -216,11 +213,6 @@
 			>
 				Access Control & Compliance Checklist
 			</a>
-		</p>
-		<p class="landing-trust-note">Validation briefing is ungated. No login required.</p>
-		<p class="landing-trust-note">
-			Valdrics is prelaunch. Public customer logos and production outcome studies will be published
-			post go-live. Current proof reflects design-partner sessions and benchmark ranges.
 		</p>
 	</div>
 
@@ -234,42 +226,9 @@
 		{/each}
 	</div>
 
-	<div class="landing-trust-ecosystem">
-		<p class="landing-proof-k">Platform Coverage</p>
-		<div class="landing-trust-badges">
-			{#each TRUST_ECOSYSTEM_BADGES as badge (badge)}
-				<span class="landing-trust-badge">{badge}</span>
-			{/each}
-		</div>
-	</div>
-
-	<div class="landing-story-grid">
-		{#each CUSTOMER_PROOF_STORIES as story (story.title)}
-			<article class="glass-panel landing-story-card">
-				<p class="landing-proof-k">{story.title}</p>
-				<p class="landing-story-label">Before</p>
-				<p class="landing-p">{story.before}</p>
-				<p class="landing-story-label">After</p>
-				<p class="landing-p">{story.after}</p>
-				<p class="landing-trust-benchmark-k">{story.impact}</p>
-			</article>
-		{/each}
-	</div>
-
-	<div class="landing-trust-benchmarks">
-		{#each TRUST_BENCHMARK_OUTCOMES as outcome (outcome.title)}
-			<article class="glass-panel landing-trust-benchmark">
-				<p class="landing-proof-k">Outcome Pattern</p>
-				<h3 class="landing-h3">{outcome.title}</h3>
-				<p class="landing-p">{outcome.detail}</p>
-				<p class="landing-trust-benchmark-k">{outcome.benchmark}</p>
-			</article>
-		{/each}
-	</div>
-
 	<div class="landing-testimonial-rotator glass-panel" aria-live="polite" aria-atomic="true">
 		<div class="landing-testimonial-head">
-			<p class="landing-proof-k">Design-Partner Comments</p>
+			<p class="landing-proof-k">Operator feedback</p>
 			<p class="landing-testimonial-counter">{activeQuoteIndex + 1}/{customerQuotes.length}</p>
 		</div>
 		{#if activeQuote}
@@ -282,18 +241,18 @@
 			<button
 				type="button"
 				class="landing-testimonial-nav"
-				aria-label="Previous design-partner comment"
+				aria-label="Previous comment"
 				disabled={customerQuotes.length < 2}
 				onclick={showPreviousQuote}
 			>
 				Prev
 			</button>
-			<div class="landing-testimonial-dots" role="group" aria-label="Design-partner comment selector">
+			<div class="landing-testimonial-dots" role="group" aria-label="Comment selector">
 				{#each customerQuotes as quote, index (quote.quote)}
 					<button
 						type="button"
 						class="landing-testimonial-dot"
-						aria-label={`Show design-partner comment ${index + 1}`}
+						aria-label={`Show comment ${index + 1}`}
 						aria-pressed={activeQuoteIndex === index}
 						onclick={() => selectQuote(index)}
 					></button>
@@ -302,7 +261,7 @@
 			<button
 				type="button"
 				class="landing-testimonial-nav"
-				aria-label="Next design-partner comment"
+				aria-label="Next comment"
 				disabled={customerQuotes.length < 2}
 				onclick={showNextQuote}
 			>
@@ -312,7 +271,7 @@
 	</div>
 
 	<div class="landing-compliance-block">
-		<p class="landing-proof-k">Security and compliance essentials</p>
+		<p class="landing-proof-k">Security essentials</p>
 		<div class="landing-trust-badges">
 			{#each COMPLIANCE_FOUNDATION_BADGES as badge (badge)}
 				<span
@@ -323,7 +282,4 @@
 			{/each}
 		</div>
 	</div>
-	<p class="landing-trust-note">
-		Use the briefing and one-pager to align engineering, finance, and security before kickoff.
-	</p>
 </section>

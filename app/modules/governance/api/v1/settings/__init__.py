@@ -21,6 +21,7 @@ from .activeops import router as activeops_router
 from .safety import router as safety_router
 from .identity import router as identity_router
 from .profile import router as profile_router
+from .account import router as account_router
 
 # Main settings router - aggregates all sub-routers
 router = APIRouter(tags=["Settings"])
@@ -33,3 +34,4 @@ router.include_router(activeops_router)
 router.include_router(safety_router)
 router.include_router(identity_router)
 router.include_router(profile_router)
+router.include_router(account_router)

@@ -52,7 +52,7 @@ resource "aws_db_instance" "main" {
   storage_encrypted            = true
   performance_insights_enabled = true
   multi_az                     = true
-  deletion_protection          = var.environment == "production"
+  deletion_protection          = contains(["prod", "production"], lower(var.environment))
 
   backup_retention_period = 30
   backup_window           = "03:00-04:00"

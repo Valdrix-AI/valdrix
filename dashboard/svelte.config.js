@@ -23,10 +23,11 @@ const config = {
 		// Cloudflare Pages/Workers runtime adapter
 		adapter: adapter(),
 		csp: {
+			mode: 'hash',
 			directives: {
 				'default-src': ['self'],
 				'script-src': ['self', 'https://*.supabase.co', 'https://challenges.cloudflare.com'],
-				'style-src': ['self', 'unsafe-inline'], // Tailwind needs this
+				'style-src': ['self'],
 				'img-src': ['self', 'data:', 'https://*.supabase.co'],
 				'font-src': ['self', 'data:'],
 				'connect-src': connectSrc,

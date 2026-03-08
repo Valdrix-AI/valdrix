@@ -82,7 +82,7 @@ async def test_remediation_resolve_credentials_includes_saas_wiring() -> None:
     result.scalar_one_or_none.return_value = SimpleNamespace(
         vendor="stripe",
         auth_method="api_key",
-        api_key="sk_live_test",
+        api_key="example_stripe_api_key",
         connector_config={"instance_url": "https://api.stripe.com"},
         spend_feed=[{"timestamp": "2026-01-01T00:00:00Z", "cost_usd": 10.0}],
     )

@@ -1,6 +1,5 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
-	import { fade, fly } from 'svelte/transition';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -99,7 +98,7 @@
 {#if isOpen}
 	<div
 		class="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh] px-4"
-		transition:fade={{ duration: prefersReducedMotion ? 0 : 150 }}
+		class:command-palette-overlay-enter={!prefersReducedMotion}
 	>
 		<!-- Backdrop -->
 		<button
@@ -112,7 +111,7 @@
 		<!-- Palette -->
 		<div
 			class="relative w-full max-w-xl glass-card rounded-xl overflow-hidden shadow-2xl border-white/10"
-			transition:fly={{ y: -10, duration: prefersReducedMotion ? 0 : 300 }}
+			class:command-palette-panel-enter={!prefersReducedMotion}
 			onkeydown={handleKeydown}
 			role="dialog"
 			aria-modal="true"
@@ -183,5 +182,33 @@
 	/* Integration with the global theme tokens */
 	input::placeholder {
 		color: var(--color-ink-500);
+	}
+
+	.command-palette-overlay-enter {
+		animation: commandPaletteOverlayEnter 150ms var(--ease-out) both;
+	}
+
+	.command-palette-panel-enter {
+		animation: commandPalettePanelEnter 300ms var(--ease-out) both;
+	}
+
+	@keyframes commandPaletteOverlayEnter {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+
+	@keyframes commandPalettePanelEnter {
+		from {
+			opacity: 0;
+			transform: translateY(-10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 </style>

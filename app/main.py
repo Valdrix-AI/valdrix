@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import inspect
 import os
-import tempfile
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Awaitable, Callable, TypeVar, cast
 
@@ -21,13 +20,24 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.shared.core.app_routes import register_api_routers, register_lifecycle_routes
+from app.shared.core.app_runtime import (
+    _api_documentation_allowed,
+    _is_test_mode,
+    _runtime_data_dir,
+    _stop_emissions_tracker,
+    EmissionsTracker,
+)
 from app.shared.core.config import get_settings, reload_settings_from_environment
 from app.shared.core.cors_policy import (
     InvalidCorsConfiguration,
     resolve_cors_allowed_origins,
 )
 from app.shared.core.logging import setup_logging
-from app.shared.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
+from app.shared.core.middleware import (
+    RequestIDMiddleware,
+    SecurityHeadersMiddleware,
+    TrustedProxyHeadersMiddleware,
+)
 from app.shared.core.security_metrics import CSRF_ERRORS, RATE_LIMIT_EXCEEDED
 from app.shared.core.ops_metrics import API_ERRORS_TOTAL
 from app.shared.core.docs_assets import render_redoc_ui_html, render_swagger_ui_html
@@ -95,33 +105,7 @@ def get_csrf_config() -> CsrfSettings:
 
 logger = structlog.get_logger()
 INTERNAL_METRICS_PATH = "/_internal/metrics"
-
-def _is_test_mode() -> bool:
-    return settings.TESTING or bool(settings.PYTEST_CURRENT_TEST)
-
-def _runtime_data_dir() -> str:
-    configured = str(getattr(settings, "APP_RUNTIME_DATA_DIR", "") or "").strip()
-    return configured or os.path.join(tempfile.gettempdir(), "valdrics")
-
-def _load_emissions_tracker() -> Any:
-    if _is_test_mode():
-        return None
-    try:
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message="The pynvml package is deprecated.*",
-                category=FutureWarning,
-            )
-            from codecarbon import EmissionsTracker as Tracker
-        return Tracker
-    except (ImportError, AttributeError) as exc:
-        logger.warning("emissions_tracker_unavailable", error=str(exc))
-        return None
-
-EmissionsTracker = _load_emissions_tracker()
+API_DOCUMENTATION_PATHS = frozenset({"/openapi.json", "/docs", "/redoc"})
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -159,11 +143,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.modules.governance.domain.scheduler import SchedulerService
 
     scheduler = SchedulerService(session_maker=async_session_maker)
-    if not settings.TESTING and settings.REDIS_URL:
+    if settings.TESTING:
+        logger.info("scheduler_skipped_in_testing")
+    elif not settings.ENABLE_SCHEDULER:
+        logger.warning("scheduler_disabled_via_config")
+    elif settings.REDIS_URL:
         scheduler.start()
         logger.info("scheduler_started")
-    elif settings.TESTING:
-        logger.info("scheduler_skipped_in_testing")
     else:
         logger.warning(
             "scheduler_skipped_no_redis", msg="Set REDIS_URL to enable background job"
@@ -177,6 +163,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from app.shared.llm.pricing_data import (
             LLM_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS,
             refresh_llm_pricing,
+        )
+        from app.shared.core.cloud_pricing_data import (
+            CLOUD_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS,
+            refresh_cloud_resource_pricing,
         )
 
         last_error: Exception | None = None
@@ -207,6 +197,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 "Analysis functionality may use stale pricing until manual refresh.",
             )
 
+        cloud_last_error: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                await refresh_cloud_resource_pricing()
+                logger.info("cloud_pricing_refreshed", attempt=attempt)
+                cloud_last_error = None
+                break
+            except CLOUD_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS as exc:
+                cloud_last_error = exc
+                logger.warning(
+                    "cloud_pricing_refresh_failed_startup",
+                    attempt=attempt,
+                    error=str(exc),
+                    exc_info=True,
+                )
+                await asyncio.sleep(0.2 * attempt)
+        if cloud_last_error is not None:
+            logger.error(
+                "cloud_pricing_refresh_failed_startup_final",
+                error=str(cloud_last_error),
+                exc_info=True,
+                remediation="Ensure cloud_resource_pricing seeding completed. "
+                "Optimization estimates may use stale or missing pricing until refresh succeeds.",
+            )
+
     from app.shared.core.http import init_http_client, close_http_client
 
     # Initialize Singleton HTTP Client (2026 Pooling Standard)
@@ -224,8 +239,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("http_client_close_skipped_loop_closed", error=str(exc))
 
     scheduler.stop()
-    if tracker:
-        tracker.stop()
+    _stop_emissions_tracker(tracker)
 
     # Final DB Cleanup
     try:
@@ -241,6 +255,7 @@ valdrics_app = FastAPI(
     lifespan=lifespan,
     docs_url=None,
     redoc_url=None,
+    openapi_url=None,
 )
 # Justification (Finding #C1): Uvicorn requires 'app' name by default in start parameters.
 # Standard pattern to resolve FastAPI type collision with module-level common variable.
@@ -331,11 +346,22 @@ valdrics_app.mount("/static", StaticFiles(directory="app/static"), name="static"
 
 @valdrics_app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html() -> Any:
+    if not _api_documentation_allowed():
+        raise HTTPException(status_code=404, detail="Not Found")
     return await render_swagger_ui_html(valdrics_app, logger=logger)
 
 @valdrics_app.get("/redoc", include_in_schema=False)
 async def redoc_html() -> Any:
+    if not _api_documentation_allowed():
+        raise HTTPException(status_code=404, detail="Not Found")
     return await render_redoc_ui_html(valdrics_app, logger=logger)
+
+
+@valdrics_app.get("/openapi.json", include_in_schema=False)
+async def openapi_schema() -> JSONResponse:
+    if not _api_documentation_allowed():
+        raise HTTPException(status_code=404, detail="Not Found")
+    return JSONResponse(valdrics_app.openapi())
 
 # Override handler to include metrics (SEC-03)
 # MyPy: 'exception_handlers' is dynamic on FastAPI instance
@@ -400,6 +426,7 @@ valdrics_app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Security headers and request ID
 valdrics_app.add_middleware(SecurityHeadersMiddleware)
 valdrics_app.add_middleware(RequestIDMiddleware)
+valdrics_app.add_middleware(TrustedProxyHeadersMiddleware)
 
 # CORS - added LAST so it processes FIRST
 # This ensures OPTIONS preflight requests are handled before other middleware

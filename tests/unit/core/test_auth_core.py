@@ -17,6 +17,7 @@ import jwt
 from datetime import datetime, timezone, timedelta
 
 TEST_JWT_SECRET = "test_secret_minimum_32_bytes_for_hs256"
+TEST_JWT_ISSUER = "supabase"
 
 
 class _AsyncNullContext:
@@ -31,6 +32,7 @@ class _AsyncNullContext:
 def mock_settings():
     with patch("app.shared.core.auth.get_settings") as mock:
         mock.return_value.SUPABASE_JWT_SECRET = TEST_JWT_SECRET
+        mock.return_value.SUPABASE_JWT_ISSUER = TEST_JWT_ISSUER
         yield mock.return_value
 
 
@@ -39,6 +41,7 @@ async def test_decode_jwt_success(mock_settings):
     payload = {
         "sub": str(uuid4()),
         "aud": "authenticated",
+        "iss": TEST_JWT_ISSUER,
         "exp": (datetime.now(timezone.utc) + timedelta(hours=1)).timestamp(),
     }
     token = jwt.encode(payload, TEST_JWT_SECRET, algorithm="HS256")
@@ -52,6 +55,7 @@ async def test_decode_jwt_expired(mock_settings):
     payload = {
         "sub": str(uuid4()),
         "aud": "authenticated",
+        "iss": TEST_JWT_ISSUER,
         "exp": (datetime.now(timezone.utc) - timedelta(hours=1)).timestamp(),
     }
     token = jwt.encode(payload, TEST_JWT_SECRET, algorithm="HS256")
@@ -67,7 +71,12 @@ async def test_get_current_user_success(mock_settings):
     user_id = uuid4()
     tenant_id = uuid4()
     email = "test@example.com"
-    token_payload = {"sub": str(user_id), "email": email, "aud": "authenticated"}
+    token_payload = {
+        "sub": str(user_id),
+        "email": email,
+        "aud": "authenticated",
+        "iss": TEST_JWT_ISSUER,
+    }
     token = jwt.encode(token_payload, TEST_JWT_SECRET, algorithm="HS256")
 
     mock_request = MagicMock(spec=Request)
@@ -106,6 +115,7 @@ async def test_get_current_user_not_found(mock_settings):
         "sub": str(uuid4()),
         "email": "test@example.com",
         "aud": "authenticated",
+        "iss": TEST_JWT_ISSUER,
     }
     token = jwt.encode(token_payload, TEST_JWT_SECRET, algorithm="HS256")
 
@@ -171,6 +181,7 @@ async def test_get_current_user_from_jwt_success(mock_settings):
         "sub": user_id,
         "email": "test@example.com",
         "aud": "authenticated",
+        "iss": TEST_JWT_ISSUER,
     }
     token = jwt.encode(token_payload, TEST_JWT_SECRET, algorithm="HS256")
 
@@ -191,7 +202,11 @@ async def test_get_current_user_from_jwt_no_credentials():
 
 @pytest.mark.asyncio
 async def test_get_current_user_from_jwt_missing_sub(mock_settings):
-    token_payload = {"email": "test@example.com", "aud": "authenticated"}  # Missing sub
+    token_payload = {
+        "email": "test@example.com",
+        "aud": "authenticated",
+        "iss": TEST_JWT_ISSUER,
+    }  # Missing sub
     token = jwt.encode(token_payload, TEST_JWT_SECRET, algorithm="HS256")
     mock_credentials = MagicMock()
     mock_credentials.credentials = token
@@ -212,7 +227,11 @@ async def test_get_current_user_no_credentials():
 
 @pytest.mark.asyncio
 async def test_get_current_user_missing_sub(mock_settings):
-    token_payload = {"email": "test@example.com", "aud": "authenticated"}
+    token_payload = {
+        "email": "test@example.com",
+        "aud": "authenticated",
+        "iss": TEST_JWT_ISSUER,
+    }
     token = jwt.encode(token_payload, TEST_JWT_SECRET, algorithm="HS256")
     mock_credentials = MagicMock()
     mock_credentials.credentials = token
@@ -231,6 +250,7 @@ async def test_get_current_user_db_error(mock_settings):
         "sub": user_id,
         "email": "test@example.com",
         "aud": "authenticated",
+        "iss": TEST_JWT_ISSUER,
     }
     token = jwt.encode(token_payload, TEST_JWT_SECRET, algorithm="HS256")
     mock_credentials = MagicMock()

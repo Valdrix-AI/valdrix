@@ -1,39 +1,18 @@
-
 -- archive_partitions.sql
--- Re-initializing the archive function with security hardening
+-- Optional DBA bootstrap for the scheduler-owned partition archival path.
+--
+-- The application now performs partition movement via
+-- `app.shared.core.maintenance.PartitionMaintenanceService`. This SQL is kept as
+-- a deterministic bootstrap helper for operators who want the archive table and
+-- unique index provisioned before the first maintenance sweep.
 
-CREATE OR REPLACE FUNCTION public.archive_old_cost_partitions()
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
--- Fix for 'Function Search Path Mutable' lint
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-    partition_record RECORD;
-    archive_count INTEGER := 0;
-BEGIN
-    -- This function moves cost_records older than 1 year to cost_records_archive
-    -- It assumes the parent table is partitioned by 'timestamp'
-    
-    FOR partition_record IN (
-        SELECT
-            nmsp_parent.nspname AS parent_schema,
-            parent.relname      AS parent_name,
-            nmsp_child.nspname  AS child_schema,
-            child.relname       AS child_name
-        FROM pg_inherits
-            JOIN pg_class parent            ON pg_inherits.inhparent = parent.oid
-            JOIN pg_class child             ON pg_inherits.inhrelid  = child.oid
-            JOIN pg_namespace nmsp_parent   ON nmsp_parent.oid  = parent.relnamespace
-            JOIN pg_namespace nmsp_child    ON nmsp_child.oid   = child.relnamespace
-        WHERE parent.relname = 'cost_records'
-    ) LOOP
-        -- Logic to check partition bounds and move data
-        -- (Simplified for seeding / re-initialization)
-        RAISE NOTICE 'Processing partition: %', partition_record.child_name;
-    END LOOP;
+CREATE TABLE IF NOT EXISTS public.cost_records_archive (
+    LIKE public.cost_records INCLUDING ALL
+);
 
-    RAISE NOTICE 'Archival process complete.';
-END;
-$$;
+ALTER TABLE public.cost_records_archive
+ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_cost_records_archive_id_recorded_at
+    ON public.cost_records_archive (id, recorded_at);
+

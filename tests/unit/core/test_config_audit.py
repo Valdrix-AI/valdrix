@@ -7,8 +7,8 @@ FAKE_CSRF_SECRET = "c" * 32
 FAKE_ENCRYPTION_KEY = "k" * 32
 # Base64 for 'KDF_SALT_FOR_TESTING_32_BYTES_OK' (32 bytes)
 FAKE_KDF_SALT = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="
-FAKE_PAYSTACK_SECRET_KEY = "sk_live_TEST_KEY_NOT_REAL_1234567890"
-FAKE_PAYSTACK_PUBLIC_KEY = "pk_live_TEST_KEY_NOT_REAL_1234567890"
+FAKE_PAYSTACK_SECRET_KEY = "example_paystack_secret_TEST_KEY_NOT_REAL_1234567890"
+FAKE_PAYSTACK_PUBLIC_KEY = "example_paystack_public_TEST_KEY_NOT_REAL_1234567890"
 
 
 @pytest.fixture(autouse=True)
@@ -164,6 +164,7 @@ def test_settings_is_production_property():
             GROQ_API_KEY="g" * 32,
             PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
             PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+            ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
             REDIS_URL="redis://localhost:6379",
             DB_SSL_MODE="require",
             _env_file=None,

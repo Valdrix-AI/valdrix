@@ -46,6 +46,7 @@ Strict SaaS mode:
 - In production, startup validation fails if env integration secrets are set while strict mode is enabled.
 - Shared `SLACK_BOT_TOKEN` is still allowed for tenant-scoped Slack delivery; env channel routing (`SLACK_CHANNEL_ID`) is blocked.
 - Use this mode for pure multi-tenant SaaS deployments where all integrations must be tenant-scoped.
+- Production SaaS operators should treat the environment-variable targets below as self-host or break-glass-only paths, not as the normal tenant workflow model.
 
 ## Environment variables (fallback)
 

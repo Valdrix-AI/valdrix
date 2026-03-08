@@ -11,21 +11,20 @@ export interface PublicContactChannel {
 }
 
 export const PUBLIC_PRIMARY_LINKS: readonly PublicNavLink[] = Object.freeze([
-	{ href: '/#benefits', label: 'Outcomes' },
-	{ href: '/#trust', label: 'Proof' },
-	{ href: '/#workflow', label: 'How It Works' },
-	{ href: '/#signal-map', label: 'See It In Action' },
-	{ href: '/resources', label: 'Resources' },
-	{ href: '/pricing', label: 'Pricing' }
+	{ href: '/#product', label: 'Product' },
+	{ href: '/#signal-map', label: 'Live Demo' },
+	{ href: '/#simulator', label: 'ROI' },
+	{ href: '/pricing', label: 'Pricing' },
+	{ href: '/enterprise', label: 'Enterprise' },
+	{ href: '/resources', label: 'Resources' }
 ]);
 
 export const PUBLIC_RESOURCES_DROPDOWN_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/resources', label: 'Resource Hub' },
-	{ href: '/enterprise', label: 'Enterprise' },
+	{ href: '/#trust', label: 'Proof' },
 	{ href: '/docs', label: 'Docs' },
 	{ href: '/blog', label: 'Blog' },
-	{ href: '/insights', label: 'Insights' },
-	{ href: '/#trust', label: 'Proof' }
+	{ href: '/insights', label: 'Insights' }
 ]);
 
 export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
@@ -35,11 +34,11 @@ export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 ]);
 
 export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
-	{ href: '/#benefits', label: 'Outcomes' },
-	{ href: '/#workflow', label: 'How It Works' },
-	{ href: '/#signal-map', label: 'See It In Action' },
-	{ href: '/#trust', label: 'Proof' },
+	{ href: '/#product', label: 'Product' },
+	{ href: '/#signal-map', label: 'Live Demo' },
+	{ href: '/#simulator', label: 'ROI' },
 	{ href: '/pricing', label: 'Pricing' },
+	{ href: '/enterprise', label: 'Enterprise' },
 	{ href: '/resources', label: 'Resources' }
 ]);
 

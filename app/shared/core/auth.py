@@ -101,7 +101,9 @@ def create_access_token(
     if "aud" not in to_encode:
         to_encode["aud"] = "authenticated"
     if "iss" not in to_encode:
-        to_encode["iss"] = "supabase"
+        to_encode["iss"] = str(
+            getattr(settings, "SUPABASE_JWT_ISSUER", "supabase") or "supabase"
+        )
 
     to_encode.update({"exp": expire})
 
@@ -160,11 +162,15 @@ def decode_jwt(token: str) -> dict[str, Any]:
             raise ValueError("Configuration error: Missing JWT secret")
 
         # Decode with verification
+        issuer = str(
+            getattr(settings, "SUPABASE_JWT_ISSUER", "supabase") or "supabase"
+        )
         payload = jwt.decode(
             token,
             settings.SUPABASE_JWT_SECRET,
             algorithms=["HS256"],
             audience="authenticated",  # Supabase uses this audience
+            issuer=issuer,
         )
         return payload
 

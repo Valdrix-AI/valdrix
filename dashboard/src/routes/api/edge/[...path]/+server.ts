@@ -1,29 +1,11 @@
-import { env as privateEnv } from '$env/dynamic/private';
-import { env as publicEnv } from '$env/dynamic/public';
-import { error, type RequestHandler } from '@sveltejs/kit';
+import type { RequestHandler } from '@sveltejs/kit';
+import { resolveBackendOrigin } from '$lib/server/backend-origin';
 
 const CACHEABLE_GET_PREFIXES = ['/health/live', '/api/v1/billing/plans'];
 const EDGE_CACHE_S_MAXAGE_SECONDS = 30;
 const EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 30;
 const EDGE_CACHE_NAMESPACE = 'valdrics-edge-proxy';
 const JOB_STREAM_SUFFIX = '/jobs/stream';
-
-function resolveBackendOrigin(): string {
-	const privateOrigin = String(privateEnv.PRIVATE_API_ORIGIN || '').trim();
-	if (privateOrigin) {
-		return privateOrigin.replace(/\/+$/, '');
-	}
-
-	const publicApiUrl = String(publicEnv.PUBLIC_API_URL || '').trim();
-	try {
-		return new URL(publicApiUrl).origin;
-	} catch {
-		throw error(
-			500,
-			'Edge proxy is misconfigured. Set PRIVATE_API_ORIGIN (preferred) or PUBLIC_API_URL.'
-		);
-	}
-}
 
 function isSafeCacheableRequest(
 	method: string,

@@ -203,7 +203,13 @@ async def test_saas_manual_feed_stream_skips_out_of_range_records() -> None:
 
 @pytest.mark.asyncio
 async def test_saas_verify_stripe_calls_balance_endpoint() -> None:
-    adapter = SaaSAdapter(_saas_credentials(platform="stripe", auth_method="api_key", api_key="sk_live_x"))
+    adapter = SaaSAdapter(
+        _saas_credentials(
+            platform="stripe",
+            auth_method="api_key",
+            api_key="example_stripe_api_key",
+        )
+    )
     with patch.object(adapter, "_get_json", AsyncMock(return_value={"ok": True})) as mock_get:
         await adapter._verify_stripe()
 
@@ -214,7 +220,11 @@ async def test_saas_verify_stripe_calls_balance_endpoint() -> None:
 @pytest.mark.asyncio
 async def test_saas_stream_stripe_branch_paths_non_dict_out_of_range_conversion_warning_and_invalid_next_token() -> None:
     adapter = SaaSAdapter(
-        _saas_credentials(platform="stripe", auth_method="api_key", api_key="sk_live_x")
+        _saas_credentials(
+            platform="stripe",
+            auth_method="api_key",
+            api_key="example_stripe_api_key",
+        )
     )
     start = datetime(2026, 1, 1, tzinfo=timezone.utc)
     end = datetime(2026, 1, 31, tzinfo=timezone.utc)

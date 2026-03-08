@@ -100,10 +100,30 @@ def validate_runtime_dependencies(settings: Settings) -> None:
     strict_env = settings.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}
     break_glass = _validate_prophet_break_glass(settings, strict_env)
 
+    if strict_env and not str(getattr(settings, "OTEL_EXPORTER_OTLP_ENDPOINT", "") or "").strip():
+        raise RuntimeError(
+            "OTEL_EXPORTER_OTLP_ENDPOINT is required in production/staging."
+        )
+    if strict_env and not str(getattr(settings, "SENTRY_DSN", "") or "").strip():
+        raise RuntimeError("SENTRY_DSN is required in production/staging.")
+
     if strict_env and not _module_available("tiktoken"):
         raise RuntimeError(
             "Missing required dependency 'tiktoken' in production/staging. "
             "Install tiktoken to ensure accurate LLM token accounting."
+        )
+
+    if strict_env and not _module_available(
+        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter"
+    ):
+        raise RuntimeError(
+            "OTLP tracing is configured for production/staging but the exporter dependency is missing."
+        )
+    if strict_env and not _module_available(
+        "opentelemetry.exporter.otlp.proto.grpc._log_exporter"
+    ):
+        raise RuntimeError(
+            "OTLP log export is configured for production/staging but the exporter dependency is missing."
         )
 
     sentry_dsn = str(getattr(settings, "SENTRY_DSN", None) or "").strip()

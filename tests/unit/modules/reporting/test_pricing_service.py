@@ -1,21 +1,13 @@
 import pytest
-from unittest.mock import patch
-import sys
-import types
+from unittest.mock import AsyncMock, patch
 
 from app.modules.reporting.domain.pricing.service import PricingService
 
 
 def test_get_hourly_rate_with_multiplier():
-    with (
-        patch(
-            "app.modules.reporting.domain.pricing.service.DEFAULT_RATES",
-            {"aws": {"instance": {"t3.micro": 0.01}}},
-        ),
-        patch(
-            "app.modules.reporting.domain.pricing.service.REGION_MULTIPLIERS",
-            {"us-east-1": 1.0, "us-west-2": 1.1},
-        ),
+    with patch(
+        "app.modules.reporting.domain.pricing.service.get_cloud_hourly_rate",
+        return_value=0.011,
     ):
         rate = PricingService.get_hourly_rate(
             "aws", "instance", "t3.micro", region="us-west-2"
@@ -25,10 +17,9 @@ def test_get_hourly_rate_with_multiplier():
 
 def test_get_hourly_rate_missing_logs():
     with (
-        patch("app.modules.reporting.domain.pricing.service.DEFAULT_RATES", {}),
         patch(
-            "app.modules.reporting.domain.pricing.service.REGION_MULTIPLIERS",
-            {"us-east-1": 1.0},
+            "app.modules.reporting.domain.pricing.service.get_cloud_hourly_rate",
+            return_value=0.0,
         ),
         patch("app.modules.reporting.domain.pricing.service.logger") as mock_logger,
     ):
@@ -48,80 +39,20 @@ def test_estimate_monthly_waste_uses_hourly():
 
 
 def test_get_hourly_rate_default_region_is_provider_neutral():
-    with (
-        patch(
-            "app.modules.reporting.domain.pricing.service.DEFAULT_RATES",
-            {"aws": {"instance": {"default": 1.0}}},
-        ),
-        patch(
-            "app.modules.reporting.domain.pricing.service.REGION_MULTIPLIERS",
-            {"us-east-1": 1.25},
-        ),
+    with patch(
+        "app.modules.reporting.domain.pricing.service.get_cloud_hourly_rate",
+        return_value=1.0,
     ):
-        # Without an explicit region, pricing should not implicitly apply AWS us-east-1 multiplier.
         rate = PricingService.get_hourly_rate("aws", "instance")
         assert rate == pytest.approx(1.0)
 
 
-def test_sync_with_aws_handles_recoverable_botocore_errors():
-    class FakeBotoCoreError(Exception):
-        pass
-
-    class FakeClientError(Exception):
-        pass
-
-    class FakeClient:
-        def get_products(self, **kwargs):
-            raise FakeClientError("pricing endpoint unavailable")
-
-    fake_boto3 = types.SimpleNamespace(
-        client=lambda service_name, region_name: FakeClient()
-    )
-    fake_botocore_exceptions = types.SimpleNamespace(
-        BotoCoreError=FakeBotoCoreError,
-        ClientError=FakeClientError,
-    )
-
-    with (
-        patch.dict(
-            sys.modules,
-            {
-                "boto3": fake_boto3,
-                "botocore.exceptions": fake_botocore_exceptions,
-            },
-        ),
-        patch("app.modules.reporting.domain.pricing.service.logger") as logger_mock,
-    ):
-        PricingService.sync_with_aws()
-
-    logger_mock.error.assert_called_once()
-
-
-def test_sync_with_aws_does_not_swallow_base_exceptions():
-    class FakeBotoCoreError(Exception):
-        pass
-
-    class FakeClientError(Exception):
-        pass
-
-    class FatalClient:
-        def get_products(self, **kwargs):
-            raise KeyboardInterrupt("stop")
-
-    fake_boto3 = types.SimpleNamespace(
-        client=lambda service_name, region_name: FatalClient()
-    )
-    fake_botocore_exceptions = types.SimpleNamespace(
-        BotoCoreError=FakeBotoCoreError,
-        ClientError=FakeClientError,
-    )
-
-    with patch.dict(
-        sys.modules,
-        {
-            "boto3": fake_boto3,
-            "botocore.exceptions": fake_botocore_exceptions,
-        },
-    ):
-        with pytest.raises(KeyboardInterrupt, match="stop"):
-            PricingService.sync_with_aws()
+@pytest.mark.asyncio
+async def test_sync_with_aws_delegates_to_supported_catalog_sync():
+    with patch(
+        "app.modules.reporting.domain.pricing.service.sync_supported_aws_pricing",
+        new=AsyncMock(return_value=3),
+    ) as sync_mock:
+        updated = await PricingService.sync_with_aws()
+    assert updated == 3
+    sync_mock.assert_awaited_once()

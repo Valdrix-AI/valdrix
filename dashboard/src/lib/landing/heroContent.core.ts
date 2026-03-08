@@ -14,7 +14,7 @@ export const HERO_ROLE_CONTEXT: Record<
 		controlTitle: 'Stop cloud and software waste before it slows your roadmap.',
 		metricsTitle: 'From cost dashboards to fast, owner-led engineering action.',
 		subtitle:
-			'Give engineering a faster path from spend signal to safe execution with clear ownership.',
+			'Valdrics routes cloud and software spend alerts to the right owner, approval path, and measurable outcome.',
 		quantPromise: 'Target 10-18% controllable spend recovery opportunity in the first 90 days.',
 		primaryIntent: 'engineering_control'
 	},
@@ -22,7 +22,7 @@ export const HERO_ROLE_CONTEXT: Record<
 		controlTitle: 'Control every dollar with accountable ownership and faster decisions.',
 		metricsTitle: 'From visibility reporting to faster financial action.',
 		subtitle:
-			'Detect spend movement earlier, route accountable owners immediately, and close actions before month-end pressure.',
+			'Valdrics turns spend findings into accountable owners, approval paths, and measurable savings.',
 		quantPromise:
 			'Target 30-50% fewer late-cycle escalations by formalizing ownership and action paths.',
 		primaryIntent: 'finops_governance'
@@ -31,7 +31,7 @@ export const HERO_ROLE_CONTEXT: Record<
 		controlTitle: 'Reduce spend and change risk without becoming a delivery bottleneck.',
 		metricsTitle: 'From anomalies to safe, reviewable remediation.',
 		subtitle:
-			'Keep execution guarded by approvals and pre-change checks while engineering keeps shipping.',
+			'Valdrics routes spend and change findings through checks, approvals, and reviewable execution.',
 		quantPromise:
 			'Target measurable reduction in risky manual changes by enforcing pre-change checks.',
 		primaryIntent: 'security_governance'
@@ -40,7 +40,7 @@ export const HERO_ROLE_CONTEXT: Record<
 		controlTitle: 'Control cloud margin risk before it reaches the boardroom.',
 		metricsTitle: 'From spend metrics to board-ready economic control.',
 		subtitle:
-			'Tie spend movement to accountable owners so margin conversations shift from surprise to strategy.',
+			'Valdrics ties spend movement to accountable owners, approvals, and measurable outcomes before variance compounds.',
 		quantPromise:
 			'Target stronger forecast confidence with one decision loop across engineering and finance.',
 		primaryIntent: 'executive_briefing'
@@ -77,53 +77,59 @@ export const HERO_OUTCOME_CHIPS = Object.freeze([
 	}
 ]);
 
-export const ABOVE_FOLD_TRUST_BADGES = Object.freeze([
-	'ISO 27001 readiness alignment',
-	'SOC 2 program alignment',
-	'GDPR data-rights support',
-	'DORA operational resilience',
-	'SSO + SCIM access controls',
-	'Tenant-isolated workspaces'
+export const ABOVE_FOLD_TRUST_RAIL = Object.freeze([
+	{
+		title: 'Safe access model',
+		detail: 'Read-only cloud roles where supported. Connector secrets stay encrypted at rest.'
+	},
+	{
+		title: 'Fast first rollout',
+		detail: 'First production workflow typically goes live in 3-10 business days.'
+	},
+	{
+		title: 'Reviewable proof',
+		detail: 'Decision history and export-ready records support finance, security, and buyer review.'
+	}
 ]);
 
 export const SIGNAL_VALUE_CARDS = Object.freeze([
 	{
-		label: 'Clarity',
-		value: 'See what changed and why',
-		hint: 'Cloud spend, anomaly, and workload signals in one operational view.'
+		label: 'Owner assigned',
+		value: 'Every issue lands with a named decision owner',
+		hint: 'Workload, team, and escalation context stay attached from first signal.'
 	},
 	{
-		label: 'Ownership',
-		value: 'Know who decides next',
-		hint: 'Clear responsibility across platform, finance, and leadership.'
+		label: 'Approval path',
+		value: 'Checks stay attached before action moves',
+		hint: 'Finance, platform, and security review one guardrailed path.'
 	},
 	{
-		label: 'Confidence',
-		value: 'Explain decisions quickly',
-		hint: 'Teams stay aligned during finance and leadership reviews.'
+		label: 'Outcome recorded',
+		value: 'Savings proof survives the meeting',
+		hint: 'Leadership reviews the result, rationale, and exported record in one place.'
 	}
 ]);
 
 export const MICRO_DEMO_STEPS = Object.freeze([
 	{
 		id: 'detect',
-		title: 'Detect',
-		detail: 'Realtime cloud anomaly is detected and scoped to impacted workloads.'
+		title: 'Scoped',
+		detail: 'The signal is tagged to the affected workload, owner queue, and spend context.'
 	},
 	{
 		id: 'govern',
-		title: 'Assess',
-		detail: 'Risk checks and entitlement context evaluate blast radius before execution.'
+		title: 'Routed',
+		detail: 'The issue moves to the right owner and review path before teams split into side threads.'
 	},
 	{
 		id: 'approve',
-		title: 'Approve',
-		detail: 'Accountable owner approves with explicit decision context and clear impact.'
+		title: 'Approved',
+		detail: 'Checks and approvers stay attached so the action can move with explicit sign-off.'
 	},
 	{
 		id: 'prove',
-		title: 'Confirm',
-		detail: 'Outcomes are captured so finance and engineering can measure impact quickly.'
+		title: 'Recorded',
+		detail: 'The result, rationale, and savings proof are saved for finance and leadership review.'
 	}
 ]);
 
@@ -190,27 +196,6 @@ export const TRUST_ECOSYSTEM_BADGES = Object.freeze([
 	'Kubernetes'
 ]);
 
-export const TRUST_BENCHMARK_OUTCOMES = Object.freeze([
-	{
-		title: 'Faster economic decisions',
-		detail:
-			'High-growth teams target a tighter detect-to-decision cycle by unifying ownership and execution context.',
-		benchmark: 'Modeled benchmark range: 15-25% faster decision cycles'
-	},
-	{
-		title: 'Fewer finance escalations',
-		detail:
-			'When ownership and approvals are explicit, month-end surprise escalations can be reduced materially.',
-		benchmark: 'Modeled benchmark range: 30-50% fewer late escalations'
-	},
-	{
-		title: 'Clear accountability',
-		detail:
-			'Teams can move from ambiguous remediation ownership to explicit, role-based accountability across functions.',
-		benchmark: 'Modeled benchmark range: owner assigned on every material anomaly'
-	}
-]);
-
 export const BUYER_ROLE_VIEWS = Object.freeze([
 	{
 		id: 'cto' as const,
@@ -264,30 +249,3 @@ export const BUYER_ROLE_VIEWS = Object.freeze([
 		]
 	}
 ]);
-
-export const CUSTOMER_PROOF_STORIES = Object.freeze([
-	{
-		title: 'Growth B2B SaaS Platform',
-		before: 'Monthly spikes were discovered late and routed through ad-hoc escalation threads.',
-		after:
-			'Ownership and approvals moved into weekly operating reviews with named decision owners.',
-		impact:
-			'Prelaunch design-partner signal: double-digit controllable spend opportunity surfaced before month-end close.'
-	},
-	{
-		title: 'Digital Commerce Group',
-		before: 'Finance and engineering escalations clustered around month-end close.',
-		after: 'Spend issues were triaged weekly with clear owners and explicit action deadlines.',
-		impact: 'Prelaunch design-partner signal: fewer late-cycle escalations and faster owner handoffs.'
-	},
-	{
-		title: 'Multi-Region Platform Team',
-		before: 'Cloud and SaaS actions were tracked in disconnected channels and ticket queues.',
-		after: 'Cloud+, SaaS, and license decisions ran in one shared operating loop across teams.',
-		impact:
-			'Prelaunch design-partner signal: unified signal-to-action narrative for leadership reviews.'
-	}
-]);
-
-export const PRELAUNCH_PROOF_NOTE =
-	'Valdrics is prelaunch. Public customer logos and production outcome studies will be published after go-live. Current proof reflects design-partner sessions and modeled benchmark ranges.';

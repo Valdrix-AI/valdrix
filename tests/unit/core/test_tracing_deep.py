@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock, patch
+import pytest
 from app.shared.core.tracing import (
     setup_tracing,
     set_correlation_id,
@@ -13,10 +14,11 @@ class TestTracingDeep:
             setup_tracing()
             # Should just return
 
-    def test_setup_tracing_console(self):
+    def test_setup_tracing_console_in_development(self):
         with patch("app.shared.core.tracing.get_settings") as mock_settings:
             mock_settings.return_value.TESTING = False
             mock_settings.return_value.OTEL_EXPORTER_OTLP_ENDPOINT = None
+            mock_settings.return_value.ENVIRONMENT = "development"
 
             # Patch classes within the tracing module namespace
             with patch("app.shared.core.tracing.TracerProvider") as mock_provider:
@@ -31,6 +33,25 @@ class TestTracingDeep:
                         assert mock_processor.called
                         assert mock_exporter.called
 
+    def test_setup_tracing_fails_closed_in_production_without_sink(self):
+        with patch("app.shared.core.tracing.get_settings") as mock_settings:
+            mock_settings.return_value.TESTING = False
+            mock_settings.return_value.OTEL_EXPORTER_OTLP_ENDPOINT = None
+            mock_settings.return_value.ENVIRONMENT = "production"
+
+            with (
+                patch("app.shared.core.tracing.TracerProvider") as mock_provider,
+                patch("app.shared.core.tracing.BatchSpanProcessor") as mock_processor,
+                patch("app.shared.core.tracing.ConsoleSpanExporter") as mock_exporter,
+            ):
+                with pytest.raises(
+                    RuntimeError, match="OTEL_EXPORTER_OTLP_ENDPOINT"
+                ):
+                    setup_tracing()
+                assert mock_provider.called
+                assert not mock_processor.called
+                assert not mock_exporter.called
+
     def test_setup_tracing_otlp(self):
         with patch("app.shared.core.tracing.get_settings") as mock_settings:
             mock_settings.return_value.TESTING = False
@@ -38,6 +59,7 @@ class TestTracingDeep:
                 "http://jaeger:4317"
             )
             mock_settings.return_value.OTEL_EXPORTER_OTLP_INSECURE = True
+            mock_settings.return_value.ENVIRONMENT = "production"
 
             with patch("app.shared.core.tracing.OTLPSpanExporter") as mock_exporter:
                 with patch("app.shared.core.tracing.TracerProvider") as mock_provider:
@@ -50,6 +72,7 @@ class TestTracingDeep:
         with patch("app.shared.core.tracing.get_settings") as mock_settings:
             mock_settings.return_value.TESTING = False
             mock_settings.return_value.OTEL_EXPORTER_OTLP_ENDPOINT = None
+            mock_settings.return_value.ENVIRONMENT = "development"
 
             with patch(
                 "app.shared.core.tracing.FastAPIInstrumentor"

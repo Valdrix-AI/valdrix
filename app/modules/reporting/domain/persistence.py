@@ -6,15 +6,20 @@ Supports both daily and hourly granularity.
 """
 
 from typing import Any, AsyncIterable
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 import uuid
 from decimal import Decimal, InvalidOperation
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 from app.models.cloud import CostRecord
 from app.schemas.costs import CloudUsageSummary
 from app.modules.reporting.domain.canonicalization import map_canonical_charge_category
+from app.modules.reporting.domain.persistence_retention_ops import (
+    cleanup_expired_cost_records_by_plan as _cleanup_expired_cost_records_by_plan_impl,
+    cleanup_old_cost_records as _cleanup_old_cost_records_impl,
+    finalize_cost_record_batch as _finalize_cost_record_batch_impl,
+)
 from app.modules.reporting.domain.persistence_adjustment_ops import (
     check_for_significant_adjustments as _check_for_significant_adjustments_impl,
 )
@@ -313,41 +318,32 @@ class CostPersistenceService:
         Deletes cost records older than the specified retention period in small batches.
         Optimized for space reclamation without long-running database locks.
         """
-        from datetime import timezone
-
-        cutoff_date = datetime.combine(
-            date.today() - timedelta(days=days_retention), datetime.min.time()
-        ).replace(tzinfo=timezone.utc)
-        total_deleted = 0
-        batch_size = 5000  # Configurable batch size
-        while True:
-            # 1. Fetch a batch of IDs to delete
-            select_stmt = (
-                select(CostRecord.id)
-                .where(CostRecord.timestamp < cutoff_date)
-                .limit(batch_size)
-            )
-            result = await self.db.execute(select_stmt)
-            ids = result.scalars().all()
-
-            if not ids:
-                break
-
-            # 2. Delete this batch
-            delete_stmt = delete(CostRecord).where(CostRecord.id.in_(ids))
-            await self.db.execute(delete_stmt)
-
-            total_deleted += len(ids)
-            await (
-                self.db.flush()
-            )  # Flush each batch to DB but don't commit outer transaction
-
-        logger.info(
-            "cost_retention_cleanup_complete",
-            cutoff_date=str(cutoff_date),
-            total_deleted=total_deleted,
+        return await _cleanup_old_cost_records_impl(
+            self.db,
+            days_retention=days_retention,
+            logger_obj=logger,
         )
-        return {"deleted_count": total_deleted}
+
+    async def cleanup_expired_records_by_plan(
+        self,
+        *,
+        batch_size: int = 5000,
+        max_batches: int = 50,
+        as_of_date: date | None = None,
+    ) -> dict[str, Any]:
+        """
+        Deletes retained cost records according to the tenant's pricing tier.
+
+        This keeps runtime enforcement aligned with the commercial retention
+        contract instead of using a single global retention threshold.
+        """
+        return await _cleanup_expired_cost_records_by_plan_impl(
+            self.db,
+            batch_size=batch_size,
+            max_batches=max_batches,
+            as_of_date=as_of_date,
+            logger_obj=logger,
+        )
 
     async def finalize_batch(
         self, days_ago: int = 2, tenant_id: str | None = None
@@ -356,32 +352,10 @@ class CostPersistenceService:
         Transition cost records from PRELIMINARY to FINAL after the restatement window.
         AWS typically finalizes costs within 24-48 hours.
         """
-        cutoff_date = date.today() - timedelta(days=days_ago)
-
-        stmt = (
-            update(CostRecord)
-            .where(
-                CostRecord.cost_status == "PRELIMINARY",
-                CostRecord.recorded_at <= cutoff_date,
-            )
-            .values(cost_status="FINAL", is_preliminary=False)
-        )
-
-        if tenant_id:
-            stmt = stmt.where(
-                CostRecord.tenant_id == self._coerce_uuid_if_valid(tenant_id)
-            )
-
-        result = await self.db.execute(stmt)
-        await self.db.flush()
-
-        rowcount = getattr(result, "rowcount", None)
-        count = int(rowcount or 0)
-        logger.info(
-            "cost_batch_finalization_complete",
+        return await _finalize_cost_record_batch_impl(
+            self.db,
+            days_ago=days_ago,
             tenant_id=tenant_id,
-            cutoff_date=str(cutoff_date),
-            records_finalized=count,
+            tenant_id_coercer=self._coerce_uuid_if_valid,
+            logger_obj=logger,
         )
-
-        return {"records_finalized": count}

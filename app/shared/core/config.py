@@ -18,6 +18,9 @@ from app.shared.core.config_validation import (
     validate_remediation_guardrails as _validate_remediation_guardrails_impl,
     validate_turnstile_config as _validate_turnstile_config_impl,
 )
+from app.shared.core.config_validation_observability import (
+    validate_observability_config as _validate_observability_config_impl,
+)
 
 # Environment Constants (Finding #10)
 ENV_PRODUCTION = "production"
@@ -73,11 +76,13 @@ class Settings(BaseSettings):
     API_URL: str = "http://localhost:8000"  # Base URL for OIDC and Magic Links
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None  # Added for D5: Telemetry Sink
     OTEL_EXPORTER_OTLP_INSECURE: bool = False  # SEC-07: Secure Tracing
+    OTEL_LOGS_EXPORT_ENABLED: bool = True
     CSRF_SECRET_KEY: Optional[str] = None  # SEC-01: CSRF
     CSRF_TEST_SECRET_KEY: Optional[str] = None
     TESTING: bool = False
     PYTEST_CURRENT_TEST: Optional[str] = None
     SENTRY_DSN: Optional[str] = None
+    EXPOSE_API_DOCUMENTATION_PUBLICLY: bool = False
     WEB_CONCURRENCY: int = 2
     APP_RUNTIME_DATA_DIR: str = "/tmp/valdrics"
     RATELIMIT_ENABLED: bool = True
@@ -100,6 +105,7 @@ class Settings(BaseSettings):
     WEBHOOK_ALLOWED_DOMAINS: list[str] = []  # Allowlist for generic webhook retries
     WEBHOOK_REQUIRE_HTTPS: bool = True
     WEBHOOK_BLOCK_PRIVATE_IPS: bool = True
+    MARKETING_SUBSCRIBE_WEBHOOK_URL: Optional[str] = None
     # Only trust X-Forwarded-For when the deployment path is explicitly trusted.
     TRUST_PROXY_HEADERS: bool = False
     # Number of trusted reverse-proxy hops when resolving client IP from XFF.
@@ -158,6 +164,14 @@ class Settings(BaseSettings):
     def _validate_environment_safety(self) -> None:
         """Validate network and deployment safety (SEC-A1/SEC-A2)."""
         _validate_environment_safety_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
+        )
+
+    def _validate_observability_config(self) -> None:
+        """Validate observability sink posture for strict environments."""
+        _validate_observability_config_impl(
             self,
             env_production=ENV_PRODUCTION,
             env_staging=ENV_STAGING,
@@ -234,6 +248,7 @@ class Settings(BaseSettings):
     LLM_GLOBAL_ABUSE_KILL_SWITCH: bool = False
 
     # Scheduler
+    ENABLE_SCHEDULER: bool = True
     SCHEDULER_HOUR: int = 8
     SCHEDULER_MINUTE: int = 0
     # Bound system-scope sweeps to reduce blast radius during incident conditions.
@@ -244,6 +259,9 @@ class Settings(BaseSettings):
     BACKGROUND_JOB_DEAD_LETTER_RETENTION_DAYS: int = 30
     BACKGROUND_JOB_RETENTION_PURGE_BATCH_SIZE: int = 1000
     BACKGROUND_JOB_RETENTION_PURGE_MAX_BATCHES: int = 20
+    # Cost-record retention is plan-aware and enforced by the maintenance sweep.
+    COST_RECORD_RETENTION_PURGE_BATCH_SIZE: int = 5000
+    COST_RECORD_RETENTION_PURGE_MAX_BATCHES: int = 50
     # Scheduler distributed lock should fail-closed by default.
     # Enable only as temporary emergency bypass.
     SCHEDULER_LOCK_FAIL_OPEN: bool = False
@@ -278,6 +296,7 @@ class Settings(BaseSettings):
     # Supabase Auth
     SUPABASE_URL: Optional[str] = None
     SUPABASE_JWT_SECRET: Optional[str] = None  # Required for auth middleware
+    SUPABASE_JWT_ISSUER: str = "supabase"
     JWT_SIGNING_KID: Optional[str] = None
 
     # Notifications
@@ -377,6 +396,9 @@ class Settings(BaseSettings):
     # Paystack Billing (Nigeria Support)
     PAYSTACK_SECRET_KEY: Optional[str] = None
     PAYSTACK_PUBLIC_KEY: Optional[str] = None
+    # Explicit offline-validation escape hatch for CI contract checks.
+    # Never enable this in real staging/production deployments.
+    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION: bool = False
     # Monthly plans
     PAYSTACK_PLAN_STARTER: Optional[str] = None
     PAYSTACK_PLAN_GROWTH: Optional[str] = None
@@ -461,3 +483,8 @@ class Settings(BaseSettings):
         Note: Staging/Development use DEBUG=False but are NOT 'production'.
         """
         return self.ENVIRONMENT == "production"
+
+    @property
+    def is_strict_environment(self) -> bool:
+        """True for staging/production where enterprise controls must fail closed."""
+        return self.ENVIRONMENT in {ENV_STAGING, ENV_PRODUCTION}

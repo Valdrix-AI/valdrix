@@ -442,7 +442,7 @@ async def request_data_erasure(
             "message": "All tenant data has been deleted. Audit logs are preserved for compliance.",
             "deleted_counts": deleted_counts,
             "next_steps": [
-                "Your account will remain active until you close it via /api/v1/settings/account",
+                "Close the tenant account via POST /api/v1/settings/account/close to revoke remaining access",
                 "Audit logs are retained for 90 days per SOC2 requirements",
                 "Contact support@valdrics.com for any questions",
             ],

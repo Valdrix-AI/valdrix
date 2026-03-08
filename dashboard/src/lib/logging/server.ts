@@ -1,11 +1,6 @@
-import { dev } from '$app/environment';
-
 type ServerLogLevel = 'error' | 'warn' | 'info';
 
 function emitServerLog(level: ServerLogLevel, message: string, context?: unknown): void {
-	if (!dev) {
-		return;
-	}
 	if (context === undefined) {
 		console[level](message);
 		return;

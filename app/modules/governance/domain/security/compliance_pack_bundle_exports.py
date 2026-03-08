@@ -9,11 +9,15 @@ import zipfile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.core.auth import CurrentUser
+from app.modules.governance.domain.security.compliance_pack_contracts import (
+    CompliancePackActor,
+)
+
 
 def _append_unique(paths: list[str], path: str) -> None:
     if path not in paths:
         paths.append(path)
+
 
 def write_core_artifacts(
     *,
@@ -33,7 +37,7 @@ def build_manifest(
     *,
     exported_at: datetime,
     run_id: str,
-    user: CurrentUser,
+    actor: CompliancePackActor,
     app_environment: str,
     app_version: str,
     start_date: Optional[datetime],
@@ -60,9 +64,9 @@ def build_manifest(
     return {
         "exported_at": exported_at.isoformat(),
         "run_id": run_id,
-        "tenant_id": str(user.tenant_id),
-        "actor_id": str(user.id),
-        "actor_email": user.email,
+        "tenant_id": str(actor.tenant_id),
+        "actor_id": str(actor.id),
+        "actor_email": actor.email,
         "environment": app_environment,
         "app_version": app_version,
         "window": {
@@ -138,7 +142,7 @@ async def run_focus_export(
     *,
     zf: zipfile.ZipFile,
     db: AsyncSession,
-    user: CurrentUser,
+    actor: CompliancePackActor,
     include_focus_export: bool,
     included_files: list[str],
     focus_export_info: dict[str, Any],
@@ -169,7 +173,7 @@ async def run_focus_export(
             focus_writer.writerow(FOCUS_V13_CORE_COLUMNS)
 
             async for focus_row in export_service.export_rows(
-                tenant_id=cast(UUID, user.tenant_id),
+                tenant_id=cast(UUID, actor.tenant_id),
                 start_date=focus_window_start,
                 end_date=focus_window_end,
                 provider=normalized_focus_provider,
@@ -223,7 +227,7 @@ async def run_savings_proof_export(
     *,
     zf: zipfile.ZipFile,
     db: AsyncSession,
-    user: CurrentUser,
+    actor: CompliancePackActor,
     include_savings_proof: bool,
     included_files: list[str],
     savings_proof_info: dict[str, Any],
@@ -239,8 +243,8 @@ async def run_savings_proof_export(
 
         service = SavingsProofService(db)
         payload = await service.generate(
-            tenant_id=cast(UUID, user.tenant_id),
-            tier=str(getattr(user, "tier", "")),
+            tenant_id=cast(UUID, actor.tenant_id),
+            tier=str(actor.tier),
             start_date=savings_window_start,
             end_date=savings_window_end,
             provider=normalized_savings_provider,
@@ -266,8 +270,8 @@ async def run_savings_proof_export(
             _append_unique(included_files, drill_csv_path)
 
             drill_payload = await service.drilldown(
-                tenant_id=cast(UUID, user.tenant_id),
-                tier=str(getattr(user, "tier", "")),
+                tenant_id=cast(UUID, actor.tenant_id),
+                tier=str(actor.tier),
                 start_date=savings_window_start,
                 end_date=savings_window_end,
                 provider=normalized_savings_provider,
@@ -304,7 +308,7 @@ async def run_realized_savings_export(
     *,
     zf: zipfile.ZipFile,
     db: AsyncSession,
-    user: CurrentUser,
+    actor: CompliancePackActor,
     include_realized_savings: bool,
     included_files: list[str],
     realized_savings_info: dict[str, Any],
@@ -333,7 +337,7 @@ async def run_realized_savings_export(
                 RealizedSavingsEvent.remediation_request_id == RemediationRequest.id,
             )
             .where(
-                RealizedSavingsEvent.tenant_id == user.tenant_id,
+                RealizedSavingsEvent.tenant_id == actor.tenant_id,
                 RemediationRequest.executed_at.is_not(None),
                 RemediationRequest.executed_at >= realized_start_dt,
                 RemediationRequest.executed_at <= realized_end_dt,
@@ -432,7 +436,7 @@ async def run_close_package_export(
     *,
     zf: zipfile.ZipFile,
     db: AsyncSession,
-    user: CurrentUser,
+    actor: CompliancePackActor,
     include_close_package: bool,
     included_files: list[str],
     close_package_info: dict[str, Any],
@@ -450,7 +454,7 @@ async def run_close_package_export(
 
         close_service = CostReconciliationService(db)
         package = await close_service.generate_close_package(
-            tenant_id=cast(UUID, user.tenant_id),
+            tenant_id=cast(UUID, actor.tenant_id),
             start_date=close_window_start,
             end_date=close_window_end,
             enforce_finalized=bool(close_enforce_finalized),

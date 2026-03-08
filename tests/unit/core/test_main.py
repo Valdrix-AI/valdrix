@@ -14,10 +14,10 @@ from app.main import (
     value_error_handler,
     generic_exception_handler,
     custom_rate_limit_handler,
-    _load_emissions_tracker,
     _resolve_csrf_settings,
 )
 from app.main import settings
+from app.shared.core import app_runtime
 from app.shared.core.exceptions import ValdricsException
 from app.shared.db.session import get_db
 from fastapi import HTTPException
@@ -84,6 +84,14 @@ async def test_metrics_are_internal_only(lite_client: AsyncClient):
     internal_response = await lite_client.get(INTERNAL_METRICS_PATH)
     assert internal_response.status_code == 200
     assert "# HELP" in internal_response.text
+
+
+@pytest.mark.asyncio
+async def test_openapi_docs_blocked_in_strict_env(lite_client: AsyncClient):
+    with patch("app.main._api_documentation_allowed", return_value=False):
+        assert (await lite_client.get("/openapi.json")).status_code == 404
+        assert (await lite_client.get("/docs")).status_code == 404
+        assert (await lite_client.get("/redoc")).status_code == 404
 
 
 @pytest.mark.asyncio
@@ -411,7 +419,7 @@ def test_load_emissions_tracker_skips_in_test_mode():
     old = settings.TESTING
     settings.TESTING = True
     try:
-        assert _load_emissions_tracker() is None
+        assert app_runtime._load_emissions_tracker() is None
     finally:
         settings.TESTING = old
 
@@ -424,10 +432,10 @@ def test_load_emissions_tracker_imports_codecarbon_when_available():
 
     setattr(module, "EmissionsTracker", DummyTracker)
     with (
-        patch("app.main._is_test_mode", return_value=False),
+        patch("app.shared.core.app_runtime._is_test_mode", return_value=False),
         patch.dict("sys.modules", {"codecarbon": module}),
     ):
-        tracker = _load_emissions_tracker()
+        tracker = app_runtime._load_emissions_tracker()
     assert tracker is DummyTracker
 
 
@@ -448,3 +456,28 @@ def test_get_csrf_config_derives_ephemeral_testing_secret(
         assert cfg.secret_key.startswith("test_csrf_")
         assert cfg.secret_key != "test_csrf_secret_key_for_local_tests_only_123"
         assert len(cfg.secret_key) > 20
+
+
+def test_stop_emissions_tracker_records_valid_emissions() -> None:
+    tracker = MagicMock()
+    tracker.stop.return_value = 1.75
+
+    with patch("app.shared.core.app_runtime.record_runtime_carbon_emissions") as mock_record:
+        app_runtime._stop_emissions_tracker(tracker)
+
+    tracker.stop.assert_called_once_with()
+    mock_record.assert_called_once_with(1.75)
+
+
+def test_stop_emissions_tracker_logs_failure_without_crashing() -> None:
+    tracker = MagicMock()
+    tracker.stop.side_effect = RuntimeError("tracker failed")
+
+    with (
+        patch("app.shared.core.app_runtime.record_runtime_carbon_emissions") as mock_record,
+        patch("app.shared.core.app_runtime.logger") as mock_logger,
+    ):
+        app_runtime._stop_emissions_tracker(tracker)
+
+    mock_record.assert_not_called()
+    mock_logger.warning.assert_called_once()

@@ -80,7 +80,8 @@
 	let activeSignalLane = $derived(activeSnapshot.lanes.find((lane) => lane.id === activeLaneId) ?? activeSnapshot.lanes[0]);
 	let heroContext = $derived(HERO_ROLE_CONTEXT[activeBuyerRole.id] ?? HERO_ROLE_CONTEXT.finops);
 	let heroTitle = $derived(experiments.heroVariant === 'from_metrics_to_control' ? heroContext.metricsTitle : heroContext.controlTitle);
-	let heroSubtitle = $derived(`${heroContext.subtitle} Valdrics helps teams catch overspend early, route the right owner, and act safely before waste compounds.`);
+	let heroSubtitle = $derived(heroContext.subtitle);
+	let heroQuantPromise = $derived(heroContext.quantPromise);
 	let canonicalUrl = $derived(new URL($page.url.pathname, $page.url.origin).toString()), ogImageUrl = $derived(new URL(`${assets}/og-image.png`, $page.url.origin).toString());
 	let primaryCtaLabel = $derived(experiments.ctaVariant === 'book_briefing' ? 'Book Executive Briefing' : 'Start Free');
 	let secondaryCtaLabel = $derived('See Enterprise Path'), secondaryCtaHref = $derived(buildEnterpriseReviewHref('hero_secondary'));
@@ -371,7 +372,8 @@
 </script>
 <LandingHeroView
 	{motionProfile} {landingScrollProgressPct} canonicalUrl={canonicalUrl} imageUrl={ogImageUrl}
-	{heroTitle} {heroSubtitle} {primaryCtaLabel} {secondaryCtaLabel} {secondaryCtaHref}
+	{heroTitle} {heroSubtitle} quantPromise={heroQuantPromise}
+	{primaryCtaLabel} {secondaryCtaLabel} {secondaryCtaHref}
 	{primaryCtaHref} ctaVariant={experiments.ctaVariant}
 	sectionOrderVariant={experiments.sectionOrderVariant}
 	{activeHookState} {hookStateIndex} onSelectHookState={selectHookState}

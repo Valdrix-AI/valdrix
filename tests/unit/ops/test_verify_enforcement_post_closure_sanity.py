@@ -52,7 +52,7 @@ def test_dimension_tokens_include_lock_contention_and_snapshot_export_evidence()
     export_integrity = {(t.path, t.token) for t in DIMENSION_TOKENS["export_integrity"]}
 
     assert (
-        "tests/unit/enforcement/test_enforcement_api.py",
+        "tests/unit/enforcement/enforcement_api_cases_part04.py",
         "test_gate_lock_failures_route_to_failsafe_with_lock_reason_codes",
     ) in observability
     assert (
@@ -64,15 +64,15 @@ def test_dimension_tokens_include_lock_contention_and_snapshot_export_evidence()
         "rollback_validation_passed: true",
     ) in deterministic
     assert (
-        "tests/unit/enforcement/test_enforcement_service.py",
+        "tests/unit/enforcement/enforcement_service_cases_part08.py",
         "computed_context_month_start",
     ) in snapshot
     assert (
-        "tests/unit/enforcement/test_enforcement_service.py",
+        "tests/unit/enforcement/enforcement_service_cases_part08.py",
         "computed_context_data_source_mode",
     ) in snapshot
     assert (
-        "tests/unit/enforcement/test_enforcement_service.py",
+        "tests/unit/enforcement/enforcement_service_cases_part08.py",
         "test_build_export_bundle_reconciles_counts_and_is_deterministic",
     ) in export_integrity
 

@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime, date, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 from decimal import Decimal
 from app.modules.reporting.domain.persistence import CostPersistenceService
@@ -325,6 +326,88 @@ async def test_cleanup_loops(persistence_service, mock_db):
 
     await persistence_service.cleanup_old_records(days_retention=30)
     assert mock_db.flush.called
+
+
+@pytest.mark.asyncio
+async def test_cleanup_expired_records_by_plan_returns_tenant_reports(
+    persistence_service, mock_db
+):
+    tenant_free = uuid4()
+    tenant_growth = uuid4()
+
+    plan_rows = MagicMock()
+    plan_rows.scalars.return_value.all.return_value = ["free", "growth", "enterprise"]
+
+    free_rows = MagicMock()
+    free_rows.all.return_value = [
+        SimpleNamespace(
+            id=uuid4(),
+            tenant_id=tenant_free,
+            recorded_at=date(2025, 1, 1),
+        )
+    ]
+
+    free_empty = MagicMock()
+    free_empty.all.return_value = []
+
+    growth_rows = MagicMock()
+    growth_rows.all.return_value = [
+        SimpleNamespace(
+            id=uuid4(),
+            tenant_id=tenant_growth,
+            recorded_at=date(2024, 1, 15),
+        ),
+        SimpleNamespace(
+            id=uuid4(),
+            tenant_id=tenant_growth,
+            recorded_at=date(2024, 1, 16),
+        ),
+    ]
+
+    growth_empty = MagicMock()
+    growth_empty.all.return_value = []
+
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            plan_rows,
+            free_rows,
+            MagicMock(),
+            free_empty,
+            growth_rows,
+            MagicMock(),
+            growth_empty,
+        ]
+    )
+
+    result = await persistence_service.cleanup_expired_records_by_plan(
+        batch_size=200,
+        max_batches=10,
+        as_of_date=date(2026, 3, 7),
+    )
+
+    assert result["deleted_count"] == 3
+    assert result["tiers"] == {"free": 1, "growth": 2}
+    assert result["batch_size"] == 200
+    assert result["max_batches"] == 10
+    assert result["tenant_reports"] == [
+        {
+            "tenant_id": str(tenant_free),
+            "tenant_tier": "free",
+            "retention_days": 30,
+            "deleted_count": 1,
+            "oldest_recorded_at": "2025-01-01",
+            "newest_recorded_at": "2025-01-01",
+        },
+        {
+            "tenant_id": str(tenant_growth),
+            "tenant_tier": "growth",
+            "retention_days": 365,
+            "deleted_count": 2,
+            "oldest_recorded_at": "2024-01-15",
+            "newest_recorded_at": "2024-01-16",
+        },
+    ]
+    assert mock_db.flush.await_count == 2
 
 
 @pytest.mark.asyncio

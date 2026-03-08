@@ -63,32 +63,32 @@ export const SIGNAL_MAP_VIEWBOX = Object.freeze({
 export const SIGNAL_LANE_DEFINITIONS: readonly SignalLaneDefinition[] = Object.freeze([
 	{
 		id: 'economic_visibility',
-		title: 'Economic Visibility',
-		subtitle: 'Spend + attribution telemetry',
+		title: 'Signal Scoped',
+		subtitle: 'Issue + workload context attached',
 		x: 138,
 		y: 122,
 		labelClass: 'signal-label--a'
 	},
 	{
 		id: 'deterministic_enforcement',
-		title: 'Execution Controls',
-		subtitle: 'Risk checks + approvals',
+		title: 'Checks Applied',
+		subtitle: 'Policy + risk guardrails loaded',
 		x: 488,
 		y: 90,
 		labelClass: 'signal-label--b'
 	},
 	{
 		id: 'financial_governance',
-		title: 'Financial Governance',
-		subtitle: 'Budgets + ownership',
+		title: 'Approval Routed',
+		subtitle: 'Owner + finance sign-off attached',
 		x: 540,
 		y: 302,
 		labelClass: 'signal-label--c'
 	},
 	{
 		id: 'operational_resilience',
-		title: 'Operational Resilience',
-		subtitle: 'Continuity + response',
+		title: 'Outcome Recorded',
+		subtitle: 'Decision trail + savings proof saved',
 		x: 170,
 		y: 320,
 		labelClass: 'signal-label--d'
@@ -100,34 +100,37 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 		id: 'snp-2026-02-27-a',
 		label: 'Snapshot A',
 		capturedAt: '2026-02-27T20:55:58Z',
-		headline: 'Signal quality stays stable as workloads change.',
-		decisionSummary: 'Teams can prioritize cost and risk from one shared view.',
+		headline: 'One issue moves from signal to owner without leaving the loop.',
+		decisionSummary: 'The same record carries context, checks, approval, and proof.',
 		lanes: {
 			economic_visibility: {
 				status: 'Watch',
-				metric: 'Attribution telemetry lag detected',
-				detail: 'Cost signals from secondary regions are experiencing collection delays.',
+				metric: 'Waste anomaly linked to shared-services workload',
+				detail:
+					'Affected workload, owner queue, and budget context are attached before anyone debates where the issue belongs.',
 				severity: 'watch',
 				wasteUsd: 12400,
-				actionLabel: 'Sync Telemetry'
+				actionLabel: 'Assign Owner'
 			},
 			deterministic_enforcement: {
 				status: 'Stable',
-				metric: 'Coverage expansion in progress',
-				detail: 'More high-impact actions are being moved into pre-change checks and approvals.',
+				metric: 'Pre-change guardrails loaded',
+				detail:
+					'Risk boundaries, blast-radius checks, and execution conditions stay attached before action moves forward.',
 				severity: 'healthy'
 			},
 			financial_governance: {
 				status: 'Stable',
-				metric: 'Budget thresholds aligned',
+				metric: 'Finance approver pre-routed',
 				detail:
-					'Budget boundaries and escalation paths stay aligned across finance and engineering.',
+					'Budget owner and finance reviewer are already in the path before the remediation request is approved.',
 				severity: 'healthy'
 			},
 			operational_resilience: {
 				status: 'Stable',
-				metric: 'Response drills completed',
-				detail: 'Teams have practiced response paths so action stays calm during cost pressure.',
+				metric: 'Decision log prepared',
+				detail:
+					'If the action completes, rationale, owner, and savings proof are captured in one reviewable record.',
 				severity: 'healthy'
 			}
 		},
@@ -141,34 +144,37 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 		id: 'snp-2026-02-28-b',
 		label: 'Snapshot B',
 		capturedAt: '2026-02-28T06:30:00Z',
-		headline: 'Approval workflows keep decisions coordinated.',
-		decisionSummary: 'Platform and finance stay aligned before operational changes.',
+		headline: 'Owner and approval routing stay aligned before any change moves.',
+		decisionSummary: 'Engineering, finance, and security review one chain instead of parallel threads.',
 		lanes: {
 			economic_visibility: {
 				status: 'Stable',
-				metric: 'Unit economics baseline validated',
+				metric: 'Owner candidate confirmed',
 				detail:
-					'Pricing assumptions stay aligned across starter, growth, pro, and enterprise plans.',
+					'The issue is already scoped to the responsible team and workload before escalation starts.',
 				severity: 'healthy'
 			},
 			deterministic_enforcement: {
 				status: 'Watch',
-				metric: 'Approval routing active',
-				detail: 'Approval sign-offs include finance, product, and engineering owners.',
+				metric: 'Exception review required',
+				detail:
+					'One remediation path needs additional policy review before execution can proceed safely.',
 				severity: 'watch',
 				wasteUsd: 8200,
-				actionLabel: 'Route Approvals'
+				actionLabel: 'Review Guardrails'
 			},
 			financial_governance: {
 				status: 'Stable',
-				metric: 'Pricing updates intentionally paused',
-				detail: 'Commercial changes stay paused until more live operating data is collected.',
+				metric: 'Approver chain complete',
+				detail:
+					'Budget owner, finance, and platform sign-off are visible in one route before approval is granted.',
 				severity: 'healthy'
 			},
 			operational_resilience: {
 				status: 'Stable',
-				metric: 'Replay and rollback readiness maintained',
-				detail: 'Critical action paths are tested for predictable rollback and recovery.',
+				metric: 'Audit record linked',
+				detail:
+					'The future export record is already linked so leadership can review the full chain after execution.',
 				severity: 'healthy'
 			}
 		},
@@ -178,33 +184,37 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 		id: 'snp-2026-02-28-c',
 		label: 'Snapshot C',
 		capturedAt: '2026-02-28T12:00:00Z',
-		headline: 'Cross-team response stays calm during cost pressure.',
-		decisionSummary: 'Leaders can triage faster with shared context and clear ownership.',
+		headline: 'Leadership can review one decision trail during cost pressure.',
+		decisionSummary: 'The same record carries the owner, the check, the approval, and the proof.',
 		lanes: {
 			economic_visibility: {
 				status: 'Stable',
-				metric: '490 active subscriptions in telemetry set',
-				detail: 'Current subscription mix gives teams a representative operating baseline.',
+				metric: 'Anomaly linked to product area',
+				detail:
+					'The spend movement is already scoped to the affected team so triage starts with accountable context.',
 				severity: 'healthy'
 			},
 			deterministic_enforcement: {
 				status: 'Stable',
-				metric: 'Release checks rerun passed',
-				detail: 'Release checks validate that control paths and exports remain intact.',
+				metric: 'Change checks rerun passed',
+				detail:
+					'Policy and execution checks validate the action path before anyone pushes a remediation forward.',
 				severity: 'healthy'
 			},
 			financial_governance: {
 				status: 'Watch',
-				metric: 'Free-tier margin watch bounded',
-				detail: 'Free-tier compute usage remains bounded against starter-tier economics.',
+				metric: 'Commercial limit review opened',
+				detail:
+					'The approval path is paused until the right commercial owner confirms the new boundary.',
 				severity: 'watch',
 				wasteUsd: 15800,
-				actionLabel: 'Adjust Limits'
+				actionLabel: 'Adjust Approval Limit'
 			},
 			operational_resilience: {
 				status: 'Stable',
-				metric: 'Operational follow-through required',
-				detail: 'Remaining items are operational cadence tasks, not core product capability gaps.',
+				metric: 'Executive summary queued',
+				detail:
+					'Leadership review gets a concise saved narrative once the action closes and proof is recorded.',
 				severity: 'healthy'
 			}
 		},
@@ -214,34 +224,38 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 		id: 'snp-2026-03-01-d',
 		label: 'Snapshot D',
 		capturedAt: '2026-03-01T09:00:00Z',
-		headline: 'Resilience guardrails maintain execution continuity.',
-		decisionSummary: 'Teams can recover faster with automated safety-checks.',
+		headline: 'Safety checks keep execution calm during remediation.',
+		decisionSummary: 'Guardrails and rollback context stay visible before approval is granted.',
 		lanes: {
 			economic_visibility: {
 				status: 'Stable',
-				metric: 'Real-time billing feed active',
-				detail: 'Cloud provider billing streams are processing with sub-hour latency.',
+				metric: 'Billing signal in sync',
+				detail:
+					'The spend event is scoped fast enough that owner routing begins before the issue hits close week.',
 				severity: 'healthy'
 			},
 			deterministic_enforcement: {
 				status: 'Stable',
-				metric: 'Guardrail policy at 94%',
-				detail: 'Policy coverage remains high across development and production clusters.',
+				metric: 'Rollback plan attached',
+				detail:
+					'Risk checks and rollback context remain attached so remediation does not trade speed for control.',
 				severity: 'healthy'
 			},
 			financial_governance: {
 				status: 'Stable',
-				metric: 'Forecast variance < 2%',
-				detail: 'Predicted spend remains highly accuracy against realized consumption.',
+				metric: 'Forecast sign-off current',
+				detail:
+					'Approvers can see the financial impact before execution because the decision path holds forecast context.',
 				severity: 'healthy'
 			},
 			operational_resilience: {
 				status: 'Watch',
-				metric: 'Recovery context update needed',
-				detail: 'New workload signatures require recovery playbook synchronization.',
+				metric: 'Proof export refresh needed',
+				detail:
+					'The record is ready to close, but the final outcome pack needs one more refresh before export.',
 				severity: 'watch',
 				wasteUsd: 9400,
-				actionLabel: 'Sync Playbook'
+				actionLabel: 'Refresh Record'
 			}
 		},
 		sources: ['Resilience audit logs', 'Recovery playbook telemetry']
@@ -250,33 +264,38 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 		id: 'snp-2026-03-02-e',
 		label: 'Snapshot E (Global)',
 		capturedAt: '2026-03-02T11:00:00Z',
-		headline: 'Global region spillover detected.',
-		decisionSummary: 'Cross-region data transfer spikes are triaged for compliance and cost.',
+		headline: 'Global spillover is routed through one accountable chain.',
+		decisionSummary:
+			'Cross-region spend pressure, sovereignty checks, and sign-off stay inside the same decision record.',
 		lanes: {
 			economic_visibility: {
 				status: 'Watch',
-				metric: 'US-East spillover to EU-West',
-				detail: 'Unexpected cross-region traffic increase impacting latency and egress cost.',
+				metric: 'Cross-region spike scoped',
+				detail:
+					'The anomaly is already tied to the responsible region, workload, and owner queue before triage starts.',
 				severity: 'watch',
 				wasteUsd: 21500,
-				actionLabel: 'Check Sovereignty'
+				actionLabel: 'Open Owner Queue'
 			},
 			deterministic_enforcement: {
 				status: 'Stable',
-				metric: 'Regional guardrails active',
-				detail: 'Governance policies enforcing data locality and regional spend limits.',
+				metric: 'Sovereignty checks active',
+				detail:
+					'Regional guardrails remain attached so the remediation path respects data-locality and risk boundaries.',
 				severity: 'healthy'
 			},
 			financial_governance: {
 				status: 'Stable',
-				metric: 'Multi-currency settlement OK',
-				detail: 'Fiscal controls tracking spend across GBP, EUR, and USD baselines.',
+				metric: 'Regional approvers preloaded',
+				detail:
+					'The right commercial and operational approvers are already in the route before execution is approved.',
 				severity: 'healthy'
 			},
 			operational_resilience: {
 				status: 'Stable',
-				metric: 'Multi-cloud failover ready',
-				detail: 'Unified control plane verified across AWS and Azure production nodes.',
+				metric: 'Global review pack ready',
+				detail:
+					'The final record is prepared so leaders can review cost, control, and outcome in one place.',
 				severity: 'healthy'
 			}
 		},

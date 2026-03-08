@@ -342,7 +342,28 @@
 .landing-plan-card {
 	display: grid;
 	gap: 0.65rem;
-	text-align: center;
+	text-align: left;
+	align-content: start;
+}
+
+.landing-plan-price-note {
+	margin: -0.2rem 0 0 0;
+	font-size: 0.93rem;
+	line-height: 1.52;
+	color: var(--color-ink-200);
+}
+
+.landing-plan-card .btn {
+	justify-self: start;
+}
+
+.landing-plans-pricing-note {
+	margin-bottom: 1rem;
+	display: grid;
+	gap: 0.4rem;
+	text-align: left;
+	border-color: rgb(255 255 255 / 0.12);
+	background: linear-gradient(145deg, rgb(9 14 22 / 0.88), rgb(11 19 30 / 0.78));
 }
 
 .landing-free-tier-card {
@@ -351,13 +372,13 @@
 	gap: 0.8rem;
 	border-color: rgb(16 185 129 / 0.32);
 	background: linear-gradient(142deg, rgb(16 185 129 / 0.14), rgb(6 11 18 / 0.72));
-	text-align: center;
+	text-align: left;
 }
 
 .landing-free-tier-head {
 	display: grid;
 	gap: 0.7rem;
-	justify-items: center;
+	justify-items: start;
 }
 
 @media (min-width: 900px) {
@@ -389,4 +410,11 @@
 	font-size: 1.4rem;
 	font-weight: 900;
 	color: var(--color-success-300);
+}
+
+.landing-free-tier-limit {
+	margin: -0.1rem 0 0 0;
+	font-size: 0.93rem;
+	line-height: 1.5;
+	color: var(--color-ink-200);
 }

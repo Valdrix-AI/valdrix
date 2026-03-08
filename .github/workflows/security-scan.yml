@@ -116,6 +116,7 @@ jobs:
           image-ref: 'valdrics-backend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
@@ -126,6 +127,7 @@ jobs:
           image-ref: 'valdrics-dashboard:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-dashboard-results.sarif'
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'

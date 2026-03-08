@@ -1,0 +1,74 @@
+# Valdrics Koyeb Worker Configuration
+# https://www.koyeb.com/docs/deploy/koyeb-files
+
+name: valdrics-worker
+type: WORKER
+definition:
+  git:
+    repository: github.com/Valdrics-AI/valdrics
+    branch: main
+    builder: docker
+    dockerfile: Dockerfile
+
+  scaling:
+    min: 1
+    max: 2
+    targets:
+      cpu:
+        value: 70
+
+  instance_type: micro
+
+  command:
+    - uv
+    - run
+    - celery
+    - -A
+    - app.shared.core.celery_app:celery_app
+    - worker
+    - -l
+    - info
+
+  env:
+    - name: ENVIRONMENT
+      value: production
+    - name: ENABLE_SCHEDULER
+      value: "false"
+    - name: LOG_LEVEL
+      value: INFO
+    - name: LLM_PROVIDER
+      value: groq
+    - name: OTEL_LOGS_EXPORT_ENABLED
+      value: "true"
+    - name: APP_RUNTIME_DATA_DIR
+      value: /tmp/valdrics
+    - name: FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK
+      secret: valdrics-forecaster-break-glass-enabled
+    - name: FORECASTER_BREAK_GLASS_REASON
+      secret: valdrics-forecaster-break-glass-reason
+    - name: FORECASTER_BREAK_GLASS_EXPIRES_AT
+      secret: valdrics-forecaster-break-glass-expires-at
+    - name: DATABASE_URL
+      secret: valdrics-database-url
+    - name: REDIS_URL
+      secret: valdrics-redis-url
+    - name: SUPABASE_JWT_SECRET
+      secret: valdrics-jwt-secret
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      secret: valdrics-otlp-endpoint
+    - name: ENCRYPTION_KEY
+      secret: valdrics-encryption-key
+    - name: KDF_SALT
+      secret: valdrics-kdf-salt
+    - name: CSRF_SECRET_KEY
+      secret: valdrics-csrf-secret
+    - name: ADMIN_API_KEY
+      secret: valdrics-admin-api-key
+    - name: GROQ_API_KEY
+      secret: valdrics-groq-key
+    - name: PAYSTACK_SECRET_KEY
+      secret: valdrics-paystack-secret
+    - name: PAYSTACK_PUBLIC_KEY
+      secret: valdrics-paystack-public
+    - name: SENTRY_DSN
+      secret: valdrics-sentry-dsn

@@ -109,7 +109,13 @@ def gcp_context() -> RemediationContext:
         tenant_id=uuid4(),
         region="us-central1",
         tier="pro",
-        credentials={"type": "service_account", "project_id": "proj"},
+        credentials={
+            "type": "service_account",
+            "project_id": "proj",
+            "client_email": "svc@example.iam.gserviceaccount.com",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        },
     )
 
 
@@ -117,26 +123,33 @@ def gcp_context() -> RemediationContext:
 async def test_base_aws_action_get_client_maps_endpoint_and_credentials(
     aws_context: RemediationContext,
 ) -> None:
-    action = _TestAWSBaseAction()
     fake_client = MagicMock()
+    fake_session = MagicMock()
+    fake_session.client.return_value = fake_client
 
     with (
+        patch(
+            "app.modules.optimization.domain.actions.aws.base.create_aws_session",
+            return_value=fake_session,
+        ),
         patch("app.modules.optimization.domain.actions.aws.base.get_settings") as get_settings,
-        patch("app.modules.optimization.domain.actions.aws.base.map_aws_credentials") as map_creds,
+        patch(
+            "app.modules.optimization.domain.actions.aws.base.build_aws_client"
+        ) as build_client,
     ):
+        action = _TestAWSBaseAction()
         get_settings.return_value = SimpleNamespace(AWS_ENDPOINT_URL="http://localstack:4566")
-        map_creds.return_value = {"aws_access_key_id": "mapped-ak"}
-        action.session.client = MagicMock(return_value=fake_client)
+        build_client.return_value = fake_client
 
         client = await action._get_client("ec2", aws_context)
 
         assert client is fake_client
-        map_creds.assert_called_once_with(aws_context.credentials)
-        action.session.client.assert_called_once_with(
-            "ec2",
-            region_name="us-east-1",
+        build_client.assert_called_once_with(
+            session=fake_session,
+            service_name="ec2",
+            region="us-east-1",
             endpoint_url="http://localstack:4566",
-            aws_access_key_id="mapped-ak",
+            raw_credentials=aws_context.credentials,
         )
 
 
@@ -273,10 +286,10 @@ async def test_base_azure_action_credentials_and_client_cache(
 
     with (
         patch(
-            "app.modules.optimization.domain.actions.azure.base.ClientSecretCredential"
+            "app.modules.optimization.domain.actions.azure.base.create_azure_action_credential"
         ) as credential_cls,
         patch(
-            "app.modules.optimization.domain.actions.azure.base.ComputeManagementClient"
+            "app.modules.optimization.domain.actions.azure.base.create_azure_compute_client"
         ) as compute_cls,
     ):
         credential_instance = MagicMock()
@@ -292,11 +305,7 @@ async def test_base_azure_action_credentials_and_client_cache(
         second_client = await action._get_compute_client(azure_context)
         assert first_client is second_client
 
-        credential_cls.assert_called_once_with(
-            tenant_id="tenant",
-            client_id="client",
-            client_secret="secret",
-        )
+        credential_cls.assert_called_once_with(azure_context.credentials)
         compute_cls.assert_called_once_with(
             credential=credential_instance,
             subscription_id="sub-123",
@@ -375,7 +384,7 @@ async def test_base_gcp_action_credentials_and_client_resolution(
     action = _TestGCPBaseAction()
 
     with patch(
-        "app.modules.optimization.domain.actions.gcp.base.service_account.Credentials.from_service_account_info"
+        "app.modules.optimization.domain.actions.gcp.base.create_gcp_action_credentials"
     ) as from_info:
         creds_obj = MagicMock()
         from_info.return_value = creds_obj
@@ -391,20 +400,14 @@ async def test_base_gcp_action_credentials_and_client_resolution(
     )
     assert await action._get_credentials(empty_context) is None
 
-    with (
-        patch(
-            "app.modules.optimization.domain.actions.gcp.base.service_account.Credentials.from_service_account_info"
-        ) as from_info,
-        patch(
-            "app.modules.optimization.domain.actions.gcp.base.compute_v1.InstancesClient"
-        ) as instances_cls,
-    ):
-        from_info.return_value = MagicMock()
+    with patch(
+        "app.modules.optimization.domain.actions.gcp.base.create_gcp_instances_client"
+    ) as instances_cls:
         instance_client = MagicMock()
         instances_cls.return_value = instance_client
         client = await action._get_instances_client(gcp_context)
         assert client is instance_client
-        instances_cls.assert_called_once()
+        instances_cls.assert_called_once_with(gcp_context.credentials)
 
     assert await action.validate("rid", gcp_context) is True
     assert await action.create_backup("rid", gcp_context) is None

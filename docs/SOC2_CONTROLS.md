@@ -1,171 +1,67 @@
-# SOC 2 Type 1 Control Documentation
+# SOC 2 Control Evidence Map
 
-## Overview
+This document maps repository-backed controls to SOC 2 preparation evidence.
+It is intentionally evidence-first: only controls with checked-in code,
+configuration, or runbooks are marked as implemented here.
 
-This document maps Valdrics security controls to SOC 2 Trust Service Criteria.
-Use this as the foundation for SOC 2 Type 1 audit preparation.
+## Scope
 
-**Organization:** Valdrics AI  
-**Audit Scope:** Cloud FinOps Platform  
-**Document Version:** 1.0  
-**Last Updated:** 2026-01-14
+- Application: FastAPI API, SvelteKit dashboard, background workers
+- Infrastructure: Helm chart, Terraform modules, GitHub Actions workflows
+- Operations evidence: runbooks, audit/export paths, observability config
 
----
+## Control Map
 
-## Trust Service Criteria Mapping
+| Control ID | Control | Repository Evidence | Status |
+|---|---|---|---|
+| CC1.3 | Ownership and change accountability | `CODEOWNERS`, `.github/workflows/ci.yml` | Implemented |
+| CC2.1 | Internal communication and logging | `app/shared/core/logging.py`, `prometheus/alerts.yml`, `grafana/dashboards/` | Implemented |
+| CC2.3 | Security and recovery policies | `docs/runbooks/disaster_recovery.md`, `docs/runbooks/tenant_data_lifecycle.md`, `docs/runbooks/secret_rotation_emergency.md` | Implemented |
+| CC3.1 | Risk identification and technical review | `docs/FULL_CODEBASE_AUDIT.md`, `docs/ops/`, `scripts/verify_exception_governance.py` | Implemented |
+| CC4.1 | Monitoring activities | `/_internal/metrics`, `prometheus/prometheus.yml`, `prometheus/alerts.yml` | Implemented |
+| CC5.1 | Preventive/detective controls | `app/shared/core/rate_limit.py`, `app/shared/core/circuit_breaker.py`, `app/shared/core/timeout.py` | Implemented |
+| CC5.2 | Technology access controls | `app/shared/core/auth.py`, `app/shared/db/session.py`, migrations with tenant/RLS controls | Implemented |
+| CC6.1 | Access architecture | `app/shared/core/auth.py`, `app/shared/db/session.py`, `docs/runbooks/tenant_data_lifecycle.md` | Implemented |
+| CC6.4 | Access removal and tenant data removal | `docs/runbooks/tenant_data_lifecycle.md`, `app/modules/governance/api/v1/audit_access.py`, `app/modules/governance/api/v1/settings/account.py` | Implemented |
+| CC7.1 | Vulnerability management | `.github/workflows/ci.yml`, `.github/workflows/sbom.yml`, `.github/workflows/security-scan.yml` | Implemented |
+| CC7.2 | Security monitoring and traceability | `app/shared/core/tracing.py`, `app/shared/core/security_metrics.py`, `app/shared/core/ops_metrics.py` | Implemented |
+| CC7.4 | Incident response and recovery | `docs/runbooks/disaster_recovery.md`, `docs/ROLLBACK_PLAN.md` | Implemented |
+| CC8.1 | Change management | Git history, `CODEOWNERS`, GitHub Actions checks, `scripts/run_enterprise_tdd_gate.py` | Implemented |
+| CC9.2 | Business continuity and backups | `terraform/modules/db/main.tf`, `docs/runbooks/disaster_recovery.md` | Implemented |
 
-### CC1: Control Environment
+## Implemented Control Evidence
 
-| Control ID | Description | Implementation | Evidence |
-|------------|-------------|----------------|----------|
-| CC1.1 | Management commitment to integrity | BSL 1.1 license, code of conduct | LICENSE, README |
-| CC1.2 | Board oversight | Founder oversight, quarterly reviews | Meeting notes |
-| CC1.3 | Organizational structure | Clear codebase structure, CODEOWNERS | CODEOWNERS file |
-| CC1.4 | Competence commitment | Code review process, CI/CD gates | GitHub PR history |
+### Identity, Authorization, and Tenant Isolation
 
-### CC2: Communication and Information
+- Authentication and token validation: `app/shared/core/auth.py`
+- Tenant-aware DB session and RLS enforcement hooks: `app/shared/db/session.py`
+- Tenant-scoped data erasure/export path: `app/modules/governance/api/v1/audit_access.py`
+- Owner-only tenant closure and access revocation path: `app/modules/governance/api/v1/settings/account.py`
 
-| Control ID | Description | Implementation | Evidence |
-|------------|-------------|----------------|----------|
-| CC2.1 | Internal communication | Structured logging, alerts | `app/core/logging.py` |
-| CC2.2 | External communication | Privacy policy, terms of service | Legal docs |
-| CC2.3 | Security policies | DR runbook, security headers | `docs/DR_RUNBOOK.md` |
+### Observability and Monitoring
 
-### CC3: Risk Assessment
+- Structured logging: `app/shared/core/logging.py`
+- Metrics contract and internal-only metrics path: `app/shared/core/ops_metrics.py`, `app/main.py`
+- Alerting rules and dashboards: `prometheus/alerts.yml`, `grafana/dashboards/finops-overview.json`
 
-| Control ID | Description | Implementation | Evidence |
-|------------|-------------|----------------|----------|
-| CC3.1 | Risk identification | Technical due diligence audits | `technical_due_diligence.md` |
-| CC3.2 | Risk analysis | Threat modeling, dependency scanning | CI/CD Trivy, Bandit |
-| CC3.3 | Fraud risk | - | N/A (B2B SaaS) |
-| CC3.4 | Change impact | Version control, PR reviews | GitHub history |
+### Deployment and Supply Chain
 
-### CC4: Monitoring Activities
+- CI, lint, tests, and coverage: `.github/workflows/ci.yml`
+- SBOM and provenance controls: `.github/workflows/sbom.yml`
+- Runtime lockfile discipline: `Dockerfile`, `scripts/verify_dependency_locking.py`
 
-| Control ID | Description | Implementation | Evidence |
-|------------|-------------|----------------|----------|
-| CC4.1 | Ongoing monitoring | Health dashboard, job queue status | `/admin/health-dashboard` |
-| CC4.2 | Deficiency evaluation | Error logging, dead letter queue | Structlog, background_jobs |
+### Recovery and Data Handling
 
-### CC5: Control Activities
+- Rollback guidance: `docs/ROLLBACK_PLAN.md`
+- Disaster recovery runbook: `docs/runbooks/disaster_recovery.md`
+- Tenant data lifecycle and erasure operations: `docs/runbooks/tenant_data_lifecycle.md`
+- AWS RDS backup retention and HA posture: `terraform/modules/db/main.tf`
 
-| Control ID | Description | Implementation | Evidence |
-|------------|-------------|----------------|----------|
-| CC5.1 | Risk mitigation | Circuit breakers, rate limiting | `circuit_breaker.py`, `rate_limiter.py` |
-| CC5.2 | Technology controls | JWT auth, RLS, encryption | `app/shared/core/auth.py` |
-| CC5.3 | Policy deployment | CI/CD automation | `.github/workflows/ci.yml` |
+## Known Gaps
 
-### CC6: Logical and Physical Access
+- Evidence collection for human processes (security training, vendor review sign-off, access review cadence) is outside this repository and must be maintained separately for audit readiness.
 
-| Control ID | Description | Implementation | Evidence |
-|------------|-------------|----------------|----------|
-| CC6.1 | Access architecture | Supabase Auth, JWT tokens | `app/shared/core/auth.py` |
-| CC6.2 | Access restrictions | RBAC (admin, member roles) | `requires_role()` decorator |
-| CC6.3 | Registration/authorization | Supabase user management | Supabase dashboard |
-| CC6.4 | Access removal | Manual process via Supabase | Runbook needed |
-| CC6.5 | Logical access | Row-Level Security (RLS) | Migration files |
-| CC6.6 | Physical access | Cloud providers (Supabase, Koyeb) | Provider SOC 2s |
-| CC6.7 | Data transmission | TLS 1.3, HTTPS only | Security headers |
-| CC6.8 | Malware prevention | Trivy container scanning | CI/CD |
+## Usage Notes
 
-### CC7: System Operations
-
-| Control ID | Description | Implementation | Evidence |
-|------------|-------------|----------------|----------|
-| CC7.1 | Vulnerability detection | Trivy, Bandit, Safety | CI pipeline |
-| CC7.2 | Security monitoring | Structlog, trace IDs | `app/core/tracing.py` |
-| CC7.3 | Security event analysis | Log aggregation | Future: Datadog/Sentry |
-| CC7.4 | Incident response | DR runbook | `docs/DR_RUNBOOK.md` |
-| CC7.5 | Recovery procedures | DR runbook | `docs/DR_RUNBOOK.md` |
-
-### CC8: Change Management
-
-| Control ID | Description | Implementation | Evidence |
-|------------|-------------|----------------|----------|
-| CC8.1 | Change authorization | PR reviews, branch protection | GitHub settings |
-
-### CC9: Risk Mitigation
-
-| Control ID | Description | Implementation | Evidence |
-|------------|-------------|----------------|----------|
-| CC9.1 | Vendor risk | Dependency scanning | Safety, npm audit |
-| CC9.2 | Business continuity | DR runbook, backups | Supabase PITR |
-
----
-
-## Security Controls Summary
-
-### Authentication
-- [x] JWT-based authentication (Supabase)
-- [x] Token expiration and refresh
-- [x] CORS configuration
-- [x] Secure headers (CSP, HSTS)
-
-### Authorization
-- [x] Role-based access control (RBAC)
-- [x] Row-Level Security (RLS) on all tenant tables
-- [x] Tenant isolation in all queries
-
-### Data Protection
-- [x] Encryption at rest (Supabase)
-- [x] Encryption in transit (TLS 1.3)
-- [x] Sensitive data masking in logs
-- [x] AWS credentials encrypted
-
-### Infrastructure
-- [x] Container scanning (Trivy)
-- [x] SAST scanning (Bandit)
-- [x] Dependency scanning (Safety, npm audit)
-- [x] Secret scanning (TruffleHog)
-
-### Operational
-- [x] Structured logging
-- [x] Distributed tracing (trace IDs)
-- [x] Health monitoring endpoints
-- [x] DR runbook
-
----
-
-## Audit Evidence Locations
-
-| Evidence Type | Location |
-|---------------|----------|
-| Code repository | github.com/Valdrics/valdrics |
-| CI/CD history | GitHub Actions logs |
-| Security scans | CI artifacts |
-| Access logs | Supabase dashboard |
-| API logs | Application logs (Koyeb) |
-| Change history | Git commit history |
-
----
-
-## Gap Analysis (Pre-Audit)
-
-### Currently Missing
-
-| Control | Gap | Remediation |
-|---------|-----|-------------|
-| CC6.4 | Access removal process | Document offboarding procedure |
-| CC7.3 | Centralized log analysis | Add Datadog/Sentry integration |
-| - | Security awareness training | Document training program |
-| - | Formal incident response plan | Expand DR runbook |
-
-### Recommended Pre-Audit Actions
-
-1. **Document access management procedures** - Who can grant/revoke access
-2. **Set up log aggregation** - Datadog, Papertrail, or CloudWatch
-3. **Create security training record** - Even informal documentation
-4. **Expand incident response** - Add communication templates
-
----
-
-## Compliance Statement
-
-Valdrics AI maintains a security-first approach to software development. 
-Our controls are designed to protect customer data and ensure service reliability.
-We leverage SOC 2 certified infrastructure providers (Supabase, AWS, Koyeb) 
-and implement application-level controls as documented above.
-
----
-
-*This document should be updated quarterly and before any SOC 2 audit.*
+- Treat this file as an evidence index, not a policy substitute.
+- Update links and status any time code paths, workflows, or runbooks change.

@@ -1,8 +1,8 @@
 """
 Add Auto-Archival for Old Partitions (Phase 4.4)
 
-This migration creates a function and scheduled job to automatically
-archive partitions older than 1 year to a separate cold storage table.
+This migration creates the archive table used by repository-managed runtime
+maintenance when archiving partitions older than 1 year to separate cold storage.
 
 Revision ID: h2i3j4k5l6m7
 Revises: g1h2i3j4k5l6
@@ -38,20 +38,18 @@ def upgrade() -> None:
         ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     """)
     
-    # Note: The archive_old_cost_partitions() plpgsql function 
-    # should be created manually or via a separate SQL script
-    # due to asyncpg limitations with dollar-quoting
-    
-    # Create a simple comment to document the intended function
+    # The repository now performs archival through PartitionMaintenanceService at
+    # runtime. Older deployments may still carry a legacy pg_cron/function path,
+    # so downgrade remains tolerant of those objects if they exist.
     op.execute("""
         COMMENT ON TABLE cost_records_archive IS 
         'Archive table for cost_records partitions older than 1 year. 
-         Use archive_old_cost_partitions() function to move old data here.'
+         Repository-managed maintenance moves old partition data here.'
     """)
 
 
 def downgrade() -> None:
-    # Remove pg_cron job
+    # Remove legacy pg_cron job if present from older manual archival deployments.
     op.execute("""
         DO $$
         BEGIN
@@ -63,9 +61,8 @@ def downgrade() -> None:
         END $$;
     """)
     
-    # Drop function
+    # Drop the legacy archival function if present from older manual setups.
     op.execute("DROP FUNCTION IF EXISTS archive_old_cost_partitions();")
     
     # Note: We don't drop the archive table to preserve historical data
     # op.execute("DROP TABLE IF EXISTS cost_records_archive;")
-

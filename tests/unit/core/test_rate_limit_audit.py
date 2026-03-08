@@ -48,7 +48,7 @@ def test_context_aware_key_ip_fallback():
     request.headers.get.return_value = None
 
     with patch(
-        "app.shared.core.rate_limit.get_remote_address", return_value="127.0.0.1"
+        "app.shared.core.rate_limit.resolve_client_ip", return_value="127.0.0.1"
     ):
         assert context_aware_key(request) == "127.0.0.1"
 

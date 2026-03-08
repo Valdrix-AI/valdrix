@@ -145,6 +145,7 @@ env:
   ENVIRONMENT: production
   LOG_LEVEL: INFO
   WEB_CONCURRENCY: "2"
+  ENABLE_SCHEDULER: "true"
 
 # -- Secrets to inject (must exist in cluster)
 existingSecrets:
@@ -153,7 +154,7 @@ existingSecrets:
 
 # -- ExternalSecrets integration (syncs runtime secrets from cloud secret stores)
 externalSecrets:
-  enabled: false
+  enabled: true
   # -- Kubernetes namespace where ExternalSecret resources are created.
   namespace: ""
   # -- SecretStore/ClusterSecretStore reference used by ExternalSecrets controller.

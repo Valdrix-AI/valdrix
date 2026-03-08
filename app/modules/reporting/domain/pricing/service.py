@@ -1,14 +1,12 @@
-"""
-Dynamic Pricing Service
-
-Centralized source of truth for resource costs across regions and providers.
-Addresses Audit Issue: Hardcoded Regional Pricing.
-"""
+"""DB-backed cloud pricing service."""
 
 import structlog
 from typing import Any
 
-from app.shared.core.pricing_defaults import DEFAULT_RATES, REGION_MULTIPLIERS
+from app.shared.core.cloud_pricing_data import (
+    get_cloud_hourly_rate,
+    sync_supported_aws_pricing,
+)
 
 logger = structlog.get_logger()
 
@@ -28,28 +26,12 @@ class PricingService:
         """
         Returns the hourly rate for a resource.
         """
-        provider_rates = DEFAULT_RATES.get(provider.lower(), {})
-        type_rates = provider_rates.get(resource_type.lower())
-
-        rate = 0.0
-        if isinstance(type_rates, dict):
-            if resource_size is not None:
-                raw_size = str(resource_size).strip()
-                lower_size = raw_size.lower()
-                if lower_size in type_rates:
-                    rate = float(type_rates[lower_size] or 0.0)
-                elif raw_size in type_rates:
-                    rate = float(type_rates[raw_size] or 0.0)
-            if rate == 0.0:
-                rate = float(type_rates.get("default", 0.0) or 0.0)
-        elif isinstance(type_rates, (float, int)):
-            rate = type_rates
-
-        # Apply regional multiplier
-        multiplier = REGION_MULTIPLIERS.get(region.lower(), 1.0)
-
-        final_rate = rate * multiplier
-
+        final_rate = get_cloud_hourly_rate(
+            provider=provider,
+            resource_type=resource_type,
+            resource_size=resource_size,
+            region=region,
+        )
         if final_rate == 0.0:
             logger.debug(
                 "pricing_missing",
@@ -62,57 +44,9 @@ class PricingService:
         return final_rate
 
     @staticmethod
-    def sync_with_aws() -> None:
-        """
-        Synchronizes the DEFAULT_RATES with live AWS Price List API.
-        In a Series-A production environment, this would run as a daily
-        background job and persist to a 'cloud_pricing' database table.
-        """
-        try:
-            import boto3
-            from botocore.exceptions import BotoCoreError, ClientError
-        except ImportError as e:
-            logger.error("aws_pricing_sync_failed", error=str(e))
-            return
-
-        try:
-            # Pricing API is only available in us-east-1
-            client = boto3.client("pricing", region_name="us-east-1")
-
-            # Example: Fetch NAT Gateway hourly rates
-            response: dict[str, Any] = client.get_products(
-                ServiceCode="AmazonEC2",
-                Filters=[
-                    {
-                        "Type": "TERM_MATCH",
-                        "Field": "usageType",
-                        "Value": "NatGateway-Hours",
-                    },
-                    {
-                        "Type": "TERM_MATCH",
-                        "Field": "location",
-                        "Value": "US East (N. Virginia)",
-                    },
-                ],
-            )
-
-            # Note: This is a complex API that returns nested JSON strings.
-            # Real implementation would parse 'PriceList' and update DB.
-            logger.info(
-                "aws_pricing_sync_polled",
-                service="AmazonEC2",
-                product_count=len(response.get("PriceList", [])),
-            )
-
-        except (
-            BotoCoreError,
-            ClientError,
-            RuntimeError,
-            TypeError,
-            ValueError,
-            AttributeError,
-        ) as e:
-            logger.error("aws_pricing_sync_failed", error=str(e))
+    async def sync_with_aws(db_session: Any = None, *, client: Any = None) -> int:
+        """Persist supported AWS Pricing API observations into the cloud pricing catalog."""
+        return await sync_supported_aws_pricing(db_session=db_session, client=client)
 
     @staticmethod
     def estimate_monthly_waste(

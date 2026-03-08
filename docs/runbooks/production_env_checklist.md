@@ -25,7 +25,10 @@ Set these in production runtime (Koyeb/Kubernetes/etc):
 - `PAYSTACK_PUBLIC_KEY=pk_live_...`
 - `CORS_ORIGINS=[\"https://<your-frontend-domain>\"]`
 - `SAAS_STRICT_INTEGRATIONS=true`
-- Optional but recommended: `SENTRY_DSN=https://...` (requires `sentry-sdk` in runtime image)
+- `SENTRY_DSN=https://...`
+- `OTEL_EXPORTER_OTLP_ENDPOINT=https://<otel-collector>:4317`
+- `OTEL_LOGS_EXPORT_ENABLED=true`
+- `EXPOSE_API_DOCUMENTATION_PUBLICLY=false`
 - If `prophet` is not bundled, set all break-glass vars:
   - `FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=true`
   - `FORECASTER_BREAK_GLASS_REASON=<incident/ticket reference>`
@@ -68,6 +71,7 @@ All tokens/secrets are stored in tenant notification settings.
 ## 6. Smoke tests after deploy
 
 - `GET /health` returns healthy.
+- `GET /docs`, `GET /redoc`, and `GET /openapi.json` are blocked from the public deployment surface.
 - From UI/API, run:
   - `POST /api/v1/settings/notifications/test-jira`
   - `POST /api/v1/settings/notifications/test-workflow`

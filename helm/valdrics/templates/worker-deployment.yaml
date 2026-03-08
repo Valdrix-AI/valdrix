@@ -47,7 +47,7 @@ spec:
               value: {{ .Values.redis.port | quote }}
           envFrom:
             - secretRef:
-                name: {{ .Values.existingSecrets.name }}
+                name: {{ include "valdrics.runtimeSecretName" . }}
           startupProbe:
             exec:
               command:
